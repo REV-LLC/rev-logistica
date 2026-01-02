@@ -1,0 +1,11 @@
+{
+  "name": "rev-logistica",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run start:dev"
+  }
+}

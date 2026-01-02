@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OFFICE
+  DRIVER
+}
+
+enum WarehouseType {
+  OWN
+  ALLY
+}
+
+enum SkuControlType {
+  BULK
+  SERIAL
+}
+
+enum DocumentType {
+  DELIVERY
+  PICKUP
+  RECEIPT
+}
+
+enum DocumentStatus {
+  DRAFT
+  CONFIRMED
+  FAILED
+  VOID
+}
+
+enum FailureResponsibility {
+  CUSTOMER
+  COMPANY
+  FORCE_MAJEURE
+}
+
+enum MovementType {
+  OUT
+  TRANSIT
+  IN
+  ADJUST
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      Role
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  documentsCreated Document[] @relation("CreatedBy")
+  ledgerCreated    StockLedger[] @relation("LedgerCreatedBy")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  nitOrId   String?
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  projects  Project[]
+}
+
+model Project {
+  id         String   @id @default(uuid())
+  customerId String
+  name       String
+  address    String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+  documents  Document[]
+  ledger     StockLedger[]
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  name      String
+  type      WarehouseType
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  assetsOwned   Asset[] @relation("OwnerWarehouse")
+  assetsCurrent Asset[] @relation("CurrentWarehouse")
+  ledger        StockLedger[]
+}
+
+model Sku {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  category    String?
+  unit        String
+  controlType SkuControlType
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+
+  assets       Asset[]
+  documentItems DocumentItem[]
+  ledger       StockLedger[]
+}
+
+model Asset {
+  id                String   @id @default(uuid())
+  skuId             String
+  serialOrEngine    String   @unique
+  brand             String?
+  model             String?
+  warehouseOwnerId  String
+  warehouseCurrentId String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  sku              Sku       @relation(fields: [skuId], references: [id])
+  warehouseOwner   Warehouse @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
+  warehouseCurrent Warehouse? @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
+
+  documentItems DocumentItem[]
+  ledger        StockLedger[]
+}
+
+model Document {
+  id        String        @id @default(uuid())
+  type      DocumentType
+  status    DocumentStatus
+  consecutive String      @unique
+  projectId String
+  createdBy String
+  docDate   DateTime
+  notes     String?
+
+  // Failed fields
+  failedReason         String?
+  failedResponsibility FailureResponsibility?
+  failedFeeApplicable  Boolean @default(false)
+
+  // Retry chain
+  retryOfDocumentId String?
+  retryOfDocument   Document? @relation("RetryChain", fields: [retryOfDocumentId], references: [id])
+  retries           Document[] @relation("RetryChain")
+
+  // Void fields
+  voidReason String?
+  voidedBy   String?
+  voidedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+  creator   User    @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  items     DocumentItem[]
+  ledger    StockLedger[]
+  files     FileObject[]
+}
+
+model DocumentItem {
+  id         String   @id @default(uuid())
+  documentId String
+
+  // BULK
+  skuId     String?
+  quantity  Decimal?
+
+  // SERIAL
+  assetId   String?
+
+  condition          String?
+  conditionNote      String?
+  damageCostEstimate Decimal?
+
+  createdAt DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id])
+  sku      Sku?     @relation(fields: [skuId], references: [id])
+  asset    Asset?   @relation(fields: [assetId], references: [id])
+
+  @@index([documentId])
+  @@index([skuId])
+  @@index([assetId])
+}
+
+model StockLedger {
+  id        String      @id @default(uuid())
+
+  // Identificador del item (uno de los dos)
+  skuId     String?
+  assetId   String?
+
+  warehouseId String
+  projectId   String?
+  movementType MovementType
+  quantity    Decimal
+
+  refDocumentId   String
+  refDocumentType DocumentType
+
+  createdAt DateTime @default(now())
+  createdBy String
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  project   Project?  @relation(fields: [projectId], references: [id])
+  document  Document  @relation(fields: [refDocumentId], references: [id])
+
+  sku   Sku?   @relation(fields: [skuId], references: [id])
+  asset Asset? @relation(fields: [assetId], references: [id])
+
+  creator User @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([refDocumentId])
+  @@index([skuId])
+  @@index([assetId])
+  @@index([warehouseId])
+}
+
+model FileObject {
+  id        String   @id @default(uuid())
+  documentId String
+  fileType  String   // SIGNATURE | PHOTO
+  storageKey String
+  mimeType  String?
+  createdAt DateTime @default(now())
+  createdBy String
+
+  document Document @relation(fields: [documentId], references: [id])
+}
