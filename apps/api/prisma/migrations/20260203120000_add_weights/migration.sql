@@ -1,0 +1,2 @@
+ALTER TABLE "Sku" ADD COLUMN "unitWeight" DECIMAL;
+ALTER TABLE "Asset" ADD COLUMN "weight" DECIMAL;

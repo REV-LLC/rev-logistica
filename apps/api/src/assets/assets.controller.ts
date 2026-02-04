@@ -1,0 +1,92 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Role } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
+import { AssetsService } from './assets.service';
+
+@Controller('assets')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+export class AssetsController {
+  constructor(private readonly assetsService: AssetsService) {}
+
+  @Get()
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  listAssets(
+    @Query('serial') serial?: string,
+    @Query('search') search?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    const parsedTake = take ? Number(take) : undefined;
+    const parsedSkip = skip ? Number(skip) : undefined;
+
+    if (take && Number.isNaN(parsedTake)) {
+      throw new BadRequestException('Invalid take');
+    }
+
+    if (skip && Number.isNaN(parsedSkip)) {
+      throw new BadRequestException('Invalid skip');
+    }
+
+    return this.assetsService.listAssets({
+      serial,
+      search,
+      take: parsedTake,
+      skip: parsedSkip,
+    });
+  }
+
+  @Post()
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createAsset(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: CreateAssetDto,
+  ) {
+    return this.assetsService.createAsset(payload);
+  }
+
+  @Patch(':assetId')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  updateAsset(
+    @Param('assetId', new ParseUUIDPipe()) assetId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: UpdateAssetDto,
+  ) {
+    return this.assetsService.updateAsset(assetId, payload);
+  }
+
+  @Delete(':assetId')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  deleteAsset(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
+    return this.assetsService.deleteAsset(assetId);
+  }
+}

@@ -6,6 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm --workspace apps/api run start:dev"
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "import:cervino": "npm --workspace apps/api run import:cervino",
+    "start:dev": "npm --workspace apps/api run start:dev"
   }
 }

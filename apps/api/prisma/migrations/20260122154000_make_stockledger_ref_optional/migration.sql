@@ -1,0 +1,2 @@
+ALTER TABLE "StockLedger" ALTER COLUMN "refDocumentId" DROP NOT NULL;
+ALTER TABLE "StockLedger" ALTER COLUMN "refDocumentType" DROP NOT NULL;
