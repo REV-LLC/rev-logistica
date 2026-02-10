@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateAssetDto {
   @IsUUID()
@@ -26,6 +26,22 @@ export class CreateAssetDto {
   @IsOptional()
   @IsString()
   model?: string;
+
+  @IsOptional()
+  @IsNumber()
+  year?: number;
+
+  @IsOptional()
+  @IsString()
+  fuel?: string;
+
+  @IsOptional()
+  @IsUUID()
+  ownerId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
 
   @IsOptional()
   @IsBoolean()

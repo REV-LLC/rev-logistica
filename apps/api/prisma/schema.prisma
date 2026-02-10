@@ -23,20 +23,6 @@ enum SkuControlType {
   SERIAL
 }
 
-enum SkuUnit {
-  UNIT
-  KG
-  TON
-  M
-  M2
-  INCH
-  CM
-  HOUR
-  KM
-  SMALL
-  MEDIUM
-  LARGE
-}
 enum EmployeeRole {
   DRIVER
   OTHER
@@ -154,27 +140,28 @@ model Warehouse {
   ledgerOwned   StockLedger[] @relation("LedgerOwnerWarehouse")
   documents     Document[]
   ownerCompany  Owner    @relation(fields: [ownerCompanyId], references: [id])
+  internalCounters AssetInternalCounter[]
 }
 
 model AssetFamily {
   id        String   @id @default(uuid())
   code      String   @unique
   name      String
+  controlType SkuControlType
   createdAt DateTime @default(now())
 
   skus   Sku[]
   assets Asset[]
+  internalCounters AssetInternalCounter[]
 }
 
 model Sku {
   id          String         @id @default(uuid())
-  name        String         @unique
-  category    String?
-  unit        SkuUnit
-  controlType SkuControlType
+  name        String
+  category    String
   imageUrl    String?
   imageFileObjectId String?
-  assetFamilyId String?
+  assetFamilyId String
   unitWeight  Decimal?
   active      Boolean        @default(true)
   createdAt   DateTime       @default(now())
@@ -183,16 +170,21 @@ model Sku {
   documentItems DocumentItem[]
   ledger       StockLedger[]
   imageFileObject FileObject? @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily AssetFamily? @relation(fields: [assetFamilyId], references: [id])
+  assetFamily AssetFamily @relation(fields: [assetFamilyId], references: [id])
+
+  @@unique([assetFamilyId, name])
 }
 
 model Asset {
   id                String   @id @default(uuid())
   skuId             String
+  publicCode        String   @unique
   serialOrEngine    String   @unique
   description       String?
   brand             String?
   model             String?
+  year              Int?
+  fuel              String?
   imageFileObjectId String?
   assetFamilyId     String
   internalNumber    Int
@@ -213,7 +205,7 @@ model Asset {
   taskAssets    TaskAsset[]
 
   @@index([assetFamilyId])
-  @@unique([warehouseOwnerId, internalNumber])
+  @@unique([warehouseOwnerId, assetFamilyId, internalNumber])
 }
 
 model Task {
@@ -323,7 +315,7 @@ model StockLedger {
   assetId   String?
 
   warehouseId String?
-  ownerWarehouseId String?
+  ownerWarehouseId String
   customerWorksiteId String?
   movementType MovementType
   quantity    Decimal
@@ -335,7 +327,7 @@ model StockLedger {
   createdBy String
 
   warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id])
-  ownerWarehouse    Warehouse?        @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])
+  ownerWarehouse    Warehouse        @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])
   customerWorksite  CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
   document          Document?         @relation(fields: [refDocumentId], references: [id])
 
@@ -349,6 +341,20 @@ model StockLedger {
   @@index([assetId])
   @@index([warehouseId])
   @@index([ownerWarehouseId])
+}
+
+model AssetInternalCounter {
+  id               String   @id @default(uuid())
+  ownerWarehouseId String
+  assetFamilyId    String
+  nextNumber       Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ownerWarehouse Warehouse @relation(fields: [ownerWarehouseId], references: [id])
+  assetFamily    AssetFamily @relation(fields: [assetFamilyId], references: [id])
+
+  @@unique([ownerWarehouseId, assetFamilyId])
 }
 
 model Owner {

@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateAssetDto {
   @IsOptional()
@@ -14,8 +14,24 @@ export class UpdateAssetDto {
   model?: string;
 
   @IsOptional()
+  @IsNumber()
+  year?: number;
+
+  @IsOptional()
+  @IsString()
+  fuel?: string;
+
+  @IsOptional()
   @IsUUID()
   warehouseCurrentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  ownerId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
 
   @IsOptional()
   @IsBoolean()

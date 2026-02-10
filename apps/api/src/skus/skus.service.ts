@@ -1,12 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, SkuControlType, SkuUnit } from '@prisma/client';
+import { Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SKU_CATEGORIES, SKU_WEIGHT_UNITS } from './skus.constants';
 
 @Injectable()
 export class SkusService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listSkus(params: { search?: string; controlType?: SkuControlType }) {
+  async listSkus(params: {
+    search?: string;
+    controlType?: SkuControlType;
+    assetFamilyId?: string;
+  }) {
     const where: Prisma.SkuWhereInput = {};
 
     if (params.search) {
@@ -17,18 +22,20 @@ export class SkusService {
     }
 
     if (params.controlType) {
-      where.controlType = params.controlType;
+      where.assetFamily = { is: { controlType: params.controlType } };
     }
 
-    return this.prisma.sku.findMany({
+    if (params.assetFamilyId) {
+      where.assetFamilyId = params.assetFamilyId;
+    }
+
+    const items = await this.prisma.sku.findMany({
       where,
       orderBy: { name: 'asc' },
       select: {
         id: true,
         name: true,
         category: true,
-        unit: true,
-        controlType: true,
         imageUrl: true,
         assetFamilyId: true,
         unitWeight: true,
@@ -39,35 +46,73 @@ export class SkusService {
             id: true,
             code: true,
             name: true,
+            controlType: true,
           },
         },
       },
     });
+
+    return items.map((item) => ({
+      ...item,
+      controlType: item.assetFamily.controlType,
+    }));
+  }
+
+  listCategories() {
+    return SKU_CATEGORIES;
+  }
+
+  listUnits() {
+    return SKU_WEIGHT_UNITS;
   }
 
   async createSku(payload: {
     name: string;
-    category?: string;
-    unit: SkuUnit;
-    controlType: SkuControlType;
+    category: string;
     imageUrl?: string;
-    assetFamilyId?: string;
+    assetFamilyId: string;
     unitWeight?: number;
     active?: boolean;
   }) {
+    const assetFamily = await this.prisma.assetFamily.findUnique({
+      where: { id: payload.assetFamilyId },
+      select: { id: true, controlType: true, code: true, name: true },
+    });
+    if (!assetFamily) {
+      throw new BadRequestException('Asset family not found');
+    }
+
     try {
-      return await this.prisma.sku.create({
+      const created = await this.prisma.sku.create({
         data: {
           name: payload.name.trim(),
-          category: payload.category ?? null,
-          unit: payload.unit,
-          controlType: payload.controlType,
+          category: payload.category.trim().toUpperCase(),
           imageUrl: payload.imageUrl ?? null,
-          assetFamilyId: payload.assetFamilyId ?? null,
+          assetFamilyId: payload.assetFamilyId,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
         },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          imageUrl: true,
+          assetFamilyId: true,
+          unitWeight: true,
+          active: true,
+          createdAt: true,
+          assetFamily: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              controlType: true,
+            },
+          },
+        },
       });
+
+      return { ...created, controlType: created.assetFamily.controlType };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new BadRequestException('Sku name already exists');
@@ -81,8 +126,6 @@ export class SkusService {
     payload: {
       name?: string;
       category?: string;
-      unit?: SkuUnit;
-      controlType?: SkuControlType;
       imageUrl?: string;
       assetFamilyId?: string;
       unitWeight?: number;
@@ -98,20 +141,48 @@ export class SkusService {
       throw new NotFoundException('Sku not found');
     }
 
+    if (payload.assetFamilyId) {
+      const assetFamily = await this.prisma.assetFamily.findUnique({
+        where: { id: payload.assetFamilyId },
+        select: { id: true },
+      });
+      if (!assetFamily) {
+        throw new BadRequestException('Asset family not found');
+      }
+    }
+
     try {
-      return await this.prisma.sku.update({
+      const updated = await this.prisma.sku.update({
         where: { id: skuId },
         data: {
           name: payload.name?.trim(),
-          category: payload.category ?? undefined,
-          unit: payload.unit,
-          controlType: payload.controlType,
+          category: payload.category?.trim().toUpperCase() ?? undefined,
           imageUrl: payload.imageUrl ?? undefined,
           assetFamilyId: payload.assetFamilyId ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
         },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          imageUrl: true,
+          assetFamilyId: true,
+          unitWeight: true,
+          active: true,
+          createdAt: true,
+          assetFamily: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              controlType: true,
+            },
+          },
+        },
       });
+
+      return { ...updated, controlType: updated.assetFamily.controlType };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new BadRequestException('Sku name already exists');

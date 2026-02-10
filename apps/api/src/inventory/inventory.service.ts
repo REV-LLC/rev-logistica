@@ -6,13 +6,17 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { MovementType, Prisma } from '@prisma/client';
+import { MovementType, Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SKU_CATEGORIES } from '../skus/skus.constants';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
+import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
+import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
+import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import {
   GetInventoryLedgerDto,
   LEDGER_DEFAULT_TAKE,
@@ -244,6 +248,195 @@ export class InventoryService {
     };
   }
 
+  async createSerializedAsset(payload: CreateSerializedAssetDto, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
+      const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+
+      const ownerWarehouse = await tx.warehouse.findUnique({
+        where: { id: payload.ownerWarehouseId },
+        select: { id: true, name: true },
+      });
+      if (!ownerWarehouse) {
+        throw new NotFoundException('Owner warehouse not found');
+      }
+
+      const currentWarehouse = await tx.warehouse.findUnique({
+        where: { id: payload.warehouseCurrentId },
+        select: { id: true },
+      });
+      if (!currentWarehouse) {
+        throw new NotFoundException('Current warehouse not found');
+      }
+
+      const serialOrEngine = payload.asset.serialOrEngine?.trim();
+      if (!serialOrEngine) {
+        throw new BadRequestException('serialOrEngine is required');
+      }
+
+      const counter = await tx.assetInternalCounter.upsert({
+        where: {
+          ownerWarehouseId_assetFamilyId: {
+            ownerWarehouseId: payload.ownerWarehouseId,
+            assetFamilyId: assetFamily.id,
+          },
+        },
+        create: {
+          ownerWarehouseId: payload.ownerWarehouseId,
+          assetFamilyId: assetFamily.id,
+          nextNumber: 2,
+        },
+        update: {
+          nextNumber: { increment: 1 },
+        },
+        select: { nextNumber: true },
+      });
+
+      const internalNumber = counter.nextNumber - 1;
+
+      const asset = await tx.asset.create({
+        data: {
+          skuId: sku.id,
+          assetFamilyId: assetFamily.id,
+          publicCode: this.buildAssetPublicCode(
+            assetFamily.code,
+            payload.ownerWarehouseId,
+            internalNumber,
+          ),
+          internalNumber,
+          serialOrEngine,
+          description: payload.asset.description ?? null,
+          brand: payload.asset.brand ?? null,
+          model: payload.asset.model ?? null,
+          year: payload.asset.year ?? null,
+          fuel: payload.asset.fuel ?? null,
+          imageFileObjectId: payload.asset.imageFileObjectId ?? null,
+          warehouseOwnerId: payload.ownerWarehouseId,
+          warehouseCurrentId: payload.warehouseCurrentId,
+          active: payload.asset.active ?? true,
+        },
+        select: {
+          id: true,
+          internalNumber: true,
+          assetFamilyId: true,
+          skuId: true,
+          warehouseOwnerId: true,
+          warehouseCurrentId: true,
+        },
+      });
+
+      const ledger = await tx.stockLedger.create({
+        data: {
+          movementType: MovementType.ADJUST,
+          warehouseId: payload.warehouseCurrentId,
+          ownerWarehouseId: payload.ownerWarehouseId,
+          customerWorksiteId: null,
+          skuId: null,
+          assetId: asset.id,
+          quantity: 1,
+          createdBy: userId,
+        },
+        select: { id: true, movementType: true, quantity: true },
+      });
+
+      return { asset, ledger };
+    });
+  }
+
+  async addBulkAdjustment(payload: CreateBulkAdjustmentDto, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.BULK, tx);
+      const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+
+      const ownerWarehouse = await tx.warehouse.findUnique({
+        where: { id: payload.ownerWarehouseId },
+        select: { id: true },
+      });
+      if (!ownerWarehouse) {
+        throw new NotFoundException('Owner warehouse not found');
+      }
+
+      const warehouse = await tx.warehouse.findUnique({
+        where: { id: payload.warehouseId },
+        select: { id: true },
+      });
+      if (!warehouse) {
+        throw new NotFoundException('Warehouse not found');
+      }
+
+      const ledger = await tx.stockLedger.create({
+        data: {
+          movementType: MovementType.ADJUST,
+          warehouseId: payload.warehouseId,
+          ownerWarehouseId: payload.ownerWarehouseId,
+          customerWorksiteId: null,
+          skuId: sku.id,
+          assetId: null,
+          quantity: payload.quantity,
+          createdBy: userId,
+        },
+        select: { id: true, movementType: true, quantity: true },
+      });
+
+      return {
+        sku: { id: sku.id, assetFamilyId: assetFamily.id },
+        ledger,
+      };
+    });
+  }
+
+  async addBulkStock(payload: CreateBulkStockDto, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const sku = await tx.sku.findUnique({
+        where: { id: payload.skuId },
+        select: {
+          id: true,
+          assetFamily: { select: { controlType: true } },
+        },
+      });
+
+      if (!sku) {
+        throw new NotFoundException('Sku not found');
+      }
+
+      if (sku.assetFamily.controlType !== 'BULK') {
+        throw new BadRequestException('Sku must be BULK');
+      }
+
+      const warehouseOwner = await tx.warehouse.findUnique({
+        where: { id: payload.ownerWarehouseId },
+        select: { id: true },
+      });
+      if (!warehouseOwner) {
+        throw new NotFoundException('Owner warehouse not found');
+      }
+
+      const warehouse = await tx.warehouse.findUnique({
+        where: { id: payload.warehouseId },
+        select: { id: true },
+      });
+      if (!warehouse) {
+        throw new NotFoundException('Warehouse not found');
+      }
+
+      const ledger = await tx.stockLedger.create({
+        data: {
+          movementType: MovementType.ADJUST,
+          warehouseId: payload.warehouseId,
+          ownerWarehouseId: payload.ownerWarehouseId,
+          customerWorksiteId: null,
+          skuId: payload.skuId,
+          assetId: null,
+          quantity: payload.quantity,
+          createdBy: userId,
+        },
+        select: { id: true },
+      });
+
+      return { ledgerId: ledger.id };
+    });
+  }
+
   async moveOut(payload: CreateInventoryOutDto, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       if (payload.documentId) {
@@ -349,7 +542,7 @@ export class InventoryService {
         }
       });
 
-      const operations = [
+      const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
             data: {
@@ -366,8 +559,12 @@ export class InventoryService {
             },
           }),
         ),
-        ...serialIds.map((assetId) =>
-          tx.stockLedger.create({
+        ...serialIds.map((assetId) => {
+          const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
+          if (!ownerWarehouseId) {
+            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+          }
+          return tx.stockLedger.create({
             data: {
               movementType: MovementType.OUT,
               warehouseId: payload.warehouseId,
@@ -376,15 +573,25 @@ export class InventoryService {
               refDocumentType: null,
               skuId: null,
               assetId,
-              ownerWarehouseId: ownerWarehouseByAsset.get(assetId) ?? null,
+              ownerWarehouseId,
               quantity: -1,
               createdBy: userId,
             },
-          }),
-        ),
+          });
+        }),
       ];
 
-      const created = await Promise.all(operations);
+      const assetUpdates = serialIds.map((assetId) =>
+        tx.asset.update({
+          where: { id: assetId },
+          data: { warehouseCurrentId: null },
+        }),
+      );
+
+      const created = await Promise.all(ledgerOps);
+      if (assetUpdates.length) {
+        await Promise.all(assetUpdates);
+      }
 
       return {
         count: created.length,
@@ -401,85 +608,102 @@ export class InventoryService {
   }
 
   async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string) {
-    if (payload.documentId) {
-      await this.assertDocumentExists(payload.documentId, this.prisma);
-    }
-
-    const customerWorksite = await this.prisma.customerWorksite.findUnique({
-      where: { id: payload.customerWorksiteId },
-      select: { id: true },
-    });
-    if (!customerWorksite) {
-      throw new NotFoundException('Customer worksite not found');
-    }
-
-    const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
-      this.normalizeOperationItems(payload.items);
-    const ownerWarehouseIds = [
-      ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
-    ];
-    await this.assertOwnerWarehousesExist(ownerWarehouseIds);
-    const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
-    const serialIds = [...serialAssetIds.values()];
-
-    const assets = serialIds.length
-      ? await this.prisma.asset.findMany({
-          where: { id: { in: serialIds } },
-          select: { id: true, warehouseOwnerId: true },
-        })
-      : [];
-    const ownerWarehouseByAsset = new Map(
-      assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
-    );
-    serialIds.forEach((assetId) => {
-      const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
-      const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
-      if (!assetOwnerWarehouseId) {
-        throw new BadRequestException(`Asset ${assetId} not found`);
+    const created = await this.prisma.$transaction(async (tx) => {
+      if (payload.documentId) {
+        await this.assertDocumentExists(payload.documentId, tx);
       }
-      if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-        throw new BadRequestException(
-          `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-        );
+
+      const customerWorksite = await tx.customerWorksite.findUnique({
+        where: { id: payload.customerWorksiteId },
+        select: { id: true },
+      });
+      if (!customerWorksite) {
+        throw new NotFoundException('Customer worksite not found');
       }
+
+      const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
+        this.normalizeOperationItems(payload.items);
+      const ownerWarehouseIds = [
+        ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
+      ];
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      const serialIds = [...serialAssetIds.values()];
+
+      const assets = serialIds.length
+        ? await tx.asset.findMany({
+            where: { id: { in: serialIds } },
+            select: { id: true, warehouseOwnerId: true },
+          })
+        : [];
+      const ownerWarehouseByAsset = new Map(
+        assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
+      );
+      serialIds.forEach((assetId) => {
+        const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
+        const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
+        if (!assetOwnerWarehouseId) {
+          throw new BadRequestException(`Asset ${assetId} not found`);
+        }
+        if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
+          throw new BadRequestException(
+            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
+          );
+        }
+      });
+
+      const ledgerOps = [
+        ...bulkGroups.map((group) =>
+          tx.stockLedger.create({
+            data: {
+              movementType: MovementType.ON_SITE,
+              warehouseId: null,
+              ownerWarehouseId: group.ownerWarehouseId,
+              customerWorksiteId: payload.customerWorksiteId,
+              refDocumentId: payload.documentId ?? null,
+              refDocumentType: null,
+              skuId: group.skuId,
+              assetId: null,
+              quantity: group.quantity,
+              createdBy: userId,
+            },
+          }),
+        ),
+        ...serialIds.map((assetId) => {
+          const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
+          if (!ownerWarehouseId) {
+            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+          }
+          return tx.stockLedger.create({
+            data: {
+              movementType: MovementType.ON_SITE,
+              warehouseId: null,
+              ownerWarehouseId,
+              customerWorksiteId: payload.customerWorksiteId,
+              refDocumentId: payload.documentId ?? null,
+              refDocumentType: null,
+              skuId: null,
+              assetId,
+              quantity: 1,
+              createdBy: userId,
+            },
+          });
+        }),
+      ];
+
+      const assetUpdates = serialIds.map((assetId) =>
+        tx.asset.update({
+          where: { id: assetId },
+          data: { warehouseCurrentId: null },
+        }),
+      );
+
+      const createdLedger = await Promise.all(ledgerOps);
+      if (assetUpdates.length) {
+        await Promise.all(assetUpdates);
+      }
+
+      return createdLedger;
     });
-
-    const operations = [
-      ...bulkGroups.map((group) =>
-        this.prisma.stockLedger.create({
-          data: {
-            movementType: MovementType.ON_SITE,
-            warehouseId: null,
-            ownerWarehouseId: group.ownerWarehouseId,
-            customerWorksiteId: payload.customerWorksiteId,
-            refDocumentId: payload.documentId ?? null,
-            refDocumentType: null,
-            skuId: group.skuId,
-            assetId: null,
-            quantity: group.quantity,
-            createdBy: userId,
-          },
-        }),
-      ),
-      ...serialIds.map((assetId) =>
-        this.prisma.stockLedger.create({
-          data: {
-            movementType: MovementType.ON_SITE,
-            warehouseId: null,
-            ownerWarehouseId: ownerWarehouseByAsset.get(assetId) ?? null,
-            customerWorksiteId: payload.customerWorksiteId,
-            refDocumentId: payload.documentId ?? null,
-            refDocumentType: null,
-            skuId: null,
-            assetId,
-            quantity: 1,
-            createdBy: userId,
-          },
-        }),
-      ),
-    ];
-
-    const created = await this.prisma.$transaction(operations);
 
     await this.invalidateInventoryCache({
       customerWorksiteId: payload.customerWorksiteId,
@@ -629,7 +853,7 @@ export class InventoryService {
         }
       });
 
-      const operations = [
+      const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
             data: {
@@ -646,8 +870,12 @@ export class InventoryService {
             },
           }),
         ),
-        ...serialIds.map((assetId) =>
-          tx.stockLedger.create({
+        ...serialIds.map((assetId) => {
+          const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
+          if (!ownerWarehouseId) {
+            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+          }
+          return tx.stockLedger.create({
             data: {
               movementType: MovementType.IN,
               warehouseId: payload.warehouseId,
@@ -656,15 +884,25 @@ export class InventoryService {
               refDocumentType: null,
               skuId: null,
               assetId,
-              ownerWarehouseId: ownerWarehouseByAsset.get(assetId) ?? null,
+              ownerWarehouseId,
               quantity: 1,
               createdBy: userId,
             },
-          }),
-        ),
+          });
+        }),
       ];
 
-      const created = await Promise.all(operations);
+      const assetUpdates = serialIds.map((assetId) =>
+        tx.asset.update({
+          where: { id: assetId },
+          data: { warehouseCurrentId: payload.warehouseId },
+        }),
+      );
+
+      const created = await Promise.all(ledgerOps);
+      if (assetUpdates.length) {
+        await Promise.all(assetUpdates);
+      }
 
       return {
         count: created.length,
@@ -965,10 +1203,10 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
-            controlType: true,
             imageUrl: true,
             imageFileObjectId: true,
             unitWeight: true,
+            assetFamily: { select: { controlType: true } },
           },
         })
       : [];
@@ -981,7 +1219,7 @@ export class InventoryService {
         return {
           skuId: row.skuId,
           skuName: sku?.name ?? null,
-          controlType: sku?.controlType ?? null,
+          controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           unitWeight: sku?.unitWeight ?? null,
@@ -1321,6 +1559,173 @@ export class InventoryService {
     return String(value).padStart(4, '0');
   }
 
+  private buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
+    return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
+  }
+
+  private buildAssetFamilyCode(value: string) {
+    return value
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  private async resolveAssetFamily(
+    input: { id?: string; code?: string; name?: string },
+    controlType: SkuControlType,
+    tx: Prisma.TransactionClient,
+  ) {
+    if (input.id) {
+      const existing = await tx.assetFamily.findUnique({
+        where: { id: input.id },
+        select: { id: true, code: true, controlType: true },
+      });
+      if (!existing) {
+        throw new NotFoundException('Asset family not found');
+      }
+      if (existing.controlType !== controlType) {
+        throw new BadRequestException('Asset family controlType mismatch');
+      }
+      return existing;
+    }
+
+    const name = input.name?.trim();
+    const code = input.code ? this.buildAssetFamilyCode(input.code) : name ? this.buildAssetFamilyCode(name) : '';
+
+    if (!name && !code) {
+      throw new BadRequestException('Asset family name or code is required');
+    }
+
+    if (code) {
+      const existingByCode = await tx.assetFamily.findUnique({
+        where: { code },
+        select: { id: true, code: true, controlType: true },
+      });
+      if (existingByCode) {
+        if (existingByCode.controlType !== controlType) {
+          throw new BadRequestException('Asset family controlType mismatch');
+        }
+        return existingByCode;
+      }
+    }
+
+    if (name) {
+      const existingByName = await tx.assetFamily.findFirst({
+        where: { name },
+        select: { id: true, code: true, controlType: true },
+      });
+      if (existingByName) {
+        if (existingByName.controlType !== controlType) {
+          throw new BadRequestException('Asset family controlType mismatch');
+        }
+        return existingByName;
+      }
+    }
+
+    try {
+      const created = await tx.assetFamily.create({
+        data: {
+          code: code || this.buildAssetFamilyCode(name ?? ''),
+          name: name ?? code!,
+          controlType,
+        },
+        select: { id: true, code: true, controlType: true },
+      });
+      return created;
+    } catch (error) {
+      // If a concurrent request creates the same family, resolve it instead of surfacing 500.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        if (code) {
+          const concurrentByCode = await tx.assetFamily.findUnique({
+            where: { code },
+            select: { id: true, code: true, controlType: true },
+          });
+          if (concurrentByCode) {
+            if (concurrentByCode.controlType !== controlType) {
+              throw new BadRequestException('Asset family controlType mismatch');
+            }
+            return concurrentByCode;
+          }
+        }
+
+        if (name) {
+          const concurrentByName = await tx.assetFamily.findFirst({
+            where: { name },
+            select: { id: true, code: true, controlType: true },
+          });
+          if (concurrentByName) {
+            if (concurrentByName.controlType !== controlType) {
+              throw new BadRequestException('Asset family controlType mismatch');
+            }
+            return concurrentByName;
+          }
+        }
+
+        throw new BadRequestException('Asset family code already exists');
+      }
+      throw error;
+    }
+  }
+
+  private async resolveSku(
+    input: {
+      id?: string;
+      name?: string;
+      category?: string;
+      unitWeight?: number;
+    },
+    assetFamilyId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    if (input.id) {
+      const existing = await tx.sku.findUnique({
+        where: { id: input.id },
+        select: { id: true, assetFamilyId: true },
+      });
+      if (!existing) {
+        throw new NotFoundException('Sku not found');
+      }
+      if (existing.assetFamilyId !== assetFamilyId) {
+        throw new BadRequestException('Sku does not belong to the asset family');
+      }
+      return existing;
+    }
+
+    const name = input.name?.trim();
+    if (!name) {
+      throw new BadRequestException('Sku name is required');
+    }
+    const category = input.category?.trim().toUpperCase();
+    if (!category) {
+      throw new BadRequestException('Sku category is required');
+    }
+    if (!SKU_CATEGORIES.includes(category as (typeof SKU_CATEGORIES)[number])) {
+      throw new BadRequestException('Sku category is invalid');
+    }
+
+    return tx.sku.upsert({
+      where: {
+        assetFamilyId_name: {
+          assetFamilyId,
+          name,
+        },
+      },
+      create: {
+        name,
+        assetFamilyId,
+        category,
+        unitWeight: input.unitWeight ?? null,
+        active: true,
+      },
+      update: {
+        category,
+        unitWeight: input.unitWeight ?? undefined,
+      },
+      select: { id: true },
+    });
+  }
+
   private parseMonthStart(month: string) {
     const [year, monthPart] = month.split('-').map((value) => Number(value));
     if (!year || !monthPart || monthPart < 1 || monthPart > 12) {
@@ -1374,7 +1779,11 @@ export class InventoryService {
     const skuIds = [...new Set(payload.items.map((item) => item.skuId))];
     const skus = await this.prisma.sku.findMany({
       where: { id: { in: skuIds } },
-      select: { id: true, controlType: true, assetFamilyId: true },
+      select: {
+        id: true,
+        assetFamilyId: true,
+        assetFamily: { select: { controlType: true, code: true } },
+      },
     });
     const skuById = new Map(skus.map((sku) => [sku.id, sku]));
 
@@ -1383,7 +1792,7 @@ export class InventoryService {
       if (!sku) {
         throw new BadRequestException(`Sku ${item.skuId} not found`);
       }
-      if (sku.controlType !== 'SERIAL') {
+      if (sku.assetFamily.controlType !== 'SERIAL') {
         throw new BadRequestException(`Sku ${item.skuId} is not SERIAL`);
       }
       if (!sku.assetFamilyId) {
@@ -1396,25 +1805,40 @@ export class InventoryService {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const latest = await tx.asset.findFirst({
-            where: { warehouseOwnerId: supplierWarehouse.id },
-            orderBy: { internalNumber: 'desc' },
-            select: { internalNumber: true },
-          });
-          let nextNumber = (latest?.internalNumber ?? 0) + 1;
-
           const createdAssets: Array<{ id: string }> = [];
           const createdLedger: Array<{ id: string }> = [];
 
           for (const item of payload.items) {
             const sku = skuById.get(item.skuId)!;
-            const internalNumber = nextNumber++;
+            const counter = await tx.assetInternalCounter.upsert({
+              where: {
+                ownerWarehouseId_assetFamilyId: {
+                  ownerWarehouseId: supplierWarehouse.id,
+                  assetFamilyId: sku.assetFamilyId!,
+                },
+              },
+              create: {
+                ownerWarehouseId: supplierWarehouse.id,
+                assetFamilyId: sku.assetFamilyId!,
+                nextNumber: 2,
+              },
+              update: {
+                nextNumber: { increment: 1 },
+              },
+              select: { nextNumber: true },
+            });
+            const internalNumber = counter.nextNumber - 1;
             const serialOrEngine = `${ownerCode}-${this.padInternalNumber(internalNumber)}`;
 
             const asset = await tx.asset.create({
               data: {
                 skuId: item.skuId,
                 assetFamilyId: sku.assetFamilyId!,
+                publicCode: this.buildAssetPublicCode(
+                  sku.assetFamily.code,
+                  supplierWarehouse.id,
+                  internalNumber,
+                ),
                 internalNumber,
                 serialOrEngine,
                 brand: item.brand ?? null,
@@ -1433,6 +1857,7 @@ export class InventoryService {
                 customerWorksiteId: null,
                 skuId: null,
                 assetId: asset.id,
+                ownerWarehouseId: supplierWarehouse.id,
                 quantity: 1,
                 createdBy: userId,
               },

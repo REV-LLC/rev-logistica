@@ -1,27 +1,27 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
-import { SkuControlType, SkuUnit } from '@prisma/client';
+import {
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+import { SKU_CATEGORIES } from '../skus.constants';
 
 export class CreateSkuDto {
   @IsString()
   name: string;
 
-  @IsOptional()
   @IsString()
-  category?: string;
-
-  @IsEnum(SkuUnit)
-  unit: SkuUnit;
-
-  @IsEnum(SkuControlType)
-  controlType: SkuControlType;
+  @IsIn(SKU_CATEGORIES)
+  category: string;
 
   @IsOptional()
   @IsString()
   imageUrl?: string;
 
-  @IsOptional()
   @IsUUID()
-  assetFamilyId?: string;
+  assetFamilyId: string;
 
   @IsOptional()
   @IsNumber()

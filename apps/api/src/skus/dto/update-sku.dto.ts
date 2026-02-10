@@ -1,5 +1,12 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
-import { SkuControlType, SkuUnit } from '@prisma/client';
+import {
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+import { SKU_CATEGORIES } from '../skus.constants';
 
 export class UpdateSkuDto {
   @IsOptional()
@@ -8,15 +15,8 @@ export class UpdateSkuDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(SKU_CATEGORIES)
   category?: string;
-
-  @IsOptional()
-  @IsEnum(SkuUnit)
-  unit?: SkuUnit;
-
-  @IsOptional()
-  @IsEnum(SkuControlType)
-  controlType?: SkuControlType;
 
   @IsOptional()
   @IsString()

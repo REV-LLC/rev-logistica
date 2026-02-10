@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -16,6 +16,10 @@ export class AssetsService {
 
   private padInternalNumber(value: number) {
     return String(value).padStart(4, '0');
+  }
+
+  private buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
+    return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
   }
 
   async listAssets(params: { serial?: string; search?: string; take?: number; skip?: number }) {
@@ -36,17 +40,20 @@ export class AssetsService {
       throw new BadRequestException('Use serial or search, not both');
     }
 
-    return this.prisma.asset.findMany({
+    const items = await this.prisma.asset.findMany({
       where,
       orderBy: { serialOrEngine: 'asc' },
       take: params.take,
       skip: params.skip,
       select: {
         id: true,
+        publicCode: true,
         serialOrEngine: true,
         description: true,
         brand: true,
         model: true,
+        year: true,
+        fuel: true,
         skuId: true,
         assetFamilyId: true,
         internalNumber: true,
@@ -66,7 +73,7 @@ export class AssetsService {
           select: {
             id: true,
             name: true,
-            controlType: true,
+            assetFamily: { select: { controlType: true } },
           },
         },
         warehouseOwner: {
@@ -83,14 +90,27 @@ export class AssetsService {
         },
       },
     });
+
+    return items.map((item) => ({
+      ...item,
+      sku: item.sku
+        ? {
+            id: item.sku.id,
+            name: item.sku.name,
+            controlType: item.sku.assetFamily?.controlType ?? null,
+          }
+        : item.sku,
+    }));
   }
 
-  async listAssetFamilies() {
+  async listAssetFamilies(params?: { controlType?: SkuControlType }) {
     return this.prisma.assetFamily.findMany({
+      where: params?.controlType ? { controlType: params.controlType } : undefined,
       select: {
         id: true,
         code: true,
         name: true,
+        controlType: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -104,14 +124,17 @@ export class AssetsService {
     description?: string;
     brand?: string;
     model?: string;
+    year?: number;
+    fuel?: string;
+    weight?: number;
     active?: boolean;
   }) {
     const sku = await this.prisma.sku.findUnique({
       where: { id: payload.skuId },
       select: {
         id: true,
-        controlType: true,
         assetFamilyId: true,
+        assetFamily: { select: { code: true, controlType: true } },
       },
     });
 
@@ -119,7 +142,7 @@ export class AssetsService {
       throw new NotFoundException('Sku not found');
     }
 
-    if (sku.controlType !== 'SERIAL') {
+    if (sku.assetFamily.controlType !== 'SERIAL') {
       throw new BadRequestException('Sku must be SERIAL');
     }
 
@@ -127,51 +150,74 @@ export class AssetsService {
       throw new BadRequestException('Sku has no asset family');
     }
 
-    const warehouseOwner = await this.prisma.warehouse.findUnique({
-      where: { id: payload.warehouseOwnerId },
-      select: { id: true, name: true },
-    });
-
-    if (!warehouseOwner) {
-      throw new NotFoundException('Owner warehouse not found');
-    }
-
-    const warehouseCurrentId = payload.warehouseCurrentId ?? payload.warehouseOwnerId;
-
-    if (warehouseCurrentId !== payload.warehouseOwnerId) {
-      const currentWarehouse = await this.prisma.warehouse.findUnique({
-        where: { id: warehouseCurrentId },
-        select: { id: true },
-      });
-      if (!currentWarehouse) {
-        throw new NotFoundException('Current warehouse not found');
-      }
-    }
-
-    const latest = await this.prisma.asset.findFirst({
-      where: { warehouseOwnerId: payload.warehouseOwnerId },
-      orderBy: { internalNumber: 'desc' },
-      select: { internalNumber: true },
-    });
-    const internalNumber = (latest?.internalNumber ?? 0) + 1;
-    const serialOrEngine =
-      payload.serialOrEngine?.trim() ||
-      `${this.sanitizeOwnerName(warehouseOwner.name)}-${this.padInternalNumber(internalNumber)}`;
-
     try {
-      return await this.prisma.asset.create({
-        data: {
-          skuId: payload.skuId,
-          assetFamilyId: sku.assetFamilyId,
-          internalNumber,
-          serialOrEngine,
-          description: payload.description ?? null,
-          brand: payload.brand ?? null,
-          model: payload.model ?? null,
-          warehouseOwnerId: payload.warehouseOwnerId,
-          warehouseCurrentId,
-          active: payload.active ?? true,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const warehouseOwner = await tx.warehouse.findUnique({
+          where: { id: payload.warehouseOwnerId },
+          select: { id: true, name: true },
+        });
+
+        if (!warehouseOwner) {
+          throw new NotFoundException('Owner warehouse not found');
+        }
+
+        const warehouseCurrentId = payload.warehouseCurrentId ?? payload.warehouseOwnerId;
+
+        if (warehouseCurrentId !== payload.warehouseOwnerId) {
+          const currentWarehouse = await tx.warehouse.findUnique({
+            where: { id: warehouseCurrentId },
+            select: { id: true },
+          });
+          if (!currentWarehouse) {
+            throw new NotFoundException('Current warehouse not found');
+          }
+        }
+
+        const counter = await tx.assetInternalCounter.upsert({
+          where: {
+            ownerWarehouseId_assetFamilyId: {
+              ownerWarehouseId: payload.warehouseOwnerId,
+              assetFamilyId: sku.assetFamilyId,
+            },
+          },
+          create: {
+            ownerWarehouseId: payload.warehouseOwnerId,
+            assetFamilyId: sku.assetFamilyId,
+            nextNumber: 2,
+          },
+          update: {
+            nextNumber: { increment: 1 },
+          },
+          select: { nextNumber: true },
+        });
+
+        const internalNumber = counter.nextNumber - 1;
+        const serialOrEngine =
+          payload.serialOrEngine?.trim() ||
+          `${this.sanitizeOwnerName(warehouseOwner.name)}-${this.padInternalNumber(internalNumber)}`;
+
+        return await tx.asset.create({
+          data: {
+            skuId: payload.skuId,
+            assetFamilyId: sku.assetFamilyId,
+            publicCode: this.buildAssetPublicCode(
+              sku.assetFamily.code,
+              payload.warehouseOwnerId,
+              internalNumber,
+            ),
+            internalNumber,
+            serialOrEngine,
+            description: payload.description ?? null,
+            brand: payload.brand ?? null,
+            model: payload.model ?? null,
+            year: payload.year ?? null,
+            fuel: payload.fuel ?? null,
+            warehouseOwnerId: payload.warehouseOwnerId,
+            warehouseCurrentId,
+            weight: payload.weight ?? null,
+            active: payload.active ?? true,
+          },
+        });
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -187,7 +233,10 @@ export class AssetsService {
       description?: string;
       brand?: string;
       model?: string;
+      year?: number;
+      fuel?: string;
       warehouseCurrentId?: string;
+      weight?: number;
       active?: boolean;
     },
   ) {
@@ -216,7 +265,10 @@ export class AssetsService {
         description: payload.description ?? undefined,
         brand: payload.brand ?? undefined,
         model: payload.model ?? undefined,
+        year: payload.year ?? undefined,
+        fuel: payload.fuel ?? undefined,
         warehouseCurrentId: payload.warehouseCurrentId ?? undefined,
+        weight: payload.weight ?? undefined,
         active: payload.active,
       },
     });
@@ -233,5 +285,79 @@ export class AssetsService {
     }
 
     return this.prisma.asset.delete({ where: { id: assetId } });
+  }
+
+  async getAssetLocation(assetId: string) {
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      select: { id: true, warehouseCurrentId: true },
+    });
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    if (asset.warehouseCurrentId) {
+      const warehouse = await this.prisma.warehouse.findUnique({
+        where: { id: asset.warehouseCurrentId },
+        select: { id: true, name: true },
+      });
+      return {
+        assetId,
+        locationType: 'WAREHOUSE',
+        warehouse,
+        customerWorksite: null,
+      };
+    }
+
+    const lastLedger = await this.prisma.stockLedger.findFirst({
+      where: { assetId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        movementType: true,
+        warehouse: { select: { id: true, name: true } },
+        customerWorksite: {
+          select: {
+            id: true,
+            customer: { select: { id: true, name: true } },
+            worksite: { select: { id: true, name: true } },
+          },
+        },
+        createdAt: true,
+      },
+    });
+
+    if (!lastLedger) {
+      return {
+        assetId,
+        locationType: 'UNKNOWN',
+        warehouse: null,
+        customerWorksite: null,
+      };
+    }
+
+    if (lastLedger.customerWorksite) {
+      return {
+        assetId,
+        locationType: 'CUSTOMER_WORKSITE',
+        warehouse: null,
+        customerWorksite: lastLedger.customerWorksite,
+      };
+    }
+
+    if (lastLedger.warehouse) {
+      return {
+        assetId,
+        locationType: 'WAREHOUSE',
+        warehouse: lastLedger.warehouse,
+        customerWorksite: null,
+      };
+    }
+
+    return {
+      assetId,
+      locationType: 'IN_TRANSIT',
+      warehouse: null,
+      customerWorksite: null,
+    };
   }
 }
