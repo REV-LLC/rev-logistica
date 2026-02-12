@@ -14,24 +14,19 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { CreateCustomerDto } from './dto/create-customer.dto';
-import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomersService } from './customers.service';
+import { CreateWorksiteDto } from './dto/create-worksite.dto';
+import { UpdateWorksiteDto } from './dto/update-worksite.dto';
 
-@Controller('customers')
+@Controller('worksites')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE)
-export class CustomersController {
+export class WorksitesController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Get()
   list() {
-    return this.customersService.list();
-  }
-
-  @Get(':id')
-  getById(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.customersService.getById(id);
+    return this.customersService.listAllWorksites();
   }
 
   @Post()
@@ -43,14 +38,14 @@ export class CustomersController {
         transform: true,
       }),
     )
-    payload: CreateCustomerDto,
+    payload: CreateWorksiteDto,
   ) {
-    return this.customersService.create(payload);
+    return this.customersService.createWorksite(payload);
   }
 
-  @Patch(':id')
+  @Patch(':customerWorksiteId')
   update(
-    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string,
     @Body(
       new ValidationPipe({
         whitelist: true,
@@ -58,18 +53,13 @@ export class CustomersController {
         transform: true,
       }),
     )
-    payload: UpdateCustomerDto,
+    payload: UpdateWorksiteDto,
   ) {
-    return this.customersService.update(id, payload);
+    return this.customersService.updateWorksite(customerWorksiteId, payload);
   }
 
-  @Delete(':id')
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.customersService.remove(id);
-  }
-
-  @Get(':id/worksites')
-  listWorksites(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.customersService.listWorksites(id);
+  @Delete(':customerWorksiteId')
+  remove(@Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string) {
+    return this.customersService.removeWorksite(customerWorksiteId);
   }
 }
