@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import RawJsonPanel from '@/components/RawJsonPanel';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import { useRouter } from 'next/navigation';
 import {
@@ -18,10 +17,41 @@ import {
 } from '@mantine/core';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
+const DEFAULT_TAKE = 30;
+const FILTER_OPTIONS_TAKE = 200;
 
 type LedgerResponse = {
   items: LedgerItem[];
   nextCursor: string | null;
+};
+
+type WarehouseOption = {
+  id: string;
+  name: string;
+};
+
+type WorksiteOption = {
+  id: string;
+  alias: string | null;
+  customer: {
+    id: string;
+    name: string;
+  };
+  worksite: {
+    id: string;
+    name: string;
+  };
+};
+
+type SkuOption = {
+  id: string;
+  name: string;
+};
+
+type AssetOption = {
+  id: string;
+  serialOrEngine: string | null;
+  description: string | null;
 };
 
 export default function LedgerPage() {
@@ -40,6 +70,11 @@ export default function LedgerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
+  const [filtersLoading, setFiltersLoading] = useState(false);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [worksites, setWorksites] = useState<WorksiteOption[]>([]);
+  const [skus, setSkus] = useState<SkuOption[]>([]);
+  const [assets, setAssets] = useState<AssetOption[]>([]);
 
   const buildQuery = (cursor?: string | null) => {
     const params = new URLSearchParams();
@@ -50,6 +85,7 @@ export default function LedgerPage() {
     if (filters.assetId) params.set('assetId', filters.assetId);
     if (filters.from) params.set('from', filters.from);
     if (filters.to) params.set('to', filters.to);
+    params.set('take', String(DEFAULT_TAKE));
     if (cursor) params.set('cursor', cursor);
     return params.toString();
   };
@@ -86,6 +122,36 @@ export default function LedgerPage() {
     }
   };
 
+  const loadFilterOptions = async () => {
+    setFiltersLoading(true);
+    try {
+      const [warehousesData, worksitesData, skusData, assetsData] = await Promise.all([
+        api<WarehouseOption[]>('/warehouses', { method: 'GET' }),
+        api<WorksiteOption[]>('/worksites', { method: 'GET' }),
+        api<SkuOption[]>('/skus', { method: 'GET' }),
+        api<AssetOption[]>(`/assets?take=${FILTER_OPTIONS_TAKE}`, { method: 'GET' }),
+      ]);
+      setWarehouses(warehousesData);
+      setWorksites(worksitesData);
+      setSkus(skusData);
+      setAssets(assetsData);
+    } catch {
+      // Keep page functional even if filter catalogs fail.
+      setWarehouses([]);
+      setWorksites([]);
+      setSkus([]);
+      setAssets([]);
+    } finally {
+      setFiltersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLedger();
+    loadFilterOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (unauthorized) {
     return (
       <main>
@@ -107,25 +173,35 @@ export default function LedgerPage() {
     <main>
       <Container size="lg" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Ledger de Inventario</Title>
-          <Text c="dimmed">Explora el historial de movimientos.</Text>
+          <Title order={2}>Historial de Movimientos</Title>
+          <Text c="dimmed">Consulta los movimientos de inventario por filtros.</Text>
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
-            <TextInput
-              label="Warehouse ID"
+            <Select
+              label="Bodega"
               value={filters.warehouseId}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, warehouseId: event.target.value }))
-              }
-              placeholder="UUID"
+              onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
+              placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todas'}
+              data={warehouses.map((warehouse) => ({
+                value: warehouse.id,
+                label: warehouse.name,
+              }))}
+              searchable
+              clearable
             />
-            <TextInput
-              label="Customer Worksite ID"
+            <Select
+              label="Obra"
               value={filters.customerWorksiteId}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, customerWorksiteId: event.target.value }))
+              onChange={(value) =>
+                setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
               }
-              placeholder="UUID"
+              placeholder={filtersLoading ? 'Cargando obras...' : 'Todas'}
+              data={worksites.map((row) => ({
+                value: row.id,
+                label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
+              }))}
+              searchable
+              clearable
             />
             <Select
               label="Movement Type"
@@ -137,17 +213,29 @@ export default function LedgerPage() {
               placeholder="Todos"
               data={MOVEMENT_TYPES.map((t) => ({ value: t, label: t }))}
             />
-            <TextInput
-              label="SKU ID"
+            <Select
+              label="SKU"
               value={filters.skuId}
-              onChange={(event) => setFilters((prev) => ({ ...prev, skuId: event.target.value }))}
-              placeholder="UUID"
+              onChange={(value) => setFilters((prev) => ({ ...prev, skuId: value ?? '' }))}
+              placeholder={filtersLoading ? 'Cargando SKUs...' : 'Todos'}
+              data={skus.map((sku) => ({
+                value: sku.id,
+                label: sku.name,
+              }))}
+              searchable
+              clearable
             />
-            <TextInput
-              label="Asset ID"
+            <Select
+              label="Activo"
               value={filters.assetId}
-              onChange={(event) => setFilters((prev) => ({ ...prev, assetId: event.target.value }))}
-              placeholder="UUID"
+              onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
+              placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
+              data={assets.map((asset) => ({
+                value: asset.id,
+                label: asset.description || asset.serialOrEngine || asset.id,
+              }))}
+              searchable
+              clearable
             />
             <TextInput
               label="Desde"
@@ -213,7 +301,6 @@ export default function LedgerPage() {
           </Group>
         )}
 
-        {items.length > 0 && <RawJsonPanel data={{ items, nextCursor }} />}
       </Container>
     </main>
   );

@@ -73,6 +73,7 @@ export class AssetsService {
           select: {
             id: true,
             name: true,
+            imageUrl: true,
             assetFamily: { select: { controlType: true } },
           },
         },
@@ -97,6 +98,7 @@ export class AssetsService {
         ? {
             id: item.sku.id,
             name: item.sku.name,
+            imageUrl: item.sku.imageUrl,
             controlType: item.sku.assetFamily?.controlType ?? null,
           }
         : item.sku,
@@ -114,6 +116,71 @@ export class AssetsService {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async getAssetById(assetId: string) {
+    const item = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      select: {
+        id: true,
+        publicCode: true,
+        serialOrEngine: true,
+        description: true,
+        brand: true,
+        model: true,
+        year: true,
+        fuel: true,
+        skuId: true,
+        assetFamilyId: true,
+        internalNumber: true,
+        warehouseOwnerId: true,
+        warehouseCurrentId: true,
+        weight: true,
+        active: true,
+        createdAt: true,
+        assetFamily: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        sku: {
+          select: {
+            id: true,
+            name: true,
+            assetFamily: { select: { controlType: true } },
+          },
+        },
+        warehouseOwner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        warehouseCurrent: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    return {
+      ...item,
+      sku: item.sku
+        ? {
+            id: item.sku.id,
+            name: item.sku.name,
+            controlType: item.sku.assetFamily?.controlType ?? null,
+          }
+        : item.sku,
+    };
   }
 
   async createAsset(payload: {

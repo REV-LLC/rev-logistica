@@ -8,6 +8,7 @@ export const SKU_CATEGORIES = [
   'ENCOFRADO',
   'ALTURAS',
   'ANDAMIOS',
+  'CARGADORES',
   'SIN_CATEGORIA',
 ] as const;
 

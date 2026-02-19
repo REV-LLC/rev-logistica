@@ -11,20 +11,20 @@ import {
   IconBuildingWarehouse,
   IconChecklist,
   IconFileInvoice,
-  IconMapPin,
-  IconTool,
+  IconPlus,
+  IconBox,
   IconTruck,
   IconUsers,
   IconUser,
 } from '@tabler/icons-react';
 
 const links = [
+  { href: '/inventory/remision-devolucion', label: 'Remisión/Devolución', special: true, icon: IconFileInvoice },
   { href: '/tasks', label: 'Pendientes', icon: IconChecklist },
   { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse },
-  { href: '/inventory/on-site', label: 'On-site', icon: IconMapPin },
   { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle },
-  { href: '/inventory/equipos', label: 'Equipos', icon: IconTool },
-  { href: '/inventory/remision-devolucion', label: 'Remisión/Devolución', special: true, icon: IconFileInvoice },
+  { href: '/inventory/serialized-assets', label: 'Crear equipo', icon: IconPlus },
+  { href: '/inventory/bulk-adjustments', label: 'Agregar stock', icon: IconBox },
   { href: '/transport/cost', label: 'Transporte', icon: IconTruck },
   { href: '/transport/vehicles', label: 'Vehículos', icon: IconTruck },
   { href: '/transport/obras', label: 'Obras', icon: IconBuilding },
@@ -32,13 +32,18 @@ const links = [
   { href: '/employees', label: 'Empleados', icon: IconUser }
 ];
 
-export default function Nav() {
+type NavProps = {
+  onNavigate?: () => void;
+};
+
+export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [copied, setCopied] = useState(false);
 
   const handleLogout = () => {
     clearToken();
+    onNavigate?.();
     router.replace('/login');
   };
 
@@ -75,7 +80,17 @@ export default function Nav() {
               label={link.label}
               active={pathname?.startsWith(link.href)}
               color={link.special ? 'green' : undefined}
+              styles={
+                link.special
+                  ? {
+                      root: { backgroundColor: 'var(--mantine-color-green-0)' },
+                      label: { color: 'var(--mantine-color-green-8)', fontWeight: 700 },
+                      section: { color: 'var(--mantine-color-green-7)' },
+                    }
+                  : undefined
+              }
               leftSection={<Icon size={16} />}
+              onClick={onNavigate}
             />
           );
         })}

@@ -6,7 +6,6 @@ import {
   PrismaClient,
   Role,
   SkuControlType,
-  SkuUnit,
 } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -78,24 +77,54 @@ function normalizeFamilyCode(value: string) {
   return value.trim().toUpperCase();
 }
 
+function buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
+  return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${String(internalNumber).padStart(4, '0')}`;
+}
+
 async function createAssetWithInternalNumber(
   tx: Prisma.TransactionClient,
-  data: Omit<Prisma.AssetUncheckedCreateInput, 'internalNumber'> & { assetFamilyId: string },
+  data: Omit<Prisma.AssetUncheckedCreateInput, 'internalNumber' | 'publicCode'> & {
+    assetFamilyId: string;
+  },
   maxRetries = 3,
 ) {
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-    const latest = await tx.asset.findFirst({
-      where: { assetFamilyId: data.assetFamilyId },
-      orderBy: { internalNumber: 'desc' },
-      select: { internalNumber: true },
-    });
-
-    const nextNumber = (latest?.internalNumber ?? 0) + 1;
-
     try {
+      const assetFamily = await tx.assetFamily.findUnique({
+        where: { id: data.assetFamilyId },
+        select: { code: true },
+      });
+      if (!assetFamily) {
+        throw new Error(`AssetFamily not found for id ${data.assetFamilyId}`);
+      }
+
+      const counter = await tx.assetInternalCounter.upsert({
+        where: {
+          ownerWarehouseId_assetFamilyId: {
+            ownerWarehouseId: data.warehouseOwnerId,
+            assetFamilyId: data.assetFamilyId,
+          },
+        },
+        create: {
+          ownerWarehouseId: data.warehouseOwnerId,
+          assetFamilyId: data.assetFamilyId,
+          nextNumber: 2,
+        },
+        update: {
+          nextNumber: { increment: 1 },
+        },
+        select: { nextNumber: true },
+      });
+
+      const nextNumber = counter.nextNumber - 1;
       return await tx.asset.create({
         data: {
           ...data,
+          publicCode: buildAssetPublicCode(
+            assetFamily.code,
+            data.warehouseOwnerId,
+            nextNumber,
+          ),
           internalNumber: nextNumber,
         },
         select: { id: true },
@@ -307,7 +336,7 @@ async function main() {
     }
 
     const existingFamilies = await tx.assetFamily.findMany({
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, controlType: true },
     });
     const assetFamilyByCode = new Map(existingFamilies.map((family) => [family.code, family]));
     const skuFamilyById = new Map<string, string>();
@@ -327,6 +356,22 @@ async function main() {
         continue;
       }
 
+      let controlType: SkuControlType | null = null;
+      if (sku.trackingType === 'SERIAL') {
+        controlType = SkuControlType.SERIAL;
+      } else if (sku.trackingType === 'BULK') {
+        controlType = SkuControlType.BULK;
+      }
+
+      if (!controlType) {
+        summary.errors.push({
+          area: 'sku',
+          message: 'Invalid trackingType',
+          context: sku,
+        });
+        continue;
+      }
+
       const existing = await tx.sku.findFirst({
         where: { name: { equals: name, mode: 'insensitive' } },
         select: { id: true, assetFamilyId: true },
@@ -337,10 +382,17 @@ async function main() {
         let family = assetFamilyByCode.get(familyCode);
         if (!family) {
           family = await tx.assetFamily.create({
-            data: { code: familyCode, name },
-            select: { id: true, code: true, name: true },
+            data: { code: familyCode, name, controlType },
+            select: { id: true, code: true, name: true, controlType: true },
           });
           assetFamilyByCode.set(family.code, family);
+        } else if (family.controlType !== controlType) {
+          summary.errors.push({
+            area: 'sku',
+            message: 'Asset family controlType mismatch',
+            context: { sku, family },
+          });
+          continue;
         }
         if (!existing.assetFamilyId) {
           await tx.sku.update({
@@ -361,37 +413,27 @@ async function main() {
         continue;
       }
 
-      let controlType: SkuControlType | null = null;
-      if (sku.trackingType === 'SERIAL') {
-        controlType = SkuControlType.SERIAL;
-      } else if (sku.trackingType === 'BULK') {
-        controlType = SkuControlType.BULK;
-      }
-
-      if (!controlType) {
-        summary.errors.push({
-          area: 'sku',
-          message: 'Invalid trackingType',
-          context: sku,
-        });
-        continue;
-      }
-
       const familyCode = normalizeFamilyCode(name);
       let family = assetFamilyByCode.get(familyCode);
       if (!family) {
         family = await tx.assetFamily.create({
-          data: { code: familyCode, name },
-          select: { id: true, code: true, name: true },
+          data: { code: familyCode, name, controlType },
+          select: { id: true, code: true, name: true, controlType: true },
         });
         assetFamilyByCode.set(family.code, family);
+      } else if (family.controlType !== controlType) {
+        summary.errors.push({
+          area: 'sku',
+          message: 'Asset family controlType mismatch',
+          context: { sku, family },
+        });
+        continue;
       }
 
       const created = await tx.sku.create({
         data: {
           name,
-          unit: SkuUnit.UNIT,
-          controlType,
+          category: 'GENERAL',
           assetFamilyId: family.id,
           active: true,
         },

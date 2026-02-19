@@ -1,0 +1,20 @@
+ALTER TABLE "Sku"
+  DROP CONSTRAINT IF EXISTS "Sku_category_check";
+
+ALTER TABLE "Sku"
+  ADD CONSTRAINT "Sku_category_check"
+  CHECK (
+    "category" IN (
+      'FORMALETA',
+      'COMPACTADORES',
+      'HERRAMIENTAS ELECTRICAS DE PERCUSION',
+      'HERRAMIENTAS NEUMATICAS',
+      'MAQUINARIA AMARILLA',
+      'DEMOLICION',
+      'ENCOFRADO',
+      'ALTURAS',
+      'ANDAMIOS',
+      'CARGADORES',
+      'SIN_CATEGORIA'
+    )
+  );

@@ -1,0 +1,211 @@
+.sheet {
+  margin-top: 20px;
+  background: #fff;
+  border: 1px solid #111;
+  color: #111;
+  padding: 14px;
+  font-family: 'Arial Narrow', Arial, sans-serif;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+}
+
+.logoText {
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.logoWrap {
+  width: 240px;
+  max-width: 100%;
+}
+
+.logoImage {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.company {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.meta {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.statusBox {
+  border: 1px solid #111;
+  padding: 8px 10px;
+  min-width: 170px;
+  max-width: 190px;
+  margin-top: 34px;
+}
+
+.statusLine {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.checkbox {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #111;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.block {
+  margin-top: 8px;
+  border: 1px solid #111;
+}
+
+.blockTitle {
+  background: #111;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.grid2 > div {
+  border-top: 1px solid #111;
+  border-right: 1px solid #111;
+  padding: 6px 8px;
+  min-height: 30px;
+  font-size: 13px;
+}
+
+.grid2 > div:nth-child(2n) {
+  border-right: none;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.table th,
+.table td {
+  border: 1px solid #111;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.table th {
+  background: #111;
+  color: #fff;
+  font-weight: 700;
+}
+
+.table tbody tr td {
+  height: 30px;
+}
+
+.observations {
+  min-height: 60px;
+  padding: 8px;
+  font-size: 13px;
+}
+
+.termsBlock {
+  margin-top: 8px;
+  border: 1px solid #111;
+}
+
+.termsTitle {
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  letter-spacing: 0.2px;
+}
+
+.termsText {
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: justify;
+  padding: 6px 8px;
+}
+
+.signatures {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid #111;
+}
+
+.signatures > div {
+  min-height: 52px;
+  border-right: 1px solid #111;
+  padding: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.signatures > div:last-child {
+  border-right: none;
+}
+
+@media (max-width: 768px) {
+  .company {
+    font-size: 20px;
+  }
+
+  .statusBox {
+    min-width: 160px;
+  }
+
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid2 > div {
+    border-right: none;
+  }
+
+  .signatures {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media print {
+  .noPrint {
+    display: none !important;
+  }
+
+  .sheet {
+    margin-top: 0;
+    border: 1px solid #111;
+    padding: 10px;
+  }
+}

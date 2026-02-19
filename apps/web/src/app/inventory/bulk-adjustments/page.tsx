@@ -481,7 +481,7 @@ export default function AddBulkStockPage() {
             </>
           )}
 
-          <Group justify="flex-end">
+          <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => setItemConfigOpen(false)}>
               Cancelar
             </Button>
@@ -510,7 +510,7 @@ export default function AddBulkStockPage() {
 
         <Stack mt="xl" gap="lg">
           <Stack gap="xs">
-            <Group justify="space-between">
+            <Group justify="space-between" className="mobile-stack">
               <Text fw={600}>Tipo de item</Text>
               <Button variant="light" size="xs" onClick={() => setItemConfigOpen(true)} disabled={!itemType}>
                 {isItemConfigured ? 'Editar configuración' : 'Configurar item'}
@@ -552,7 +552,7 @@ export default function AddBulkStockPage() {
 
           <Stack gap="xs">
             <Text fw={600}>Movimiento inicial</Text>
-            <Group grow>
+            <Group grow className="mobile-stack">
               <Select
                 label="Bodega dueña"
                 data={warehouseOptions}
@@ -582,14 +582,19 @@ export default function AddBulkStockPage() {
 
           <Stack gap="xs">
             <Text fw={600}>JSON generado</Text>
-            <Paper withBorder p="md" radius="md" bg="gray.0">
-              <Text component="pre" ff="monospace" size="xs" style={{ margin: 0 }}>
+            <Paper withBorder p="md" radius="md" bg="gray.0" className="mobile-json-preview">
+              <Text
+                component="pre"
+                ff="monospace"
+                size="xs"
+                style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+              >
                 {JSON.stringify(payloadPreview, null, 2)}
               </Text>
             </Paper>
           </Stack>
 
-          <Group justify="flex-end">
+          <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => router.back()}>
               Cancelar
             </Button>

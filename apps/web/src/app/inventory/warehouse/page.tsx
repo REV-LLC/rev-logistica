@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import RawJsonPanel from '@/components/RawJsonPanel';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { useRouter } from 'next/navigation';
-import { buildFormaletaDebug } from '@/lib/formaleta';
 import {
+  ActionIcon,
   Button,
   Container,
   Group,
@@ -21,12 +20,15 @@ import {
   TextInput,
   Title
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconEye } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
 
 interface InventoryResponse {
   warehouseId: string;
   bulk: {
     skuId: string;
+    ownerWarehouseId: string;
     skuName: string | null;
     imageUrl: string | null;
     imageFileObjectId: string | null;
@@ -53,15 +55,22 @@ type Warehouse = {
   } | null;
 };
 
+type Owner = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
 export default function WarehouseInventoryPage() {
   const router = useRouter();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [warehouseSelectKey, setWarehouseSelectKey] = useState(0);
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
-  const [viewFilter, setViewFilter] = useState<'ALL' | 'FORMALETAS' | 'OTROS' | 'SERIAL'>('ALL');
+  const [viewFilter, setViewFilter] = useState<'ALL' | 'BULK' | 'SERIAL'>('ALL');
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [reauthEmail, setReauthEmail] = useState('');
   const [reauthPassword, setReauthPassword] = useState('');
@@ -75,6 +84,9 @@ export default function WarehouseInventoryPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
   const [warehousesError, setWarehousesError] = useState<string | null>(null);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
+  const [ownersError, setOwnersError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createType, setCreateType] = useState<'OWN' | 'ALLY'>('OWN');
@@ -94,18 +106,32 @@ export default function WarehouseInventoryPage() {
   const [deleteTarget, setDeleteTarget] = useState<Warehouse | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsTarget, setDetailsTarget] = useState<Warehouse | null>(null);
 
   const ownerOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
+    const ownersFromWarehouses = new Map<string, string>();
     warehouses.forEach((warehouse) => {
       const owner = warehouse.ownerCompany;
-      if (owner?.id) map.set(owner.id, owner);
+      if (owner?.id && owner?.name) {
+        ownersFromWarehouses.set(owner.id, owner.name);
+      }
     });
-    return Array.from(map.values()).map((owner) => ({
+
+    const optionsFromOwners = owners.map((owner) => ({
       value: owner.id,
-      label: owner.name,
+      label: owner.active ? owner.name : `${owner.name} (inactivo)`,
     }));
-  }, [warehouses]);
+
+    if (optionsFromOwners.length > 0) {
+      return optionsFromOwners;
+    }
+
+    return Array.from(ownersFromWarehouses.entries()).map(([id, name]) => ({
+      value: id,
+      label: name,
+    }));
+  }, [owners, warehouses]);
 
   const typeOptions = [
     { value: 'OWN', label: 'Propia' },
@@ -146,6 +172,9 @@ export default function WarehouseInventoryPage() {
     }
   };
 
+  const bulkAdjustKey = (item: { skuId: string; ownerWarehouseId: string }) =>
+    `${item.skuId}::${item.ownerWarehouseId}`;
+
   const loadWarehouses = async () => {
     setWarehousesLoading(true);
     setWarehousesError(null);
@@ -165,9 +194,36 @@ export default function WarehouseInventoryPage() {
     }
   };
 
+  const loadOwners = async () => {
+    setOwnersLoading(true);
+    setOwnersError(null);
+    try {
+      const response = await api<Owner[]>('/owners', { method: 'GET' });
+      setOwners(response);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setOwnersError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setOwnersError(err.message);
+      } else {
+        setOwnersError('Error cargando empresas dueñas.');
+      }
+    } finally {
+      setOwnersLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadWarehouses();
+    loadOwners();
   }, []);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    if (createOwnerCompanyId) return;
+    if (!ownerOptions.length) return;
+    setCreateOwnerCompanyId(ownerOptions[0].value);
+  }, [createOpen, createOwnerCompanyId, ownerOptions]);
 
   const openCreate = () => {
     setCreateName('');
@@ -269,6 +325,11 @@ export default function WarehouseInventoryPage() {
     setDeleteOpen(true);
   };
 
+  const openDetails = (warehouse: Warehouse) => {
+    setDetailsTarget(warehouse);
+    setDetailsOpen(true);
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleteLoading(true);
@@ -323,7 +384,7 @@ export default function WarehouseInventoryPage() {
     setAdjustSearch('');
     const initial: Record<string, number> = {};
     data.bulk.forEach((item) => {
-      initial[item.skuId] = item.quantity;
+      initial[bulkAdjustKey(item)] = item.quantity;
     });
     setDesiredMap(initial);
   };
@@ -364,13 +425,13 @@ export default function WarehouseInventoryPage() {
     try {
       const items = data.bulk
         .map((item) => {
-          const desired = desiredMap[item.skuId];
+          const desired = desiredMap[bulkAdjustKey(item)];
           const next = typeof desired === 'number' ? desired : item.quantity;
           const diff = next - item.quantity;
           if (diff === 0) return null;
-          return { skuId: item.skuId, quantity: diff };
+          return { skuId: item.skuId, ownerWarehouseId: item.ownerWarehouseId, quantity: diff };
         })
-        .filter(Boolean) as { skuId: string; quantity: number }[];
+        .filter(Boolean) as { skuId: string; ownerWarehouseId: string; quantity: number }[];
 
       if (items.length === 0) {
         setAdjustResult('No hay cambios para aplicar.');
@@ -424,8 +485,13 @@ export default function WarehouseInventoryPage() {
               {warehousesError}
             </Text>
           )}
+          {ownersError && (
+            <Text c="red" mt="sm">
+              {ownersError}
+            </Text>
+          )}
           <ScrollArea mt="md">
-            <Table striped highlightOnHover>
+            <Table striped highlightOnHover className="table-mobile-fit">
               <Table.Caption>
                 {warehousesLoading
                   ? 'Cargando bodegas...'
@@ -433,11 +499,12 @@ export default function WarehouseInventoryPage() {
               </Table.Caption>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Nombre</Table.Th>
-                  <Table.Th>Tipo</Table.Th>
-                  <Table.Th>Empresa dueña</Table.Th>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th>Acciones</Table.Th>
+                  <Table.Th style={isMobile ? { width: '80%' } : undefined}>Nombre</Table.Th>
+                  {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
+                  {!isMobile ? <Table.Th>Tipo</Table.Th> : null}
+                  {!isMobile ? <Table.Th>Empresa dueña</Table.Th> : null}
+                  {!isMobile ? <Table.Th>Estado</Table.Th> : null}
+                  {!isMobile ? <Table.Th>Acciones</Table.Th> : null}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -445,23 +512,40 @@ export default function WarehouseInventoryPage() {
                   <Table.Tr key={warehouse.id}>
                     <Table.Td>
                       <Text fw={600}>{warehouse.name}</Text>
-                      <Text size="xs" c="dimmed">
-                        {warehouse.id}
-                      </Text>
+                      {!isMobile ? (
+                        <Text size="xs" c="dimmed">
+                          {warehouse.id}
+                        </Text>
+                      ) : null}
                     </Table.Td>
-                    <Table.Td>{warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}</Table.Td>
-                    <Table.Td>{warehouse.ownerCompany?.name ?? warehouse.ownerCompanyId}</Table.Td>
-                    <Table.Td>{warehouse.active ? 'Activa' : 'Inactiva'}</Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <Button size="xs" variant="light" onClick={() => openEdit(warehouse)}>
-                          Editar
-                        </Button>
-                        <Button size="xs" color="red" variant="light" onClick={() => openDelete(warehouse)}>
-                          Eliminar
-                        </Button>
-                      </Group>
-                    </Table.Td>
+                    {isMobile ? (
+                      <Table.Td>
+                        <ActionIcon
+                          variant="light"
+                          aria-label={`Ver detalles de ${warehouse.name}`}
+                          onClick={() => openDetails(warehouse)}
+                        >
+                          <IconEye size={16} />
+                        </ActionIcon>
+                      </Table.Td>
+                    ) : null}
+                    {!isMobile ? <Table.Td>{warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}</Table.Td> : null}
+                    {!isMobile ? (
+                      <Table.Td>{warehouse.ownerCompany?.name ?? warehouse.ownerCompanyId}</Table.Td>
+                    ) : null}
+                    {!isMobile ? <Table.Td>{warehouse.active ? 'Activa' : 'Inactiva'}</Table.Td> : null}
+                    {!isMobile ? (
+                      <Table.Td>
+                        <Group gap="xs">
+                          <Button size="xs" variant="light" onClick={() => openEdit(warehouse)}>
+                            Editar
+                          </Button>
+                          <Button size="xs" color="red" variant="light" onClick={() => openDelete(warehouse)}>
+                            Eliminar
+                          </Button>
+                        </Group>
+                      </Table.Td>
+                    ) : null}
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -469,7 +553,7 @@ export default function WarehouseInventoryPage() {
           </ScrollArea>
         </Paper>
 
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Paper shadow="sm" p="xl" radius="md" withBorder mt="md">
           <Title order={2}>Inventario por bodega</Title>
           <Text c="dimmed">Consulta el inventario de una bodega.</Text>
           <Group mt="md" align="flex-end" justify="space-between" wrap="wrap">
@@ -486,8 +570,7 @@ export default function WarehouseInventoryPage() {
               onChange={(value) => setViewFilter((value as typeof viewFilter) ?? 'ALL')}
               data={[
                 { value: 'ALL', label: 'Todo' },
-                { value: 'FORMALETAS', label: 'Formaletas' },
-                { value: 'OTROS', label: 'Otros bulk' },
+                { value: 'BULK', label: 'Stock masivo' },
                 { value: 'SERIAL', label: 'Serial' }
               ]}
               w={180}
@@ -513,12 +596,6 @@ export default function WarehouseInventoryPage() {
                 viewFilter={viewFilter}
               />
             </div>
-            <RawJsonPanel
-              data={{
-                ...data,
-                formaletaDebug: buildFormaletaDebug(data.bulk)
-              }}
-            />
           </>
         )}
       </Container>
@@ -592,11 +669,11 @@ export default function WarehouseInventoryPage() {
                       <Table.Td>
                         <NumberInput
                           min={0}
-                          value={desiredMap[item.skuId]}
+                          value={desiredMap[bulkAdjustKey(item)]}
                           onChange={(value) =>
                             setDesiredMap((prev) => ({
                               ...prev,
-                              [item.skuId]: typeof value === 'number' ? value : item.quantity
+                              [bulkAdjustKey(item)]: typeof value === 'number' ? value : item.quantity
                             }))
                           }
                         />
@@ -621,6 +698,52 @@ export default function WarehouseInventoryPage() {
       </Modal>
 
       <Modal
+        opened={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="Detalle de bodega"
+      >
+        {detailsTarget ? (
+          <>
+            <Text fw={700}>{detailsTarget.name}</Text>
+            <Text size="xs" c="dimmed" mb="md">
+              {detailsTarget.id}
+            </Text>
+            <Text>
+              <strong>Tipo:</strong> {detailsTarget.type === 'OWN' ? 'Propia' : 'Aliada'}
+            </Text>
+            <Text mt="xs">
+              <strong>Empresa dueña:</strong>{' '}
+              {detailsTarget.ownerCompany?.name ?? detailsTarget.ownerCompanyId}
+            </Text>
+            <Text mt="xs">
+              <strong>Estado:</strong> {detailsTarget.active ? 'Activa' : 'Inactiva'}
+            </Text>
+            <Group mt="md" className="mobile-actions">
+              <Button
+                variant="light"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  openEdit(detailsTarget);
+                }}
+              >
+                Editar
+              </Button>
+              <Button
+                color="red"
+                variant="light"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  openDelete(detailsTarget);
+                }}
+              >
+                Eliminar
+              </Button>
+            </Group>
+          </>
+        ) : null}
+      </Modal>
+
+      <Modal
         opened={createOpen}
         onClose={() => setCreateOpen(false)}
         title="Crear bodega"
@@ -637,22 +760,16 @@ export default function WarehouseInventoryPage() {
           onChange={(value) => setCreateType((value as 'OWN' | 'ALLY') ?? 'OWN')}
           mt="sm"
         />
-        {ownerOptions.length > 0 ? (
-          <Select
-            label="Empresa dueña"
-            data={ownerOptions}
-            value={createOwnerCompanyId}
-            onChange={(value) => setCreateOwnerCompanyId(value)}
-            mt="sm"
-          />
-        ) : (
-          <TextInput
-            label="Empresa dueña (UUID)"
-            value={createOwnerCompanyId ?? ''}
-            onChange={(event) => setCreateOwnerCompanyId(event.target.value || null)}
-            mt="sm"
-          />
-        )}
+        <Select
+          label="Empresa dueña"
+          placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
+          data={ownerOptions}
+          value={createOwnerCompanyId}
+          onChange={(value) => setCreateOwnerCompanyId(value)}
+          mt="sm"
+          disabled={ownersLoading && ownerOptions.length === 0}
+          searchable
+        />
         <Select
           label="Estado"
           data={activeOptions}
@@ -666,7 +783,11 @@ export default function WarehouseInventoryPage() {
           </Text>
         )}
         <Group mt="md">
-          <Button onClick={handleCreate} loading={createLoading}>
+          <Button
+            onClick={handleCreate}
+            loading={createLoading}
+            disabled={!createOwnerCompanyId}
+          >
             Crear
           </Button>
         </Group>
@@ -689,22 +810,16 @@ export default function WarehouseInventoryPage() {
           onChange={(value) => setEditType((value as 'OWN' | 'ALLY') ?? 'OWN')}
           mt="sm"
         />
-        {ownerOptions.length > 0 ? (
-          <Select
-            label="Empresa dueña"
-            data={ownerOptions}
-            value={editOwnerCompanyId}
-            onChange={(value) => setEditOwnerCompanyId(value)}
-            mt="sm"
-          />
-        ) : (
-          <TextInput
-            label="Empresa dueña (UUID)"
-            value={editOwnerCompanyId ?? ''}
-            onChange={(event) => setEditOwnerCompanyId(event.target.value || null)}
-            mt="sm"
-          />
-        )}
+        <Select
+          label="Empresa dueña"
+          placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
+          data={ownerOptions}
+          value={editOwnerCompanyId}
+          onChange={(value) => setEditOwnerCompanyId(value)}
+          mt="sm"
+          disabled={ownersLoading && ownerOptions.length === 0}
+          searchable
+        />
         <Select
           label="Estado"
           data={activeOptions}
@@ -718,7 +833,11 @@ export default function WarehouseInventoryPage() {
           </Text>
         )}
         <Group mt="md">
-          <Button onClick={handleEdit} loading={editLoading}>
+          <Button
+            onClick={handleEdit}
+            loading={editLoading}
+            disabled={!editOwnerCompanyId}
+          >
             Guardar
           </Button>
         </Group>

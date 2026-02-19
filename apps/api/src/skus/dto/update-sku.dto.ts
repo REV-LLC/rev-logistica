@@ -31,6 +31,10 @@ export class UpdateSkuDto {
   unitWeight?: number;
 
   @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }

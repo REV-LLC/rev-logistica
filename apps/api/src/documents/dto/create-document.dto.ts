@@ -1,9 +1,13 @@
 import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { DocumentType } from '@prisma/client';
+import { DocumentStatus, DocumentType } from '@prisma/client';
 
 export class CreateDocumentDto {
   @IsEnum(DocumentType)
   type: DocumentType;
+
+  @IsOptional()
+  @IsEnum(DocumentStatus)
+  status?: DocumentStatus;
 
   @IsOptional()
   @IsString()

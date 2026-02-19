@@ -1,0 +1,3 @@
+ALTER TABLE "Sku" DROP COLUMN "unit";
+
+DROP TYPE IF EXISTS "SkuUnit";

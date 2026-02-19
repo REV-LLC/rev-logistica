@@ -4,9 +4,17 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background: #f3f5f8;
+  -webkit-text-size-adjust: 100%;
 }
 
 a {
@@ -28,4 +36,93 @@ a {
   background: #eef1f5;
   color: #868e96;
   cursor: not-allowed;
+}
+
+/* Responsive base rules shared across all modules. */
+@media (max-width: 1024px) {
+  .mantine-Container-root {
+    padding-inline: 10px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mantine-AppShell-header {
+    padding-inline: 10px;
+  }
+
+  .mantine-Container-root {
+    padding-inline: 8px !important;
+    padding-block: 10px !important;
+  }
+
+  .mantine-Title-root {
+    line-height: 1.2;
+  }
+
+  .mantine-TextInput-input,
+  .mantine-Autocomplete-input,
+  .mantine-Select-input,
+  .mantine-NumberInput-input,
+  .mantine-Textarea-input {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .mantine-Group-root {
+    gap: 8px;
+  }
+
+  .mantine-Modal-content .mantine-Group-root {
+    flex-wrap: wrap;
+  }
+
+  .mantine-Modal-content .mantine-Button-root,
+  .mantine-Modal-content .mantine-ActionIcon-root {
+    width: 100%;
+  }
+
+  .mantine-Paper-root {
+    padding: 12px !important;
+  }
+
+  .mantine-Table-root {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mantine-Table-table {
+    min-width: 760px;
+  }
+
+  .table-mobile-fit.mantine-Table-table,
+  .table-mobile-fit .mantine-Table-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed;
+  }
+
+  .mobile-stack {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mobile-stack .mantine-Button-root,
+  .mobile-stack .mantine-Input-wrapper,
+  .mobile-stack > * {
+    width: 100%;
+  }
+
+  .mobile-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .mobile-actions .mantine-Button-root {
+    width: 100%;
+  }
+
+  .mobile-json-preview {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }

@@ -17,10 +17,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
+import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
+import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
+import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { GetInventoryLedgerDto } from './dto/get-inventory-ledger.dto';
 import { GetInventorySummaryDto } from './dto/get-inventory-summary.dto';
 import { InventoryService } from './inventory.service';
@@ -51,6 +54,57 @@ export class InventoryController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.inventoryService.adjustInventory(payload, request.user.sub);
+  }
+
+  @Post('serialized-assets')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createSerializedAsset(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: CreateSerializedAssetDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.createSerializedAsset(payload, request.user.sub);
+  }
+
+  @Post('bulk-adjustments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE)
+  addBulkAdjustment(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: CreateBulkAdjustmentDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.addBulkAdjustment(payload, request.user.sub);
+  }
+
+  @Post('bulk-stock')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE)
+  addBulkStock(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: CreateBulkStockDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.addBulkStock(payload, request.user.sub);
   }
 
   @Post('provider-receipts')

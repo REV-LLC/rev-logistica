@@ -16,7 +16,8 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconTrash } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconEye } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -51,12 +52,14 @@ const emptyForm: CustomerForm = {
 };
 
 export default function CustomersPage() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
 
@@ -160,26 +163,6 @@ export default function CustomersPage() {
     }
   };
 
-  const deleteCustomer = async (customer: Customer) => {
-    if (!window.confirm(`¿Eliminar cliente ${customer.name}?`)) return;
-
-    setError(null);
-    try {
-      await api(`/customers/${customer.id}`, {
-        method: 'DELETE',
-      });
-      await loadCustomers();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error eliminando cliente');
-      }
-    }
-  };
-
   return (
     <Container size="xl" py="xl">
       <Paper shadow="sm" p="xl" radius="md" withBorder>
@@ -194,14 +177,20 @@ export default function CustomersPage() {
           </Text>
         )}
 
-        <Table striped highlightOnHover withTableBorder>
+        <Table
+          striped
+          highlightOnHover
+          withTableBorder
+          className={isMobile ? 'table-mobile-fit' : undefined}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Nombre</Table.Th>
-              <Table.Th>NIT / Documento</Table.Th>
-              <Table.Th>Teléfono</Table.Th>
-              <Table.Th>Estado</Table.Th>
-              <Table.Th />
+              <Table.Th style={isMobile ? { width: '50%' } : undefined}>Nombre</Table.Th>
+              {!isMobile ? <Table.Th>NIT / Documento</Table.Th> : null}
+              {!isMobile ? <Table.Th>Teléfono</Table.Th> : null}
+              <Table.Th style={isMobile ? { width: '30%' } : undefined}>Estado</Table.Th>
+              {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
+              {!isMobile ? <Table.Th /> : null}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -209,34 +198,38 @@ export default function CustomersPage() {
               customers.map((customer) => (
                 <Table.Tr key={customer.id}>
                   <Table.Td>{customer.name}</Table.Td>
-                  <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
-                  <Table.Td>{customer.phone ?? '-'}</Table.Td>
+                  {!isMobile ? <Table.Td>{customer.nitOrId ?? '-'}</Table.Td> : null}
+                  {!isMobile ? <Table.Td>{customer.phone ?? '-'}</Table.Td> : null}
                   <Table.Td>
                     <Badge color={customer.active ? 'green' : 'gray'} variant="light">
                       {customer.active ? 'Activo' : 'Inactivo'}
                     </Badge>
                   </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" justify="flex-end">
-                      <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
-                        Editar
-                      </Button>
+                  {isMobile ? (
+                    <Table.Td>
                       <ActionIcon
-                        color="red"
                         variant="light"
-                        aria-label="Eliminar cliente"
-                        onClick={() => deleteCustomer(customer)}
+                        aria-label={`Ver detalle de ${customer.name}`}
+                        onClick={() => setDetailsCustomer(customer)}
                       >
-                        <IconTrash size={16} />
+                        <IconEye size={16} />
                       </ActionIcon>
-                    </Group>
-                  </Table.Td>
+                    </Table.Td>
+                  ) : (
+                    <Table.Td>
+                      <Group gap="xs" justify="flex-end">
+                        <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
+                          Editar
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  )}
                 </Table.Tr>
               ))}
 
             {!loading && customers.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={5}>
+                <Table.Td colSpan={isMobile ? 3 : 5}>
                   <Text c="dimmed" ta="center">
                     No hay clientes registrados.
                   </Text>
@@ -246,7 +239,7 @@ export default function CustomersPage() {
 
             {loading && (
               <Table.Tr>
-                <Table.Td colSpan={5}>
+                <Table.Td colSpan={isMobile ? 3 : 5}>
                   <Text c="dimmed" ta="center">
                     Cargando...
                   </Text>
@@ -256,6 +249,33 @@ export default function CustomersPage() {
           </Table.Tbody>
         </Table>
       </Paper>
+
+      <Modal
+        opened={!!detailsCustomer}
+        onClose={() => setDetailsCustomer(null)}
+        title="Detalle de cliente"
+        centered
+      >
+        {detailsCustomer ? (
+          <Stack gap="xs">
+            <Text><strong>Nombre:</strong> {detailsCustomer.name}</Text>
+            <Text><strong>NIT / Documento:</strong> {detailsCustomer.nitOrId ?? '-'}</Text>
+            <Text><strong>Teléfono:</strong> {detailsCustomer.phone ?? '-'}</Text>
+            <Text><strong>Estado:</strong> {detailsCustomer.active ? 'Activo' : 'Inactivo'}</Text>
+            <Group className="mobile-actions" mt="sm">
+              <Button
+                variant="light"
+                onClick={() => {
+                  setDetailsCustomer(null);
+                  openEdit(detailsCustomer);
+                }}
+              >
+                Editar
+              </Button>
+            </Group>
+          </Stack>
+        ) : null}
+      </Modal>
 
       <Modal
         opened={modalOpen}
@@ -334,7 +354,7 @@ export default function CustomersPage() {
             </>
           )}
 
-          <Group justify="flex-end">
+          <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>

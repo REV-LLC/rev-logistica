@@ -12,12 +12,13 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
-import { Role, SkuControlType, SkuUnit } from '@prisma/client';
+import { Role, SkuControlType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
+import { SKU_CATEGORIES } from './skus.constants';
 import { SkusService } from './skus.service';
 
 @Controller('skus')
@@ -30,16 +31,22 @@ export class SkusController {
   listSkus(
     @Query('search') search?: string,
     @Query('controlType') controlType?: SkuControlType,
+    @Query('assetFamilyId') assetFamilyId?: string,
   ) {
     if (controlType && !Object.values(SkuControlType).includes(controlType)) {
       throw new BadRequestException('Invalid controlType');
     }
-    return this.skusService.listSkus({ search, controlType });
+    return this.skusService.listSkus({ search, controlType, assetFamilyId });
+  }
+
+  @Get('categories')
+  listCategories() {
+    return this.skusService.listCategories();
   }
 
   @Get('units')
   listUnits() {
-    return Object.values(SkuUnit);
+    return this.skusService.listUnits();
   }
 
   @Post()

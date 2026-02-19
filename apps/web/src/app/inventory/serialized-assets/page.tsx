@@ -51,6 +51,15 @@ type CreateSerializedResponse = {
   };
 };
 
+const normalizeSkuCategory = (value: string) =>
+  value.trim().toUpperCase().replace(/\s+/g, '_');
+
+const FUEL_OPTIONS = [
+  { value: 'GASOLINA', label: 'Gasolina' },
+  { value: 'DIESEL', label: 'Diesel' },
+  { value: 'ELECTRICO', label: 'Eléctrico' },
+];
+
 export default function CreateSerializedAssetPage() {
   const router = useRouter();
   const [families, setFamilies] = useState<AssetFamily[]>([]);
@@ -79,7 +88,6 @@ export default function CreateSerializedAssetPage() {
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | ''>('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
-  const [description, setDescription] = useState('');
   const [imageFileObjectId, setImageFileObjectId] = useState('');
   const [active, setActive] = useState(true);
 
@@ -202,10 +210,6 @@ export default function CreateSerializedAssetPage() {
         setError('Ingresa el nombre del modelo o al menos marca/modelo');
         return;
       }
-      if (!skuUnit) {
-        setError('Selecciona la unidad del modelo');
-        return;
-      }
     }
 
     if (!serialOrEngine.trim()) {
@@ -225,6 +229,11 @@ export default function CreateSerializedAssetPage() {
 
     setSaving(true);
     try {
+      const categoryBase =
+        familyMode === 'new'
+          ? familyName
+          : familyNameById.get(familyId ?? '')?.name ?? '';
+
       const payload = {
         family:
           familyMode === 'existing'
@@ -235,19 +244,18 @@ export default function CreateSerializedAssetPage() {
               },
         sku:
           skuMode === 'existing'
-            ? { id: skuId, unit: skuUnit || 'UNIT' }
+            ? { id: skuId }
             : {
                 name: skuName.trim() || undefined,
-                brand: skuBrand.trim() || undefined,
-                model: skuModel.trim() || undefined,
-                year: skuYear === '' ? undefined : skuYear,
-                fuel: skuFuel.trim() || undefined,
-                unit: skuUnit,
+                category: normalizeSkuCategory(categoryBase || 'SIN_CATEGORIA'),
                 unitWeight: skuUnitWeight === '' ? undefined : skuUnitWeight,
               },
         asset: {
           serialOrEngine: serialOrEngine.trim(),
-          description: description.trim() || undefined,
+          brand: skuBrand.trim() || undefined,
+          model: skuModel.trim() || undefined,
+          year: skuYear === '' ? undefined : skuYear,
+          fuel: skuFuel || undefined,
           imageFileObjectId: imageFileObjectId.trim() || undefined,
           active,
         },
@@ -260,11 +268,11 @@ export default function CreateSerializedAssetPage() {
         json: payload,
       });
 
-      const familyName =
+      const resolvedFamilyName =
         familyMode === 'existing'
           ? familyNameById.get(familyId ?? '')?.name
           : familyName.trim();
-      setSuccess(`Creado: ${familyName ?? 'Equipo'} #${response.asset.internalNumber}`);
+      setSuccess(`Creado: ${resolvedFamilyName ?? 'Equipo'} #${response.asset.internalNumber}`);
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -301,7 +309,7 @@ export default function CreateSerializedAssetPage() {
 
         <Stack mt="xl" gap="lg">
           <Stack gap="xs">
-            <Group justify="space-between">
+            <Group justify="space-between" className="mobile-stack">
               <Text fw={600}>Tipo de equipo</Text>
               <Button
                 variant="light"
@@ -325,7 +333,7 @@ export default function CreateSerializedAssetPage() {
                 disabled={loading}
               />
             ) : (
-              <Group grow>
+              <Group grow className="mobile-stack">
                 <TextInput
                   label="Nombre del tipo"
                   value={familyName}
@@ -344,7 +352,7 @@ export default function CreateSerializedAssetPage() {
           <Divider />
 
           <Stack gap="xs">
-            <Group justify="space-between">
+            <Group justify="space-between" className="mobile-stack">
               <Text fw={600}>Modelo</Text>
               <Button
                 variant="light"
@@ -377,7 +385,7 @@ export default function CreateSerializedAssetPage() {
                   onChange={(event) => setSkuName(event.currentTarget.value)}
                   placeholder="Ej: Bomag BW120 2019"
                 />
-                <Group grow>
+                <Group grow className="mobile-stack">
                   <TextInput
                     label="Marca"
                     value={skuBrand}
@@ -389,7 +397,7 @@ export default function CreateSerializedAssetPage() {
                     onChange={(event) => setSkuModel(event.currentTarget.value)}
                   />
                 </Group>
-                <Group grow>
+                <Group grow className="mobile-stack">
                   <NumberInput
                     label="Año"
                     value={skuYear}
@@ -399,13 +407,15 @@ export default function CreateSerializedAssetPage() {
                     min={1900}
                     max={2100}
                   />
-                  <TextInput
+                  <Select
                     label="Combustible"
+                    data={FUEL_OPTIONS}
                     value={skuFuel}
-                    onChange={(event) => setSkuFuel(event.currentTarget.value)}
+                    onChange={(value) => setSkuFuel(value ?? '')}
+                    clearable
                   />
                 </Group>
-                <Group grow>
+                <Group grow className="mobile-stack">
                   <Select
                     label="Unidad"
                     data={unitOptions}
@@ -440,11 +450,6 @@ export default function CreateSerializedAssetPage() {
               required
             />
             <TextInput
-              label="Descripción"
-              value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-            />
-            <TextInput
               label="Imagen (FileObject ID)"
               value={imageFileObjectId}
               onChange={(event) => setImageFileObjectId(event.currentTarget.value)}
@@ -455,7 +460,7 @@ export default function CreateSerializedAssetPage() {
 
           <Stack gap="xs">
             <Text fw={600}>Ownership y ubicación inicial</Text>
-            <Group grow>
+            <Group grow className="mobile-stack">
               <Select
                 label="Bodega dueña"
                 data={warehouseOptions}
@@ -478,7 +483,7 @@ export default function CreateSerializedAssetPage() {
             />
           </Stack>
 
-          <Group justify="flex-end">
+          <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => router.back()}>
               Cancelar
             </Button>

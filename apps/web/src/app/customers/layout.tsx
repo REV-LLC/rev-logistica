@@ -1,18 +1,12 @@
 'use client';
 
-import { AppShell } from '@mantine/core';
 import AuthGuard from '@/components/AuthGuard';
-import Nav from '@/components/Nav';
+import ResponsiveShell from '@/components/ResponsiveShell';
 
 export default function CustomersLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
-      <AppShell navbar={{ width: 260, breakpoint: 'sm' }} padding="md">
-        <AppShell.Navbar withBorder>
-          <Nav />
-        </AppShell.Navbar>
-        <AppShell.Main>{children}</AppShell.Main>
-      </AppShell>
+      <ResponsiveShell>{children}</ResponsiveShell>
     </AuthGuard>
   );
 }

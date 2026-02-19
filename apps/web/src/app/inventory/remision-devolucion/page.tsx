@@ -7,6 +7,7 @@ import {
   Container,
   Divider,
   Group,
+  Modal,
   Paper,
   Radio,
   Select,
@@ -18,18 +19,14 @@ import {
   Title,
   NumberInput
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { api, ApiError } from '@/lib/api';
 import WarehouseSelect from '@/components/WarehouseSelect';
-
-const MOVEMENT_SOURCE = [
-  { value: 'warehouse', label: 'Bodega' },
-  { value: 'on-site', label: 'On-site' },
-  { value: 'catalog', label: 'Catálogo' }
-];
 
 type InventoryBulk = {
   skuId: string;
   skuName: string | null;
+  ownerWarehouseId: string | null;
   quantity: number;
 };
 
@@ -39,6 +36,7 @@ type InventorySerial = {
   description: string | null;
   quantity: number;
   skuId?: string | null;
+  ownerWarehouseId: string | null;
 };
 
 type CatalogSku = {
@@ -70,14 +68,20 @@ type SelectedItem = {
   name: string;
   serial?: string | null;
   quantity?: number;
-  ownerId?: string | null;
+  ownerWarehouseId?: string | null;
 };
 
+function withDocPrefix(value: string, docType: 'REMISSION' | 'RETURN') {
+  const prefix = docType === 'REMISSION' ? 'RM' : 'DV';
+  const cleaned = value.trim().replace(/^(RM|DV)[\s\-_]*/i, '');
+  return `${prefix}${cleaned}`;
+}
+
 export default function RemisionDevolucionPage() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const router = useRouter();
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
-  const [businessName, setBusinessName] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [docDate, setDocDate] = useState('');
   const [cutOffDate, setCutOffDate] = useState('');
@@ -88,14 +92,11 @@ export default function RemisionDevolucionPage() {
   const [driverId, setDriverId] = useState<string | null>(null);
   const [dispatcherId, setDispatcherId] = useState<string | null>(null);
 
-  const [sourceMode, setSourceMode] = useState('warehouse');
   const [sourceWarehouseId, setSourceWarehouseId] = useState<string | null>(null);
-  const [sourceWorksiteId, setSourceWorksiteId] = useState('');
+  const [sourceWorksiteId, setSourceWorksiteId] = useState<string | null>(null);
 
   const [bulkItems, setBulkItems] = useState<InventoryBulk[]>([]);
   const [serialItems, setSerialItems] = useState<InventorySerial[]>([]);
-  const [catalogSkus, setCatalogSkus] = useState<CatalogSku[]>([]);
-  const [catalogAssets, setCatalogAssets] = useState<CatalogAsset[]>([]);
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -109,6 +110,8 @@ export default function RemisionDevolucionPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [itemsModalOpen, setItemsModalOpen] = useState(false);
+  const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
 
   useEffect(() => {
     let mounted = true;
@@ -188,34 +191,16 @@ export default function RemisionDevolucionPage() {
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
       } else if (sourceMode === 'on-site') {
-        if (!sourceWorksiteId) throw new Error('Ingresa un on-site');
+        if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/on-site/${sourceWorksiteId}`,
           { method: 'GET' }
         );
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
-      } else {
-        const data = await api<{ skus: CatalogSku[]; assets: CatalogAsset[] }>(
-          '/catalog/items',
-          { method: 'GET' }
-        );
-        setCatalogSkus(data.skus);
-        setCatalogAssets(data.assets);
-        setBulkItems(
-          data.skus
-            .filter((sku) => sku.controlType === 'BULK')
-            .map((sku) => ({ skuId: sku.skuId, skuName: sku.name, quantity: 0 }))
-        );
-        setSerialItems(
-          data.assets.map((asset) => ({
-            assetId: asset.assetId,
-            serialOrEngine: asset.serialOrEngine,
-            description: null,
-            quantity: 1,
-            skuId: asset.skuId
-          }))
-        );
+      }
+      if (isMobile) {
+        setItemsModalOpen(true);
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -233,11 +218,19 @@ export default function RemisionDevolucionPage() {
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
-    setCatalogSkus([]);
-    setCatalogAssets([]);
     setBulkSelect(null);
     setSerialSelect(null);
-  }, [sourceMode]);
+    if (docType === 'REMISSION') {
+      setSourceWorksiteId(null);
+    } else {
+      setSourceWarehouseId(null);
+    }
+  }, [docType]);
+
+  useEffect(() => {
+    if (!consecutive) return;
+    setConsecutive((prev) => withDocPrefix(prev, docType));
+  }, [docType]);
 
   const addBulkItem = (item: InventoryBulk) => {
     setSelectedItems((prev) => {
@@ -250,7 +243,7 @@ export default function RemisionDevolucionPage() {
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
           quantity: 1,
-          ownerId: null
+          ownerWarehouseId: item.ownerWarehouseId
         }
       ];
     });
@@ -267,7 +260,7 @@ export default function RemisionDevolucionPage() {
           assetId: item.assetId,
           name: item.description ?? item.serialOrEngine ?? item.assetId,
           serial: item.serialOrEngine,
-          ownerId: null
+          ownerWarehouseId: item.ownerWarehouseId
         }
       ];
     });
@@ -289,44 +282,55 @@ export default function RemisionDevolucionPage() {
       if (!docDate || !consecutive || !customerId) {
         throw new Error('Completa los campos obligatorios.');
       }
-      if (!businessName) {
-        throw new Error('Selecciona una razón social válida.');
-      }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
       }
+      if (!customerWorksiteId) {
+        throw new Error('Selecciona la obra (worksite).');
+      }
+      if (docType === 'RETURN' && !warehouseId) {
+        throw new Error('Selecciona la bodega para la devolución.');
+      }
+      if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !warehouseId) {
+        throw new Error('Selecciona la bodega de despacho.');
+      }
 
-      const payload = {
+      const documentPayload = {
         type: docType,
-        consecutive,
-        businessName,
-        customerId,
-        docDate,
-        cutOffDate: docType === 'RETURN' && cutOffDate ? cutOffDate : null,
-        warehouseId: warehouseId ?? null,
-        customerWorksiteId: customerWorksiteId || null,
-        deliveryMode: docType === 'REMISSION' ? deliveryMode : null,
-        vehicleId: deliveryMode === 'ON_SITE' ? vehicleId : null,
-        driverId: deliveryMode === 'ON_SITE' ? driverId : null,
-        dispatcherId: deliveryMode === 'WAREHOUSE' ? dispatcherId : null,
-        items: selectedItems.map((item) => ({
-          skuId: item.type === 'bulk' ? item.skuId : null,
-          assetId: item.type === 'serial' ? item.assetId : null,
-          quantity: item.type === 'bulk' ? item.quantity : 1,
-          ownerId: item.ownerId ?? null
-        }))
+        status: 'CONFIRMED',
+        number: withDocPrefix(consecutive, docType),
+        warehouseId: warehouseId ?? undefined,
+        customerWorksiteId: customerWorksiteId || undefined,
+        notes: [
+          `Fecha doc: ${docDate}`,
+          docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
+          docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
+          deliveryMode === 'ON_SITE' && vehicleId ? `Vehículo: ${vehicleId}` : null,
+          deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
+          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
+        ].filter(Boolean).join(' | ')
       } as const;
 
       const created = await api<{ id: string }>('/documents', {
         method: 'POST',
-        json: payload
+        json: documentPayload
       });
 
-      const movementItems = selectedItems.map((item) =>
-        item.type === 'bulk'
-          ? { skuId: item.skuId, quantity: item.quantity }
-          : { assetId: item.assetId }
-      );
+      const movementItems = selectedItems.map((item) => {
+        if (!item.ownerWarehouseId) {
+          throw new Error(`Falta bodega dueña para item ${item.name}`);
+        }
+        return item.type === 'bulk'
+          ? {
+              skuId: item.skuId,
+              quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+              ownerWarehouseId: item.ownerWarehouseId
+            }
+          : {
+              assetId: item.assetId,
+              ownerWarehouseId: item.ownerWarehouseId
+            };
+      });
 
       if (docType === 'REMISSION') {
         if (deliveryMode === 'WAREHOUSE') {
@@ -398,7 +402,7 @@ export default function RemisionDevolucionPage() {
             <TextInput
               label="Consecutivo"
               value={consecutive}
-              onChange={(event) => setConsecutive(event.target.value)}
+              onChange={(event) => setConsecutive(withDocPrefix(event.target.value, docType))}
               required
             />
             <Select
@@ -406,8 +410,6 @@ export default function RemisionDevolucionPage() {
               value={customerId}
               onChange={(value) => {
                 setCustomerId(value);
-                const found = customers.find((customer) => customer.id === value);
-                setBusinessName(found?.name ?? '');
                 setCustomerWorksiteId('');
               }}
               data={customers.map((customer) => ({
@@ -508,22 +510,26 @@ export default function RemisionDevolucionPage() {
           <Text c="dimmed">Busca y agrega; la tabla se llena abajo.</Text>
 
           <Group mt="md" align="flex-end" wrap="wrap">
-            <Select
-              label="Origen"
-              value={sourceMode}
-              onChange={(value) => setSourceMode(value ?? 'warehouse')}
-              data={MOVEMENT_SOURCE}
-            />
             {sourceMode === 'warehouse' && (
               <div style={{ minWidth: 260 }}>
                 <WarehouseSelect value={sourceWarehouseId} onChange={setSourceWarehouseId} />
               </div>
             )}
             {sourceMode === 'on-site' && (
-              <TextInput
-                label="On-site ID"
+              <Select
+                label="On-site (worksite)"
                 value={sourceWorksiteId}
-                onChange={(event) => setSourceWorksiteId(event.target.value)}
+                onChange={(value) => setSourceWorksiteId(value)}
+                data={worksites.map((item) => ({
+                  value: item.id,
+                  label: item.alias
+                    ? `${item.alias} · ${item.worksite.name}`
+                    : item.worksite.name
+                }))}
+                searchable
+                clearable
+                placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
+                disabled={!customerId || worksitesLoading}
               />
             )}
             <Button onClick={loadInventory} loading={loadingInventory}>
@@ -533,75 +539,124 @@ export default function RemisionDevolucionPage() {
 
           <Divider my="md" />
 
-          <Stack gap="md">
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <Select
-                label="Agregar BULK"
-                placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
-                searchable
-                clearable
-                value={bulkSelect}
-                onChange={(value) => {
-                  const found = bulkItems.find((item) => item.skuId === value);
-                  if (found) {
-                    addBulkItem(found);
-                    setBulkSelect(null);
-                  } else {
-                    setBulkSelect(value);
-                  }
-                }}
-                data={bulkItems.map((item) => ({
-                  value: item.skuId,
-                  label: `${item.skuName ?? 'SKU'} · ${item.quantity}`
-                }))}
-              />
-              <Select
-                label="Agregar SERIAL"
-                placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
-                searchable
-                clearable
-                value={serialSelect}
-                onChange={(value) => {
-                  const found = serialItems.find((item) => item.assetId === value);
-                  if (found) {
-                    addSerialItem(found);
-                    setSerialSelect(null);
-                  } else {
-                    setSerialSelect(value);
-                  }
-                }}
-                data={serialItems.map((item) => ({
-                  value: item.assetId,
-                  label: `${item.serialOrEngine ?? item.assetId} · ${item.description ?? ''}`.trim()
-                }))}
-              />
-            </SimpleGrid>
-          </Stack>
+          {!isMobile ? (
+            <Stack gap="md">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Select
+                  label="Agregar BULK"
+                  placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
+                  searchable
+                  clearable
+                  value={bulkSelect}
+                  onChange={(value) => {
+                    const found = bulkItems.find((item) => item.skuId === value);
+                    if (found) {
+                      addBulkItem(found);
+                      setBulkSelect(null);
+                    } else {
+                      setBulkSelect(value);
+                    }
+                  }}
+                  data={bulkItems.map((item) => ({
+                    value: item.skuId,
+                    label: `${item.skuName ?? 'SKU'} · ${item.quantity}`
+                  }))}
+                />
+                <Select
+                  label="Agregar SERIAL"
+                  placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
+                  searchable
+                  clearable
+                  value={serialSelect}
+                  onChange={(value) => {
+                    const found = serialItems.find((item) => item.assetId === value);
+                    if (found) {
+                      addSerialItem(found);
+                      setSerialSelect(null);
+                    } else {
+                      setSerialSelect(value);
+                    }
+                  }}
+                  data={serialItems.map((item) => ({
+                    value: item.assetId,
+                    label: `${item.serialOrEngine ?? item.assetId} · ${item.description ?? ''}`.trim()
+                  }))}
+                />
+              </SimpleGrid>
+            </Stack>
+          ) : (
+            <Text size="sm" c="dimmed">
+              Pulsa "Cargar items" para abrir el selector de items.
+            </Text>
+          )}
           <Divider my="md" />
 
           <Title order={4}>Seleccionados</Title>
-          <Table striped highlightOnHover mt="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Item</Table.Th>
-                <Table.Th>Cantidad</Table.Th>
-                <Table.Th></Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
+          {!isMobile ? (
+            <Table striped highlightOnHover mt="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Item</Table.Th>
+                  <Table.Th>Cantidad</Table.Th>
+                  <Table.Th></Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {selectedItems.map((item, index) => (
+                  <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
+                    <Table.Td>
+                      <Text fw={600}>{item.name}</Text>
+                      {item.serial && (
+                        <Text size="xs" c="dimmed">
+                          {item.serial}
+                        </Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      {item.type === 'bulk' ? (
+                        <NumberInput
+                          min={0}
+                          value={item.quantity ?? 1}
+                          onChange={(value) =>
+                            updateSelected(index, {
+                              quantity: typeof value === 'number' ? value : 1
+                            })
+                          }
+                        />
+                      ) : (
+                        <Text>1</Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      <Button variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                        Quitar
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          ) : (
+            <Stack mt="md" gap="sm">
               {selectedItems.map((item, index) => (
-                <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
-                  <Table.Td>
-                    <Text fw={600}>{item.name}</Text>
-                    {item.serial && (
-                      <Text size="xs" c="dimmed">
-                        {item.serial}
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
+                <Paper
+                  key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}
+                  withBorder
+                  radius="md"
+                  p="sm"
+                >
+                  <Stack gap="xs">
+                    <div>
+                      <Text fw={600}>{item.name}</Text>
+                      {item.serial && (
+                        <Text size="xs" c="dimmed">
+                          {item.serial}
+                        </Text>
+                      )}
+                    </div>
                     {item.type === 'bulk' ? (
                       <NumberInput
+                        label="Cantidad"
                         min={0}
                         value={item.quantity ?? 1}
                         onChange={(value) =>
@@ -611,18 +666,16 @@ export default function RemisionDevolucionPage() {
                         }
                       />
                     ) : (
-                      <Text>1</Text>
+                      <Text size="sm">Cantidad: 1</Text>
                     )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Button variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                    <Button variant="light" color="red" onClick={() => removeSelected(index)}>
                       Quitar
                     </Button>
-                  </Table.Td>
-                </Table.Tr>
+                  </Stack>
+                </Paper>
               ))}
-            </Table.Tbody>
-          </Table>
+            </Stack>
+          )}
 
           {error && (
             <Text c="red" mt="sm">
@@ -642,6 +695,61 @@ export default function RemisionDevolucionPage() {
           </Group>
         </Paper>
       </Container>
+
+      <Modal
+        opened={itemsModalOpen}
+        onClose={() => setItemsModalOpen(false)}
+        title="Seleccionar items"
+        centered
+      >
+        <Stack gap="md">
+          <Select
+            label="Agregar BULK"
+            placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
+            searchable
+            clearable
+            value={bulkSelect}
+            onChange={(value) => {
+              const found = bulkItems.find((item) => item.skuId === value);
+              if (found) {
+                addBulkItem(found);
+                setBulkSelect(null);
+              } else {
+                setBulkSelect(value);
+              }
+            }}
+            data={bulkItems.map((item) => ({
+              value: item.skuId,
+              label: `${item.skuName ?? 'SKU'} · ${item.quantity}`
+            }))}
+          />
+          <Select
+            label="Agregar SERIAL"
+            placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
+            searchable
+            clearable
+            value={serialSelect}
+            onChange={(value) => {
+              const found = serialItems.find((item) => item.assetId === value);
+              if (found) {
+                addSerialItem(found);
+                setSerialSelect(null);
+              } else {
+                setSerialSelect(value);
+              }
+            }}
+            data={serialItems.map((item) => ({
+              value: item.assetId,
+              label: `${item.serialOrEngine ?? item.assetId} · ${item.description ?? ''}`.trim()
+            }))}
+          />
+          <Group justify="flex-end" className="mobile-actions">
+            <Button variant="default" onClick={() => setItemsModalOpen(false)}>
+              Cerrar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </main>
   );
 }

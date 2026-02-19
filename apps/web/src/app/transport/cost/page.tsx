@@ -416,7 +416,7 @@ export default function TransportCostPage() {
                 <NumberInput
                   label="Tarifa por Km"
                   value={ratePerKm}
-                  onChange={setRatePerKm}
+                  onChange={(value) => setRatePerKm(typeof value === 'number' ? value : '')}
                   decimalScale={2}
                   disabled={!rateEditable}
                   className={!rateEditable ? 'rate-locked' : undefined}

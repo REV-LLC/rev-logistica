@@ -1,0 +1,3716 @@
+{
+  "meta": {
+    "source": "CERVINO",
+    "cutoverMode": "SALDO_FIN",
+    "warehouseMapping": {
+      "1": "MAIN"
+    },
+    "generatedAt": "2026-01-27T15:14:57+00:00",
+    "warnings": [
+      "MAQUINARIA PESADA marcada como SERIAL. No hay VIN/seriales en el Excel; se generaron 8 placeholders 'CERVINO-<code>-NNN' para serialOrEngine. Reemplazar por VIN/motor real en el mapeo.",
+      "Ítems con pinta de equipo quedaron como BULK porque no están en 'MAQUINARIA PESADA': BOMBA SUMERGIBLE BARNES 2\" # 1; BOMBA SUMERGIBLE BARNES 2\" # 2; BOMBA SUMERGIBLE TSURUMI 2\" # 4; BOMBA SUMERGIBLE TSURUMI 3\" # 5; BOMBA SUMERGIBLE TSURUMI 3\" # 6; BOMBA SUMERGIBLE TSURUMI 3\" # 7; COMPRESOR CON DOS MARTILLOS; CORTADORA DE CONCRETO TARRET # 1; CORTADORA DE CONCRETO TARRET # 2; CORTADORA DE LADRILLO # 1; MOTOBOMBA A DIESEL; MOTOBOMBA GASOLINA; PLANTA ELECTRICA A GASOLINA #1; PLANTA ELECTRICA A GASOLINA ELITE #4; PLANTA ELECTRICA A GASOLINA ELITE #5; PLANTA ELECTRICA A GASOLINA ELITE #6; PLANTA ELECTRICA A GASOLINA ELITE #7; PLANTA ELECTRICA A GASOLINA WACKER #3; SIERRA CIRCULAR 7\"; TORRE DE LUCES WACKER; ..."
+    ]
+  },
+  "skus": [
+    {
+      "externalCode": "5",
+      "name": "VERTICALES 2,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "7",
+      "name": "VERTICALES 1,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "9",
+      "name": "VERTICALES 0,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "10",
+      "name": "HORIZONTALES 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "11",
+      "name": "HORIZONTALES 1,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "12",
+      "name": "HORIZONTALES 0,70M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "13",
+      "name": "DIAGONALES PARA 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "14",
+      "name": "DIAGONALES PARA 1,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "15",
+      "name": "DIAGONALES PARA 0,70M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "17",
+      "name": "PLATAFORMAS DE 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "18",
+      "name": "PLATAFORMAS DE 1,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "19",
+      "name": "TORNILLO NIVELADOR",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "20",
+      "name": "BASE COLLAR",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "21",
+      "name": "RUEDAS ANDAMIO CERTIFICADAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "22",
+      "name": "ESCALERA TIPO GATO",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "24",
+      "name": "ESCALERA TIPO GATO SIN ANCLAJE",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "25",
+      "name": "PASAMANOS ESCALERAS TIPO PELDAÑO",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "26",
+      "name": "APAREJO ELEVADOR MANUAL",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "27",
+      "name": "PESCANTE DE FIJACION",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "30",
+      "name": "RODAPIE METALICO FRONTAL 0,75M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "31",
+      "name": "RODAPIE METALICO FRONTAL 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "32",
+      "name": "SOPORTE PASANTE CON FIJACION Y VARI",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "33",
+      "name": "GRILLETE TIPO LIRA DE 1/2 PULGADAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "34",
+      "name": "TORNILLO 5/8 CON ARANDELAS Y TUERCAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "35",
+      "name": "PLATINA SEGURIDAD DE POLEA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "36",
+      "name": "ANCLAJE PARA CABLES",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "37",
+      "name": "POLEA PARA PESCANTE",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "38",
+      "name": "CABLE PARA ANDAMIO 50,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "39",
+      "name": "LASTRE",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "40",
+      "name": "CUERPO ANDAMIO COMUN 1,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "41",
+      "name": "TIJERAS ANDAMIO COMUN 1,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "42",
+      "name": "ANDAMIO TUBULAR DE 1,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "43",
+      "name": "TIJERAS ANDAMIO TUBULAR 1,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "44",
+      "name": "PLATAFORMA ANDAMIO TUBULAR 1,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "45",
+      "name": "TABLONES PARA ANDAMIO TUBULAR",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "47",
+      "name": "TUERCA PARA TIJERAS ANDAMIO COMUN",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "48",
+      "name": "RUEDAS ANDAMIO TUBULAR",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "50",
+      "name": "DIFERENCIAL DE 5 TONELADAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "51",
+      "name": "ESCALERA EXTENSION 4,00M - 8,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "62",
+      "name": "GRILLETE O PERRO",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "63",
+      "name": "PANEL METALICO DE 0,10M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "64",
+      "name": "PANEL METALICO DE 0,10M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "65",
+      "name": "PANEL METALICO DE 0,10M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "66",
+      "name": "PANEL METALICO DE 0,15M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "67",
+      "name": "PANEL METALICO DE 0,15M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "68",
+      "name": "PANEL METALICO DE 0,15M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "69",
+      "name": "PANEL METALICO DE 0,20M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "70",
+      "name": "PANEL METALICO DE 0,20M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "71",
+      "name": "PANEL METALICO DE 0,20M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "72",
+      "name": "PANEL METALICO DE 0,25M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "73",
+      "name": "PANEL METALICO DE 0,25M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "74",
+      "name": "PANEL METALICO DE 0,25M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "75",
+      "name": "PANEL METALICO DE 0,30M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "76",
+      "name": "PANEL METALICO DE 0,30M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "77",
+      "name": "PANEL METALICO DE 0,30M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "78",
+      "name": "PANEL METALICO DE 0,35M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "79",
+      "name": "PANEL METALICO DE 0,40M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "80",
+      "name": "PANEL METALICO DE 0,40M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "81",
+      "name": "PANEL METALICO DE 0,40M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "82",
+      "name": "PANEL METALICO DE 0,50M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "83",
+      "name": "PANEL METALICO DE 0,50M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "84",
+      "name": "PANEL METALICO DE 0,60M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "85",
+      "name": "PANEL METALICO DE 0,60M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "86",
+      "name": "PANEL METALICO DE 0,60M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "90",
+      "name": "RINCONERA 0,10M x 0,10M x 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "92",
+      "name": "RINCONERA 0,10M x 0,10M x 0,80M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "93",
+      "name": "RINCONERA 0,10M x 0,10M x 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "94",
+      "name": "RINCONERA 0,10M x 0,15M x 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "95",
+      "name": "ANGULOS DE 2,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "96",
+      "name": "ANGULOS DE 1,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "97",
+      "name": "ANGULOS DE 60,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "98",
+      "name": "ALINEADOR 1,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "99",
+      "name": "ALINEADOR 1,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "100",
+      "name": "ALINEADOR 2,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "101",
+      "name": "ALINEADOR 2,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "102",
+      "name": "ALINEADOR 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "103",
+      "name": "ALINEADOR 4,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "105",
+      "name": "ALINEADOR 5,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "106",
+      "name": "ALINEADOR 6,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "107",
+      "name": "SUJETADORES",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "108",
+      "name": "TENSORES 0,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "109",
+      "name": "TENSORES 0,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "110",
+      "name": "TENSORES 0,80M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "111",
+      "name": "CUÑAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "112",
+      "name": "CRUCETAS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "113",
+      "name": "PINES DE 0,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "118",
+      "name": "GATO METALICO 2,00M - 3,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "119",
+      "name": "GATO METALICO 1,70M - 2,60M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "120",
+      "name": "GATO METALICO 2,50M - 4,20M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "121",
+      "name": "GATO METALICO 3,00M - 5,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "122",
+      "name": "CERCHAS METALICAS 3,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "131",
+      "name": "CILINDROS DE PRUEBA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "132",
+      "name": "RANA VIBROCOMPACTADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "133",
+      "name": "RANA VIBROCOMPACTADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "135",
+      "name": "RANA VIBROCOMPACTADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "136",
+      "name": "SALTARIN",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "masalta"
+    },
+    {
+      "externalCode": "139",
+      "name": "VIBROCOMPACTADOR 1 TN",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "141",
+      "name": "VIBROCOMPACTADOR 1 TN",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "144",
+      "name": "VIBROCOMPACTADOR 3 TN DD-24",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "ingersoll rand"
+    },
+    {
+      "externalCode": "145",
+      "name": "VIBROCOMPACTADOR 3 TN",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "hamm"
+    },
+    {
+      "externalCode": "146",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "147",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "148",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "149",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "150",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "151",
+      "name": "MEZCLADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "153",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "wacker neuson"
+    },
+    {
+      "externalCode": "154",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "wacker neuson"
+    },
+    {
+      "externalCode": "155",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "wacker neuson"
+    },
+    {
+      "externalCode": "156",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "shino"
+    },
+    {
+      "externalCode": "157",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "shino"
+    },
+    {
+      "externalCode": "158",
+      "name": "VIBRADOR ELECTRICO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "shino"
+    },
+    {
+      "externalCode": "159",
+      "name": "VIBRADOR A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "160",
+      "name": "PLUMA GRUA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "161",
+      "name": "BALDE PLUMA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "162",
+      "name": "CANASTILLA PLUMA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "163",
+      "name": "BACHE PLUMA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "164",
+      "name": "MADONA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "165",
+      "name": "DOCIFICADOR",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "167",
+      "name": "HELICOPTERO",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "170",
+      "name": "CORTADORA DE CONCRETO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "TARRET"
+    },
+    {
+      "externalCode": "171",
+      "name": "CORTADORA DE LADRILLO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "172",
+      "name": "SACANUCLEOS",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "173",
+      "name": "TROZADORA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "stanley"
+    },
+    {
+      "externalCode": "174",
+      "name": "PULIDORA 9\"",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "175",
+      "name": "PULIDORA 4 1/2\"",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "176",
+      "name": "SIERRA CIRCULAR 7\"",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "177",
+      "name": "PULIDORA 7\"",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "178",
+      "name": "DEMOLEDOR MEDIANO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "bosch"
+    },
+    {
+      "externalCode": "179",
+      "name": "DEMOLEDOR MEDIANO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "bosch"
+    },
+    {
+      "externalCode": "180",
+      "name": "DEMOLEDOR MEDIANO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "bosch"
+    },
+    {
+      "externalCode": "181",
+      "name": "ROTOMARTILLO MEDIANO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "dewalt"
+    },
+    {
+      "externalCode": "184",
+      "name": "DEMOLEDOR MEDIANO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "makita"
+    },
+    {
+      "externalCode": "185",
+      "name": "ROTOMARTILLO SDS PLUS",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "SIEFKEN"
+    },
+    {
+      "externalCode": "186",
+      "name": "ROTOMARTILLO SDS PLUS",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "dewalt"
+    },
+    {
+      "externalCode": "187",
+      "name": "ROTOMARTILLO SDS MAX",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "dewalt"
+    },
+    {
+      "externalCode": "188",
+      "name": "PUNTA MARTILLO GRANDE",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "189",
+      "name": "PUNTA MARTILLO MEDIANO",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "193",
+      "name": "COMPRESOR CON MARTILLO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "194",
+      "name": "BOMBA SUMERGIBLE 2\"",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "barnes"
+    },
+    {
+      "externalCode": "198",
+      "name": "BOMBA SUMERGIBLE 3\"",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "tsurumi"
+    },
+    {
+      "externalCode": "201",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "203",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "wacker neuson"
+    },
+    {
+      "externalCode": "204",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "elite"
+    },
+    {
+      "externalCode": "205",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "elite"
+    },
+    {
+      "externalCode": "206",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "elite"
+    },
+    {
+      "externalCode": "207",
+      "name": "PLANTA ELECTRICA A GASOLINA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "elite"
+    },
+    {
+      "externalCode": "208",
+      "name": "MOTOBOMBA GASOLINA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "209",
+      "name": "MOTOBOMBA A DIESEL",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "210",
+      "name": "TORRE DE LUCES",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "wacker neuson"
+    },
+    {
+      "externalCode": "213",
+      "name": "RETROEXCAVADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "luigong"
+    },
+    {
+      "externalCode": "214",
+      "name": "RETROEXCAVADORA CON MARTILLO",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "luigong"
+    },
+    {
+      "externalCode": "215",
+      "name": "RETROEXCAVADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "komatsu"
+    },
+    {
+      "externalCode": "216",
+      "name": "MINI RETROEXCAVADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "jcb"
+    },
+    {
+      "externalCode": "217",
+      "name": "MINIEXCAVADORA 3 TONELADAS",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "komatsu"
+    },
+    {
+      "externalCode": "218",
+      "name": "MINICARGADOR",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "bobcat"
+    },
+    {
+      "externalCode": "226",
+      "name": "HIDROLAVADORA",
+      "trackingType": "SERIAL",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "242",
+      "name": "PANEL METALICO DE 0,35M x 0,40M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "243",
+      "name": "PANEL METALICO DE 0,40M x 0,50M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "276",
+      "name": "GUAYA",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "279",
+      "name": "DISCO DE CORTE",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "282",
+      "name": "MARTILLO NEUMATICO 90 LB",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "apt"
+    },
+    {
+      "externalCode": "283",
+      "name": "MARTILLO NEUMATICO 60 LB",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "apt"
+    },
+    {
+      "externalCode": "286",
+      "name": "DIAGONALES PARA 2,00M",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "303",
+      "name": "PINES DE 0,60 CM",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "n/a"
+    },
+    {
+      "externalCode": "308",
+      "name": "MARTILLO NEUMATICO 40 LB",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "apt"
+    },
+    {
+      "externalCode": "309",
+      "name": "MARTILLO NEUMATICO 20 LB",
+      "trackingType": "BULK",
+      "notes": null,
+      "brand": "apt"
+    }
+  ],
+  "assets": [
+    {
+      "serialOrEngine": "SERIAL-0001",
+      "description": "RANA VIBROCOMPACTADORA",
+      "skuExternalCode": "132",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0002",
+      "description": "RANA VIBROCOMPACTADORA",
+      "skuExternalCode": "133",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0003",
+      "description": "RANA VIBROCOMPACTADORA",
+      "skuExternalCode": "135",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0004",
+      "description": "SALTARIN",
+      "skuExternalCode": "136",
+      "skuNameFallback": "SALTARIN"
+    },
+    {
+      "serialOrEngine": "SERIAL-0005",
+      "description": "VIBROCOMPACTADOR 1 TN",
+      "skuExternalCode": "139",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN"
+    },
+    {
+      "serialOrEngine": "SERIAL-0006",
+      "description": "VIBROCOMPACTADOR 1 TN",
+      "skuExternalCode": "141",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN"
+    },
+    {
+      "serialOrEngine": "SERIAL-0007",
+      "description": "VIBROCOMPACTADOR 3 TN DD-24",
+      "skuExternalCode": "144",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN DD-24"
+    },
+    {
+      "serialOrEngine": "SERIAL-0008",
+      "description": "VIBROCOMPACTADOR 3 TN",
+      "skuExternalCode": "145",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN"
+    },
+    {
+      "serialOrEngine": "SERIAL-0009",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "146",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0010",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "147",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0011",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "148",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0012",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "149",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0013",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "150",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0014",
+      "description": "MEZCLADORA",
+      "skuExternalCode": "151",
+      "skuNameFallback": "MEZCLADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0015",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "153",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0016",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "154",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0017",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "155",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0018",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "156",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0019",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "157",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0020",
+      "description": "VIBRADOR ELECTRICO",
+      "skuExternalCode": "158",
+      "skuNameFallback": "VIBRADOR ELECTRICO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0021",
+      "description": "VIBRADOR A GASOLINA",
+      "skuExternalCode": "159",
+      "skuNameFallback": "VIBRADOR A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0022",
+      "description": "PLUMA GRUA",
+      "skuExternalCode": "160",
+      "skuNameFallback": "PLUMA GRUA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0023",
+      "description": "BALDE PLUMA",
+      "skuExternalCode": "161",
+      "skuNameFallback": "BALDE PLUMA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0024",
+      "description": "CANASTILLA PLUMA",
+      "skuExternalCode": "162",
+      "skuNameFallback": "CANASTILLA PLUMA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0025",
+      "description": "BACHE PLUMA",
+      "skuExternalCode": "163",
+      "skuNameFallback": "BACHE PLUMA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0026",
+      "description": "CORTADORA DE CONCRETO",
+      "skuExternalCode": "170",
+      "skuNameFallback": "CORTADORA DE CONCRETO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0027",
+      "description": "CORTADORA DE LADRILLO",
+      "skuExternalCode": "171",
+      "skuNameFallback": "CORTADORA DE LADRILLO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0028",
+      "description": "DEMOLEDOR MEDIANO",
+      "skuExternalCode": "178",
+      "skuNameFallback": "DEMOLEDOR MEDIANO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0029",
+      "description": "DEMOLEDOR MEDIANO",
+      "skuExternalCode": "179",
+      "skuNameFallback": "DEMOLEDOR MEDIANO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0030",
+      "description": "DEMOLEDOR MEDIANO",
+      "skuExternalCode": "180",
+      "skuNameFallback": "DEMOLEDOR MEDIANO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0031",
+      "description": "ROTOMARTILLO MEDIANO",
+      "skuExternalCode": "181",
+      "skuNameFallback": "ROTOMARTILLO MEDIANO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0032",
+      "description": "DEMOLEDOR MEDIANO",
+      "skuExternalCode": "184",
+      "skuNameFallback": "DEMOLEDOR MEDIANO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0033",
+      "description": "ROTOMARTILLO SDS PLUS",
+      "skuExternalCode": "185",
+      "skuNameFallback": "ROTOMARTILLO SDS PLUS"
+    },
+    {
+      "serialOrEngine": "SERIAL-0034",
+      "description": "ROTOMARTILLO SDS PLUS",
+      "skuExternalCode": "186",
+      "skuNameFallback": "ROTOMARTILLO SDS PLUS"
+    },
+    {
+      "serialOrEngine": "SERIAL-0035",
+      "description": "ROTOMARTILLO SDS MAX",
+      "skuExternalCode": "187",
+      "skuNameFallback": "ROTOMARTILLO SDS MAX"
+    },
+    {
+      "serialOrEngine": "SERIAL-0036",
+      "description": "COMPRESOR CON MARTILLO",
+      "skuExternalCode": "193",
+      "skuNameFallback": "COMPRESOR CON MARTILLO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0037",
+      "description": "BOMBA SUMERGIBLE 2\"",
+      "skuExternalCode": "194",
+      "skuNameFallback": "BOMBA SUMERGIBLE 2\""
+    },
+    {
+      "serialOrEngine": "SERIAL-0038",
+      "description": "BOMBA SUMERGIBLE 3\"",
+      "skuExternalCode": "198",
+      "skuNameFallback": "BOMBA SUMERGIBLE 3\""
+    },
+    {
+      "serialOrEngine": "SERIAL-0039",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "201",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0040",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "203",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0041",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "204",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0042",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "205",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0043",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "206",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0044",
+      "description": "PLANTA ELECTRICA A GASOLINA",
+      "skuExternalCode": "207",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0045",
+      "description": "RETROEXCAVADORA",
+      "skuExternalCode": "213",
+      "skuNameFallback": "RETROEXCAVADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0046",
+      "description": "RETROEXCAVADORA CON MARTILLO",
+      "skuExternalCode": "214",
+      "skuNameFallback": "RETROEXCAVADORA CON MARTILLO"
+    },
+    {
+      "serialOrEngine": "SERIAL-0047",
+      "description": "RETROEXCAVADORA",
+      "skuExternalCode": "215",
+      "skuNameFallback": "RETROEXCAVADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0048",
+      "description": "MINI RETROEXCAVADORA",
+      "skuExternalCode": "216",
+      "skuNameFallback": "MINI RETROEXCAVADORA"
+    },
+    {
+      "serialOrEngine": "SERIAL-0049",
+      "description": "MINIEXCAVADORA 3 TONELADAS",
+      "skuExternalCode": "217",
+      "skuNameFallback": "MINIEXCAVADORA 3 TONELADAS"
+    },
+    {
+      "serialOrEngine": "SERIAL-0050",
+      "description": "MINICARGADOR",
+      "skuExternalCode": "218",
+      "skuNameFallback": "MINICARGADOR"
+    },
+    {
+      "serialOrEngine": "SERIAL-0051",
+      "description": "HIDROLAVADORA",
+      "skuExternalCode": "226",
+      "skuNameFallback": "HIDROLAVADORA"
+    }
+  ],
+  "initialLedgerAdjustments": [
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "5",
+      "skuNameFallback": "VERTICALES CON PIN 2,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "7",
+      "skuNameFallback": "VERTICALES CON PIN 1,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "9",
+      "skuNameFallback": "VERTICALES CON PIN 0,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "10",
+      "skuNameFallback": "HORIZONTALES 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "11",
+      "skuNameFallback": "HORIZONTALES 1,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "12",
+      "skuNameFallback": "HORIZONTALES 0,70M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "13",
+      "skuNameFallback": "DIAGONALES PARA 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "14",
+      "skuNameFallback": "DIAGONALES PARA 1,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "15",
+      "skuNameFallback": "DIAGONALES PARA 0,70M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "17",
+      "skuNameFallback": "PLATAFORMAS DE 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "18",
+      "skuNameFallback": "PLATAFORMAS DE 1,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "19",
+      "skuNameFallback": "TORNILLO NIVELADOR",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "20",
+      "skuNameFallback": "BASE COLLAR",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "21",
+      "skuNameFallback": "RUEDAS AMD. CERTIFICADAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "22",
+      "skuNameFallback": "ESCALERA TIPO GATO",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "24",
+      "skuNameFallback": "ESCALERA VERTICAL 2,00M FIJA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "25",
+      "skuNameFallback": "PASAMANOS ESCALERAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "26",
+      "skuNameFallback": "APAREJO ELEVADOR MANUAL",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "27",
+      "skuNameFallback": "PESCANTE DE FIJACION",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "30",
+      "skuNameFallback": "RODAPIE METALICO FRONTAL 0,75M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "31",
+      "skuNameFallback": "RODAPIE METALICO FRONTAL 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "32",
+      "skuNameFallback": "SOPORTE PASANTE CON FIJACION Y VARI",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "33",
+      "skuNameFallback": "GRILLETE TIPO LIRA DE 1/2 PULGADAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "34",
+      "skuNameFallback": "TORNILLO 5/8 CON ARANDELAS Y TUERCAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "35",
+      "skuNameFallback": "PLATINA SEGURIDAD DE POLEA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "36",
+      "skuNameFallback": "ANCLAJE PARA CABLES",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "37",
+      "skuNameFallback": "POLEA PARA PESCANTE",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "38",
+      "skuNameFallback": "CABLE PARA ANDAMIO 50,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "39",
+      "skuNameFallback": "LASTRE",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "40",
+      "skuNameFallback": "CUERPO ANDAMIO COMUN 1,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "41",
+      "skuNameFallback": "TIJERAS ANDAMIO COMUN 1,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "42",
+      "skuNameFallback": "ANDAMIO COMUN DE 1,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "43",
+      "skuNameFallback": "TIJERAS ADM. COMUN 1,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "44",
+      "skuNameFallback": "PLATAFORMA ANDAMIO COMUN",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "45",
+      "skuNameFallback": "TABLONES PARA ANDAMIO COMUN",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "47",
+      "skuNameFallback": "TUERCAS PARA ANDAMIOS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "48",
+      "skuNameFallback": "RUEDAS ANDAMIO COMUN",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "50",
+      "skuNameFallback": "DIFERENCIAL DE 5 TN",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "51",
+      "skuNameFallback": "ESCALERA EXTENSION 4 A 8,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "62",
+      "skuNameFallback": "GRILLETE O PERRO",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "63",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,10M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "66",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,15M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "69",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,20M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "72",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,25M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "75",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,30M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "79",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "84",
+      "skuNameFallback": "PANEL METALICO DE 0,60M x 0,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "64",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,10M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "67",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,15M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "70",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,20M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "73",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,25M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "76",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,30M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "80",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "82",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "85",
+      "skuNameFallback": "PANEL METALICO DE 1,20M x 0,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "65",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,10M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "68",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,15M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "71",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,20M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "74",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,25M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "77",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,30M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "78",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,35M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "81",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "83",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "86",
+      "skuNameFallback": "PANEL METALICO DE 2,40M x 0,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "90",
+      "skuNameFallback": "RINCONERA 0,10M*10*2.40",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "92",
+      "skuNameFallback": "RINCONERA 0,10M*10*80",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "93",
+      "skuNameFallback": "RINCONERA 0,10M*10*60",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "94",
+      "skuNameFallback": "RINCONERA 0,10M*15*1.20",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "95",
+      "skuNameFallback": "ANGULOS DE 2,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "96",
+      "skuNameFallback": "ANGULOS DE 1,20M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "97",
+      "skuNameFallback": "ANGULOS DE 60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "98",
+      "skuNameFallback": "ALINEADOR 1,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "99",
+      "skuNameFallback": "ALINEADOR 1,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "100",
+      "skuNameFallback": "ALINEADOR 2,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "101",
+      "skuNameFallback": "ALINEADOR 2,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "102",
+      "skuNameFallback": "ALINEADOR 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "103",
+      "skuNameFallback": "ALINEADOR 4,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "105",
+      "skuNameFallback": "ALINEADOR 5,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "106",
+      "skuNameFallback": "ALINEADOR 6,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "107",
+      "skuNameFallback": "SUJETADORES",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "108",
+      "skuNameFallback": "TENSORES 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "109",
+      "skuNameFallback": "TENSORES 0,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "110",
+      "skuNameFallback": "TENSORES 0,80M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "111",
+      "skuNameFallback": "CUÑAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "112",
+      "skuNameFallback": "CRUCETAS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "113",
+      "skuNameFallback": "PINES DE 0,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "118",
+      "skuNameFallback": "GATO METALICO 2,00M - 3,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "119",
+      "skuNameFallback": "GATO METALICO 1,70M - 2,60M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "120",
+      "skuNameFallback": "GATO METALICO 2,50M - 4,20M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "121",
+      "skuNameFallback": "GATO METALICO 3,00M - 5,50M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "122",
+      "skuNameFallback": "CERCHAS METALICAS 3,00M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "131",
+      "skuNameFallback": "CILINDROS DE PRUEBA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "132",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "133",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA # 2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "135",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA # 4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "136",
+      "skuNameFallback": "SALTARIN MASALTA # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "139",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN #2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "141",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN #4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "144",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN #3 DD-24",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "145",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN #4 HAMM",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "146",
+      "skuNameFallback": "MEZCLADORA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "147",
+      "skuNameFallback": "MEZCLADORA #2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "148",
+      "skuNameFallback": "MEZCLADORA #3",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "149",
+      "skuNameFallback": "MEZCLADORA #4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "150",
+      "skuNameFallback": "MEZCLADORA #5",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "151",
+      "skuNameFallback": "MEZCLADORA #6",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "153",
+      "skuNameFallback": "VIBRADOR ELECTRICO WACKER 110 V #2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "154",
+      "skuNameFallback": "VIBRADOR ELECTRICO WACKER 110 V #3",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "155",
+      "skuNameFallback": "VIBRADOR ELECTRICO WACKER 110 V #4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "156",
+      "skuNameFallback": "VIBRADOR ELECTRICO SHINO 110 V #5",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "157",
+      "skuNameFallback": "VIBRADOR ELECTRICO SHINO 110 V #6",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "158",
+      "skuNameFallback": "VIBRADOR ELECTRICO SHINO 110 V #7",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "159",
+      "skuNameFallback": "VIBRADOR A GASOLINA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "160",
+      "skuNameFallback": "PLUMA GRUA # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "161",
+      "skuNameFallback": "BALDE PLUMA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "162",
+      "skuNameFallback": "CANASTILLA PLUMA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "163",
+      "skuNameFallback": "BACHE PLUMA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "164",
+      "skuNameFallback": "MADONA SUB",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "165",
+      "skuNameFallback": "DOCIFICADOR",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "167",
+      "skuNameFallback": "HELICOPTERO",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "170",
+      "skuNameFallback": "CORTADORA DE CONCRETO TARRET # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "171",
+      "skuNameFallback": "CORTADORA DE LADRILLO # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "172",
+      "skuNameFallback": "SACANUCLEOS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "173",
+      "skuNameFallback": "TROZADORA STANLEY",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "174",
+      "skuNameFallback": "PULIDORA 9\"",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "175",
+      "skuNameFallback": "PULIDORA 4 1/2\"",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "176",
+      "skuNameFallback": "SIERRA CIRCULAR 7\"",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "177",
+      "skuNameFallback": "PULIDORA 7\"",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "178",
+      "skuNameFallback": "DEMOLEDOR BOSCH MEDIANO 11E # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "179",
+      "skuNameFallback": "DEMOLEDOR BOSCH MEDIANO 11E # 2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "180",
+      "skuNameFallback": "DEMOLEDOR BOSCH MEDIANO 11E # 3",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "181",
+      "skuNameFallback": "DEMOLEDOR MEDIANO DEWALTH #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "184",
+      "skuNameFallback": "MINI BRUTE DEMOLEDOR MAKITA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "185",
+      "skuNameFallback": "ROTOMARTILLO SIEFKEN SDS PLUS #2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "186",
+      "skuNameFallback": "ROTOMARTILLO DEWALTH SDS PLUS #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "187",
+      "skuNameFallback": "ROTOMARTILLO DEWALT SDS MAX # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "188",
+      "skuNameFallback": "PUNTA MARTILLO GRANDE",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "189",
+      "skuNameFallback": "PUNTA MARTILLO MEDIANO",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "193",
+      "skuNameFallback": "COMPRESOR CON DOS MARTILLOS",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "194",
+      "skuNameFallback": "BOMBA SUMERGIBLE BARNES 2\" # 1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "198",
+      "skuNameFallback": "BOMBA SUMERGIBLE TSURUMI 3\" # 7",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "201",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA #1",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "203",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA WACKER #3",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "204",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA ELITE #4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "205",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA ELITE #5",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "206",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA ELITE #6",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "207",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA ELITE #7",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "208",
+      "skuNameFallback": "MOTOBOMBA GASOLINA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "209",
+      "skuNameFallback": "MOTOBOMBA A DIESEL",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "210",
+      "skuNameFallback": "TORRE DE LUCES WACKER",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "226",
+      "skuNameFallback": "HIDROLAVADORA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "242",
+      "skuNameFallback": "PANEL METALICO DE 0,35M x 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "243",
+      "skuNameFallback": "PANEL METALICO DE 0,50M x 0,40M",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "244",
+      "skuNameFallback": "BOMBA SUMERGIBLE TSURUMI 2\" # 4",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "245",
+      "skuNameFallback": "BOMBA SUMERGIBLE TSURUMI 3\" # 5",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "246",
+      "skuNameFallback": "BOMBA SUMERGIBLE TSURUMI 3\" # 6",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "276",
+      "skuNameFallback": "GUAYA",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "279",
+      "skuNameFallback": "DISCO DE CORTE",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "282",
+      "skuNameFallback": "MARTILLO APT 90 LB",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "283",
+      "skuNameFallback": "MARTILLO APT 60 LB",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "286",
+      "skuNameFallback": "DIAGONALES PARA 2MT",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "302",
+      "skuNameFallback": "CORTADORA DE CONCRETO TARRET # 2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "303",
+      "skuNameFallback": "PINES DE 0,60 CM",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "304",
+      "skuNameFallback": "BOMBA SUMERGIBLE BARNES 2\" # 2",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "308",
+      "skuNameFallback": "MARTILLO APT 40 LB",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "BULK",
+      "skuExternalCode": "309",
+      "skuNameFallback": "MARTILLO APT 20 LB",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "132",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA",
+      "serialOrEngine": "SERIAL-0001",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "133",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA",
+      "serialOrEngine": "SERIAL-0002",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "135",
+      "skuNameFallback": "RANA VIBROCOMPACTADORA",
+      "serialOrEngine": "SERIAL-0003",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "136",
+      "skuNameFallback": "SALTARIN",
+      "serialOrEngine": "SERIAL-0004",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "139",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN",
+      "serialOrEngine": "SERIAL-0005",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "141",
+      "skuNameFallback": "VIBROCOMPACTADOR 1 TN",
+      "serialOrEngine": "SERIAL-0006",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "144",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN DD-24",
+      "serialOrEngine": "SERIAL-0007",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "145",
+      "skuNameFallback": "VIBROCOMPACTADOR 3 TN",
+      "serialOrEngine": "SERIAL-0008",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "146",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0009",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "147",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0010",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "148",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0011",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "149",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0012",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "150",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0013",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "151",
+      "skuNameFallback": "MEZCLADORA",
+      "serialOrEngine": "SERIAL-0014",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "153",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0015",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "154",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0016",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "155",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0017",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "156",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0018",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "157",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0019",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "158",
+      "skuNameFallback": "VIBRADOR ELECTRICO",
+      "serialOrEngine": "SERIAL-0020",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "159",
+      "skuNameFallback": "VIBRADOR A GASOLINA",
+      "serialOrEngine": "SERIAL-0021",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "160",
+      "skuNameFallback": "PLUMA GRUA",
+      "serialOrEngine": "SERIAL-0022",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "161",
+      "skuNameFallback": "BALDE PLUMA",
+      "serialOrEngine": "SERIAL-0023",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "162",
+      "skuNameFallback": "CANASTILLA PLUMA",
+      "serialOrEngine": "SERIAL-0024",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "163",
+      "skuNameFallback": "BACHE PLUMA",
+      "serialOrEngine": "SERIAL-0025",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "170",
+      "skuNameFallback": "CORTADORA DE CONCRETO",
+      "serialOrEngine": "SERIAL-0026",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "171",
+      "skuNameFallback": "CORTADORA DE LADRILLO",
+      "serialOrEngine": "SERIAL-0027",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "178",
+      "skuNameFallback": "DEMOLEDOR MEDIANO",
+      "serialOrEngine": "SERIAL-0028",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "179",
+      "skuNameFallback": "DEMOLEDOR MEDIANO",
+      "serialOrEngine": "SERIAL-0029",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "180",
+      "skuNameFallback": "DEMOLEDOR MEDIANO",
+      "serialOrEngine": "SERIAL-0030",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "181",
+      "skuNameFallback": "ROTOMARTILLO MEDIANO",
+      "serialOrEngine": "SERIAL-0031",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "184",
+      "skuNameFallback": "DEMOLEDOR MEDIANO",
+      "serialOrEngine": "SERIAL-0032",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "185",
+      "skuNameFallback": "ROTOMARTILLO SDS PLUS",
+      "serialOrEngine": "SERIAL-0033",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "186",
+      "skuNameFallback": "ROTOMARTILLO SDS PLUS",
+      "serialOrEngine": "SERIAL-0034",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "187",
+      "skuNameFallback": "ROTOMARTILLO SDS MAX",
+      "serialOrEngine": "SERIAL-0035",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "193",
+      "skuNameFallback": "COMPRESOR CON MARTILLO",
+      "serialOrEngine": "SERIAL-0036",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "194",
+      "skuNameFallback": "BOMBA SUMERGIBLE 2\"",
+      "serialOrEngine": "SERIAL-0037",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "198",
+      "skuNameFallback": "BOMBA SUMERGIBLE 3\"",
+      "serialOrEngine": "SERIAL-0038",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "201",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0039",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "203",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0040",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "204",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0041",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "205",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0042",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "206",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0043",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "207",
+      "skuNameFallback": "PLANTA ELECTRICA A GASOLINA",
+      "serialOrEngine": "SERIAL-0044",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "213",
+      "skuNameFallback": "RETROEXCAVADORA",
+      "serialOrEngine": "SERIAL-0045",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "214",
+      "skuNameFallback": "RETROEXCAVADORA CON MARTILLO",
+      "serialOrEngine": "SERIAL-0046",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "215",
+      "skuNameFallback": "RETROEXCAVADORA",
+      "serialOrEngine": "SERIAL-0047",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "216",
+      "skuNameFallback": "MINI RETROEXCAVADORA",
+      "serialOrEngine": "SERIAL-0048",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "217",
+      "skuNameFallback": "MINIEXCAVADORA 3 TONELADAS",
+      "serialOrEngine": "SERIAL-0049",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "218",
+      "skuNameFallback": "MINICARGADOR",
+      "serialOrEngine": "SERIAL-0050",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    },
+    {
+      "movementType": "ADJUST",
+      "warehouseKey": "MAIN",
+      "itemType": "SERIAL",
+      "skuExternalCode": "226",
+      "skuNameFallback": "HIDROLAVADORA",
+      "serialOrEngine": "SERIAL-0051",
+      "quantity": 1,
+      "refDocumentType": "CERVINO_CUTOVER",
+      "refDocumentId": null
+    }
+  ]
+}

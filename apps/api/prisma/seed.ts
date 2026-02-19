@@ -1,4 +1,4 @@
-import { Employee, EmployeeRole, PrismaClient, Role, Sku, SkuControlType, SkuUnit, User, Vehicle, Warehouse, WarehouseType } from '@prisma/client';
+import { Employee, EmployeeRole, PrismaClient, Role, Sku, SkuControlType, User, Vehicle, Warehouse, WarehouseType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -30,14 +30,14 @@ async function main() {
 
   const adminUser = createdUsers.find((user) => user.role === Role.ADMIN)!;
 
-  const ownerCompany = await prisma.owner.upsert({
-    where: { name: 'REV Logistics' },
-    update: {},
-    create: {
-      name: 'REV Logistics',
-      active: true,
-    },
-  });
+  const ownerCompany =
+    (await prisma.owner.findFirst({ where: { name: 'REV Logistics' } })) ??
+    (await prisma.owner.create({
+      data: {
+        name: 'REV Logistics',
+        active: true,
+      },
+    }));
 
   const warehouseNames: Array<Pick<Warehouse, 'name' | 'type'>> = [
     { name: 'Main Warehouse', type: WarehouseType.OWN },
@@ -68,26 +68,29 @@ async function main() {
     create: {
       code: 'DEFAULT',
       name: 'Default',
+      controlType: SkuControlType.BULK,
     },
   });
 
-  const sku: Sku = await prisma.sku.upsert({
-    where: { name: 'Default SKU' },
-    update: {},
-    create: {
-      name: 'Default SKU',
-      unit: SkuUnit.UNIT,
-      controlType: SkuControlType.BULK,
-      assetFamilyId: assetFamily.id,
-      active: true,
-    },
-  });
+  const sku: Sku =
+    (await prisma.sku.findFirst({
+      where: { name: 'Default SKU', assetFamilyId: assetFamily.id },
+    })) ??
+    (await prisma.sku.create({
+      data: {
+        name: 'Default SKU',
+        category: 'GENERAL',
+        assetFamilyId: assetFamily.id,
+        active: true,
+      },
+    }));
 
   const asset =
     (await prisma.asset.findFirst({ where: { serialOrEngine: 'SERIAL-001' } })) ??
     (await prisma.asset.create({
       data: {
         serialOrEngine: 'SERIAL-001',
+        publicCode: 'DEFAULT-MAIN-0001',
         skuId: sku.id,
         assetFamilyId: assetFamily.id,
         internalNumber: 1,

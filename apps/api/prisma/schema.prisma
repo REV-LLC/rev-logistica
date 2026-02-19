@@ -25,6 +25,13 @@ enum SkuControlType {
 
 enum EmployeeRole {
   DRIVER
+  HEAVY_MACHINERY_OPERATOR
+  MACHINIST
+  OFFICE
+  MANAGER
+  OPERATIONS_MANAGER
+  MECHANIC
+  WAREHOUSE_KEEPER
   OTHER
 }
 
@@ -162,6 +169,7 @@ model Sku {
   imageUrl    String?
   imageFileObjectId String?
   assetFamilyId String
+  price       Decimal?
   unitWeight  Decimal?
   active      Boolean        @default(true)
   createdAt   DateTime       @default(now())

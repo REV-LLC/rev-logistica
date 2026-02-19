@@ -38,6 +38,7 @@ export class SkusService {
         category: true,
         imageUrl: true,
         assetFamilyId: true,
+        price: true,
         unitWeight: true,
         active: true,
         createdAt: true,
@@ -71,6 +72,7 @@ export class SkusService {
     category: string;
     imageUrl?: string;
     assetFamilyId: string;
+    price?: number;
     unitWeight?: number;
     active?: boolean;
   }) {
@@ -89,6 +91,7 @@ export class SkusService {
           category: payload.category.trim().toUpperCase(),
           imageUrl: payload.imageUrl ?? null,
           assetFamilyId: payload.assetFamilyId,
+          price: payload.price ?? null,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
         },
@@ -98,6 +101,7 @@ export class SkusService {
           category: true,
           imageUrl: true,
           assetFamilyId: true,
+          price: true,
           unitWeight: true,
           active: true,
           createdAt: true,
@@ -128,6 +132,7 @@ export class SkusService {
       category?: string;
       imageUrl?: string;
       assetFamilyId?: string;
+      price?: number;
       unitWeight?: number;
       active?: boolean;
     },
@@ -159,6 +164,7 @@ export class SkusService {
           category: payload.category?.trim().toUpperCase() ?? undefined,
           imageUrl: payload.imageUrl ?? undefined,
           assetFamilyId: payload.assetFamilyId ?? undefined,
+          price: payload.price ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
         },
@@ -168,6 +174,7 @@ export class SkusService {
           category: true,
           imageUrl: true,
           assetFamilyId: true,
+          price: true,
           unitWeight: true,
           active: true,
           createdAt: true,

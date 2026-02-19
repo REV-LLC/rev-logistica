@@ -69,7 +69,7 @@ export class AssetsController {
   }
 
   @Patch(':assetId')
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.OFFICE)
   updateAsset(
     @Param('assetId', new ParseUUIDPipe()) assetId: string,
     @Body(
@@ -82,6 +82,18 @@ export class AssetsController {
     payload: UpdateAssetDto,
   ) {
     return this.assetsService.updateAsset(assetId, payload);
+  }
+
+  @Get(':assetId')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getAssetById(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
+    return this.assetsService.getAssetById(assetId);
+  }
+
+  @Get(':assetId/location')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getAssetLocation(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
+    return this.assetsService.getAssetLocation(assetId);
   }
 
   @Delete(':assetId')

@@ -28,6 +28,10 @@ export class CreateSkuDto {
   unitWeight?: number;
 
   @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }

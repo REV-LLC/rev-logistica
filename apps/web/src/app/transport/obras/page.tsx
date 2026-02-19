@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   ActionIcon,
   Badge,
@@ -17,7 +18,8 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconTrash } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconEye } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -62,6 +64,7 @@ const emptyForm: WorksiteForm = {
 };
 
 export default function ObrasPage() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [worksites, setWorksites] = useState<WorksiteRow[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +73,7 @@ export default function ObrasPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorksiteRow | null>(null);
+  const [detailsRow, setDetailsRow] = useState<WorksiteRow | null>(null);
   const [form, setForm] = useState<WorksiteForm>(emptyForm);
 
   const loadData = async () => {
@@ -172,24 +176,6 @@ export default function ObrasPage() {
     }
   };
 
-  const removeWorksite = async (row: WorksiteRow) => {
-    if (!window.confirm(`¿Eliminar obra ${row.worksite.name}?`)) return;
-
-    setError(null);
-    try {
-      await api(`/worksites/${row.id}`, { method: 'DELETE' });
-      await loadData();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error eliminando obra');
-      }
-    }
-  };
-
   return (
     <Container size="xl" py="xl">
       <Paper shadow="sm" p="xl" radius="md" withBorder>
@@ -204,56 +190,86 @@ export default function ObrasPage() {
           </Text>
         )}
 
-        <Table striped highlightOnHover withTableBorder>
+        <Table
+          striped
+          highlightOnHover
+          withTableBorder
+          className={isMobile ? 'table-mobile-fit' : undefined}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Obra</Table.Th>
-              <Table.Th>Alias</Table.Th>
-              <Table.Th>Cliente</Table.Th>
-              <Table.Th>Dirección</Table.Th>
-              <Table.Th>Estado</Table.Th>
-              <Table.Th />
+              <Table.Th style={isMobile ? { width: '50%' } : undefined}>Obra</Table.Th>
+              {!isMobile ? <Table.Th>Alias</Table.Th> : null}
+              <Table.Th style={isMobile ? { width: '35%' } : undefined}>Cliente</Table.Th>
+              {!isMobile ? <Table.Th>Dirección</Table.Th> : null}
+              {!isMobile ? <Table.Th>Estado</Table.Th> : null}
+              <Table.Th style={isMobile ? { width: '15%' } : undefined}>{isMobile ? 'Ver' : ''}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {!loading &&
               worksites.map((row) => (
                 <Table.Tr key={row.id}>
-                  <Table.Td>{row.worksite.name}</Table.Td>
-                  <Table.Td>{row.alias ?? '-'}</Table.Td>
-                  <Table.Td>{row.customer.name}</Table.Td>
-                  <Table.Td>{row.worksite.address ?? '-'}</Table.Td>
                   <Table.Td>
-                    <Group gap="xs">
-                      <Badge variant="light" color={row.active ? 'green' : 'gray'}>
-                        Relación: {row.active ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                      <Badge variant="light" color={row.worksite.active ? 'green' : 'gray'}>
-                        Obra: {row.worksite.active ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                    </Group>
+                    <Text
+                      component={Link}
+                      href={`/transport/obras/${row.id}`}
+                      c="blue.7"
+                      style={{ textDecoration: 'underline' }}
+                    >
+                      {row.worksite.name}
+                    </Text>
                   </Table.Td>
+                  {!isMobile ? <Table.Td>{row.alias ?? '-'}</Table.Td> : null}
                   <Table.Td>
-                    <Group gap="xs" justify="flex-end">
-                      <Button size="xs" variant="light" onClick={() => openEdit(row)}>
-                        Editar
-                      </Button>
+                    <Text
+                      component={Link}
+                      href={`/customers?customerId=${row.customer.id}`}
+                      c="blue.7"
+                      style={{ textDecoration: 'underline' }}
+                    >
+                      {row.customer.name}
+                    </Text>
+                  </Table.Td>
+                  {!isMobile ? <Table.Td>{row.worksite.address ?? '-'}</Table.Td> : null}
+                  {!isMobile ? (
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Badge variant="light" color={row.active ? 'green' : 'gray'}>
+                          Relación: {row.active ? 'Activa' : 'Inactiva'}
+                        </Badge>
+                        <Badge variant="light" color={row.worksite.active ? 'green' : 'gray'}>
+                          Obra: {row.worksite.active ? 'Activa' : 'Inactiva'}
+                        </Badge>
+                      </Group>
+                    </Table.Td>
+                  ) : null}
+                  <Table.Td>
+                    {isMobile ? (
                       <ActionIcon
-                        color="red"
                         variant="light"
-                        aria-label="Eliminar obra"
-                        onClick={() => removeWorksite(row)}
+                        aria-label={`Ver detalle de ${row.worksite.name}`}
+                        onClick={() => setDetailsRow(row)}
                       >
-                        <IconTrash size={16} />
+                        <IconEye size={16} />
                       </ActionIcon>
-                    </Group>
+                    ) : (
+                      <Group gap="xs" justify="flex-end">
+                        <Button size="xs" variant="default" component={Link} href={`/transport/obras/${row.id}`}>
+                          Abrir
+                        </Button>
+                        <Button size="xs" variant="light" onClick={() => openEdit(row)}>
+                          Editar
+                        </Button>
+                      </Group>
+                    )}
                   </Table.Td>
                 </Table.Tr>
               ))}
 
             {!loading && worksites.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={6}>
+                <Table.Td colSpan={isMobile ? 3 : 6}>
                   <Text c="dimmed" ta="center">
                     No hay obras registradas.
                   </Text>
@@ -263,7 +279,7 @@ export default function ObrasPage() {
 
             {loading && (
               <Table.Tr>
-                <Table.Td colSpan={6}>
+                <Table.Td colSpan={isMobile ? 3 : 6}>
                   <Text c="dimmed" ta="center">
                     Cargando...
                   </Text>
@@ -273,6 +289,52 @@ export default function ObrasPage() {
           </Table.Tbody>
         </Table>
       </Paper>
+
+      <Modal opened={!!detailsRow} onClose={() => setDetailsRow(null)} title="Detalle de obra" centered>
+        {detailsRow ? (
+          <Stack gap="xs">
+            <Text><strong>Obra:</strong> {detailsRow.worksite.name}</Text>
+            <Text><strong>Alias:</strong> {detailsRow.alias ?? '-'}</Text>
+            <Text>
+              <strong>Cliente:</strong>{' '}
+              <Text
+                component={Link}
+                href={`/customers?customerId=${detailsRow.customer.id}`}
+                c="blue.7"
+                style={{ textDecoration: 'underline' }}
+              >
+                {detailsRow.customer.name}
+              </Text>
+            </Text>
+            <Text><strong>Dirección:</strong> {detailsRow.worksite.address ?? '-'}</Text>
+            <Text>
+              <strong>Relación:</strong> {detailsRow.active ? 'Activa' : 'Inactiva'}
+            </Text>
+            <Text>
+              <strong>Obra:</strong> {detailsRow.worksite.active ? 'Activa' : 'Inactiva'}
+            </Text>
+            <Group className="mobile-actions" mt="sm">
+              <Button
+                variant="default"
+                component={Link}
+                href={`/transport/obras/${detailsRow.id}`}
+                onClick={() => setDetailsRow(null)}
+              >
+                Abrir
+              </Button>
+              <Button
+                variant="light"
+                onClick={() => {
+                  setDetailsRow(null);
+                  openEdit(detailsRow);
+                }}
+              >
+                Editar
+              </Button>
+            </Group>
+          </Stack>
+        ) : null}
+      </Modal>
 
       <Modal
         opened={modalOpen}
@@ -335,7 +397,7 @@ export default function ObrasPage() {
             />
           )}
 
-          <Group justify="flex-end">
+          <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>

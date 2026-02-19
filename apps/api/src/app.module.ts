@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -18,6 +18,8 @@ import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
 import { AssetsModule } from './assets/assets.module';
 import { SkusModule } from './skus/skus.module';
+import { OwnersModule } from './owners/owners.module';
+import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
 
 @Module({
   imports: [
@@ -45,6 +47,7 @@ import { SkusModule } from './skus/skus.module';
     UsersModule,
     AssetsModule,
     SkusModule,
+    OwnersModule,
   ],
   controllers: [AppController],
   providers: [
@@ -55,4 +58,11 @@ import { SkusModule } from './skus/skus.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(UppercaseBodyMiddleware)
+      .exclude({ path: 'auth/login', method: RequestMethod.POST })
+      .forRoutes('*');
+  }
+}

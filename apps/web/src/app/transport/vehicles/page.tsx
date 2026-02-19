@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActionIcon,
+  Autocomplete,
   Button,
   Center,
   Container,
@@ -9,14 +11,22 @@ import {
   Loader,
   Modal,
   Paper,
+  Select,
   Stack,
-  Switch,
   Table,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconEye } from '@tabler/icons-react';
 import { api } from '@/lib/api';
+
+const VEHICLE_TYPE_OPTIONS = ['CAMION/CAMIONETA', 'AUTOMOVIL', 'MOTO', 'GRUA'];
+const CAPACITY_OPTIONS = Array.from({ length: 91 }, (_, index) => {
+  const value = 1 + index / 10;
+  return value.toFixed(1).replace('.', ',');
+});
 
 type Vehicle = {
   id: string;
@@ -27,7 +37,6 @@ type Vehicle = {
   capacity?: string | null;
   soatVigencia?: string | null;
   tecnomecanicaVigencia?: string | null;
-  active: boolean;
   createdAt: string;
   drivers: Array<{
     id: string;
@@ -43,10 +52,9 @@ type VehicleForm = {
   capacity: string;
   soatVigencia: string;
   tecnomecanicaVigencia: string;
-  active: boolean;
 };
 
-const emptyForm = (vehicle: Vehicle): VehicleForm => ({
+const formFromVehicle = (vehicle: Vehicle): VehicleForm => ({
   plate: vehicle.plate ?? '',
   brand: vehicle.brand ?? '',
   model: vehicle.model ?? '',
@@ -54,8 +62,17 @@ const emptyForm = (vehicle: Vehicle): VehicleForm => ({
   capacity: vehicle.capacity ?? '',
   soatVigencia: toDateInput(vehicle.soatVigencia),
   tecnomecanicaVigencia: toDateInput(vehicle.tecnomecanicaVigencia),
-  active: vehicle.active,
 });
+
+const emptyForm: VehicleForm = {
+  plate: '',
+  brand: '',
+  model: '',
+  type: '',
+  capacity: '',
+  soatVigencia: '',
+  tecnomecanicaVigencia: '',
+};
 
 function toDateInput(value?: string | null) {
   if (!value) return '';
@@ -69,11 +86,13 @@ function toPatchValue(value: string) {
 }
 
 export default function VehiclesPage() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<VehicleForm | null>(null);
+  const [detailsVehicle, setDetailsVehicle] = useState<Vehicle | null>(null);
   const [saving, setSaving] = useState(false);
 
   const driversById = useMemo(() => {
@@ -86,6 +105,16 @@ export default function VehiclesPage() {
     return map;
   }, [vehicles]);
 
+  const brandOptions = useMemo(
+    () =>
+      Array.from(new Set(vehicles.map((vehicle) => vehicle.brand?.trim()).filter(Boolean) as string[])).sort(),
+    [vehicles],
+  );
+  const modelOptions = useMemo(
+    () =>
+      Array.from(new Set(vehicles.map((vehicle) => vehicle.model?.trim()).filter(Boolean) as string[])).sort(),
+    [vehicles],
+  );
   const loadVehicles = async () => {
     setLoading(true);
     setError(null);
@@ -103,9 +132,14 @@ export default function VehiclesPage() {
     loadVehicles();
   }, []);
 
+  const startCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+  };
+
   const startEdit = (vehicle: Vehicle) => {
     setEditing(vehicle);
-    setForm(emptyForm(vehicle));
+    setForm(formFromVehicle(vehicle));
   };
 
   const closeEdit = () => {
@@ -114,27 +148,40 @@ export default function VehiclesPage() {
   };
 
   const saveEdit = async () => {
-    if (!editing || !form) return;
+    if (!form) return;
+    if (!form.plate.trim()) {
+      setError('La placa es obligatoria');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await api(`/vehicles/${editing.id}`, {
-        method: 'PATCH',
-        json: {
-          plate: form.plate.trim(),
-          brand: toPatchValue(form.brand),
-          model: toPatchValue(form.model),
-          type: toPatchValue(form.type),
-          capacity: toPatchValue(form.capacity),
-          soatVigencia: toPatchValue(form.soatVigencia),
-          tecnomecanicaVigencia: toPatchValue(form.tecnomecanicaVigencia),
-          active: form.active,
-        },
-      });
+      const payload = {
+        plate: form.plate.trim().toUpperCase(),
+        brand: toPatchValue(form.brand)?.toUpperCase(),
+        model: toPatchValue(form.model)?.toUpperCase(),
+        type: toPatchValue(form.type)?.toUpperCase(),
+        capacity: toPatchValue(form.capacity)?.toUpperCase(),
+        soatVigencia: toPatchValue(form.soatVigencia),
+        tecnomecanicaVigencia: toPatchValue(form.tecnomecanicaVigencia),
+      };
+
+      if (editing) {
+        await api(`/vehicles/${editing.id}`, {
+          method: 'PATCH',
+          json: payload,
+        });
+      } else {
+        await api('/vehicles', {
+          method: 'POST',
+          json: payload,
+        });
+      }
+
       await loadVehicles();
       closeEdit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo actualizar');
+      setError(err instanceof Error ? err.message : 'No se pudo guardar');
     } finally {
       setSaving(false);
     }
@@ -145,6 +192,7 @@ export default function VehiclesPage() {
       <Paper shadow="sm" p="xl" radius="md" withBorder>
         <Group justify="space-between" align="center" mb="md">
           <Title order={2}>Vehículos</Title>
+          <Button onClick={startCreate}>Nuevo vehículo</Button>
         </Group>
 
         {error && (
@@ -158,47 +206,35 @@ export default function VehiclesPage() {
             <Loader />
           </Center>
         ) : (
-          <Table striped highlightOnHover withTableBorder>
+          <Table striped highlightOnHover withTableBorder className={isMobile ? 'table-mobile-fit' : undefined}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Placa</Table.Th>
-                <Table.Th>Marca</Table.Th>
-                <Table.Th>Modelo</Table.Th>
-                <Table.Th>Tipo</Table.Th>
-                <Table.Th>Capacidad</Table.Th>
-                <Table.Th>SOAT vence</Table.Th>
-                <Table.Th>Tecnomecánica vence</Table.Th>
-                <Table.Th>Conductores</Table.Th>
-                <Table.Th>Activo</Table.Th>
-                <Table.Th />
+                <Table.Th style={isMobile ? { width: '50%' } : undefined}>Placa</Table.Th>
+                <Table.Th style={isMobile ? { width: '35%' } : undefined}>Marca</Table.Th>
+                <Table.Th style={isMobile ? { width: '15%' } : undefined}>Ver</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {vehicles.map((vehicle) => (
                 <Table.Tr key={vehicle.id}>
                   <Table.Td>{vehicle.plate}</Table.Td>
-                  <Table.Td>{vehicle.brand ?? '-'}</Table.Td>
-                  <Table.Td>{vehicle.model ?? '-'}</Table.Td>
-                  <Table.Td>{vehicle.type ?? '-'}</Table.Td>
-                  <Table.Td>{vehicle.capacity ?? '-'}</Table.Td>
-                  <Table.Td>{toDateInput(vehicle.soatVigencia) || '-'}</Table.Td>
-                  <Table.Td>{toDateInput(vehicle.tecnomecanicaVigencia) || '-'}</Table.Td>
                   <Table.Td>
-                    {vehicle.drivers.length
-                      ? vehicle.drivers.map((driver) => driversById.get(driver.id) ?? driver.name).join(', ')
-                      : '-'}
+                    {vehicle.brand ?? '-'}
                   </Table.Td>
-                  <Table.Td>{vehicle.active ? 'Sí' : 'No'}</Table.Td>
                   <Table.Td>
-                    <Button size="xs" variant="light" onClick={() => startEdit(vehicle)}>
-                      Editar
-                    </Button>
+                    <ActionIcon
+                      variant="light"
+                      aria-label={`Ver detalle de ${vehicle.plate}`}
+                      onClick={() => setDetailsVehicle(vehicle)}
+                    >
+                      <IconEye size={16} />
+                    </ActionIcon>
                   </Table.Td>
                 </Table.Tr>
               ))}
               {!vehicles.length && (
                 <Table.Tr>
-                  <Table.Td colSpan={10}>
+                  <Table.Td colSpan={3}>
                     <Text c="dimmed" ta="center">
                       Sin vehículos registrados.
                     </Text>
@@ -210,40 +246,86 @@ export default function VehiclesPage() {
         )}
       </Paper>
 
-      <Modal opened={!!editing} onClose={closeEdit} title="Editar vehículo" size="lg">
+      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehículo">
+        {detailsVehicle ? (
+          <Stack gap="xs">
+            <Text><strong>Placa:</strong> {detailsVehicle.plate}</Text>
+            <Text><strong>Marca:</strong> {detailsVehicle.brand ?? '-'}</Text>
+            <Text><strong>Modelo:</strong> {detailsVehicle.model ?? '-'}</Text>
+            <Text><strong>Tipo:</strong> {detailsVehicle.type ?? '-'}</Text>
+            <Text><strong>Capacidad:</strong> {detailsVehicle.capacity ?? '-'}</Text>
+            <Text><strong>SOAT vence:</strong> {toDateInput(detailsVehicle.soatVigencia) || '-'}</Text>
+            <Text><strong>Tecnomecánica vence:</strong> {toDateInput(detailsVehicle.tecnomecanicaVigencia) || '-'}</Text>
+            <Text>
+              <strong>Conductores:</strong>{' '}
+              {detailsVehicle.drivers.length
+                ? detailsVehicle.drivers.map((driver) => driversById.get(driver.id) ?? driver.name).join(', ')
+                : '-'}
+            </Text>
+            <Group justify="flex-end" mt="sm">
+              <Button
+                size="xs"
+                variant="light"
+                onClick={() => {
+                  setDetailsVehicle(null);
+                  startEdit(detailsVehicle);
+                }}
+              >
+                Editar
+              </Button>
+            </Group>
+          </Stack>
+        ) : null}
+      </Modal>
+
+      <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Editar vehículo' : 'Nuevo vehículo'} size="lg">
         {form && (
           <Stack>
-            <TextInput
-              label="Placa"
-              value={form.plate}
-              onChange={(event) => setForm({ ...form, plate: event.currentTarget.value })}
-              required
-            />
-            <Group grow>
+            <Group gap="xs" wrap="nowrap" align="flex-end">
               <TextInput
+                label="Placa"
+                value={form.plate}
+                onChange={(event) => setForm({ ...form, plate: event.currentTarget.value })}
+                style={{ flex: '0 0 30%' }}
+                required
+              />
+              <Autocomplete
                 label="Marca"
                 value={form.brand}
-                onChange={(event) => setForm({ ...form, brand: event.currentTarget.value })}
+                data={brandOptions}
+                onChange={(value) => setForm({ ...form, brand: value })}
+                placeholder="Escribe para sugerir"
+                style={{ flex: '1 1 35%', minWidth: 0 }}
               />
-              <TextInput
+              <Autocomplete
                 label="Modelo"
                 value={form.model}
-                onChange={(event) => setForm({ ...form, model: event.currentTarget.value })}
+                data={modelOptions}
+                onChange={(value) => setForm({ ...form, model: value })}
+                placeholder="Escribe para sugerir"
+                style={{ flex: '1 1 35%', minWidth: 0 }}
               />
             </Group>
-            <Group grow>
-              <TextInput
+            <Group align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'} className="mobile-stack">
+              <Select
                 label="Tipo"
                 value={form.type}
-                onChange={(event) => setForm({ ...form, type: event.currentTarget.value })}
+                data={VEHICLE_TYPE_OPTIONS}
+                onChange={(value) => setForm({ ...form, type: value ?? '' })}
+                clearable
+                style={{ flex: isMobile ? undefined : '1 1 38%' }}
               />
-              <TextInput
+              <Select
                 label="Capacidad"
                 value={form.capacity}
-                onChange={(event) => setForm({ ...form, capacity: event.currentTarget.value })}
+                data={CAPACITY_OPTIONS}
+                searchable
+                clearable
+                onChange={(value) => setForm({ ...form, capacity: value ?? '' })}
+                style={{ flex: isMobile ? undefined : '1 1 62%' }}
               />
             </Group>
-            <Group grow>
+            <Group grow className="mobile-stack">
               <TextInput
                 label="SOAT vence"
                 type="date"
@@ -259,12 +341,7 @@ export default function VehiclesPage() {
                 }
               />
             </Group>
-            <Switch
-              label="Activo"
-              checked={form.active}
-              onChange={(event) => setForm({ ...form, active: event.currentTarget.checked })}
-            />
-            <Group justify="flex-end">
+            <Group justify="flex-end" className="mobile-actions">
               <Button variant="default" onClick={closeEdit}>
                 Cancelar
               </Button>

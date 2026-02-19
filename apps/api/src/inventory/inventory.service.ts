@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   Inject,
+  InternalServerErrorException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { MovementType, Prisma, SkuControlType } from '@prisma/client';
+import { DocumentType, MovementType, Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SKU_CATEGORIES } from '../skus/skus.constants';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
@@ -58,14 +59,15 @@ export class InventoryService {
   private async assertDocumentExists(
     documentId: string,
     prismaClient: Prisma.TransactionClient | PrismaService,
-  ) {
+  ): Promise<DocumentType> {
     const document = await prismaClient.document.findUnique({
       where: { id: documentId },
-      select: { id: true },
+      select: { id: true, type: true },
     });
     if (!document) {
       throw new NotFoundException('Document not found');
     }
+    return document.type;
   }
 
   private parseLedgerCursor(cursor: string) {
@@ -249,9 +251,10 @@ export class InventoryService {
   }
 
   async createSerializedAsset(payload: CreateSerializedAssetDto, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
-      const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
+        const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
@@ -339,8 +342,41 @@ export class InventoryService {
         select: { id: true, movementType: true, quantity: true },
       });
 
-      return { asset, ledger };
-    });
+        return { asset, ledger };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          const targets = Array.isArray(error.meta?.target)
+            ? error.meta.target.map((value) => String(value))
+            : [String(error.meta?.target ?? '')];
+
+          if (targets.some((target) => target.includes('serialOrEngine'))) {
+            throw new BadRequestException('Serial o motor ya existe');
+          }
+          if (targets.some((target) => target.includes('publicCode'))) {
+            throw new BadRequestException('Código público del equipo ya existe');
+          }
+          if (targets.some((target) => target.includes('internalNumber'))) {
+            throw new BadRequestException('Consecutivo interno ya existe, intenta nuevamente');
+          }
+          throw new BadRequestException('No se pudo crear el equipo por un valor duplicado');
+        }
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Referencia inválida en los datos enviados');
+        }
+        if (error.code === 'P2025') {
+          throw new BadRequestException('Uno de los registros relacionados no existe');
+        }
+      }
+      if (error instanceof Prisma.PrismaClientValidationError) {
+        throw new BadRequestException('Datos inválidos para crear el equipo');
+      }
+      if (error instanceof Error) {
+        throw new InternalServerErrorException(error.message);
+      }
+      throw new InternalServerErrorException('Error creando equipo');
+    }
   }
 
   async addBulkAdjustment(payload: CreateBulkAdjustmentDto, userId: string) {
@@ -439,8 +475,9 @@ export class InventoryService {
 
   async moveOut(payload: CreateInventoryOutDto, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
+      let refDocumentType: DocumentType | null = null;
       if (payload.documentId) {
-        await this.assertDocumentExists(payload.documentId, tx);
+        refDocumentType = await this.assertDocumentExists(payload.documentId, tx);
       }
 
       const warehouse = await tx.warehouse.findUnique({
@@ -550,7 +587,7 @@ export class InventoryService {
               warehouseId: payload.warehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: group.skuId,
               assetId: null,
               ownerWarehouseId: group.ownerWarehouseId,
@@ -570,7 +607,7 @@ export class InventoryService {
               warehouseId: payload.warehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: null,
               assetId,
               ownerWarehouseId,
@@ -608,9 +645,13 @@ export class InventoryService {
   }
 
   async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string) {
+    const ownerWarehouseIds = [
+      ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
+    ];
     const created = await this.prisma.$transaction(async (tx) => {
+      let refDocumentType: DocumentType | null = null;
       if (payload.documentId) {
-        await this.assertDocumentExists(payload.documentId, tx);
+        refDocumentType = await this.assertDocumentExists(payload.documentId, tx);
       }
 
       const customerWorksite = await tx.customerWorksite.findUnique({
@@ -623,9 +664,6 @@ export class InventoryService {
 
       const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
         this.normalizeOperationItems(payload.items);
-      const ownerWarehouseIds = [
-        ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
-      ];
       await this.assertOwnerWarehousesExist(ownerWarehouseIds);
       const serialIds = [...serialAssetIds.values()];
 
@@ -660,7 +698,7 @@ export class InventoryService {
               ownerWarehouseId: group.ownerWarehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: group.skuId,
               assetId: null,
               quantity: group.quantity,
@@ -680,7 +718,7 @@ export class InventoryService {
               ownerWarehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: null,
               assetId,
               quantity: 1,
@@ -708,6 +746,11 @@ export class InventoryService {
     await this.invalidateInventoryCache({
       customerWorksiteId: payload.customerWorksiteId,
     });
+    await Promise.all(
+      ownerWarehouseIds.map((ownerWarehouseId) =>
+        this.invalidateInventoryCache({ warehouseId: ownerWarehouseId }),
+      ),
+    );
 
     return {
       count: created.length,
@@ -717,8 +760,9 @@ export class InventoryService {
 
   async moveIn(payload: CreateInventoryInDto, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
+      let refDocumentType: DocumentType | null = null;
       if (payload.documentId) {
-        await this.assertDocumentExists(payload.documentId, tx);
+        refDocumentType = await this.assertDocumentExists(payload.documentId, tx);
       }
 
       const warehouse = await tx.warehouse.findUnique({
@@ -861,7 +905,7 @@ export class InventoryService {
               warehouseId: payload.warehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: group.skuId,
               assetId: null,
               ownerWarehouseId: group.ownerWarehouseId,
@@ -881,7 +925,7 @@ export class InventoryService {
               warehouseId: payload.warehouseId,
               customerWorksiteId: payload.customerWorksiteId,
               refDocumentId: payload.documentId ?? null,
-              refDocumentType: null,
+              refDocumentType,
               skuId: null,
               assetId,
               ownerWarehouseId,
@@ -939,10 +983,18 @@ export class InventoryService {
     }
 
     const bulkRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId'],
+      by: ['skuId', 'ownerWarehouseId'],
       where: {
         warehouseId,
-        customerWorksiteId: null,
+        skuId: { not: null },
+      },
+      _sum: { quantity: true },
+    });
+    const bulkOnSiteRows = await this.prisma.stockLedger.groupBy({
+      by: ['skuId', 'ownerWarehouseId'],
+      where: {
+        ownerWarehouseId: warehouseId,
+        movementType: MovementType.ON_SITE,
         skuId: { not: null },
       },
       _sum: { quantity: true },
@@ -952,25 +1004,84 @@ export class InventoryService {
       by: ['assetId'],
       where: {
         warehouseId,
-        customerWorksiteId: null,
+        assetId: { not: null },
+      },
+      _sum: { quantity: true },
+    });
+    const serialOnSiteRows = await this.prisma.stockLedger.groupBy({
+      by: ['assetId'],
+      where: {
+        ownerWarehouseId: warehouseId,
+        movementType: MovementType.ON_SITE,
         assetId: { not: null },
       },
       _sum: { quantity: true },
     });
 
-    const bulkBase = bulkRows
-      .map((row) => ({
-        skuId: row.skuId as string,
-        quantity: Number(row._sum.quantity ?? 0),
-      }));
+    const bulkBySkuAndOwner = new Map<string, { skuId: string; ownerWarehouseId: string; quantity: number }>();
+    bulkRows.forEach((row) => {
+      const rawSkuId = row.skuId as string;
+      const skuId = rawSkuId.toLowerCase();
+      const ownerWarehouseId = (row.ownerWarehouseId ?? warehouseId).toLowerCase();
+      const quantity = Number(row._sum.quantity ?? 0);
+      const key = `${skuId}::${ownerWarehouseId}`;
+      const existing = bulkBySkuAndOwner.get(key);
+      if (existing) {
+        existing.quantity += quantity;
+        return;
+      }
+      bulkBySkuAndOwner.set(key, { skuId, ownerWarehouseId, quantity });
+    });
+    bulkOnSiteRows.forEach((row) => {
+      const rawSkuId = row.skuId as string;
+      const skuId = rawSkuId.toLowerCase();
+      const ownerWarehouseId = (row.ownerWarehouseId ?? warehouseId).toLowerCase();
+      const quantity = Number(row._sum.quantity ?? 0);
+      const key = `${skuId}::${ownerWarehouseId}`;
+      const existing = bulkBySkuAndOwner.get(key);
+      if (existing) {
+        existing.quantity -= quantity;
+        return;
+      }
+      bulkBySkuAndOwner.set(key, { skuId, ownerWarehouseId, quantity: -quantity });
+    });
+    const bulkBase = Array.from(bulkBySkuAndOwner.values());
 
-    const serialBase = serialRows
-      .map((row) => ({
-        assetId: row.assetId as string,
-        quantity: Number(row._sum.quantity ?? 0),
-      }));
+    const serialByAsset = new Map<string, number>();
+    serialRows.forEach((row) => {
+      const rawAssetId = row.assetId as string;
+      const assetId = rawAssetId.toLowerCase();
+      const quantity = Number(row._sum.quantity ?? 0);
+      serialByAsset.set(assetId, (serialByAsset.get(assetId) ?? 0) + quantity);
+    });
+    serialOnSiteRows.forEach((row) => {
+      const rawAssetId = row.assetId as string;
+      const assetId = rawAssetId.toLowerCase();
+      const quantity = Number(row._sum.quantity ?? 0);
+      serialByAsset.set(assetId, (serialByAsset.get(assetId) ?? 0) - quantity);
+    });
+    const serialBase = Array.from(serialByAsset.entries()).map(([assetId, quantity]) => ({
+      assetId,
+      quantity,
+    }));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
+    const serialStatusByAssetId = new Map<string, MovementType>();
+    if (assetIds.length > 0) {
+      const serialLedgerRows = await this.prisma.stockLedger.findMany({
+        where: { assetId: { in: assetIds } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { assetId: true, movementType: true },
+      });
+      serialLedgerRows.forEach((row) => {
+        if (!row.assetId) return;
+        const key = row.assetId.toLowerCase();
+        if (!serialStatusByAssetId.has(key)) {
+          serialStatusByAssetId.set(key, row.movementType);
+        }
+      });
+    }
+
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
           where: { id: { in: assetIds } },
@@ -978,7 +1089,10 @@ export class InventoryService {
             id: true,
             serialOrEngine: true,
             description: true,
+            brand: true,
+            model: true,
             skuId: true,
+            warehouseOwnerId: true,
             imageFileObjectId: true,
             internalNumber: true,
             weight: true,
@@ -988,7 +1102,7 @@ export class InventoryService {
           },
         })
       : [];
-    const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+    const assetsById = new Map(assets.map((asset) => [asset.id.toLowerCase(), asset]));
 
     const skuIds = [
       ...new Set([
@@ -1002,13 +1116,17 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
+            category: true,
             imageUrl: true,
             imageFileObjectId: true,
+            assetFamilyId: true,
             unitWeight: true,
+            active: true,
+            createdAt: true,
           },
         })
       : [];
-    const skusById = new Map(skus.map((sku) => [sku.id, sku]));
+    const skusById = new Map(skus.map((sku) => [sku.id.toLowerCase(), sku]));
 
     const bulk = bulkBase
       .map((row) => {
@@ -1016,10 +1134,17 @@ export class InventoryService {
 
         return {
           skuId: row.skuId,
+          ownerWarehouseId: row.ownerWarehouseId,
+          id: sku?.id ?? row.skuId,
           skuName: sku?.name ?? null,
+          name: sku?.name ?? null,
+          category: sku?.category ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
+          assetFamilyId: sku?.assetFamilyId ?? null,
           unitWeight: sku?.unitWeight ?? null,
+          active: sku?.active ?? null,
+          createdAt: sku?.createdAt ?? null,
           storageLocation: { warehouseId },
           quantity: row.quantity,
         };
@@ -1035,8 +1160,14 @@ export class InventoryService {
 
         return {
           assetId: row.assetId,
+          ownerWarehouseId: asset?.warehouseOwnerId ?? null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
+          skuName: sku?.name ?? null,
+          imageUrl: sku?.imageUrl ?? null,
+          brand: asset?.brand ?? null,
+          model: asset?.model ?? null,
+          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
           assetFamily: asset?.assetFamily ?? null,
           weight: asset?.weight ?? null,
@@ -1088,7 +1219,7 @@ export class InventoryService {
     }
 
     const bulkOnSiteRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId'],
+      by: ['skuId', 'ownerWarehouseId'],
       where: {
         customerWorksiteId,
         warehouseId: null,
@@ -1097,7 +1228,7 @@ export class InventoryService {
       _sum: { quantity: true },
     });
     const bulkInRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId'],
+      by: ['skuId', 'ownerWarehouseId'],
       where: {
         customerWorksiteId,
         movementType: MovementType.IN,
@@ -1125,17 +1256,29 @@ export class InventoryService {
       _sum: { quantity: true },
     });
 
-    const bulkOnSiteBySku = new Map(
-      bulkOnSiteRows.map((row) => [row.skuId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const bulkInBySku = new Map(
-      bulkInRows.map((row) => [row.skuId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const bulkNet = [...new Set([...bulkOnSiteBySku.keys(), ...bulkInBySku.keys()])].map(
-      (skuId) => ({
-        skuId,
-        quantity: (bulkOnSiteBySku.get(skuId) ?? 0) - (bulkInBySku.get(skuId) ?? 0),
-      }),
+    const bulkOnSiteByGroup = new Map<string, number>();
+    bulkOnSiteRows.forEach((row) => {
+      const skuId = row.skuId as string;
+      const ownerWarehouseId = row.ownerWarehouseId as string;
+      const key = `${skuId}::${ownerWarehouseId}`;
+      bulkOnSiteByGroup.set(key, Number(row._sum.quantity ?? 0));
+    });
+    const bulkInByGroup = new Map<string, number>();
+    bulkInRows.forEach((row) => {
+      const skuId = row.skuId as string;
+      const ownerWarehouseId = row.ownerWarehouseId as string;
+      const key = `${skuId}::${ownerWarehouseId}`;
+      bulkInByGroup.set(key, Number(row._sum.quantity ?? 0));
+    });
+    const bulkNet = [...new Set([...bulkOnSiteByGroup.keys(), ...bulkInByGroup.keys()])].map(
+      (key) => {
+        const [skuId, ownerWarehouseId] = key.split('::');
+        return {
+          skuId,
+          ownerWarehouseId,
+          quantity: (bulkOnSiteByGroup.get(key) ?? 0) - (bulkInByGroup.get(key) ?? 0),
+        };
+      },
     );
     const bulkNegative = bulkNet.filter((row) => row.quantity < 0);
     if (bulkNegative.length) {
@@ -1172,6 +1315,21 @@ export class InventoryService {
     const serialBase = serialNet.filter((row) => row.quantity > 0);
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
+    const serialStatusByAssetId = new Map<string, MovementType>();
+    if (assetIds.length > 0) {
+      const serialLedgerRows = await this.prisma.stockLedger.findMany({
+        where: { assetId: { in: assetIds } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { assetId: true, movementType: true },
+      });
+      serialLedgerRows.forEach((row) => {
+        if (!row.assetId) return;
+        if (!serialStatusByAssetId.has(row.assetId)) {
+          serialStatusByAssetId.set(row.assetId, row.movementType);
+        }
+      });
+    }
+
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
           where: { id: { in: assetIds } },
@@ -1179,7 +1337,10 @@ export class InventoryService {
             id: true,
             serialOrEngine: true,
             description: true,
+            brand: true,
+            model: true,
             skuId: true,
+            warehouseOwnerId: true,
             imageFileObjectId: true,
             internalNumber: true,
             weight: true,
@@ -1218,6 +1379,7 @@ export class InventoryService {
 
         return {
           skuId: row.skuId,
+          ownerWarehouseId: row.ownerWarehouseId,
           skuName: sku?.name ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
@@ -1239,8 +1401,14 @@ export class InventoryService {
 
         return {
           assetId: row.assetId,
+          ownerWarehouseId: asset?.warehouseOwnerId ?? null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
+          skuName: sku?.name ?? null,
+          imageUrl: sku?.imageUrl ?? null,
+          brand: asset?.brand ?? null,
+          model: asset?.model ?? null,
+          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
           assetFamily: asset?.assetFamily ?? null,
           weight: asset?.weight ?? null,
@@ -1336,6 +1504,7 @@ export class InventoryService {
             worksite: { select: { id: true, name: true } },
           },
         },
+        document: { select: { id: true, consecutive: true, type: true } },
         creator: { select: { id: true, email: true } },
       },
     });
@@ -1736,6 +1905,19 @@ export class InventoryService {
       throw new BadRequestException('Invalid month format');
     }
     return monthStart;
+  }
+
+  private mapSerialStatus(movementType: MovementType | undefined, quantity: number) {
+    if (movementType === MovementType.TRANSIT) {
+      return 'TRANSIT';
+    }
+    if (movementType === MovementType.OUT || movementType === MovementType.ON_SITE) {
+      return 'OUT';
+    }
+    if (movementType === MovementType.IN || movementType === MovementType.ADJUST) {
+      return 'IN';
+    }
+    return quantity > 0 ? 'IN' : 'OUT';
   }
 
   private async assertOwnerWarehousesExist(ownerWarehouseIds: string[]) {

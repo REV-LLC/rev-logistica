@@ -1,0 +1,2 @@
+ALTER TABLE "Sku"
+  ADD COLUMN "price" DECIMAL;
