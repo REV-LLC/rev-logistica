@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Autocomplete, Text } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
+import type { ReactNode } from 'react';
 
 type Warehouse = {
   id: string;
@@ -13,12 +14,14 @@ type Props = {
   value: string | null;
   onChange: (warehouseId: string | null) => void;
   defaultName?: string;
+  label?: ReactNode;
 };
 
 export default function WarehouseSelect({
   value,
   onChange,
-  defaultName = 'Main Warehouse'
+  defaultName = 'Main Warehouse',
+  label = 'Bodega de ubicación',
 }: Props) {
   const [items, setItems] = useState<Warehouse[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -110,7 +113,7 @@ export default function WarehouseSelect({
   return (
     <div>
       <Autocomplete
-        label="Warehouse"
+        label={label}
         placeholder={loading ? 'Cargando bodegas...' : 'Busca por nombre'}
         data={items.map((warehouse) => warehouse.name)}
         value={inputValue}

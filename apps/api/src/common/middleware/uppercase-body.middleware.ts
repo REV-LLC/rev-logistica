@@ -6,6 +6,10 @@ const UUID_REGEX =
 
 function uppercaseDeep(value: unknown): unknown {
   if (typeof value === 'string') {
+    // Keep data URLs intact; uppercasing breaks base64 payloads (e.g. signatures).
+    if (/^data:[^;]+;base64,/i.test(value)) {
+      return value;
+    }
     // Keep UUID-like identifiers intact; uppercasing breaks lookups on text ids.
     if (UUID_REGEX.test(value)) {
       return value;

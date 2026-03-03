@@ -6,10 +6,10 @@ const prisma = new PrismaClient();
 async function main() {
   const passwordHash = await bcrypt.hash('test', 10);
 
-  const users: Array<Pick<User, 'name' | 'email' | 'role'>> = [
-    { name: 'Admin', email: 'admin@rev.com', role: Role.ADMIN },
-    { name: 'Office User', email: 'office@rev.com', role: Role.OFFICE },
-    { name: 'Driver User', email: 'driver@rev.com', role: Role.DRIVER },
+  const users: Array<Pick<User, 'email' | 'role'>> = [
+    { email: 'admin@rev.com', role: Role.ADMIN },
+    { email: 'office@rev.com', role: Role.OFFICE },
+    { email: 'driver@rev.com', role: Role.DRIVER },
   ];
 
   const createdUsers: User[] = [];
@@ -18,7 +18,6 @@ async function main() {
       where: { email: user.email },
       update: {},
       create: {
-        name: user.name,
         email: user.email,
         passwordHash,
         role: user.role,
@@ -123,6 +122,22 @@ async function main() {
           },
         });
     createdEmployees.push(created);
+  }
+
+  // Keep a deterministic link between demo users and employees for display name.
+  const officeUser = createdUsers.find((user) => user.role === Role.OFFICE);
+  const driverUser = createdUsers.find((user) => user.role === Role.DRIVER);
+  if (officeUser && createdEmployees[2]) {
+    await prisma.employee.update({
+      where: { id: createdEmployees[2].id },
+      data: { userId: officeUser.id },
+    });
+  }
+  if (driverUser && createdEmployees[0]) {
+    await prisma.employee.update({
+      where: { id: createdEmployees[0].id },
+      data: { userId: driverUser.id },
+    });
   }
 
   const vehicles: Array<Pick<Vehicle, 'plate' | 'brand' | 'model' | 'type' | 'capacity'>> = [

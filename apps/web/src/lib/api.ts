@@ -41,7 +41,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   });
 
   const shouldRedirect = options.redirectOnAuthError !== false;
-  if (shouldRedirect && (response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
+  if (shouldRedirect && response.status === 401 && typeof window !== 'undefined') {
     clearToken();
     const next = window.location.pathname || '';
     if (!window.location.pathname.startsWith('/login')) {

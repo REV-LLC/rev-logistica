@@ -80,7 +80,6 @@ enum TaskPriority {
 
 model User {
   id        String   @id @default(uuid())
-  name      String
   email     String   @unique
   passwordHash String
   role      Role
@@ -91,6 +90,7 @@ model User {
   ledgerCreated    StockLedger[] @relation("LedgerCreatedBy")
   tasksCreated     Task[] @relation("TaskCreatedBy")
   tasksAssigned    Task[] @relation("TaskAssignedTo")
+  employee         Employee?
 }
 
 model Customer {
@@ -170,6 +170,8 @@ model Sku {
   imageFileObjectId String?
   assetFamilyId String
   price       Decimal?
+  subrentalPrice Decimal?
+  areaM2      Decimal?
   unitWeight  Decimal?
   active      Boolean        @default(true)
   createdAt   DateTime       @default(now())
@@ -296,6 +298,7 @@ model DocumentItem {
   // BULK
   skuId     String?
   quantity  Decimal?
+  requestedTag String?
 
   // SERIAL
   assetId   String?
@@ -313,6 +316,7 @@ model DocumentItem {
   @@index([documentId])
   @@index([skuId])
   @@index([assetId])
+  @@index([requestedTag])
 }
 
 model StockLedger {
@@ -384,10 +388,12 @@ model Employee {
   phone      String?
   email      String?
   documentId String?
+  userId     String?      @unique
   active     Boolean      @default(true)
   createdAt  DateTime     @default(now())
 
   vehicles EmployeeVehicle[]
+  user     User?          @relation(fields: [userId], references: [id])
 }
 
 model Vehicle {

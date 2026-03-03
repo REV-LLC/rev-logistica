@@ -25,6 +25,7 @@ export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Get()
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   listEmployees() {
     return this.employeesService.listEmployees();
   }

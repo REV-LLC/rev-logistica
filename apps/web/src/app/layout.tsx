@@ -5,7 +5,12 @@ import Providers from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'Rev Logistica Backoffice',
-  description: 'Backoffice UI for inventory operations.'
+  description: 'Backoffice UI for inventory operations.',
+  icons: {
+    icon: '/fiesta.svg',
+    shortcut: '/fiesta.svg',
+    apple: '/fiesta.svg',
+  },
 };
 
 export const viewport: Viewport = {

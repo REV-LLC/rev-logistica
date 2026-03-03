@@ -41,6 +41,18 @@ export class BulkSkuInput {
   @IsOptional()
   @IsNumber()
   unitWeight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @IsOptional()
+  @IsNumber()
+  subrentalPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  areaM2?: number;
 }
 
 export class CreateBulkAdjustmentDto {

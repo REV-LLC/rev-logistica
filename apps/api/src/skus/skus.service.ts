@@ -39,6 +39,8 @@ export class SkusService {
         imageUrl: true,
         assetFamilyId: true,
         price: true,
+        subrentalPrice: true,
+        areaM2: true,
         unitWeight: true,
         active: true,
         createdAt: true,
@@ -73,6 +75,8 @@ export class SkusService {
     imageUrl?: string;
     assetFamilyId: string;
     price?: number;
+    subrentalPrice?: number;
+    areaM2?: number;
     unitWeight?: number;
     active?: boolean;
   }) {
@@ -92,6 +96,8 @@ export class SkusService {
           imageUrl: payload.imageUrl ?? null,
           assetFamilyId: payload.assetFamilyId,
           price: payload.price ?? null,
+          subrentalPrice: payload.subrentalPrice ?? null,
+          areaM2: payload.areaM2 ?? null,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
         },
@@ -102,6 +108,8 @@ export class SkusService {
           imageUrl: true,
           assetFamilyId: true,
           price: true,
+          subrentalPrice: true,
+          areaM2: true,
           unitWeight: true,
           active: true,
           createdAt: true,
@@ -133,6 +141,8 @@ export class SkusService {
       imageUrl?: string;
       assetFamilyId?: string;
       price?: number;
+      subrentalPrice?: number;
+      areaM2?: number;
       unitWeight?: number;
       active?: boolean;
     },
@@ -165,6 +175,8 @@ export class SkusService {
           imageUrl: payload.imageUrl ?? undefined,
           assetFamilyId: payload.assetFamilyId ?? undefined,
           price: payload.price ?? undefined,
+          subrentalPrice: payload.subrentalPrice ?? undefined,
+          areaM2: payload.areaM2 ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
         },
@@ -175,6 +187,8 @@ export class SkusService {
           imageUrl: true,
           assetFamilyId: true,
           price: true,
+          subrentalPrice: true,
+          areaM2: true,
           unitWeight: true,
           active: true,
           createdAt: true,

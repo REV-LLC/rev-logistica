@@ -42,6 +42,10 @@ export class SerializedSkuInput {
   @IsOptional()
   @IsNumber()
   unitWeight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  subrentalPrice?: number;
 }
 
 export class SerializedAssetInput {

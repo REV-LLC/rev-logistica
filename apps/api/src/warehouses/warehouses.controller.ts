@@ -24,14 +24,14 @@ export class WarehousesController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   listWarehouses() {
     return this.warehousesService.listWarehouses();
   }
 
   @Get(':warehouseId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   getWarehouse(@Param('warehouseId', new ParseUUIDPipe()) warehouseId: string) {
     return this.warehousesService.getWarehouse(warehouseId);
   }

@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role, User } from '@prisma/client';
+import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,7 +18,14 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        employee: {
+          select: { name: true },
+        },
+      },
+    });
 
     if (!user || !user.active) {
       throw new UnauthorizedException('Invalid credentials');
@@ -51,10 +58,15 @@ export class AuthService {
     }
   }
 
-  private mapUser(user: User) {
+  private mapUser(user: {
+    id: string;
+    email: string;
+    role: Role;
+    employee?: { name: string } | null;
+  }) {
     return {
       id: user.id,
-      name: user.name,
+      name: user.employee?.name ?? user.email,
       email: user.email,
       role: user.role,
     };

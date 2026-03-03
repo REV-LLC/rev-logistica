@@ -1,5 +1,5 @@
-import { IsArray, IsEmail, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { EmployeeRole } from '@prisma/client';
+import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { EmployeeRole, Role } from '@prisma/client';
 
 export class CreateEmployeeDto {
   @IsString()
@@ -24,4 +24,20 @@ export class CreateEmployeeDto {
   @IsArray()
   @IsUUID('4', { each: true })
   vehicleIds?: string[];
+
+  @IsOptional()
+  @IsEmail()
+  loginEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  loginPassword?: string;
+
+  @IsOptional()
+  @IsEnum(Role)
+  loginRole?: Role;
+
+  @IsOptional()
+  @IsBoolean()
+  loginActive?: boolean;
 }

@@ -156,7 +156,7 @@ export default function ObrasPage() {
             name: form.name.trim().toUpperCase(),
             address: form.address.trim().toUpperCase() || undefined,
             alias: form.alias.trim().toUpperCase() || undefined,
-            active: form.active,
+            active: true,
           },
         });
       }
@@ -380,13 +380,15 @@ export default function ObrasPage() {
               setForm((prev) => ({ ...prev, address: value }));
             }}
           />
-          <Switch
-            label="Relación activa"
-            checked={form.active}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
-            }
-          />
+          {editing && (
+            <Switch
+              label="Relación activa"
+              checked={form.active}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
+              }
+            />
+          )}
           {editing && (
             <Switch
               label="Obra activa"

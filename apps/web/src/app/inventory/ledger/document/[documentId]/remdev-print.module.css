@@ -176,6 +176,14 @@
   border-right: none;
 }
 
+.signatureImage {
+  display: block;
+  width: 100%;
+  max-height: 44px;
+  object-fit: contain;
+  margin-top: 4px;
+}
+
 @media (max-width: 768px) {
   .company {
     font-size: 20px;

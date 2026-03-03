@@ -5,7 +5,7 @@ import ResponsiveShell from '@/components/ResponsiveShell';
 
 export default function EmployeesLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthGuard>
+    <AuthGuard allowedRoles={['ADMIN', 'OFFICE']}>
       <ResponsiveShell>{children}</ResponsiveShell>
     </AuthGuard>
   );

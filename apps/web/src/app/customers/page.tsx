@@ -125,14 +125,14 @@ export default function CustomersPage() {
         name: form.name.trim().toUpperCase(),
         nitOrId: form.nitOrId.trim().toUpperCase() || undefined,
         phone: form.phone.trim().toUpperCase() || undefined,
-        active: form.active,
+        active: editingCustomer ? form.active : true,
         initialWorksite: editingCustomer
           ? undefined
           : {
               name: form.initialWorksiteName.trim().toUpperCase(),
               alias: form.initialWorksiteAlias.trim().toUpperCase() || undefined,
               address: form.initialWorksiteAddress.trim().toUpperCase() || undefined,
-              active: form.initialWorksiteActive,
+              active: true,
             },
       };
 
@@ -309,11 +309,13 @@ export default function CustomersPage() {
               setForm((prev) => ({ ...prev, phone: value }));
             }}
           />
-          <Switch
-            label="Activo"
-            checked={form.active}
-            onChange={(event) => setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))}
-          />
+          {editingCustomer ? (
+            <Switch
+              label="Activo"
+              checked={form.active}
+              onChange={(event) => setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))}
+            />
+          ) : null}
           {!editingCustomer && (
             <>
               <Text fw={600} mt="sm">
@@ -343,13 +345,6 @@ export default function CustomersPage() {
                   const value = event.currentTarget.value;
                   setForm((prev) => ({ ...prev, initialWorksiteAddress: value }));
                 }}
-              />
-              <Switch
-                label="Obra activa"
-                checked={form.initialWorksiteActive}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, initialWorksiteActive: event.currentTarget.checked }))
-                }
               />
             </>
           )}

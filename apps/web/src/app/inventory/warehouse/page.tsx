@@ -108,6 +108,8 @@ export default function WarehouseInventoryPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsTarget, setDetailsTarget] = useState<Warehouse | null>(null);
+  const [emptyInventoryOpen, setEmptyInventoryOpen] = useState(false);
+  const [emptyInventoryWarehouseName, setEmptyInventoryWarehouseName] = useState<string>('');
 
   const ownerOptions = useMemo(() => {
     const ownersFromWarehouses = new Map<string, string>();
@@ -155,6 +157,12 @@ export default function WarehouseInventoryPage() {
         { method: 'GET' }
       );
       setData(response);
+      if (response.bulk.length === 0 && response.serial.length === 0) {
+        const selectedWarehouseName =
+          warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? 'esta bodega';
+        setEmptyInventoryWarehouseName(selectedWarehouseName);
+        setEmptyInventoryOpen(true);
+      }
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setUnauthorized(true);
@@ -540,9 +548,6 @@ export default function WarehouseInventoryPage() {
                           <Button size="xs" variant="light" onClick={() => openEdit(warehouse)}>
                             Editar
                           </Button>
-                          <Button size="xs" color="red" variant="light" onClick={() => openDelete(warehouse)}>
-                            Eliminar
-                          </Button>
                         </Group>
                       </Table.Td>
                     ) : null}
@@ -728,16 +733,6 @@ export default function WarehouseInventoryPage() {
               >
                 Editar
               </Button>
-              <Button
-                color="red"
-                variant="light"
-                onClick={() => {
-                  setDetailsOpen(false);
-                  openDelete(detailsTarget);
-                }}
-              >
-                Eliminar
-              </Button>
             </Group>
           </>
         ) : null}
@@ -832,7 +827,18 @@ export default function WarehouseInventoryPage() {
             {editError}
           </Text>
         )}
-        <Group mt="md">
+        <Group mt="md" justify="space-between">
+          <Button
+            color="red"
+            variant="light"
+            onClick={() => {
+              if (!editTarget) return;
+              setEditOpen(false);
+              openDelete(editTarget);
+            }}
+          >
+            Eliminar
+          </Button>
           <Button
             onClick={handleEdit}
             loading={editLoading}
@@ -865,6 +871,22 @@ export default function WarehouseInventoryPage() {
           <Button color="red" onClick={handleDelete} loading={deleteLoading}>
             Eliminar
           </Button>
+        </Group>
+      </Modal>
+
+      <Modal
+        opened={emptyInventoryOpen}
+        onClose={() => setEmptyInventoryOpen(false)}
+      >
+        <Text ta="center" size="xl" mb="xs">
+          ¯\_(ツ)_/¯
+        </Text>
+        <Text>
+          <strong>{emptyInventoryWarehouseName.toUpperCase()}</strong> está más limpia que una
+          nevera nueva: no hay nada que mostrar todavía.
+        </Text>
+        <Group mt="md" justify="flex-end">
+          <Button onClick={() => setEmptyInventoryOpen(false)}>Entendido</Button>
         </Group>
       </Modal>
     </main>

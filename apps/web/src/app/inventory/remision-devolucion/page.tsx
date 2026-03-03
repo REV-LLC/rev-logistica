@@ -17,7 +17,8 @@ import {
   Text,
   TextInput,
   Title,
-  NumberInput
+  NumberInput,
+  Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { api, ApiError } from '@/lib/api';
@@ -27,6 +28,7 @@ type InventoryBulk = {
   skuId: string;
   skuName: string | null;
   ownerWarehouseId: string | null;
+  ownerWarehouseName?: string | null;
   quantity: number;
 };
 
@@ -34,6 +36,10 @@ type InventorySerial = {
   assetId: string;
   serialOrEngine: string | null;
   description: string | null;
+  skuName?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  internalNumber?: number | null;
   quantity: number;
   skuId?: string | null;
   ownerWarehouseId: string | null;
@@ -60,9 +66,11 @@ type CustomerWorksite = {
 };
 
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
+type Warehouse = { id: string; name: string };
 
 type SelectedItem = {
   type: 'bulk' | 'serial';
+  bulkKey?: string;
   skuId?: string;
   assetId?: string;
   name: string;
@@ -70,6 +78,34 @@ type SelectedItem = {
   quantity?: number;
   ownerWarehouseId?: string | null;
 };
+
+const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
+  `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+
+const buildSerialDisplayName = (item: InventorySerial) => {
+  const parts = [item.skuName, item.brand, item.model]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  const base = parts.length ? parts.join(' ') : item.description ?? item.serialOrEngine ?? item.assetId;
+  const internal = item.internalNumber != null ? ` #${item.internalNumber}` : '';
+  return `${base}${internal}`.trim();
+};
+
+const helpLabel = (label: string, help: string, required = false) => (
+  <Group gap={6} align="center">
+    <Text span>{label}</Text>
+    {required ? (
+      <Text span c="red" fw={700}>
+        *
+      </Text>
+    ) : null}
+    <Tooltip label={help} multiline w={280} withArrow>
+      <Text span c="dimmed" fw={700} style={{ cursor: 'help' }}>
+        ?
+      </Text>
+    </Tooltip>
+  </Group>
+);
 
 function withDocPrefix(value: string, docType: 'REMISSION' | 'RETURN') {
   const prefix = docType === 'REMISSION' ? 'RM' : 'DV';
@@ -92,7 +128,7 @@ export default function RemisionDevolucionPage() {
   const [driverId, setDriverId] = useState<string | null>(null);
   const [dispatcherId, setDispatcherId] = useState<string | null>(null);
 
-  const [sourceWarehouseId, setSourceWarehouseId] = useState<string | null>(null);
+  const [sourceOwnerWarehouseId, setSourceOwnerWarehouseId] = useState<string | null>(null);
   const [sourceWorksiteId, setSourceWorksiteId] = useState<string | null>(null);
 
   const [bulkItems, setBulkItems] = useState<InventoryBulk[]>([]);
@@ -104,6 +140,7 @@ export default function RemisionDevolucionPage() {
   const [serialSelect, setSerialSelect] = useState<string | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
   const [worksitesLoading, setWorksitesLoading] = useState(false);
@@ -112,23 +149,29 @@ export default function RemisionDevolucionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
+  const ownerWarehouseOptions = warehouses.map((warehouse) => ({
+    value: warehouse.id,
+    label: warehouse.name,
+  }));
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const [emps, vehs] = await Promise.all([
+        const [emps, vehs, whs] = await Promise.all([
           api<Employee[]>('/employees', { method: 'GET' }),
-          api<Vehicle[]>('/vehicles', { method: 'GET' })
+          api<Vehicle[]>('/vehicles', { method: 'GET' }),
+          api<Warehouse[]>('/warehouses', { method: 'GET' }),
         ]);
-      if (!mounted) return;
-      setEmployees(emps);
-      setVehicles(vehs);
-    } catch (err) {
-      if (!mounted) return;
-    }
-  };
-  load();
+        if (!mounted) return;
+        setEmployees(emps);
+        setVehicles(vehs);
+        setWarehouses(whs);
+      } catch (err) {
+        if (!mounted) return;
+      }
+    };
+    load();
     return () => {
       mounted = false;
     };
@@ -183,13 +226,17 @@ export default function RemisionDevolucionPage() {
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
-        if (!sourceWarehouseId) throw new Error('Selecciona una bodega');
+        if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/warehouse/${sourceWarehouseId}`,
+          `/inventory/warehouse/${sourceOwnerWarehouseId}`,
           { method: 'GET' }
         );
-        setBulkItems(data.bulk);
-        setSerialItems(data.serial);
+        setBulkItems(
+          data.bulk.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
+        );
+        setSerialItems(
+          data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
+        );
       } else if (sourceMode === 'on-site') {
         if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
@@ -223,23 +270,20 @@ export default function RemisionDevolucionPage() {
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
-      setSourceWarehouseId(null);
+      setSourceOwnerWarehouseId(null);
     }
   }, [docType]);
 
-  useEffect(() => {
-    if (!consecutive) return;
-    setConsecutive((prev) => withDocPrefix(prev, docType));
-  }, [docType]);
-
   const addBulkItem = (item: InventoryBulk) => {
+    const bulkKey = buildBulkKey(item);
     setSelectedItems((prev) => {
-      const exists = prev.find((entry) => entry.skuId === item.skuId && entry.type === 'bulk');
+      const exists = prev.find((entry) => entry.type === 'bulk' && entry.bulkKey === bulkKey);
       if (exists) return prev;
       return [
         ...prev,
         {
           type: 'bulk',
+          bulkKey,
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
           quantity: 1,
@@ -258,7 +302,7 @@ export default function RemisionDevolucionPage() {
         {
           type: 'serial',
           assetId: item.assetId,
-          name: item.description ?? item.serialOrEngine ?? item.assetId,
+          name: buildSerialDisplayName(item),
           serial: item.serialOrEngine,
           ownerWarehouseId: item.ownerWarehouseId
         }
@@ -366,6 +410,26 @@ export default function RemisionDevolucionPage() {
       }
 
       setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
+      setConsecutive('');
+      setCustomerId(null);
+      setDocDate('');
+      setCutOffDate('');
+      setDeliveryMode('WAREHOUSE');
+      setCustomerWorksiteId('');
+      setWarehouseId(null);
+      setVehicleId(null);
+      setDriverId(null);
+      setDispatcherId(null);
+      setSourceOwnerWarehouseId(null);
+      setSourceWorksiteId(null);
+      setBulkItems([]);
+      setSerialItems([]);
+      setSelectedItems([]);
+      setBulkSelect(null);
+      setSerialSelect(null);
+      setItemsModalOpen(false);
+      setWorksites([]);
+      router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -400,9 +464,10 @@ export default function RemisionDevolucionPage() {
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             <TextInput
-              label="Consecutivo"
+              label={helpLabel('Consecutivo', 'Número interno del documento. El prefijo RM o DV se agrega automáticamente al guardar.', true)}
+              withAsterisk={false}
               value={consecutive}
-              onChange={(event) => setConsecutive(withDocPrefix(event.target.value, docType))}
+              onChange={(event) => setConsecutive(event.target.value)}
               required
             />
             <Select
@@ -422,7 +487,8 @@ export default function RemisionDevolucionPage() {
               placeholder="Selecciona cliente"
             />
             <TextInput
-              label="Fecha"
+              label={helpLabel('Fecha', 'Fecha del documento de remisión o devolución.', true)}
+              withAsterisk={false}
               type="date"
               value={docDate}
               onChange={(event) => setDocDate(event.target.value)}
@@ -453,9 +519,13 @@ export default function RemisionDevolucionPage() {
           )}
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
-            <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
+            <WarehouseSelect
+              value={warehouseId}
+              onChange={setWarehouseId}
+              label={helpLabel('Bodega de ubicación', 'Bodega física desde donde se despacha o recibe el inventario.')}
+            />
             <Select
-              label="Obra (worksite)"
+              label={helpLabel('Obra', 'Obra destino del movimiento.')}
               value={customerWorksiteId}
               onChange={(value) => setCustomerWorksiteId(value ?? '')}
               data={worksites.map((item) => ({
@@ -471,7 +541,7 @@ export default function RemisionDevolucionPage() {
             />
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label="Vehículo"
+                label={helpLabel('Vehículo', 'Vehículo que transporta la remisión on-site.')}
                 value={vehicleId}
                 onChange={(value) => setVehicleId(value)}
                 data={vehicles.map((v) => ({
@@ -484,7 +554,7 @@ export default function RemisionDevolucionPage() {
             )}
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label="Conductor"
+                label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
                 value={driverId}
                 onChange={(value) => setDriverId(value)}
                 data={employees.map((e) => ({ value: e.id, label: e.name }))}
@@ -494,7 +564,7 @@ export default function RemisionDevolucionPage() {
             )}
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               <Select
-                label="Despachador"
+                label={helpLabel('Despachador', 'Empleado que entrega el material desde bodega.')}
                 value={dispatcherId}
                 onChange={(value) => setDispatcherId(value)}
                 data={employees.map((e) => ({ value: e.id, label: e.name }))}
@@ -511,13 +581,20 @@ export default function RemisionDevolucionPage() {
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
-              <div style={{ minWidth: 260 }}>
-                <WarehouseSelect value={sourceWarehouseId} onChange={setSourceWarehouseId} />
-              </div>
+              <Select
+                label={helpLabel('Dueño/a', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                value={sourceOwnerWarehouseId}
+                onChange={(value) => setSourceOwnerWarehouseId(value)}
+                data={ownerWarehouseOptions}
+                searchable
+                clearable
+                placeholder="Selecciona dueño/a"
+                w={320}
+              />
             )}
             {sourceMode === 'on-site' && (
               <Select
-                label="On-site (worksite)"
+                label={helpLabel('Obra origen', 'Obra desde donde se devolverán los items a bodega.')}
                 value={sourceWorksiteId}
                 onChange={(value) => setSourceWorksiteId(value)}
                 data={worksites.map((item) => ({
@@ -543,13 +620,13 @@ export default function RemisionDevolucionPage() {
             <Stack gap="md">
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Select
-                  label="Agregar BULK"
+                  label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
                   placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
                   searchable
                   clearable
                   value={bulkSelect}
                   onChange={(value) => {
-                    const found = bulkItems.find((item) => item.skuId === value);
+                    const found = bulkItems.find((item) => buildBulkKey(item) === value);
                     if (found) {
                       addBulkItem(found);
                       setBulkSelect(null);
@@ -558,12 +635,12 @@ export default function RemisionDevolucionPage() {
                     }
                   }}
                   data={bulkItems.map((item) => ({
-                    value: item.skuId,
-                    label: `${item.skuName ?? 'SKU'} · ${item.quantity}`
+                    value: buildBulkKey(item),
+                    label: `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
                   }))}
                 />
                 <Select
-                  label="Agregar SERIAL"
+                  label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
                   placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
                   searchable
                   clearable
@@ -579,7 +656,7 @@ export default function RemisionDevolucionPage() {
                   }}
                   data={serialItems.map((item) => ({
                     value: item.assetId,
-                    label: `${item.serialOrEngine ?? item.assetId} · ${item.description ?? ''}`.trim()
+                    label: buildSerialDisplayName(item)
                   }))}
                 />
               </SimpleGrid>
@@ -640,7 +717,7 @@ export default function RemisionDevolucionPage() {
             <Stack mt="md" gap="sm">
               {selectedItems.map((item, index) => (
                 <Paper
-                  key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}
+                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
                   withBorder
                   radius="md"
                   p="sm"
@@ -704,13 +781,13 @@ export default function RemisionDevolucionPage() {
       >
         <Stack gap="md">
           <Select
-            label="Agregar BULK"
+            label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
             placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
             searchable
             clearable
             value={bulkSelect}
             onChange={(value) => {
-              const found = bulkItems.find((item) => item.skuId === value);
+              const found = bulkItems.find((item) => buildBulkKey(item) === value);
               if (found) {
                 addBulkItem(found);
                 setBulkSelect(null);
@@ -719,12 +796,12 @@ export default function RemisionDevolucionPage() {
               }
             }}
             data={bulkItems.map((item) => ({
-              value: item.skuId,
-              label: `${item.skuName ?? 'SKU'} · ${item.quantity}`
+              value: buildBulkKey(item),
+              label: `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
             }))}
           />
           <Select
-            label="Agregar SERIAL"
+            label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
             placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
             searchable
             clearable
@@ -740,7 +817,7 @@ export default function RemisionDevolucionPage() {
             }}
             data={serialItems.map((item) => ({
               value: item.assetId,
-              label: `${item.serialOrEngine ?? item.assetId} · ${item.description ?? ''}`.trim()
+              label: buildSerialDisplayName(item)
             }))}
           />
           <Group justify="flex-end" className="mobile-actions">

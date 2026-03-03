@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActionIcon, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconPencil } from '@tabler/icons-react';
@@ -9,6 +9,7 @@ import Link from 'next/link';
 type BulkItem = {
   skuId: string;
   ownerWarehouseId?: string | null;
+  ownerWarehouseName?: string | null;
   id?: string | null;
   skuName: string | null;
   name?: string | null;
@@ -45,15 +46,33 @@ export default function InventoryDisplay({
   bulk,
   serial,
   onAdjust,
-  viewFilter = 'ALL'
+  viewFilter = 'ALL',
+  bulkOwnerStackMode = false,
+  isWorksiteView = false,
+  allowSerialEdit = true,
+  serialSectionTitle = 'EQUIPOS UNICOS',
 }: {
   bulk: BulkItem[];
   serial: SerialItem[];
   onAdjust?: () => void;
   viewFilter?: 'ALL' | 'BULK' | 'SERIAL';
+  bulkOwnerStackMode?: boolean;
+  isWorksiteView?: boolean;
+  allowSerialEdit?: boolean;
+  serialSectionTitle?: string;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+  const ownerPalette = [
+    'blue',
+    'teal',
+    'orange',
+    'pink',
+    'cyan',
+    'grape',
+    'indigo',
+    'lime',
+  ] as const;
 
   const getSerialDescription = (item: SerialItem) => {
     const manualDescription = item.description?.trim();
@@ -74,8 +93,78 @@ export default function InventoryDisplay({
     return 'gray';
   };
 
+  const getStatusLabel = (status?: string | null) => {
+    const normalized = (status ?? 'IN').toString().toUpperCase();
+    if (isWorksiteView && normalized === 'OUT') return 'En obra';
+    return normalized;
+  };
+
   const showBulkSection = (viewFilter === 'ALL' || viewFilter === 'BULK') && bulk.length > 0;
   const showSerialSection = (viewFilter === 'ALL' || viewFilter === 'SERIAL') && serial.length > 0;
+
+  const groupedBulk = useMemo(() => {
+    if (!bulkOwnerStackMode) return null;
+
+    const map = new Map<
+      string,
+      {
+        skuId: string;
+        name: string;
+        category: string;
+        owners: Array<{
+          ownerWarehouseId: string;
+          ownerWarehouseName: string;
+          quantity: number;
+        }>;
+      }
+    >();
+
+    bulk.forEach((item) => {
+      const key = item.skuId;
+      const ownerWarehouseId = item.ownerWarehouseId ?? `unknown-${item.skuId}`;
+      const ownerWarehouseName = item.ownerWarehouseName ?? '-';
+      const name = item.name ?? item.skuName ?? '-';
+      const category = item.category ?? '-';
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          skuId: item.skuId,
+          name,
+          category,
+          owners: [{ ownerWarehouseId, ownerWarehouseName, quantity: item.quantity }],
+        });
+        return;
+      }
+
+      const ownerIndex = existing.owners.findIndex(
+        (owner) => owner.ownerWarehouseId === ownerWarehouseId,
+      );
+      if (ownerIndex >= 0) {
+        existing.owners[ownerIndex].quantity += item.quantity;
+      } else {
+        existing.owners.push({ ownerWarehouseId, ownerWarehouseName, quantity: item.quantity });
+      }
+    });
+
+    return Array.from(map.values()).map((row) => {
+      const owners = [...row.owners].sort((a, b) => b.quantity - a.quantity);
+      return {
+        ...row,
+        owners,
+        visibleOwners: owners.slice(0, 2),
+        hiddenOwnersCount: Math.max(0, owners.length - 2),
+      };
+    });
+  }, [bulk, bulkOwnerStackMode]);
+
+  const getOwnerColor = (ownerWarehouseId: string) => {
+    let hash = 0;
+    for (let index = 0; index < ownerWarehouseId.length; index += 1) {
+      hash = (hash * 31 + ownerWarehouseId.charCodeAt(index)) % 9973;
+    }
+    return ownerPalette[Math.abs(hash) % ownerPalette.length];
+  };
 
   return (
     <Stack gap="lg">
@@ -95,51 +184,128 @@ export default function InventoryDisplay({
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>SKU ID</Table.Th>
-                    <Table.Th>Owner Warehouse ID</Table.Th>
                     <Table.Th>Nombre</Table.Th>
                     <Table.Th>Categoría</Table.Th>
-                    <Table.Th>Asset Family ID</Table.Th>
-                    <Table.Th>Unit Weight</Table.Th>
-                    <Table.Th>Activo</Table.Th>
-                    <Table.Th>Creado</Table.Th>
+                    <Table.Th>Bodega dueña</Table.Th>
                     <Table.Th>Cantidad</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {bulk.map((item) => (
-                    <Table.Tr key={item.skuId}>
-                      <Table.Td>{item.id ?? item.skuId}</Table.Td>
-                      <Table.Td>{item.ownerWarehouseId ?? '-'}</Table.Td>
-                      <Table.Td>{item.name ?? item.skuName ?? '-'}</Table.Td>
-                      <Table.Td>{item.category ?? '-'}</Table.Td>
-                      <Table.Td>{item.assetFamilyId ?? '-'}</Table.Td>
-                      <Table.Td>{item.unitWeight ?? '-'}</Table.Td>
-                      <Table.Td>
-                        {item.active === null || item.active === undefined
-                          ? '-'
-                          : item.active
-                            ? 'Sí'
-                            : 'No'}
-                      </Table.Td>
-                      <Table.Td>
-                        {item.createdAt ? new Date(item.createdAt).toLocaleString('es-CO') : '-'}
-                      </Table.Td>
-                      <Table.Td>{item.quantity}</Table.Td>
-                    </Table.Tr>
-                  ))}
+                  {bulkOwnerStackMode && groupedBulk
+                    ? groupedBulk.map((item) => (
+                        <Table.Tr key={item.skuId}>
+                          <Table.Td>{item.name}</Table.Td>
+                          <Table.Td>{item.category}</Table.Td>
+                          <Table.Td>
+                            <Group gap={6} wrap="wrap">
+                              {item.visibleOwners.map((owner) => (
+                                <Badge
+                                  key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
+                                  color={getOwnerColor(owner.ownerWarehouseId)}
+                                  variant="light"
+                                >
+                                  {owner.ownerWarehouseName}
+                                </Badge>
+                              ))}
+                              {item.hiddenOwnersCount > 0 ? (
+                                <Badge color="green" variant="filled">
+                                  +{item.hiddenOwnersCount} más
+                                </Badge>
+                              ) : null}
+                            </Group>
+                          </Table.Td>
+                          <Table.Td>
+                            <Group gap={6} wrap="wrap">
+                              {item.visibleOwners.map((owner) => (
+                                <Badge
+                                  key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
+                                  color={getOwnerColor(owner.ownerWarehouseId)}
+                                  variant="filled"
+                                >
+                                  {owner.quantity}
+                                </Badge>
+                              ))}
+                              {item.hiddenOwnersCount > 0 ? (
+                                <Badge color="green" variant="light">
+                                  +{item.hiddenOwnersCount} más
+                                </Badge>
+                              ) : null}
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    : bulk.map((item) => (
+                        <Table.Tr key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}>
+                          <Table.Td>{item.name ?? item.skuName ?? '-'}</Table.Td>
+                          <Table.Td>{item.category ?? '-'}</Table.Td>
+                          <Table.Td>{item.ownerWarehouseName ?? '-'}</Table.Td>
+                          <Table.Td>{item.quantity}</Table.Td>
+                        </Table.Tr>
+                      ))}
                 </Table.Tbody>
               </Table>
             ) : (
               <Stack gap="sm">
-                {bulk.map((item) => (
-                  <Card key={item.skuId} withBorder padding="sm" radius="md">
-                    <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
-                    <Text size="xs" c="dimmed">{item.id ?? item.skuId}</Text>
-                    <Text mt="xs"><strong>Cantidad:</strong> {item.quantity}</Text>
-                    <Text size="sm"><strong>Bodega dueña:</strong> {item.ownerWarehouseId ?? '-'}</Text>
-                  </Card>
-                ))}
+                {bulkOwnerStackMode && groupedBulk
+                  ? groupedBulk.map((item) => (
+                      <Card key={item.skuId} withBorder padding="sm" radius="md">
+                        <Text fw={700}>{item.name}</Text>
+                        <Text size="xs" c="dimmed">
+                          {item.category}
+                        </Text>
+                        <Group mt="xs" gap={6} wrap="wrap">
+                          {item.visibleOwners.map((owner) => (
+                            <Badge
+                              key={`${item.skuId}-owner-mobile-${owner.ownerWarehouseId}`}
+                              color={getOwnerColor(owner.ownerWarehouseId)}
+                              variant="light"
+                            >
+                              {owner.ownerWarehouseName}
+                            </Badge>
+                          ))}
+                          {item.hiddenOwnersCount > 0 ? (
+                            <Badge color="green" variant="filled">
+                              +{item.hiddenOwnersCount} más
+                            </Badge>
+                          ) : null}
+                        </Group>
+                        <Group mt={6} gap={6} wrap="wrap">
+                          {item.visibleOwners.map((owner) => (
+                            <Badge
+                              key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}
+                              color={getOwnerColor(owner.ownerWarehouseId)}
+                              variant="filled"
+                            >
+                              {owner.quantity}
+                            </Badge>
+                          ))}
+                          {item.hiddenOwnersCount > 0 ? (
+                            <Badge color="green" variant="light">
+                              +{item.hiddenOwnersCount} más
+                            </Badge>
+                          ) : null}
+                        </Group>
+                      </Card>
+                    ))
+                  : bulk.map((item) => (
+                      <Card
+                        key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}
+                        withBorder
+                        padding="sm"
+                        radius="md"
+                      >
+                        <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
+                        <Text size="xs" c="dimmed">
+                          {item.category ?? '-'}
+                        </Text>
+                        <Text mt="xs">
+                          <strong>Cantidad:</strong> {item.quantity}
+                        </Text>
+                        <Text size="sm">
+                          <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
+                        </Text>
+                      </Card>
+                    ))}
               </Stack>
             )}
           </Card>
@@ -149,7 +315,7 @@ export default function InventoryDisplay({
       {showSerialSection && (
         <section>
           <Title order={3} mb="sm">
-            EQUIPOS UNICOS
+            {serialSectionTitle}
           </Title>
           <Card withBorder>
             <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
@@ -200,18 +366,20 @@ export default function InventoryDisplay({
                         <Text fw={700} lineClamp={2}>
                           {getSerialDescription(item)}
                         </Text>
-                        <ActionIcon
-                          component={Link}
-                          href={`/inventory/serialized-assets/${item.assetId}`}
-                          variant="light"
-                          size="sm"
-                          aria-label="Editar equipo"
-                        >
-                          <IconPencil size={14} />
-                        </ActionIcon>
+                        {allowSerialEdit ? (
+                          <ActionIcon
+                            component={Link}
+                            href={`/inventory/serialized-assets/${item.assetId}`}
+                            variant="light"
+                            size="sm"
+                            aria-label="Editar equipo"
+                          >
+                            <IconPencil size={14} />
+                          </ActionIcon>
+                        ) : null}
                       </Group>
                       <Badge color={getStatusColor(item.status)} variant="light">
-                        {(item.status ?? 'IN').toString().toUpperCase()}
+                        {getStatusLabel(item.status)}
                       </Badge>
                     </Group>
                     <Text size="sm" c="dimmed">

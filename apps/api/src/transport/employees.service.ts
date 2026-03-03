@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { EmployeeRole, Prisma, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -17,6 +19,14 @@ export class EmployeesService {
         documentId: true,
         active: true,
         createdAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            active: true,
+          },
+        },
         vehicles: {
           select: {
             vehicle: {
@@ -40,34 +50,70 @@ export class EmployeesService {
     email?: string;
     documentId?: string;
     vehicleIds?: string[];
+    loginEmail?: string;
+    loginPassword?: string;
+    loginRole?: Role;
+    loginActive?: boolean;
   }) {
     const vehicleIds = payload.vehicleIds ?? [];
     if (vehicleIds.length) {
       await this.assertVehiclesExist(vehicleIds);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const created = await tx.employee.create({
-        data: {
-          name: payload.name,
-          role: payload.role as any,
-          phone: payload.phone ?? null,
-          email: payload.email ?? null,
-          documentId: payload.documentId ?? null,
-        },
-      });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        let createdUserId: string | null = null;
+        const normalizedLoginEmail = payload.loginEmail?.trim().toLowerCase();
+        const wantsLogin = Boolean(
+          normalizedLoginEmail || payload.loginPassword || payload.loginRole || payload.loginActive !== undefined,
+        );
 
-      if (vehicleIds.length) {
-        await tx.employeeVehicle.createMany({
-          data: vehicleIds.map((vehicleId) => ({
-            employeeId: created.id,
-            vehicleId,
-          })),
+        if (wantsLogin) {
+          if (!normalizedLoginEmail) {
+            throw new BadRequestException('El email de acceso es obligatorio');
+          }
+          if (!payload.loginPassword?.trim()) {
+            throw new BadRequestException('La contraseña de acceso es obligatoria');
+          }
+          const userRole = payload.loginRole ?? this.mapEmployeeRoleToUserRole(payload.role as EmployeeRole);
+          const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+          const user = await tx.user.create({
+            data: {
+              email: normalizedLoginEmail,
+              passwordHash,
+              role: userRole,
+              active: payload.loginActive ?? true,
+            },
+            select: { id: true },
+          });
+          createdUserId = user.id;
+        }
+
+        const created = await tx.employee.create({
+          data: {
+            name: payload.name,
+            role: payload.role as any,
+            phone: payload.phone ?? null,
+            email: payload.email ?? null,
+            documentId: payload.documentId ?? null,
+            userId: createdUserId,
+          },
         });
-      }
 
-      return created;
-    });
+        if (vehicleIds.length) {
+          await tx.employeeVehicle.createMany({
+            data: vehicleIds.map((vehicleId) => ({
+              employeeId: created.id,
+              vehicleId,
+            })),
+          });
+        }
+
+        return created;
+      });
+    } catch (error) {
+      this.rethrowConstraint(error);
+    }
   }
 
   async updateEmployee(
@@ -80,11 +126,16 @@ export class EmployeesService {
       documentId?: string;
       active?: boolean;
       vehicleIds?: string[];
+      loginEnabled?: boolean;
+      loginEmail?: string;
+      loginPassword?: string;
+      loginRole?: Role;
+      loginActive?: boolean;
     },
   ) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { id: true },
+      select: { id: true, role: true, userId: true },
     });
     if (!employee) {
       throw new NotFoundException('Employee not found');
@@ -95,33 +146,93 @@ export class EmployeesService {
       await this.assertVehiclesExist(vehicleIds);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.employee.update({
-        where: { id: employeeId },
-        data: {
-          name: payload.name,
-          role: payload.role as any,
-          phone: payload.phone,
-          email: payload.email,
-          documentId: payload.documentId,
-          active: payload.active,
-        },
-      });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const nextName = payload.name ?? undefined;
+        const nextEmployeeRole = (payload.role as EmployeeRole | undefined) ?? employee.role;
 
-      if (vehicleIds) {
-        await tx.employeeVehicle.deleteMany({ where: { employeeId } });
-        if (vehicleIds.length) {
-          await tx.employeeVehicle.createMany({
-            data: vehicleIds.map((vehicleId) => ({
-              employeeId,
-              vehicleId,
-            })),
+        const normalizedLoginEmail = payload.loginEmail?.trim().toLowerCase();
+        const wantsLogin =
+          payload.loginEnabled === true ||
+          normalizedLoginEmail !== undefined ||
+          payload.loginPassword !== undefined ||
+          payload.loginRole !== undefined ||
+          payload.loginActive !== undefined;
+
+        if (payload.loginEnabled === false && employee.userId) {
+          await tx.user.update({
+            where: { id: employee.userId },
+            data: { active: false },
           });
+        } else if (wantsLogin) {
+          if (employee.userId) {
+            const data: Prisma.UserUpdateInput = {};
+            if (normalizedLoginEmail) data.email = normalizedLoginEmail;
+            if (payload.loginRole) data.role = payload.loginRole;
+            if (payload.loginActive !== undefined) data.active = payload.loginActive;
+            if (payload.loginPassword?.trim()) {
+              data.passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+            }
+            if (Object.keys(data).length) {
+              await tx.user.update({
+                where: { id: employee.userId },
+                data,
+              });
+            }
+          } else {
+            if (!normalizedLoginEmail) {
+              throw new BadRequestException('El email de acceso es obligatorio');
+            }
+            if (!payload.loginPassword?.trim()) {
+              throw new BadRequestException('La contraseña de acceso es obligatoria');
+            }
+            const userRole = payload.loginRole ?? this.mapEmployeeRoleToUserRole(nextEmployeeRole);
+            const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+            const user = await tx.user.create({
+              data: {
+                email: normalizedLoginEmail,
+                passwordHash,
+                role: userRole,
+                active: payload.loginActive ?? true,
+              },
+              select: { id: true },
+            });
+            await tx.employee.update({
+              where: { id: employeeId },
+              data: { userId: user.id },
+            });
+          }
         }
-      }
 
-      return updated;
-    });
+        const updated = await tx.employee.update({
+          where: { id: employeeId },
+          data: {
+            name: payload.name,
+            role: payload.role as any,
+            phone: payload.phone,
+            email: payload.email,
+            documentId: payload.documentId,
+            active: payload.active,
+          },
+        });
+
+        if (vehicleIds) {
+          await tx.employeeVehicle.deleteMany({ where: { employeeId } });
+          if (vehicleIds.length) {
+            await tx.employeeVehicle.createMany({
+              data: vehicleIds.map((vehicleId) => ({
+                employeeId,
+                vehicleId,
+              })),
+            });
+          }
+        }
+
+        return updated;
+      });
+    } catch (error) {
+      this.rethrowConstraint(error);
+    }
   }
 
   async deleteEmployee(employeeId: string) {
@@ -138,5 +249,17 @@ export class EmployeesService {
     if (count !== unique.length) {
       throw new BadRequestException('One or more vehicleIds are invalid');
     }
+  }
+
+  private mapEmployeeRoleToUserRole(role: EmployeeRole): Role {
+    if (role === 'DRIVER') return Role.DRIVER;
+    return Role.OFFICE;
+  }
+
+  private rethrowConstraint(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new BadRequestException('El email de acceso ya está en uso');
+    }
+    throw error;
   }
 }

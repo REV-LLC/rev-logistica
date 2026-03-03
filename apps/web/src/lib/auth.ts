@@ -2,6 +2,7 @@ const TOKEN_KEY = 'revlogistica.token';
 
 type JwtPayload = {
   exp?: number;
+  role?: string;
 };
 
 function parseJwtPayload(token: string): JwtPayload | null {
@@ -39,4 +40,19 @@ export function setToken(token: string) {
 export function clearToken() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getTokenPayload() {
+  const token = getToken();
+  if (!token) return null;
+  return parseJwtPayload(token);
+}
+
+export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
+
+export function getCurrentUserRole(): AppRole | null {
+  const payload = getTokenPayload();
+  const role = payload?.role;
+  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
+  return null;
 }

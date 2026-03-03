@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { ActionIcon, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
@@ -21,6 +22,7 @@ type InventoryResponse = {
   bulk: {
     skuId: string;
     skuName: string | null;
+    category?: string | null;
     imageUrl: string | null;
     imageFileObjectId: string | null;
     quantity: number;
@@ -101,6 +103,9 @@ export default function ObraDetailPage() {
   return (
     <main>
       <Container size="xl" py="xl">
+        <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
+          <IconArrowLeft size={18} />
+        </ActionIcon>
         <Paper shadow="sm" p="xl" radius="md" withBorder>
           <Group justify="space-between" className="mobile-stack" mb="sm">
             <div>
@@ -108,9 +113,6 @@ export default function ObraDetailPage() {
               <Text c="dimmed">Detalle de obra e inventario on-site.</Text>
             </div>
             <Group>
-              <Button variant="light" onClick={() => router.back()}>
-                Volver
-              </Button>
               {worksite ? (
                 <Button variant="default" component={Link} href={`/customers?customerId=${worksite.customer.id}`}>
                   Ver cliente
@@ -139,7 +141,14 @@ export default function ObraDetailPage() {
 
         {inventory ? (
           <div style={{ marginTop: 24 }}>
-            <InventoryDisplay bulk={inventory.bulk} serial={inventory.serial} />
+            <InventoryDisplay
+              bulk={inventory.bulk}
+              serial={inventory.serial}
+              bulkOwnerStackMode
+              isWorksiteView
+              allowSerialEdit={false}
+              serialSectionTitle={`MAQUINARIA EN ${worksite?.worksite.name ?? 'OBRA'}`}
+            />
           </div>
         ) : null}
 

@@ -33,7 +33,7 @@ export type LedgerItem = {
     customer?: { id: string; name: string } | null;
     worksite?: { id: string; name: string } | null;
   } | null;
-  creator?: { id: string; email: string } | null;
+  creator?: { id: string; email: string; employee?: { name: string } | null } | null;
 };
 
 function formatDate(value: string) {
@@ -48,11 +48,25 @@ function formatDocType(value: string) {
   return value;
 }
 
+function formatMovementType(item: LedgerItem) {
+  if (item.movementType === 'ADJUST') {
+    if (item.assetId && item.quantity > 0) return 'CREACION';
+    return 'AJUSTE';
+  }
+  return item.movementType;
+}
+
 function renderReference(item: LedgerItem) {
+  const formatReferenceLabel = (reference: string, type: string) => {
+    const trimmed = reference.trim();
+    if (/^(RM|DV)\b/i.test(trimmed)) return trimmed.toUpperCase();
+    return `${formatDocType(type)} ${trimmed}`.trim();
+  };
+
   const label = item.document?.consecutive
-    ? `${formatDocType(item.document.type)} ${item.document.consecutive}`.trim()
-    : item.refDocumentType
-    ? `${formatDocType(item.refDocumentType)} ${item.refDocumentId ?? ''}`.trim()
+    ? formatReferenceLabel(item.document.consecutive, item.document.type)
+    : item.refDocumentType && item.refDocumentId
+    ? formatReferenceLabel(item.refDocumentId, item.refDocumentType)
     : '-';
 
   const documentId = item.document?.id ?? item.refDocumentId ?? null;
@@ -107,11 +121,11 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
                   item.customerWorksite.worksite?.name ?? 'Worksite'
                 }`
               : '-';
-            const createdBy = item.creator?.email ?? '-';
+            const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
             return (
               <Table.Tr key={item.id}>
                 <Table.Td>{formatDate(item.createdAt)}</Table.Td>
-                {!isMobile ? <Table.Td>{item.movementType}</Table.Td> : null}
+                {!isMobile ? <Table.Td>{formatMovementType(item)}</Table.Td> : null}
                 <Table.Td>
                   {item.assetId ? (
                     <Link href={`/inventory/ledger/asset/${item.assetId}`}>
@@ -158,7 +172,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
               <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
             </Text>
             <Text mt="xs">
-              <strong>Movimiento:</strong> {detailsItem.movementType}
+              <strong>Movimiento:</strong> {formatMovementType(detailsItem)}
             </Text>
             <Text mt="xs">
               <strong>Cantidad:</strong> {detailsItem.quantity}
@@ -174,7 +188,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
                 : '-'}
             </Text>
             <Text mt="xs">
-              <strong>Creado por:</strong> {detailsItem.creator?.email ?? '-'}
+              <strong>Creado por:</strong> {detailsItem.creator?.employee?.name ?? detailsItem.creator?.email ?? '-'}
             </Text>
             <Text mt="xs">
               <strong>Referencia:</strong> {renderReference(detailsItem)}

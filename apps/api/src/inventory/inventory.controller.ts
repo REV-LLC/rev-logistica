@@ -177,14 +177,14 @@ export class InventoryController {
 
   @Get('warehouse/:warehouseId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   getWarehouseInventory(@Param('warehouseId', new ParseUUIDPipe()) warehouseId: string) {
     return this.inventoryService.getWarehouseInventory(warehouseId);
   }
 
   @Get('on-site/:customerWorksiteId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   getOnSiteInventory(
     @Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string,
   ) {

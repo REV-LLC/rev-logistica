@@ -20,21 +20,23 @@ import { CustomersService } from './customers.service';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.OFFICE)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Get()
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   list() {
     return this.customersService.list();
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   getById(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.customersService.getById(id);
   }
 
   @Post()
+  @Roles(Role.ADMIN, Role.OFFICE)
   create(
     @Body(
       new ValidationPipe({
@@ -49,6 +51,7 @@ export class CustomersController {
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN, Role.OFFICE)
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body(
@@ -64,11 +67,13 @@ export class CustomersController {
   }
 
   @Delete(':id')
+  @Roles(Role.ADMIN, Role.OFFICE)
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.customersService.remove(id);
   }
 
   @Get(':id/worksites')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   listWorksites(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.customersService.listWorksites(id);
   }

@@ -5,7 +5,14 @@ import ResponsiveShell from '@/components/ResponsiveShell';
 
 export default function TransportLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthGuard>
+    <AuthGuard
+      routeRoleRules={[
+        { prefix: '/transport/solicitudes', roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+        { prefix: '/transport/cost', roles: ['ADMIN', 'OFFICE'] },
+        { prefix: '/transport/vehicles', roles: ['ADMIN', 'OFFICE'] },
+        { prefix: '/transport/obras', roles: ['ADMIN', 'OFFICE'] },
+      ]}
+    >
       <ResponsiveShell>{children}</ResponsiveShell>
     </AuthGuard>
   );

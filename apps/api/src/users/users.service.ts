@@ -17,16 +17,26 @@ export class UsersService {
       where.role = params.role;
     }
 
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { email: 'asc' },
       select: {
         id: true,
-        name: true,
         email: true,
         role: true,
         active: true,
+        employee: {
+          select: { name: true },
+        },
       },
     });
+
+    return users.map((user) => ({
+      id: user.id,
+      name: user.employee?.name ?? user.email,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+    }));
   }
 }

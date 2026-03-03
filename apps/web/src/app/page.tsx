@@ -221,7 +221,7 @@ export default function HomePage() {
   ));
 
   return (
-    <AuthGuard>
+    <AuthGuard allowedRoles={['ADMIN', 'OFFICE']}>
       <AppShell navbar={{ width: 260, breakpoint: 'sm' }} padding="md">
         <AppShell.Navbar withBorder>
           <Nav />

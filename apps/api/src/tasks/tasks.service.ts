@@ -57,17 +57,31 @@ export class TasksService {
       ];
     }
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: params.take,
       skip: params.skip,
       include: {
         assignedTo: {
-          select: { id: true, name: true },
+          select: {
+            id: true,
+            email: true,
+            employee: { select: { name: true } },
+          },
         },
       },
     });
+
+    return tasks.map((task) => ({
+      ...task,
+      assignedTo: task.assignedTo
+        ? {
+            id: task.assignedTo.id,
+            name: task.assignedTo.employee?.name ?? task.assignedTo.email,
+          }
+        : null,
+    }));
   }
 
   async updateTask(id: string, payload: UpdateTaskDto) {

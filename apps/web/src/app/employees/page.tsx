@@ -40,6 +40,12 @@ type Employee = {
   active: boolean;
   createdAt: string;
   vehicles: VehicleOption[];
+  user: {
+    id: string;
+    email: string;
+    role: AppRoleValue;
+    active: boolean;
+  } | null;
 };
 
 type RoleValue =
@@ -61,7 +67,14 @@ type EmployeeForm = {
   documentId: string;
   active: boolean;
   vehicleIds: string[];
+  loginEnabled: boolean;
+  loginEmail: string;
+  loginPassword: string;
+  loginRole: AppRoleValue;
+  loginActive: boolean;
 };
+
+type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER';
 
 const emptyForm: EmployeeForm = {
   name: '',
@@ -71,6 +84,11 @@ const emptyForm: EmployeeForm = {
   documentId: '',
   active: true,
   vehicleIds: [],
+  loginEnabled: false,
+  loginEmail: '',
+  loginPassword: '',
+  loginRole: 'DRIVER',
+  loginActive: true,
 };
 
 const roleOptions = [
@@ -95,6 +113,18 @@ const roleLabelByValue: Record<RoleValue, string> = {
   MECHANIC: 'Mecánico',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
+};
+
+const appRoleOptions = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'OFFICE', label: 'Oficina' },
+  { value: 'DRIVER', label: 'Conductor' },
+];
+
+const appRoleLabelByValue: Record<AppRoleValue, string> = {
+  ADMIN: 'Admin',
+  OFFICE: 'Oficina',
+  DRIVER: 'Conductor',
 };
 
 export default function EmployeesPage() {
@@ -153,6 +183,11 @@ export default function EmployeesPage() {
       documentId: employee.documentId ?? '',
       active: employee.active,
       vehicleIds: employee.vehicles.map((entry) => entry.id),
+      loginEnabled: Boolean(employee.user),
+      loginEmail: employee.user?.email ?? '',
+      loginPassword: '',
+      loginRole: employee.user?.role ?? (employee.role === 'DRIVER' ? 'DRIVER' : 'OFFICE'),
+      loginActive: employee.user?.active ?? true,
     });
     setModalOpen(true);
   };
@@ -162,6 +197,14 @@ export default function EmployeesPage() {
 
     if (!form.name.trim()) {
       setError('El nombre es obligatorio');
+      return;
+    }
+    if (form.loginEnabled && !form.loginEmail.trim()) {
+      setError('El email de acceso es obligatorio');
+      return;
+    }
+    if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
+      setError('La contraseña de acceso es obligatoria');
       return;
     }
 
@@ -175,6 +218,11 @@ export default function EmployeesPage() {
         documentId: form.documentId.trim().toUpperCase() || undefined,
         active: form.active,
         vehicleIds: form.vehicleIds,
+        loginEnabled: form.loginEnabled,
+        loginEmail: form.loginEnabled ? form.loginEmail.trim().toLowerCase() || undefined : undefined,
+        loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
+        loginRole: form.loginEnabled ? form.loginRole : undefined,
+        loginActive: form.loginEnabled ? form.loginActive : undefined,
       };
 
       if (editingEmployee) {
@@ -192,6 +240,10 @@ export default function EmployeesPage() {
             email: payload.email,
             documentId: payload.documentId,
             vehicleIds: payload.vehicleIds,
+            loginEmail: payload.loginEmail,
+            loginPassword: payload.loginPassword,
+            loginRole: payload.loginRole,
+            loginActive: payload.loginActive,
           },
         });
       }
@@ -256,6 +308,7 @@ export default function EmployeesPage() {
               {!isMobile ? <Table.Th>Teléfono</Table.Th> : null}
               {!isMobile ? <Table.Th>Email</Table.Th> : null}
               {!isMobile ? <Table.Th>Documento</Table.Th> : null}
+              {!isMobile ? <Table.Th>Acceso</Table.Th> : null}
               {!isMobile ? <Table.Th>Vehículos</Table.Th> : null}
               <Table.Th style={isMobile ? { width: '30%' } : undefined}>Estado</Table.Th>
               {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
@@ -271,6 +324,20 @@ export default function EmployeesPage() {
                   {!isMobile ? <Table.Td>{employee.phone ?? '-'}</Table.Td> : null}
                   {!isMobile ? <Table.Td>{employee.email ?? '-'}</Table.Td> : null}
                   {!isMobile ? <Table.Td>{employee.documentId ?? '-'}</Table.Td> : null}
+                  {!isMobile ? (
+                    <Table.Td>
+                      {employee.user ? (
+                        <Stack gap={2}>
+                          <Text size="sm">{employee.user.email}</Text>
+                          <Text size="xs" c="dimmed">
+                            {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
+                          </Text>
+                        </Stack>
+                      ) : (
+                        '-'
+                      )}
+                    </Table.Td>
+                  ) : null}
                   {!isMobile ? (
                     <Table.Td>
                       {employee.vehicles.length
@@ -315,7 +382,7 @@ export default function EmployeesPage() {
 
             {!loading && employees.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={isMobile ? 4 : 8}>
+                <Table.Td colSpan={isMobile ? 4 : 9}>
                   <Text c="dimmed" ta="center">
                     No hay empleados registrados.
                   </Text>
@@ -325,7 +392,7 @@ export default function EmployeesPage() {
 
             {loading && (
               <Table.Tr>
-                <Table.Td colSpan={isMobile ? 4 : 8}>
+                <Table.Td colSpan={isMobile ? 4 : 9}>
                   <Text c="dimmed" ta="center">
                     Cargando...
                   </Text>
@@ -349,6 +416,14 @@ export default function EmployeesPage() {
             <Text><strong>Teléfono:</strong> {detailsEmployee.phone ?? '-'}</Text>
             <Text><strong>Email:</strong> {detailsEmployee.email ?? '-'}</Text>
             <Text><strong>Documento:</strong> {detailsEmployee.documentId ?? '-'}</Text>
+            <Text>
+              <strong>Acceso:</strong>{' '}
+              {detailsEmployee.user
+                ? `${detailsEmployee.user.email} · ${appRoleLabelByValue[detailsEmployee.user.role]} · ${
+                    detailsEmployee.user.active ? 'Activo' : 'Inactivo'
+                  }`
+                : '-'}
+            </Text>
             <Text>
               <strong>Vehículos:</strong>{' '}
               {detailsEmployee.vehicles.length
@@ -445,6 +520,60 @@ export default function EmployeesPage() {
             searchable
             clearable
           />
+          <Paper withBorder radius="md" p="sm">
+            <Stack gap="xs">
+              <Switch
+                label="Crear acceso al sistema"
+                checked={form.loginEnabled}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, loginEnabled: event.currentTarget.checked }))
+                }
+              />
+              {form.loginEnabled ? (
+                <>
+                  <TextInput
+                    label="Email de acceso"
+                    type="email"
+                    value={form.loginEmail}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setForm((prev) => ({ ...prev, loginEmail: value }));
+                    }}
+                    required
+                  />
+                  <Group grow className="mobile-stack">
+                    <Select
+                      label="Rol de acceso"
+                      value={form.loginRole}
+                      onChange={(value) =>
+                        setForm((prev) => ({ ...prev, loginRole: (value as AppRoleValue) ?? 'DRIVER' }))
+                      }
+                      data={appRoleOptions}
+                      allowDeselect={false}
+                    />
+                    <Switch
+                      mt={28}
+                      label="Acceso activo"
+                      checked={form.loginActive}
+                      onChange={(event) =>
+                        setForm((prev) => ({ ...prev, loginActive: event.currentTarget.checked }))
+                      }
+                    />
+                  </Group>
+                  <TextInput
+                    label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+                    type="password"
+                    value={form.loginPassword}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setForm((prev) => ({ ...prev, loginPassword: value }));
+                    }}
+                    required={!editingEmployee}
+                  />
+                </>
+              ) : null}
+            </Stack>
+          </Paper>
           {editingEmployee && (
             <Switch
               label="Activo"

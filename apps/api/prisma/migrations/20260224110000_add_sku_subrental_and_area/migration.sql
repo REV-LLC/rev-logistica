@@ -1,0 +1,3 @@
+ALTER TABLE "Sku"
+  ADD COLUMN "subrentalPrice" DECIMAL,
+  ADD COLUMN "areaM2" DECIMAL;

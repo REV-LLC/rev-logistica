@@ -102,6 +102,17 @@ export class InventoryService {
     ).toString('base64');
   }
 
+  private formatOwnerWarehouseLabel(warehouse?: {
+    name: string;
+    ownerCompany?: { name: string } | null;
+  }) {
+    if (!warehouse) return null;
+    const ownerName = warehouse.ownerCompany?.name?.trim();
+    const warehouseName = warehouse.name?.trim();
+    if (ownerName && warehouseName) return `${ownerName} | ${warehouseName}`;
+    return warehouseName || ownerName || null;
+  }
+
   private normalizeOperationItems(
     items: {
       skuId?: string;
@@ -667,6 +678,69 @@ export class InventoryService {
       await this.assertOwnerWarehousesExist(ownerWarehouseIds);
       const serialIds = [...serialAssetIds.values()];
 
+      const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
+      if (bulkSkuIds.length) {
+        const warehouseRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId', 'warehouseId'],
+          where: {
+            warehouseId: { in: ownerWarehouseIds },
+            customerWorksiteId: null,
+            skuId: { in: bulkSkuIds },
+          },
+          _sum: { quantity: true },
+        });
+
+        const onSiteRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId'],
+          where: {
+            ownerWarehouseId: { in: ownerWarehouseIds },
+            movementType: MovementType.ON_SITE,
+            skuId: { in: bulkSkuIds },
+          },
+          _sum: { quantity: true },
+        });
+        const returnedRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId'],
+          where: {
+            ownerWarehouseId: { in: ownerWarehouseIds },
+            movementType: MovementType.IN,
+            customerWorksiteId: { not: null },
+            skuId: { in: bulkSkuIds },
+          },
+          _sum: { quantity: true },
+        });
+
+        const availableByGroup = new Map<string, number>();
+        warehouseRows.forEach((row) => {
+          if (!row.skuId || !row.ownerWarehouseId || !row.warehouseId) return;
+          if (row.ownerWarehouseId !== row.warehouseId) return;
+          const key = `${row.skuId}::${row.ownerWarehouseId}`;
+          availableByGroup.set(key, Number(row._sum.quantity ?? 0));
+        });
+        onSiteRows.forEach((row) => {
+          if (!row.skuId || !row.ownerWarehouseId) return;
+          const key = `${row.skuId}::${row.ownerWarehouseId}`;
+          const current = availableByGroup.get(key) ?? 0;
+          availableByGroup.set(key, current - Number(row._sum.quantity ?? 0));
+        });
+        returnedRows.forEach((row) => {
+          if (!row.skuId || !row.ownerWarehouseId) return;
+          const key = `${row.skuId}::${row.ownerWarehouseId}`;
+          const current = availableByGroup.get(key) ?? 0;
+          availableByGroup.set(key, current + Number(row._sum.quantity ?? 0));
+        });
+
+        bulkGroups.forEach((group) => {
+          const key = `${group.skuId}::${group.ownerWarehouseId}`;
+          const available = availableByGroup.get(key) ?? 0;
+          if (available < group.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for skuId ${group.skuId} ownerWarehouse ${group.ownerWarehouseId}`,
+            );
+          }
+        });
+      }
+
       const assets = serialIds.length
         ? await tx.asset.findMany({
             where: { id: { in: serialIds } },
@@ -688,6 +762,62 @@ export class InventoryService {
           );
         }
       });
+
+      if (serialIds.length) {
+        const warehouseRows = await tx.stockLedger.groupBy({
+          by: ['assetId', 'warehouseId'],
+          where: {
+            warehouseId: { in: ownerWarehouseIds },
+            customerWorksiteId: null,
+            assetId: { in: serialIds },
+          },
+          _sum: { quantity: true },
+        });
+        const onSiteRows = await tx.stockLedger.groupBy({
+          by: ['assetId', 'ownerWarehouseId'],
+          where: {
+            ownerWarehouseId: { in: ownerWarehouseIds },
+            movementType: MovementType.ON_SITE,
+            assetId: { in: serialIds },
+          },
+          _sum: { quantity: true },
+        });
+        const returnedRows = await tx.stockLedger.groupBy({
+          by: ['assetId'],
+          where: {
+            ownerWarehouseId: { in: ownerWarehouseIds },
+            movementType: MovementType.IN,
+            customerWorksiteId: { not: null },
+            assetId: { in: serialIds },
+          },
+          _sum: { quantity: true },
+        });
+
+        const availableByAsset = new Map<string, number>();
+        warehouseRows.forEach((row) => {
+          if (!row.assetId || !row.warehouseId) return;
+          const expectedOwnerWarehouseId = ownerWarehouseByAsset.get(row.assetId);
+          if (!expectedOwnerWarehouseId || row.warehouseId !== expectedOwnerWarehouseId) return;
+          availableByAsset.set(row.assetId, Number(row._sum.quantity ?? 0));
+        });
+        onSiteRows.forEach((row) => {
+          if (!row.assetId) return;
+          const current = availableByAsset.get(row.assetId) ?? 0;
+          availableByAsset.set(row.assetId, current - Number(row._sum.quantity ?? 0));
+        });
+        returnedRows.forEach((row) => {
+          if (!row.assetId) return;
+          const current = availableByAsset.get(row.assetId) ?? 0;
+          availableByAsset.set(row.assetId, current + Number(row._sum.quantity ?? 0));
+        });
+
+        serialIds.forEach((assetId) => {
+          const available = availableByAsset.get(assetId) ?? 0;
+          if (available <= 0) {
+            throw new BadRequestException(`Asset ${assetId} is not available in owner warehouse`);
+          }
+        });
+      }
 
       const ledgerOps = [
         ...bulkGroups.map((group) =>
@@ -1120,6 +1250,9 @@ export class InventoryService {
             imageUrl: true,
             imageFileObjectId: true,
             assetFamilyId: true,
+            price: true,
+            subrentalPrice: true,
+            areaM2: true,
             unitWeight: true,
             active: true,
             createdAt: true,
@@ -1127,6 +1260,23 @@ export class InventoryService {
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id.toLowerCase(), sku]));
+    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouses = ownerWarehouseIds.length
+      ? await this.prisma.warehouse.findMany({
+          where: { id: { in: ownerWarehouseIds } },
+          select: {
+            id: true,
+            name: true,
+            ownerCompany: { select: { name: true } },
+          },
+        })
+      : [];
+    const ownerWarehouseNames = new Map(
+      ownerWarehouses.map((warehouse) => [
+        warehouse.id.toLowerCase(),
+        this.formatOwnerWarehouseLabel(warehouse),
+      ]),
+    );
 
     const bulk = bulkBase
       .map((row) => {
@@ -1135,6 +1285,7 @@ export class InventoryService {
         return {
           skuId: row.skuId,
           ownerWarehouseId: row.ownerWarehouseId,
+          ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId) ?? null,
           id: sku?.id ?? row.skuId,
           skuName: sku?.name ?? null,
           name: sku?.name ?? null,
@@ -1142,6 +1293,9 @@ export class InventoryService {
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           assetFamilyId: sku?.assetFamilyId ?? null,
+          price: sku?.price ?? null,
+          subrentalPrice: sku?.subrentalPrice ?? null,
+          areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           active: sku?.active ?? null,
           createdAt: sku?.createdAt ?? null,
@@ -1364,14 +1518,35 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
+            category: true,
             imageUrl: true,
             imageFileObjectId: true,
+            price: true,
+            subrentalPrice: true,
+            areaM2: true,
             unitWeight: true,
             assetFamily: { select: { controlType: true } },
           },
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id, sku]));
+    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouses = ownerWarehouseIds.length
+      ? await this.prisma.warehouse.findMany({
+          where: { id: { in: ownerWarehouseIds } },
+          select: {
+            id: true,
+            name: true,
+            ownerCompany: { select: { name: true } },
+          },
+        })
+      : [];
+    const ownerWarehouseNames = new Map(
+      ownerWarehouses.map((warehouse) => [
+        warehouse.id.toLowerCase(),
+        this.formatOwnerWarehouseLabel(warehouse),
+      ]),
+    );
 
     const bulk = bulkBase
       .map((row) => {
@@ -1380,10 +1555,15 @@ export class InventoryService {
         return {
           skuId: row.skuId,
           ownerWarehouseId: row.ownerWarehouseId,
+          ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId.toLowerCase()) ?? null,
           skuName: sku?.name ?? null,
+          category: sku?.category ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
+          price: sku?.price ?? null,
+          subrentalPrice: sku?.subrentalPrice ?? null,
+          areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           storageLocation: { warehouseId: null },
           quantity: row.quantity,
@@ -1505,7 +1685,13 @@ export class InventoryService {
           },
         },
         document: { select: { id: true, consecutive: true, type: true } },
-        creator: { select: { id: true, email: true } },
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            employee: { select: { name: true } },
+          },
+        },
       },
     });
 
@@ -1642,6 +1828,9 @@ export class InventoryService {
             name: true,
             imageUrl: true,
             imageFileObjectId: true,
+            price: true,
+            subrentalPrice: true,
+            areaM2: true,
             unitWeight: true,
           },
         })
@@ -1676,6 +1865,9 @@ export class InventoryService {
           skuName: sku?.name ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
+          price: sku?.price ?? null,
+          subrentalPrice: sku?.subrentalPrice ?? null,
+          areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           initialQuantity,
           onSiteQuantity,
@@ -1843,6 +2035,9 @@ export class InventoryService {
       name?: string;
       category?: string;
       unitWeight?: number;
+      price?: number;
+      subrentalPrice?: number;
+      areaM2?: number;
     },
     assetFamilyId: string,
     tx: Prisma.TransactionClient,
@@ -1884,11 +2079,17 @@ export class InventoryService {
         name,
         assetFamilyId,
         category,
+        price: input.price ?? null,
+        subrentalPrice: input.subrentalPrice ?? null,
+        areaM2: input.areaM2 ?? null,
         unitWeight: input.unitWeight ?? null,
         active: true,
       },
       update: {
         category,
+        price: input.price ?? undefined,
+        subrentalPrice: input.subrentalPrice ?? undefined,
+        areaM2: input.areaM2 ?? undefined,
         unitWeight: input.unitWeight ?? undefined,
       },
       select: { id: true },

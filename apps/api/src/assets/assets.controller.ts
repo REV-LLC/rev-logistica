@@ -9,16 +9,24 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { AssetsService } from './assets.service';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: Role;
+}
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -64,8 +72,9 @@ export class AssetsController {
       }),
     )
     payload: CreateAssetDto,
+    @Req() request: Request & { user: JwtPayload },
   ) {
-    return this.assetsService.createAsset(payload);
+    return this.assetsService.createAsset(payload, request.user.sub);
   }
 
   @Patch(':assetId')

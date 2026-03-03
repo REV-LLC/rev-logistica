@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActionIcon,
   Button,
   Container,
   Group,
@@ -14,6 +15,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -164,6 +166,9 @@ export default function EditSerializedAssetPage() {
 
   return (
     <Container size="md" py="xl">
+      <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
+        <IconArrowLeft size={18} />
+      </ActionIcon>
       <Paper withBorder shadow="sm" p="xl" radius="md">
         <Group justify="space-between" align="flex-start" mb="md" className="mobile-stack">
           <div>
@@ -172,9 +177,6 @@ export default function EditSerializedAssetPage() {
               Solo aplica para equipos seriales.
             </Text>
           </div>
-          <Button variant="light" onClick={() => router.back()}>
-            Volver
-          </Button>
         </Group>
 
         {loading ? (

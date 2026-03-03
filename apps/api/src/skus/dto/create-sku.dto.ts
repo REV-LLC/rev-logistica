@@ -32,6 +32,14 @@ export class CreateSkuDto {
   price?: number;
 
   @IsOptional()
+  @IsNumber()
+  subrentalPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  areaM2?: number;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }

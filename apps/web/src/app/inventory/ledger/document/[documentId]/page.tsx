@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { ActionIcon, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
+import { IconArrowLeft } from '@tabler/icons-react';
 
 type DocumentDetail = {
   id: string;
@@ -23,11 +24,39 @@ type DocumentDetail = {
     worksite?: { id: string; name: string; address: string | null } | null;
   } | null;
   creator?: { id: string; email: string; name: string | null } | null;
+  files?: Array<{
+    id: string;
+    fileType: string;
+    storageKey: string;
+    mimeType?: string | null;
+    createdAt: string;
+  }>;
+  items: Array<{
+    id: string;
+    skuId?: string | null;
+    assetId?: string | null;
+    quantity?: string | number | null;
+    condition?: string | null;
+    requestedTag?: string | null;
+    sku?: { id: string; name: string } | null;
+    asset?: {
+      id: string;
+      description?: string | null;
+      serialOrEngine?: string | null;
+      internalNumber?: number | null;
+      sku?: { id: string; name: string } | null;
+    } | null;
+  }>;
   ledger: Array<{
     id: string;
     createdAt: string;
     movementType: string;
     quantity: string | number;
+    ownerWarehouse?: {
+      id: string;
+      name: string;
+      ownerCompany?: { name: string } | null;
+    } | null;
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
@@ -47,6 +76,11 @@ type VehicleOption = {
 };
 
 type EmployeeOption = {
+  id: string;
+  name: string;
+};
+
+type WarehouseOption = {
   id: string;
   name: string;
 };
@@ -139,6 +173,7 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState<DocumentDetail | null>(null);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   useEffect(() => {
     if (!documentId) return;
@@ -148,15 +183,17 @@ export default function DocumentDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const [docData, vehiclesData, employeesData] = await Promise.all([
+        const [docData, vehiclesData, employeesData, warehousesData] = await Promise.all([
           api<DocumentDetail>(`/documents/${documentId}`, { method: 'GET' }),
           api<VehicleOption[]>('/vehicles', { method: 'GET' }),
           api<EmployeeOption[]>('/employees', { method: 'GET' }),
+          api<WarehouseOption[]>('/warehouses', { method: 'GET' }),
         ]);
         if (!mounted) return;
         setDocument(docData);
         setVehicles(vehiclesData);
         setEmployees(employeesData);
+        setWarehouses(warehousesData);
       } catch (err) {
         if (!mounted) return;
         if (err instanceof ApiError) {
@@ -211,6 +248,14 @@ export default function DocumentDetailPage() {
     );
     return found?.name ?? '-';
   }, [parsedNotes.driverId, employees]);
+  const dispatcherDisplay = useMemo(() => {
+    const dispatcherId = parsedNotes.dispatcherId ?? '';
+    if (!dispatcherId) return '-';
+    const found = employees.find(
+      (employee) => employee.id.toLowerCase() === dispatcherId.toLowerCase(),
+    );
+    return found?.name ?? '-';
+  }, [parsedNotes.dispatcherId, employees]);
   const transportadoPorDisplay = useMemo(() => {
     const driver = driverDisplay && driverDisplay !== '-' ? driverDisplay : '';
     const plate = vehiclePlateDisplay && vehiclePlateDisplay !== '-' ? vehiclePlateDisplay : '';
@@ -221,23 +266,49 @@ export default function DocumentDetailPage() {
   }, [driverDisplay, vehiclePlateDisplay]);
   const isRemission = document?.type === 'REMISSION';
   const isReturn = document?.type === 'RETURN';
+  const isChange = document?.type === 'CUTOVER' || document?.type === 'CHANGE';
+  const receivedSignature = document?.files?.[0]?.storageKey ?? null;
+  const hasRenderableSignature = Boolean(receivedSignature?.startsWith('data:image/'));
+  const deliveredByDisplay = document?.creator?.name ?? document?.creator?.email ?? dispatcherDisplay ?? '-';
+  const warehouseNameById = useMemo(
+    () => new Map(warehouses.map((warehouse) => [warehouse.id.toLowerCase(), warehouse.name])),
+    [warehouses],
+  );
 
   const lines = useMemo(() => {
-    const rows = (document?.ledger ?? []).map((entry) => {
-      const qty = Number(entry.quantity || 0);
-      const desc = entry.asset?.description ?? entry.asset?.sku?.name ?? entry.sku?.name ?? '-';
+    const sourceRows = (document?.ledger?.length ? document.ledger : document?.items ?? []);
+    const rows = sourceRows.map((entry: any) => {
+      const qty = Math.abs(Number(entry.quantity || 0));
+      const desc =
+        entry.asset?.description ??
+        entry.asset?.sku?.name ??
+        entry.sku?.name ??
+        entry.requestedTag ??
+        '-';
       const eq = entry.asset?.internalNumber != null ? `#${entry.asset.internalNumber}` : '';
-      return { qty, desc, eq };
+      const origin = entry.ownerWarehouse
+        ? entry.ownerWarehouse.ownerCompany?.name
+          ? `${entry.ownerWarehouse.ownerCompany.name} | ${entry.ownerWarehouse.name}`
+          : entry.ownerWarehouse.name
+        : (() => {
+            const raw = (entry.condition ?? '').trim();
+            if (!raw) return '';
+            return warehouseNameById.get(raw.toLowerCase()) ?? raw;
+          })();
+      return { qty, desc, eq, origin };
     });
     while (rows.length < 11) {
-      rows.push({ qty: 0, desc: '', eq: '' });
+      rows.push({ qty: 0, desc: '', eq: '', origin: '' });
     }
     return rows.slice(0, 11);
-  }, [document?.ledger]);
+  }, [document?.items, document?.ledger, warehouseNameById]);
 
   return (
     <main>
       <Container size="lg" py="xl">
+        <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
+          <IconArrowLeft size={18} />
+        </ActionIcon>
         <Paper shadow="sm" p="xl" radius="md" withBorder className={styles.noPrint}>
           <Group justify="space-between" className="mobile-stack">
             <div>
@@ -247,9 +318,6 @@ export default function DocumentDetailPage() {
               </Text>
             </div>
             <Group>
-              <Button variant="light" onClick={() => router.back()}>
-                Volver
-              </Button>
               <Button onClick={() => window.print()} disabled={!document}>
                 Exportar PDF
               </Button>
@@ -291,8 +359,7 @@ export default function DocumentDetailPage() {
                   <span className={styles.checkbox}>{isReturn ? 'X' : ''}</span> DEVOLUCION
                 </div>
                 <div className={styles.statusLine}>
-                  <span className={styles.checkbox}>{document.status === 'CONFIRMED' ? 'X' : ''}</span>{' '}
-                  CAMBIO
+                  <span className={styles.checkbox}>{isChange ? 'X' : ''}</span> CAMBIO
                 </div>
               </div>
             </header>
@@ -331,7 +398,8 @@ export default function DocumentDetailPage() {
                   <tr>
                     <th style={{ width: '12%' }}>CANTIDAD</th>
                     <th>DESCRIPCION</th>
-                    <th style={{ width: '12%' }}># EQ</th>
+                    <th style={{ width: '10%' }}># EQ</th>
+                    <th style={{ width: '20%' }}>ORIGEN</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -340,6 +408,7 @@ export default function DocumentDetailPage() {
                       <td>{line.qty > 0 ? line.qty : ''}</td>
                       <td>{line.desc}</td>
                       <td>{line.eq}</td>
+                      <td>{line.origin}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -366,8 +435,20 @@ export default function DocumentDetailPage() {
             <section className={styles.signatures}>
               <div>ELABORADO POR<br />{document.creator?.name ?? document.creator?.email ?? '-'}</div>
               <div>TRANSPORTADO POR<br />{transportadoPorDisplay}</div>
-              <div>ENTREGADO POR<br />{parsedNotes.dispatcherId || '-'}</div>
-              <div>RECIBIDO POR<br />_____________________</div>
+              <div>ENTREGADO POR<br />{deliveredByDisplay}</div>
+              <div>
+                RECIBIDO POR
+                <br />
+                {hasRenderableSignature ? (
+                  <img
+                    src={receivedSignature ?? undefined}
+                    alt="Firma recibido por"
+                    className={styles.signatureImage}
+                  />
+                ) : (
+                  '_____________________'
+                )}
+              </div>
             </section>
           </div>
         ) : null}

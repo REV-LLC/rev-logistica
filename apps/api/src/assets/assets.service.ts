@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, SkuControlType } from '@prisma/client';
+import { MovementType, Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -195,7 +195,7 @@ export class AssetsService {
     fuel?: string;
     weight?: number;
     active?: boolean;
-  }) {
+  }, userId: string) {
     const sku = await this.prisma.sku.findUnique({
       where: { id: payload.skuId },
       select: {
@@ -263,7 +263,7 @@ export class AssetsService {
           payload.serialOrEngine?.trim() ||
           `${this.sanitizeOwnerName(warehouseOwner.name)}-${this.padInternalNumber(internalNumber)}`;
 
-        return await tx.asset.create({
+        const createdAsset = await tx.asset.create({
           data: {
             skuId: payload.skuId,
             assetFamilyId: sku.assetFamilyId,
@@ -285,6 +285,21 @@ export class AssetsService {
             active: payload.active ?? true,
           },
         });
+
+        await tx.stockLedger.create({
+          data: {
+            movementType: MovementType.ADJUST,
+            warehouseId: warehouseCurrentId,
+            customerWorksiteId: null,
+            skuId: null,
+            assetId: createdAsset.id,
+            ownerWarehouseId: payload.warehouseOwnerId,
+            quantity: 1,
+            createdBy: userId,
+          },
+        });
+
+        return createdAsset;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
