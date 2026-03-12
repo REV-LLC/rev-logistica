@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, SkuControlType } from '@prisma/client';
+import { ChargeType, Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SKU_CATEGORIES, SKU_WEIGHT_UNITS } from './skus.constants';
+import { SKU_WEIGHT_UNITS } from './skus.constants';
 
 @Injectable()
 export class SkusService {
@@ -17,7 +17,7 @@ export class SkusService {
     if (params.search) {
       where.OR = [
         { name: { contains: params.search, mode: 'insensitive' } },
-        { category: { contains: params.search, mode: 'insensitive' } },
+        { assetFamily: { is: { name: { contains: params.search, mode: 'insensitive' } } } },
       ];
     }
 
@@ -35,11 +35,12 @@ export class SkusService {
       select: {
         id: true,
         name: true,
-        category: true,
         imageUrl: true,
         assetFamilyId: true,
         price: true,
         subrentalPrice: true,
+        chargeType: true,
+        minimumChargeHours: true,
         areaM2: true,
         unitWeight: true,
         active: true,
@@ -58,11 +59,8 @@ export class SkusService {
     return items.map((item) => ({
       ...item,
       controlType: item.assetFamily.controlType,
+      category: item.assetFamily.name,
     }));
-  }
-
-  listCategories() {
-    return SKU_CATEGORIES;
   }
 
   listUnits() {
@@ -71,11 +69,12 @@ export class SkusService {
 
   async createSku(payload: {
     name: string;
-    category: string;
     imageUrl?: string;
     assetFamilyId: string;
     price?: number;
     subrentalPrice?: number;
+    chargeType?: ChargeType;
+    minimumChargeHours?: number;
     areaM2?: number;
     unitWeight?: number;
     active?: boolean;
@@ -88,15 +87,18 @@ export class SkusService {
       throw new BadRequestException('Asset family not found');
     }
 
+    const chargeConfig = this.resolveCreateChargeConfig(payload.chargeType, payload.minimumChargeHours);
+
     try {
       const created = await this.prisma.sku.create({
         data: {
           name: payload.name.trim(),
-          category: payload.category.trim().toUpperCase(),
           imageUrl: payload.imageUrl ?? null,
           assetFamilyId: payload.assetFamilyId,
           price: payload.price ?? null,
           subrentalPrice: payload.subrentalPrice ?? null,
+          chargeType: chargeConfig.chargeType,
+          minimumChargeHours: chargeConfig.minimumChargeHours,
           areaM2: payload.areaM2 ?? null,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
@@ -104,11 +106,12 @@ export class SkusService {
         select: {
           id: true,
           name: true,
-          category: true,
           imageUrl: true,
           assetFamilyId: true,
           price: true,
           subrentalPrice: true,
+          chargeType: true,
+          minimumChargeHours: true,
           areaM2: true,
           unitWeight: true,
           active: true,
@@ -124,7 +127,7 @@ export class SkusService {
         },
       });
 
-      return { ...created, controlType: created.assetFamily.controlType };
+      return { ...created, controlType: created.assetFamily.controlType, category: created.assetFamily.name };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new BadRequestException('Sku name already exists');
@@ -137,11 +140,12 @@ export class SkusService {
     skuId: string,
     payload: {
       name?: string;
-      category?: string;
       imageUrl?: string;
       assetFamilyId?: string;
       price?: number;
       subrentalPrice?: number;
+      chargeType?: ChargeType;
+      minimumChargeHours?: number;
       areaM2?: number;
       unitWeight?: number;
       active?: boolean;
@@ -149,7 +153,7 @@ export class SkusService {
   ) {
     const sku = await this.prisma.sku.findUnique({
       where: { id: skuId },
-      select: { id: true },
+      select: { id: true, chargeType: true, minimumChargeHours: true },
     });
 
     if (!sku) {
@@ -166,16 +170,24 @@ export class SkusService {
       }
     }
 
+    const chargeConfig = this.resolveUpdateChargeConfig(
+      payload.chargeType,
+      payload.minimumChargeHours,
+      sku.chargeType,
+      sku.minimumChargeHours == null ? null : Number(sku.minimumChargeHours),
+    );
+
     try {
       const updated = await this.prisma.sku.update({
         where: { id: skuId },
         data: {
           name: payload.name?.trim(),
-          category: payload.category?.trim().toUpperCase() ?? undefined,
           imageUrl: payload.imageUrl ?? undefined,
           assetFamilyId: payload.assetFamilyId ?? undefined,
           price: payload.price ?? undefined,
           subrentalPrice: payload.subrentalPrice ?? undefined,
+          chargeType: chargeConfig.chargeType,
+          minimumChargeHours: chargeConfig.minimumChargeHours,
           areaM2: payload.areaM2 ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
@@ -183,11 +195,12 @@ export class SkusService {
         select: {
           id: true,
           name: true,
-          category: true,
           imageUrl: true,
           assetFamilyId: true,
           price: true,
           subrentalPrice: true,
+          chargeType: true,
+          minimumChargeHours: true,
           areaM2: true,
           unitWeight: true,
           active: true,
@@ -203,7 +216,7 @@ export class SkusService {
         },
       });
 
-      return { ...updated, controlType: updated.assetFamily.controlType };
+      return { ...updated, controlType: updated.assetFamily.controlType, category: updated.assetFamily.name };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new BadRequestException('Sku name already exists');
@@ -235,5 +248,46 @@ export class SkusService {
     }
 
     return this.prisma.sku.delete({ where: { id: skuId } });
+  }
+
+  private resolveCreateChargeConfig(chargeType?: ChargeType, minimumChargeHours?: number) {
+    const resolvedChargeType = chargeType ?? ChargeType.DAY;
+    if (resolvedChargeType === ChargeType.HOUR) {
+      if (minimumChargeHours == null || minimumChargeHours <= 0) {
+        throw new BadRequestException('minimumChargeHours is required when chargeType is HOUR');
+      }
+      return { chargeType: resolvedChargeType, minimumChargeHours };
+    }
+    return {
+      chargeType: resolvedChargeType,
+      minimumChargeHours: null,
+    };
+  }
+
+  private resolveUpdateChargeConfig(
+    chargeType: ChargeType | undefined,
+    minimumChargeHours: number | undefined,
+    currentChargeType: ChargeType,
+    currentMinimumChargeHours: number | null,
+  ) {
+    if (chargeType == null && minimumChargeHours == null) {
+      return {
+        chargeType: undefined,
+        minimumChargeHours: undefined,
+      };
+    }
+
+    const resolvedChargeType = chargeType ?? currentChargeType;
+    const resolvedMinimum =
+      minimumChargeHours !== undefined ? minimumChargeHours : currentMinimumChargeHours;
+
+    if (resolvedChargeType === ChargeType.HOUR) {
+      if (resolvedMinimum == null || resolvedMinimum <= 0) {
+        throw new BadRequestException('minimumChargeHours is required when chargeType is HOUR');
+      }
+      return { chargeType: resolvedChargeType, minimumChargeHours: resolvedMinimum };
+    }
+
+    return { chargeType: resolvedChargeType, minimumChargeHours: null };
   }
 }

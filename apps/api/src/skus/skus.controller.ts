@@ -18,7 +18,6 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
-import { SKU_CATEGORIES } from './skus.constants';
 import { SkusService } from './skus.service';
 
 @Controller('skus')
@@ -37,11 +36,6 @@ export class SkusController {
       throw new BadRequestException('Invalid controlType');
     }
     return this.skusService.listSkus({ search, controlType, assetFamilyId });
-  }
-
-  @Get('categories')
-  listCategories() {
-    return this.skusService.listCategories();
   }
 
   @Get('units')

@@ -11,7 +11,6 @@ import {
   IconBuildingWarehouse,
   IconChecklist,
   IconClipboardList,
-  IconPlus,
   IconBox,
   IconTruck,
   IconUsers,
@@ -23,6 +22,7 @@ type NavLinkItem = {
   label: string;
   icon: typeof IconClipboardList;
   roles: AppRole[];
+  activePrefixes?: string[];
 };
 
 const links: NavLinkItem[] = [
@@ -30,8 +30,13 @@ const links: NavLinkItem[] = [
   { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
   { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
   { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/inventory/serialized-assets', label: 'Crear equipo', icon: IconPlus, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/inventory/bulk-adjustments', label: 'Agregar stock', icon: IconBox, roles: ['ADMIN', 'OFFICE'] },
+  {
+    href: '/inventory/bulk-adjustments',
+    label: 'Agregar stock',
+    icon: IconBox,
+    roles: ['ADMIN', 'OFFICE'],
+    activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
+  },
   { href: '/transport/cost', label: 'Transporte', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
   { href: '/transport/vehicles', label: 'Vehículos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
   { href: '/transport/obras', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
@@ -88,7 +93,8 @@ export default function Nav({ onNavigate }: NavProps) {
       <Stack gap={2}>
         {allowedLinks.map((link) => {
           const Icon = link.icon;
-          const isActive = pathname?.startsWith(link.href) ?? false;
+          const prefixes = link.activePrefixes ?? [link.href];
+          const isActive = prefixes.some((prefix) => pathname?.startsWith(prefix));
           return (
             <NavLink
               key={link.href}

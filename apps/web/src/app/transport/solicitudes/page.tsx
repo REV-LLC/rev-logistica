@@ -99,11 +99,19 @@ type PrincipalCatalogEntry = {
   key: string;
   label: string;
   type: 'bulk' | 'serial';
+  skuName?: string;
   skuId?: string;
   assetId?: string;
   ownerWarehouseId: string;
   quantity?: number;
   serial?: string | null;
+};
+
+type GenerateFieldErrors = {
+  customerId?: string;
+  docDate?: string;
+  customerWorksiteId?: string;
+  driverId?: string;
 };
 
 type RequestDocument = {
@@ -159,12 +167,42 @@ type RequestDocumentDetail = {
   }>;
 };
 
-type SkuOption = { id: string; name: string };
+type SkuOption = {
+  id: string;
+  name: string;
+  assetFamilyId: string;
+  controlType: 'BULK' | 'SERIAL';
+};
+
+type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
+
+type CreateSerializedAssetResponse = {
+  asset: {
+    id: string;
+    internalNumber: number;
+    skuId: string;
+    warehouseOwnerId: string;
+    warehouseCurrentId: string;
+  };
+};
 const WAREHOUSES_CACHE_KEY = 'solicitudes.warehouses.v1';
 const PRINCIPAL_TAGS_CACHE_KEY = 'solicitudes.principalTags.v1';
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+
+const normalizeTagBase = (value?: string | null) =>
+  (value ?? '')
+    .replace(/#\s*\d+\s*$/i, '')
+    .trim()
+    .toUpperCase();
+
+const parseInternalNumberFromTag = (value?: string | null) => {
+  const match = (value ?? '').match(/#\s*(\d+)\s*$/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
 
 const buildSerialDisplayName = (item: InventorySerial) => {
   const parts = [item.skuName, item.brand, item.model]
@@ -207,7 +245,12 @@ function formatDateTime(value: string) {
   return date.toLocaleString('es-CO');
 }
 
-const OWNER_BADGE_COLORS = ['blue', 'teal', 'grape', 'orange', 'pink', 'cyan', 'indigo', 'lime'];
+const FUEL_OPTIONS = [
+  { value: 'GASOLINA', label: 'Gasolina' },
+  { value: 'DIESEL', label: 'Diesel' },
+  { value: 'ELECTRICO', label: 'Eléctrico' },
+];
+const OWNER_COLORS = ['blue', 'teal', 'grape', 'orange', 'pink', 'cyan', 'indigo', 'lime'] as const;
 
 function ownerColorById(ownerWarehouseId: string | null | undefined) {
   if (!ownerWarehouseId) return 'gray';
@@ -215,7 +258,7 @@ function ownerColorById(ownerWarehouseId: string | null | undefined) {
   for (let index = 0; index < ownerWarehouseId.length; index += 1) {
     hash = (hash * 31 + ownerWarehouseId.charCodeAt(index)) >>> 0;
   }
-  return OWNER_BADGE_COLORS[hash % OWNER_BADGE_COLORS.length];
+  return OWNER_COLORS[hash % OWNER_COLORS.length];
 }
 
 function getCurrentUserRole(): string | null {
@@ -303,6 +346,19 @@ function extractOwnerWarehouseIdFromMessage(message: string) {
   return match?.[1] ?? null;
 }
 
+function extractSkuIdsFromMessages(messages: string[]) {
+  const ids = new Set<string>();
+  messages.forEach((message) => {
+    const regex = /skuId\s+([0-9a-fA-F-]{36})/gi;
+    let match = regex.exec(message);
+    while (match) {
+      ids.add(match[1]);
+      match = regex.exec(message);
+    }
+  });
+  return [...ids];
+}
+
 function readJsonCache<T>(key: string): T | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -350,9 +406,10 @@ export default function SolicitudesIpadPage() {
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [bulkSelect, setBulkSelect] = useState<string | null>(null);
   const [serialSelect, setSerialSelect] = useState<string | null>(null);
+  const [onSiteItemSelect, setOnSiteItemSelect] = useState<string | null>(null);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeQtyInput, setFreeQtyInput] = useState<number | ''>('');
-  const [principalTags, setPrincipalTags] = useState<string[]>([]);
+  const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
   const [principalCatalog, setPrincipalCatalog] = useState<PrincipalCatalogEntry[]>([]);
   const [loadingPrincipalTags, setLoadingPrincipalTags] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -365,6 +422,7 @@ export default function SolicitudesIpadPage() {
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
+  const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
@@ -375,7 +433,19 @@ export default function SolicitudesIpadPage() {
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveDocument, setResolveDocument] = useState<RequestDocumentDetail | null>(null);
   const [resolveSkuByIndex, setResolveSkuByIndex] = useState<Record<number, string>>({});
+  const [resolveAssetByIndex, setResolveAssetByIndex] = useState<Record<number, string>>({});
+  const [resolveInventoryByOwner, setResolveInventoryByOwner] = useState<ResolveInventoryByOwner>({});
   const [resolvingApprove, setResolvingApprove] = useState(false);
+  const [createSerialOpen, setCreateSerialOpen] = useState(false);
+  const [createSerialIndex, setCreateSerialIndex] = useState<number | null>(null);
+  const [createSerialSerialOrEngine, setCreateSerialSerialOrEngine] = useState('');
+  const [createSerialInternalNumber, setCreateSerialInternalNumber] = useState<number | ''>('');
+  const [createSerialBrand, setCreateSerialBrand] = useState('');
+  const [createSerialModel, setCreateSerialModel] = useState('');
+  const [createSerialYear, setCreateSerialYear] = useState<number | ''>('');
+  const [createSerialFuel, setCreateSerialFuel] = useState<string | null>(null);
+  const [createSerialSaving, setCreateSerialSaving] = useState(false);
+  const [createSerialError, setCreateSerialError] = useState<string | null>(null);
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
@@ -393,8 +463,7 @@ export default function SolicitudesIpadPage() {
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
   const isAlternateOwnerMode = sourceMode === 'warehouse' && sourceOwnerWarehouse?.type === 'ALLY';
-  const isDriverWarehouseCaptureMode = isDriverRole && sourceMode === 'warehouse';
-  const useManualWarehouseCapture = sourceMode === 'warehouse' && (isAlternateOwnerMode || isDriverWarehouseCaptureMode);
+  const useManualWarehouseCapture = sourceMode === 'warehouse' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
       warehouses.find((warehouse) => warehouse.name.trim().toUpperCase() === 'BODEGA PRINCIPAL') ??
@@ -445,25 +514,76 @@ export default function SolicitudesIpadPage() {
     () => serialItems.filter((item) => !selectedSerialIds.has(item.assetId)),
     [serialItems, selectedSerialIds],
   );
+  const onSiteItemOptions = useMemo(
+    () => [
+      ...availableSerialItems.map((item) => ({
+        value: `serial:${item.assetId}`,
+        label: buildSerialDisplayName(item),
+        ownerWarehouseId: item.ownerWarehouseId ?? null,
+      })),
+      ...availableBulkItems.map((item) => ({
+        value: `bulk:${buildBulkKey(item)}`,
+        label: `${item.skuName ?? 'SKU'}`,
+        ownerWarehouseId: item.ownerWarehouseId ?? null,
+      })),
+    ],
+    [availableBulkItems, availableSerialItems],
+  );
+  const onSiteOwnerByValue = useMemo(() => {
+    const map = new Map<string, { ownerId: string | null; ownerName: string }>();
+    onSiteItemOptions.forEach((option) => {
+      const ownerId = option.ownerWarehouseId ?? null;
+      const ownerName = ownerId
+        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño/a'
+        : 'Sin dueño/a';
+      map.set(option.value, { ownerId, ownerName });
+    });
+    return map;
+  }, [onSiteItemOptions, warehouses]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
-  const freeTagCatalogMatch = useMemo(() => {
+  const alternateTagCatalog = useMemo(() => {
+    if (!isAlternateOwnerMode) return [] as Array<{ label: string; type: 'bulk' | 'serial' }>;
+    const byLabel = new Map<string, { label: string; type: 'bulk' | 'serial' }>();
+    principalCatalog.forEach((entry) => {
+      const rawLabel =
+        entry.type === 'serial'
+          ? entry.skuName?.trim() || entry.label.trim()
+          : entry.label.trim();
+      if (!rawLabel) return;
+      const key = rawLabel.toUpperCase();
+      if (!byLabel.has(key)) {
+        byLabel.set(key, { label: rawLabel, type: entry.type });
+      }
+    });
+    return [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [isAlternateOwnerMode, principalCatalog]);
+  const alternateTagMatch = useMemo(() => {
+    if (!isAlternateOwnerMode) return null;
     const typed = freeTagInput.trim().toUpperCase();
     if (!typed) return null;
-    return (
-      principalCatalog.find((entry) => entry.label.trim().toUpperCase() === typed) ??
-      null
-    );
-  }, [freeTagInput, principalCatalog]);
+    return alternateTagCatalog.find((entry) => entry.label.toUpperCase() === typed) ?? null;
+  }, [isAlternateOwnerMode, freeTagInput, alternateTagCatalog]);
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.name ?? '-';
   const sourceWorksiteName =
     worksites.find((worksite) => worksite.id === sourceWorksiteId)?.alias ??
     worksites.find((worksite) => worksite.id === sourceWorksiteId)?.worksite.name ??
     '-';
+  const isResolvePendingItem = (item: RequestDocumentDetail['items'][number]) => {
+    const hasTag = Boolean(item.requestedTag?.trim());
+    if (!item.skuId && !item.assetId) {
+      return hasTag;
+    }
+    if (item.skuId && !item.assetId) {
+      const skuType = skuOptions.find((sku) => sku.id === item.skuId)?.controlType;
+      return skuType === 'SERIAL';
+    }
+    return false;
+  };
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -585,6 +705,16 @@ export default function SolicitudesIpadPage() {
     }
 
     const messages = normalizeApiErrorMessages(err);
+    const hasAssetUnavailableError = messages.some((message) =>
+      /asset\s+[0-9a-f-]{36}\s+is not available in owner warehouse/i.test(message),
+    );
+    if (hasAssetUnavailableError) {
+      setRequestsError(
+        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Verifica si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
+      );
+      return;
+    }
+
     const hasStockError = messages.some((message) => /insufficient stock/i.test(message));
     if (hasStockError && canDecide) {
       const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
@@ -592,10 +722,17 @@ export default function SolicitudesIpadPage() {
       const ownerName = ownerId
         ? warehouses.find((warehouse) => warehouse.id.toLowerCase() === ownerId.toLowerCase())?.name
         : null;
+      const missingSkuLabels = extractSkuIdsFromMessages(messages).map((skuId) => {
+        const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
+        return skuName ?? `SKU ${skuId.slice(0, 8)}`;
+      });
       const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const missingItemsBlock = missingSkuLabels.length
+        ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
+        : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `Primero debes hacer ajuste de "${warehouseLabel}" bodega para hacer movimientos.`,
+        `Primero debes hacer ajuste de "${warehouseLabel}" bodega para hacer movimientos.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);
@@ -606,10 +743,6 @@ export default function SolicitudesIpadPage() {
   };
 
   useEffect(() => {
-    const cachedTags = readJsonCache<{ tags?: string[] }>(PRINCIPAL_TAGS_CACHE_KEY);
-    if (cachedTags?.tags?.length) {
-      setPrincipalTags(cachedTags.tags);
-    }
     const cachedWarehouses = readJsonCache<{ items?: Warehouse[] }>(WAREHOUSES_CACHE_KEY);
     if (cachedWarehouses?.items?.length) {
       setWarehouses(cachedWarehouses.items);
@@ -644,6 +777,7 @@ export default function SolicitudesIpadPage() {
             key,
             label,
             type: 'bulk',
+            skuName: label,
             skuId: item.skuId,
             ownerWarehouseId: item.ownerWarehouseId ?? principalWarehouse.id,
             quantity: item.quantity,
@@ -658,6 +792,7 @@ export default function SolicitudesIpadPage() {
             key,
             label,
             type: 'serial',
+            skuName: item.skuName?.trim() || undefined,
             assetId: item.assetId,
             ownerWarehouseId: item.ownerWarehouseId ?? principalWarehouse.id,
             serial: item.serialOrEngine,
@@ -665,7 +800,6 @@ export default function SolicitudesIpadPage() {
           uniqueLabels.set(label.toUpperCase(), label);
         });
         const sortedTags = [...uniqueLabels.values()].sort((a, b) => a.localeCompare(b));
-        setPrincipalTags(sortedTags);
         setPrincipalCatalog(catalogEntries);
         writeJsonCache(PRINCIPAL_TAGS_CACHE_KEY, {
           tags: sortedTags,
@@ -674,10 +808,7 @@ export default function SolicitudesIpadPage() {
         });
       } catch {
         if (!mounted) return;
-        const cachedTags = readJsonCache<{ tags?: string[] }>(PRINCIPAL_TAGS_CACHE_KEY);
-        if (cachedTags?.tags?.length) {
-          setPrincipalTags(cachedTags.tags);
-        }
+        // ignore: si no carga, la captura alterna queda sin sugerencias hasta refrescar
       } finally {
         if (mounted) setLoadingPrincipalTags(false);
       }
@@ -779,7 +910,7 @@ export default function SolicitudesIpadPage() {
     }
   }, [currentUserId, dispatcherId, employees, isDriverRole]);
 
-  const loadInventory = async () => {
+  const loadInventory = async (openSelector = true) => {
     setLoadingInventory(true);
     setError(null);
     try {
@@ -808,7 +939,7 @@ export default function SolicitudesIpadPage() {
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
       }
-      if (isMobile) {
+      if (openSelector && isMobile && sourceMode === 'warehouse') {
         setItemsModalOpen(true);
       }
     } catch (err) {
@@ -825,12 +956,35 @@ export default function SolicitudesIpadPage() {
   };
 
   useEffect(() => {
+    if (sourceMode !== 'warehouse') return;
+    if (!sourceOwnerWarehouseId) return;
+    const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
+    if (selectedOwner?.type === 'ALLY') return;
+    void loadInventory(false);
+  }, [sourceMode, sourceOwnerWarehouseId, warehouses]);
+
+  useEffect(() => {
+    if (sourceMode !== 'on-site') return;
+    if (!sourceWorksiteId) {
+      setBulkItems([]);
+      setSerialItems([]);
+      setOnSiteItemSelect(null);
+      return;
+    }
+    void loadInventory(false);
+    setOnSiteItemSelect(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceMode, sourceWorksiteId]);
+
+  useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
     setBulkSelect(null);
     setSerialSelect(null);
+    setOnSiteItemSelect(null);
     setFreeTagInput('');
     setFreeQtyInput('');
+    setItemsModalOpen(false);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
@@ -874,9 +1028,18 @@ export default function SolicitudesIpadPage() {
     const loadSkuOptions = async () => {
       if (!canDecide) return;
       try {
-        const data = await api<Array<{ id: string; name: string }>>('/skus', { method: 'GET' });
+        const data = await api<
+          Array<{ id: string; name: string; assetFamilyId: string; controlType: 'BULK' | 'SERIAL' }>
+        >('/skus', { method: 'GET' });
         if (!mounted) return;
-        setSkuOptions(data.map((item) => ({ id: item.id, name: item.name })));
+        setSkuOptions(
+          data.map((item) => ({
+            id: item.id,
+            name: item.name,
+            assetFamilyId: item.assetFamilyId,
+            controlType: item.controlType,
+          })),
+        );
       } catch {
         if (!mounted) return;
       }
@@ -886,6 +1049,160 @@ export default function SolicitudesIpadPage() {
       mounted = false;
     };
   }, [canDecide]);
+
+  const closeResolveModal = () => {
+    if (resolvingApprove) return;
+    setResolveModalOpen(false);
+    setResolveDocument(null);
+    setResolveSkuByIndex({});
+    setResolveAssetByIndex({});
+    setResolveInventoryByOwner({});
+  };
+
+  const loadResolveInventories = async (ownerIds: string[]) => {
+    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
+    if (!uniqueOwnerIds.length) return {};
+    const loadedEntries = await Promise.all(
+      uniqueOwnerIds.map(async (ownerId) => {
+        try {
+          const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
+            method: 'GET',
+          });
+          return [ownerId, { serial: inventory.serial ?? [] }] as const;
+        } catch {
+          return [ownerId, { serial: [] }] as const;
+        }
+      }),
+    );
+    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
+  };
+
+  const buildInitialResolveState = (
+    doc: RequestDocumentDetail,
+    inventoriesByOwner: ResolveInventoryByOwner,
+  ) => {
+    const skuByNormalizedName = new Map<string, SkuOption>();
+    skuOptions.forEach((sku) => skuByNormalizedName.set(sku.name.trim().toUpperCase(), sku));
+    const initialSkuMap: Record<number, string> = {};
+    const initialAssetMap: Record<number, string> = {};
+
+    doc.items.forEach((item, index) => {
+      if (item.assetId) return;
+      const normalizedTag = normalizeTagBase(item.requestedTag);
+      const matchedSku = item.skuId
+        ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
+        : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
+      if (!matchedSku) return;
+
+      initialSkuMap[index] = matchedSku.id;
+
+      if (matchedSku.controlType !== 'SERIAL') return;
+      const ownerWarehouseId = item.condition?.trim();
+      if (!ownerWarehouseId) return;
+      const serialCandidates =
+        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
+      const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
+      if (internalFromTag == null) return;
+      const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
+      if (exactAsset) {
+        initialAssetMap[index] = exactAsset.assetId;
+      }
+    });
+
+    return { initialSkuMap, initialAssetMap };
+  };
+
+  const openCreateSerialForRow = (index: number) => {
+    const row = resolveDocument?.items[index];
+    if (!row) return;
+    const internal = parseInternalNumberFromTag(row.requestedTag);
+    setCreateSerialIndex(index);
+    setCreateSerialSerialOrEngine('');
+    setCreateSerialInternalNumber(internal ?? '');
+    setCreateSerialBrand('');
+    setCreateSerialModel('');
+    setCreateSerialYear('');
+    setCreateSerialFuel(null);
+    setCreateSerialError(null);
+    setCreateSerialOpen(true);
+  };
+
+  const createMissingSerialFromResolve = async () => {
+    if (!resolveDocument || createSerialIndex == null) return;
+    const row = resolveDocument.items[createSerialIndex];
+    if (!row) return;
+    const ownerWarehouseId = row.condition?.trim();
+    if (!ownerWarehouseId) {
+      setCreateSerialError('La línea no tiene bodega dueña.');
+      return;
+    }
+    const selectedSkuId = resolveSkuByIndex[createSerialIndex];
+    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
+    if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
+      setCreateSerialError('Selecciona primero un SKU serial.');
+      return;
+    }
+    if (!createSerialSerialOrEngine.trim()) {
+      setCreateSerialError('El serial/motor es obligatorio.');
+      return;
+    }
+    if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
+      setCreateSerialError('Número interno inválido.');
+      return;
+    }
+
+    setCreateSerialSaving(true);
+    setCreateSerialError(null);
+    try {
+      const response = await api<CreateSerializedAssetResponse>('/inventory/serialized-assets', {
+        method: 'POST',
+        json: {
+          family: { id: selectedSku.assetFamilyId },
+          sku: { id: selectedSku.id },
+          asset: {
+            serialOrEngine: createSerialSerialOrEngine.trim(),
+            internalNumber: Number(createSerialInternalNumber),
+            brand: createSerialBrand.trim() || undefined,
+            model: createSerialModel.trim() || undefined,
+            year: createSerialYear === '' ? undefined : createSerialYear,
+            fuel: createSerialFuel ?? undefined,
+            active: true,
+          },
+          ownerWarehouseId,
+          warehouseCurrentId: ownerWarehouseId,
+        },
+      });
+
+      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+        method: 'GET',
+      });
+      setResolveInventoryByOwner((prev) => ({
+        ...prev,
+        [ownerWarehouseId]: { serial: refreshedInventory.serial ?? [] },
+      }));
+      setResolveAssetByIndex((prev) => ({
+        ...prev,
+        [createSerialIndex]: response.asset.id,
+      }));
+      setCreateSerialOpen(false);
+      setCreateSerialIndex(null);
+      setCreateSerialBrand('');
+      setCreateSerialModel('');
+      setCreateSerialYear('');
+      setCreateSerialFuel(null);
+      setItemsAddedNotice('Equipo creado y asignado al tag.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setCreateSerialError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setCreateSerialError(err.message);
+      } else {
+        setCreateSerialError('Error creando equipo.');
+      }
+    } finally {
+      setCreateSerialSaving(false);
+    }
+  };
 
   const approveWithDecision = async (documentId: string) => {
     setDecidingId(documentId);
@@ -927,20 +1244,19 @@ export default function SolicitudesIpadPage() {
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
       const unresolved = doc.items
         .map((item, index) => ({ item, index }))
-        .filter(
-          ({ item }) =>
-            !item.skuId &&
-            !item.assetId &&
-            Boolean(item.requestedTag?.trim()),
-        );
+        .filter(({ item }) => isResolvePendingItem(item));
 
       if (unresolved.length > 0) {
-        const initialMap: Record<number, string> = {};
-        unresolved.forEach(({ index }) => {
-          initialMap[index] = '';
-        });
+        const ownerIds = unresolved
+          .map(({ item }) => item.condition?.trim() ?? '')
+          .filter((value): value is string => Boolean(value));
+        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
+
         setResolveDocument(doc);
-        setResolveSkuByIndex(initialMap);
+        setResolveInventoryByOwner(inventoriesByOwner);
+        setResolveSkuByIndex(initialSkuMap);
+        setResolveAssetByIndex(initialAssetMap);
         setResolveModalOpen(true);
         return;
       }
@@ -978,16 +1294,22 @@ export default function SolicitudesIpadPage() {
     if (!resolveDocument) return;
     const unresolved = resolveDocument.items
       .map((item, index) => ({ item, index }))
-      .filter(
-        ({ item }) =>
-          !item.skuId &&
-          !item.assetId &&
-          Boolean(item.requestedTag?.trim()),
-      );
+      .filter(({ item }) => isResolvePendingItem(item));
 
     const missing = unresolved.filter(({ index }) => !resolveSkuByIndex[index]);
     if (missing.length > 0) {
       setRequestsError('Resuelve todos los tags pendientes antes de aprobar.');
+      return;
+    }
+
+    const serialMissingAsset = unresolved.filter(({ item, index }) => {
+      const skuId = resolveSkuByIndex[index];
+      const sku = skuOptions.find((entry) => entry.id === skuId);
+      if (sku?.controlType !== 'SERIAL') return false;
+      return !resolveAssetByIndex[index];
+    });
+    if (serialMissingAsset.length > 0) {
+      setRequestsError('Falta seleccionar o crear equipo para uno o más tags seriales.');
       return;
     }
 
@@ -1002,6 +1324,16 @@ export default function SolicitudesIpadPage() {
             ownerWarehouseId,
           };
         }
+        if (item.skuId && !item.assetId) {
+          const existingSku = skuOptions.find((entry) => entry.id === item.skuId);
+          if (existingSku?.controlType === 'SERIAL') {
+            return {
+              assetId: resolveAssetByIndex[index],
+              ownerWarehouseId,
+              requestedTag: item.requestedTag ?? undefined,
+            };
+          }
+        }
         if (item.skuId) {
           return {
             skuId: item.skuId,
@@ -1011,6 +1343,14 @@ export default function SolicitudesIpadPage() {
           };
         }
         const resolvedSkuId = resolveSkuByIndex[index];
+        const resolvedSku = skuOptions.find((entry) => entry.id === resolvedSkuId);
+        if (resolvedSku?.controlType === 'SERIAL') {
+          return {
+            assetId: resolveAssetByIndex[index],
+            ownerWarehouseId,
+            requestedTag: item.requestedTag ?? undefined,
+          };
+        }
         return {
           skuId: resolvedSkuId,
           quantity: Number(item.quantity ?? 1) || 1,
@@ -1032,9 +1372,7 @@ export default function SolicitudesIpadPage() {
       });
 
       await approveWithDecision(resolveDocument.id);
-      setResolveModalOpen(false);
-      setResolveDocument(null);
-      setResolveSkuByIndex({});
+      closeResolveModal();
     } catch (err) {
       handleApprovalError(err);
     } finally {
@@ -1074,69 +1412,41 @@ export default function SolicitudesIpadPage() {
       return;
     }
     const selectedOwnerType = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.type;
-    const isPrincipalOwner = sourceOwnerWarehouseId === principalWarehouse?.id;
-    const matchedCatalogEntry =
-      principalCatalog.find((entry) => entry.label.trim().toUpperCase() === tag) ?? null;
-
-    if (isPrincipalOwner && principalCatalog.length > 0) {
-      if (!matchedCatalogEntry) {
-        setError('Selecciona un item válido del catálogo de bodega principal');
-        return;
-      }
-      if (matchedCatalogEntry.type === 'serial' && matchedCatalogEntry.assetId) {
-        setError(null);
-        setSelectedItems((prev) => {
-          const exists = prev.some((item) => item.type === 'serial' && item.assetId === matchedCatalogEntry.assetId);
-          if (exists) return prev;
-          return [
-            ...prev,
-            {
-              type: 'serial',
-              assetId: matchedCatalogEntry.assetId,
-              name: matchedCatalogEntry.label,
-              serial: matchedCatalogEntry.serial ?? null,
-              ownerWarehouseId: sourceOwnerWarehouseId,
-            },
-          ];
-        });
-        setFreeTagInput('');
-        setFreeQtyInput('');
-        setItemsAddedNotice(`${matchedCatalogEntry.label} agregado a la lista.`);
-        return;
-      }
-      if (!qty || qty <= 0) {
-        setError('Cantidad inválida para el item');
-        return;
-      }
-      if (matchedCatalogEntry.type === 'bulk' && matchedCatalogEntry.skuId) {
-        setError(null);
-        setSelectedItems((prev) => {
-          const bulkKey = buildBulkKey({
-            skuId: matchedCatalogEntry.skuId as string,
-            ownerWarehouseId: sourceOwnerWarehouseId,
-          });
-          const exists = prev.some((item) => item.type === 'bulk' && item.bulkKey === bulkKey);
-          if (exists) return prev;
-          return [
-            ...prev,
-            {
-              type: 'bulk',
-              bulkKey,
-              skuId: matchedCatalogEntry.skuId,
-              name: matchedCatalogEntry.label,
-              quantity: qty,
-              ownerWarehouseId: sourceOwnerWarehouseId,
-            },
-          ];
-        });
-        setFreeTagInput('');
-        setFreeQtyInput('');
-        setItemsAddedNotice(`${matchedCatalogEntry.label} agregado a la lista.`);
-        return;
-      }
-    }
 
     if (selectedOwnerType === 'ALLY') {
+      const isAlternateSerial = alternateTagMatch?.type === 'serial';
+      if (isAlternateSerial) {
+        const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : 0;
+        if (!internal || internal <= 0) {
+          setError('Ingresa el número interno del equipo');
+          return;
+        }
+        const serialLabel = `${tag} #${internal}`;
+        setError(null);
+        setSelectedItems((prev) => {
+          const exists = prev.some(
+            (item) =>
+              item.ownerWarehouseId === sourceOwnerWarehouseId &&
+              (item.requestedTag ?? item.name).toUpperCase() === serialLabel.toUpperCase(),
+          );
+          if (exists) return prev;
+          return [
+            ...prev,
+            {
+              type: 'free',
+              name: serialLabel,
+              requestedTag: serialLabel,
+              quantity: 1,
+              ownerWarehouseId: sourceOwnerWarehouseId,
+            },
+          ];
+        });
+        setFreeTagInput('');
+        setFreeQtyInput('');
+        setFreeInternalNumber('');
+        setItemsAddedNotice(`${serialLabel} agregado a la lista.`);
+        return;
+      }
       if (!qty || qty <= 0) {
         setError('Cantidad inválida para el item');
         return;
@@ -1154,28 +1464,12 @@ export default function SolicitudesIpadPage() {
       ]);
       setFreeTagInput('');
       setFreeQtyInput('');
+      setFreeInternalNumber('');
       setItemsAddedNotice(`${tag} agregado a la lista.`);
       return;
     }
 
-    if (!qty || qty <= 0) {
-      setError('Cantidad inválida para el item');
-      return;
-    }
-    setError(null);
-    setSelectedItems((prev) => [
-      ...prev,
-      {
-        type: 'free',
-        name: tag,
-        requestedTag: tag,
-        quantity: qty,
-        ownerWarehouseId: sourceOwnerWarehouseId,
-      },
-    ]);
-    setFreeTagInput('');
-    setFreeQtyInput('');
-    setItemsAddedNotice(`${tag} agregado a la lista.`);
+    setError('Captura manual solo aplica para bodega alterna.');
   };
 
   const resolveFreeItemToSku = (index: number, skuId: string | null) => {
@@ -1229,6 +1523,8 @@ export default function SolicitudesIpadPage() {
     setSerialSelect(null);
     setFreeTagInput('');
     setFreeQtyInput('');
+    setFreeInternalNumber('');
+    setGenerateFieldErrors({});
     setGenerateStep('info');
     setReceivedSignature(null);
   };
@@ -1325,7 +1621,7 @@ export default function SolicitudesIpadPage() {
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra (worksite).');
       }
-      if (!receivedSignature) {
+      if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
       }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
@@ -1344,7 +1640,7 @@ export default function SolicitudesIpadPage() {
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
-        receivedSignature: receivedSignature ?? undefined,
+        receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
           `Fecha doc: ${docDate}`,
           docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
@@ -1414,16 +1710,16 @@ export default function SolicitudesIpadPage() {
 
   const goToItemsStep = () => {
     setError(null);
-    if (!docDate || !customerId) {
-      setError('Completa los campos obligatorios de información.');
-      return;
-    }
-    if (!customerWorksiteId) {
-      setError('Selecciona la obra (worksite).');
-      return;
-    }
+    const nextFieldErrors: GenerateFieldErrors = {};
+    if (!customerId) nextFieldErrors.customerId = 'Selecciona la razón social.';
+    if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
+    if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
-      setError('Tu usuario no está vinculado a un empleado conductor.');
+      nextFieldErrors.driverId = 'Selecciona el conductor.';
+    }
+    setGenerateFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError('Revisa los campos obligatorios resaltados.');
       return;
     }
     setGenerateStep('items');
@@ -1668,12 +1964,14 @@ export default function SolicitudesIpadPage() {
               </Radio.Group>
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
-            <TextInput
-              label={helpLabel('Consecutivo (opcional)', 'Si lo dejas vacío, oficina podrá asignarlo al confirmar.')}
-              withAsterisk={false}
-              value={consecutive}
-              onChange={(event) => setConsecutive(event.target.value)}
-            />
+            {!isDriverRole ? (
+              <TextInput
+                label={helpLabel('Consecutivo (opcional)', 'Si lo dejas vacío, oficina podrá asignarlo al confirmar.')}
+                withAsterisk={false}
+                value={consecutive}
+                onChange={(event) => setConsecutive(event.target.value)}
+              />
+            ) : null}
             {isMobile ? (
               <NativeSelect
                 label="Razón social"
@@ -1681,6 +1979,7 @@ export default function SolicitudesIpadPage() {
                 onChange={(event) => {
                   setCustomerId(event.currentTarget.value || null);
                   setCustomerWorksiteId('');
+                  setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
                 }}
                 data={[
                   { value: '', label: 'Selecciona cliente' },
@@ -1690,6 +1989,7 @@ export default function SolicitudesIpadPage() {
                   })),
                 ]}
                 required
+                error={generateFieldErrors.customerId}
               />
             ) : (
               <Select
@@ -1698,6 +1998,7 @@ export default function SolicitudesIpadPage() {
                 onChange={(value) => {
                   setCustomerId(value);
                   setCustomerWorksiteId('');
+                  setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
                 }}
                 data={customers.map((customer) => ({
                   value: customer.id,
@@ -1707,6 +2008,7 @@ export default function SolicitudesIpadPage() {
                 clearable
                 required
                 placeholder="Selecciona cliente"
+                error={generateFieldErrors.customerId}
               />
             )}
             <TextInput
@@ -1714,8 +2016,12 @@ export default function SolicitudesIpadPage() {
               withAsterisk={false}
               type="date"
               value={docDate}
-              onChange={(event) => setDocDate(event.target.value)}
+              onChange={(event) => {
+                setDocDate(event.target.value);
+                setGenerateFieldErrors((prev) => ({ ...prev, docDate: undefined }));
+              }}
               required
+              error={generateFieldErrors.docDate}
             />
             {docType === 'RETURN' && (
               <TextInput
@@ -1746,23 +2052,31 @@ export default function SolicitudesIpadPage() {
               <NativeSelect
                 label={helpLabel('Obra', 'Obra destino del movimiento.')}
                 value={customerWorksiteId}
-                onChange={(event) => setCustomerWorksiteId(event.currentTarget.value)}
+                onChange={(event) => {
+                  setCustomerWorksiteId(event.currentTarget.value);
+                  setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
+                }}
                 data={[
                   { value: '', label: customerId ? 'Selecciona obra' : 'Selecciona cliente primero' },
                   ...worksiteOptions,
                 ]}
                 disabled={!customerId || worksitesLoading}
+                error={generateFieldErrors.customerWorksiteId}
               />
             ) : (
               <Select
                 label={helpLabel('Obra', 'Obra destino del movimiento.')}
                 value={customerWorksiteId}
-                onChange={(value) => setCustomerWorksiteId(value ?? '')}
+                onChange={(value) => {
+                  setCustomerWorksiteId(value ?? '');
+                  setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
+                }}
                 data={worksiteOptions}
                 searchable
                 clearable
                 placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
                 disabled={!customerId || worksitesLoading}
+                error={generateFieldErrors.customerWorksiteId}
               />
             )}
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
@@ -1789,19 +2103,27 @@ export default function SolicitudesIpadPage() {
                 <NativeSelect
                   label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
                   value={driverId ?? ''}
-                  onChange={(event) => setDriverId(event.currentTarget.value || null)}
+                  onChange={(event) => {
+                    setDriverId(event.currentTarget.value || null);
+                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
+                  }}
                   data={[{ value: '', label: 'Selecciona conductor' }, ...employeeOptions]}
                   disabled={isDriverRole}
+                  error={generateFieldErrors.driverId}
                 />
               ) : (
                 <Select
                   label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
                   value={driverId}
-                  onChange={(value) => setDriverId(value)}
+                  onChange={(value) => {
+                    setDriverId(value);
+                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
+                  }}
                   data={employeeOptions}
                   searchable
                   clearable
                   disabled={isDriverRole}
+                  error={generateFieldErrors.driverId}
                 />
               )
             )}
@@ -1860,13 +2182,13 @@ export default function SolicitudesIpadPage() {
                 : 'Devolución'}
             </Text>
           </Paper>
-          <Text c="dimmed">Busca y agrega; la tabla se llena abajo.</Text>
+          <Text c="dimmed">Agregar los equipos y su origen.</Text>
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Dueño/a', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
                   value={sourceOwnerWarehouseId ?? ''}
                   onChange={(event) => setSourceOwnerWarehouseId(event.currentTarget.value || null)}
                   data={[{ value: '', label: 'Selecciona dueño/a' }, ...ownerWarehouseOptions]}
@@ -1874,7 +2196,7 @@ export default function SolicitudesIpadPage() {
                 />
               ) : (
                 <Select
-                  label={helpLabel('Dueño/a', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
                   value={sourceOwnerWarehouseId}
                   onChange={(value) => setSourceOwnerWarehouseId(value)}
                   data={ownerWarehouseOptions}
@@ -1911,8 +2233,8 @@ export default function SolicitudesIpadPage() {
                 />
               )
             )}
-            {useManualWarehouseCapture ? null : (
-              <Button onClick={loadInventory} loading={loadingInventory}>
+            {useManualWarehouseCapture || sourceMode === 'on-site' ? null : (
+              <Button onClick={() => void loadInventory()} loading={loadingInventory}>
                 Cargar items
               </Button>
             )}
@@ -1920,20 +2242,29 @@ export default function SolicitudesIpadPage() {
 
           {useManualWarehouseCapture ? (
             <Stack mt="md" gap="sm">
-              <Text size="xs" c="dimmed">
-                Catálogo base cargado desde bodega principal ({principalTags.length} tags).
-              </Text>
               <Group align="flex-end" wrap="wrap">
                 <Autocomplete
                   label="Item/s"
                   placeholder={loadingPrincipalTags ? 'Cargando items...' : 'Selecciona o escribe el item'}
-                  data={principalTags}
+                  data={alternateTagCatalog.map((entry) => entry.label)}
                   value={freeTagInput}
-                  onChange={(value) => setFreeTagInput(value)}
+                  onChange={(value) => {
+                    setFreeTagInput(value);
+                    setError(null);
+                  }}
                   disabled={loadingPrincipalTags}
                   w={isMobile ? '100%' : 320}
                 />
-                {freeTagCatalogMatch?.type !== 'serial' ? (
+                {isAlternateOwnerMode && alternateTagMatch?.type === 'serial' ? (
+                  <NumberInput
+                    label="N° interno"
+                    min={1}
+                    value={freeInternalNumber}
+                    onChange={(value) => setFreeInternalNumber(typeof value === 'number' ? value : '')}
+                    w={isMobile ? '100%' : 140}
+                  />
+                ) : null}
+                {alternateTagMatch?.type !== 'serial' ? (
                   <NumberInput
                     label="Cantidad"
                     min={1}
@@ -1941,11 +2272,7 @@ export default function SolicitudesIpadPage() {
                     onChange={(value) => setFreeQtyInput(typeof value === 'number' ? value : '')}
                     w={isMobile ? '100%' : 140}
                   />
-                ) : (
-                  <Text size="sm" c="dimmed" mt={30}>
-                    Equipo único: cantidad fija 1
-                  </Text>
-                )}
+                ) : null}
                 <Button onClick={addFreeItem}>Agregar item</Button>
               </Group>
             </Stack>
@@ -1953,7 +2280,62 @@ export default function SolicitudesIpadPage() {
 
           <Divider my="md" />
 
-          {!isMobile && !useManualWarehouseCapture ? (
+          {!useManualWarehouseCapture && sourceMode === 'on-site' ? (
+            <Stack gap="md">
+              <Select
+                label={helpLabel('Selecciona el item', 'Lista de equipos disponibles en la obra seleccionada.')}
+                placeholder={onSiteItemOptions.length ? 'Busca y selecciona' : 'Sin items en la obra'}
+                searchable
+                clearable
+                renderOption={({ option }) => {
+                  const owner = onSiteOwnerByValue.get(option.value);
+                  return (
+                    <Group justify="space-between" wrap="nowrap" w="100%">
+                      <Text size="sm" style={{ minWidth: 0, flex: 1 }}>
+                        {option.label}
+                      </Text>
+                      <Badge size="xs" variant="light" color={ownerColorById(owner?.ownerId)}>
+                        {owner?.ownerName ?? 'Sin dueño/a'}
+                      </Badge>
+                    </Group>
+                  );
+                }}
+                value={onSiteItemSelect}
+                onChange={(value) => {
+                  if (!value) {
+                    setOnSiteItemSelect(null);
+                    return;
+                  }
+                  if (value.startsWith('serial:')) {
+                    const assetId = value.slice('serial:'.length);
+                    const foundSerial = availableSerialItems.find((item) => item.assetId === assetId);
+                    if (foundSerial) {
+                      const added = addSerialItem(foundSerial);
+                      if (added) {
+                        setItemsAddedNotice(`${buildSerialDisplayName(foundSerial)} agregado a la lista.`);
+                      }
+                    }
+                    setOnSiteItemSelect(null);
+                    return;
+                  }
+                  if (value.startsWith('bulk:')) {
+                    const bulkKey = value.slice('bulk:'.length);
+                    const foundBulk = availableBulkItems.find((item) => buildBulkKey(item) === bulkKey);
+                    if (foundBulk) {
+                      const added = addBulkItem(foundBulk);
+                      if (added) {
+                        setItemsAddedNotice(`${foundBulk.skuName ?? 'Item'} agregado a la lista.`);
+                      }
+                    }
+                    setOnSiteItemSelect(null);
+                    return;
+                  }
+                  setOnSiteItemSelect(value);
+                }}
+                data={onSiteItemOptions}
+              />
+            </Stack>
+          ) : !isMobile && !useManualWarehouseCapture ? (
             <Stack gap="md">
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Select
@@ -2000,11 +2382,7 @@ export default function SolicitudesIpadPage() {
                 />
               </SimpleGrid>
             </Stack>
-          ) : useManualWarehouseCapture ? (
-            <Text size="sm" c="dimmed">
-              Agrega items por descripción.
-            </Text>
-          ) : (
+          ) : useManualWarehouseCapture ? null : (
             <Text size="sm" c="dimmed">
               Pulsa "Cargar items" para abrir el selector de items.
             </Text>
@@ -2012,13 +2390,16 @@ export default function SolicitudesIpadPage() {
           <Divider my="md" />
 
           <Title order={4}>Seleccionados</Title>
-          {!isMobile ? (
+          {selectedItems.length === 0 ? (
+            <Text size="sm" c="dimmed" mt="md">
+              No hay equipos agregados
+            </Text>
+          ) : (
             <Table striped highlightOnHover mt="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Item</Table.Th>
-                  <Table.Th>Cantidad</Table.Th>
-                  <Table.Th></Table.Th>
+                  <Table.Th>Desc.</Table.Th>
+                  <Table.Th style={{ width: 120, textAlign: 'center' }}>Cantidad</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -2026,16 +2407,6 @@ export default function SolicitudesIpadPage() {
                   <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
                     <Table.Td>
                       <Text fw={600}>{item.name}</Text>
-                      <Badge
-                        size="xs"
-                        mt={4}
-                        variant="light"
-                        color={ownerColorById(item.ownerWarehouseId)}
-                      >
-                        {item.ownerWarehouseId
-                          ? warehouses.find((warehouse) => warehouse.id === item.ownerWarehouseId)?.name ?? 'Sin dueño/a'
-                          : 'Sin dueño/a'}
-                      </Badge>
                       {item.serial && (
                         <Text size="xs" c="dimmed">
                           {item.serial}
@@ -2067,9 +2438,7 @@ export default function SolicitudesIpadPage() {
                           onChange={(value) => resolveFreeItemToSku(index, value)}
                         />
                       ) : null}
-                    </Table.Td>
-                    <Table.Td>
-                      <Button variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
                         Quitar
                       </Button>
                     </Table.Td>
@@ -2077,60 +2446,6 @@ export default function SolicitudesIpadPage() {
                 ))}
               </Table.Tbody>
             </Table>
-          ) : (
-            <Stack mt="md" gap="sm">
-              {selectedItems.map((item, index) => (
-                <Paper
-                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
-                  withBorder
-                  radius="md"
-                  p="sm"
-                >
-                  <Stack gap="xs">
-                    <div>
-                      <Text fw={600}>{item.name}</Text>
-                      <Badge size="xs" mt={4} variant="light" color={ownerColorById(item.ownerWarehouseId)}>
-                        {item.ownerWarehouseId
-                          ? warehouses.find((warehouse) => warehouse.id === item.ownerWarehouseId)?.name ?? 'Sin dueño/a'
-                          : 'Sin dueño/a'}
-                      </Badge>
-                      {item.serial && (
-                        <Text size="xs" c="dimmed">
-                          {item.serial}
-                        </Text>
-                      )}
-                    </div>
-                    {item.type === 'bulk' || item.type === 'free' ? (
-                      <NumberInput
-                        label="Cantidad"
-                        min={0}
-                        value={item.quantity ?? 1}
-                        onChange={(value) =>
-                          updateSelected(index, {
-                            quantity: typeof value === 'number' ? value : 1
-                          })
-                        }
-                      />
-                    ) : (
-                      <Text size="sm">Cantidad: 1</Text>
-                    )}
-                    {canResolveInline && item.type === 'free' ? (
-                      <Select
-                        label="Resolver a SKU"
-                        placeholder="Selecciona SKU"
-                        searchable
-                        clearable
-                        data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
-                        onChange={(value) => resolveFreeItemToSku(index, value)}
-                      />
-                    ) : null}
-                    <Button variant="light" color="red" onClick={() => removeSelected(index)}>
-                      Quitar
-                    </Button>
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
           )}
 
           <Group mt="md" justify="space-between" className="mobile-actions">
@@ -2188,15 +2503,21 @@ export default function SolicitudesIpadPage() {
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
-              <Button
-                variant="light"
-                onClick={() => {
-                  setSignatureDraft(receivedSignature);
-                  setSignatureModalOpen(true);
-                }}
-              >
-                Firmar
-              </Button>
+              {editingRequestId ? (
+                <Text size="xs" c="dimmed">
+                  Firma bloqueada en edición
+                </Text>
+              ) : (
+                <Button
+                  variant="light"
+                  onClick={() => {
+                    setSignatureDraft(receivedSignature);
+                    setSignatureModalOpen(true);
+                  }}
+                >
+                  Firmar
+                </Button>
+              )}
             </Group>
             {receivedSignature ? (
               <img
@@ -2289,7 +2610,7 @@ export default function SolicitudesIpadPage() {
         centered
       >
         <Stack gap="md">
-          <Text size="sm">
+          <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
             {adjustWarningMessage ??
               'Primero debes hacer ajuste de bodega para hacer movimientos.'}
           </Text>
@@ -2316,47 +2637,101 @@ export default function SolicitudesIpadPage() {
 
       <Modal
         opened={resolveModalOpen}
-        onClose={() => {
-          if (resolvingApprove) return;
-          setResolveModalOpen(false);
-          setResolveDocument(null);
-          setResolveSkuByIndex({});
-        }}
+        onClose={closeResolveModal}
         title="Resolver tags antes de aprobar"
         centered
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Esta solicitud tiene tags sin ID. Asigna un SKU a cada uno para continuar.
+            Bulk se resuelve por SKU. Serial se resuelve por equipo específico (# interno).
           </Text>
           {(resolveDocument?.items ?? [])
             .map((item, index) => ({ item, index }))
-            .filter(
-              ({ item }) =>
-                !item.skuId &&
-                !item.assetId &&
-                Boolean(item.requestedTag?.trim()),
-            )
+            .filter(({ item }) => isResolvePendingItem(item))
             .map(({ item, index }) => (
               <Paper key={`${item.requestedTag}-${index}`} withBorder p="sm" radius="md">
                 <Stack gap={6}>
-                  <Text fw={600}>{item.requestedTag}</Text>
+                  <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
                   <Text size="xs" c="dimmed">
                     Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
+                  <Text size="xs" c="dimmed">
+                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                  </Text>
                   <Select
-                    label="SKU destino"
+                    label="Equipo"
                     placeholder="Selecciona SKU"
                     searchable
                     data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
                     value={resolveSkuByIndex[index] ?? null}
-                    onChange={(value) =>
+                    onChange={(value) => {
                       setResolveSkuByIndex((prev) => ({
                         ...prev,
                         [index]: value ?? '',
-                      }))
-                    }
+                      }));
+                      setResolveAssetByIndex((prev) => ({
+                        ...prev,
+                        [index]: '',
+                      }));
+                    }}
                   />
+                  {(() => {
+                    const selectedSkuId = resolveSkuByIndex[index];
+                    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
+                    if (selectedSku?.controlType !== 'SERIAL') return null;
+                    const ownerWarehouseId = item.condition?.trim() ?? '';
+                    const inventory = resolveInventoryByOwner[ownerWarehouseId]?.serial ?? [];
+                    const expectedInternal = parseInternalNumberFromTag(item.requestedTag);
+                    const serialOptions = inventory
+                      .filter(
+                        (serial) =>
+                          serial.skuId === selectedSku.id &&
+                          (expectedInternal == null || serial.internalNumber === expectedInternal),
+                      )
+                      .map((serial) => ({
+                        value: serial.assetId,
+                        label: buildSerialDisplayName(serial),
+                      }));
+                    const hasExpected = expectedInternal == null
+                      ? false
+                      : inventory.some(
+                          (serial) =>
+                            serial.skuId === selectedSku.id &&
+                            serial.internalNumber === expectedInternal,
+                        );
+                    return (
+                      <Stack gap={6}>
+                        <Select
+                          label="Equipo serial"
+                          placeholder="Selecciona el equipo"
+                          searchable
+                          data={serialOptions}
+                          value={resolveAssetByIndex[index] ?? null}
+                          nothingFoundMessage="No hay equipos de este SKU en esa bodega"
+                          onChange={(value) =>
+                            setResolveAssetByIndex((prev) => ({
+                              ...prev,
+                              [index]: value ?? '',
+                            }))
+                          }
+                        />
+                        {expectedInternal != null && !hasExpected ? (
+                          <Text size="xs" c="orange.7">
+                            El tag pide #{expectedInternal}, pero no existe en esa bodega.
+                          </Text>
+                        ) : null}
+                        {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
+                          <Button
+                            size="xs"
+                            variant="light"
+                            onClick={() => openCreateSerialForRow(index)}
+                          >
+                            Crear equipo faltante
+                          </Button>
+                        ) : null}
+                      </Stack>
+                    );
+                  })()}
                 </Stack>
               </Paper>
             ))}
@@ -2364,11 +2739,7 @@ export default function SolicitudesIpadPage() {
           <Group justify="flex-end" className="mobile-actions">
             <Button
               variant="default"
-              onClick={() => {
-                setResolveModalOpen(false);
-                setResolveDocument(null);
-                setResolveSkuByIndex({});
-              }}
+              onClick={closeResolveModal}
               disabled={resolvingApprove}
             >
               Cancelar
@@ -2381,7 +2752,7 @@ export default function SolicitudesIpadPage() {
       </Modal>
 
       <Modal
-        opened={itemsModalOpen}
+        opened={itemsModalOpen && sourceMode === 'warehouse'}
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
         centered
@@ -2453,6 +2824,89 @@ export default function SolicitudesIpadPage() {
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={() => setItemsModalOpen(false)}>
               Cerrar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={createSerialOpen}
+        onClose={() => {
+          if (createSerialSaving) return;
+          setCreateSerialOpen(false);
+          setCreateSerialIndex(null);
+          setCreateSerialError(null);
+          setCreateSerialBrand('');
+          setCreateSerialModel('');
+          setCreateSerialYear('');
+          setCreateSerialFuel(null);
+        }}
+        title="Crear equipo serial faltante"
+        centered
+      >
+        <Stack gap="sm">
+          {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
+          <TextInput
+            label="Serial / motor"
+            value={createSerialSerialOrEngine}
+            onChange={(event) => setCreateSerialSerialOrEngine(event.currentTarget.value)}
+            required
+          />
+          <NumberInput
+            label="Número interno"
+            value={createSerialInternalNumber}
+            onChange={(value) =>
+              setCreateSerialInternalNumber(typeof value === 'number' ? value : '')
+            }
+            min={1}
+            required
+          />
+          <Group grow>
+            <TextInput
+              label="Marca (opcional)"
+              value={createSerialBrand}
+              onChange={(event) => setCreateSerialBrand(event.currentTarget.value)}
+            />
+            <TextInput
+              label="Modelo (opcional)"
+              value={createSerialModel}
+              onChange={(event) => setCreateSerialModel(event.currentTarget.value)}
+            />
+          </Group>
+          <Group grow>
+            <NumberInput
+              label="Año (opcional)"
+              value={createSerialYear}
+              onChange={(value) => setCreateSerialYear(typeof value === 'number' ? value : '')}
+              min={1900}
+              max={2100}
+            />
+            <Select
+              label="Combustible (opcional)"
+              data={FUEL_OPTIONS}
+              value={createSerialFuel}
+              onChange={(value) => setCreateSerialFuel(value)}
+              clearable
+            />
+          </Group>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                if (createSerialSaving) return;
+                setCreateSerialOpen(false);
+                setCreateSerialIndex(null);
+                setCreateSerialError(null);
+                setCreateSerialBrand('');
+                setCreateSerialModel('');
+                setCreateSerialYear('');
+                setCreateSerialFuel(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
+              Crear y usar
             </Button>
           </Group>
         </Stack>

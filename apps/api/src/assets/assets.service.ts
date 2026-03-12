@@ -55,26 +55,18 @@ export class AssetsService {
         year: true,
         fuel: true,
         skuId: true,
-        assetFamilyId: true,
         internalNumber: true,
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
         active: true,
         createdAt: true,
-        assetFamily: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
         sku: {
           select: {
             id: true,
             name: true,
             imageUrl: true,
-            assetFamily: { select: { controlType: true } },
+            assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         },
         warehouseOwner: {
@@ -131,25 +123,17 @@ export class AssetsService {
         year: true,
         fuel: true,
         skuId: true,
-        assetFamilyId: true,
         internalNumber: true,
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
         active: true,
         createdAt: true,
-        assetFamily: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
         sku: {
           select: {
             id: true,
             name: true,
-            assetFamily: { select: { controlType: true } },
+            assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         },
         warehouseOwner: {
@@ -266,7 +250,6 @@ export class AssetsService {
         const createdAsset = await tx.asset.create({
           data: {
             skuId: payload.skuId,
-            assetFamilyId: sku.assetFamilyId,
             publicCode: this.buildAssetPublicCode(
               sku.assetFamily.code,
               payload.warehouseOwnerId,

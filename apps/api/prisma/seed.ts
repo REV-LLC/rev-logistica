@@ -78,7 +78,6 @@ async function main() {
     (await prisma.sku.create({
       data: {
         name: 'Default SKU',
-        category: 'GENERAL',
         assetFamilyId: assetFamily.id,
         active: true,
       },
@@ -91,7 +90,6 @@ async function main() {
         serialOrEngine: 'SERIAL-001',
         publicCode: 'DEFAULT-MAIN-0001',
         skuId: sku.id,
-        assetFamilyId: assetFamily.id,
         internalNumber: 1,
         warehouseOwnerId: warehouse.id,
         warehouseCurrentId: warehouse.id,

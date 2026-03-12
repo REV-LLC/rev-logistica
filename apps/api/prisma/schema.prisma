@@ -23,6 +23,11 @@ enum SkuControlType {
   SERIAL
 }
 
+enum ChargeType {
+  DAY
+  HOUR
+}
+
 enum EmployeeRole {
   DRIVER
   HEAVY_MACHINERY_OPERATOR
@@ -158,19 +163,19 @@ model AssetFamily {
   createdAt DateTime @default(now())
 
   skus   Sku[]
-  assets Asset[]
   internalCounters AssetInternalCounter[]
 }
 
 model Sku {
   id          String         @id @default(uuid())
   name        String
-  category    String
   imageUrl    String?
   imageFileObjectId String?
   assetFamilyId String
   price       Decimal?
   subrentalPrice Decimal?
+  chargeType  ChargeType     @default(DAY)
+  minimumChargeHours Decimal?
   areaM2      Decimal?
   unitWeight  Decimal?
   active      Boolean        @default(true)
@@ -196,7 +201,6 @@ model Asset {
   year              Int?
   fuel              String?
   imageFileObjectId String?
-  assetFamilyId     String
   internalNumber    Int
   weight            Decimal?
   warehouseOwnerId  String
@@ -208,14 +212,12 @@ model Asset {
   warehouseOwner   Warehouse @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
   warehouseCurrent Warehouse? @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
-  assetFamily      AssetFamily @relation(fields: [assetFamilyId], references: [id])
 
   documentItems DocumentItem[]
   ledger        StockLedger[]
   taskAssets    TaskAsset[]
 
-  @@index([assetFamilyId])
-  @@unique([warehouseOwnerId, assetFamilyId, internalNumber])
+  @@index([skuId])
 }
 
 model Task {

@@ -7,9 +7,8 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { DocumentType, MovementType, Prisma, SkuControlType } from '@prisma/client';
+import { ChargeType, DocumentType, MovementType, Prisma, SkuControlType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SKU_CATEGORIES } from '../skus/skus.constants';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
@@ -288,30 +287,77 @@ export class InventoryService {
         throw new BadRequestException('serialOrEngine is required');
       }
 
-      const counter = await tx.assetInternalCounter.upsert({
-        where: {
-          ownerWarehouseId_assetFamilyId: {
+      const requestedInternalNumber =
+        payload.asset.internalNumber != null ? Number(payload.asset.internalNumber) : null;
+
+      let internalNumber: number;
+      if (requestedInternalNumber != null) {
+        if (!Number.isInteger(requestedInternalNumber) || requestedInternalNumber <= 0) {
+          throw new BadRequestException('internalNumber must be a positive integer');
+        }
+
+        const existingAsset = await tx.asset.findFirst({
+          where: {
+            warehouseOwnerId: payload.ownerWarehouseId,
+            sku: { assetFamilyId: assetFamily.id },
+            internalNumber: requestedInternalNumber,
+          },
+          select: { id: true },
+        });
+        if (existingAsset) {
+          throw new BadRequestException('Consecutivo interno ya existe, intenta nuevamente');
+        }
+
+        const counter = await tx.assetInternalCounter.findUnique({
+          where: {
+            ownerWarehouseId_assetFamilyId: {
+              ownerWarehouseId: payload.ownerWarehouseId,
+              assetFamilyId: assetFamily.id,
+            },
+          },
+          select: { id: true, nextNumber: true },
+        });
+
+        if (!counter) {
+          await tx.assetInternalCounter.create({
+            data: {
+              ownerWarehouseId: payload.ownerWarehouseId,
+              assetFamilyId: assetFamily.id,
+              nextNumber: requestedInternalNumber + 1,
+            },
+          });
+        } else if (counter.nextNumber <= requestedInternalNumber) {
+          await tx.assetInternalCounter.update({
+            where: { id: counter.id },
+            data: { nextNumber: requestedInternalNumber + 1 },
+          });
+        }
+
+        internalNumber = requestedInternalNumber;
+      } else {
+        const counter = await tx.assetInternalCounter.upsert({
+          where: {
+            ownerWarehouseId_assetFamilyId: {
+              ownerWarehouseId: payload.ownerWarehouseId,
+              assetFamilyId: assetFamily.id,
+            },
+          },
+          create: {
             ownerWarehouseId: payload.ownerWarehouseId,
             assetFamilyId: assetFamily.id,
+            nextNumber: 2,
           },
-        },
-        create: {
-          ownerWarehouseId: payload.ownerWarehouseId,
-          assetFamilyId: assetFamily.id,
-          nextNumber: 2,
-        },
-        update: {
-          nextNumber: { increment: 1 },
-        },
-        select: { nextNumber: true },
-      });
-
-      const internalNumber = counter.nextNumber - 1;
+          update: {
+            nextNumber: { increment: 1 },
+          },
+          select: { nextNumber: true },
+        });
+        internalNumber = counter.nextNumber - 1;
+      }
 
       const asset = await tx.asset.create({
         data: {
           skuId: sku.id,
-          assetFamilyId: assetFamily.id,
           publicCode: this.buildAssetPublicCode(
             assetFamily.code,
             payload.ownerWarehouseId,
@@ -332,7 +378,6 @@ export class InventoryService {
         select: {
           id: true,
           internalNumber: true,
-          assetFamilyId: true,
           skuId: true,
           warehouseOwnerId: true,
           warehouseCurrentId: true,
@@ -1226,9 +1271,6 @@ export class InventoryService {
             imageFileObjectId: true,
             internalNumber: true,
             weight: true,
-            assetFamily: {
-              select: { code: true, name: true },
-            },
           },
         })
       : [];
@@ -1246,12 +1288,13 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
-            category: true,
             imageUrl: true,
             imageFileObjectId: true,
-            assetFamilyId: true,
+            assetFamily: { select: { id: true, code: true, name: true } },
             price: true,
             subrentalPrice: true,
+            chargeType: true,
+            minimumChargeHours: true,
             areaM2: true,
             unitWeight: true,
             active: true,
@@ -1289,12 +1332,14 @@ export class InventoryService {
           id: sku?.id ?? row.skuId,
           skuName: sku?.name ?? null,
           name: sku?.name ?? null,
-          category: sku?.category ?? null,
+          category: sku?.assetFamily?.name ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
-          assetFamilyId: sku?.assetFamilyId ?? null,
+          assetFamilyId: sku?.assetFamily?.id ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          chargeType: sku?.chargeType ?? null,
+          minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           active: sku?.active ?? null,
@@ -1314,16 +1359,19 @@ export class InventoryService {
 
         return {
           assetId: row.assetId,
+          skuId: asset?.skuId ?? null,
           ownerWarehouseId: asset?.warehouseOwnerId ?? null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,
+          chargeType: sku?.chargeType ?? null,
+          minimumChargeHours: sku?.minimumChargeHours ?? null,
           imageUrl: sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
-          assetFamily: asset?.assetFamily ?? null,
+          assetFamily: sku?.assetFamily ?? null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId },
           assetImageFileObjectId,
@@ -1498,9 +1546,6 @@ export class InventoryService {
             imageFileObjectId: true,
             internalNumber: true,
             weight: true,
-            assetFamily: {
-              select: { code: true, name: true },
-            },
           },
         })
       : [];
@@ -1518,14 +1563,15 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
-            category: true,
             imageUrl: true,
             imageFileObjectId: true,
             price: true,
             subrentalPrice: true,
+            chargeType: true,
+            minimumChargeHours: true,
             areaM2: true,
             unitWeight: true,
-            assetFamily: { select: { controlType: true } },
+            assetFamily: { select: { code: true, name: true, controlType: true } },
           },
         })
       : [];
@@ -1557,12 +1603,14 @@ export class InventoryService {
           ownerWarehouseId: row.ownerWarehouseId,
           ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId.toLowerCase()) ?? null,
           skuName: sku?.name ?? null,
-          category: sku?.category ?? null,
+          category: sku?.assetFamily?.name ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          chargeType: sku?.chargeType ?? null,
+          minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           storageLocation: { warehouseId: null },
@@ -1581,16 +1629,19 @@ export class InventoryService {
 
         return {
           assetId: row.assetId,
+          skuId: asset?.skuId ?? null,
           ownerWarehouseId: asset?.warehouseOwnerId ?? null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,
+          chargeType: sku?.chargeType ?? null,
+          minimumChargeHours: sku?.minimumChargeHours ?? null,
           imageUrl: sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
-          assetFamily: asset?.assetFamily ?? null,
+          assetFamily: sku?.assetFamily ? { code: sku.assetFamily.code, name: sku.assetFamily.name } : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },
           assetImageFileObjectId,
@@ -1830,6 +1881,8 @@ export class InventoryService {
             imageFileObjectId: true,
             price: true,
             subrentalPrice: true,
+            chargeType: true,
+            minimumChargeHours: true,
             areaM2: true,
             unitWeight: true,
           },
@@ -1846,7 +1899,7 @@ export class InventoryService {
             description: true,
             internalNumber: true,
             weight: true,
-            assetFamily: { select: { code: true, name: true } },
+            sku: { select: { assetFamily: { select: { code: true, name: true } } } },
           },
         })
       : [];
@@ -1867,6 +1920,8 @@ export class InventoryService {
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          chargeType: sku?.chargeType ?? null,
+          minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           initialQuantity,
@@ -1890,7 +1945,7 @@ export class InventoryService {
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
           internalNumber: asset?.internalNumber ?? null,
-          assetFamily: asset?.assetFamily ?? null,
+          assetFamily: asset?.sku?.assetFamily ?? null,
           weight: asset?.weight ?? null,
           initialQuantity,
           onSiteQuantity,
@@ -2033,10 +2088,11 @@ export class InventoryService {
     input: {
       id?: string;
       name?: string;
-      category?: string;
       unitWeight?: number;
       price?: number;
       subrentalPrice?: number;
+      chargeType?: ChargeType;
+      minimumChargeHours?: number;
       areaM2?: number;
     },
     assetFamilyId: string,
@@ -2060,13 +2116,8 @@ export class InventoryService {
     if (!name) {
       throw new BadRequestException('Sku name is required');
     }
-    const category = input.category?.trim().toUpperCase();
-    if (!category) {
-      throw new BadRequestException('Sku category is required');
-    }
-    if (!SKU_CATEGORIES.includes(category as (typeof SKU_CATEGORIES)[number])) {
-      throw new BadRequestException('Sku category is invalid');
-    }
+
+    const chargeConfig = this.resolveChargeConfig(input.chargeType, input.minimumChargeHours);
 
     return tx.sku.upsert({
       where: {
@@ -2078,22 +2129,41 @@ export class InventoryService {
       create: {
         name,
         assetFamilyId,
-        category,
         price: input.price ?? null,
         subrentalPrice: input.subrentalPrice ?? null,
+        chargeType: chargeConfig.chargeType,
+        minimumChargeHours: chargeConfig.minimumChargeHours,
         areaM2: input.areaM2 ?? null,
         unitWeight: input.unitWeight ?? null,
         active: true,
       },
       update: {
-        category,
         price: input.price ?? undefined,
         subrentalPrice: input.subrentalPrice ?? undefined,
+        chargeType: chargeConfig.chargeType,
+        minimumChargeHours: chargeConfig.minimumChargeHours,
         areaM2: input.areaM2 ?? undefined,
         unitWeight: input.unitWeight ?? undefined,
       },
       select: { id: true },
     });
+  }
+
+  private resolveChargeConfig(chargeType?: ChargeType, minimumChargeHours?: number) {
+    const resolvedChargeType = chargeType ?? ChargeType.DAY;
+    if (resolvedChargeType === ChargeType.HOUR) {
+      if (minimumChargeHours == null || minimumChargeHours <= 0) {
+        throw new BadRequestException('minimumChargeHours is required when chargeType is HOUR');
+      }
+      return {
+        chargeType: resolvedChargeType,
+        minimumChargeHours,
+      };
+    }
+    return {
+      chargeType: resolvedChargeType,
+      minimumChargeHours: null,
+    };
   }
 
   private parseMonthStart(month: string) {
@@ -2216,7 +2286,6 @@ export class InventoryService {
             const asset = await tx.asset.create({
               data: {
                 skuId: item.skuId,
-                assetFamilyId: sku.assetFamilyId!,
                 publicCode: this.buildAssetPublicCode(
                   sku.assetFamily.code,
                   supplierWarehouse.id,

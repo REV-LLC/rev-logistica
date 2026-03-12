@@ -1,15 +1,6 @@
-import {
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  ValidateNested,
-} from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SKU_CATEGORIES } from '../../skus/skus.constants';
+import { ChargeType } from '@prisma/client';
 
 export class SerializedAssetFamilyInput {
   @IsOptional()
@@ -35,17 +26,24 @@ export class SerializedSkuInput {
   name?: string;
 
   @IsOptional()
-  @IsString()
-  @IsIn(SKU_CATEGORIES)
-  category?: string;
-
-  @IsOptional()
   @IsNumber()
   unitWeight?: number;
 
   @IsOptional()
   @IsNumber()
   subrentalPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @IsOptional()
+  @IsEnum(ChargeType)
+  chargeType?: ChargeType;
+
+  @IsOptional()
+  @IsNumber()
+  minimumChargeHours?: number;
 }
 
 export class SerializedAssetInput {
@@ -79,6 +77,10 @@ export class SerializedAssetInput {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  internalNumber?: number;
 }
 
 export class CreateSerializedAssetDto {

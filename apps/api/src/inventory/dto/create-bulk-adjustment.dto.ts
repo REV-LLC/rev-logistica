@@ -1,5 +1,5 @@
 import {
-  IsIn,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -8,7 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SKU_CATEGORIES } from '../../skus/skus.constants';
+import { ChargeType } from '@prisma/client';
 
 export class BulkAssetFamilyInput {
   @IsOptional()
@@ -34,11 +34,6 @@ export class BulkSkuInput {
   name?: string;
 
   @IsOptional()
-  @IsString()
-  @IsIn(SKU_CATEGORIES)
-  category?: string;
-
-  @IsOptional()
   @IsNumber()
   unitWeight?: number;
 
@@ -49,6 +44,14 @@ export class BulkSkuInput {
   @IsOptional()
   @IsNumber()
   subrentalPrice?: number;
+
+  @IsOptional()
+  @IsEnum(ChargeType)
+  chargeType?: ChargeType;
+
+  @IsOptional()
+  @IsNumber()
+  minimumChargeHours?: number;
 
   @IsOptional()
   @IsNumber()

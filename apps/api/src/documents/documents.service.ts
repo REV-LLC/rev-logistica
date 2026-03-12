@@ -387,7 +387,7 @@ export class DocumentsService {
     return mode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE';
   }
 
-  private mapDocumentItemsToMovementItems(
+  private async mapDocumentItemsToMovementItems(
     items: Array<{
       skuId: string | null;
       assetId: string | null;
@@ -400,7 +400,22 @@ export class DocumentsService {
       throw new BadRequestException('El documento no tiene items para ejecutar');
     }
 
-    return items.map((item, index) => {
+    const skuIds = [...new Set(items.map((item) => item.skuId).filter((value): value is string => Boolean(value)))];
+    const skuControlTypeById = new Map<string, string>();
+    if (skuIds.length) {
+      const skus = await this.prisma.sku.findMany({
+        where: { id: { in: skuIds } },
+        select: {
+          id: true,
+          assetFamily: { select: { controlType: true } },
+        },
+      });
+      skus.forEach((sku) => {
+        skuControlTypeById.set(sku.id, sku.assetFamily.controlType);
+      });
+    }
+
+    return Promise.all(items.map(async (item, index) => {
       const ownerWarehouseId = item.condition?.trim();
       if (!ownerWarehouseId) {
         throw new BadRequestException(
@@ -419,6 +434,57 @@ export class DocumentsService {
         throw new BadRequestException(`Item ${index + 1} inválido: falta sku/asset`);
       }
       if (item.skuId) {
+        const controlType = skuControlTypeById.get(item.skuId) ?? 'BULK';
+        if (controlType === 'SERIAL') {
+          const internalFromTag = (() => {
+            const tag = item.requestedTag?.trim() ?? '';
+            const match = tag.match(/#\s*(\d+)/);
+            if (!match) return null;
+            const parsed = Number(match[1]);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+          })();
+
+          const assets = await this.prisma.asset.findMany({
+            where: {
+              skuId: item.skuId,
+              warehouseOwnerId: ownerWarehouseId,
+              warehouseCurrentId: ownerWarehouseId,
+              active: true,
+            },
+            select: {
+              id: true,
+              internalNumber: true,
+              serialOrEngine: true,
+            },
+            orderBy: { internalNumber: 'asc' },
+          });
+
+          if (!assets.length) {
+            throw new BadRequestException(
+              `Item ${index + 1} (${item.requestedTag ?? 'serial'}) sin equipo disponible en bodega`,
+            );
+          }
+
+          const availableNumbers = assets.map((asset) => `#${asset.internalNumber}`).join(', ');
+          if (internalFromTag == null) {
+            throw new BadRequestException(
+              `Item ${index + 1} (${item.requestedTag ?? 'serial'}) debe incluir número interno (#). Disponibles: ${availableNumbers}`,
+            );
+          }
+
+          const resolvedAsset = assets.find((asset) => asset.internalNumber === internalFromTag);
+          if (!resolvedAsset) {
+            throw new BadRequestException(
+              `Item ${index + 1} pidió #${internalFromTag}, pero no existe en esa bodega. Disponibles: ${availableNumbers}`,
+            );
+          }
+
+          return {
+            assetId: resolvedAsset.id,
+            ownerWarehouseId,
+          };
+        }
+
         const quantity = Number(item.quantity ?? 0);
         if (!Number.isFinite(quantity) || quantity <= 0) {
           throw new BadRequestException(`Item ${index + 1} inválido: cantidad debe ser > 0`);
@@ -433,7 +499,7 @@ export class DocumentsService {
         assetId: item.assetId as string,
         ownerWarehouseId,
       };
-    });
+    }));
   }
 
   async approveRequestDocument(documentId: string, userId: string) {
@@ -453,7 +519,7 @@ export class DocumentsService {
       throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
     }
 
-    const items = this.mapDocumentItemsToMovementItems(document.items);
+    const items = await this.mapDocumentItemsToMovementItems(document.items);
 
     if (document.type === DocumentType.REMISSION) {
       if (!document.customerWorksiteId) {

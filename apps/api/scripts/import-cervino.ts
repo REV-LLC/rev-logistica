@@ -433,7 +433,6 @@ async function main() {
       const created = await tx.sku.create({
         data: {
           name,
-          category: 'GENERAL',
           assetFamilyId: family.id,
           active: true,
         },

@@ -1,20 +1,16 @@
 import {
+  IsEnum,
   IsBoolean,
-  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
 } from 'class-validator';
-import { SKU_CATEGORIES } from '../skus.constants';
+import { ChargeType } from '@prisma/client';
 
 export class CreateSkuDto {
   @IsString()
   name: string;
-
-  @IsString()
-  @IsIn(SKU_CATEGORIES)
-  category: string;
 
   @IsOptional()
   @IsString()
@@ -34,6 +30,14 @@ export class CreateSkuDto {
   @IsOptional()
   @IsNumber()
   subrentalPrice?: number;
+
+  @IsOptional()
+  @IsEnum(ChargeType)
+  chargeType?: ChargeType;
+
+  @IsOptional()
+  @IsNumber()
+  minimumChargeHours?: number;
 
   @IsOptional()
   @IsNumber()

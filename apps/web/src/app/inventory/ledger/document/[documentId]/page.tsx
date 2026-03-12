@@ -216,7 +216,7 @@ export default function DocumentDetailPage() {
 
   const title = useMemo(() => {
     if (!document) return 'Documento';
-    if (document.consecutive) return `${formatDocType(document.type)} ${document.consecutive}`.trim();
+    if (document.consecutive) return document.consecutive.trim();
     return `${formatDocType(document.type)} ${document.id.slice(0, 8)}`;
   }, [document]);
 

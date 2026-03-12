@@ -3,19 +3,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Badge,
   Button,
   Container,
   Group,
   NumberInput,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconMapPin, IconPencil } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -39,6 +41,23 @@ type AssetResponse = {
 type Warehouse = {
   id: string;
   name: string;
+};
+
+type WarehouseInventoryResponse = {
+  serial?: Array<{
+    assetId: string;
+    imageUrl?: string | null;
+  }>;
+};
+
+type AssetLedgerResponse = {
+  items: Array<{
+    movementType?: string | null;
+    customerWorksite?: {
+      customer?: { name?: string | null } | null;
+      worksite?: { name?: string | null } | null;
+    } | null;
+  }>;
 };
 
 const FUEL_OPTIONS = [
@@ -66,6 +85,8 @@ export default function EditSerializedAssetPage() {
   const [skuImageUrl, setSkuImageUrl] = useState('');
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(null);
   const [active, setActive] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!assetId) return;
@@ -79,6 +100,38 @@ export default function EditSerializedAssetPage() {
           api<AssetResponse>(`/assets/${assetId}`),
           api<Warehouse[]>('/warehouses'),
         ]);
+        let resolvedWorksiteLocation: string | null = null;
+        if (!assetData.warehouseCurrentId) {
+          try {
+            const ledgerData = await api<AssetLedgerResponse>(
+              `/inventory/ledger?assetId=${encodeURIComponent(assetData.id)}&take=20`,
+              { method: 'GET' },
+            );
+            const onSiteRow =
+              ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
+              ledgerData.items.find((entry) => entry.customerWorksite);
+            if (onSiteRow?.customerWorksite) {
+              const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
+              const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
+              resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
+            }
+          } catch {
+            // ignore location lookup errors
+          }
+        }
+        let resolvedImageUrl = assetData.sku?.imageUrl ?? '';
+        if (!resolvedImageUrl && assetData.warehouseOwnerId) {
+          try {
+            const warehouseInventory = await api<WarehouseInventoryResponse>(
+              `/inventory/warehouse/${assetData.warehouseOwnerId}`,
+              { method: 'GET' },
+            );
+            const serialRow = warehouseInventory.serial?.find((row) => row.assetId === assetData.id);
+            resolvedImageUrl = serialRow?.imageUrl ?? '';
+          } catch {
+            // ignore fallback errors
+          }
+        }
         if (!mounted) return;
         setAsset(assetData);
         setWarehouses(warehouseData);
@@ -86,8 +139,9 @@ export default function EditSerializedAssetPage() {
         setModel(assetData.model ?? '');
         setYear(assetData.year ?? '');
         setFuel(assetData.fuel ?? '');
-        setSkuImageUrl(assetData.sku?.imageUrl ?? '');
-        setWarehouseCurrentId(assetData.warehouseCurrentId ?? assetData.warehouseOwnerId);
+        setSkuImageUrl(resolvedImageUrl);
+        setWarehouseCurrentId(assetData.warehouseCurrentId);
+        setWorksiteLocationName(resolvedWorksiteLocation);
         setActive(assetData.active);
       } catch (err) {
         if (!mounted) return;
@@ -118,6 +172,33 @@ export default function EditSerializedAssetPage() {
     const parts = [asset?.sku?.name, brand.trim(), model.trim()].filter(Boolean);
     return parts.length ? parts.join(' ') : '-';
   }, [asset?.sku?.name, brand, model]);
+  const fuelLabel = useMemo(
+    () => ((FUEL_OPTIONS.find((option) => option.value === fuel)?.label ?? fuel) || '-'),
+    [fuel],
+  );
+  const warehouseCurrentName = useMemo(
+    () => warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name ?? '-',
+    [warehouses, warehouseCurrentId],
+  );
+  const locationBadge = useMemo(() => {
+    if (!asset) {
+      return { color: 'gray' as const, label: '-' };
+    }
+    if (!warehouseCurrentId) {
+      return {
+        color: 'red' as const,
+        label: worksiteLocationName ?? 'En obra',
+      };
+    }
+    const currentName =
+      warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name ??
+      asset.warehouseCurrent?.name ??
+      'Bodega';
+    if (warehouseCurrentId === asset.warehouseOwnerId) {
+      return { color: 'blue' as const, label: currentName };
+    }
+    return { color: 'red' as const, label: currentName };
+  }, [asset, warehouseCurrentId, warehouses, worksiteLocationName]);
 
   const handleSave = async () => {
     if (!assetId || !warehouseCurrentId) {
@@ -171,12 +252,33 @@ export default function EditSerializedAssetPage() {
       </ActionIcon>
       <Paper withBorder shadow="sm" p="xl" radius="md">
         <Group justify="space-between" align="flex-start" mb="md" className="mobile-stack">
-          <div>
-            <Title order={2}>Editar Equipo</Title>
-            <Text c="dimmed" size="sm">
-              Solo aplica para equipos seriales.
-            </Text>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flex: 1 }}>
+            <div>
+              <Title order={2}>Ficha de equipo</Title>
+              <Text c="dimmed" size="sm">
+                Información y estado del equipo serial.
+              </Text>
+            </div>
+
+            <Badge
+              variant="light"
+              color={locationBadge.color}
+              radius="xl"
+              leftSection={<IconMapPin size={14} />}
+            >
+              Ubicación: {locationBadge.label}
+            </Badge>
           </div>
+          {asset ? (
+            <ActionIcon
+              variant={editing ? 'filled' : 'light'}
+              color={editing ? 'blue' : 'gray'}
+              aria-label={editing ? 'Cerrar edición' : 'Editar equipo'}
+              onClick={() => setEditing((prev) => !prev)}
+            >
+              <IconPencil size={16} />
+            </ActionIcon>
+          ) : null}
         </Group>
 
         {loading ? (
@@ -197,69 +299,46 @@ export default function EditSerializedAssetPage() {
 
         {asset ? (
           <Stack gap="md">
-            <TextInput label="Serial/Motor" value={asset.serialOrEngine} readOnly />
-            <Group grow className="mobile-stack">
-              <TextInput label="Tipo" value={asset.assetFamily?.name ?? '-'} readOnly />
-              <TextInput label="Modelo SKU" value={asset.sku?.name ?? '-'} readOnly />
-            </Group>
-            <TextInput label="Descripción automática" value={autoDescription} readOnly />
-            <TextInput
-              label="URL imagen (modelo)"
-              placeholder="https://..."
-              value={skuImageUrl}
-              onChange={(event) => setSkuImageUrl(event.currentTarget.value)}
-            />
+            <Paper withBorder radius="md" p={0} style={{ overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: 240,
+                  background: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderBottom: '1px solid var(--mantine-color-gray-3)',
+                }}
+              >
+                {skuImageUrl?.trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={skuImageUrl}
+                    alt={autoDescription}
+                    style={{ width: '30%', height: '100%', objectFit: 'contain', background: '#fff' }}
+                  />
+                ) : (
+                  <Text c="dimmed">Sin imagen</Text>
+                )}
 
-            <Group grow className="mobile-stack">
-              <TextInput
-                label="Marca"
-                value={brand}
-                onChange={(event) => setBrand(event.currentTarget.value)}
-              />
-              <TextInput
-                label="Modelo"
-                value={model}
-                onChange={(event) => setModel(event.currentTarget.value)}
-              />
-            </Group>
-
-            <Group grow className="mobile-stack">
-              <NumberInput
-                label="Año"
-                value={year}
-                onChange={(value) => setYear(typeof value === 'number' ? value : '')}
-                min={1900}
-                max={2100}
-              />
-              <Select
-                label="Combustible"
-                data={FUEL_OPTIONS}
-                value={fuel}
-                onChange={(value) => setFuel(value ?? '')}
-                clearable
-              />
-            </Group>
-
-            <Select
-              label="Bodega actual"
-              data={warehouseOptions}
-              value={warehouseCurrentId}
-              onChange={(value) => setWarehouseCurrentId(value)}
-              searchable
-              nothingFoundMessage="Sin resultados"
-            />
-
-            <Switch
-              checked={active}
-              onChange={(event) => setActive(event.currentTarget.checked)}
-              label={active ? 'Activo' : 'Inactivo'}
-            />
-
-            <Group justify="flex-end">
-              <Button loading={saving} onClick={handleSave}>
-                Guardar cambios
-              </Button>
-            </Group>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                <Text size="sm"><strong>Descripción:</strong> {autoDescription}</Text>
+                <Text size="sm"><strong>Serial/Motor:</strong> {asset.serialOrEngine || '-'}</Text>
+                <Text size="sm"><strong>Dueño:</strong> {asset.warehouseOwner?.name ?? '-'}</Text>
+                <Text size="sm"><strong>Código público:</strong> {asset.publicCode ?? '-'}</Text>
+                <Text size="sm"><strong>Modelo:</strong> {model || '-'}</Text>
+                <Text size="sm"><strong>Año:</strong> {year === '' ? '-' : String(year)}</Text>
+                <Text size="sm"><strong>Combustible:</strong> {fuelLabel}</Text>
+              </SimpleGrid>
+              
+              </div>
+              <Group justify="space-between" px="md" py="sm">
+                <Text fw={700}>{autoDescription}</Text>
+                <Badge color={active ? 'green' : 'gray'} variant="light">
+                  {active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </Group>
+            </Paper>
           </Stack>
         ) : null}
       </Paper>

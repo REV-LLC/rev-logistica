@@ -42,12 +42,6 @@ function formatDate(value: string) {
   return date.toLocaleString('es-CO');
 }
 
-function formatDocType(value: string) {
-  if (value === 'REMISSION') return 'RM';
-  if (value === 'RETURN') return 'DV';
-  return value;
-}
-
 function formatMovementType(item: LedgerItem) {
   if (item.movementType === 'ADJUST') {
     if (item.assetId && item.quantity > 0) return 'CREACION';
@@ -57,16 +51,10 @@ function formatMovementType(item: LedgerItem) {
 }
 
 function renderReference(item: LedgerItem) {
-  const formatReferenceLabel = (reference: string, type: string) => {
-    const trimmed = reference.trim();
-    if (/^(RM|DV)\b/i.test(trimmed)) return trimmed.toUpperCase();
-    return `${formatDocType(type)} ${trimmed}`.trim();
-  };
-
   const label = item.document?.consecutive
-    ? formatReferenceLabel(item.document.consecutive, item.document.type)
-    : item.refDocumentType && item.refDocumentId
-    ? formatReferenceLabel(item.refDocumentId, item.refDocumentType)
+    ? item.document.consecutive.trim()
+    : item.refDocumentId
+    ? item.refDocumentId.trim()
     : '-';
 
   const documentId = item.document?.id ?? item.refDocumentId ?? null;
@@ -143,6 +131,11 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
                       {secondaryLabel}
                     </Text>
                   )}
+                  {item.assetId ? (
+                    <Text size="xs">
+                      <Link href={`/inventory/serialized-assets/${item.assetId}`}>Ver equipo</Link>
+                    </Text>
+                  ) : null}
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'center' }}>{item.quantity}</Table.Td>
                 {isMobile ? (
@@ -193,6 +186,12 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
             <Text mt="xs">
               <strong>Referencia:</strong> {renderReference(detailsItem)}
             </Text>
+            {detailsItem.assetId ? (
+              <Text mt="xs">
+                <strong>Equipo:</strong>{' '}
+                <Link href={`/inventory/serialized-assets/${detailsItem.assetId}`}>Abrir ficha del equipo</Link>
+              </Text>
+            ) : null}
           </>
         ) : null}
       </Modal>

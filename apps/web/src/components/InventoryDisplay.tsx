@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ActionIcon, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconPencil } from '@tabler/icons-react';
 import Link from 'next/link';
 
 type BulkItem = {
@@ -18,6 +17,8 @@ type BulkItem = {
   imageFileObjectId: string | null;
   assetFamilyId?: string | null;
   unitWeight?: number | string | null;
+  chargeType?: 'DAY' | 'HOUR' | string | null;
+  minimumChargeHours?: number | string | null;
   active?: boolean | null;
   createdAt?: string | Date | null;
   quantity: number;
@@ -31,6 +32,8 @@ type SerialItem = {
   imageUrl?: string | null;
   brand?: string | null;
   model?: string | null;
+  chargeType?: 'DAY' | 'HOUR' | string | null;
+  minimumChargeHours?: number | string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   internalNumber?: string | null;
   assetFamily?: {
@@ -49,7 +52,6 @@ export default function InventoryDisplay({
   viewFilter = 'ALL',
   bulkOwnerStackMode = false,
   isWorksiteView = false,
-  allowSerialEdit = true,
   serialSectionTitle = 'EQUIPOS UNICOS',
 }: {
   bulk: BulkItem[];
@@ -58,7 +60,6 @@ export default function InventoryDisplay({
   viewFilter?: 'ALL' | 'BULK' | 'SERIAL';
   bulkOwnerStackMode?: boolean;
   isWorksiteView?: boolean;
-  allowSerialEdit?: boolean;
   serialSectionTitle?: string;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -99,23 +100,45 @@ export default function InventoryDisplay({
     return normalized;
   };
 
+  const formatCharge = (chargeType?: string | null, minimumChargeHours?: number | string | null) => {
+    const normalized = chargeType?.toUpperCase();
+    if (normalized === 'HOUR') {
+      const minimum =
+        typeof minimumChargeHours === 'number'
+          ? minimumChargeHours
+          : typeof minimumChargeHours === 'string'
+            ? Number(minimumChargeHours)
+            : null;
+      if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
+        return `Hora (mín ${minimum}h)`;
+      }
+      return 'Hora';
+    }
+    if (normalized === 'DAY') {
+      return 'Día';
+    }
+    return '-';
+  };
+
   const showBulkSection = (viewFilter === 'ALL' || viewFilter === 'BULK') && bulk.length > 0;
   const showSerialSection = (viewFilter === 'ALL' || viewFilter === 'SERIAL') && serial.length > 0;
 
   const groupedBulk = useMemo(() => {
     if (!bulkOwnerStackMode) return null;
 
-    const map = new Map<
-      string,
-      {
-        skuId: string;
-        name: string;
-        category: string;
-        owners: Array<{
-          ownerWarehouseId: string;
-          ownerWarehouseName: string;
-          quantity: number;
-        }>;
+        const map = new Map<
+          string,
+          {
+            skuId: string;
+            name: string;
+            category: string;
+            chargeType: string | null;
+            minimumChargeHours: number | string | null;
+            owners: Array<{
+              ownerWarehouseId: string;
+              ownerWarehouseName: string;
+              quantity: number;
+            }>;
       }
     >();
 
@@ -125,6 +148,8 @@ export default function InventoryDisplay({
       const ownerWarehouseName = item.ownerWarehouseName ?? '-';
       const name = item.name ?? item.skuName ?? '-';
       const category = item.category ?? '-';
+      const chargeType = item.chargeType ?? null;
+      const minimumChargeHours = item.minimumChargeHours ?? null;
 
       const existing = map.get(key);
       if (!existing) {
@@ -132,6 +157,8 @@ export default function InventoryDisplay({
           skuId: item.skuId,
           name,
           category,
+          chargeType,
+          minimumChargeHours,
           owners: [{ ownerWarehouseId, ownerWarehouseName, quantity: item.quantity }],
         });
         return;
@@ -186,6 +213,7 @@ export default function InventoryDisplay({
                   <Table.Tr>
                     <Table.Th>Nombre</Table.Th>
                     <Table.Th>Categoría</Table.Th>
+                    <Table.Th>Cobro</Table.Th>
                     <Table.Th>Bodega dueña</Table.Th>
                     <Table.Th>Cantidad</Table.Th>
                   </Table.Tr>
@@ -196,6 +224,9 @@ export default function InventoryDisplay({
                         <Table.Tr key={item.skuId}>
                           <Table.Td>{item.name}</Table.Td>
                           <Table.Td>{item.category}</Table.Td>
+                          <Table.Td>
+                            {formatCharge(item.chargeType, item.minimumChargeHours)}
+                          </Table.Td>
                           <Table.Td>
                             <Group gap={6} wrap="wrap">
                               {item.visibleOwners.map((owner) => (
@@ -238,6 +269,9 @@ export default function InventoryDisplay({
                         <Table.Tr key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}>
                           <Table.Td>{item.name ?? item.skuName ?? '-'}</Table.Td>
                           <Table.Td>{item.category ?? '-'}</Table.Td>
+                          <Table.Td>
+                            {formatCharge(item.chargeType, item.minimumChargeHours)}
+                          </Table.Td>
                           <Table.Td>{item.ownerWarehouseName ?? '-'}</Table.Td>
                           <Table.Td>{item.quantity}</Table.Td>
                         </Table.Tr>
@@ -252,6 +286,9 @@ export default function InventoryDisplay({
                         <Text fw={700}>{item.name}</Text>
                         <Text size="xs" c="dimmed">
                           {item.category}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                         </Text>
                         <Group mt="xs" gap={6} wrap="wrap">
                           {item.visibleOwners.map((owner) => (
@@ -297,6 +334,9 @@ export default function InventoryDisplay({
                         <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
                         <Text size="xs" c="dimmed">
                           {item.category ?? '-'}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                         </Text>
                         <Text mt="xs">
                           <strong>Cantidad:</strong> {item.quantity}
@@ -363,20 +403,15 @@ export default function InventoryDisplay({
                   <Stack gap={4} mt="xs" style={{ flex: '1 1 28%', minHeight: 0 }}>
                     <Group justify="space-between" wrap="nowrap">
                       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-                        <Text fw={700} lineClamp={2}>
+                        <Text
+                          component={Link}
+                          href={`/inventory/serialized-assets/${item.assetId}`}
+                          fw={700}
+                          lineClamp={2}
+                          style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
                           {getSerialDescription(item)}
                         </Text>
-                        {allowSerialEdit ? (
-                          <ActionIcon
-                            component={Link}
-                            href={`/inventory/serialized-assets/${item.assetId}`}
-                            variant="light"
-                            size="sm"
-                            aria-label="Editar equipo"
-                          >
-                            <IconPencil size={14} />
-                          </ActionIcon>
-                        ) : null}
                       </Group>
                       <Badge color={getStatusColor(item.status)} variant="light">
                         {getStatusLabel(item.status)}
@@ -387,6 +422,9 @@ export default function InventoryDisplay({
                     </Text>
                     <Text size="xs" c="dimmed" lineClamp={1}>
                       {item.serialOrEngine ?? '-'}
+                    </Text>
+                    <Text size="xs" c="dimmed" lineClamp={1}>
+                      Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                     </Text>
                   </Stack>
                 </Card>

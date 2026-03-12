@@ -127,7 +127,6 @@ export class TasksService {
             serialOrEngine: true,
             description: true,
             skuId: true,
-            assetFamilyId: true,
             internalNumber: true,
           },
         },

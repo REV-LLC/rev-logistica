@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Chip,
   Container,
   Divider,
   Group,
@@ -27,13 +28,17 @@ type AssetFamily = {
 type Warehouse = {
   id: string;
   name: string;
+  type?: 'OWN' | 'ALLY' | string;
 };
 
 type Sku = {
   id: string;
   name: string;
   unitWeight?: number | null;
+  price?: number | null;
   subrentalPrice?: number | null;
+  chargeType?: 'DAY' | 'HOUR' | null;
+  minimumChargeHours?: number | null;
 };
 
 type Asset = {
@@ -64,13 +69,14 @@ type CreateSerializedResponse = {
   };
 };
 
-const normalizeSkuCategory = (value: string) =>
-  value.trim().toUpperCase().replace(/\s+/g, '_');
-
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
   { value: 'ELECTRICO', label: 'Eléctrico' },
+];
+const CHARGE_TYPE_OPTIONS = [
+  { value: 'DAY', label: 'Por día' },
+  { value: 'HOUR', label: 'Por hora' },
 ];
 
 export default function CreateSerializedAssetPage() {
@@ -98,7 +104,10 @@ export default function CreateSerializedAssetPage() {
   const [skuFuel, setSkuFuel] = useState('');
   const [skuUnit, setSkuUnit] = useState('');
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | ''>('');
+  const [skuPrice, setSkuPrice] = useState<number | ''>('');
   const [skuSubrentalPrice, setSkuSubrentalPrice] = useState<number | ''>('');
+  const [skuChargeType, setSkuChargeType] = useState<'DAY' | 'HOUR'>('DAY');
+  const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<number | ''>('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
   const [imageFileObjectId, setImageFileObjectId] = useState('');
@@ -106,6 +115,7 @@ export default function CreateSerializedAssetPage() {
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(null);
+  const [manualInternalNumber, setManualInternalNumber] = useState<number | ''>('');
   const [assets, setAssets] = useState<Asset[]>([]);
 
   useEffect(() => {
@@ -209,6 +219,36 @@ export default function CreateSerializedAssetPage() {
     families.forEach((family) => map.set(family.id, family));
     return map;
   }, [families]);
+  const selectedOwnerWarehouse = useMemo(
+    () => warehouses.find((warehouse) => warehouse.id === ownerWarehouseId) ?? null,
+    [ownerWarehouseId, warehouses],
+  );
+  const isAlternateOwnerWarehouse = selectedOwnerWarehouse?.type === 'ALLY';
+
+  const resetForm = () => {
+    setFamilyMode('existing');
+    setFamilyId(null);
+    setFamilyName('');
+    setFamilyCode('');
+    setSkuSuggestionId(null);
+    setSkuName('');
+    setSkuBrand('');
+    setSkuModel('');
+    setSkuYear('');
+    setSkuFuel('');
+    setSkuUnit('');
+    setSkuUnitWeight('');
+    setSkuPrice('');
+    setSkuSubrentalPrice('');
+    setSkuChargeType('DAY');
+    setSkuMinimumChargeHours('');
+    setSerialOrEngine('');
+    setImageFileObjectId('');
+    setActive(true);
+    setOwnerWarehouseId(null);
+    setWarehouseCurrentId(null);
+    setManualInternalNumber('');
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -244,13 +284,18 @@ export default function CreateSerializedAssetPage() {
       return;
     }
 
+    if (skuChargeType === 'HOUR' && (skuMinimumChargeHours === '' || skuMinimumChargeHours <= 0)) {
+      setError('Ingresa el mínimo de cobro por hora.');
+      return;
+    }
+
+    if (isAlternateOwnerWarehouse && (manualInternalNumber === '' || manualInternalNumber <= 0)) {
+      setError('Ingresa el número interno de la bodega alterna.');
+      return;
+    }
+
     setSaving(true);
     try {
-      const categoryBase =
-        familyMode === 'new'
-          ? familyName
-          : familyNameById.get(familyId ?? '')?.name ?? '';
-
       const payload = {
         family:
           familyMode === 'existing'
@@ -262,9 +307,14 @@ export default function CreateSerializedAssetPage() {
         sku:
           {
             name: skuName.trim() || undefined,
-            category: normalizeSkuCategory(categoryBase || 'SIN_CATEGORIA'),
             unitWeight: skuUnitWeight === '' ? undefined : skuUnitWeight,
+            price: skuPrice === '' ? undefined : skuPrice,
             subrentalPrice: skuSubrentalPrice === '' ? undefined : skuSubrentalPrice,
+            chargeType: skuChargeType,
+            minimumChargeHours:
+              skuChargeType === 'HOUR' && skuMinimumChargeHours !== ''
+                ? skuMinimumChargeHours
+                : undefined,
           },
         asset: {
           serialOrEngine: serialOrEngine.trim(),
@@ -274,6 +324,10 @@ export default function CreateSerializedAssetPage() {
           fuel: skuFuel || undefined,
           imageFileObjectId: imageFileObjectId.trim() || undefined,
           active,
+          internalNumber:
+            isAlternateOwnerWarehouse && manualInternalNumber !== ''
+              ? manualInternalNumber
+              : undefined,
         },
         ownerWarehouseId,
         warehouseCurrentId,
@@ -289,6 +343,7 @@ export default function CreateSerializedAssetPage() {
           ? familyNameById.get(familyId ?? '')?.name
           : familyName.trim();
       setSuccess(`Creado: ${resolvedFamilyName ?? 'Equipo'} #${response.asset.internalNumber}`);
+      resetForm();
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -306,6 +361,23 @@ export default function CreateSerializedAssetPage() {
   return (
     <Container size="lg" py="xl">
       <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Group mb="md">
+          <Chip.Group
+            multiple={false}
+            value="serial"
+            onChange={(value) => {
+              if (value === 'bulk') {
+                router.push('/inventory/bulk-adjustments');
+              }
+            }}
+          >
+            <Group gap="xs">
+              <Chip value="bulk">Stock masivo</Chip>
+              <Chip value="serial">Equipo serial</Chip>
+            </Group>
+          </Chip.Group>
+        </Group>
+
         <Title order={2}>Registrar equipo</Title>
         <Text c="dimmed" mt="xs">
           Registra un equipo único y déjalo listo en inventario.
@@ -392,8 +464,18 @@ export default function CreateSerializedAssetPage() {
                   setSkuUnitWeight(
                     typeof selectedSku.unitWeight === 'number' ? selectedSku.unitWeight : '',
                   );
+                  setSkuPrice(typeof selectedSku.price === 'number' ? selectedSku.price : '');
                   setSkuSubrentalPrice(
                     typeof selectedSku.subrentalPrice === 'number' ? selectedSku.subrentalPrice : '',
+                  );
+                  setSkuChargeType(
+                    selectedSku.chargeType === 'HOUR' ? 'HOUR' : 'DAY',
+                  );
+                  setSkuMinimumChargeHours(
+                    selectedSku.chargeType === 'HOUR' &&
+                      typeof selectedSku.minimumChargeHours === 'number'
+                      ? selectedSku.minimumChargeHours
+                      : '',
                   );
                   const sampleAsset = (referenceAssetsBySkuId.get(selectedSku.id) ?? []).find(
                     (asset) =>
@@ -478,6 +560,34 @@ export default function CreateSerializedAssetPage() {
                   min={0}
                   step={1000}
                 />
+                <NumberInput
+                  label="Precio"
+                  value={skuPrice}
+                  onChange={(value) =>
+                    setSkuPrice(typeof value === 'number' ? value : '')
+                  }
+                  min={0}
+                  step={1000}
+                />
+                <Select
+                  label="Tipo de cobro"
+                  data={CHARGE_TYPE_OPTIONS}
+                  value={skuChargeType}
+                  onChange={(value) =>
+                    setSkuChargeType((value as 'DAY' | 'HOUR' | null) ?? 'DAY')
+                  }
+                />
+                {skuChargeType === 'HOUR' ? (
+                  <NumberInput
+                    label="Mínimo de cobro (horas)"
+                    value={skuMinimumChargeHours}
+                    onChange={(value) =>
+                      setSkuMinimumChargeHours(typeof value === 'number' ? value : '')
+                    }
+                    min={0.5}
+                    step={0.5}
+                  />
+                ) : null}
               </Group>
             </Stack>
           </Stack>
@@ -498,6 +608,17 @@ export default function CreateSerializedAssetPage() {
               value={imageFileObjectId}
               onChange={(event) => setImageFileObjectId(event.currentTarget.value)}
             />
+            {isAlternateOwnerWarehouse ? (
+              <NumberInput
+                label="Número interno (bodega alterna)"
+                value={manualInternalNumber}
+                onChange={(value) =>
+                  setManualInternalNumber(typeof value === 'number' ? value : '')
+                }
+                min={1}
+                required
+              />
+            ) : null}
           </Stack>
 
           <Divider />
@@ -509,7 +630,14 @@ export default function CreateSerializedAssetPage() {
                 label="Bodega dueña"
                 data={warehouseOptions}
                 value={ownerWarehouseId}
-                onChange={(value) => setOwnerWarehouseId(value)}
+                onChange={(value) => {
+                  setOwnerWarehouseId(value);
+                  setWarehouseCurrentId(value);
+                  const selected = warehouses.find((warehouse) => warehouse.id === value);
+                  if (selected?.type !== 'ALLY') {
+                    setManualInternalNumber('');
+                  }
+                }}
                 required
               />
               <Select

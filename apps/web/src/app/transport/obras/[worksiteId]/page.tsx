@@ -146,7 +146,6 @@ export default function ObraDetailPage() {
               serial={inventory.serial}
               bulkOwnerStackMode
               isWorksiteView
-              allowSerialEdit={false}
               serialSectionTitle={`MAQUINARIA EN ${worksite?.worksite.name ?? 'OBRA'}`}
             />
           </div>
