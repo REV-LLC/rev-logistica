@@ -1,8 +1,10 @@
 const TOKEN_KEY = 'revlogistica.token';
 
-type JwtPayload = {
+export type JwtPayload = {
+  sub?: string;
+  email?: string;
   exp?: number;
-  role?: string;
+  role?: AppRole;
 };
 
 function parseJwtPayload(token: string): JwtPayload | null {
@@ -55,4 +57,8 @@ export function getCurrentUserRole(): AppRole | null {
   const role = payload?.role;
   if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
   return null;
+}
+
+export function getCurrentUserSession(): JwtPayload | null {
+  return getTokenPayload();
 }

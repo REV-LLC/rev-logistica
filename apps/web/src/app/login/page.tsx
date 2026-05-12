@@ -1,12 +1,12 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
 import { getToken, isTokenExpired, setToken } from '@/lib/auth';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -91,5 +91,13 @@ export default function LoginPage() {
         </Paper>
       </Container>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
