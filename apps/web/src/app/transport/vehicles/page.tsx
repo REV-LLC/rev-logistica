@@ -1,25 +1,38 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Autocomplete,
+  Badge,
   Button,
-  Center,
   Container,
   Group,
-  Loader,
   Modal,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconEye } from '@tabler/icons-react';
+import {
+  IconCalendarDue,
+  IconCar,
+  IconEye,
+  IconFileDescription,
+  IconPlus,
+  IconSteeringWheel,
+  IconTruck,
+  IconUserCheck,
+} from '@tabler/icons-react';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import { api } from '@/lib/api';
 
 const VEHICLE_TYPE_OPTIONS = ['CAMION/CAMIONETA', 'AUTOMOVIL', 'MOTO', 'GRUA'];
@@ -81,8 +94,113 @@ function toDateInput(value?: string | null) {
   return date.toISOString().slice(0, 10);
 }
 
+function formatDisplayDate(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('es-CO', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  }).format(date);
+}
+
 function toPatchValue(value: string) {
   return value.trim() === '' ? undefined : value.trim();
+}
+
+function daysUntil(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function getDocumentStatus(days: number | null) {
+  if (days === null) return { label: 'Sin fecha', color: 'gray' };
+  if (days < 0) return { label: 'Vencido', color: 'red' };
+  if (days <= 30) return { label: `${days} días`, color: 'orange' };
+  return { label: `${days} días`, color: 'green' };
+}
+
+function VehicleDetails({
+  vehicle,
+  onEdit,
+}: {
+  vehicle: Vehicle;
+  onEdit?: (vehicle: Vehicle) => void;
+}) {
+  const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
+  const technoStatus = getDocumentStatus(daysUntil(vehicle.tecnomecanicaVigencia));
+
+  return (
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Text fw={700} size="lg">
+            {vehicle.plate}
+          </Text>
+          <Text size="sm" c="dimmed">
+            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+          </Text>
+        </div>
+        <Badge color="blue" variant="light">
+          {vehicle.type ?? 'Sin tipo'}
+        </Badge>
+      </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Configuración
+          </Text>
+          <Stack gap={6} mt={8}>
+            <Text size="sm">Capacidad: {vehicle.capacity ?? '-'}</Text>
+            <Text size="sm">
+              Conductores: {vehicle.drivers.length ? vehicle.drivers.map((driver) => driver.name).join(', ') : '-'}
+            </Text>
+          </Stack>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Documentación
+          </Text>
+          <Stack gap={8} mt={8}>
+            <Group justify="space-between">
+              <Text size="sm">SOAT</Text>
+              <Badge color={soatStatus.color} variant="light">
+                {soatStatus.label}
+              </Badge>
+            </Group>
+            <Text size="sm" c="dimmed">
+              Vence: {formatDisplayDate(vehicle.soatVigencia)}
+            </Text>
+            <Group justify="space-between">
+              <Text size="sm">Tecnomecánica</Text>
+              <Badge color={technoStatus.color} variant="light">
+                {technoStatus.label}
+              </Badge>
+            </Group>
+            <Text size="sm" c="dimmed">
+              Vence: {formatDisplayDate(vehicle.tecnomecanicaVigencia)}
+            </Text>
+          </Stack>
+        </Paper>
+      </SimpleGrid>
+
+      {onEdit ? (
+        <Group className="mobile-actions">
+          <Button variant="light" onClick={() => onEdit(vehicle)}>
+            Editar
+          </Button>
+        </Group>
+      ) : null}
+    </Stack>
+  );
 }
 
 export default function VehiclesPage() {
@@ -90,31 +208,29 @@ export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<VehicleForm | null>(null);
   const [detailsVehicle, setDetailsVehicle] = useState<Vehicle | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const driversById = useMemo(() => {
-    const map = new Map<string, string>();
-    vehicles.forEach((vehicle) => {
-      vehicle.drivers.forEach((driver) => {
-        map.set(driver.id, driver.name);
-      });
-    });
-    return map;
-  }, [vehicles]);
-
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(vehicles.map((vehicle) => vehicle.brand?.trim()).filter(Boolean) as string[])).sort(),
+      Array.from(
+        new Set(vehicles.map((vehicle) => vehicle.brand?.trim()).filter(Boolean) as string[]),
+      ).sort(),
     [vehicles],
   );
+
   const modelOptions = useMemo(
     () =>
-      Array.from(new Set(vehicles.map((vehicle) => vehicle.model?.trim()).filter(Boolean) as string[])).sort(),
+      Array.from(
+        new Set(vehicles.map((vehicle) => vehicle.model?.trim()).filter(Boolean) as string[]),
+      ).sort(),
     [vehicles],
   );
+
   const loadVehicles = async () => {
     setLoading(true);
     setError(null);
@@ -132,29 +248,58 @@ export default function VehiclesPage() {
     loadVehicles();
   }, []);
 
+  const metrics = useMemo(() => {
+    const withDrivers = vehicles.filter((vehicle) => vehicle.drivers.length > 0).length;
+    const soatSoon = vehicles.filter((vehicle) => {
+      const days = daysUntil(vehicle.soatVigencia);
+      return days !== null && days <= 30;
+    }).length;
+    const technoSoon = vehicles.filter((vehicle) => {
+      const days = daysUntil(vehicle.tecnomecanicaVigencia);
+      return days !== null && days <= 30;
+    }).length;
+    return {
+      total: vehicles.length,
+      withDrivers,
+      soatSoon,
+      technoSoon,
+    };
+  }, [vehicles]);
+
   const startCreate = () => {
     setEditing(null);
+    setFormError(null);
+    setSuccess(null);
     setForm(emptyForm);
   };
 
   const startEdit = (vehicle: Vehicle) => {
     setEditing(vehicle);
+    setFormError(null);
+    setSuccess(null);
     setForm(formFromVehicle(vehicle));
   };
 
   const closeEdit = () => {
     setEditing(null);
+    setFormError(null);
     setForm(null);
+  };
+
+  const handleSaveSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void saveEdit();
   };
 
   const saveEdit = async () => {
     if (!form) return;
     if (!form.plate.trim()) {
-      setError('La placa es obligatoria');
+      setFormError('La placa es obligatoria');
       return;
     }
     setSaving(true);
-    setError(null);
+    setFormError(null);
+    setSuccess(null);
     try {
       const payload = {
         plate: form.plate.trim().toUpperCase(),
@@ -179,9 +324,10 @@ export default function VehiclesPage() {
       }
 
       await loadVehicles();
+      setSuccess('Vehículo guardado.');
       closeEdit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar');
+      setFormError(err instanceof Error ? err.message : 'No se pudo guardar');
     } finally {
       setSaving(false);
     }
@@ -189,168 +335,370 @@ export default function VehiclesPage() {
 
   return (
     <Container size="xl" py="xl">
-      <Paper shadow="sm" p="xl" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md">
-          <Title order={2}>Vehículos</Title>
-          <Button onClick={startCreate}>Nuevo vehículo</Button>
-        </Group>
+      <Stack gap="lg">
+        <PageHeaderCard
+          title="Vehículos"
+          description="Administra flota, documentación y disponibilidad operativa desde una sola vista."
+          icon={<IconTruck size={20} />}
+          iconColor="orange"
+          accentColor="rgba(249,115,22,0.12)"
+          aside={
+            <Button onClick={startCreate} leftSection={<IconPlus size={16} />}>
+              Nuevo vehículo
+            </Button>
+          }
+        >
+          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+            <StatCard
+              label="Total"
+              value={String(metrics.total)}
+              hint="Vehículos registrados"
+              color="orange"
+              icon={<IconTruck size={20} />}
+            />
+            <StatCard
+              label="Con conductor"
+              value={String(metrics.withDrivers)}
+              hint="Asignaciones activas"
+              color="blue"
+              icon={<IconUserCheck size={20} />}
+            />
+            <StatCard
+              label="SOAT próximo"
+              value={String(metrics.soatSoon)}
+              hint="Vence en 30 días o menos"
+              color="red"
+              icon={<IconFileDescription size={20} />}
+            />
+            <StatCard
+              label="Tecnomecánica próxima"
+              value={String(metrics.technoSoon)}
+              hint="Vence en 30 días o menos"
+              color="grape"
+              icon={<IconCalendarDue size={20} />}
+            />
+          </SimpleGrid>
+        </PageHeaderCard>
 
-        {error && (
-          <Text c="red" mb="md">
+        {error ? (
+          <Alert color="red" variant="light" title="No se pudo completar la carga">
             {error}
-          </Text>
-        )}
+          </Alert>
+        ) : null}
 
-        {loading ? (
-          <Center py="xl">
-            <Loader />
-          </Center>
-        ) : (
-          <Table striped highlightOnHover withTableBorder className={isMobile ? 'table-mobile-fit' : undefined}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={isMobile ? { width: '50%' } : undefined}>Placa</Table.Th>
-                <Table.Th style={isMobile ? { width: '35%' } : undefined}>Marca</Table.Th>
-                <Table.Th style={isMobile ? { width: '15%' } : undefined}>Ver</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {vehicles.map((vehicle) => (
-                <Table.Tr key={vehicle.id}>
-                  <Table.Td>{vehicle.plate}</Table.Td>
-                  <Table.Td>
-                    {vehicle.brand ?? '-'}
-                  </Table.Td>
-                  <Table.Td>
-                    <ActionIcon
-                      variant="light"
-                      aria-label={`Ver detalle de ${vehicle.plate}`}
-                      onClick={() => setDetailsVehicle(vehicle)}
-                    >
-                      <IconEye size={16} />
-                    </ActionIcon>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-              {!vehicles.length && (
-                <Table.Tr>
-                  <Table.Td colSpan={3}>
-                    <Text c="dimmed" ta="center">
-                      Sin vehículos registrados.
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-              )}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Paper>
-
-      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehículo">
-        {detailsVehicle ? (
-          <Stack gap="xs">
-            <Text><strong>Placa:</strong> {detailsVehicle.plate}</Text>
-            <Text><strong>Marca:</strong> {detailsVehicle.brand ?? '-'}</Text>
-            <Text><strong>Modelo:</strong> {detailsVehicle.model ?? '-'}</Text>
-            <Text><strong>Tipo:</strong> {detailsVehicle.type ?? '-'}</Text>
-            <Text><strong>Capacidad:</strong> {detailsVehicle.capacity ?? '-'}</Text>
-            <Text><strong>SOAT vence:</strong> {toDateInput(detailsVehicle.soatVigencia) || '-'}</Text>
-            <Text><strong>Tecnomecánica vence:</strong> {toDateInput(detailsVehicle.tecnomecanicaVigencia) || '-'}</Text>
-            <Text>
-              <strong>Conductores:</strong>{' '}
-              {detailsVehicle.drivers.length
-                ? detailsVehicle.drivers.map((driver) => driversById.get(driver.id) ?? driver.name).join(', ')
-                : '-'}
+        {success ? (
+          <Alert color="green" variant="light" withCloseButton onClose={() => setSuccess(null)}>
+            <Text role="status" aria-live="polite">
+              {success}
             </Text>
-            <Group justify="flex-end" mt="sm">
-              <Button
-                size="xs"
-                variant="light"
-                onClick={() => {
-                  setDetailsVehicle(null);
-                  startEdit(detailsVehicle);
-                }}
-              >
-                Editar
-              </Button>
-            </Group>
-          </Stack>
+          </Alert>
+        ) : null}
+
+        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          {loading ? (
+            <Paper radius="lg" p="xl" bg="gray.0">
+              <Text c="dimmed" ta="center">
+                Cargando...
+              </Text>
+            </Paper>
+          ) : isMobile ? (
+            <Stack gap="sm">
+              {vehicles.map((vehicle) => {
+                const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
+                return (
+                  <Paper key={vehicle.id} withBorder radius="lg" p="md">
+                    <Stack gap="md">
+                      <Group justify="space-between" align="flex-start">
+                        <div>
+                          <Text fw={700}>{vehicle.plate}</Text>
+                          <Text size="sm" c="dimmed">
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                          </Text>
+                        </div>
+                        <Badge color={soatStatus.color} variant="light">
+                          SOAT {soatStatus.label}
+                        </Badge>
+                      </Group>
+
+                      <SimpleGrid cols={2} spacing="sm">
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Tipo
+                          </Text>
+                          <Text size="sm">{vehicle.type ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Conductores
+                          </Text>
+                          <Text size="sm">{vehicle.drivers.length || 0}</Text>
+                        </div>
+                      </SimpleGrid>
+
+                      <Button
+                        variant="light"
+                        leftSection={<IconEye size={16} />}
+                        onClick={() => setDetailsVehicle(vehicle)}
+                      >
+                        Ver detalle
+                      </Button>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+
+              {!vehicles.length ? (
+                <Paper radius="lg" p="xl" bg="gray.0">
+                  <Stack align="center" gap="xs">
+                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                      <IconCar size={20} />
+                    </ThemeIcon>
+                    <Text fw={700}>Sin vehículos registrados</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Crea un nuevo vehículo para empezar.
+                    </Text>
+                  </Stack>
+                </Paper>
+              ) : null}
+            </Stack>
+          ) : (
+            <Table highlightOnHover verticalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Vehículo</Table.Th>
+                  <Table.Th>Tipo / capacidad</Table.Th>
+                  <Table.Th>Conductores</Table.Th>
+                  <Table.Th>Documentación</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {vehicles.map((vehicle) => {
+                  const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
+                  const technoStatus = getDocumentStatus(daysUntil(vehicle.tecnomecanicaVigencia));
+                  return (
+                    <Table.Tr key={vehicle.id}>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text fw={700}>{vehicle.plate}</Text>
+                          <Text size="sm" c="dimmed">
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
+                          <Text size="xs" c="dimmed">
+                            Capacidad: {vehicle.capacity ?? '-'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">
+                          {vehicle.drivers.length
+                            ? vehicle.drivers.map((driver) => driver.name).join(', ')
+                            : 'Sin conductores'}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Stack gap="xs">
+                          <Badge color={soatStatus.color} variant="light" style={{ width: 'fit-content' }}>
+                            SOAT: {soatStatus.label}
+                          </Badge>
+                          <Badge color={technoStatus.color} variant="light" style={{ width: 'fit-content' }}>
+                            Tecno: {technoStatus.label}
+                          </Badge>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                          <Button size="xs" variant="light" onClick={() => startEdit(vehicle)}>
+                            Editar
+                          </Button>
+                          <ActionIcon
+                            variant="light"
+                            aria-label={`Ver detalle de ${vehicle.plate}`}
+                            onClick={() => setDetailsVehicle(vehicle)}
+                          >
+                            <IconEye size={16} />
+                          </ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+                {!vehicles.length && (
+                  <Table.Tr>
+                    <Table.Td colSpan={5}>
+                      <Stack align="center" gap="xs" py="lg">
+                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                          <IconCar size={20} />
+                        </ThemeIcon>
+                        <Text fw={700}>Sin vehículos registrados</Text>
+                        <Text size="sm" c="dimmed">
+                          Crea un nuevo vehículo.
+                        </Text>
+                      </Stack>
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
+      </Stack>
+
+      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehículo" size="lg">
+        {detailsVehicle ? (
+          <VehicleDetails
+            vehicle={detailsVehicle}
+            onEdit={(vehicle) => {
+              setDetailsVehicle(null);
+              startEdit(vehicle);
+            }}
+          />
         ) : null}
       </Modal>
 
       <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Editar vehículo' : 'Nuevo vehículo'} size="lg">
-        {form && (
-          <Stack>
-            <Group gap="xs" wrap="nowrap" align="flex-end">
-              <TextInput
-                label="Placa"
-                value={form.plate}
-                onChange={(event) => setForm({ ...form, plate: event.currentTarget.value })}
-                style={{ flex: '0 0 30%' }}
-                required
-              />
-              <Autocomplete
-                label="Marca"
-                value={form.brand}
-                data={brandOptions}
-                onChange={(value) => setForm({ ...form, brand: value })}
-                placeholder="Escribe para sugerir"
-                style={{ flex: '1 1 35%', minWidth: 0 }}
-              />
-              <Autocomplete
-                label="Modelo"
-                value={form.model}
-                data={modelOptions}
-                onChange={(value) => setForm({ ...form, model: value })}
-                placeholder="Escribe para sugerir"
-                style={{ flex: '1 1 35%', minWidth: 0 }}
-              />
-            </Group>
-            <Group align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'} className="mobile-stack">
-              <Select
-                label="Tipo"
-                value={form.type}
-                data={VEHICLE_TYPE_OPTIONS}
-                onChange={(value) => setForm({ ...form, type: value ?? '' })}
-                clearable
-                style={{ flex: isMobile ? undefined : '1 1 38%' }}
-              />
-              <Select
-                label="Capacidad"
-                value={form.capacity}
-                data={CAPACITY_OPTIONS}
-                searchable
-                clearable
-                onChange={(value) => setForm({ ...form, capacity: value ?? '' })}
-                style={{ flex: isMobile ? undefined : '1 1 62%' }}
-              />
-            </Group>
-            <Group grow className="mobile-stack">
-              <TextInput
-                label="SOAT vence"
-                type="date"
-                value={form.soatVigencia}
-                onChange={(event) => setForm({ ...form, soatVigencia: event.currentTarget.value })}
-              />
-              <TextInput
-                label="Tecnomecánica vence"
-                type="date"
-                value={form.tecnomecanicaVigencia}
-                onChange={(event) =>
-                  setForm({ ...form, tecnomecanicaVigencia: event.currentTarget.value })
-                }
-              />
-            </Group>
-            <Group justify="flex-end" className="mobile-actions">
-              <Button variant="default" onClick={closeEdit}>
-                Cancelar
-              </Button>
-              <Button onClick={saveEdit} loading={saving}>
-                Guardar
-              </Button>
-            </Group>
-          </Stack>
-        )}
+        {form ? (
+          <form onSubmit={handleSaveSubmit}>
+            <Stack gap="lg">
+              {editing ? (
+                <Paper
+                  withBorder
+                  radius="lg"
+                  p="md"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, rgba(248,250,252,0.96) 0%, rgba(255,247,237,0.96) 100%)',
+                  }}
+                >
+                  <Group justify="space-between" align="flex-start">
+                    <div>
+                      <Text fw={700}>{editing.plate}</Text>
+                      <Text size="sm" c="dimmed">
+                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                      </Text>
+                    </div>
+                    <Badge color="orange" variant="light">
+                      {editing.type ?? 'Sin tipo'}
+                    </Badge>
+                  </Group>
+                </Paper>
+              ) : null}
+
+              {formError ? (
+                <Alert color="red" variant="light" role="alert">
+                  {formError}
+                </Alert>
+              ) : null}
+
+              <Paper withBorder radius="lg" p="md">
+                <Stack gap="md">
+                  <div>
+                    <Text fw={700}>Ficha del vehículo</Text>
+                    <Text size="sm" c="dimmed">
+                      Datos básicos para identificar el vehículo dentro de la flota.
+                    </Text>
+                  </div>
+
+                  <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+                    <TextInput
+                      label="Placa"
+                      name="plate"
+                      autoComplete="off"
+                      value={form.plate}
+                      onChange={(event) => setForm({ ...form, plate: event.currentTarget.value })}
+                      required
+                    />
+                    <Autocomplete
+                      label="Marca"
+                      name="brand"
+                      autoComplete="off"
+                      value={form.brand}
+                      data={brandOptions}
+                      onChange={(value) => setForm({ ...form, brand: value })}
+                      placeholder="Escribe para sugerir"
+                    />
+                    <Autocomplete
+                      label="Modelo"
+                      name="model"
+                      autoComplete="off"
+                      value={form.model}
+                      data={modelOptions}
+                      onChange={(value) => setForm({ ...form, model: value })}
+                      placeholder="Escribe para sugerir"
+                    />
+                  </SimpleGrid>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <Select
+                      label="Tipo"
+                      name="vehicleType"
+                      value={form.type}
+                      data={VEHICLE_TYPE_OPTIONS}
+                      onChange={(value) => setForm({ ...form, type: value ?? '' })}
+                      clearable
+                      leftSection={<IconSteeringWheel size={16} />}
+                    />
+                    <Select
+                      label="Capacidad"
+                      name="capacity"
+                      value={form.capacity}
+                      data={CAPACITY_OPTIONS}
+                      searchable
+                      clearable
+                      onChange={(value) => setForm({ ...form, capacity: value ?? '' })}
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Paper>
+
+              <Paper withBorder radius="lg" p="md">
+                <Stack gap="md">
+                  <div>
+                    <Text fw={700}>Documentación</Text>
+                    <Text size="sm" c="dimmed">
+                      Registra fechas de vencimiento para control preventivo de la flota.
+                    </Text>
+                  </div>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <TextInput
+                      label="SOAT vence"
+                      name="soatVigencia"
+                      autoComplete="off"
+                      type="date"
+                      value={form.soatVigencia}
+                      onChange={(event) => setForm({ ...form, soatVigencia: event.currentTarget.value })}
+                    />
+                    <TextInput
+                      label="Tecnomecánica vence"
+                      name="tecnomecanicaVigencia"
+                      autoComplete="off"
+                      type="date"
+                      value={form.tecnomecanicaVigencia}
+                      onChange={(event) =>
+                        setForm({ ...form, tecnomecanicaVigencia: event.currentTarget.value })
+                      }
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Paper>
+
+              <Group justify="flex-end" className="mobile-actions">
+                <Button type="button" variant="default" onClick={closeEdit}>
+                  Cancelar
+                </Button>
+                <Button type="submit" loading={saving}>
+                  {editing ? 'Guardar cambios' : 'Crear vehículo'}
+                </Button>
+              </Group>
+            </Stack>
+          </form>
+        ) : null}
       </Modal>
     </Container>
   );

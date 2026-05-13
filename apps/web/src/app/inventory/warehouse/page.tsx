@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { useRouter } from 'next/navigation';
 import {
   ActionIcon,
+  Alert,
+  Badge,
   Button,
   Container,
   Group,
@@ -15,13 +19,16 @@ import {
   Paper,
   ScrollArea,
   Select,
+  SimpleGrid,
+  Stack,
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconEye } from '@tabler/icons-react';
+import { IconAdjustments, IconBuildingWarehouse, IconEye, IconHomeCog, IconPackage, IconPlus } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
 
 interface InventoryResponse {
@@ -477,132 +484,212 @@ export default function WarehouseInventoryPage() {
       })
     : [];
 
+  const metrics = useMemo(() => {
+    const activeWarehouses = warehouses.filter((warehouse) => warehouse.active).length;
+    const bulkCount = data?.bulk.length ?? 0;
+    const serialCount = data?.serial.length ?? 0;
+    return {
+      totalWarehouses: warehouses.length,
+      activeWarehouses,
+      bulkCount,
+      serialCount,
+    };
+  }, [warehouses, data]);
+
   return (
     <main>
-      <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Group justify="space-between" align="flex-start" wrap="wrap">
-            <div>
-              <Title order={2}>Bodegas</Title>
-              <Text c="dimmed">Administra y crea bodegas.</Text>
-            </div>
-            <Button onClick={openCreate}>Crear bodega</Button>
-          </Group>
-          {warehousesError && (
-            <Text c="red" mt="sm">
+      <Container size="xl" py="xl">
+        <Stack gap="lg">
+          <PageHeaderCard
+            title="Bodegas"
+            description="Administra bodegas y consulta su inventario en tiempo real."
+            icon={<IconBuildingWarehouse size={20} />}
+            iconColor="orange"
+            accentColor="rgba(234,88,12,0.12)"
+            aside={
+              <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
+                Crear bodega
+              </Button>
+            }
+          >
+            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+              <StatCard
+                label="Bodegas"
+                value={String(metrics.totalWarehouses)}
+                hint="Registradas en el sistema"
+                color="orange"
+                icon={<IconBuildingWarehouse size={20} />}
+              />
+              <StatCard
+                label="Activas"
+                value={String(metrics.activeWarehouses)}
+                hint="Operativas actualmente"
+                color="green"
+                icon={<IconHomeCog size={20} />}
+              />
+              <StatCard
+                label="Bulk"
+                value={String(metrics.bulkCount)}
+                hint="Items masivos cargados"
+                color="blue"
+                icon={<IconPackage size={20} />}
+              />
+              <StatCard
+                label="Serial"
+                value={String(metrics.serialCount)}
+                hint="Equipos únicos visibles"
+                color="grape"
+                icon={<IconAdjustments size={20} />}
+              />
+            </SimpleGrid>
+          </PageHeaderCard>
+
+          {warehousesError ? (
+            <Alert color="red" variant="light" title="No se pudieron cargar las bodegas">
               {warehousesError}
-            </Text>
-          )}
-          {ownersError && (
-            <Text c="red" mt="sm">
+            </Alert>
+          ) : null}
+          {ownersError ? (
+            <Alert color="red" variant="light" title="No se pudieron cargar las empresas dueñas">
               {ownersError}
-            </Text>
-          )}
-          <ScrollArea mt="md">
-            <Table striped highlightOnHover className="table-mobile-fit">
-              <Table.Caption>
-                {warehousesLoading
-                  ? 'Cargando bodegas...'
-                  : `${warehouses.length} bodegas`}
-              </Table.Caption>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th style={isMobile ? { width: '80%' } : undefined}>Nombre</Table.Th>
-                  {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
-                  {!isMobile ? <Table.Th>Tipo</Table.Th> : null}
-                  {!isMobile ? <Table.Th>Empresa dueña</Table.Th> : null}
-                  {!isMobile ? <Table.Th>Estado</Table.Th> : null}
-                  {!isMobile ? <Table.Th>Acciones</Table.Th> : null}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {warehouses.map((warehouse) => (
-                  <Table.Tr key={warehouse.id}>
-                    <Table.Td>
-                      <Text fw={600}>{warehouse.name}</Text>
-                      {!isMobile ? (
-                        <Text size="xs" c="dimmed">
-                          {warehouse.id}
-                        </Text>
-                      ) : null}
-                    </Table.Td>
-                    {isMobile ? (
-                      <Table.Td>
-                        <ActionIcon
-                          variant="light"
-                          aria-label={`Ver detalles de ${warehouse.name}`}
-                          onClick={() => openDetails(warehouse)}
-                        >
-                          <IconEye size={16} />
-                        </ActionIcon>
-                      </Table.Td>
-                    ) : null}
-                    {!isMobile ? <Table.Td>{warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}</Table.Td> : null}
-                    {!isMobile ? (
-                      <Table.Td>{warehouse.ownerCompany?.name ?? warehouse.ownerCompanyId}</Table.Td>
-                    ) : null}
-                    {!isMobile ? <Table.Td>{warehouse.active ? 'Activa' : 'Inactiva'}</Table.Td> : null}
-                    {!isMobile ? (
-                      <Table.Td>
-                        <Group gap="xs">
-                          <Button size="xs" variant="light" onClick={() => openEdit(warehouse)}>
-                            Editar
-                          </Button>
-                        </Group>
-                      </Table.Td>
-                    ) : null}
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Paper>
-
-        <Paper shadow="sm" p="xl" radius="md" withBorder mt="md">
-          <Title order={2}>Inventario por bodega</Title>
-          <Text c="dimmed">Consulta el inventario de una bodega.</Text>
-          <Group mt="md" align="flex-end" justify="space-between" wrap="wrap">
-            <div style={{ flex: 1, minWidth: 280 }}>
-              <WarehouseSelect
-                key={warehouseSelectKey}
-                value={warehouseId}
-                onChange={setWarehouseId}
-              />
-            </div>
-            <Select
-              label="Ver"
-              value={viewFilter}
-              onChange={(value) => setViewFilter((value as typeof viewFilter) ?? 'ALL')}
-              data={[
-                { value: 'ALL', label: 'Todo' },
-                { value: 'BULK', label: 'Stock masivo' },
-                { value: 'SERIAL', label: 'Serial' }
-              ]}
-              w={180}
-            />
-            <Button onClick={handleFetch} disabled={!warehouseId} loading={loading}>
-              Consultar
-            </Button>
-          </Group>
-          {error && (
-            <Text c="red" mt="sm">
+            </Alert>
+          ) : null}
+          {error ? (
+            <Alert color="red" variant="light" title="No se pudo consultar el inventario">
               {error}
-            </Text>
-          )}
-        </Paper>
+            </Alert>
+          ) : null}
 
-        {data && (
-          <>
-            <div style={{ marginTop: 24 }}>
-              <InventoryDisplay
-                bulk={data.bulk}
-                serial={data.serial}
-                onAdjust={openAdjust}
-                viewFilter={viewFilter}
-              />
-            </div>
-          </>
-        )}
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Stack gap="md">
+              <Group justify="space-between" align="center">
+                <div>
+                  <Text fw={700}>Administración de bodegas</Text>
+                  <Text size="sm" c="dimmed">
+                    Revisa tipo, dueño y estado de cada bodega. Desde aquí también puedes editar.
+                  </Text>
+                </div>
+                <Badge variant="light" color="gray">
+                  {warehousesLoading ? 'Cargando...' : `${warehouses.length} bodegas`}
+                </Badge>
+              </Group>
+
+              <ScrollArea>
+                <Table striped highlightOnHover className="table-mobile-fit">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th style={isMobile ? { width: '80%' } : undefined}>Nombre</Table.Th>
+                      {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
+                      {!isMobile ? <Table.Th>Tipo</Table.Th> : null}
+                      {!isMobile ? <Table.Th>Empresa dueña</Table.Th> : null}
+                      {!isMobile ? <Table.Th>Estado</Table.Th> : null}
+                      {!isMobile ? <Table.Th>Acciones</Table.Th> : null}
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {warehouses.map((warehouse) => (
+                      <Table.Tr key={warehouse.id}>
+                        <Table.Td>
+                          <Text fw={600}>{warehouse.name}</Text>
+                          {!isMobile ? (
+                            <Text size="xs" c="dimmed">
+                              {warehouse.id}
+                            </Text>
+                          ) : null}
+                        </Table.Td>
+                        {isMobile ? (
+                          <Table.Td>
+                            <ActionIcon
+                              variant="light"
+                              aria-label={`Ver detalles de ${warehouse.name}`}
+                              onClick={() => openDetails(warehouse)}
+                            >
+                              <IconEye size={16} />
+                            </ActionIcon>
+                          </Table.Td>
+                        ) : null}
+                        {!isMobile ? <Table.Td>{warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}</Table.Td> : null}
+                        {!isMobile ? (
+                          <Table.Td>{warehouse.ownerCompany?.name ?? warehouse.ownerCompanyId}</Table.Td>
+                        ) : null}
+                        {!isMobile ? (
+                          <Table.Td>
+                            <Badge color={warehouse.active ? 'green' : 'gray'} variant="light">
+                              {warehouse.active ? 'Activa' : 'Inactiva'}
+                            </Badge>
+                          </Table.Td>
+                        ) : null}
+                        {!isMobile ? (
+                          <Table.Td>
+                            <Group gap="xs">
+                              <Button size="xs" variant="light" onClick={() => openEdit(warehouse)}>
+                                Editar
+                              </Button>
+                            </Group>
+                          </Table.Td>
+                        ) : null}
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
+            </Stack>
+          </Paper>
+
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Inventario por bodega</Text>
+                <Text size="sm" c="dimmed">
+                  Selecciona la bodega y el tipo de vista para consultar el inventario actual.
+                </Text>
+              </div>
+
+              <Group align="flex-end" justify="space-between" wrap="wrap">
+                <div style={{ flex: 1, minWidth: 280 }}>
+                  <WarehouseSelect
+                    key={warehouseSelectKey}
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                  />
+                </div>
+                <Select
+                  label="Ver"
+                  value={viewFilter}
+                  onChange={(value) => setViewFilter((value as typeof viewFilter) ?? 'ALL')}
+                  data={[
+                    { value: 'ALL', label: 'Todo' },
+                    { value: 'BULK', label: 'Stock masivo' },
+                    { value: 'SERIAL', label: 'Serial' }
+                  ]}
+                  w={180}
+                />
+                <Button onClick={handleFetch} disabled={!warehouseId} loading={loading}>
+                  Consultar
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+
+          {data ? (
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Stack gap="md">
+                <div>
+                  <Text fw={700}>Resultado de inventario</Text>
+                  <Text size="sm" c="dimmed">
+                    Stock masivo y equipos únicos de la bodega consultada.
+                  </Text>
+                </div>
+                <InventoryDisplay
+                  bulk={data.bulk}
+                  serial={data.serial}
+                  onAdjust={openAdjust}
+                  viewFilter={viewFilter}
+                />
+              </Stack>
+            </Paper>
+          ) : null}
+        </Stack>
       </Container>
 
       <Modal

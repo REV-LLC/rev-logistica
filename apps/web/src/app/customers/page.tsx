@@ -1,23 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Container,
   Group,
   Modal,
   Paper,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconEye } from '@tabler/icons-react';
+import {
+  IconBuildingEstate,
+  IconEye,
+  IconFileText,
+  IconPhone,
+  IconPlus,
+  IconRoad,
+  IconUserCheck,
+  IconUsersGroup,
+} from '@tabler/icons-react';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -50,6 +64,60 @@ const emptyForm: CustomerForm = {
   initialWorksiteAddress: '',
   initialWorksiteActive: true,
 };
+
+function CustomerDetails({
+  customer,
+  onEdit,
+}: {
+  customer: Customer;
+  onEdit?: (customer: Customer) => void;
+}) {
+  return (
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Text fw={700} size="lg">
+            {customer.name}
+          </Text>
+          <Text size="sm" c="dimmed">
+            Cliente registrado
+          </Text>
+        </div>
+        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
+          {customer.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Identificación
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.nitOrId ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Contacto
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.phone ?? '-'}
+          </Text>
+        </Paper>
+      </SimpleGrid>
+
+      {onEdit ? (
+        <Group className="mobile-actions">
+          <Button variant="light" onClick={() => onEdit(customer)}>
+            Editar
+          </Button>
+        </Group>
+      ) : null}
+    </Stack>
+  );
+}
 
 export default function CustomersPage() {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -86,6 +154,18 @@ export default function CustomersPage() {
     loadCustomers();
   }, []);
 
+  const metrics = useMemo(() => {
+    const activeCount = customers.filter((customer) => customer.active).length;
+    const identifiedCount = customers.filter((customer) => customer.nitOrId?.trim()).length;
+    const withPhoneCount = customers.filter((customer) => customer.phone?.trim()).length;
+    return {
+      total: customers.length,
+      active: activeCount,
+      identified: identifiedCount,
+      withPhone: withPhoneCount,
+    };
+  }, [customers]);
+
   const openCreate = () => {
     setEditingCustomer(null);
     setForm(emptyForm);
@@ -105,6 +185,12 @@ export default function CustomersPage() {
       initialWorksiteActive: true,
     });
     setModalOpen(true);
+  };
+
+  const closeFormModal = () => {
+    setModalOpen(false);
+    setEditingCustomer(null);
+    setForm(emptyForm);
   };
 
   const saveCustomer = async () => {
@@ -148,7 +234,7 @@ export default function CustomersPage() {
         });
       }
 
-      setModalOpen(false);
+      closeFormModal();
       await loadCustomers();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -165,196 +251,377 @@ export default function CustomersPage() {
 
   return (
     <Container size="xl" py="xl">
-      <Paper shadow="sm" p="xl" radius="md" withBorder>
-        <Group justify="space-between" mb="md">
-          <Title order={2}>Clientes</Title>
-          <Button onClick={openCreate}>Nuevo cliente</Button>
-        </Group>
-
-        {error && (
-          <Text c="red" mb="md">
-            {error}
-          </Text>
-        )}
-
-        <Table
-          striped
-          highlightOnHover
-          withTableBorder
-          className={isMobile ? 'table-mobile-fit' : undefined}
+      <Stack gap="lg">
+        <PageHeaderCard
+          title="Clientes"
+          description="Centraliza la información comercial y deja listo el arranque operativo de cada cliente."
+          icon={<IconUsersGroup size={20} />}
+          iconColor="green"
+          accentColor="rgba(34,197,94,0.12)"
+          aside={
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              Nuevo cliente
+            </Button>
+          }
         >
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th style={isMobile ? { width: '50%' } : undefined}>Nombre</Table.Th>
-              {!isMobile ? <Table.Th>NIT / Documento</Table.Th> : null}
-              {!isMobile ? <Table.Th>Teléfono</Table.Th> : null}
-              <Table.Th style={isMobile ? { width: '30%' } : undefined}>Estado</Table.Th>
-              {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
-              {!isMobile ? <Table.Th /> : null}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {!loading &&
-              customers.map((customer) => (
-                <Table.Tr key={customer.id}>
-                  <Table.Td>{customer.name}</Table.Td>
-                  {!isMobile ? <Table.Td>{customer.nitOrId ?? '-'}</Table.Td> : null}
-                  {!isMobile ? <Table.Td>{customer.phone ?? '-'}</Table.Td> : null}
-                  <Table.Td>
-                    <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                      {customer.active ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                  </Table.Td>
-                  {isMobile ? (
-                    <Table.Td>
-                      <ActionIcon
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+            <StatCard
+              label="Total"
+              value={String(metrics.total)}
+              hint="Clientes registrados"
+              color="green"
+              icon={<IconUsersGroup size={20} />}
+            />
+            <StatCard
+              label="Activos"
+              value={String(metrics.active)}
+              hint={`${Math.max(metrics.total - metrics.active, 0)} inactivos`}
+              color="teal"
+              icon={<IconUserCheck size={20} />}
+            />
+            <StatCard
+              label="Con documento"
+              value={String(metrics.identified)}
+              hint="NIT o documento cargado"
+              color="lime"
+              icon={<IconFileText size={20} />}
+            />
+            <StatCard
+              label="Con teléfono"
+              value={String(metrics.withPhone)}
+              hint="Canal de contacto disponible"
+              color="blue"
+              icon={<IconPhone size={20} />}
+            />
+          </SimpleGrid>
+        </PageHeaderCard>
+
+        {error ? (
+          <Alert color="red" variant="light" title="No se pudo completar la acción">
+            {error}
+          </Alert>
+        ) : null}
+
+        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          {isMobile ? (
+            <Stack gap="sm">
+              {!loading &&
+                customers.map((customer) => (
+                  <Paper key={customer.id} withBorder radius="lg" p="md">
+                    <Stack gap="md">
+                      <Group justify="space-between" align="flex-start">
+                        <div>
+                          <Text fw={700}>{customer.name}</Text>
+                          <Text size="sm" c="dimmed">
+                            {customer.nitOrId ?? 'Sin documento'}
+                          </Text>
+                        </div>
+                        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
+                          {customer.active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </Group>
+
+                      <SimpleGrid cols={2} spacing="sm">
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Contacto
+                          </Text>
+                          <Text size="sm">{customer.phone ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Estado
+                          </Text>
+                          <Text size="sm">{customer.active ? 'Operando' : 'Pausado'}</Text>
+                        </div>
+                      </SimpleGrid>
+
+                      <Button
                         variant="light"
-                        aria-label={`Ver detalle de ${customer.name}`}
+                        leftSection={<IconEye size={16} />}
                         onClick={() => setDetailsCustomer(customer)}
                       >
-                        <IconEye size={16} />
-                      </ActionIcon>
-                    </Table.Td>
-                  ) : (
-                    <Table.Td>
-                      <Group gap="xs" justify="flex-end">
-                        <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
-                          Editar
-                        </Button>
-                      </Group>
-                    </Table.Td>
-                  )}
-                </Table.Tr>
-              ))}
+                        Ver detalle
+                      </Button>
+                    </Stack>
+                  </Paper>
+                ))}
 
-            {!loading && customers.length === 0 && (
-              <Table.Tr>
-                <Table.Td colSpan={isMobile ? 3 : 5}>
-                  <Text c="dimmed" ta="center">
-                    No hay clientes registrados.
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
+              {!loading && customers.length === 0 ? (
+                <Paper radius="lg" p="xl" bg="gray.0">
+                  <Stack align="center" gap="xs">
+                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                      <IconUsersGroup size={20} />
+                    </ThemeIcon>
+                    <Text fw={700}>No hay clientes registrados</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Crea un nuevo cliente para empezar.
+                    </Text>
+                  </Stack>
+                </Paper>
+              ) : null}
 
-            {loading && (
-              <Table.Tr>
-                <Table.Td colSpan={isMobile ? 3 : 5}>
+              {loading ? (
+                <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
                     Cargando...
                   </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
-      </Paper>
+                </Paper>
+              ) : null}
+            </Stack>
+          ) : (
+            <Table highlightOnHover verticalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Cliente</Table.Th>
+                  <Table.Th>Identificación</Table.Th>
+                  <Table.Th>Contacto</Table.Th>
+                  <Table.Th>Estado</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {!loading &&
+                  customers.map((customer) => (
+                    <Table.Tr key={customer.id}>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text fw={700}>{customer.name}</Text>
+                          <Text size="sm" c="dimmed">
+                            Cliente registrado
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{customer.phone ?? 'Sin teléfono'}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
+                          {customer.active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                          <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
+                            Editar
+                          </Button>
+                          <ActionIcon
+                            color="gray"
+                            variant="light"
+                            aria-label={`Ver detalle de ${customer.name}`}
+                            onClick={() => setDetailsCustomer(customer)}
+                          >
+                            <IconEye size={16} />
+                          </ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+
+                {!loading && customers.length === 0 && (
+                  <Table.Tr>
+                    <Table.Td colSpan={5}>
+                      <Stack align="center" gap="xs" py="lg">
+                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                          <IconUsersGroup size={20} />
+                        </ThemeIcon>
+                        <Text fw={700}>No hay clientes para mostrar</Text>
+                        <Text size="sm" c="dimmed">
+                          Registra un nuevo cliente.
+                        </Text>
+                      </Stack>
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+
+                {loading && (
+                  <Table.Tr>
+                    <Table.Td colSpan={5}>
+                      <Text c="dimmed" ta="center">
+                        Cargando...
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
+      </Stack>
 
       <Modal
         opened={!!detailsCustomer}
         onClose={() => setDetailsCustomer(null)}
         title="Detalle de cliente"
         centered
+        size="lg"
       >
         {detailsCustomer ? (
-          <Stack gap="xs">
-            <Text><strong>Nombre:</strong> {detailsCustomer.name}</Text>
-            <Text><strong>NIT / Documento:</strong> {detailsCustomer.nitOrId ?? '-'}</Text>
-            <Text><strong>Teléfono:</strong> {detailsCustomer.phone ?? '-'}</Text>
-            <Text><strong>Estado:</strong> {detailsCustomer.active ? 'Activo' : 'Inactivo'}</Text>
-            <Group className="mobile-actions" mt="sm">
-              <Button
-                variant="light"
-                onClick={() => {
-                  setDetailsCustomer(null);
-                  openEdit(detailsCustomer);
-                }}
-              >
-                Editar
-              </Button>
-            </Group>
-          </Stack>
+          <CustomerDetails
+            customer={detailsCustomer}
+            onEdit={(customer) => {
+              setDetailsCustomer(null);
+              openEdit(customer);
+            }}
+          />
         ) : null}
       </Modal>
 
       <Modal
         opened={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeFormModal}
         title={editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}
         centered
+        size="lg"
       >
-        <Stack>
-          <TextInput
-            label="Nombre"
-            value={form.name}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setForm((prev) => ({ ...prev, name: value }));
-            }}
-            required
-          />
-          <TextInput
-            label="NIT / Documento"
-            value={form.nitOrId}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setForm((prev) => ({ ...prev, nitOrId: value }));
-            }}
-          />
-          <TextInput
-            label="Teléfono"
-            value={form.phone}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setForm((prev) => ({ ...prev, phone: value }));
-            }}
-          />
+        <Stack gap="lg">
           {editingCustomer ? (
-            <Switch
-              label="Activo"
-              checked={form.active}
-              onChange={(event) => setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))}
-            />
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(248,250,252,0.96) 0%, rgba(240,253,244,0.96) 100%)',
+              }}
+            >
+              <Group justify="space-between" align="flex-start">
+                <div>
+                  <Text fw={700}>{editingCustomer.name}</Text>
+                  <Text size="sm" c="dimmed">
+                    {editingCustomer.nitOrId ?? 'Sin documento'}
+                  </Text>
+                </div>
+                <Badge color={form.active ? 'green' : 'gray'} variant="light">
+                  {form.active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </Group>
+            </Paper>
           ) : null}
-          {!editingCustomer && (
-            <>
-              <Text fw={600} mt="sm">
-                Obra inicial
-              </Text>
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Perfil comercial</Text>
+                <Text size="sm" c="dimmed">
+                  Datos base para identificar y contactar al cliente.
+                </Text>
+              </div>
+
               <TextInput
-                label="Nombre de la obra"
-                value={form.initialWorksiteName}
+                label="Nombre"
+                placeholder="Razón social o nombre del cliente"
+                value={form.name}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
-                  setForm((prev) => ({ ...prev, initialWorksiteName: value }));
+                  setForm((prev) => ({ ...prev, name: value }));
                 }}
                 required
               />
-              <TextInput
-                label="Alias de la obra"
-                value={form.initialWorksiteAlias}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setForm((prev) => ({ ...prev, initialWorksiteAlias: value }));
-                }}
-              />
-              <TextInput
-                label="Dirección de la obra"
-                value={form.initialWorksiteAddress}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setForm((prev) => ({ ...prev, initialWorksiteAddress: value }));
-                }}
-              />
-            </>
-          )}
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <TextInput
+                  label="NIT / Documento"
+                  placeholder="Identificación tributaria o documento"
+                  value={form.nitOrId}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, nitOrId: value }));
+                  }}
+                />
+                <TextInput
+                  label="Teléfono"
+                  placeholder="Número de contacto"
+                  value={form.phone}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, phone: value }));
+                  }}
+                />
+              </SimpleGrid>
+
+              {editingCustomer ? (
+                <Switch
+                  checked={form.active}
+                  label="Cliente activo"
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
+                  }
+                />
+              ) : null}
+            </Stack>
+          </Paper>
+
+          {!editingCustomer ? (
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <div>
+                  <Group gap="xs">
+                    <ThemeIcon color="green" variant="light" size={32} radius="xl">
+                      <IconBuildingEstate size={16} />
+                    </ThemeIcon>
+                    <div>
+                      <Text fw={700}>Obra inicial</Text>
+                      <Text size="sm" c="dimmed">
+                        Crea la primera obra junto con el cliente para dejar listo el arranque.
+                      </Text>
+                    </div>
+                  </Group>
+                </div>
+
+                <TextInput
+                  label="Nombre de la obra"
+                  placeholder="Nombre principal de la obra"
+                  value={form.initialWorksiteName}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, initialWorksiteName: value }));
+                  }}
+                  required
+                />
+
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <TextInput
+                    label="Alias de la obra"
+                    placeholder="Nombre corto o referencia interna"
+                    value={form.initialWorksiteAlias}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setForm((prev) => ({ ...prev, initialWorksiteAlias: value }));
+                    }}
+                  />
+                  <TextInput
+                    label="Dirección de la obra"
+                    placeholder="Ubicación o dirección principal"
+                    value={form.initialWorksiteAddress}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setForm((prev) => ({ ...prev, initialWorksiteAddress: value }));
+                    }}
+                  />
+                </SimpleGrid>
+
+                <Paper radius="md" p="sm" bg="gray.0">
+                  <Group gap="xs" wrap="nowrap">
+                    <ThemeIcon color="gray" variant="light" size={28} radius="xl">
+                      <IconRoad size={14} />
+                    </ThemeIcon>
+                    <Text size="sm" c="dimmed">
+                      La obra inicial se creará activa junto con el cliente.
+                    </Text>
+                  </Group>
+                </Paper>
+              </Stack>
+            </Paper>
+          ) : null}
 
           <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => setModalOpen(false)}>
+            <Button variant="default" onClick={closeFormModal}>
               Cancelar
             </Button>
             <Button onClick={saveCustomer} loading={saving}>
-              Guardar
+              {editingCustomer ? 'Guardar cambios' : 'Crear cliente'}
             </Button>
           </Group>
         </Stack>

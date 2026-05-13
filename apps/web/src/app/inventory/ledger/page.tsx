@@ -1,20 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import { useRouter } from 'next/navigation';
 import {
+  Alert,
   Button,
   Container,
   Group,
   Paper,
   Select,
   SimpleGrid,
+  Stack,
   Text,
   TextInput,
-  Title
+  ThemeIcon,
+  Title,
 } from '@mantine/core';
+import {
+  IconAdjustments,
+  IconArrowsShuffle,
+  IconBuildingWarehouse,
+  IconChecklist,
+  IconClockHour4,
+} from '@tabler/icons-react';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
 const DEFAULT_TAKE = 30;
@@ -63,7 +75,7 @@ export default function LedgerPage() {
     skuId: '',
     assetId: '',
     from: '',
-    to: ''
+    to: '',
   });
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -101,7 +113,7 @@ export default function LedgerPage() {
     try {
       const response = await api<LedgerResponse>(
         `/inventory/ledger${query ? `?${query}` : ''}`,
-        { method: 'GET' }
+        { method: 'GET' },
       );
       setItems((prev) => (options?.append ? [...prev, ...response.items] : response.items));
       setNextCursor(response.nextCursor);
@@ -136,7 +148,6 @@ export default function LedgerPage() {
       setSkus(skusData);
       setAssets(assetsData);
     } catch {
-      // Keep page functional even if filter catalogs fail.
       setWarehouses([]);
       setWorksites([]);
       setSkus([]);
@@ -151,6 +162,20 @@ export default function LedgerPage() {
     loadFilterOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const metrics = useMemo(() => {
+    const uniqueMovements = new Set(items.map((item) => item.movementType)).size;
+    const withDocument = items.filter((item) => item.document?.id || item.refDocumentId).length;
+    const withAsset = items.filter((item) => item.assetId).length;
+    return {
+      total: items.length,
+      uniqueMovements,
+      withDocument,
+      withAsset,
+    };
+  }, [items]);
+
+  const hasActiveFilters = Object.values(filters).some(Boolean);
 
   if (unauthorized) {
     return (
@@ -171,136 +196,208 @@ export default function LedgerPage() {
 
   return (
     <main>
-      <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Historial de Movimientos</Title>
-          <Text c="dimmed">Consulta los movimientos de inventario por filtros.</Text>
+      <Container size="xl" py="xl">
+        <Stack gap="lg">
+          <PageHeaderCard
+            title="Historial de movimientos"
+            description="Consulta entradas, salidas, tránsitos y ajustes del inventario con filtros combinados."
+            icon={<IconArrowsShuffle size={20} />}
+            iconColor="blue"
+            accentColor="rgba(59,130,246,0.12)"
+          >
+            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+              <StatCard
+                label="Resultados"
+                value={String(metrics.total)}
+                hint="Movimientos cargados"
+                color="blue"
+                icon={<IconChecklist size={20} />}
+              />
+              <StatCard
+                label="Tipos"
+                value={String(metrics.uniqueMovements)}
+                hint="Clases de movimiento presentes"
+                color="grape"
+                icon={<IconAdjustments size={20} />}
+              />
+              <StatCard
+                label="Con documento"
+                value={String(metrics.withDocument)}
+                hint="Asociados a remisión o referencia"
+                color="cyan"
+                icon={<IconClockHour4 size={20} />}
+              />
+              <StatCard
+                label="Equipos"
+                value={String(metrics.withAsset)}
+                hint="Movimientos ligados a activo único"
+                color="teal"
+                icon={<IconBuildingWarehouse size={20} />}
+              />
+            </SimpleGrid>
+          </PageHeaderCard>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
-            <Select
-              label="Bodega"
-              value={filters.warehouseId}
-              onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
-              placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todas'}
-              data={warehouses.map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.name,
-              }))}
-              searchable
-              clearable
-            />
-            <Select
-              label="Obra"
-              value={filters.customerWorksiteId}
-              onChange={(value) =>
-                setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
-              }
-              placeholder={filtersLoading ? 'Cargando obras...' : 'Todas'}
-              data={worksites.map((row) => ({
-                value: row.id,
-                label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
-              }))}
-              searchable
-              clearable
-            />
-            <Select
-              label="Movement Type"
-              value={filters.movementType}
-              onChange={(value) =>
-                setFilters((prev) => ({ ...prev, movementType: value ?? '' }))
-              }
-              clearable
-              placeholder="Todos"
-              data={MOVEMENT_TYPES.map((t) => ({ value: t, label: t }))}
-            />
-            <Select
-              label="SKU"
-              value={filters.skuId}
-              onChange={(value) => setFilters((prev) => ({ ...prev, skuId: value ?? '' }))}
-              placeholder={filtersLoading ? 'Cargando SKUs...' : 'Todos'}
-              data={skus.map((sku) => ({
-                value: sku.id,
-                label: sku.name,
-              }))}
-              searchable
-              clearable
-            />
-            <Select
-              label="Activo"
-              value={filters.assetId}
-              onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
-              placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
-              data={assets.map((asset) => ({
-                value: asset.id,
-                label: asset.description || asset.serialOrEngine || asset.id,
-              }))}
-              searchable
-              clearable
-            />
-            <TextInput
-              label="Desde"
-              type="datetime-local"
-              value={filters.from}
-              onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
-            />
-            <TextInput
-              label="Hasta"
-              type="datetime-local"
-              value={filters.to}
-              onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
-            />
-          </SimpleGrid>
-
-          <Group mt="md">
-            <Button onClick={() => fetchLedger()} loading={loading}>
-              Buscar
-            </Button>
-            <Button
-              variant="light"
-              onClick={() => {
-                setFilters({
-                  warehouseId: '',
-                  customerWorksiteId: '',
-                  movementType: '',
-                  skuId: '',
-                  assetId: '',
-                  from: '',
-                  to: ''
-                });
-                setItems([]);
-                setNextCursor(null);
-              }}
-            >
-              Limpiar
-            </Button>
-          </Group>
-
-          {error && (
-            <Text c="red" mt="sm">
+          {error ? (
+            <Alert color="red" variant="light" title="No se pudo consultar el ledger">
               {error}
-            </Text>
-          )}
-        </Paper>
+            </Alert>
+          ) : null}
 
-        {items.length > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <LedgerTable items={items} />
-          </div>
-        )}
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Stack gap="md">
+              <Group justify="space-between" align="center">
+                <div>
+                  <Text fw={700}>Filtros de consulta</Text>
+                  <Text size="sm" c="dimmed">
+                    Combina ubicación, obra, movimiento y rango de fechas para aislar el historial que necesitas.
+                  </Text>
+                </div>
+                {hasActiveFilters ? (
+                  <Button
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => {
+                      setFilters({
+                        warehouseId: '',
+                        customerWorksiteId: '',
+                        movementType: '',
+                        skuId: '',
+                        assetId: '',
+                        from: '',
+                        to: '',
+                      });
+                      setItems([]);
+                      setNextCursor(null);
+                    }}
+                  >
+                    Limpiar filtros
+                  </Button>
+                ) : null}
+              </Group>
 
-        {items.length > 0 && (
-          <Group mt="md">
-            <Button
-              variant="light"
-              disabled={!nextCursor}
-              loading={loading}
-              onClick={() => fetchLedger({ append: true })}
-            >
-              {nextCursor ? 'Cargar más' : 'Sin más resultados'}
-            </Button>
-          </Group>
-        )}
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                <Select
+                  label="Bodega"
+                  value={filters.warehouseId}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
+                  placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todas'}
+                  data={warehouses.map((warehouse) => ({
+                    value: warehouse.id,
+                    label: warehouse.name,
+                  }))}
+                  searchable
+                  clearable
+                />
+                <Select
+                  label="Obra"
+                  value={filters.customerWorksiteId}
+                  onChange={(value) =>
+                    setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
+                  }
+                  placeholder={filtersLoading ? 'Cargando obras...' : 'Todas'}
+                  data={worksites.map((row) => ({
+                    value: row.id,
+                    label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
+                  }))}
+                  searchable
+                  clearable
+                />
+                <Select
+                  label="Tipo de movimiento"
+                  value={filters.movementType}
+                  onChange={(value) =>
+                    setFilters((prev) => ({ ...prev, movementType: value ?? '' }))
+                  }
+                  clearable
+                  placeholder="Todos"
+                  data={MOVEMENT_TYPES.map((t) => ({ value: t, label: t }))}
+                />
+                <Select
+                  label="SKU"
+                  value={filters.skuId}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, skuId: value ?? '' }))}
+                  placeholder={filtersLoading ? 'Cargando SKUs...' : 'Todos'}
+                  data={skus.map((sku) => ({
+                    value: sku.id,
+                    label: sku.name,
+                  }))}
+                  searchable
+                  clearable
+                />
+                <Select
+                  label="Activo"
+                  value={filters.assetId}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
+                  placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
+                  data={assets.map((asset) => ({
+                    value: asset.id,
+                    label: asset.description || asset.serialOrEngine || asset.id,
+                  }))}
+                  searchable
+                  clearable
+                />
+                <div />
+                <TextInput
+                  label="Desde"
+                  type="datetime-local"
+                  value={filters.from}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
+                />
+                <TextInput
+                  label="Hasta"
+                  type="datetime-local"
+                  value={filters.to}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
+                />
+              </SimpleGrid>
 
+              <Group className="mobile-actions">
+                <Button onClick={() => fetchLedger()} loading={loading}>
+                  Buscar movimientos
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+
+          {items.length > 0 ? (
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Stack gap="md">
+                <div>
+                  <Text fw={700}>Resultados</Text>
+                  <Text size="sm" c="dimmed">
+                    {items.length} movimiento{items.length === 1 ? '' : 's'} cargado{items.length === 1 ? '' : 's'}.
+                  </Text>
+                </div>
+                <LedgerTable items={items} />
+              </Stack>
+            </Paper>
+          ) : !loading ? (
+            <Paper withBorder radius="xl" p="xl">
+              <Stack align="center" gap="xs">
+                <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                  <IconChecklist size={20} />
+                </ThemeIcon>
+                <Text fw={700}>No hay movimientos para mostrar</Text>
+                <Text size="sm" c="dimmed" ta="center">
+                  Ajusta los filtros o ejecuta una nueva búsqueda para consultar otro tramo del historial.
+                </Text>
+              </Stack>
+            </Paper>
+          ) : null}
+
+          {items.length > 0 ? (
+            <Group>
+              <Button
+                variant="light"
+                disabled={!nextCursor}
+                loading={loading}
+                onClick={() => fetchLedger({ append: true })}
+              >
+                {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+              </Button>
+            </Group>
+          ) : null}
+        </Stack>
       </Container>
     </main>
   );

@@ -57,6 +57,12 @@ enum DocumentStatus {
   VOID
 }
 
+enum DocumentItemBillingStatus {
+  OPEN
+  CUT
+  CLOSED
+}
+
 enum FailureResponsibility {
   CUSTOMER
   COMPANY
@@ -308,6 +314,12 @@ model DocumentItem {
   condition          String?
   conditionNote      String?
   damageCostEstimate Decimal?
+  billingCutoffDate  DateTime?
+  returnedAt         DateTime?
+  billingStatus      DocumentItemBillingStatus @default(OPEN)
+  billingNote        String?
+  billingUpdatedAt   DateTime?
+  billingUpdatedBy   String?
 
   createdAt DateTime @default(now())
 

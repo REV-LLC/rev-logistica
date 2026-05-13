@@ -21,6 +21,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateDocumentRequestDto } from './dto/create-document-request.dto';
 import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
+import { UpdateDocumentItemBillingDto } from './dto/update-document-item-billing.dto';
 import { UpdateDocumentRequestDto } from './dto/update-document-request.dto';
 import { DocumentsService } from './documents.service';
 
@@ -98,6 +99,29 @@ export class DocumentsController {
       throw new BadRequestException('Solo se permiten solicitudes de remisión o devolución');
     }
     return this.documentsService.updateRequestDocument(documentId, payload);
+  }
+
+  @Patch(':documentId/items/:itemId/billing')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  updateDocumentItemBilling(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: UpdateDocumentItemBillingDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.documentsService.updateDocumentItemBilling(
+      documentId,
+      itemId,
+      payload,
+      request.user.sub,
+    );
   }
 
   @Get()

@@ -7,7 +7,6 @@ import {
   Container,
   Divider,
   Group,
-  Modal,
   Paper,
   Radio,
   Select,
@@ -22,28 +21,15 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { api, ApiError } from '@/lib/api';
+import InventoryItemPickerModal, {
+  type InventoryItemPickerBulkItem,
+  type InventoryItemPickerSerialItem,
+} from '@/components/InventoryItemPickerModal';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 
-type InventoryBulk = {
-  skuId: string;
-  skuName: string | null;
-  ownerWarehouseId: string | null;
-  ownerWarehouseName?: string | null;
-  quantity: number;
-};
-
-type InventorySerial = {
-  assetId: string;
-  serialOrEngine: string | null;
-  description: string | null;
-  skuName?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  internalNumber?: number | null;
-  quantity: number;
-  skuId?: string | null;
-  ownerWarehouseId: string | null;
-};
+type InventoryBulk = InventoryItemPickerBulkItem;
+type InventorySerial = InventoryItemPickerSerialItem;
 
 type CatalogSku = {
   skuId: string;
@@ -81,15 +67,6 @@ type SelectedItem = {
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
-
-const buildSerialDisplayName = (item: InventorySerial) => {
-  const parts = [item.skuName, item.brand, item.model]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value));
-  const base = parts.length ? parts.join(' ') : item.description ?? item.serialOrEngine ?? item.assetId;
-  const internal = item.internalNumber != null ? ` #${item.internalNumber}` : '';
-  return `${base}${internal}`.trim();
-};
 
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
@@ -136,8 +113,6 @@ export default function RemisionDevolucionPage() {
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
-  const [bulkSelect, setBulkSelect] = useState<string | null>(null);
-  const [serialSelect, setSerialSelect] = useState<string | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -246,9 +221,7 @@ export default function RemisionDevolucionPage() {
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
       }
-      if (isMobile) {
-        setItemsModalOpen(true);
-      }
+      setItemsModalOpen(true);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -265,8 +238,6 @@ export default function RemisionDevolucionPage() {
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
-    setBulkSelect(null);
-    setSerialSelect(null);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
@@ -302,7 +273,7 @@ export default function RemisionDevolucionPage() {
         {
           type: 'serial',
           assetId: item.assetId,
-          name: buildSerialDisplayName(item),
+          name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
           ownerWarehouseId: item.ownerWarehouseId
         }
@@ -313,6 +284,16 @@ export default function RemisionDevolucionPage() {
   const updateSelected = (index: number, updates: Partial<SelectedItem>) => {
     setSelectedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)));
   };
+
+  const selectedBulkKeys = useMemo(
+    () => new Set(selectedItems.filter((item) => item.type === 'bulk').map((item) => item.bulkKey)),
+    [selectedItems],
+  );
+
+  const selectedSerialIds = useMemo(
+    () => new Set(selectedItems.filter((item) => item.type === 'serial').map((item) => item.assetId)),
+    [selectedItems],
+  );
 
   const removeSelected = (index: number) => {
     setSelectedItems((prev) => prev.filter((_, i) => i !== index));
@@ -425,8 +406,6 @@ export default function RemisionDevolucionPage() {
       setBulkItems([]);
       setSerialItems([]);
       setSelectedItems([]);
-      setBulkSelect(null);
-      setSerialSelect(null);
       setItemsModalOpen(false);
       setWorksites([]);
       router.refresh();
@@ -615,57 +594,9 @@ export default function RemisionDevolucionPage() {
           </Group>
 
           <Divider my="md" />
-
-          {!isMobile ? (
-            <Stack gap="md">
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <Select
-                  label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
-                  placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
-                  searchable
-                  clearable
-                  value={bulkSelect}
-                  onChange={(value) => {
-                    const found = bulkItems.find((item) => buildBulkKey(item) === value);
-                    if (found) {
-                      addBulkItem(found);
-                      setBulkSelect(null);
-                    } else {
-                      setBulkSelect(value);
-                    }
-                  }}
-                  data={bulkItems.map((item) => ({
-                    value: buildBulkKey(item),
-                    label: `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
-                  }))}
-                />
-                <Select
-                  label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
-                  placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
-                  searchable
-                  clearable
-                  value={serialSelect}
-                  onChange={(value) => {
-                    const found = serialItems.find((item) => item.assetId === value);
-                    if (found) {
-                      addSerialItem(found);
-                      setSerialSelect(null);
-                    } else {
-                      setSerialSelect(value);
-                    }
-                  }}
-                  data={serialItems.map((item) => ({
-                    value: item.assetId,
-                    label: buildSerialDisplayName(item)
-                  }))}
-                />
-              </SimpleGrid>
-            </Stack>
-          ) : (
-            <Text size="sm" c="dimmed">
-              Pulsa "Cargar items" para abrir el selector de items.
-            </Text>
-          )}
+          <Text size="sm" c="dimmed">
+            Carga el inventario y selecciónalo desde el modal.
+          </Text>
           <Divider my="md" />
 
           <Title order={4}>Seleccionados</Title>
@@ -773,60 +704,18 @@ export default function RemisionDevolucionPage() {
         </Paper>
       </Container>
 
-      <Modal
+      <InventoryItemPickerModal
         opened={itemsModalOpen}
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
-        centered
-      >
-        <Stack gap="md">
-          <Select
-            label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
-            placeholder={bulkItems.length ? 'Busca por nombre o SKU' : 'Cargar items primero'}
-            searchable
-            clearable
-            value={bulkSelect}
-            onChange={(value) => {
-              const found = bulkItems.find((item) => buildBulkKey(item) === value);
-              if (found) {
-                addBulkItem(found);
-                setBulkSelect(null);
-              } else {
-                setBulkSelect(value);
-              }
-            }}
-            data={bulkItems.map((item) => ({
-              value: buildBulkKey(item),
-              label: `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
-            }))}
-          />
-          <Select
-            label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
-            placeholder={serialItems.length ? 'Busca por serial o asset' : 'Cargar items primero'}
-            searchable
-            clearable
-            value={serialSelect}
-            onChange={(value) => {
-              const found = serialItems.find((item) => item.assetId === value);
-              if (found) {
-                addSerialItem(found);
-                setSerialSelect(null);
-              } else {
-                setSerialSelect(value);
-              }
-            }}
-            data={serialItems.map((item) => ({
-              value: item.assetId,
-              label: buildSerialDisplayName(item)
-            }))}
-          />
-          <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => setItemsModalOpen(false)}>
-              Cerrar
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        bulkItems={bulkItems}
+        serialItems={serialItems}
+        selectedBulkKeys={selectedBulkKeys}
+        selectedSerialIds={selectedSerialIds}
+        onAddBulk={addBulkItem}
+        onAddSerial={addSerialItem}
+        sourceMode={sourceMode}
+      />
     </main>
   );
 }

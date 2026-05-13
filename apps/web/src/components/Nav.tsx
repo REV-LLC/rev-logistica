@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Badge, Box, Button, Divider, Group, NavLink, Stack } from '@mantine/core';
-import { AppRole, clearToken, getCurrentUserRole, getToken } from '@/lib/auth';
+import { Badge, Box, Button, Divider, Group, NavLink, Stack, Text } from '@mantine/core';
+import { AppRole, clearToken, getCurrentUserRole } from '@/lib/auth';
 import {
   IconArrowsShuffle,
   IconBuilding,
@@ -12,6 +11,8 @@ import {
   IconChecklist,
   IconClipboardList,
   IconBox,
+  IconMap2,
+  IconReceipt,
   IconTruck,
   IconUsers,
   IconUser,
@@ -25,23 +26,44 @@ type NavLinkItem = {
   activePrefixes?: string[];
 };
 
-const links: NavLinkItem[] = [
-  { href: '/transport/solicitudes', label: 'Solicitudes iPad', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
-  { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
+type NavSection = {
+  title: string;
+  links: NavLinkItem[];
+};
+
+const sections: NavSection[] = [
   {
-    href: '/inventory/bulk-adjustments',
-    label: 'Agregar stock',
-    icon: IconBox,
-    roles: ['ADMIN', 'OFFICE'],
-    activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
+    title: 'Operacion',
+    links: [
+      { href: '/transport/solicitudes', label: 'Solicitudes', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+      { href: '/transport/cost', label: 'Transporte', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/vehicles', label: 'Vehiculos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/obras', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
+    ],
   },
-  { href: '/transport/cost', label: 'Transporte', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/transport/vehicles', label: 'Vehículos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/transport/obras', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] }
+  {
+    title: 'Inventario',
+    links: [
+      { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
+      {
+        href: '/inventory/bulk-adjustments',
+        label: 'Stock',
+        icon: IconBox,
+        roles: ['ADMIN', 'OFFICE'],
+        activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
+      },
+    ],
+  },
+  {
+    title: 'Administracion',
+    links: [
+      { href: '/billing/prefactura', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+    ],
+  },
 ];
 
 type NavProps = {
@@ -51,9 +73,13 @@ type NavProps = {
 export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [copied, setCopied] = useState(false);
   const currentRole = getCurrentUserRole();
-  const allowedLinks = links.filter((link) => (currentRole ? link.roles.includes(currentRole) : true));
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      links: section.links.filter((link) => (currentRole ? link.roles.includes(currentRole) : true)),
+    }))
+    .filter((section) => section.links.length > 0);
   const roleColor =
     currentRole === 'ADMIN' ? 'red' : currentRole === 'OFFICE' ? 'blue' : currentRole === 'DRIVER' ? 'teal' : 'gray';
 
@@ -61,18 +87,6 @@ export default function Nav({ onNavigate }: NavProps) {
     clearToken();
     onNavigate?.();
     router.replace('/login');
-  };
-
-  const handleCopyToken = async () => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
   };
 
   return (
@@ -85,48 +99,69 @@ export default function Nav({ onNavigate }: NavProps) {
             style={{ height: 36, width: 'auto', display: 'block' }}
           />
         </Link>
-        <Badge color={roleColor} variant="light">
+        <Badge color={roleColor} variant="light" radius="sm" tt="uppercase">
           {currentRole ?? 'SIN ROL'}
         </Badge>
       </Group>
       <Divider />
-      <Stack gap={2}>
-        {allowedLinks.map((link) => {
-          const Icon = link.icon;
-          const prefixes = link.activePrefixes ?? [link.href];
-          const isActive = prefixes.some((prefix) => pathname?.startsWith(prefix));
-          return (
-            <NavLink
-              key={link.href}
-              component={Link}
-              href={link.href}
-              label={link.label}
-              active={isActive}
-              color={isActive ? 'green' : undefined}
-              styles={{
-                root: {
-                  backgroundColor: isActive ? 'var(--mantine-color-green-0)' : undefined,
-                  borderRadius: 'var(--mantine-radius-sm)',
-                },
-                label: {
-                  color: isActive ? 'var(--mantine-color-green-8)' : undefined,
-                  fontWeight: isActive ? 700 : 500,
-                },
-                section: { color: isActive ? 'var(--mantine-color-green-7)' : undefined },
-              }}
-              leftSection={<Icon size={16} />}
-              onClick={onNavigate}
-            />
-          );
-        })}
+      <Stack gap="lg">
+        {visibleSections.map((section) => (
+          <Stack key={section.title} gap={6}>
+            <Text size="xs" fw={700} c="dimmed" tt="uppercase" px="sm" lh={1.2}>
+              {section.title}
+            </Text>
+            <Stack gap={4}>
+              {section.links.map((link) => {
+                const Icon = link.icon;
+                const prefixes = link.activePrefixes ?? [link.href];
+                const isActive = prefixes.some((prefix) => pathname?.startsWith(prefix));
+                return (
+                  <NavLink
+                    key={link.href}
+                    component={Link}
+                    href={link.href}
+                    label={link.label}
+                    active={isActive}
+                    styles={{
+                      root: {
+                        borderRadius: 'var(--mantine-radius-md)',
+                        borderLeft: isActive
+                          ? '3px solid var(--mantine-color-blue-6)'
+                          : '3px solid transparent',
+                        backgroundColor: isActive ? 'var(--mantine-color-blue-0)' : 'transparent',
+                        paddingLeft: 'calc(var(--mantine-spacing-sm) - 3px)',
+                        paddingTop: '10px',
+                        paddingBottom: '10px',
+                      },
+                      body: {
+                        minHeight: 'auto',
+                        display: 'flex',
+                        alignItems: 'center',
+                      },
+                      label: {
+                        color: isActive ? 'var(--mantine-color-blue-9)' : 'var(--mantine-color-gray-8)',
+                        fontWeight: isActive ? 700 : 500,
+                        lineHeight: 1.2,
+                      },
+                      section: {
+                        color: isActive ? 'var(--mantine-color-blue-7)' : 'var(--mantine-color-gray-6)',
+                        display: 'flex',
+                        alignItems: 'center',
+                      },
+                    }}
+                    leftSection={<Icon size={17} stroke={1.8} />}
+                    onClick={onNavigate}
+                  />
+                );
+              })}
+            </Stack>
+          </Stack>
+        ))}
       </Stack>
       <Box mt="auto">
         <Divider mb="md" />
         <Stack gap="xs">
-          <Button variant="light" onClick={handleCopyToken} size="xs">
-            {copied ? 'Copiado' : 'Copiar token'}
-          </Button>
-          <Button variant="light" color="red" onClick={handleLogout} size="xs">
+          <Button variant="subtle" color="red" onClick={handleLogout} size="xs">
             Logout
           </Button>
         </Stack>

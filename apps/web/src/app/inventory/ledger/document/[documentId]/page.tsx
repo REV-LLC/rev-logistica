@@ -1,12 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Container,
+  Group,
+  Modal,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconCalendar } from '@tabler/icons-react';
 
 type DocumentDetail = {
   id: string;
@@ -37,6 +50,7 @@ type DocumentDetail = {
     assetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;
+    conditionNote?: string | null;
     requestedTag?: string | null;
     sku?: { id: string; name: string } | null;
     asset?: {
@@ -46,6 +60,10 @@ type DocumentDetail = {
       internalNumber?: number | null;
       sku?: { id: string; name: string } | null;
     } | null;
+    billingCutoffDate?: string | null;
+    returnedAt?: string | null;
+    billingStatus?: 'OPEN' | 'CUT' | 'CLOSED' | string | null;
+    billingNote?: string | null;
   }>;
   ledger: Array<{
     id: string;
@@ -95,6 +113,43 @@ function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('es-CO');
+}
+
+function toDisplayDateInput(value?: string | null) {
+  if (!value) return '';
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-CO');
+}
+
+function toPickerDateInput(value?: string | null) {
+  if (!value) return '';
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function toApiDateInput(value: string, fieldLabel: string) {
+  const raw = value.trim();
+  if (!raw) return null;
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    throw new Error(`${fieldLabel} debe estar en formato dd/mm/aaaa`);
+  }
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
 }
 
 function formatDateTime(value: string) {
@@ -174,6 +229,15 @@ export default function DocumentDetailPage() {
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [billingModalOpen, setBillingModalOpen] = useState(false);
+  const [billingItemId, setBillingItemId] = useState<string | null>(null);
+  const [billingCutoffDate, setBillingCutoffDate] = useState('');
+  const [billingReturnedAt, setBillingReturnedAt] = useState('');
+  const [billingNote, setBillingNote] = useState('');
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
+  const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!documentId) return;
@@ -219,6 +283,10 @@ export default function DocumentDetailPage() {
     if (document.consecutive) return document.consecutive.trim();
     return `${formatDocType(document.type)} ${document.id.slice(0, 8)}`;
   }, [document]);
+  const selectedBillingItem = useMemo(
+    () => document?.items.find((item) => item.id === billingItemId) ?? null,
+    [billingItemId, document?.items],
+  );
 
   const parsedNotes = useMemo(() => parseNotes(document?.notes ?? null), [document?.notes]);
   const observationText = useMemo(() => buildObservationText(document?.notes ?? null), [document?.notes]);
@@ -276,15 +344,21 @@ export default function DocumentDetailPage() {
   );
 
   const lines = useMemo(() => {
-    const sourceRows = (document?.ledger?.length ? document.ledger : document?.items ?? []);
+    const sourceRows = document?.type === 'RETURN'
+      ? document?.items ?? []
+      : (document?.ledger?.length ? document.ledger : document?.items ?? []);
     const rows = sourceRows.map((entry: any) => {
-      const qty = Math.abs(Number(entry.quantity || 0));
-      const desc =
+      const qty = entry.assetId && entry.quantity == null
+        ? 1
+        : Math.abs(Number(entry.quantity || 0));
+      const baseDesc =
         entry.asset?.description ??
         entry.asset?.sku?.name ??
         entry.sku?.name ??
         entry.requestedTag ??
         '-';
+      const damageNote = entry.conditionNote?.trim();
+      const desc = damageNote ? `${baseDesc} | Averia: ${damageNote}` : baseDesc;
       const eq = entry.asset?.internalNumber != null ? `#${entry.asset.internalNumber}` : '';
       const origin = entry.ownerWarehouse
         ? entry.ownerWarehouse.ownerCompany?.name
@@ -301,7 +375,74 @@ export default function DocumentDetailPage() {
       rows.push({ qty: 0, desc: '', eq: '', origin: '' });
     }
     return rows.slice(0, 11);
-  }, [document?.items, document?.ledger, warehouseNameById]);
+  }, [document?.items, document?.ledger, document?.type, warehouseNameById]);
+  const describeItem = (item: DocumentDetail['items'][number]) => {
+    return (
+      item.asset?.description ??
+      item.asset?.sku?.name ??
+      item.sku?.name ??
+      item.requestedTag ??
+      '-'
+    );
+  };
+  const displayQuantity = (value?: string | number | null) => {
+    if (value == null) return '-';
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return String(value);
+    return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2);
+  };
+  const billingStatusColor = (status?: string | null) => {
+    if (status === 'CUT') return 'yellow';
+    if (status === 'CLOSED') return 'gray';
+    return 'green';
+  };
+  const openBillingModal = (item: DocumentDetail['items'][number]) => {
+    const defaultReturnedAt =
+      document?.type === 'RETURN'
+        ? toPickerDateInput(item.returnedAt ?? document.docDate ?? document.createdAt)
+        : toPickerDateInput(item.returnedAt);
+    setBillingItemId(item.id);
+    setBillingCutoffDate(toPickerDateInput(item.billingCutoffDate));
+    setBillingReturnedAt(defaultReturnedAt);
+    setBillingNote(item.billingNote ?? '');
+    setBillingError(null);
+    setBillingModalOpen(true);
+  };
+  const reloadDocumentOnly = async () => {
+    if (!documentId) return;
+    const docData = await api<DocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+    setDocument(docData);
+  };
+  const saveBilling = async () => {
+    if (!document?.id || !selectedBillingItem) return;
+    setBillingLoading(true);
+    setBillingError(null);
+    try {
+      const cutoffValue = toApiDateInput(billingCutoffDate, 'Fecha corte');
+      const returnedValue = toApiDateInput(billingReturnedAt, 'Fecha devolución real');
+      await api(`/documents/${document.id}/items/${selectedBillingItem.id}/billing`, {
+        method: 'PATCH',
+        json: {
+          billingCutoffDate: cutoffValue,
+          returnedAt: returnedValue,
+          note: billingNote || undefined,
+        },
+      });
+      await reloadDocumentOnly();
+      setBillingModalOpen(false);
+      setBillingItemId(null);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setBillingError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setBillingError(err.message);
+      } else {
+        setBillingError('Error guardando corte del item');
+      }
+    } finally {
+      setBillingLoading(false);
+    }
+  };
 
   return (
     <main>
@@ -329,6 +470,50 @@ export default function DocumentDetailPage() {
             <Text c="red" mt="md">
               {error}
             </Text>
+          ) : null}
+          {document ? (
+            <Paper withBorder p="md" mt="md">
+              <Title order={5}>Corte por item (facturación)</Title>
+              <Table mt="sm" striped>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Item</Table.Th>
+                    <Table.Th>Cantidad</Table.Th>
+                    <Table.Th>Corte</Table.Th>
+                    <Table.Th>Devolución real</Table.Th>
+                    <Table.Th>Estado</Table.Th>
+                    <Table.Th></Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {document.items.map((item) => (
+                    <Table.Tr key={`billing-${item.id}`}>
+                      <Table.Td>
+                        <Text>{describeItem(item)}</Text>
+                        {item.conditionNote ? (
+                          <Text size="xs" c="red">
+                            Averia: {item.conditionNote}
+                          </Text>
+                        ) : null}
+                      </Table.Td>
+                      <Table.Td>{displayQuantity(item.quantity)}</Table.Td>
+                      <Table.Td>{item.billingCutoffDate ? formatDate(item.billingCutoffDate) : '-'}</Table.Td>
+                      <Table.Td>{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Table.Td>
+                      <Table.Td>
+                        <Badge size="sm" variant="light" color={billingStatusColor(item.billingStatus)}>
+                          {item.billingStatus ?? 'OPEN'}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Button size="xs" variant="light" onClick={() => openBillingModal(item)}>
+                          Definir corte
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Paper>
           ) : null}
         </Paper>
 
@@ -453,6 +638,87 @@ export default function DocumentDetailPage() {
           </div>
         ) : null}
       </Container>
+      <Modal
+        opened={billingModalOpen}
+        onClose={() => {
+          if (billingLoading) return;
+          setBillingModalOpen(false);
+        }}
+        title="Definir corte por item"
+        centered
+      >
+        <Stack gap="sm">
+          <Text size="sm" fw={600}>
+            {selectedBillingItem ? describeItem(selectedBillingItem) : '-'}
+          </Text>
+          <TextInput
+            label="Fecha corte (opcional)"
+            value={billingCutoffDate ? toDisplayDateInput(billingCutoffDate) : ''}
+            placeholder="dd/mm/aaaa"
+            readOnly
+            rightSection={
+              <ActionIcon
+                variant="subtle"
+                aria-label="Seleccionar fecha corte"
+                onClick={() => billingCutoffPickerRef.current?.showPicker?.()}
+              >
+                <IconCalendar size={16} />
+              </ActionIcon>
+            }
+          />
+          <input
+            ref={billingCutoffPickerRef}
+            type="date"
+            value={billingCutoffDate}
+            onChange={(event) => setBillingCutoffDate(event.currentTarget.value)}
+            style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <TextInput
+            label="Fecha devolución real (opcional)"
+            value={billingReturnedAt ? toDisplayDateInput(billingReturnedAt) : ''}
+            placeholder="dd/mm/aaaa"
+            readOnly
+            rightSection={
+              <ActionIcon
+                variant="subtle"
+                aria-label="Seleccionar fecha devolución real"
+                onClick={() => billingReturnedPickerRef.current?.showPicker?.()}
+              >
+                <IconCalendar size={16} />
+              </ActionIcon>
+            }
+          />
+          <input
+            ref={billingReturnedPickerRef}
+            type="date"
+            value={billingReturnedAt}
+            onChange={(event) => setBillingReturnedAt(event.currentTarget.value)}
+            style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <TextInput
+            label="Nota (opcional)"
+            value={billingNote}
+            onChange={(event) => setBillingNote(event.currentTarget.value)}
+          />
+          {billingError ? <Text c="red">{billingError}</Text> : null}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setBillingModalOpen(false)}
+              disabled={billingLoading}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={saveBilling} loading={billingLoading}>
+              Guardar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </main>
   );
 }

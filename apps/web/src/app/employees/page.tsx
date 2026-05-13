@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Container,
@@ -11,15 +12,29 @@ import {
   MultiSelect,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconEye, IconTrash } from '@tabler/icons-react';
+import {
+  IconBriefcase2,
+  IconCar,
+  IconEye,
+  IconMail,
+  IconPhone,
+  IconPlus,
+  IconTrash,
+  IconUserCheck,
+  IconUsers,
+} from '@tabler/icons-react';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
 
 type VehicleOption = {
@@ -127,6 +142,106 @@ const appRoleLabelByValue: Record<AppRoleValue, string> = {
   DRIVER: 'Conductor',
 };
 
+function getVehicleSummary(vehicles: VehicleOption[]) {
+  if (!vehicles.length) return 'Sin vehículos asignados';
+  return vehicles.map((entry) => entry.plate).join(', ');
+}
+
+function EmployeeDetails({
+  employee,
+  onEdit,
+  onDelete,
+}: {
+  employee: Employee;
+  onEdit?: (employee: Employee) => void;
+  onDelete?: (employee: Employee) => void;
+}) {
+  return (
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Text fw={700} size="lg">
+            {employee.name}
+          </Text>
+          <Text size="sm" c="dimmed">
+            {roleLabelByValue[employee.role] ?? employee.role}
+          </Text>
+        </div>
+        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
+          {employee.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Contacto
+          </Text>
+          <Stack gap={6} mt={8}>
+            <Group gap={8} wrap="nowrap">
+              <IconPhone size={14} />
+              <Text size="sm">{employee.phone ?? '-'}</Text>
+            </Group>
+            <Group gap={8} wrap="nowrap">
+              <IconMail size={14} />
+              <Text size="sm">{employee.email ?? '-'}</Text>
+            </Group>
+          </Stack>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Identificación
+          </Text>
+          <Text size="sm" mt={8}>
+            {employee.documentId ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Acceso a la app
+          </Text>
+          <Stack gap={4} mt={8}>
+            <Text size="sm">{employee.user?.email ?? 'Sin acceso creado'}</Text>
+            <Text size="xs" c="dimmed">
+              {employee.user
+                ? `${appRoleLabelByValue[employee.user.role]} · ${
+                    employee.user.active ? 'Activo' : 'Inactivo'
+                  }`
+                : 'Este empleado no tiene usuario asociado'}
+            </Text>
+          </Stack>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Vehículos asignados
+          </Text>
+          <Text size="sm" mt={8}>
+            {getVehicleSummary(employee.vehicles)}
+          </Text>
+        </Paper>
+      </SimpleGrid>
+
+      {onEdit || onDelete ? (
+        <Group className="mobile-actions">
+          {onDelete ? (
+            <Button color="red" variant="light" onClick={() => onDelete(employee)}>
+              Eliminar
+            </Button>
+          ) : null}
+          {onEdit ? (
+            <Button variant="light" onClick={() => onEdit(employee)}>
+              Editar
+            </Button>
+          ) : null}
+        </Group>
+      ) : null}
+    </Stack>
+  );
+}
+
 export default function EmployeesPage() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -167,6 +282,18 @@ export default function EmployeesPage() {
     loadData();
   }, []);
 
+  const metrics = useMemo(() => {
+    const activeCount = employees.filter((employee) => employee.active).length;
+    const withAccessCount = employees.filter((employee) => employee.user).length;
+    const assignedVehicleCount = employees.filter((employee) => employee.vehicles.length > 0).length;
+    return {
+      total: employees.length,
+      active: activeCount,
+      withAccess: withAccessCount,
+      assignedVehicle: assignedVehicleCount,
+    };
+  }, [employees]);
+
   const openCreate = () => {
     setEditingEmployee(null);
     setForm(emptyForm);
@@ -190,6 +317,12 @@ export default function EmployeesPage() {
       loginActive: employee.user?.active ?? true,
     });
     setModalOpen(true);
+  };
+
+  const closeFormModal = () => {
+    setModalOpen(false);
+    setEditingEmployee(null);
+    setForm(emptyForm);
   };
 
   const saveEmployee = async () => {
@@ -248,7 +381,7 @@ export default function EmployeesPage() {
         });
       }
 
-      setModalOpen(false);
+      closeFormModal();
       await loadData();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -283,267 +416,447 @@ export default function EmployeesPage() {
 
   return (
     <Container size="xl" py="xl">
-      <Paper shadow="sm" p="xl" radius="md" withBorder>
-        <Group justify="space-between" mb="md">
-          <Title order={2}>Empleados</Title>
-          <Button onClick={openCreate}>Nuevo empleado</Button>
-        </Group>
-
-        {error && (
-          <Text c="red" mb="md">
-            {error}
-          </Text>
-        )}
-
-        <Table
-          striped
-          highlightOnHover
-          withTableBorder
-          className={isMobile ? 'table-mobile-fit' : undefined}
+      <Stack gap="lg">
+        <PageHeaderCard
+          title="Empleados"
+          description="Administra personal, accesos y asignación de vehículos desde una sola vista."
+          icon={<IconUsers size={20} />}
+          iconColor="blue"
+          accentColor="rgba(14,165,233,0.14)"
+          aside={
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              Nuevo empleado
+            </Button>
+          }
         >
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th style={isMobile ? { width: '50%' } : undefined}>Nombre</Table.Th>
-              {!isMobile ? <Table.Th>Rol</Table.Th> : null}
-              {!isMobile ? <Table.Th>Teléfono</Table.Th> : null}
-              {!isMobile ? <Table.Th>Email</Table.Th> : null}
-              {!isMobile ? <Table.Th>Documento</Table.Th> : null}
-              {!isMobile ? <Table.Th>Acceso</Table.Th> : null}
-              {!isMobile ? <Table.Th>Vehículos</Table.Th> : null}
-              <Table.Th style={isMobile ? { width: '30%' } : undefined}>Estado</Table.Th>
-              {isMobile ? <Table.Th style={{ width: '20%' }}>Ver</Table.Th> : null}
-              {!isMobile ? <Table.Th /> : null}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {!loading &&
-              employees.map((employee) => (
-                <Table.Tr key={employee.id}>
-                  <Table.Td>{employee.name}</Table.Td>
-                  {!isMobile ? <Table.Td>{roleLabelByValue[employee.role] ?? employee.role}</Table.Td> : null}
-                  {!isMobile ? <Table.Td>{employee.phone ?? '-'}</Table.Td> : null}
-                  {!isMobile ? <Table.Td>{employee.email ?? '-'}</Table.Td> : null}
-                  {!isMobile ? <Table.Td>{employee.documentId ?? '-'}</Table.Td> : null}
-                  {!isMobile ? (
-                    <Table.Td>
-                      {employee.user ? (
-                        <Stack gap={2}>
-                          <Text size="sm">{employee.user.email}</Text>
-                          <Text size="xs" c="dimmed">
-                            {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+            <StatCard
+              label="Total"
+              value={String(metrics.total)}
+              hint="Empleados registrados"
+              color="blue"
+              icon={<IconUsers size={20} />}
+            />
+            <StatCard
+              label="Activos"
+              value={String(metrics.active)}
+              hint={`${Math.max(metrics.total - metrics.active, 0)} inactivos`}
+              color="green"
+              icon={<IconUserCheck size={20} />}
+            />
+            <StatCard
+              label="Con acceso"
+              value={String(metrics.withAccess)}
+              hint="Usuarios con login habilitado"
+              color="violet"
+              icon={<IconBriefcase2 size={20} />}
+            />
+            <StatCard
+              label="Con vehículo"
+              value={String(metrics.assignedVehicle)}
+              hint="Asignaciones vigentes"
+              color="teal"
+              icon={<IconCar size={20} />}
+            />
+          </SimpleGrid>
+        </PageHeaderCard>
+
+        {error ? (
+          <Alert color="red" variant="light" title="No se pudo completar la acción">
+            {error}
+          </Alert>
+        ) : null}
+
+        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          {isMobile ? (
+            <Stack gap="sm">
+              {!loading &&
+                employees.map((employee) => (
+                  <Paper key={employee.id} withBorder radius="lg" p="md">
+                    <Stack gap="md">
+                      <Group justify="space-between" align="flex-start">
+                        <div>
+                          <Text fw={700}>{employee.name}</Text>
+                          <Text size="sm" c="dimmed">
+                            {roleLabelByValue[employee.role] ?? employee.role}
                           </Text>
-                        </Stack>
-                      ) : (
-                        '-'
-                      )}
-                    </Table.Td>
-                  ) : null}
-                  {!isMobile ? (
-                    <Table.Td>
-                      {employee.vehicles.length
-                        ? employee.vehicles.map((entry) => entry.plate).join(', ')
-                        : '-'}
-                    </Table.Td>
-                  ) : null}
-                  <Table.Td>
-                    <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                      {employee.active ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                  </Table.Td>
-                  {isMobile ? (
-                    <Table.Td>
-                      <ActionIcon
-                        variant="light"
-                        aria-label={`Ver detalle de ${employee.name}`}
-                        onClick={() => setDetailsEmployee(employee)}
-                      >
-                        <IconEye size={16} />
-                      </ActionIcon>
-                    </Table.Td>
-                  ) : (
-                    <Table.Td>
-                      <Group gap="xs" justify="flex-end">
-                        <Button size="xs" variant="light" onClick={() => openEdit(employee)}>
-                          Editar
+                        </div>
+                        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
+                          {employee.active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </Group>
+
+                      <SimpleGrid cols={2} spacing="sm">
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Contacto
+                          </Text>
+                          <Text size="sm">{employee.phone ?? employee.email ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Acceso
+                          </Text>
+                          <Text size="sm">{employee.user ? appRoleLabelByValue[employee.user.role] : 'No'}</Text>
+                        </div>
+                      </SimpleGrid>
+
+                      <Text size="sm" c="dimmed">
+                        {getVehicleSummary(employee.vehicles)}
+                      </Text>
+
+                      <Group grow>
+                        <Button
+                          variant="light"
+                          leftSection={<IconEye size={16} />}
+                          onClick={() => setDetailsEmployee(employee)}
+                        >
+                          Ver detalle
                         </Button>
                         <ActionIcon
                           color="red"
                           variant="light"
+                          size={36}
                           aria-label="Eliminar empleado"
                           onClick={() => deleteEmployee(employee)}
                         >
-                          <IconTrash size={16} />
+                          <IconTrash size={18} />
                         </ActionIcon>
                       </Group>
-                    </Table.Td>
-                  )}
-                </Table.Tr>
-              ))}
+                    </Stack>
+                  </Paper>
+                ))}
 
-            {!loading && employees.length === 0 && (
-              <Table.Tr>
-                <Table.Td colSpan={isMobile ? 4 : 9}>
-                  <Text c="dimmed" ta="center">
-                    No hay empleados registrados.
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
+              {!loading && employees.length === 0 ? (
+                <Paper radius="lg" p="xl" bg="gray.0">
+                  <Stack align="center" gap="xs">
+                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                      <IconUsers size={20} />
+                    </ThemeIcon>
+                    <Text fw={700}>No hay empleados registrados</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Crea un nuevo empleado para empezar.
+                    </Text>
+                  </Stack>
+                </Paper>
+              ) : null}
 
-            {loading && (
-              <Table.Tr>
-                <Table.Td colSpan={isMobile ? 4 : 9}>
+              {loading ? (
+                <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
                     Cargando...
                   </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
-      </Paper>
+                </Paper>
+              ) : null}
+            </Stack>
+          ) : (
+            <Table highlightOnHover verticalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Empleado</Table.Th>
+                  <Table.Th>Contacto</Table.Th>
+                  <Table.Th>Documento</Table.Th>
+                  <Table.Th>Acceso</Table.Th>
+                  <Table.Th>Vehículos</Table.Th>
+                  <Table.Th>Estado</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {!loading &&
+                  employees.map((employee) => (
+                    <Table.Tr key={employee.id}>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text fw={700}>{employee.name}</Text>
+                          <Text size="sm" c="dimmed">
+                            {roleLabelByValue[employee.role] ?? employee.role}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text size="sm">{employee.phone ?? '-'}</Text>
+                          <Text size="xs" c="dimmed">
+                            {employee.email ?? 'Sin correo'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>{employee.documentId ?? '-'}</Table.Td>
+                      <Table.Td>
+                        {employee.user ? (
+                          <Stack gap={2}>
+                            <Text size="sm">{employee.user.email}</Text>
+                            <Badge
+                              color={employee.user.active ? 'blue' : 'gray'}
+                              variant="light"
+                              size="sm"
+                              style={{ width: 'fit-content' }}
+                            >
+                              {appRoleLabelByValue[employee.user.role]} ·{' '}
+                              {employee.user.active ? 'Activo' : 'Inactivo'}
+                            </Badge>
+                          </Stack>
+                        ) : (
+                          <Text size="sm" c="dimmed">
+                            Sin acceso
+                          </Text>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" maw={260}>
+                          {getVehicleSummary(employee.vehicles)}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
+                          {employee.active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                          <Button size="xs" variant="light" onClick={() => openEdit(employee)}>
+                            Editar
+                          </Button>
+                          <ActionIcon
+                            color="gray"
+                            variant="light"
+                            aria-label={`Ver detalle de ${employee.name}`}
+                            onClick={() => setDetailsEmployee(employee)}
+                          >
+                            <IconEye size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            color="red"
+                            variant="light"
+                            aria-label="Eliminar empleado"
+                            onClick={() => deleteEmployee(employee)}
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+
+                {!loading && employees.length === 0 && (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Stack align="center" gap="xs" py="lg">
+                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                          <IconUsers size={20} />
+                        </ThemeIcon>
+                        <Text fw={700}>No hay empleados para mostrar</Text>
+                        <Text size="sm" c="dimmed">
+                          Registra un nuevo empleado.
+                        </Text>
+                      </Stack>
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+
+                {loading && (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Text c="dimmed" ta="center">
+                        Cargando...
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
+      </Stack>
 
       <Modal
         opened={!!detailsEmployee}
         onClose={() => setDetailsEmployee(null)}
         title="Detalle de empleado"
         centered
+        size="lg"
       >
         {detailsEmployee ? (
-          <Stack gap="xs">
-            <Text><strong>Nombre:</strong> {detailsEmployee.name}</Text>
-            <Text><strong>Rol:</strong> {roleLabelByValue[detailsEmployee.role] ?? detailsEmployee.role}</Text>
-            <Text><strong>Teléfono:</strong> {detailsEmployee.phone ?? '-'}</Text>
-            <Text><strong>Email:</strong> {detailsEmployee.email ?? '-'}</Text>
-            <Text><strong>Documento:</strong> {detailsEmployee.documentId ?? '-'}</Text>
-            <Text>
-              <strong>Acceso:</strong>{' '}
-              {detailsEmployee.user
-                ? `${detailsEmployee.user.email} · ${appRoleLabelByValue[detailsEmployee.user.role]} · ${
-                    detailsEmployee.user.active ? 'Activo' : 'Inactivo'
-                  }`
-                : '-'}
-            </Text>
-            <Text>
-              <strong>Vehículos:</strong>{' '}
-              {detailsEmployee.vehicles.length
-                ? detailsEmployee.vehicles.map((entry) => entry.plate).join(', ')
-                : '-'}
-            </Text>
-            <Text><strong>Estado:</strong> {detailsEmployee.active ? 'Activo' : 'Inactivo'}</Text>
-
-            <Group className="mobile-actions" mt="sm">
-              <Button
-                variant="light"
-                onClick={() => {
-                  setDetailsEmployee(null);
-                  openEdit(detailsEmployee);
-                }}
-              >
-                Editar
-              </Button>
-              <Button
-                color="red"
-                variant="light"
-                onClick={() => {
-                  setDetailsEmployee(null);
-                  deleteEmployee(detailsEmployee);
-                }}
-              >
-                Eliminar
-              </Button>
-            </Group>
-          </Stack>
+          <EmployeeDetails
+            employee={detailsEmployee}
+            onEdit={(employee) => {
+              setDetailsEmployee(null);
+              openEdit(employee);
+            }}
+            onDelete={(employee) => {
+              setDetailsEmployee(null);
+              deleteEmployee(employee);
+            }}
+          />
         ) : null}
       </Modal>
 
       <Modal
         opened={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeFormModal}
         title={editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}
         centered
+        size="lg"
       >
-        <Stack>
-          <TextInput
-            label="Nombre"
-            value={form.name}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setForm((prev) => ({ ...prev, name: value }));
-            }}
-            required
-          />
-          <Select
-            label="Rol"
-            value={form.role}
-            onChange={(value) =>
-              setForm((prev) => ({ ...prev, role: (value as RoleValue) ?? 'DRIVER' }))
-            }
-            data={roleOptions}
-            allowDeselect={false}
-            required
-          />
-          <Group grow className="mobile-stack">
-            <TextInput
-              label="Teléfono"
-              value={form.phone}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setForm((prev) => ({ ...prev, phone: value }));
+        <Stack gap="lg">
+          {editingEmployee ? (
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(248,250,252,0.96) 0%, rgba(239,246,255,0.96) 100%)',
               }}
-            />
-            <TextInput
-              label="Email"
-              value={form.email}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setForm((prev) => ({ ...prev, email: value }));
-              }}
-            />
-          </Group>
-          <TextInput
-            label="Documento"
-            value={form.documentId}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setForm((prev) => ({ ...prev, documentId: value }));
-            }}
-          />
-          <MultiSelect
-            label="Vehículos asignados"
-            value={form.vehicleIds}
-            onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
-            data={vehicles.map((vehicle) => ({
-              value: vehicle.id,
-              label: `${vehicle.plate}${vehicle.brand ? ` · ${vehicle.brand}` : ''}${vehicle.model ? ` ${vehicle.model}` : ''}`,
-            }))}
-            searchable
-            clearable
-          />
-          <Paper withBorder radius="md" p="sm">
-            <Stack gap="xs">
+            >
+              <Group justify="space-between" align="flex-start">
+                <div>
+                  <Text fw={700}>{editingEmployee.name}</Text>
+                  <Text size="sm" c="dimmed">
+                    {roleLabelByValue[editingEmployee.role] ?? editingEmployee.role}
+                  </Text>
+                </div>
+                <Badge color={form.active ? 'green' : 'gray'} variant="light">
+                  {form.active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </Group>
+            </Paper>
+          ) : null}
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Perfil del empleado</Text>
+                <Text size="sm" c="dimmed">
+                  Datos básicos para identificar al colaborador dentro del sistema.
+                </Text>
+              </div>
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <TextInput
+                  label="Nombre"
+                  placeholder="Nombre completo"
+                  value={form.name}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, name: value }));
+                  }}
+                  required
+                />
+                <Select
+                  label="Rol"
+                  value={form.role}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, role: (value as RoleValue) ?? 'DRIVER' }))
+                  }
+                  data={roleOptions}
+                  allowDeselect={false}
+                  required
+                />
+              </SimpleGrid>
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <TextInput
+                  label="Teléfono"
+                  placeholder="Número de contacto"
+                  value={form.phone}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, phone: value }));
+                  }}
+                />
+                <TextInput
+                  label="Email"
+                  placeholder="Correo de contacto"
+                  value={form.email}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, email: value }));
+                  }}
+                />
+              </SimpleGrid>
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <TextInput
+                  label="Documento"
+                  placeholder="Documento o identificación"
+                  value={form.documentId}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, documentId: value }));
+                  }}
+                />
+                <Switch
+                  mt="xl"
+                  checked={form.active}
+                  label="Empleado activo"
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
+                  }
+                />
+              </SimpleGrid>
+            </Stack>
+          </Paper>
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Asignación operativa</Text>
+                <Text size="sm" c="dimmed">
+                  Vincula los vehículos que este empleado tiene a cargo actualmente.
+                </Text>
+              </div>
+
+              <MultiSelect
+                label="Vehículos asignados"
+                placeholder="Selecciona uno o más vehículos"
+                value={form.vehicleIds}
+                onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
+                data={vehicles.map((vehicle) => ({
+                  value: vehicle.id,
+                  label: `${vehicle.plate}${vehicle.brand ? ` · ${vehicle.brand}` : ''}${
+                    vehicle.model ? ` ${vehicle.model}` : ''
+                  }`,
+                }))}
+                searchable
+                nothingFoundMessage="Sin resultados"
+              />
+            </Stack>
+          </Paper>
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Acceso a la app</Text>
+                <Text size="sm" c="dimmed">
+                  Controla si el empleado puede entrar al sistema y con qué rol operativo.
+                </Text>
+              </div>
+
               <Switch
-                label="Crear acceso al sistema"
                 checked={form.loginEnabled}
+                label="Crear o mantener acceso para este empleado"
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, loginEnabled: event.currentTarget.checked }))
                 }
               />
+
               {form.loginEnabled ? (
-                <>
-                  <TextInput
-                    label="Email de acceso"
-                    type="email"
-                    value={form.loginEmail}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setForm((prev) => ({ ...prev, loginEmail: value }));
-                    }}
-                    required
-                  />
-                  <Group grow className="mobile-stack">
+                <Stack gap="md">
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    <TextInput
+                      label="Email de acceso"
+                      placeholder="usuario@empresa.com"
+                      value={form.loginEmail}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setForm((prev) => ({ ...prev, loginEmail: value }));
+                      }}
+                      required
+                    />
                     <Select
-                      label="Rol de acceso"
+                      label="Rol en la app"
                       value={form.loginRole}
                       onChange={(value) =>
                         setForm((prev) => ({ ...prev, loginRole: (value as AppRoleValue) ?? 'DRIVER' }))
@@ -551,45 +864,47 @@ export default function EmployeesPage() {
                       data={appRoleOptions}
                       allowDeselect={false}
                     />
+                  </SimpleGrid>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    <TextInput
+                      label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+                      placeholder={
+                        editingEmployee ? 'Déjala vacía para conservar la actual' : 'Contraseña inicial'
+                      }
+                      type="password"
+                      value={form.loginPassword}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setForm((prev) => ({ ...prev, loginPassword: value }));
+                      }}
+                    />
                     <Switch
-                      mt={28}
-                      label="Acceso activo"
+                      mt="xl"
                       checked={form.loginActive}
+                      label="Usuario activo"
                       onChange={(event) =>
                         setForm((prev) => ({ ...prev, loginActive: event.currentTarget.checked }))
                       }
                     />
-                  </Group>
-                  <TextInput
-                    label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
-                    type="password"
-                    value={form.loginPassword}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setForm((prev) => ({ ...prev, loginPassword: value }));
-                    }}
-                    required={!editingEmployee}
-                  />
-                </>
-              ) : null}
+                  </SimpleGrid>
+                </Stack>
+              ) : (
+                <Paper radius="md" p="sm" bg="gray.0">
+                  <Text size="sm" c="dimmed">
+                    Este empleado quedará sin acceso al sistema. Sus datos operativos seguirán disponibles.
+                  </Text>
+                </Paper>
+              )}
             </Stack>
           </Paper>
-          {editingEmployee && (
-            <Switch
-              label="Activo"
-              checked={form.active}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
-              }
-            />
-          )}
 
           <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => setModalOpen(false)}>
+            <Button variant="default" onClick={closeFormModal}>
               Cancelar
             </Button>
-            <Button onClick={saveEmployee} loading={saving}>
-              Guardar
+            <Button loading={saving} onClick={saveEmployee}>
+              {editingEmployee ? 'Guardar cambios' : 'Crear empleado'}
             </Button>
           </Group>
         </Stack>

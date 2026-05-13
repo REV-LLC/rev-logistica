@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import Link from 'next/link';
+import SerialAssetCard from '@/components/SerialAssetCard';
+import { ownerColorById } from '@/lib/owner-color';
 
 type BulkItem = {
   skuId: string;
@@ -29,6 +30,7 @@ type SerialItem = {
   serialOrEngine: string | null;
   description: string | null;
   skuName?: string | null;
+  ownerWarehouseName?: string | null;
   imageUrl?: string | null;
   brand?: string | null;
   model?: string | null;
@@ -63,42 +65,6 @@ export default function InventoryDisplay({
   serialSectionTitle?: string;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
-  const ownerPalette = [
-    'blue',
-    'teal',
-    'orange',
-    'pink',
-    'cyan',
-    'grape',
-    'indigo',
-    'lime',
-  ] as const;
-
-  const getSerialDescription = (item: SerialItem) => {
-    const manualDescription = item.description?.trim();
-    if (manualDescription) return manualDescription;
-
-    const parts = [item.skuName, item.brand, item.model]
-      .map((value) => value?.trim())
-      .filter((value): value is string => Boolean(value));
-
-    return parts.length > 0 ? parts.join(' ') : '-';
-  };
-
-  const getStatusColor = (status?: string | null) => {
-    const normalized = status?.toUpperCase();
-    if (normalized === 'IN') return 'green';
-    if (normalized === 'OUT') return 'red';
-    if (normalized === 'TRANSIT') return 'yellow';
-    return 'gray';
-  };
-
-  const getStatusLabel = (status?: string | null) => {
-    const normalized = (status ?? 'IN').toString().toUpperCase();
-    if (isWorksiteView && normalized === 'OUT') return 'En obra';
-    return normalized;
-  };
 
   const formatCharge = (chargeType?: string | null, minimumChargeHours?: number | string | null) => {
     const normalized = chargeType?.toUpperCase();
@@ -185,14 +151,6 @@ export default function InventoryDisplay({
     });
   }, [bulk, bulkOwnerStackMode]);
 
-  const getOwnerColor = (ownerWarehouseId: string) => {
-    let hash = 0;
-    for (let index = 0; index < ownerWarehouseId.length; index += 1) {
-      hash = (hash * 31 + ownerWarehouseId.charCodeAt(index)) % 9973;
-    }
-    return ownerPalette[Math.abs(hash) % ownerPalette.length];
-  };
-
   return (
     <Stack gap="lg">
       {showBulkSection && (
@@ -232,7 +190,7 @@ export default function InventoryDisplay({
                               {item.visibleOwners.map((owner) => (
                                 <Badge
                                   key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
-                                  color={getOwnerColor(owner.ownerWarehouseId)}
+                                  color={ownerColorById(owner.ownerWarehouseId)}
                                   variant="light"
                                 >
                                   {owner.ownerWarehouseName}
@@ -250,7 +208,7 @@ export default function InventoryDisplay({
                               {item.visibleOwners.map((owner) => (
                                 <Badge
                                   key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
-                                  color={getOwnerColor(owner.ownerWarehouseId)}
+                                  color={ownerColorById(owner.ownerWarehouseId)}
                                   variant="filled"
                                 >
                                   {owner.quantity}
@@ -294,7 +252,7 @@ export default function InventoryDisplay({
                           {item.visibleOwners.map((owner) => (
                             <Badge
                               key={`${item.skuId}-owner-mobile-${owner.ownerWarehouseId}`}
-                              color={getOwnerColor(owner.ownerWarehouseId)}
+                              color={ownerColorById(owner.ownerWarehouseId)}
                               variant="light"
                             >
                               {owner.ownerWarehouseName}
@@ -310,7 +268,7 @@ export default function InventoryDisplay({
                           {item.visibleOwners.map((owner) => (
                             <Badge
                               key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}
-                              color={getOwnerColor(owner.ownerWarehouseId)}
+                              color={ownerColorById(owner.ownerWarehouseId)}
                               variant="filled"
                             >
                               {owner.quantity}
@@ -360,74 +318,13 @@ export default function InventoryDisplay({
           <Card withBorder>
             <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
               {serial.map((item) => (
-                <Card
+                <SerialAssetCard
                   key={item.assetId}
-                  withBorder
-                  padding="sm"
-                  radius="md"
-                  style={{
-                    aspectRatio: '1 / 1',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Card.Section
-                    style={{
-                      flex: '0 0 72%',
-                      height: '72%',
-                      background: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderBottom: '1px solid var(--mantine-color-gray-3)',
-                    }}
-                  >
-                    {item.imageUrl && !brokenImages[item.assetId] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.imageUrl}
-                        alt={getSerialDescription(item)}
-                        onError={() =>
-                          setBrokenImages((prev) => ({ ...prev, [item.assetId]: true }))
-                        }
-                        style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#ffffff' }}
-                      />
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        {item.imageFileObjectId ? 'Imagen cargada' : 'Sin imagen'}
-                      </Text>
-                    )}
-                  </Card.Section>
-
-                  <Stack gap={4} mt="xs" style={{ flex: '1 1 28%', minHeight: 0 }}>
-                    <Group justify="space-between" wrap="nowrap">
-                      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-                        <Text
-                          component={Link}
-                          href={`/inventory/serialized-assets/${item.assetId}`}
-                          fw={700}
-                          lineClamp={2}
-                          style={{ textDecoration: 'none', color: 'inherit' }}
-                        >
-                          {getSerialDescription(item)}
-                        </Text>
-                      </Group>
-                      <Badge color={getStatusColor(item.status)} variant="light">
-                        {getStatusLabel(item.status)}
-                      </Badge>
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      #{item.internalNumber ?? '-'}
-                    </Text>
-                    <Text size="xs" c="dimmed" lineClamp={1}>
-                      {item.serialOrEngine ?? '-'}
-                    </Text>
-                    <Text size="xs" c="dimmed" lineClamp={1}>
-                      Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-                    </Text>
-                  </Stack>
-                </Card>
+                  item={item}
+                  href={`/inventory/serialized-assets/${item.assetId}`}
+                  isWorksiteView={isWorksiteView}
+                  display={{ showOwnerChip: isWorksiteView }}
+                />
               ))}
             </SimpleGrid>
           </Card>

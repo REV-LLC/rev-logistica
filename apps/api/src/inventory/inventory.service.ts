@@ -1361,6 +1361,9 @@ export class InventoryService {
           assetId: row.assetId,
           skuId: asset?.skuId ?? null,
           ownerWarehouseId: asset?.warehouseOwnerId ?? null,
+          ownerWarehouseName: asset?.warehouseOwnerId
+            ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
+            : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,
@@ -1631,6 +1634,9 @@ export class InventoryService {
           assetId: row.assetId,
           skuId: asset?.skuId ?? null,
           ownerWarehouseId: asset?.warehouseOwnerId ?? null,
+          ownerWarehouseName: asset?.warehouseOwnerId
+            ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
+            : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,

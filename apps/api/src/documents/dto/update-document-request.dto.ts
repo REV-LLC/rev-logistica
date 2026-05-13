@@ -34,6 +34,10 @@ class UpdateDocumentRequestItemDto {
   @IsOptional()
   @IsString()
   requestedTag?: string;
+
+  @IsOptional()
+  @IsString()
+  conditionNote?: string;
 }
 
 export class UpdateDocumentRequestDto {

@@ -8,6 +8,7 @@ import {
   Autocomplete,
   Badge,
   Button,
+  Checkbox,
   Container,
   Divider,
   Group,
@@ -21,35 +22,28 @@ import {
   Tabs,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
   NumberInput,
   NativeSelect,
+  Textarea,
   Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { IconChecklist, IconFilePlus, IconFileText, IconRoute2 } from '@tabler/icons-react';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
-import { getToken } from '@/lib/auth';
+import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
+import { ownerColorById } from '@/lib/owner-color';
+import InventoryItemPickerModal, {
+  type InventoryItemPickerBulkItem,
+  type InventoryItemPickerSerialItem,
+} from '@/components/InventoryItemPickerModal';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 
-type InventoryBulk = {
-  skuId: string;
-  skuName: string | null;
-  ownerWarehouseId: string | null;
-  ownerWarehouseName?: string | null;
-  quantity: number;
-};
-
-type InventorySerial = {
-  assetId: string;
-  serialOrEngine: string | null;
-  description: string | null;
-  skuName?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  internalNumber?: number | null;
-  quantity: number;
-  skuId?: string | null;
-  ownerWarehouseId: string | null;
-};
+type InventoryBulk = InventoryItemPickerBulkItem;
+type InventorySerial = InventoryItemPickerSerialItem;
 
 type CatalogSku = {
   skuId: string;
@@ -93,6 +87,8 @@ type SelectedItem = {
   serial?: string | null;
   quantity?: number;
   ownerWarehouseId?: string | null;
+  isDamaged?: boolean;
+  damageDescription?: string;
 };
 
 type PrincipalCatalogEntry = {
@@ -152,11 +148,14 @@ type RequestDocumentDetail = {
     createdAt: string;
   }>;
   items: Array<{
+    id: string;
     skuId?: string | null;
     assetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;
+    conditionNote?: string | null;
     requestedTag?: string | null;
+    billingCutoffDate?: string | null;
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
@@ -204,15 +203,6 @@ const parseInternalNumberFromTag = (value?: string | null) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-const buildSerialDisplayName = (item: InventorySerial) => {
-  const parts = [item.skuName, item.brand, item.model]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value));
-  const base = parts.length ? parts.join(' ') : item.description ?? item.serialOrEngine ?? item.assetId;
-  const internal = item.internalNumber != null ? ` #${item.internalNumber}` : '';
-  return `${base}${internal}`.trim();
-};
-
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
     <Text span>{label}</Text>
@@ -245,52 +235,33 @@ function formatDateTime(value: string) {
   return date.toLocaleString('es-CO');
 }
 
+function getTodayDateInput() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function requestTypeColor(type: string) {
+  return type === 'REMISSION' ? 'green' : type === 'RETURN' ? 'red' : 'gray';
+}
+
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
   { value: 'ELECTRICO', label: 'Eléctrico' },
 ];
-const OWNER_COLORS = ['blue', 'teal', 'grape', 'orange', 'pink', 'cyan', 'indigo', 'lime'] as const;
 
-function ownerColorById(ownerWarehouseId: string | null | undefined) {
-  if (!ownerWarehouseId) return 'gray';
-  let hash = 0;
-  for (let index = 0; index < ownerWarehouseId.length; index += 1) {
-    hash = (hash * 31 + ownerWarehouseId.charCodeAt(index)) >>> 0;
+function normalizeQuantityInput(value: string | number, fallback = 1) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : fallback;
   }
-  return OWNER_COLORS[hash % OWNER_COLORS.length];
-}
-
-function getCurrentUserRole(): string | null {
-  const token = getToken();
-  if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-    const decoded = typeof window !== 'undefined' ? window.atob(padded) : '';
-    const payload = JSON.parse(decoded) as { role?: string };
-    return payload.role ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function getCurrentUserSession() {
-  const token = getToken();
-  if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-    const decoded = typeof window !== 'undefined' ? window.atob(padded) : '';
-    const payload = JSON.parse(decoded) as { sub?: string; role?: string; email?: string };
-    return payload;
-  } catch {
-    return null;
-  }
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  const parsed = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function parseNotes(notes: string | null) {
@@ -379,15 +350,58 @@ function writeJsonCache(key: string, value: unknown) {
   }
 }
 
+type SolicitudesTab = 'list' | 'generate';
+type GenerateStep = 'info' | 'items' | 'sign';
+
+function normalizeSolicitudesTab(value: string | null): SolicitudesTab {
+  return value === 'generate' ? 'generate' : 'list';
+}
+
+function normalizeGenerateStep(value: string | null): GenerateStep {
+  if (value === 'items' || value === 'sign') return value;
+  return 'info';
+}
+
+function readFlowStateFromUrl() {
+  if (typeof window === 'undefined') {
+    return { tab: 'list' as SolicitudesTab, step: 'info' as GenerateStep };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const tab = normalizeSolicitudesTab(params.get('tab'));
+  return {
+    tab,
+    step: tab === 'generate' ? normalizeGenerateStep(params.get('step')) : 'info',
+  };
+}
+
+function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (tab === 'generate') {
+    url.searchParams.set('tab', 'generate');
+    url.searchParams.set('step', step);
+  } else {
+    url.searchParams.delete('tab');
+    url.searchParams.delete('step');
+  }
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl !== currentUrl) {
+    window.history.pushState(null, '', nextUrl);
+  }
+}
+
 export default function SolicitudesIpadPage() {
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const isTabletOrMobile = useMediaQuery('(max-width: 1024px)');
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<string | null>('list');
-  const [generateStep, setGenerateStep] = useState<'info' | 'items' | 'sign'>('info');
+  const [activeTab, setActiveTab] = useState<SolicitudesTab>('list');
+  const [generateStep, setGenerateStep] = useState<GenerateStep>('info');
+  const [flowUrlReady, setFlowUrlReady] = useState(false);
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [docDate, setDocDate] = useState('');
+  const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [cutOffDate, setCutOffDate] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('WAREHOUSE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
@@ -404,8 +418,6 @@ export default function SolicitudesIpadPage() {
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
-  const [bulkSelect, setBulkSelect] = useState<string | null>(null);
-  const [serialSelect, setSerialSelect] = useState<string | null>(null);
   const [onSiteItemSelect, setOnSiteItemSelect] = useState<string | null>(null);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeQtyInput, setFreeQtyInput] = useState<number | ''>('');
@@ -454,6 +466,7 @@ export default function SolicitudesIpadPage() {
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
+  const skipNextFlowUrlSyncRef = useRef(false);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isDriverRole = userRole === 'DRIVER';
@@ -518,7 +531,7 @@ export default function SolicitudesIpadPage() {
     () => [
       ...availableSerialItems.map((item) => ({
         value: `serial:${item.assetId}`,
-        label: buildSerialDisplayName(item),
+        label: getSerialDisplayName(item),
         ownerWarehouseId: item.ownerWarehouseId ?? null,
       })),
       ...availableBulkItems.map((item) => ({
@@ -569,9 +582,11 @@ export default function SolicitudesIpadPage() {
   }, [isAlternateOwnerMode, freeTagInput, alternateTagCatalog]);
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.name ?? '-';
+  const effectiveSourceWorksiteId =
+    sourceMode === 'on-site' ? customerWorksiteId || sourceWorksiteId || null : sourceWorksiteId;
   const sourceWorksiteName =
-    worksites.find((worksite) => worksite.id === sourceWorksiteId)?.alias ??
-    worksites.find((worksite) => worksite.id === sourceWorksiteId)?.worksite.name ??
+    worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.alias ??
+    worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.worksite.name ??
     '-';
   const isResolvePendingItem = (item: RequestDocumentDetail['items'][number]) => {
     const hasTag = Boolean(item.requestedTag?.trim());
@@ -584,6 +599,31 @@ export default function SolicitudesIpadPage() {
     }
     return false;
   };
+
+  useEffect(() => {
+    const applyUrlState = () => {
+      const { tab, step } = readFlowStateFromUrl();
+      skipNextFlowUrlSyncRef.current = true;
+      setActiveTab(tab);
+      setGenerateStep(step);
+    };
+
+    applyUrlState();
+    setFlowUrlReady(true);
+    window.addEventListener('popstate', applyUrlState);
+    return () => {
+      window.removeEventListener('popstate', applyUrlState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!flowUrlReady) return;
+    if (skipNextFlowUrlSyncRef.current) {
+      skipNextFlowUrlSyncRef.current = false;
+      return;
+    }
+    pushFlowStateToUrl(activeTab, generateStep);
+  }, [activeTab, flowUrlReady, generateStep]);
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -785,7 +825,7 @@ export default function SolicitudesIpadPage() {
           uniqueLabels.set(label.toUpperCase(), label);
         });
         data.serial.forEach((item) => {
-          const label = buildSerialDisplayName(item);
+          const label = getSerialDisplayName(item);
           if (!label) return;
           const key = `serial:${item.assetId}`;
           catalogEntries.push({
@@ -910,6 +950,12 @@ export default function SolicitudesIpadPage() {
     }
   }, [currentUserId, dispatcherId, employees, isDriverRole]);
 
+  useEffect(() => {
+    if (isDriverRole && cutOffDate) {
+      setCutOffDate('');
+    }
+  }, [cutOffDate, isDriverRole]);
+
   const loadInventory = async (openSelector = true) => {
     setLoadingInventory(true);
     setError(null);
@@ -931,15 +977,15 @@ export default function SolicitudesIpadPage() {
           data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
       } else if (sourceMode === 'on-site') {
-        if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
+        if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/on-site/${sourceWorksiteId}`,
+          `/inventory/on-site/${effectiveSourceWorksiteId}`,
           { method: 'GET' }
         );
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
       }
-      if (openSelector && isMobile && sourceMode === 'warehouse') {
+      if (openSelector && !useManualWarehouseCapture) {
         setItemsModalOpen(true);
       }
     } catch (err) {
@@ -965,7 +1011,7 @@ export default function SolicitudesIpadPage() {
 
   useEffect(() => {
     if (sourceMode !== 'on-site') return;
-    if (!sourceWorksiteId) {
+    if (!effectiveSourceWorksiteId) {
       setBulkItems([]);
       setSerialItems([]);
       setOnSiteItemSelect(null);
@@ -974,13 +1020,11 @@ export default function SolicitudesIpadPage() {
     void loadInventory(false);
     setOnSiteItemSelect(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceMode, sourceWorksiteId]);
+  }, [sourceMode, effectiveSourceWorksiteId]);
 
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
-    setBulkSelect(null);
-    setSerialSelect(null);
     setOnSiteItemSelect(null);
     setFreeTagInput('');
     setFreeQtyInput('');
@@ -1242,6 +1286,14 @@ export default function SolicitudesIpadPage() {
 
     try {
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      if (doc.type === 'RETURN') {
+        const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
+        if (missingCutoff) {
+          setRequestsError('Antes de aprobar la devolución debes definir la fecha de corte por item.');
+          router.push(`/inventory/ledger/document/${documentId}`);
+          return;
+        }
+      }
       const unresolved = doc.items
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => isResolvePendingItem(item));
@@ -1322,6 +1374,7 @@ export default function SolicitudesIpadPage() {
           return {
             assetId: item.assetId,
             ownerWarehouseId,
+            conditionNote: item.conditionNote ?? undefined,
           };
         }
         if (item.skuId && !item.assetId) {
@@ -1331,6 +1384,7 @@ export default function SolicitudesIpadPage() {
               assetId: resolveAssetByIndex[index],
               ownerWarehouseId,
               requestedTag: item.requestedTag ?? undefined,
+              conditionNote: item.conditionNote ?? undefined,
             };
           }
         }
@@ -1340,6 +1394,7 @@ export default function SolicitudesIpadPage() {
             quantity: Number(item.quantity ?? 1) || 1,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
+            conditionNote: item.conditionNote ?? undefined,
           };
         }
         const resolvedSkuId = resolveSkuByIndex[index];
@@ -1349,6 +1404,7 @@ export default function SolicitudesIpadPage() {
             assetId: resolveAssetByIndex[index],
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
+            conditionNote: item.conditionNote ?? undefined,
           };
         }
         return {
@@ -1356,6 +1412,7 @@ export default function SolicitudesIpadPage() {
           quantity: Number(item.quantity ?? 1) || 1,
           ownerWarehouseId,
           requestedTag: item.requestedTag ?? undefined,
+          conditionNote: item.conditionNote ?? undefined,
         };
       });
 
@@ -1391,7 +1448,7 @@ export default function SolicitudesIpadPage() {
         {
           type: 'serial',
           assetId: item.assetId,
-          name: buildSerialDisplayName(item),
+          name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
           ownerWarehouseId: item.ownerWarehouseId
         }
@@ -1486,6 +1543,8 @@ export default function SolicitudesIpadPage() {
               name: sku.name,
               quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
               ownerWarehouseId: item.ownerWarehouseId,
+              isDamaged: item.isDamaged,
+              damageDescription: item.damageDescription,
             }
           : item,
       ),
@@ -1503,10 +1562,9 @@ export default function SolicitudesIpadPage() {
   const resetGenerateForm = () => {
     setEditingRequestId(null);
     setError(null);
-    setSubmitResult(null);
     setConsecutive('');
     setCustomerId(null);
-    setDocDate('');
+    setDocDate(getTodayDateInput());
     setCutOffDate('');
     setDeliveryMode('WAREHOUSE');
     setCustomerWorksiteId('');
@@ -1519,8 +1577,6 @@ export default function SolicitudesIpadPage() {
     setBulkItems([]);
     setSerialItems([]);
     setSelectedItems([]);
-    setBulkSelect(null);
-    setSerialSelect(null);
     setFreeTagInput('');
     setFreeQtyInput('');
     setFreeInternalNumber('');
@@ -1551,8 +1607,6 @@ export default function SolicitudesIpadPage() {
       setSourceWorksiteId(null);
       setBulkItems([]);
       setSerialItems([]);
-      setBulkSelect(null);
-      setSerialSelect(null);
       setSelectedItems(
         doc.items.map((item) => {
           const ownerWarehouseId = item.condition ?? null;
@@ -1563,6 +1617,8 @@ export default function SolicitudesIpadPage() {
               requestedTag: item.requestedTag,
               quantity: Number(item.quantity ?? 1) || 1,
               ownerWarehouseId,
+              isDamaged: Boolean(item.conditionNote?.trim()),
+              damageDescription: item.conditionNote ?? '',
             };
           }
           if (item.skuId) {
@@ -1576,6 +1632,8 @@ export default function SolicitudesIpadPage() {
               name: item.sku?.name ?? item.skuId,
               quantity: Number(item.quantity ?? 1) || 1,
               ownerWarehouseId,
+              isDamaged: Boolean(item.conditionNote?.trim()),
+              damageDescription: item.conditionNote ?? '',
             };
           }
           return {
@@ -1589,6 +1647,8 @@ export default function SolicitudesIpadPage() {
               'Serial',
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
+            isDamaged: Boolean(item.conditionNote?.trim()),
+            damageDescription: item.conditionNote ?? '',
           };
         }),
       );
@@ -1634,6 +1694,12 @@ export default function SolicitudesIpadPage() {
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
         throw new Error('Tu usuario no está vinculado a un empleado conductor.');
       }
+      const damagedWithoutDescription = selectedItems.find(
+        (item) => item.isDamaged && !item.damageDescription?.trim(),
+      );
+      if (docType === 'RETURN' && damagedWithoutDescription) {
+        throw new Error(`Describe el daño de ${damagedWithoutDescription.name}.`);
+      }
 
       const documentPayload = {
         type: docType,
@@ -1660,17 +1726,29 @@ export default function SolicitudesIpadPage() {
             requestedTag: item.requestedTag ?? item.name,
             quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
             ownerWarehouseId: item.ownerWarehouseId,
+            conditionNote:
+              docType === 'RETURN' && item.isDamaged
+                ? item.damageDescription?.trim()
+                : undefined,
           };
         }
         return item.type === 'bulk'
           ? {
               skuId: item.skuId,
               quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-              ownerWarehouseId: item.ownerWarehouseId
+              ownerWarehouseId: item.ownerWarehouseId,
+              conditionNote:
+                docType === 'RETURN' && item.isDamaged
+                  ? item.damageDescription?.trim()
+                  : undefined,
             }
           : {
               assetId: item.assetId,
-              ownerWarehouseId: item.ownerWarehouseId
+              ownerWarehouseId: item.ownerWarehouseId,
+              conditionNote:
+                docType === 'RETURN' && item.isDamaged
+                  ? item.damageDescription?.trim()
+                  : undefined,
             };
       });
 
@@ -1684,12 +1762,11 @@ export default function SolicitudesIpadPage() {
           },
         },
       );
-      setSubmitResult(
-        editingRequestId
-          ? `Solicitud actualizada (${created.id}).`
-          : `Solicitud enviada en borrador (${created.id}).`,
-      );
+      const successMessage = editingRequestId
+        ? `Solicitud actualizada (${created.id}).`
+        : `Solicitud enviada en borrador (${created.id}).`;
       resetGenerateForm();
+      setSubmitResult(successMessage);
       setItemsModalOpen(false);
       setWorksites([]);
       setActiveTab('list');
@@ -1746,12 +1823,102 @@ export default function SolicitudesIpadPage() {
     setGenerateStep('info');
   };
 
+  const handleActiveTabChange = (value: string | null) => {
+    setActiveTab(normalizeSolicitudesTab(value));
+  };
+
+  const renderDamageFields = (item: SelectedItem, index: number) => {
+    if (docType !== 'RETURN') return null;
+    return (
+      <Stack gap={6} mt="xs">
+        <Checkbox
+          label="Entra averiado"
+          checked={Boolean(item.isDamaged)}
+          onChange={(event) =>
+            updateSelected(index, {
+              isDamaged: event.currentTarget.checked,
+              damageDescription: event.currentTarget.checked ? item.damageDescription ?? '' : '',
+            })
+          }
+        />
+        {item.isDamaged ? (
+          <Textarea
+            label="Descripción del daño"
+            placeholder="Describe el daño reportado al recibir el equipo"
+            value={item.damageDescription ?? ''}
+            onChange={(event) =>
+              updateSelected(index, {
+                damageDescription: event.currentTarget.value,
+              })
+            }
+            minRows={2}
+            autosize
+            required
+          />
+        ) : null}
+      </Stack>
+    );
+  };
+
+  const renderGenerateError = () =>
+    error ? (
+      <Alert color="red" variant="light" mb="md" withCloseButton onClose={() => setError(null)}>
+        {error}
+      </Alert>
+    ) : null;
+
+  const requestMetrics = {
+    drafts: requests.length,
+    selected: selectedItems.length,
+    activeDoc: editingRequestId ? 'Edición' : 'Nueva',
+    tab: activeTab === 'list' ? 'Borradores' : 'Generación',
+  };
+
   return (
     <main>
-      <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Solicitudes de documentos</Title>
-          <Tabs value={activeTab} onChange={setActiveTab} mt="md">
+      <Container size="xl" py="xl">
+        <Stack gap="lg">
+          <PageHeaderCard
+            title="Solicitudes de documentos"
+            description="Gestiona borradores de remisión y devolución, arma items y controla su envío operativo."
+            icon={<IconFileText size={20} />}
+            iconColor="blue"
+            accentColor="rgba(14,165,233,0.12)"
+          >
+            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+              <StatCard
+                label="Borradores"
+                value={String(requestMetrics.drafts)}
+                hint="Solicitudes cargadas en lista"
+                color="blue"
+                icon={<IconChecklist size={20} />}
+              />
+              <StatCard
+                label="Items"
+                value={String(requestMetrics.selected)}
+                hint="Seleccionados en el documento actual"
+                color="teal"
+                icon={<IconRoute2 size={20} />}
+              />
+              <StatCard
+                label="Modo"
+                value={requestMetrics.activeDoc}
+                hint="Estado del flujo actual"
+                color="grape"
+                icon={<IconFilePlus size={20} />}
+              />
+              <StatCard
+                label="Vista"
+                value={requestMetrics.tab}
+                hint="Tab actualmente activo"
+                color="cyan"
+                icon={<IconFileText size={20} />}
+              />
+            </SimpleGrid>
+          </PageHeaderCard>
+
+          <Paper shadow="sm" p="xl" radius="xl" withBorder>
+            <Tabs value={activeTab} onChange={handleActiveTabChange}>
             <Tabs.List grow={isMobile}>
               <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes documentos'}</Tabs.Tab>
               <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
@@ -1759,7 +1926,12 @@ export default function SolicitudesIpadPage() {
 
             <Tabs.Panel value="list" pt="md">
               <Group justify="space-between" mb="sm">
-                <Text fw={600}>Solicitudes en borrador</Text>
+                <div>
+                  <Text fw={700}>Solicitudes en borrador</Text>
+                  <Text size="sm" c="dimmed">
+                    Revisa solicitudes pendientes, entra a detalle o decide aprobación y rechazo.
+                  </Text>
+                </div>
                 <Button variant="light" onClick={loadRequests} loading={requestsLoading}>
                   Refrescar
                 </Button>
@@ -1768,6 +1940,11 @@ export default function SolicitudesIpadPage() {
                 <Text c="red" mb="sm">
                   {requestsError}
                 </Text>
+              ) : null}
+              {submitResult ? (
+                <Alert color="green" variant="light" mb="sm" withCloseButton onClose={() => setSubmitResult(null)}>
+                  {submitResult}
+                </Alert>
               ) : null}
               {isMobile ? (
                 <Stack gap="sm">
@@ -1780,8 +1957,11 @@ export default function SolicitudesIpadPage() {
                             {row.status}
                           </Badge>
                         </Group>
-                        <Text size="sm">
-                          <strong>Tipo:</strong> {formatDocType(row.type)}
+                        <Text size="sm" component="div">
+                          <strong>Tipo:</strong>{' '}
+                          <Badge size="sm" variant="light" color={requestTypeColor(row.type)}>
+                            {formatDocType(row.type)}
+                          </Badge>
                         </Text>
                         <Text size="sm">
                           <strong>Cliente:</strong> {row.customerWorksite?.customer?.name ?? '-'}
@@ -1860,7 +2040,11 @@ export default function SolicitudesIpadPage() {
                   <Table.Tbody>
                     {requests.map((row) => (
                       <Table.Tr key={row.id}>
-                        <Table.Td>{formatDocType(row.type)}</Table.Td>
+                        <Table.Td>
+                          <Badge size="sm" variant="light" color={requestTypeColor(row.type)}>
+                            {formatDocType(row.type)}
+                          </Badge>
+                        </Table.Td>
                         <Table.Td>{row.consecutive ?? '-'}</Table.Td>
                         <Table.Td>
                           <Text size="sm">{row.customerWorksite?.customer?.name ?? '-'}</Text>
@@ -1933,9 +2117,14 @@ export default function SolicitudesIpadPage() {
 
             <Tabs.Panel value="generate" pt="md">
               <Group justify="space-between" mb="sm">
-                <Text fw={600}>
+                <div>
+                  <Text fw={700}>
                   {editingRequestId ? `Editando solicitud ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
-                </Text>
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Completa información, agrega items y registra la firma antes de enviar.
+                  </Text>
+                </div>
                 {editingRequestId ? (
                   <Button variant="light" color="gray" onClick={resetGenerateForm}>
                     Cancelar edición
@@ -1951,6 +2140,7 @@ export default function SolicitudesIpadPage() {
               </Tabs>
               {generateStep === 'info' ? (
                 <>
+              {renderGenerateError()}
               <Radio.Group
                 mt="md"
                 value={docType}
@@ -2023,7 +2213,7 @@ export default function SolicitudesIpadPage() {
               required
               error={generateFieldErrors.docDate}
             />
-            {docType === 'RETURN' && (
+            {docType === 'RETURN' && !isDriverRole && (
               <TextInput
                 label="Fecha de corte (opcional)"
                 type="date"
@@ -2156,16 +2346,22 @@ export default function SolicitudesIpadPage() {
               ) : null}
             </Tabs.Panel>
           </Tabs>
-        </Paper>
+          </Paper>
 
         {activeTab === 'generate' && generateStep === 'items' ? (
-        <Paper shadow="sm" p="xl" radius="md" withBorder mt="lg">
+        <Paper shadow="sm" p="xl" radius="xl" withBorder mt="lg">
           <Group justify="space-between" align="center" mb="sm">
-            <Title order={4}>Items del documento</Title>
+            <div>
+              <Title order={4}>Items del documento</Title>
+              <Text size="sm" c="dimmed">
+                Agrega equipos, cantidades y condiciones para construir el documento.
+              </Text>
+            </div>
             <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
               Volver a info
             </Button>
           </Group>
+          {renderGenerateError()}
           <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
             <Text size="sm">
               <strong>Resumen:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
@@ -2207,33 +2403,7 @@ export default function SolicitudesIpadPage() {
                 />
               )
             )}
-            {sourceMode === 'on-site' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel('Obra origen', 'Obra desde donde se devolverán los items a bodega.')}
-                  value={sourceWorksiteId ?? ''}
-                  onChange={(event) => setSourceWorksiteId(event.currentTarget.value || null)}
-                  data={[
-                    { value: '', label: customerId ? 'Selecciona obra' : 'Selecciona cliente primero' },
-                    ...worksiteOptions,
-                  ]}
-                  disabled={!customerId || worksitesLoading}
-                  w="100%"
-                />
-              ) : (
-                <Select
-                  label={helpLabel('Obra origen', 'Obra desde donde se devolverán los items a bodega.')}
-                  value={sourceWorksiteId}
-                  onChange={(value) => setSourceWorksiteId(value)}
-                  data={worksiteOptions}
-                  searchable
-                  clearable
-                  placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
-                  disabled={!customerId || worksitesLoading}
-                />
-              )
-            )}
-            {useManualWarehouseCapture || sourceMode === 'on-site' ? null : (
+            {useManualWarehouseCapture ? null : (
               <Button onClick={() => void loadInventory()} loading={loadingInventory}>
                 Cargar items
               </Button>
@@ -2280,109 +2450,7 @@ export default function SolicitudesIpadPage() {
 
           <Divider my="md" />
 
-          {!useManualWarehouseCapture && sourceMode === 'on-site' ? (
-            <Stack gap="md">
-              <Select
-                label={helpLabel('Selecciona el item', 'Lista de equipos disponibles en la obra seleccionada.')}
-                placeholder={onSiteItemOptions.length ? 'Busca y selecciona' : 'Sin items en la obra'}
-                searchable
-                clearable
-                renderOption={({ option }) => {
-                  const owner = onSiteOwnerByValue.get(option.value);
-                  return (
-                    <Group justify="space-between" wrap="nowrap" w="100%">
-                      <Text size="sm" style={{ minWidth: 0, flex: 1 }}>
-                        {option.label}
-                      </Text>
-                      <Badge size="xs" variant="light" color={ownerColorById(owner?.ownerId)}>
-                        {owner?.ownerName ?? 'Sin dueño/a'}
-                      </Badge>
-                    </Group>
-                  );
-                }}
-                value={onSiteItemSelect}
-                onChange={(value) => {
-                  if (!value) {
-                    setOnSiteItemSelect(null);
-                    return;
-                  }
-                  if (value.startsWith('serial:')) {
-                    const assetId = value.slice('serial:'.length);
-                    const foundSerial = availableSerialItems.find((item) => item.assetId === assetId);
-                    if (foundSerial) {
-                      const added = addSerialItem(foundSerial);
-                      if (added) {
-                        setItemsAddedNotice(`${buildSerialDisplayName(foundSerial)} agregado a la lista.`);
-                      }
-                    }
-                    setOnSiteItemSelect(null);
-                    return;
-                  }
-                  if (value.startsWith('bulk:')) {
-                    const bulkKey = value.slice('bulk:'.length);
-                    const foundBulk = availableBulkItems.find((item) => buildBulkKey(item) === bulkKey);
-                    if (foundBulk) {
-                      const added = addBulkItem(foundBulk);
-                      if (added) {
-                        setItemsAddedNotice(`${foundBulk.skuName ?? 'Item'} agregado a la lista.`);
-                      }
-                    }
-                    setOnSiteItemSelect(null);
-                    return;
-                  }
-                  setOnSiteItemSelect(value);
-                }}
-                data={onSiteItemOptions}
-              />
-            </Stack>
-          ) : !isMobile && !useManualWarehouseCapture ? (
-            <Stack gap="md">
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <Select
-                  label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
-                  placeholder={availableBulkItems.length ? 'Busca por nombre o SKU' : 'Sin items disponibles'}
-                  searchable
-                  clearable
-                  value={bulkSelect}
-                  onChange={(value) => {
-                    const found = availableBulkItems.find((item) => buildBulkKey(item) === value);
-                    if (found) {
-                      addBulkItem(found);
-                      setBulkSelect(null);
-                    } else {
-                      setBulkSelect(value);
-                    }
-                  }}
-                  data={availableBulkItems.map((item) => ({
-                    value: buildBulkKey(item),
-                    label: isDriverRole
-                      ? `${item.skuName ?? 'SKU'}`
-                      : `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
-                  }))}
-                />
-                <Select
-                  label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
-                  placeholder={availableSerialItems.length ? 'Busca por serial o asset' : 'Sin equipos disponibles'}
-                  searchable
-                  clearable
-                  value={serialSelect}
-                  onChange={(value) => {
-                    const found = availableSerialItems.find((item) => item.assetId === value);
-                    if (found) {
-                      addSerialItem(found);
-                      setSerialSelect(null);
-                    } else {
-                      setSerialSelect(value);
-                    }
-                  }}
-                  data={availableSerialItems.map((item) => ({
-                    value: item.assetId,
-                    label: buildSerialDisplayName(item)
-                  }))}
-                />
-              </SimpleGrid>
-            </Stack>
-          ) : useManualWarehouseCapture ? null : (
+          {useManualWarehouseCapture ? null : (
             <Text size="sm" c="dimmed">
               Pulsa "Cargar items" para abrir el selector de items.
             </Text>
@@ -2394,7 +2462,7 @@ export default function SolicitudesIpadPage() {
             <Text size="sm" c="dimmed" mt="md">
               No hay equipos agregados
             </Text>
-          ) : (
+          ) : !isTabletOrMobile ? (
             <Table striped highlightOnHover mt="md">
               <Table.Thead>
                 <Table.Tr>
@@ -2412,15 +2480,16 @@ export default function SolicitudesIpadPage() {
                           {item.serial}
                         </Text>
                       )}
+                      {renderDamageFields(item, index)}
                     </Table.Td>
                     <Table.Td>
                       {item.type === 'bulk' || item.type === 'free' ? (
                         <NumberInput
-                          min={0}
+                          min={1}
                           value={item.quantity ?? 1}
                           onChange={(value) =>
                             updateSelected(index, {
-                              quantity: typeof value === 'number' ? value : 1
+                              quantity: normalizeQuantityInput(value, item.quantity ?? 1)
                             })
                           }
                         />
@@ -2446,6 +2515,56 @@ export default function SolicitudesIpadPage() {
                 ))}
               </Table.Tbody>
             </Table>
+          ) : (
+            <Stack mt="md" gap="sm">
+              {selectedItems.map((item, index) => (
+                <Paper
+                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
+                  withBorder
+                  radius="md"
+                  p="sm"
+                >
+                  <Stack gap="xs">
+                    <div>
+                      <Text fw={600}>{item.name}</Text>
+                      {item.serial ? (
+                        <Text size="xs" c="dimmed">
+                          {item.serial}
+                        </Text>
+                      ) : null}
+                    </div>
+                    {item.type === 'bulk' || item.type === 'free' ? (
+                      <NumberInput
+                        label="Cantidad"
+                        min={1}
+                        value={item.quantity ?? 1}
+                        onChange={(value) =>
+                          updateSelected(index, {
+                            quantity: normalizeQuantityInput(value, item.quantity ?? 1),
+                          })
+                        }
+                      />
+                    ) : (
+                      <Text size="sm">Cantidad: 1</Text>
+                    )}
+                    {renderDamageFields(item, index)}
+                    {canResolveInline && item.type === 'free' ? (
+                      <Select
+                        label="Resolver a SKU"
+                        placeholder="Selecciona SKU"
+                        searchable
+                        clearable
+                        data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
+                        onChange={(value) => resolveFreeItemToSku(index, value)}
+                      />
+                    ) : null}
+                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                      Quitar
+                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
           )}
 
           <Group mt="md" justify="space-between" className="mobile-actions">
@@ -2458,13 +2577,30 @@ export default function SolicitudesIpadPage() {
         ) : null}
 
         {activeTab === 'generate' && generateStep === 'sign' ? (
-        <Paper shadow="sm" p="xl" radius="md" withBorder mt="lg">
+        <Paper
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+          shadow="sm"
+          p="xl"
+          radius="xl"
+          withBorder
+          mt="lg"
+        >
           <Group justify="space-between" align="center" mb="sm">
-            <Title order={4}>Firma y envío</Title>
-            <Button variant="light" color="gray" onClick={() => setGenerateStep('items')}>
+            <div>
+              <Title order={4}>Firma y envío</Title>
+              <Text size="sm" c="dimmed">
+                Verifica el resumen final, captura la firma y envía la solicitud.
+              </Text>
+            </div>
+            <Button type="button" variant="light" color="gray" onClick={() => setGenerateStep('items')}>
               Volver a items
             </Button>
           </Group>
+          {renderGenerateError()}
 
           <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
             <Text size="sm">
@@ -2488,7 +2624,14 @@ export default function SolicitudesIpadPage() {
             <Table.Tbody>
               {selectedItems.map((item, index) => (
                 <Table.Tr key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}>
-                  <Table.Td>{item.name}</Table.Td>
+                  <Table.Td>
+                    <Text>{item.name}</Text>
+                    {docType === 'RETURN' && item.isDamaged ? (
+                      <Text size="xs" c="red">
+                        Averiado: {item.damageDescription?.trim() || 'Sin descripción'}
+                      </Text>
+                    ) : null}
+                  </Table.Td>
                   <Table.Td style={{ textAlign: 'center' }}>
                     {item.type === 'serial' ? 1 : item.quantity ?? 1}
                   </Table.Td>
@@ -2509,6 +2652,7 @@ export default function SolicitudesIpadPage() {
                 </Text>
               ) : (
                 <Button
+                  type="button"
                   variant="light"
                   onClick={() => {
                     setSignatureDraft(receivedSignature);
@@ -2536,11 +2680,6 @@ export default function SolicitudesIpadPage() {
             ) : null}
           </Stack>
 
-          {error && (
-            <Text c="red" mt="sm">
-              {error}
-            </Text>
-          )}
           {submitResult && (
             <Text c="green" mt="sm">
               {submitResult}
@@ -2548,12 +2687,13 @@ export default function SolicitudesIpadPage() {
           )}
 
           <Group mt="md">
-            <Button onClick={handleSubmit} loading={submitting}>
+            <Button type="submit" loading={submitting}>
               {editingRequestId ? 'Guardar cambios' : 'Enviar solicitud'}
             </Button>
           </Group>
         </Paper>
         ) : null}
+        </Stack>
       </Container>
 
       <Modal
@@ -2690,7 +2830,7 @@ export default function SolicitudesIpadPage() {
                       )
                       .map((serial) => ({
                         value: serial.assetId,
-                        label: buildSerialDisplayName(serial),
+                        label: getSerialDisplayName(serial),
                       }));
                     const hasExpected = expectedInternal == null
                       ? false
@@ -2751,83 +2891,24 @@ export default function SolicitudesIpadPage() {
         </Stack>
       </Modal>
 
-      <Modal
-        opened={itemsModalOpen && sourceMode === 'warehouse'}
+      <InventoryItemPickerModal
+        opened={itemsModalOpen && !useManualWarehouseCapture}
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
-        centered
-      >
-        <Stack gap="md">
-          {itemsAddedNotice ? (
-            <Alert color="green" variant="light">
-              {itemsAddedNotice}
-            </Alert>
-          ) : null}
-          {useManualWarehouseCapture ? (
-            <Text size="sm" c="dimmed">
-              Usa captura por descripción en la sección principal.
-            </Text>
-          ) : (
-            <>
-          <Select
-            label={helpLabel('Agregar stock (masivo)', 'Items por cantidad, por ejemplo formaletas o consumibles.')}
-            placeholder={availableBulkItems.length ? 'Busca por nombre o SKU' : 'Sin items disponibles'}
-            searchable
-            clearable
-            value={bulkSelect}
-            onChange={(value) => {
-              const found = availableBulkItems.find((item) => buildBulkKey(item) === value);
-              if (found) {
-                const added = addBulkItem(found);
-                if (added) {
-                  setItemsAddedNotice(`${found.skuName ?? 'Item'} agregado a la lista.`);
-                  setItemsModalOpen(false);
-                }
-                setBulkSelect(null);
-              } else {
-                setBulkSelect(value);
-              }
-            }}
-            data={availableBulkItems.map((item) => ({
-              value: buildBulkKey(item),
-              label: isDriverRole
-                ? `${item.skuName ?? 'SKU'}`
-                : `${item.skuName ?? 'SKU'} · ${item.quantity} · ${item.ownerWarehouseName ?? 'Sin bodega dueña'}`
-            }))}
-          />
-          <Select
-            label={helpLabel('Agregar equipo (serial)', 'Equipos únicos identificados por serial o motor.')}
-            placeholder={availableSerialItems.length ? 'Busca por serial o asset' : 'Sin equipos disponibles'}
-            searchable
-            clearable
-            value={serialSelect}
-            onChange={(value) => {
-              const found = availableSerialItems.find((item) => item.assetId === value);
-              if (found) {
-                const added = addSerialItem(found);
-                if (added) {
-                  setItemsAddedNotice(`${buildSerialDisplayName(found)} agregado a la lista.`);
-                  setItemsModalOpen(false);
-                }
-                setSerialSelect(null);
-              } else {
-                setSerialSelect(value);
-              }
-            }}
-            data={availableSerialItems.map((item) => ({
-              value: item.assetId,
-              label: buildSerialDisplayName(item)
-            }))}
-          />
-            </>
-          )}
-          <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => setItemsModalOpen(false)}>
-              Cerrar
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        bulkItems={availableBulkItems}
+        serialItems={availableSerialItems}
+        selectedBulkKeys={selectedBulkKeys}
+        selectedSerialIds={selectedSerialIds}
+        onAddBulk={addBulkItem}
+        onAddSerial={addSerialItem}
+        itemsAddedNotice={itemsAddedNotice}
+        isDriverRole={isDriverRole}
+        sourceMode={sourceMode}
+        emptyStateText={
+          useManualWarehouseCapture ? 'Usa captura por descripción en la sección principal.' : null
+        }
+        onItemAddedNotice={setItemsAddedNotice}
+      />
 
       <Modal
         opened={createSerialOpen}

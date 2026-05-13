@@ -32,6 +32,7 @@ type InventoryResponse = {
     serialOrEngine: string | null;
     description: string | null;
     skuName?: string | null;
+    ownerWarehouseName?: string | null;
     imageUrl?: string | null;
     brand?: string | null;
     model?: string | null;

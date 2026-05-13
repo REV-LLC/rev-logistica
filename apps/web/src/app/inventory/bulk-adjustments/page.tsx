@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
+  Badge,
   Button,
   Chip,
   Container,
@@ -11,13 +13,26 @@ import {
   NumberInput,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  IconArrowsTransferUp,
+  IconBuildingWarehouse,
+  IconChecks,
+  IconClipboardList,
+  IconCubePlus,
+  IconForms,
+  IconPlus,
+} from '@tabler/icons-react';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
 
 type Warehouse = {
@@ -801,144 +816,263 @@ export default function AddBulkStockPage() {
             <Button variant="default" onClick={() => setItemConfigOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={applyTypeConfiguration}>Aplicar</Button>
+            <Button onClick={applyTypeConfiguration}>Aplicar configuración</Button>
           </Group>
         </Stack>
       </Modal>
 
-      <Paper shadow="sm" p="xl" radius="md" withBorder>
-        <Group mb="md">
-          <Chip.Group
-            multiple={false}
-            value="bulk"
-            onChange={(value) => {
-              if (value === 'serial') {
-                router.push('/inventory/serialized-assets');
-              }
-            }}
-          >
-            <Group gap="xs">
-              <Chip value="bulk">Stock masivo</Chip>
-              <Chip value="serial">Equipo serial</Chip>
-            </Group>
-          </Chip.Group>
-        </Group>
-
-        <Title order={2}>Agregar stock</Title>
-        <Text c="dimmed" mt="xs">
-          Crea items por tipo.
-        </Text>
-
-        {error && (
-          <Text c="red" mt="md">
-            {error}
-          </Text>
-        )}
-
-        {success && (
-          <Text c="green" mt="md">
-            {success}
-          </Text>
-        )}
-
-        <Stack mt="xl" gap="lg">
-          <Stack gap="xs">
-            <Select
-              label="Usar plantilla de equipo existente (opcional)"
-              placeholder="Busca un item ya creado"
-              searchable
-              clearable
-              data={templateOptions}
-              value={templateSkuId}
-              onChange={applyTemplate}
-            />
-          </Stack>
-
-          <Stack gap="xs">
-            <Text fw={600}>Tipo de item</Text>
-            <Select
-              label="Tipo"
-              data={typeOptions}
-              value={itemTypeSelection}
+      <Stack gap="lg">
+        <PageHeaderCard
+          title="Agregar stock masivo"
+          description="Crea items por cantidad, configura su ficha base y registra el ingreso inicial en bodega."
+          icon={<IconCubePlus size={20} />}
+          iconColor="green"
+          accentColor="rgba(22,163,74,0.12)"
+        >
+          <Group>
+            <Chip.Group
+              multiple={false}
+              value="bulk"
               onChange={(value) => {
-                setItemTypeSelection(value);
-                if (!value) {
-                  setItemType(null);
-                  return;
+                if (value === 'serial') {
+                  router.push('/inventory/serialized-assets');
                 }
-
-                if (value === 'FORMALETA') {
-                  setItemType('FORMALETA');
-                  resetTypeForm('FORMALETA');
-                  setItemConfigOpen(true);
-                  return;
-                }
-
-                setItemType('GENERIC');
-                resetTypeForm('GENERIC');
-                if (value === 'ANDAMIO') {
-                  setGenericFamilyName('ANDAMIO');
-                  setGenericFamilyCode('ANDAMIO');
-                } else if (value === 'ENCOFRADO') {
-                  setGenericFamilyName('ENCOFRADO');
-                  setGenericFamilyCode('ENCOFRADO');
-                }
-                setItemConfigOpen(true);
               }}
-              placeholder={loading ? 'Cargando...' : 'Selecciona un tipo'}
-              disabled={loading}
-              required
-            />
-            {builtItem ? (
-              <Text size="sm" c="dimmed">
-                {`Item: ${builtItem.familyName} / ${builtItem.skuName}`}
-              </Text>
-            ) : null}
-          </Stack>
-
-          <Divider />
-
-          <Stack gap="xs">
-            <Text fw={600}>Movimiento inicial</Text>
-            <Group grow className="mobile-stack">
-              <Select
-                label="Bodega dueña"
-                data={warehouseOptions}
-                value={ownerWarehouseId}
-                onChange={(value) => {
-                  setOwnerWarehouseId(value);
-                  setWarehouseId(value);
-                }}
-                required
-              />
-              <Select
-                label="Bodega ubicación inicial"
-                data={warehouseOptions}
-                value={warehouseId}
-                onChange={(value) => setWarehouseId(value)}
-                required
-              />
-            </Group>
-            <NumberInput
-              label="Cantidad"
-              value={quantity}
-              onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
-              min={0}
-              step={1}
-              required
-            />
-          </Stack>
-
-          <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => router.back()}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit} loading={saving}>
-              Agregar stock
-            </Button>
+            >
+              <Group gap="xs">
+                <Chip value="bulk">Items por cantidad</Chip>
+                <Chip value="serial">Equipos únicos</Chip>
+              </Group>
+            </Chip.Group>
           </Group>
-        </Stack>
-      </Paper>
+
+          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+            <StatCard
+              label="Plantillas"
+              value={String(templateSkus.length)}
+              hint="SKUs bulk reutilizables"
+              color="green"
+              icon={<IconClipboardList size={20} />}
+            />
+            <StatCard
+              label="Bodegas"
+              value={String(warehouses.length)}
+              hint="Disponibles para el ingreso"
+              color="blue"
+              icon={<IconBuildingWarehouse size={20} />}
+            />
+            <StatCard
+              label="Item"
+              value={builtItem ? 'OK' : 'Pend.'}
+              hint={builtItem ? builtItem.familyName : 'Configura el producto'}
+              color={builtItem ? 'teal' : 'gray'}
+              icon={<IconForms size={20} />}
+            />
+            <StatCard
+              label="Movimiento"
+              value={payloadPreview ? String(payloadPreview.quantity) : '0'}
+              hint={payloadPreview ? 'Cantidad lista para ingresar' : 'Falta completar datos'}
+              color={payloadPreview ? 'lime' : 'gray'}
+              icon={<IconArrowsTransferUp size={20} />}
+            />
+          </SimpleGrid>
+        </PageHeaderCard>
+
+        {error ? (
+          <Alert color="red" variant="light" title="No se pudo completar la acción">
+            {error}
+          </Alert>
+        ) : null}
+
+        {success ? (
+          <Alert color="green" variant="light" title="Movimiento registrado">
+            {success}
+          </Alert>
+        ) : null}
+
+        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Stack gap="lg">
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <div>
+                  <Text fw={700}>1. Base del item</Text>
+                  <Text size="sm" c="dimmed">
+                    Arranca desde una plantilla existente o define un tipo nuevo para abrir la configuración.
+                  </Text>
+                </div>
+
+                <Select
+                  label="Usar plantilla de equipo existente"
+                  placeholder="Busca un item ya creado"
+                  searchable
+                  clearable
+                  data={templateOptions}
+                  value={templateSkuId}
+                  onChange={applyTemplate}
+                />
+
+                <Select
+                  label="Tipo de item"
+                  data={typeOptions}
+                  value={itemTypeSelection}
+                  onChange={(value) => {
+                    setItemTypeSelection(value);
+                    if (!value) {
+                      setItemType(null);
+                      return;
+                    }
+
+                    if (value === 'FORMALETA') {
+                      setItemType('FORMALETA');
+                      resetTypeForm('FORMALETA');
+                      setItemConfigOpen(true);
+                      return;
+                    }
+
+                    setItemType('GENERIC');
+                    resetTypeForm('GENERIC');
+                    if (value === 'ANDAMIO') {
+                      setGenericFamilyName('ANDAMIO');
+                      setGenericFamilyCode('ANDAMIO');
+                    } else if (value === 'ENCOFRADO') {
+                      setGenericFamilyName('ENCOFRADO');
+                      setGenericFamilyCode('ENCOFRADO');
+                    }
+                    setItemConfigOpen(true);
+                  }}
+                  placeholder={loading ? 'Cargando...' : 'Selecciona un tipo'}
+                  disabled={loading}
+                  required
+                />
+
+                {itemType ? (
+                  <Group justify="space-between" align="center">
+                    <Stack gap={2}>
+                      <Text size="sm" fw={600}>
+                        {builtItem ? builtItem.skuName : 'Aún sin configuración completa'}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {builtItem
+                          ? `${builtItem.familyName}${builtItem.familyCode ? ` · ${builtItem.familyCode}` : ''}`
+                          : 'Abre la configuración para definir medidas, nombre y propiedades'}
+                      </Text>
+                    </Stack>
+                    <Group gap="xs">
+                      <Badge color={isItemConfigured ? 'green' : 'gray'} variant="light">
+                        {isItemConfigured ? 'Configurado' : 'Pendiente'}
+                      </Badge>
+                      <Button variant="light" size="xs" onClick={() => setItemConfigOpen(true)}>
+                        {isItemConfigured ? 'Editar configuración' : 'Configurar'}
+                      </Button>
+                    </Group>
+                  </Group>
+                ) : null}
+              </Stack>
+            </Paper>
+
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <div>
+                  <Text fw={700}>2. Movimiento inicial</Text>
+                  <Text size="sm" c="dimmed">
+                    Define la bodega dueña, la ubicación de entrada y la cantidad que vas a incorporar.
+                  </Text>
+                </div>
+
+                <Group grow className="mobile-stack">
+                  <Select
+                    label="Bodega dueña"
+                    data={warehouseOptions}
+                    value={ownerWarehouseId}
+                    onChange={(value) => {
+                      setOwnerWarehouseId(value);
+                      setWarehouseId(value);
+                    }}
+                    required
+                  />
+                  <Select
+                    label="Bodega ubicación inicial"
+                    data={warehouseOptions}
+                    value={warehouseId}
+                    onChange={(value) => setWarehouseId(value)}
+                    required
+                  />
+                </Group>
+
+                <NumberInput
+                  label="Cantidad"
+                  value={quantity}
+                  onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
+                  min={0}
+                  step={1}
+                  required
+                />
+              </Stack>
+            </Paper>
+
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <div>
+                  <Text fw={700}>3. Resumen de ingreso</Text>
+                  <Text size="sm" c="dimmed">
+                    Revisa lo que se va a crear antes de registrar el stock.
+                  </Text>
+                </div>
+
+                {payloadPreview ? (
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    <Paper radius="md" p="sm" bg="gray.0">
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                        Familia / SKU
+                      </Text>
+                      <Text size="sm" mt={8}>
+                        {payloadPreview.family.name}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {payloadPreview.sku.name}
+                      </Text>
+                    </Paper>
+                    <Paper radius="md" p="sm" bg="gray.0">
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                        Movimiento
+                      </Text>
+                      <Text size="sm" mt={8}>
+                        Cantidad: {payloadPreview.quantity}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        Dueña: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        Ubicación: {warehouseOptions.find((item) => item.value === warehouseId)?.label ?? '-'}
+                      </Text>
+                    </Paper>
+                  </SimpleGrid>
+                ) : (
+                  <Paper radius="md" p="sm" bg="gray.0">
+                    <Group gap="xs" wrap="nowrap">
+                      <ThemeIcon color="gray" variant="light" size={30} radius="xl">
+                        <IconChecks size={16} />
+                      </ThemeIcon>
+                      <Text size="sm" c="dimmed">
+                        Completa la configuración del item y el movimiento inicial para ver el resumen final.
+                      </Text>
+                    </Group>
+                  </Paper>
+                )}
+              </Stack>
+            </Paper>
+
+            <Group justify="flex-end" className="mobile-actions">
+              <Button variant="default" onClick={() => router.back()}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSubmit} loading={saving} leftSection={<IconPlus size={16} />}>
+                Agregar stock
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
+      </Stack>
     </Container>
   );
 }

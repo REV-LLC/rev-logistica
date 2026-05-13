@@ -1,10 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DocumentStatus, DocumentType, Prisma, Role } from '@prisma/client';
+import { DocumentItemBillingStatus, DocumentStatus, DocumentType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class DocumentsService {
+  private readonly businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryService: InventoryService,
@@ -75,6 +82,40 @@ export class DocumentsService {
   private parseSignatureMimeType(signatureDataUrl: string) {
     const match = signatureDataUrl.match(/^data:([^;]+);base64,/i);
     return match?.[1] ?? 'image/png';
+  }
+
+  private parseBillingDate(
+    value: string | null | undefined,
+    fieldName: string,
+  ): Date | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const raw = value.trim();
+    if (!raw) return null;
+    const isoDayMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const localDayMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const normalizedDay = isoDayMatch
+      ? `${isoDayMatch[1]}-${isoDayMatch[2]}-${isoDayMatch[3]}`
+      : localDayMatch
+        ? `${localDayMatch[3]}-${localDayMatch[2]}-${localDayMatch[1]}`
+        : null;
+    const parsed = normalizedDay
+      ? new Date(`${normalizedDay}T12:00:00.000Z`)
+      : new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`${fieldName} inválida`);
+    }
+    return parsed;
+  }
+
+  private getBusinessDateKey(value: Date) {
+    return this.businessDateFormatter.format(value);
+  }
+
+  private getBillingStatus(cutoff: Date | null, returnedAt: Date | null) {
+    if (returnedAt) return DocumentItemBillingStatus.CLOSED;
+    if (cutoff) return DocumentItemBillingStatus.CUT;
+    return DocumentItemBillingStatus.OPEN;
   }
 
   private async saveReceivedSignature(
@@ -161,6 +202,7 @@ export class DocumentsService {
       ownerWarehouseId?: string;
       quantity?: number;
       requestedTag?: string;
+      conditionNote?: string;
     }>;
   }) {
     const type = payload.type as DocumentType;
@@ -190,6 +232,7 @@ export class DocumentsService {
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
                 condition: item.ownerWarehouseId ?? null,
+                conditionNote: item.conditionNote?.trim() || null,
               })),
             });
           }
@@ -233,6 +276,7 @@ export class DocumentsService {
         ownerWarehouseId?: string;
         quantity?: number;
         requestedTag?: string;
+        conditionNote?: string;
       }>;
     },
   ) {
@@ -295,6 +339,7 @@ export class DocumentsService {
             quantity: item.quantity ?? (item.skuId ? 1 : null),
             requestedTag: item.requestedTag?.trim() || null,
             condition: item.ownerWarehouseId ?? null,
+            conditionNote: item.conditionNote?.trim() || null,
           })),
         });
       }
@@ -307,6 +352,83 @@ export class DocumentsService {
       );
 
       return updated;
+    });
+  }
+
+  async updateDocumentItemBilling(
+    documentId: string,
+    itemId: string,
+    payload: {
+      billingCutoffDate?: string | null;
+      returnedAt?: string | null;
+      note?: string;
+    },
+    userId: string,
+  ) {
+    const cutoffInput = this.parseBillingDate(payload.billingCutoffDate, 'billingCutoffDate');
+    const returnedInput = this.parseBillingDate(payload.returnedAt, 'returnedAt');
+    if (
+      cutoffInput !== undefined &&
+      returnedInput !== undefined &&
+      cutoffInput &&
+      returnedInput &&
+      cutoffInput.getTime() > returnedInput.getTime()
+    ) {
+      throw new BadRequestException('billingCutoffDate no puede ser posterior a returnedAt');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findUnique({
+        where: { id: documentId },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          docDate: true,
+        },
+      });
+      if (!document) throw new NotFoundException('Document not found');
+      if (document.type !== DocumentType.REMISSION && document.type !== DocumentType.RETURN) {
+        throw new BadRequestException('Solo aplica para documentos de remisión/devolución');
+      }
+
+      const item = await tx.documentItem.findFirst({
+        where: {
+          id: itemId,
+          documentId,
+        },
+      });
+      if (!item) {
+        throw new NotFoundException('Document item not found');
+      }
+
+      const nextCutoff = cutoffInput !== undefined ? cutoffInput : item.billingCutoffDate;
+      const nextReturned = returnedInput !== undefined ? returnedInput : item.returnedAt;
+      if (
+        document.type === DocumentType.REMISSION &&
+        nextCutoff &&
+        this.getBusinessDateKey(nextCutoff) < this.getBusinessDateKey(document.docDate)
+      ) {
+        throw new BadRequestException('billingCutoffDate no puede ser anterior a la fecha del documento');
+      }
+      if (nextCutoff && nextReturned && nextCutoff.getTime() > nextReturned.getTime()) {
+        throw new BadRequestException('billingCutoffDate no puede ser posterior a returnedAt');
+      }
+
+      const note = payload.note !== undefined ? payload.note?.trim() || null : item.billingNote;
+      const updated = await tx.documentItem.update({
+        where: { id: item.id },
+        data: {
+          billingCutoffDate: nextCutoff ?? null,
+          returnedAt: nextReturned ?? null,
+          billingStatus: this.getBillingStatus(nextCutoff ?? null, nextReturned ?? null),
+          billingNote: note,
+          billingUpdatedAt: new Date(),
+          billingUpdatedBy: userId,
+        },
+      });
+
+      return { updatedItem: updated, splitItem: null };
     });
   }
 
