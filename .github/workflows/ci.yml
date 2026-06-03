@@ -30,6 +30,8 @@ jobs:
 
       - name: Generate Prisma client
         run: npm --workspace apps/api exec prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rev_logistica
 
       - name: Build API
         run: npm --workspace apps/api run build
