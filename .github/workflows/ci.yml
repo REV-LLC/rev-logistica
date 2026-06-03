@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - production
+  push:
+    branches:
+      - dev
+      - production
+
+jobs:
+  build:
+    name: Build API and Web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm --workspace apps/api exec prisma generate
+
+      - name: Build API
+        run: npm --workspace apps/api run build
+
+      - name: Build Web
+        run: npm --workspace apps/web run build
