@@ -39,3 +39,6 @@ cp apps/web/.env.example apps/web/.env.local
 - `/inventory/warehouse`
 - `/inventory/on-site`
 - `/inventory/ops`
+
+## Despliegue
+El flujo de ramas y despliegue esta documentado en [docs/07-ramas-despliegue.md](docs/07-ramas-despliegue.md).
