@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
-  ActionIcon,
-  AppShell,
+  Alert,
   Badge,
+  Button,
   Center,
   Container,
   Group,
@@ -19,12 +20,25 @@ import {
   TableThead,
   TableTr,
   Text,
-  Title,
+  ThemeIcon,
 } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconChecklist,
+  IconClipboardList,
+  IconReceipt2,
+  IconTruck,
+  IconUsers,
+  IconUserStar,
+} from '@tabler/icons-react';
 import AuthGuard from '@/components/AuthGuard';
-import Nav from '@/components/Nav';
+import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import StatCard from '@/components/dashboard/StatCard';
+import ResponsiveShell from '@/components/ResponsiveShell';
 import { api } from '@/lib/api';
+import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 
 type Vehicle = {
   id: string;
@@ -32,6 +46,23 @@ type Vehicle = {
   soatVigencia?: string | null;
   tecnomecanicaVigencia?: string | null;
   active?: boolean;
+};
+
+type Task = {
+  id: string;
+  status?: 'OPEN' | 'DOING' | 'DONE' | null;
+  assignedToUserId?: string | null;
+};
+
+type Customer = {
+  id: string;
+  active: boolean;
+};
+
+type Employee = {
+  id: string;
+  active: boolean;
+  user?: { id: string; active: boolean } | null;
 };
 
 type PendingVehicle = {
@@ -43,6 +74,37 @@ type PendingVehicle = {
   technoDays: number | null;
   minDays: number;
 };
+
+const quickLinks = [
+  {
+    href: '/transport/solicitudes',
+    title: 'Solicitudes',
+    description: 'Arma remisiones y devoluciones con seguimiento operativo.',
+    icon: <IconClipboardList size={18} />,
+    color: 'blue',
+  },
+  {
+    href: '/tasks',
+    title: 'Pendientes',
+    description: 'Revisa tareas abiertas y seguimientos del equipo.',
+    icon: <IconChecklist size={18} />,
+    color: 'yellow',
+  },
+  {
+    href: '/transport/vehicles',
+    title: 'Vehículos',
+    description: 'Controla flota, SOAT y tecnomecánica próximos.',
+    icon: <IconTruck size={18} />,
+    color: 'orange',
+  },
+  {
+    href: '/billing/prefactura',
+    title: 'Prefactura',
+    description: 'Consolida periodos facturables por obra y cliente.',
+    icon: <IconReceipt2 size={18} />,
+    color: 'teal',
+  },
+];
 
 function startOfToday() {
   const today = new Date();
@@ -62,42 +124,78 @@ function daysUntil(date: Date) {
 }
 
 function badgeColor(daysLeft: number) {
-  if (daysLeft <= 30) return 'red';
+  if (daysLeft < 0) return 'red';
+  if (daysLeft <= 7) return 'red';
+  if (daysLeft <= 30) return 'orange';
   return 'teal';
 }
 
 function formatDate(value: Date | null) {
   if (!value) return '-';
-  return value.toLocaleDateString('es-CO');
+  return value.toLocaleDateString('es-CO', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  });
 }
 
 function daysChipLabel(prefix: string, daysLeft: number | null) {
-  if (daysLeft === null) return `- ${prefix}`;
-  return `${daysLeft} ${prefix}`;
+  if (daysLeft === null) return `${prefix}: sin fecha`;
+  if (daysLeft < 0) return `${prefix}: vencido`;
+  return `${prefix}: ${daysLeft} días`;
+}
+
+function formatToday() {
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date());
 }
 
 export default function HomePage() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const currentRole = getCurrentUserRole();
+  const session = getCurrentUserSession();
+
   useEffect(() => {
     let mounted = true;
-    const loadVehicles = async () => {
+
+    const loadDashboard = async () => {
       setLoading(true);
       setError(null);
+
       try {
-        const data = await api<Vehicle[]>('/vehicles');
-        if (mounted) setVehicles(data);
+        const [vehiclesData, tasksData, customersData, employeesData] = await Promise.all([
+          api<Vehicle[]>('/vehicles'),
+          api<Task[]>('/tasks'),
+          api<Customer[]>('/customers'),
+          api<Employee[]>('/employees'),
+        ]);
+
+        if (!mounted) return;
+        setVehicles(vehiclesData);
+        setTasks(tasksData);
+        setCustomers(customersData);
+        setEmployees(employeesData);
       } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : 'No se pudo cargar vehículos');
-        }
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
       } finally {
         if (mounted) setLoading(false);
       }
     };
-    loadVehicles();
+
+    loadDashboard();
+
     return () => {
       mounted = false;
     };
@@ -105,6 +203,7 @@ export default function HomePage() {
 
   const pendingVehicles = useMemo<PendingVehicle[]>(() => {
     return vehicles
+      .filter((vehicle) => vehicle.active !== false)
       .map((vehicle) => {
         const soatDate = parseDate(vehicle.soatVigencia);
         const technoDate = parseDate(vehicle.tecnomecanicaVigencia);
@@ -112,6 +211,7 @@ export default function HomePage() {
         const technoDays = technoDate ? daysUntil(technoDate) : null;
         const dayValues = [soatDays, technoDays].filter((value): value is number => value !== null);
         if (!dayValues.length) return null;
+
         return {
           id: vehicle.id,
           plate: vehicle.plate,
@@ -126,177 +226,215 @@ export default function HomePage() {
       .sort((a, b) => a.minDays - b.minDays);
   }, [vehicles]);
 
-  const criticalCount = pendingVehicles.filter((vehicle) => vehicle.minDays <= 7).length;
+  const dashboardMetrics = useMemo(() => {
+    const criticalVehicles = pendingVehicles.filter((vehicle) => vehicle.minDays <= 7).length;
+    const upcomingVehicles = pendingVehicles.filter((vehicle) => vehicle.minDays > 7 && vehicle.minDays <= 30).length;
+    const activeCustomers = customers.filter((customer) => customer.active).length;
+    const activeEmployees = employees.filter((employee) => employee.active).length;
+    const usersWithAccess = employees.filter((employee) => employee.user?.active).length;
+    const openTasks = tasks.filter((task) => task.status === 'OPEN').length;
+    const doingTasks = tasks.filter((task) => task.status === 'DOING').length;
 
-  const rows = pendingVehicles.map((vehicle) => (
-    <TableTr key={vehicle.id}>
-      <TableTd>
-        <Text fw={600} tt="uppercase">
-          {vehicle.plate}
-        </Text>
-      </TableTd>
-      <TableTd>
-        <Text>{formatDate(vehicle.soatDate)}</Text>
-      </TableTd>
-      <TableTd>
-        <Text>{formatDate(vehicle.technoDate)}</Text>
-      </TableTd>
-      <TableTd style={{ minWidth: 260 }}>
-        <Group gap="xs">
-          <Badge
-            color={vehicle.soatDays === null ? 'gray' : badgeColor(vehicle.soatDays)}
-            variant={vehicle.soatDays !== null && vehicle.soatDays <= 30 ? 'filled' : 'light'}
-            styles={
-              vehicle.soatDays !== null && vehicle.soatDays <= 30
-                ? {
-                    root: {
-                      backgroundColor: 'var(--mantine-color-red-2)',
-                      color: 'var(--mantine-color-red-9)',
-                      paddingInline: '0.5rem',
-                      paddingBlock: '0.5rem',
-                    },
-                    label: {
-                      lineHeight: 1.2,
-                    },
-                  }
-                : {
-                    root: {
-                      paddingInline: '0.5rem',
-                      paddingBlock: '0.5rem',
-                    },
-                    label: {
-                      lineHeight: 1.2,
-                    },
-                  }
-            }
-          >
-            <Text
-              span
-              c={vehicle.soatDays !== null && vehicle.soatDays <= 30 ? 'red.6' : 'dark'}
-              size="xs"
-              fw={700}
-            >
-              {daysChipLabel('DÍAS PARA SOAT', vehicle.soatDays)}
-            </Text>
-          </Badge>
-          <Badge
-            color={vehicle.technoDays === null ? 'gray' : badgeColor(vehicle.technoDays)}
-            variant={vehicle.technoDays !== null && vehicle.technoDays <= 30 ? 'filled' : 'light'}
-            styles={
-              vehicle.technoDays !== null && vehicle.technoDays <= 30
-                ? {
-                    root: {
-                      backgroundColor: 'var(--mantine-color-red-2)',
-                      color: 'var(--mantine-color-red-9)',
-                      paddingInline: '0.5rem',
-                      paddingBlock: '0.5rem',
-                    },
-                    label: {
-                      lineHeight: 1.2,
-                    },
-                  }
-                : {
-                    root: {
-                      paddingInline: '0.5rem',
-                      paddingBlock: '0.5rem',
-                    },
-                    label: {
-                      lineHeight: 1.2,
-                    },
-                  }
-            }
-          >
-            <Text
-              span
-              c={vehicle.technoDays !== null && vehicle.technoDays <= 30 ? 'red.6' : 'dark'}
-              size="xs"
-              fw={700}
-            >
-              {daysChipLabel('DÍAS PARA TECNO', vehicle.technoDays)}
-            </Text>
-          </Badge>
-        </Group>
-      </TableTd>
-    </TableTr>
-  ));
+    return {
+      criticalVehicles,
+      upcomingVehicles,
+      activeCustomers,
+      activeEmployees,
+      usersWithAccess,
+      openTasks,
+      doingTasks,
+    };
+  }, [customers, employees, pendingVehicles, tasks]);
+
+  const topVehicles = pendingVehicles.slice(0, 8);
+  const dashboardStatus =
+    dashboardMetrics.criticalVehicles > 0
+      ? {
+          title: 'Atención inmediata',
+          description: `${dashboardMetrics.criticalVehicles} vencimientos críticos en flota requieren revisión hoy.`,
+          color: 'red',
+        }
+      : dashboardMetrics.openTasks > 0
+        ? {
+            title: 'Seguimiento operativo',
+            description: `${dashboardMetrics.openTasks} tareas abiertas siguen pendientes de atención.`,
+            color: 'yellow',
+          }
+        : {
+            title: 'Operación estable',
+            description: 'No hay alertas críticas visibles en la vista principal.',
+            color: 'teal',
+          };
 
   return (
     <AuthGuard allowedRoles={['ADMIN', 'OFFICE']}>
-      <AppShell navbar={{ width: 260, breakpoint: 'sm' }} padding="md">
-        <AppShell.Navbar withBorder>
-          <Nav />
-        </AppShell.Navbar>
-        <AppShell.Main>
-          <Container size="xl" py="xl">
-            <Stack gap="xl">
-              <div>
-                <Title order={2}>DASHBOARD</Title>
-                <Text c="dimmed">RESUMEN GENERAL Y ALERTAS OPERATIVAS.</Text>
-              </div>
-
-              {error && (
-                <Text c="red" fw={500}>
-                  {error.toUpperCase()}
-                </Text>
-              )}
-
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-                <Paper shadow="sm" p="lg" radius="md" withBorder>
-                  <Group justify="space-between" align="flex-start">
-                    <div>
-                      <Text fw={600}>PENDIENTES</Text>
-                      <Text c="dimmed" size="sm">
-                        TAREAS Y SEGUIMIENTOS POR ATENDER.
-                      </Text>
-                    </div>
-                    <Group gap="xs">
-                      <Badge color="teal" variant="light">
-                        {pendingVehicles.length} PENDIENTES
-                      </Badge>
-                      <ActionIcon
-                        component="a"
-                        href="/tasks"
-                        variant="light"
-                        color="teal"
-                        aria-label="IR A TAREAS"
-                      >
-                        <IconPlus size={16} stroke={2.5} />
-                      </ActionIcon>
-                    </Group>
-                  </Group>
-                  <Text mt="md" size="sm">
-                    PRIORIZA LO URGENTE Y MANTÉN LA OPERACIÓN AL DÍA.
+      <ResponsiveShell>
+        <Container size="xl" py="xl">
+          <Stack gap="lg">
+            <PageHeaderCard
+              title="Dashboard operativo"
+              description="Visibilidad rápida del equipo, la operación y los vencimientos que requieren atención."
+              icon={<IconAlertTriangle size={20} />}
+              iconColor={dashboardStatus.color}
+              accentColor={
+                dashboardStatus.color === 'red'
+                  ? 'rgba(239,68,68,0.12)'
+                  : dashboardStatus.color === 'yellow'
+                    ? 'rgba(245,158,11,0.14)'
+                    : 'rgba(20,184,166,0.12)'
+              }
+              aside={
+                <Stack gap={6} align="flex-end">
+                  <Badge variant="light" color={currentRole === 'ADMIN' ? 'red' : 'blue'} size="lg">
+                    {currentRole ?? 'SIN ROL'}
+                  </Badge>
+                  <Text size="xs" c="dimmed" ta="right">
+                    {formatToday()}
                   </Text>
-                </Paper>
-
-                <Paper shadow="sm" p="lg" radius="md" withBorder>
-                  <Group justify="space-between" align="flex-start">
-                    <div>
-                      <Text fw={600}>ALERTAS</Text>
-                      <Text c="dimmed" size="sm">
-                        VENCIMIENTOS Y PENDIENTES CRÍTICOS.
-                      </Text>
-                    </div>
-                    <Badge color={criticalCount ? 'red' : 'teal'} variant="light">
-                      {criticalCount} CRÍTICAS
-                    </Badge>
-                  </Group>
-                  <Text mt="md" size="sm">
-                    AUTOMATIZAREMOS ALERTAS PARA SEGUROS, REVISIONES Y NOVEDADES DE FLOTA.
-                  </Text>
-                </Paper>
-              </SimpleGrid>
-
-              <Paper shadow="sm" p="lg" radius="md" withBorder>
-                <Group justify="space-between" mb="md">
+                </Stack>
+              }
+            >
+              <Paper withBorder radius="lg" p="md" bg="rgba(255,255,255,0.72)">
+                <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                   <div>
-                    <Text fw={600}>VENCIMIENTOS</Text>
-                    <Text c="dimmed" size="sm">
-                      VEHÍCULOS CON VENCIMIENTOS PRÓXIMOS DE SOAT Y TECNOMECÁNICA.
+                    <Text fw={700}>{dashboardStatus.title}</Text>
+                    <Text size="sm" c="dimmed" mt={4}>
+                      {dashboardStatus.description}
                     </Text>
                   </div>
-                  <Badge color="orange" variant="light">
-                    {pendingVehicles.length} VEHÍCULOS
+                  <div>
+                    <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                      Sesión
+                    </Text>
+                    <Text size="sm" mt={4}>
+                      {session?.email ?? 'Usuario autenticado'}
+                    </Text>
+                  </div>
+                </Group>
+              </Paper>
+
+              <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+                <StatCard
+                  label="Vencimientos críticos"
+                  value={String(dashboardMetrics.criticalVehicles)}
+                  hint="SOAT o tecnomecánica en 7 días o menos"
+                  color="red"
+                  icon={<IconAlertTriangle size={20} />}
+                />
+                <StatCard
+                  label="Tareas activas"
+                  value={String(dashboardMetrics.openTasks + dashboardMetrics.doingTasks)}
+                  hint={`${dashboardMetrics.openTasks} abiertas y ${dashboardMetrics.doingTasks} en curso`}
+                  color="yellow"
+                  icon={<IconChecklist size={20} />}
+                />
+                <StatCard
+                  label="Clientes activos"
+                  value={String(dashboardMetrics.activeCustomers)}
+                  hint="Base comercial operativa"
+                  color="teal"
+                  icon={<IconUsers size={20} />}
+                />
+                <StatCard
+                  label="Equipo con acceso"
+                  value={String(dashboardMetrics.usersWithAccess)}
+                  hint={`${dashboardMetrics.activeEmployees} empleados activos`}
+                  color="blue"
+                  icon={<IconUserStar size={20} />}
+                />
+              </SimpleGrid>
+            </PageHeaderCard>
+
+            {error ? (
+              <Alert color="red" variant="light" title="No se pudo cargar la home">
+                {error}
+              </Alert>
+            ) : null}
+
+            <SimpleGrid cols={{ base: 1, xl: 3 }} spacing="lg">
+              <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }} style={{ gridColumn: 'span 2' }}>
+                <Stack gap="md">
+                  <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                    <div>
+                      <Text fw={700}>Atajos operativos</Text>
+                      <Text size="sm" c="dimmed">
+                        Entra directo a los flujos que más se usan en oficina.
+                      </Text>
+                    </div>
+                    <Badge color="gray" variant="light">
+                      {quickLinks.length} accesos
+                    </Badge>
+                  </Group>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    {quickLinks.map((link) => (
+                      <Paper
+                        key={link.href}
+                        component={Link}
+                        href={link.href}
+                        withBorder
+                        radius="lg"
+                        p="md"
+                        style={{ textDecoration: 'none', color: 'inherit' }}
+                      >
+                        <Group justify="space-between" align="center" wrap="nowrap">
+                          <Group gap="sm" wrap="nowrap" align="flex-start">
+                            <ThemeIcon color={link.color} variant="light" size={40} radius="xl">
+                              {link.icon}
+                            </ThemeIcon>
+                            <div>
+                              <Text fw={700}>{link.title}</Text>
+                              <Text size="sm" c="dimmed" mt={4}>
+                                {link.description}
+                              </Text>
+                            </div>
+                          </Group>
+                          <IconArrowRight size={18} />
+                        </Group>
+                      </Paper>
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+              </Paper>
+
+              <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+                <Stack gap="md">
+                  <div>
+                    <Text fw={700}>Pulso de operación</Text>
+                    <Text size="sm" c="dimmed">
+                      Una lectura breve de carga y cobertura actual.
+                    </Text>
+                  </div>
+
+                  <StatCard
+                    label="En curso"
+                    value={String(dashboardMetrics.doingTasks)}
+                    hint="Tareas actualmente ejecutándose"
+                    color="blue"
+                    icon={<IconChecklist size={20} />}
+                  />
+                  <StatCard
+                    label="Flota próxima"
+                    value={String(dashboardMetrics.upcomingVehicles)}
+                    hint="Vehículos con documentos entre 8 y 30 días"
+                    color="orange"
+                    icon={<IconTruck size={20} />}
+                  />
+                </Stack>
+              </Paper>
+            </SimpleGrid>
+
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                  <div>
+                    <Text fw={700}>Vencimientos de vehículos</Text>
+                    <Text size="sm" c="dimmed">
+                      Prioridad ordenada por la fecha más cercana entre SOAT y tecnomecánica.
+                    </Text>
+                  </div>
+                  <Badge color={dashboardMetrics.criticalVehicles > 0 ? 'red' : 'orange'} variant="light">
+                    {pendingVehicles.length} vehículos
                   </Badge>
                 </Group>
 
@@ -304,24 +442,118 @@ export default function HomePage() {
                   <Center py="xl">
                     <Loader />
                   </Center>
+                ) : topVehicles.length === 0 ? (
+                  <Paper radius="lg" p="xl" bg="gray.0">
+                    <Text fw={700}>No hay vencimientos visibles.</Text>
+                    <Text size="sm" c="dimmed" mt={6}>
+                      Cuando la flota tenga fechas de SOAT o tecnomecánica, aparecerán aquí ordenadas por prioridad.
+                    </Text>
+                  </Paper>
+                ) : isMobile ? (
+                  <Stack gap="sm">
+                    {topVehicles.map((vehicle) => (
+                      <Paper key={vehicle.id} withBorder radius="lg" p="md">
+                        <Stack gap="sm">
+                          <Group justify="space-between" align="flex-start">
+                            <div>
+                              <Text fw={700} tt="uppercase">
+                                {vehicle.plate}
+                              </Text>
+                              <Text size="sm" c="dimmed">
+                                Próximo vencimiento en {vehicle.minDays < 0 ? 'estado vencido' : `${vehicle.minDays} días`}
+                              </Text>
+                            </div>
+                            <Badge color={badgeColor(vehicle.minDays)} variant="light">
+                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} días`}
+                            </Badge>
+                          </Group>
+
+                          <SimpleGrid cols={1} spacing="xs">
+                            <Paper radius="md" p="sm" bg="gray.0">
+                              <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                                SOAT
+                              </Text>
+                              <Text size="sm" mt={4}>
+                                {formatDate(vehicle.soatDate)}
+                              </Text>
+                              <Text size="sm" c="dimmed" mt={4}>
+                                {daysChipLabel('SOAT', vehicle.soatDays)}
+                              </Text>
+                            </Paper>
+                            <Paper radius="md" p="sm" bg="gray.0">
+                              <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                                Tecnomecánica
+                              </Text>
+                              <Text size="sm" mt={4}>
+                                {formatDate(vehicle.technoDate)}
+                              </Text>
+                              <Text size="sm" c="dimmed" mt={4}>
+                                {daysChipLabel('TECNO', vehicle.technoDays)}
+                              </Text>
+                            </Paper>
+                          </SimpleGrid>
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
                 ) : (
-                  <Table withTableBorder={false} verticalSpacing="sm" layout="fixed">
+                  <Table verticalSpacing="sm" layout="fixed">
                     <TableThead>
                       <TableTr>
-                        <TableTh style={{ width: '25%' }}>PLACA</TableTh>
-                        <TableTh style={{ width: '25%' }}>SOAT</TableTh>
-                        <TableTh style={{ width: '25%' }}>TECNOMECÁNICA</TableTh>
-                        <TableTh style={{ width: '25%' }}>DÍAS</TableTh>
+                        <TableTh>Placa</TableTh>
+                        <TableTh>SOAT</TableTh>
+                        <TableTh>Tecnomecánica</TableTh>
+                        <TableTh>Prioridad</TableTh>
                       </TableTr>
                     </TableThead>
-                    <TableTbody>{rows}</TableTbody>
+                    <TableTbody>
+                      {topVehicles.map((vehicle) => (
+                        <TableTr key={vehicle.id}>
+                          <TableTd>
+                            <Text fw={700} tt="uppercase">
+                              {vehicle.plate}
+                            </Text>
+                          </TableTd>
+                          <TableTd>
+                            <Stack gap={4}>
+                              <Text size="sm">{formatDate(vehicle.soatDate)}</Text>
+                              <Badge color={vehicle.soatDays === null ? 'gray' : badgeColor(vehicle.soatDays)} variant="light">
+                                {daysChipLabel('SOAT', vehicle.soatDays)}
+                              </Badge>
+                            </Stack>
+                          </TableTd>
+                          <TableTd>
+                            <Stack gap={4}>
+                              <Text size="sm">{formatDate(vehicle.technoDate)}</Text>
+                              <Badge
+                                color={vehicle.technoDays === null ? 'gray' : badgeColor(vehicle.technoDays)}
+                                variant="light"
+                              >
+                                {daysChipLabel('TECNO', vehicle.technoDays)}
+                              </Badge>
+                            </Stack>
+                          </TableTd>
+                          <TableTd>
+                            <Badge color={badgeColor(vehicle.minDays)} variant="light">
+                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} días`}
+                            </Badge>
+                          </TableTd>
+                        </TableTr>
+                      ))}
+                    </TableTbody>
                   </Table>
                 )}
-              </Paper>
-            </Stack>
-          </Container>
-        </AppShell.Main>
-      </AppShell>
+
+                <Group justify="flex-end">
+                  <Button component={Link} href="/transport/vehicles" variant="light" rightSection={<IconArrowRight size={16} />}>
+                    Ver flota completa
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+          </Stack>
+        </Container>
+      </ResponsiveShell>
     </AuthGuard>
   );
 }

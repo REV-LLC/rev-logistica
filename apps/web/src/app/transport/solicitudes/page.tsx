@@ -86,6 +86,7 @@ type SelectedItem = {
   requestedTag?: string;
   serial?: string | null;
   quantity?: number;
+  availableQuantity?: number;
   ownerWarehouseId?: string | null;
   isDamaged?: boolean;
   damageDescription?: string;
@@ -403,7 +404,7 @@ export default function SolicitudesIpadPage() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [cutOffDate, setCutOffDate] = useState('');
-  const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('WAREHOUSE');
+  const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -1321,6 +1322,10 @@ export default function SolicitudesIpadPage() {
   };
 
   const addBulkItem = (item: InventoryBulk) => {
+    if (item.quantity < 0) {
+      setError('Este item tiene alerta de inventario negativo. Ajusta el stock antes de usarlo en un documento.');
+      return false;
+    }
     const bulkKey = buildBulkKey(item);
     let added = false;
     setSelectedItems((prev) => {
@@ -1335,6 +1340,7 @@ export default function SolicitudesIpadPage() {
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
           quantity: 1,
+          availableQuantity: item.quantity,
           ownerWarehouseId: item.ownerWarehouseId
         }
       ];
@@ -1566,7 +1572,7 @@ export default function SolicitudesIpadPage() {
     setCustomerId(null);
     setDocDate(getTodayDateInput());
     setCutOffDate('');
-    setDeliveryMode('WAREHOUSE');
+    setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
     setVehicleId(null);
@@ -1677,6 +1683,13 @@ export default function SolicitudesIpadPage() {
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
+      }
+      if (
+        selectedItems.some(
+          (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
+        )
+      ) {
+        throw new Error('Hay items con alerta de inventario negativo. Ajusta el stock antes de crear el documento.');
       }
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra (worksite).');

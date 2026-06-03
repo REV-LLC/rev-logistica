@@ -1,6 +1,7 @@
 'use client';
 
 import { Alert, Badge, Button, Divider, Group, Modal, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import SerialAssetCard, { type SerialAssetCardItem } from '@/components/SerialAssetCard';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 
@@ -76,15 +77,20 @@ export default function InventoryItemPickerModal({
                 bulkItems.map((item) => {
                   const bulkKey = buildBulkItemKey(item);
                   const alreadySelected = selectedBulkKeys.has(bulkKey);
+                  const hasNegativeStock = item.quantity < 0;
+                  const disabled = alreadySelected || hasNegativeStock;
                   return (
                     <Paper
                       key={bulkKey}
                       withBorder
                       p="sm"
                       radius="md"
-                      style={{ cursor: alreadySelected ? 'default' : 'pointer' }}
+                      style={{
+                        cursor: disabled ? 'default' : 'pointer',
+                        borderColor: hasNegativeStock ? 'var(--mantine-color-red-4)' : undefined,
+                      }}
                       onClick={() => {
-                        if (alreadySelected) return;
+                        if (disabled) return;
                         const added = onAddBulk(item);
                         if (added && onItemAddedNotice) {
                           onItemAddedNotice(`${item.skuName ?? 'Item'} agregado a la lista.`);
@@ -103,6 +109,14 @@ export default function InventoryItemPickerModal({
                         {alreadySelected ? (
                           <Badge color="green" variant="light">
                             Agregado
+                          </Badge>
+                        ) : hasNegativeStock ? (
+                          <Badge
+                            color="red"
+                            variant="filled"
+                            leftSection={<IconAlertTriangle size={12} stroke={2.5} />}
+                          >
+                            Requiere ajuste
                           </Badge>
                         ) : (
                           <Badge variant="light">

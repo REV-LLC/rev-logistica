@@ -305,7 +305,7 @@ export default function CreateSerializedAssetPage() {
 
     if (familyMode === 'existing' && !familyId) {
       setValidationError(
-        'Selecciona una categoría de equipo.',
+        'Selecciona familia de equipo.',
         familySelectRef,
       );
       return;
@@ -440,8 +440,8 @@ export default function CreateSerializedAssetPage() {
     <Container size="lg" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Registrar equipo único"
-          description="Crea un activo serializado, define su referencia comercial y déjalo listo en inventario."
+          title="Registrar activo único"
+          description="Crea la plantilla del equipo y registra la unidad física con su ubicación inicial."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -465,30 +465,30 @@ export default function CreateSerializedAssetPage() {
 
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
             <StatCard
-              label="Categorías"
+              label="Familias"
               value={String(families.length)}
-              hint="Familias serializadas disponibles"
+              hint="Catálogo serial"
               color="blue"
               icon={<IconChecklist size={20} />}
             />
             <StatCard
-              label="Referencias"
+              label="Plantillas"
               value={String(skus.length)}
-              hint={familyMode === 'existing' ? 'Sugerencias para la familia elegida' : 'Se llenan al elegir una familia'}
+              hint={familyMode === 'existing' ? 'De la familia elegida' : 'Nueva referencia'}
               color="cyan"
               icon={<IconCubePlus size={20} />}
             />
             <StatCard
-              label="Bodegas"
+              label="Ubicación"
               value={String(warehouses.length)}
-              hint="Dueña y ubicación inicial"
+              hint="Dueña y actual"
               color="grape"
               icon={<IconBuildingWarehouse size={20} />}
             />
             <StatCard
-              label="Registro"
+              label="Activo"
               value={serialReady ? 'Listo' : 'Pend.'}
-              hint={serialReady ? 'Serial y bodegas completas' : 'Faltan datos clave'}
+              hint={serialReady ? 'Serial y bodegas completas' : 'Faltan datos'}
               color={serialReady ? 'teal' : 'gray'}
               icon={<IconHash size={20} />}
             />
@@ -514,9 +514,9 @@ export default function CreateSerializedAssetPage() {
                 <Stack gap="md">
                   <Group justify="space-between" className="mobile-stack">
                     <div>
-                      <Text fw={700}>1. Categoría del equipo</Text>
+                      <Text fw={700}>1. Familia</Text>
                       <Text size="sm" c="dimmed">
-                        La categoría agrupa equipos parecidos, por ejemplo cargadores o compresores.
+                        Elige la línea del catálogo o crea una nueva.
                       </Text>
                     </div>
                     <Button
@@ -530,21 +530,21 @@ export default function CreateSerializedAssetPage() {
                       }
                     >
                       {familyMode === 'existing'
-                        ? 'No existe, crear categoría'
-                        : 'Usar categoría existente'}
+                        ? 'Crear familia'
+                        : 'Usar familia existente'}
                     </Button>
                   </Group>
 
                   {familyMode === 'existing' ? (
                     <Select
                       ref={familySelectRef}
-                      label="Categoría"
+                      label="Familia"
                       name="familyId"
                       data={familyOptions}
                       value={familyId}
                       onChange={(value) => setFamilyId(value)}
                       placeholder={
-                        loading ? 'Cargando…' : 'Selecciona una categoría'
+                        loading ? 'Cargando…' : 'Selecciona familia'
                       }
                       searchable
                       nothingFoundMessage="Sin resultados"
@@ -554,7 +554,7 @@ export default function CreateSerializedAssetPage() {
                     <Group grow className="mobile-stack">
                       <TextInput
                         ref={familyNameRef}
-                        label="Nombre de la categoría"
+                        label="Nombre de la familia"
                         name="familyName"
                         autoComplete="off"
                         value={familyName}
@@ -579,7 +579,7 @@ export default function CreateSerializedAssetPage() {
 
                   <Group gap="xs">
                     <Badge color={familyMode === 'existing' ? 'blue' : 'violet'} variant="light">
-                      {familyMode === 'existing' ? 'Categoría existente' : 'Nueva categoría'}
+                      {familyMode === 'existing' ? 'Familia existente' : 'Nueva familia'}
                     </Badge>
                     {(selectedFamily || familyName.trim()) ? (
                       <Badge color="teal" variant="light">
@@ -593,14 +593,14 @@ export default function CreateSerializedAssetPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>2. Referencia del equipo</Text>
+                    <Text fw={700}>2. Plantilla</Text>
                     <Text size="sm" c="dimmed">
-                      Define la referencia comercial y los atributos base del equipo.
+                      Reutiliza una referencia o define marca, modelo y datos base.
                     </Text>
                   </div>
 
                   <Select
-                    label="Sugerencias de referencia"
+                    label="Buscar plantilla"
                     name="skuSuggestionId"
                     data={skuOptions}
                     value={skuSuggestionId}
@@ -651,7 +651,7 @@ export default function CreateSerializedAssetPage() {
                     placeholder={
                       loadingSkus
                         ? 'Cargando…'
-                        : 'Selecciona una referencia parecida'
+                        : 'Selecciona una plantilla parecida'
                     }
                     searchable
                     clearable
@@ -661,7 +661,7 @@ export default function CreateSerializedAssetPage() {
 
                   <TextInput
                     ref={skuNameRef}
-                    label="Nombre de la referencia"
+                    label="Referencia"
                     name="skuName"
                     autoComplete="off"
                     value={skuName}
@@ -737,9 +737,9 @@ export default function CreateSerializedAssetPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>3. Tarifas y cobro</Text>
+                    <Text fw={700}>3. Datos comerciales</Text>
                     <Text size="sm" c="dimmed">
-                      Configura el comportamiento comercial del equipo para alquiler o subalquiler.
+                      Precio, subalquiler y regla de cobro.
                     </Text>
                   </div>
 
@@ -803,15 +803,15 @@ export default function CreateSerializedAssetPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>4. Identificación del equipo</Text>
+                    <Text fw={700}>4. Activo</Text>
                     <Text size="sm" c="dimmed">
-                      Datos únicos del activo para que quede trazable dentro del sistema.
+                      La unidad física que queda trazable.
                     </Text>
                   </div>
 
                   <TextInput
                     ref={serialOrEngineRef}
-                    label="Serial / motor"
+                    label="Serial o motor"
                     name="serialOrEngine"
                     autoComplete="off"
                     value={serialOrEngine}
@@ -852,9 +852,9 @@ export default function CreateSerializedAssetPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>5. Propiedad y ubicación inicial</Text>
+                    <Text fw={700}>5. Ubicación</Text>
                     <Text size="sm" c="dimmed">
-                      Define la bodega dueña del activo y dónde quedará ubicado al registrarlo.
+                      Define la bodega dueña y dónde queda el activo.
                     </Text>
                   </div>
 
@@ -879,7 +879,7 @@ export default function CreateSerializedAssetPage() {
                     />
                     <Select
                       ref={warehouseCurrentRef}
-                      label="Bodega de ubicación"
+                      label="Dónde queda"
                       name="warehouseCurrentId"
                       data={warehouseOptions}
                       value={warehouseCurrentId}
@@ -899,9 +899,9 @@ export default function CreateSerializedAssetPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Resumen de registro</Text>
+                    <Text fw={700}>Revisión</Text>
                     <Text size="sm" c="dimmed">
-                      Vista rápida de lo que se va a crear.
+                      Confirma la plantilla, el activo y la ubicación.
                     </Text>
                   </div>
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -962,7 +962,7 @@ export default function CreateSerializedAssetPage() {
                   Cancelar
                 </Button>
                 <Button type="submit" loading={saving}>
-                  Guardar equipo
+                  Guardar activo
                 </Button>
               </Group>
             </Stack>

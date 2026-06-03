@@ -5,9 +5,11 @@ import { useMediaQuery } from '@mantine/hooks';
 import Link from 'next/link';
 import { useState } from 'react';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import { ownerColorById } from '@/lib/owner-color';
 
 export type SerialAssetCardItem = {
   assetId: string;
+  ownerWarehouseId?: string | null;
   serialOrEngine?: string | null;
   description?: string | null;
   skuName?: string | null;
@@ -161,7 +163,7 @@ export default function SerialAssetCard({
           </Text>
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
-              <Badge color="blue" variant="light">
+              <Badge color={ownerColorById(item.ownerWarehouseId)} variant="light">
                 Dueño: {ownerChipLabel}
               </Badge>
             </Group>

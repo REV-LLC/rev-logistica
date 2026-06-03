@@ -62,6 +62,7 @@ type SelectedItem = {
   name: string;
   serial?: string | null;
   quantity?: number;
+  availableQuantity?: number;
   ownerWarehouseId?: string | null;
 };
 
@@ -246,10 +247,16 @@ export default function RemisionDevolucionPage() {
   }, [docType]);
 
   const addBulkItem = (item: InventoryBulk) => {
+    if (item.quantity < 0) {
+      setError('Este item tiene alerta de inventario negativo. Ajusta el stock antes de usarlo en un documento.');
+      return false;
+    }
     const bulkKey = buildBulkKey(item);
+    let added = false;
     setSelectedItems((prev) => {
       const exists = prev.find((entry) => entry.type === 'bulk' && entry.bulkKey === bulkKey);
       if (exists) return prev;
+      added = true;
       return [
         ...prev,
         {
@@ -258,10 +265,12 @@ export default function RemisionDevolucionPage() {
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
           quantity: 1,
+          availableQuantity: item.quantity,
           ownerWarehouseId: item.ownerWarehouseId
         }
       ];
     });
+    return added;
   };
 
   const addSerialItem = (item: InventorySerial) => {
@@ -309,6 +318,13 @@ export default function RemisionDevolucionPage() {
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
+      }
+      if (
+        selectedItems.some(
+          (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
+        )
+      ) {
+        throw new Error('Hay items con alerta de inventario negativo. Ajusta el stock antes de crear el documento.');
       }
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra (worksite).');

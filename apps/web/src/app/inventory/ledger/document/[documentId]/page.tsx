@@ -9,14 +9,18 @@ import {
   Group,
   Modal,
   Paper,
+  Select,
   Stack,
   Table,
   Text,
   TextInput,
   Title,
+  NumberInput,
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
 import { IconArrowLeft, IconCalendar } from '@tabler/icons-react';
@@ -102,6 +106,43 @@ type WarehouseOption = {
   id: string;
   name: string;
 };
+
+type InventorySerial = {
+  assetId: string;
+  skuId?: string | null;
+  skuName?: string | null;
+  description?: string | null;
+  serialOrEngine?: string | null;
+  internalNumber?: number | null;
+  brand?: string | null;
+  model?: string | null;
+  ownerWarehouseId?: string | null;
+};
+
+type SkuOption = {
+  id: string;
+  name: string;
+  assetFamilyId: string;
+  controlType: 'BULK' | 'SERIAL';
+};
+
+type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
+
+type CreateSerializedAssetResponse = {
+  asset: {
+    id: string;
+    internalNumber: number;
+    skuId: string;
+    warehouseOwnerId: string;
+    warehouseCurrentId: string;
+  };
+};
+
+const FUEL_OPTIONS = [
+  { value: 'GASOLINA', label: 'Gasolina' },
+  { value: 'DIESEL', label: 'Diesel' },
+  { value: 'ELECTRICO', label: 'Eléctrico' },
+];
 
 function formatDocType(value: string) {
   if (value === 'REMISSION') return 'RM';
@@ -194,6 +235,68 @@ function buildObservationText(notes: string | null) {
     .join(' | ');
 }
 
+function normalizeTagBase(value?: string | null) {
+  return (value ?? '')
+    .replace(/#\s*\d+\s*$/i, '')
+    .trim()
+    .toUpperCase();
+}
+
+function parseInternalNumberFromTag(value?: string | null) {
+  const match = (value ?? '').match(/#\s*(\d+)\s*$/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeApiErrorMessages(error: ApiError) {
+  const messages: string[] = [];
+  if (typeof error.message === 'string' && error.message.trim()) {
+    messages.push(error.message.trim());
+  }
+  const data = error.data as
+    | { message?: string | string[]; error?: string }
+    | string
+    | null
+    | undefined;
+  if (typeof data === 'string' && data.trim()) {
+    messages.push(data.trim());
+  } else if (data && typeof data === 'object') {
+    if (typeof data.error === 'string' && data.error.trim()) {
+      messages.push(data.error.trim());
+    }
+    const apiMessage = data.message;
+    if (Array.isArray(apiMessage)) {
+      apiMessage.forEach((entry) => {
+        if (typeof entry === 'string' && entry.trim()) {
+          messages.push(entry.trim());
+        }
+      });
+    } else if (typeof apiMessage === 'string' && apiMessage.trim()) {
+      messages.push(apiMessage.trim());
+    }
+  }
+  return [...new Set(messages)];
+}
+
+function extractOwnerWarehouseIdFromMessage(message: string) {
+  const match = message.match(/ownerWarehouse(?:Id)?\s+([0-9a-fA-F-]{36})/i);
+  return match?.[1] ?? null;
+}
+
+function extractSkuIdsFromMessages(messages: string[]) {
+  const ids = new Set<string>();
+  messages.forEach((message) => {
+    const regex = /skuId\s+([0-9a-fA-F-]{36})/gi;
+    let match = regex.exec(message);
+    while (match) {
+      ids.add(match[1]);
+      match = regex.exec(message);
+    }
+  });
+  return [...ids];
+}
+
 const TERMS_TEXT = `TÉRMINOS Y CONDICIONES DEL CONTRATO DE ALQUILER DE EQUIPOS
 
 Entre los suscritos a saber JESUS ALVARO GUERRERO VILLAMICENCIO, quien obra en este acto en representación de la empresa persona natural JESUS ALVARO GUERRERO VILLAMICENCIO, con establecimiento comercial denominado RENTA EQUIPOS DEL VALLE, identificada con la cédula de ciudadanía No 94.371.184, que en lo sucesivo para los efectos de este contrato se denominará LA ARRENDADORA, por una parte y quien firma el presente documento en nombre propio o en representación de la obra donde se remisiona el equipo en adelante se denominará LA ARRENDATARIA, acuerdan por medio del presente documento celebrar un contrato de arrendamiento de equipos para la construcción el cual se regirá por las siguientes cláusulas:
@@ -222,6 +325,8 @@ export default function DocumentDetailPage() {
   const router = useRouter();
   const params = useParams<{ documentId: string }>();
   const documentId = params?.documentId;
+  const userRole = useMemo(() => getCurrentUserRole(), []);
+  const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -229,6 +334,7 @@ export default function DocumentDetailPage() {
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
   const [billingModalOpen, setBillingModalOpen] = useState(false);
   const [billingItemId, setBillingItemId] = useState<string | null>(null);
   const [billingCutoffDate, setBillingCutoffDate] = useState('');
@@ -236,6 +342,26 @@ export default function DocumentDetailPage() {
   const [billingNote, setBillingNote] = useState('');
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState<'APPROVE' | 'REJECT' | null>(null);
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [resolveDocument, setResolveDocument] = useState<DocumentDetail | null>(null);
+  const [resolveSkuByIndex, setResolveSkuByIndex] = useState<Record<number, string>>({});
+  const [resolveAssetByIndex, setResolveAssetByIndex] = useState<Record<number, string>>({});
+  const [resolveInventoryByOwner, setResolveInventoryByOwner] = useState<ResolveInventoryByOwner>({});
+  const [resolvingApprove, setResolvingApprove] = useState(false);
+  const [createSerialOpen, setCreateSerialOpen] = useState(false);
+  const [createSerialIndex, setCreateSerialIndex] = useState<number | null>(null);
+  const [createSerialSerialOrEngine, setCreateSerialSerialOrEngine] = useState('');
+  const [createSerialInternalNumber, setCreateSerialInternalNumber] = useState<number | ''>('');
+  const [createSerialBrand, setCreateSerialBrand] = useState('');
+  const [createSerialModel, setCreateSerialModel] = useState('');
+  const [createSerialYear, setCreateSerialYear] = useState<number | ''>('');
+  const [createSerialFuel, setCreateSerialFuel] = useState<string | null>(null);
+  const [createSerialSaving, setCreateSerialSaving] = useState(false);
+  const [createSerialError, setCreateSerialError] = useState<string | null>(null);
+  const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
+  const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
+  const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
   const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
   const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
 
@@ -277,6 +403,33 @@ export default function DocumentDetailPage() {
       mounted = false;
     };
   }, [documentId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSkuOptions = async () => {
+      if (!canDecide) return;
+      try {
+        const data = await api<
+          Array<{ id: string; name: string; assetFamilyId: string; controlType: 'BULK' | 'SERIAL' }>
+        >('/skus', { method: 'GET' });
+        if (!mounted) return;
+        setSkuOptions(
+          data.map((item) => ({
+            id: item.id,
+            name: item.name,
+            assetFamilyId: item.assetFamilyId,
+            controlType: item.controlType,
+          })),
+        );
+      } catch {
+        if (!mounted) return;
+      }
+    };
+    void loadSkuOptions();
+    return () => {
+      mounted = false;
+    };
+  }, [canDecide]);
 
   const title = useMemo(() => {
     if (!document) return 'Documento';
@@ -396,6 +549,17 @@ export default function DocumentDetailPage() {
     if (status === 'CLOSED') return 'gray';
     return 'green';
   };
+  const isResolvePendingItem = (item: DocumentDetail['items'][number]) => {
+    const hasTag = Boolean(item.requestedTag?.trim());
+    if (!item.skuId && !item.assetId) {
+      return hasTag;
+    }
+    if (item.skuId && !item.assetId) {
+      const skuType = skuOptions.find((sku) => sku.id === item.skuId)?.controlType;
+      return skuType === 'SERIAL';
+    }
+    return false;
+  };
   const openBillingModal = (item: DocumentDetail['items'][number]) => {
     const defaultReturnedAt =
       document?.type === 'RETURN'
@@ -444,6 +608,385 @@ export default function DocumentDetailPage() {
     }
   };
 
+  const handleApprovalError = (err: unknown) => {
+    if (!(err instanceof ApiError)) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error al procesar solicitud');
+      }
+      return;
+    }
+
+    const messages = normalizeApiErrorMessages(err);
+    const hasAssetUnavailableError = messages.some((message) =>
+      /asset\s+[0-9a-f-]{36}\s+is not available in owner warehouse/i.test(message),
+    );
+    if (hasAssetUnavailableError) {
+      setError(
+        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Verifica si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
+      );
+      return;
+    }
+
+    const hasStockError = messages.some((message) => /insufficient stock/i.test(message));
+    if (hasStockError && canDecide) {
+      const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
+      const ownerId = extractOwnerWarehouseIdFromMessage(messageWithOwner);
+      const ownerName = ownerId
+        ? warehouses.find((warehouse) => warehouse.id.toLowerCase() === ownerId.toLowerCase())?.name
+        : null;
+      const missingSkuLabels = extractSkuIdsFromMessages(messages).map((skuId) => {
+        const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
+        return skuName ?? `SKU ${skuId.slice(0, 8)}`;
+      });
+      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const missingItemsBlock = missingSkuLabels.length
+        ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
+        : '';
+      setAdjustWarningOwnerWarehouseId(ownerId ?? null);
+      setAdjustWarningMessage(
+        `Primero debes hacer ajuste de "${warehouseLabel}" bodega para hacer movimientos.${missingItemsBlock}`,
+      );
+      setAdjustWarningModalOpen(true);
+      setError(null);
+      return;
+    }
+
+    setError(`${err.status}: ${err.message}`);
+  };
+
+  const closeResolveModal = () => {
+    if (resolvingApprove) return;
+    setResolveModalOpen(false);
+    setResolveDocument(null);
+    setResolveSkuByIndex({});
+    setResolveAssetByIndex({});
+    setResolveInventoryByOwner({});
+  };
+
+  const loadResolveInventories = async (ownerIds: string[]) => {
+    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
+    if (!uniqueOwnerIds.length) return {};
+    const loadedEntries = await Promise.all(
+      uniqueOwnerIds.map(async (ownerId) => {
+        try {
+          const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
+            method: 'GET',
+          });
+          return [ownerId, { serial: inventory.serial ?? [] }] as const;
+        } catch {
+          return [ownerId, { serial: [] }] as const;
+        }
+      }),
+    );
+    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
+  };
+
+  const buildInitialResolveState = (
+    doc: DocumentDetail,
+    inventoriesByOwner: ResolveInventoryByOwner,
+  ) => {
+    const skuByNormalizedName = new Map<string, SkuOption>();
+    skuOptions.forEach((sku) => skuByNormalizedName.set(sku.name.trim().toUpperCase(), sku));
+    const initialSkuMap: Record<number, string> = {};
+    const initialAssetMap: Record<number, string> = {};
+
+    doc.items.forEach((item, index) => {
+      if (item.assetId) return;
+      const normalizedTag = normalizeTagBase(item.requestedTag);
+      const matchedSku = item.skuId
+        ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
+        : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
+      if (!matchedSku) return;
+
+      initialSkuMap[index] = matchedSku.id;
+
+      if (matchedSku.controlType !== 'SERIAL') return;
+      const ownerWarehouseId = item.condition?.trim();
+      if (!ownerWarehouseId) return;
+      const serialCandidates =
+        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
+      const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
+      if (internalFromTag == null) return;
+      const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
+      if (exactAsset) {
+        initialAssetMap[index] = exactAsset.assetId;
+      }
+    });
+
+    return { initialSkuMap, initialAssetMap };
+  };
+
+  const openCreateSerialForRow = (index: number) => {
+    const row = resolveDocument?.items[index];
+    if (!row) return;
+    const internal = parseInternalNumberFromTag(row.requestedTag);
+    setCreateSerialIndex(index);
+    setCreateSerialSerialOrEngine('');
+    setCreateSerialInternalNumber(internal ?? '');
+    setCreateSerialBrand('');
+    setCreateSerialModel('');
+    setCreateSerialYear('');
+    setCreateSerialFuel(null);
+    setCreateSerialError(null);
+    setCreateSerialOpen(true);
+  };
+
+  const createMissingSerialFromResolve = async () => {
+    if (!resolveDocument || createSerialIndex == null) return;
+    const row = resolveDocument.items[createSerialIndex];
+    if (!row) return;
+    const ownerWarehouseId = row.condition?.trim();
+    if (!ownerWarehouseId) {
+      setCreateSerialError('La línea no tiene bodega dueña.');
+      return;
+    }
+    const selectedSkuId = resolveSkuByIndex[createSerialIndex];
+    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
+    if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
+      setCreateSerialError('Selecciona primero un SKU serial.');
+      return;
+    }
+    if (!createSerialSerialOrEngine.trim()) {
+      setCreateSerialError('El serial/motor es obligatorio.');
+      return;
+    }
+    if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
+      setCreateSerialError('Número interno inválido.');
+      return;
+    }
+
+    setCreateSerialSaving(true);
+    setCreateSerialError(null);
+    try {
+      const response = await api<CreateSerializedAssetResponse>('/inventory/serialized-assets', {
+        method: 'POST',
+        json: {
+          family: { id: selectedSku.assetFamilyId },
+          sku: { id: selectedSku.id },
+          asset: {
+            serialOrEngine: createSerialSerialOrEngine.trim(),
+            internalNumber: Number(createSerialInternalNumber),
+            brand: createSerialBrand.trim() || undefined,
+            model: createSerialModel.trim() || undefined,
+            year: createSerialYear === '' ? undefined : createSerialYear,
+            fuel: createSerialFuel ?? undefined,
+            active: true,
+          },
+          ownerWarehouseId,
+          warehouseCurrentId: ownerWarehouseId,
+        },
+      });
+
+      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+        method: 'GET',
+      });
+      setResolveInventoryByOwner((prev) => ({
+        ...prev,
+        [ownerWarehouseId]: { serial: refreshedInventory.serial ?? [] },
+      }));
+      setResolveAssetByIndex((prev) => ({
+        ...prev,
+        [createSerialIndex]: response.asset.id,
+      }));
+      setCreateSerialOpen(false);
+      setCreateSerialIndex(null);
+      setCreateSerialBrand('');
+      setCreateSerialModel('');
+      setCreateSerialYear('');
+      setCreateSerialFuel(null);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setCreateSerialError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setCreateSerialError(err.message);
+      } else {
+        setCreateSerialError('Error creando equipo.');
+      }
+    } finally {
+      setCreateSerialSaving(false);
+    }
+  };
+
+  const approveWithDecision = async (docId: string) => {
+    setDecisionLoading('APPROVE');
+    setError(null);
+    try {
+      await api(`/documents/${docId}/decision`, {
+        method: 'POST',
+        json: { action: 'APPROVE' },
+      });
+      await reloadDocumentOnly();
+      router.refresh();
+    } catch (err) {
+      handleApprovalError(err);
+    } finally {
+      setDecisionLoading(null);
+    }
+  };
+
+  const decideDocument = async (action: 'APPROVE' | 'REJECT') => {
+    if (!document?.id) return;
+    if (action === 'REJECT') {
+      const reason = window.prompt('Motivo de rechazo (opcional):') ?? undefined;
+      if (!window.confirm('¿Rechazar esta solicitud?')) return;
+      setDecisionLoading('REJECT');
+      setError(null);
+      try {
+        await api(`/documents/${document.id}/decision`, {
+          method: 'POST',
+          json: {
+            action,
+            reason,
+          },
+        });
+        await reloadDocumentOnly();
+        router.refresh();
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(`${err.status}: ${err.message}`);
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Error procesando la solicitud');
+        }
+      } finally {
+        setDecisionLoading(null);
+      }
+      return;
+    }
+
+    try {
+      const doc = await api<DocumentDetail>(`/documents/${document.id}`, { method: 'GET' });
+      if (doc.type === 'RETURN') {
+        const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
+        if (missingCutoff) {
+          setError('Antes de aprobar la devolución debes definir la fecha de corte por item.');
+          return;
+        }
+      }
+      const unresolved = doc.items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => isResolvePendingItem(item));
+
+      if (unresolved.length > 0) {
+        const ownerIds = unresolved
+          .map(({ item }) => item.condition?.trim() ?? '')
+          .filter((value): value is string => Boolean(value));
+        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
+
+        setResolveDocument(doc);
+        setResolveInventoryByOwner(inventoriesByOwner);
+        setResolveSkuByIndex(initialSkuMap);
+        setResolveAssetByIndex(initialAssetMap);
+        setResolveModalOpen(true);
+        return;
+      }
+
+      if (!window.confirm('¿Aprobar esta solicitud y ejecutar el movimiento de inventario?')) return;
+      await approveWithDecision(document.id);
+    } catch (err) {
+      handleApprovalError(err);
+    }
+  };
+
+  const resolveAndApprove = async () => {
+    if (!resolveDocument) return;
+    const unresolved = resolveDocument.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => isResolvePendingItem(item));
+
+    const missing = unresolved.filter(({ index }) => !resolveSkuByIndex[index]);
+    if (missing.length > 0) {
+      setError('Resuelve todos los tags pendientes antes de aprobar.');
+      return;
+    }
+
+    const serialMissingAsset = unresolved.filter(({ item, index }) => {
+      const skuId = resolveSkuByIndex[index];
+      const sku = skuOptions.find((entry) => entry.id === skuId);
+      if (sku?.controlType !== 'SERIAL') return false;
+      return !resolveAssetByIndex[index];
+    });
+    if (serialMissingAsset.length > 0) {
+      setError('Falta seleccionar o crear equipo para uno o más tags seriales.');
+      return;
+    }
+
+    setResolvingApprove(true);
+    setError(null);
+    try {
+      const itemsPayload = resolveDocument.items.map((item, index) => {
+        const ownerWarehouseId = item.condition ?? undefined;
+        if (item.assetId) {
+          return {
+            assetId: item.assetId,
+            ownerWarehouseId,
+            conditionNote: item.conditionNote ?? undefined,
+          };
+        }
+        if (item.skuId && !item.assetId) {
+          const existingSku = skuOptions.find((entry) => entry.id === item.skuId);
+          if (existingSku?.controlType === 'SERIAL') {
+            return {
+              assetId: resolveAssetByIndex[index],
+              ownerWarehouseId,
+              requestedTag: item.requestedTag ?? undefined,
+              conditionNote: item.conditionNote ?? undefined,
+            };
+          }
+        }
+        if (item.skuId) {
+          return {
+            skuId: item.skuId,
+            quantity: Number(item.quantity ?? 1) || 1,
+            ownerWarehouseId,
+            requestedTag: item.requestedTag ?? undefined,
+            conditionNote: item.conditionNote ?? undefined,
+          };
+        }
+        const resolvedSkuId = resolveSkuByIndex[index];
+        const resolvedSku = skuOptions.find((entry) => entry.id === resolvedSkuId);
+        if (resolvedSku?.controlType === 'SERIAL') {
+          return {
+            assetId: resolveAssetByIndex[index],
+            ownerWarehouseId,
+            requestedTag: item.requestedTag ?? undefined,
+            conditionNote: item.conditionNote ?? undefined,
+          };
+        }
+        return {
+          skuId: resolvedSkuId,
+          quantity: Number(item.quantity ?? 1) || 1,
+          ownerWarehouseId,
+          requestedTag: item.requestedTag ?? undefined,
+          conditionNote: item.conditionNote ?? undefined,
+        };
+      });
+
+      await api(`/documents/${resolveDocument.id}/request`, {
+        method: 'PATCH',
+        json: {
+          type: resolveDocument.type,
+          number: resolveDocument.consecutive ?? undefined,
+          warehouseId: resolveDocument.warehouse?.id ?? undefined,
+          customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
+          notes: resolveDocument.notes ?? undefined,
+          items: itemsPayload,
+        },
+      });
+
+      await approveWithDecision(resolveDocument.id);
+      closeResolveModal();
+    } catch (err) {
+      handleApprovalError(err);
+    } finally {
+      setResolvingApprove(false);
+    }
+  };
+
   return (
     <main>
       <Container size="lg" py="xl">
@@ -459,6 +1002,25 @@ export default function DocumentDetailPage() {
               </Text>
             </div>
             <Group>
+              {canDecide && document?.status === 'DRAFT' ? (
+                <>
+                  <Button
+                    color="green"
+                    loading={decisionLoading === 'APPROVE'}
+                    onClick={() => void decideDocument('APPROVE')}
+                  >
+                    Aprobar
+                  </Button>
+                  <Button
+                    color="red"
+                    variant="light"
+                    loading={decisionLoading === 'REJECT'}
+                    onClick={() => void decideDocument('REJECT')}
+                  >
+                    Rechazar
+                  </Button>
+                </>
+              ) : null}
               <Button onClick={() => window.print()} disabled={!document}>
                 Exportar PDF
               </Button>
@@ -471,7 +1033,7 @@ export default function DocumentDetailPage() {
               {error}
             </Text>
           ) : null}
-          {document ? (
+          {document?.type === 'RETURN' ? (
             <Paper withBorder p="md" mt="md">
               <Title order={5}>Corte por item (facturación)</Title>
               <Table mt="sm" striped>
@@ -715,6 +1277,228 @@ export default function DocumentDetailPage() {
             </Button>
             <Button onClick={saveBilling} loading={billingLoading}>
               Guardar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={adjustWarningModalOpen}
+        onClose={() => {
+          setAdjustWarningModalOpen(false);
+          setAdjustWarningOwnerWarehouseId(null);
+        }}
+        title="Ajuste requerido"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+            {adjustWarningMessage ?? 'Primero debes hacer ajuste de bodega para hacer movimientos.'}
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              onClick={() => {
+                setAdjustWarningModalOpen(false);
+                const params = new URLSearchParams();
+                if (adjustWarningOwnerWarehouseId) {
+                  params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
+                  params.set('warehouseId', adjustWarningOwnerWarehouseId);
+                }
+                router.push(
+                  `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
+                );
+                setAdjustWarningOwnerWarehouseId(null);
+              }}
+            >
+              Entendido
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={resolveModalOpen}
+        onClose={closeResolveModal}
+        title="Resolver tags antes de aprobar"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Bulk se resuelve por SKU. Serial se resuelve por equipo específico (# interno).
+          </Text>
+          {(resolveDocument?.items ?? [])
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => isResolvePendingItem(item))
+            .map(({ item, index }) => (
+              <Paper key={`${item.requestedTag}-${index}`} withBorder p="sm" radius="md">
+                <Stack gap={6}>
+                  <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
+                  <Text size="xs" c="dimmed">
+                    Cantidad: {Number(item.quantity ?? 1) || 1}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                  </Text>
+                  <Select
+                    label="Equipo"
+                    placeholder="Selecciona SKU"
+                    searchable
+                    data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
+                    value={resolveSkuByIndex[index] ?? null}
+                    onChange={(value) => {
+                      setResolveSkuByIndex((prev) => ({
+                        ...prev,
+                        [index]: value ?? '',
+                      }));
+                      setResolveAssetByIndex((prev) => ({
+                        ...prev,
+                        [index]: '',
+                      }));
+                    }}
+                  />
+                  {(() => {
+                    const selectedSkuId = resolveSkuByIndex[index];
+                    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
+                    if (selectedSku?.controlType !== 'SERIAL') return null;
+                    const ownerWarehouseId = item.condition?.trim() ?? '';
+                    const inventory = resolveInventoryByOwner[ownerWarehouseId]?.serial ?? [];
+                    const expectedInternal = parseInternalNumberFromTag(item.requestedTag);
+                    const serialOptions = inventory
+                      .filter(
+                        (serial) =>
+                          serial.skuId === selectedSku.id &&
+                          (expectedInternal == null || serial.internalNumber === expectedInternal),
+                      )
+                      .map((serial) => ({
+                        value: serial.assetId,
+                        label: getSerialDisplayName(serial),
+                      }));
+                    const hasExpected = expectedInternal == null
+                      ? false
+                      : inventory.some(
+                          (serial) =>
+                            serial.skuId === selectedSku.id &&
+                            serial.internalNumber === expectedInternal,
+                        );
+                    return (
+                      <Stack gap={6}>
+                        <Select
+                          label="Equipo serial"
+                          placeholder="Selecciona el equipo"
+                          searchable
+                          data={serialOptions}
+                          value={resolveAssetByIndex[index] ?? null}
+                          nothingFoundMessage="No hay equipos de este SKU en esa bodega"
+                          onChange={(value) =>
+                            setResolveAssetByIndex((prev) => ({
+                              ...prev,
+                              [index]: value ?? '',
+                            }))
+                          }
+                        />
+                        {expectedInternal != null && !hasExpected ? (
+                          <Text size="xs" c="orange.7">
+                            El tag pide #{expectedInternal}, pero no existe en esa bodega.
+                          </Text>
+                        ) : null}
+                        {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
+                          <Button size="xs" variant="light" onClick={() => openCreateSerialForRow(index)}>
+                            Crear equipo faltante
+                          </Button>
+                        ) : null}
+                      </Stack>
+                    );
+                  })()}
+                </Stack>
+              </Paper>
+            ))}
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeResolveModal} disabled={resolvingApprove}>
+              Cancelar
+            </Button>
+            <Button onClick={resolveAndApprove} loading={resolvingApprove}>
+              Resolver y aprobar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={createSerialOpen}
+        onClose={() => {
+          if (createSerialSaving) return;
+          setCreateSerialOpen(false);
+          setCreateSerialIndex(null);
+          setCreateSerialError(null);
+          setCreateSerialBrand('');
+          setCreateSerialModel('');
+          setCreateSerialYear('');
+          setCreateSerialFuel(null);
+        }}
+        title="Crear equipo serial faltante"
+        centered
+      >
+        <Stack gap="sm">
+          {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
+          <TextInput
+            label="Serial / motor"
+            value={createSerialSerialOrEngine}
+            onChange={(event) => setCreateSerialSerialOrEngine(event.currentTarget.value)}
+            required
+          />
+          <NumberInput
+            label="Número interno"
+            value={createSerialInternalNumber}
+            onChange={(value) =>
+              setCreateSerialInternalNumber(typeof value === 'number' ? value : '')
+            }
+            min={1}
+            required
+          />
+          <Group grow>
+            <TextInput
+              label="Marca (opcional)"
+              value={createSerialBrand}
+              onChange={(event) => setCreateSerialBrand(event.currentTarget.value)}
+            />
+            <TextInput
+              label="Modelo (opcional)"
+              value={createSerialModel}
+              onChange={(event) => setCreateSerialModel(event.currentTarget.value)}
+            />
+          </Group>
+          <Group grow>
+            <NumberInput
+              label="Año (opcional)"
+              value={createSerialYear}
+              onChange={(value) => setCreateSerialYear(typeof value === 'number' ? value : '')}
+              min={1900}
+              max={2100}
+            />
+            <Select
+              label="Combustible (opcional)"
+              data={FUEL_OPTIONS}
+              value={createSerialFuel}
+              onChange={(value) => setCreateSerialFuel(value)}
+              clearable
+            />
+          </Group>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                if (createSerialSaving) return;
+                setCreateSerialOpen(false);
+                setCreateSerialIndex(null);
+                setCreateSerialError(null);
+                setCreateSerialBrand('');
+                setCreateSerialModel('');
+                setCreateSerialYear('');
+                setCreateSerialFuel(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
+              Crear y usar
             </Button>
           </Group>
         </Stack>

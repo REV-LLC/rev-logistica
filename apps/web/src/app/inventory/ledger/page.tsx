@@ -8,9 +8,11 @@ import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
+  ActionIcon,
   Button,
   Container,
   Group,
+  Modal,
   Paper,
   Select,
   SimpleGrid,
@@ -26,6 +28,7 @@ import {
   IconBuildingWarehouse,
   IconChecklist,
   IconClockHour4,
+  IconFilter,
 } from '@tabler/icons-react';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
@@ -83,6 +86,7 @@ export default function LedgerPage() {
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
   const [filtersLoading, setFiltersLoading] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [worksites, setWorksites] = useState<WorksiteOption[]>([]);
   const [skus, setSkus] = useState<SkuOption[]>([]);
@@ -176,6 +180,21 @@ export default function LedgerPage() {
   }, [items]);
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
+  const activeFiltersCount = Object.values(filters).filter(Boolean).length;
+
+  const clearFilters = () => {
+    setFilters({
+      warehouseId: '',
+      customerWorksiteId: '',
+      movementType: '',
+      skuId: '',
+      assetId: '',
+      from: '',
+      to: '',
+    });
+    setItems([]);
+    setNextCursor(null);
+  };
 
   if (unauthorized) {
     return (
@@ -204,6 +223,18 @@ export default function LedgerPage() {
             icon={<IconArrowsShuffle size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
+            aside={
+              <ActionIcon
+                variant={hasActiveFilters ? 'filled' : 'light'}
+                color={hasActiveFilters ? 'blue' : 'gray'}
+                size="lg"
+                radius="xl"
+                aria-label={hasActiveFilters ? `Filtros activos (${activeFiltersCount})` : 'Abrir filtros'}
+                onClick={() => setFiltersOpen(true)}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+            }
           >
             <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
               <StatCard
@@ -243,37 +274,20 @@ export default function LedgerPage() {
             </Alert>
           ) : null}
 
-          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Modal
+            opened={filtersOpen}
+            onClose={() => setFiltersOpen(false)}
+            title="Filtros de consulta"
+            size="xl"
+            centered
+          >
             <Stack gap="md">
-              <Group justify="space-between" align="center">
-                <div>
-                  <Text fw={700}>Filtros de consulta</Text>
-                  <Text size="sm" c="dimmed">
-                    Combina ubicación, obra, movimiento y rango de fechas para aislar el historial que necesitas.
-                  </Text>
-                </div>
-                {hasActiveFilters ? (
-                  <Button
-                    variant="subtle"
-                    color="gray"
-                    onClick={() => {
-                      setFilters({
-                        warehouseId: '',
-                        customerWorksiteId: '',
-                        movementType: '',
-                        skuId: '',
-                        assetId: '',
-                        from: '',
-                        to: '',
-                      });
-                      setItems([]);
-                      setNextCursor(null);
-                    }}
-                  >
-                    Limpiar filtros
-                  </Button>
-                ) : null}
-              </Group>
+              <div>
+                <Text fw={700}>Ajusta la consulta</Text>
+                <Text size="sm" c="dimmed">
+                  Combina ubicación, obra, movimiento y rango de fechas para aislar el historial que necesitas.
+                </Text>
+              </div>
 
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
                 <Select
@@ -351,13 +365,27 @@ export default function LedgerPage() {
                 />
               </SimpleGrid>
 
-              <Group className="mobile-actions">
-                <Button onClick={() => fetchLedger()} loading={loading}>
+              <Group justify="space-between" className="mobile-actions">
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  onClick={clearFilters}
+                  disabled={!hasActiveFilters}
+                >
+                  Limpiar filtros
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await fetchLedger();
+                    setFiltersOpen(false);
+                  }}
+                  loading={loading}
+                >
                   Buscar movimientos
                 </Button>
               </Group>
             </Stack>
-          </Paper>
+          </Modal>
 
           {items.length > 0 ? (
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>

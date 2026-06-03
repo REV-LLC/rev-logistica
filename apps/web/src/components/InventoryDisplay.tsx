@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
 import { ownerColorById } from '@/lib/owner-color';
 
@@ -27,6 +28,7 @@ type BulkItem = {
 
 type SerialItem = {
   assetId: string;
+  ownerWarehouseId?: string | null;
   serialOrEngine: string | null;
   description: string | null;
   skuName?: string | null;
@@ -88,6 +90,18 @@ export default function InventoryDisplay({
 
   const showBulkSection = (viewFilter === 'ALL' || viewFilter === 'BULK') && bulk.length > 0;
   const showSerialSection = (viewFilter === 'ALL' || viewFilter === 'SERIAL') && serial.length > 0;
+  const isNegativeQuantity = (quantity: number) => quantity < 0;
+  const quantityBadge = (quantity: number, color = 'gray') => (
+    <Badge
+      color={isNegativeQuantity(quantity) ? 'red' : color}
+      variant="filled"
+      leftSection={
+        isNegativeQuantity(quantity) ? <IconAlertTriangle size={12} stroke={2.5} /> : undefined
+      }
+    >
+      {quantity}
+    </Badge>
+  );
 
   const groupedBulk = useMemo(() => {
     if (!bulkOwnerStackMode) return null;
@@ -141,7 +155,11 @@ export default function InventoryDisplay({
     });
 
     return Array.from(map.values()).map((row) => {
-      const owners = [...row.owners].sort((a, b) => b.quantity - a.quantity);
+      const owners = [...row.owners].sort((a, b) => {
+        if (a.quantity < 0 && b.quantity >= 0) return -1;
+        if (b.quantity < 0 && a.quantity >= 0) return 1;
+        return b.quantity - a.quantity;
+      });
       return {
         ...row,
         owners,
@@ -208,8 +226,17 @@ export default function InventoryDisplay({
                               {item.visibleOwners.map((owner) => (
                                 <Badge
                                   key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
-                                  color={ownerColorById(owner.ownerWarehouseId)}
+                                  color={
+                                    isNegativeQuantity(owner.quantity)
+                                      ? 'red'
+                                      : ownerColorById(owner.ownerWarehouseId)
+                                  }
                                   variant="filled"
+                                  leftSection={
+                                    isNegativeQuantity(owner.quantity) ? (
+                                      <IconAlertTriangle size={12} stroke={2.5} />
+                                    ) : undefined
+                                  }
                                 >
                                   {owner.quantity}
                                 </Badge>
@@ -231,7 +258,18 @@ export default function InventoryDisplay({
                             {formatCharge(item.chargeType, item.minimumChargeHours)}
                           </Table.Td>
                           <Table.Td>{item.ownerWarehouseName ?? '-'}</Table.Td>
-                          <Table.Td>{item.quantity}</Table.Td>
+                          <Table.Td>
+                            {isNegativeQuantity(item.quantity) ? (
+                              <Group gap={6} wrap="nowrap">
+                                <IconAlertTriangle size={16} stroke={2.5} color="var(--mantine-color-red-7)" />
+                                <Text c="red" fw={700}>
+                                  {item.quantity}
+                                </Text>
+                              </Group>
+                            ) : (
+                              item.quantity
+                            )}
+                          </Table.Td>
                         </Table.Tr>
                       ))}
                 </Table.Tbody>
@@ -266,13 +304,9 @@ export default function InventoryDisplay({
                         </Group>
                         <Group mt={6} gap={6} wrap="wrap">
                           {item.visibleOwners.map((owner) => (
-                            <Badge
-                              key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}
-                              color={ownerColorById(owner.ownerWarehouseId)}
-                              variant="filled"
-                            >
-                              {owner.quantity}
-                            </Badge>
+                            <span key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}>
+                              {quantityBadge(owner.quantity, ownerColorById(owner.ownerWarehouseId))}
+                            </span>
                           ))}
                           {item.hiddenOwnersCount > 0 ? (
                             <Badge color="green" variant="light">
@@ -297,7 +331,19 @@ export default function InventoryDisplay({
                           Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                         </Text>
                         <Text mt="xs">
-                          <strong>Cantidad:</strong> {item.quantity}
+                          <strong>Cantidad:</strong>{' '}
+                          {isNegativeQuantity(item.quantity) ? (
+                            <Text span c="red" fw={700}>
+                              <IconAlertTriangle
+                                size={14}
+                                stroke={2.5}
+                                style={{ verticalAlign: 'text-bottom' }}
+                              />{' '}
+                              {item.quantity}
+                            </Text>
+                          ) : (
+                            item.quantity
+                          )}
                         </Text>
                         <Text size="sm">
                           <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}

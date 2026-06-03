@@ -7,11 +7,10 @@ import {
   Button,
   Chip,
   Container,
-  Divider,
   Group,
-  Modal,
   NumberInput,
   Paper,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -19,7 +18,6 @@ import {
   Text,
   TextInput,
   ThemeIcon,
-  Title,
 } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -70,6 +68,7 @@ type TemplateSku = {
 };
 
 type ItemType = 'FORMALETA' | 'GENERIC';
+type BulkEntryMode = 'existing' | 'new';
 type WeightUnit = 'KG' | 'TON';
 type ChargeType = 'DAY' | 'HOUR';
 type FormaletaLine = 'FORMALETA' | 'FORMALETA_SARDINEL';
@@ -124,9 +123,9 @@ export default function AddBulkStockPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [bulkEntryMode, setBulkEntryMode] = useState<BulkEntryMode>('existing');
   const [itemType, setItemType] = useState<ItemType | null>(null);
   const [itemTypeSelection, setItemTypeSelection] = useState<string | null>(null);
-  const [itemConfigOpen, setItemConfigOpen] = useState(false);
   const [isItemConfigured, setIsItemConfigured] = useState(false);
 
   const [formaletaX, setFormaletaX] = useState<string>('0,10');
@@ -358,7 +357,6 @@ export default function AddBulkStockPage() {
 
   const resetTypeForm = (type: ItemType) => {
     setIsItemConfigured(false);
-    setItemConfigOpen(false);
 
     const defaultWeightUnit = (weightUnits[0] as WeightUnit | undefined) ?? '';
     if (type === 'FORMALETA') {
@@ -394,7 +392,6 @@ export default function AddBulkStockPage() {
     setItemType(null);
     setItemTypeSelection(null);
     setTemplateSkuId(null);
-    setItemConfigOpen(false);
     setIsItemConfigured(false);
 
     setFormaletaX('0,10');
@@ -441,7 +438,6 @@ export default function AddBulkStockPage() {
           return;
         }
         setIsItemConfigured(true);
-        setItemConfigOpen(false);
         return;
       }
       const xValue = parseLocaleDecimal(formaletaX);
@@ -482,12 +478,16 @@ export default function AddBulkStockPage() {
     }
 
     setIsItemConfigured(true);
-    setItemConfigOpen(false);
   };
 
   const applyTemplate = (skuId: string | null) => {
     setTemplateSkuId(skuId);
-    if (!skuId) return;
+    if (!skuId) {
+      setItemType(null);
+      setItemTypeSelection(null);
+      setIsItemConfigured(false);
+      return;
+    }
     const template = templateSkus.find((sku) => sku.id === skuId);
     if (!template) return;
 
@@ -545,17 +545,28 @@ export default function AddBulkStockPage() {
     setIsItemConfigured(true);
   };
 
+  const handleBulkEntryModeChange = (value: string) => {
+    const nextMode = value as BulkEntryMode;
+    setBulkEntryMode(nextMode);
+    setError(null);
+    setSuccess(null);
+    setTemplateSkuId(null);
+    setItemType(null);
+    setItemTypeSelection(null);
+    setIsItemConfigured(false);
+  };
+
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
 
     if (!itemType) {
-      setError('Selecciona el tipo de item');
+      setError('Selecciona el producto');
       return;
     }
 
     if (!isItemConfigured || !builtItem) {
-      setError('Configura el item antes de agregar stock');
+      setError('Selecciona o crea una plantilla antes de agregar stock');
       return;
     }
 
@@ -565,7 +576,7 @@ export default function AddBulkStockPage() {
     }
 
     if (!warehouseId) {
-      setError('Selecciona la bodega ubicación inicial');
+      setError('Selecciona dónde queda el stock');
       return;
     }
 
@@ -581,15 +592,15 @@ export default function AddBulkStockPage() {
           name: builtItem.familyName,
           code: builtItem.familyCode,
         },
-      sku: {
-        name: builtItem.skuName,
-        unitWeight: builtItem.skuUnitWeight,
-        price: builtItem.skuPrice,
-        subrentalPrice: builtItem.skuSubrentalPrice,
-        chargeType: builtItem.chargeType,
-        minimumChargeHours: builtItem.minimumChargeHours,
-        areaM2: builtItem.areaM2,
-      },
+        sku: {
+          name: builtItem.skuName,
+          unitWeight: builtItem.skuUnitWeight,
+          price: builtItem.skuPrice,
+          subrentalPrice: builtItem.skuSubrentalPrice,
+          chargeType: builtItem.chargeType,
+          minimumChargeHours: builtItem.minimumChargeHours,
+          areaM2: builtItem.areaM2,
+        },
         ownerWarehouseId,
         warehouseId,
         quantity: Number(quantity),
@@ -619,212 +630,10 @@ export default function AddBulkStockPage() {
 
   return (
     <Container size="lg" py="xl">
-      <Modal
-        opened={itemConfigOpen}
-        onClose={() => setItemConfigOpen(false)}
-        title={itemType === 'FORMALETA' ? 'Configurar Formaleta' : 'Configurar item genérico'}
-        centered
-      >
-        <Stack gap="md">
-          {itemType === 'FORMALETA' ? (
-            <>
-              <Switch
-                label="¿Accesorio de formaleta?"
-                checked={formaletaIsAccessory}
-                onChange={(event) => setFormaletaIsAccessory(event.currentTarget.checked)}
-              />
-              {formaletaIsAccessory ? (
-                <TextInput
-                  label="Nombre del accesorio"
-                  value={formaletaAccessoryName}
-                  onChange={(event) => setFormaletaAccessoryName(event.currentTarget.value)}
-                  placeholder="Ej: CUÑA, CRUCETA"
-                  required
-                />
-              ) : (
-                <>
-                  <Select
-                    label="Línea"
-                    data={formaletaLineOptions}
-                    value={formaletaLine}
-                    onChange={(value) =>
-                      setFormaletaLine((value as FormaletaLine | null) ?? 'FORMALETA')
-                    }
-                    required
-                  />
-                  <TextInput
-                    label="Medida X (metros)"
-                    value={formaletaX}
-                    onChange={(event) => setFormaletaX(event.currentTarget.value)}
-                    inputMode="decimal"
-                    description="Ejemplo: 0.10, 0.20, 0.50"
-                    placeholder="0,10"
-                    required
-                  />
-                  <Select
-                    label="Medida Y (metros)"
-                    data={FORMALETA_Y_OPTIONS.map((value) => ({
-                      value: String(value),
-                      label: formatMeasure(value),
-                    }))}
-                    value={formaletaY}
-                    onChange={(value) => setFormaletaY(value ?? String(FORMALETA_Y_OPTIONS[0]))}
-                    required
-                  />
-                  <NumberInput
-                    label="Peso unidad (opcional)"
-                    value={formaletaSkuUnitWeight}
-                    onChange={(value) => setFormaletaSkuUnitWeight(typeof value === 'number' ? value : '')}
-                    min={0}
-                    step={0.1}
-                  />
-                  <NumberInput
-                    label="Precio (opcional)"
-                    value={formaletaSkuPrice}
-                    onChange={(value) => setFormaletaSkuPrice(typeof value === 'number' ? value : '')}
-                    min={0}
-                    step={1000}
-                  />
-              <NumberInput
-                label="Precio subalquiler (opcional)"
-                value={formaletaSkuSubrentalPrice}
-                    onChange={(value) =>
-                      setFormaletaSkuSubrentalPrice(typeof value === 'number' ? value : '')
-                    }
-                min={0}
-                step={1000}
-              />
-              <Select
-                label="Tipo de cobro"
-                data={chargeTypeOptions}
-                value={formaletaChargeType}
-                onChange={(value) =>
-                  setFormaletaChargeType((value as ChargeType | null) ?? 'DAY')
-                }
-              />
-              {formaletaChargeType === 'HOUR' ? (
-                <NumberInput
-                  label="Mínimo de cobro (horas)"
-                  value={formaletaMinimumChargeHours}
-                  onChange={(value) =>
-                    setFormaletaMinimumChargeHours(typeof value === 'number' ? value : '')
-                  }
-                  min={0.5}
-                  step={0.5}
-                />
-              ) : null}
-              <NumberInput
-                label="Área m² (opcional)"
-                value={formaletaAreaM2}
-                    onChange={(value) => setFormaletaAreaM2(typeof value === 'number' ? value : '')}
-                    min={0}
-                    step={0.01}
-                  />
-                  <Select
-                    label="Unidad de peso"
-                    data={weightUnitOptions}
-                    value={formaletaWeightUnit}
-                    onChange={(value) => setFormaletaWeightUnit((value as WeightUnit | null) ?? '')}
-                    searchable
-                    nothingFoundMessage="Sin unidades"
-                  />
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <TextInput
-                label="Tipo/Familia"
-                value={genericFamilyName}
-                onChange={(event) => setGenericFamilyName(event.currentTarget.value)}
-                placeholder="Ej: ANDAMIO"
-                required
-              />
-              <TextInput
-                label="Código de familia (opcional)"
-                value={genericFamilyCode}
-                onChange={(event) => setGenericFamilyCode(event.currentTarget.value)}
-              />
-              <TextInput
-                label="Nombre del SKU"
-                value={genericSkuName}
-                onChange={(event) => setGenericSkuName(event.currentTarget.value)}
-                placeholder="Ej: ANDAMIO TIPO EUROPEO"
-                required
-              />
-              <NumberInput
-                label="Peso unidad (opcional)"
-                value={genericSkuUnitWeight}
-                onChange={(value) => setGenericSkuUnitWeight(typeof value === 'number' ? value : '')}
-                min={0}
-                step={0.1}
-              />
-              <NumberInput
-                label="Precio (opcional)"
-                value={genericSkuPrice}
-                onChange={(value) => setGenericSkuPrice(typeof value === 'number' ? value : '')}
-                min={0}
-                step={1000}
-              />
-              <NumberInput
-                label="Precio subalquiler (opcional)"
-                value={genericSkuSubrentalPrice}
-                onChange={(value) =>
-                  setGenericSkuSubrentalPrice(typeof value === 'number' ? value : '')
-                }
-                min={0}
-                step={1000}
-              />
-              <Select
-                label="Tipo de cobro"
-                data={chargeTypeOptions}
-                value={genericChargeType}
-                onChange={(value) =>
-                  setGenericChargeType((value as ChargeType | null) ?? 'DAY')
-                }
-              />
-              {genericChargeType === 'HOUR' ? (
-                <NumberInput
-                  label="Mínimo de cobro (horas)"
-                  value={genericMinimumChargeHours}
-                  onChange={(value) =>
-                    setGenericMinimumChargeHours(typeof value === 'number' ? value : '')
-                  }
-                  min={0.5}
-                  step={0.5}
-                />
-              ) : null}
-              <NumberInput
-                label="Área m² (opcional)"
-                value={genericAreaM2}
-                onChange={(value) => setGenericAreaM2(typeof value === 'number' ? value : '')}
-                min={0}
-                step={0.01}
-              />
-              <Select
-                label="Unidad de peso"
-                data={weightUnitOptions}
-                value={genericWeightUnit}
-                onChange={(value) => setGenericWeightUnit((value as WeightUnit | null) ?? '')}
-                searchable
-                nothingFoundMessage="Sin unidades"
-              />
-            </>
-          )}
-
-          <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={() => setItemConfigOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={applyTypeConfiguration}>Aplicar configuración</Button>
-          </Group>
-        </Stack>
-      </Modal>
-
       <Stack gap="lg">
         <PageHeaderCard
-          title="Agregar stock masivo"
-          description="Crea items por cantidad, configura su ficha base y registra el ingreso inicial en bodega."
+          title="Ingresar stock por cantidad"
+          description="Elige una plantilla del catálogo o crea una nueva y registra la entrada en bodega."
           icon={<IconCubePlus size={20} />}
           iconColor="green"
           accentColor="rgba(22,163,74,0.12)"
@@ -848,30 +657,30 @@ export default function AddBulkStockPage() {
 
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
             <StatCard
-              label="Plantillas"
+              label="Catálogo"
               value={String(templateSkus.length)}
-              hint="SKUs bulk reutilizables"
+              hint="Plantillas bulk"
               color="green"
               icon={<IconClipboardList size={20} />}
             />
             <StatCard
-              label="Bodegas"
-              value={String(warehouses.length)}
-              hint="Disponibles para el ingreso"
+              label="Producto"
+              value={builtItem ? 'Listo' : 'Pend.'}
+              hint={builtItem ? builtItem.familyName : 'Elige o crea plantilla'}
               color="blue"
-              icon={<IconBuildingWarehouse size={20} />}
-            />
-            <StatCard
-              label="Item"
-              value={builtItem ? 'OK' : 'Pend.'}
-              hint={builtItem ? builtItem.familyName : 'Configura el producto'}
-              color={builtItem ? 'teal' : 'gray'}
               icon={<IconForms size={20} />}
             />
             <StatCard
-              label="Movimiento"
+              label="Ubicación"
+              value={ownerWarehouseId && warehouseId ? 'Listo' : 'Pend.'}
+              hint={ownerWarehouseId && warehouseId ? 'Bodegas definidas' : `${warehouses.length} bodegas`}
+              color={ownerWarehouseId && warehouseId ? 'teal' : 'gray'}
+              icon={<IconBuildingWarehouse size={20} />}
+            />
+            <StatCard
+              label="Cantidad"
               value={payloadPreview ? String(payloadPreview.quantity) : '0'}
-              hint={payloadPreview ? 'Cantidad lista para ingresar' : 'Falta completar datos'}
+              hint={payloadPreview ? 'Listo para guardar' : 'Falta completar'}
               color={payloadPreview ? 'lime' : 'gray'}
               icon={<IconArrowsTransferUp size={20} />}
             />
@@ -895,77 +704,315 @@ export default function AddBulkStockPage() {
             <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>1. Base del item</Text>
+                  <Text fw={700}>1. Producto</Text>
                   <Text size="sm" c="dimmed">
-                    Arranca desde una plantilla existente o define un tipo nuevo para abrir la configuración.
+                    Usa una plantilla del catálogo o crea la referencia si aún no existe.
                   </Text>
                 </div>
 
-                <Select
-                  label="Usar plantilla de equipo existente"
-                  placeholder="Busca un item ya creado"
-                  searchable
-                  clearable
-                  data={templateOptions}
-                  value={templateSkuId}
-                  onChange={applyTemplate}
+                <SegmentedControl
+                  value={bulkEntryMode}
+                  onChange={handleBulkEntryModeChange}
+                  data={[
+                    { value: 'existing', label: 'Usar plantilla' },
+                    { value: 'new', label: 'Crear plantilla' },
+                  ]}
+                  fullWidth
                 />
 
-                <Select
-                  label="Tipo de item"
-                  data={typeOptions}
-                  value={itemTypeSelection}
-                  onChange={(value) => {
-                    setItemTypeSelection(value);
-                    if (!value) {
-                      setItemType(null);
-                      return;
-                    }
+                {bulkEntryMode === 'existing' ? (
+                  <Select
+                    label="Plantilla"
+                    placeholder="Busca por referencia o familia"
+                    searchable
+                    clearable
+                    data={templateOptions}
+                    value={templateSkuId}
+                    onChange={applyTemplate}
+                  />
+                ) : (
+                  <Stack gap="md">
+                    <Select
+                      label="Familia"
+                      data={typeOptions}
+                      value={itemTypeSelection}
+                      onChange={(value) => {
+                        setItemTypeSelection(value);
+                        setIsItemConfigured(false);
+                        if (!value) {
+                          setItemType(null);
+                          return;
+                        }
 
-                    if (value === 'FORMALETA') {
-                      setItemType('FORMALETA');
-                      resetTypeForm('FORMALETA');
-                      setItemConfigOpen(true);
-                      return;
-                    }
+                        if (value === 'FORMALETA') {
+                          setItemType('FORMALETA');
+                          resetTypeForm('FORMALETA');
+                          return;
+                        }
 
-                    setItemType('GENERIC');
-                    resetTypeForm('GENERIC');
-                    if (value === 'ANDAMIO') {
-                      setGenericFamilyName('ANDAMIO');
-                      setGenericFamilyCode('ANDAMIO');
-                    } else if (value === 'ENCOFRADO') {
-                      setGenericFamilyName('ENCOFRADO');
-                      setGenericFamilyCode('ENCOFRADO');
-                    }
-                    setItemConfigOpen(true);
-                  }}
-                  placeholder={loading ? 'Cargando...' : 'Selecciona un tipo'}
-                  disabled={loading}
-                  required
-                />
+                        setItemType('GENERIC');
+                        resetTypeForm('GENERIC');
+                        if (value === 'ANDAMIO') {
+                          setGenericFamilyName('ANDAMIO');
+                          setGenericFamilyCode('ANDAMIO');
+                        } else if (value === 'ENCOFRADO') {
+                          setGenericFamilyName('ENCOFRADO');
+                          setGenericFamilyCode('ENCOFRADO');
+                        }
+                      }}
+                      placeholder={loading ? 'Cargando...' : 'Selecciona familia'}
+                      disabled={loading}
+                      required
+                    />
 
-                {itemType ? (
-                  <Group justify="space-between" align="center">
-                    <Stack gap={2}>
-                      <Text size="sm" fw={600}>
-                        {builtItem ? builtItem.skuName : 'Aún sin configuración completa'}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {builtItem
-                          ? `${builtItem.familyName}${builtItem.familyCode ? ` · ${builtItem.familyCode}` : ''}`
-                          : 'Abre la configuración para definir medidas, nombre y propiedades'}
-                      </Text>
-                    </Stack>
-                    <Group gap="xs">
-                      <Badge color={isItemConfigured ? 'green' : 'gray'} variant="light">
-                        {isItemConfigured ? 'Configurado' : 'Pendiente'}
+                    {itemType === 'FORMALETA' ? (
+                      <Paper radius="md" p="md" bg="gray.0">
+                        <Stack gap="md">
+                          <Switch
+                            label="Es accesorio"
+                            checked={formaletaIsAccessory}
+                            onChange={(event) => {
+                              setFormaletaIsAccessory(event.currentTarget.checked);
+                              setIsItemConfigured(false);
+                            }}
+                          />
+                          {formaletaIsAccessory ? (
+                            <TextInput
+                              label="Referencia"
+                              value={formaletaAccessoryName}
+                              onChange={(event) => {
+                                setFormaletaAccessoryName(event.currentTarget.value);
+                                setIsItemConfigured(false);
+                              }}
+                              placeholder="Ej: CUÑA, CRUCETA"
+                              required
+                            />
+                          ) : (
+                            <>
+                              <Group grow className="mobile-stack">
+                                <Select
+                                  label="Línea"
+                                  data={formaletaLineOptions}
+                                  value={formaletaLine}
+                                  onChange={(value) => {
+                                    setFormaletaLine((value as FormaletaLine | null) ?? 'FORMALETA');
+                                    setIsItemConfigured(false);
+                                  }}
+                                  required
+                                />
+                                <TextInput
+                                  label="Ancho X (m)"
+                                  value={formaletaX}
+                                  onChange={(event) => {
+                                    setFormaletaX(event.currentTarget.value);
+                                    setIsItemConfigured(false);
+                                  }}
+                                  inputMode="decimal"
+                                  placeholder="0,10"
+                                  required
+                                />
+                                <Select
+                                  label="Alto Y (m)"
+                                  data={FORMALETA_Y_OPTIONS.map((value) => ({
+                                    value: String(value),
+                                    label: formatMeasure(value),
+                                  }))}
+                                  value={formaletaY}
+                                  onChange={(value) => {
+                                    setFormaletaY(value ?? String(FORMALETA_Y_OPTIONS[0]));
+                                    setIsItemConfigured(false);
+                                  }}
+                                  required
+                                />
+                              </Group>
+                              <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+                                <NumberInput
+                                  label="Peso"
+                                  value={formaletaSkuUnitWeight}
+                                  onChange={(value) => setFormaletaSkuUnitWeight(typeof value === 'number' ? value : '')}
+                                  min={0}
+                                  step={0.1}
+                                />
+                                <Select
+                                  label="Unidad"
+                                  data={weightUnitOptions}
+                                  value={formaletaWeightUnit}
+                                  onChange={(value) => setFormaletaWeightUnit((value as WeightUnit | null) ?? '')}
+                                  searchable
+                                  nothingFoundMessage="Sin unidades"
+                                />
+                                <NumberInput
+                                  label="Precio"
+                                  value={formaletaSkuPrice}
+                                  onChange={(value) => setFormaletaSkuPrice(typeof value === 'number' ? value : '')}
+                                  min={0}
+                                  step={1000}
+                                />
+                                <NumberInput
+                                  label="Subalquiler"
+                                  value={formaletaSkuSubrentalPrice}
+                                  onChange={(value) =>
+                                    setFormaletaSkuSubrentalPrice(typeof value === 'number' ? value : '')
+                                  }
+                                  min={0}
+                                  step={1000}
+                                />
+                                <Select
+                                  label="Cobro"
+                                  data={chargeTypeOptions}
+                                  value={formaletaChargeType}
+                                  onChange={(value) =>
+                                    setFormaletaChargeType((value as ChargeType | null) ?? 'DAY')
+                                  }
+                                />
+                                {formaletaChargeType === 'HOUR' ? (
+                                  <NumberInput
+                                    label="Mínimo horas"
+                                    value={formaletaMinimumChargeHours}
+                                    onChange={(value) =>
+                                      setFormaletaMinimumChargeHours(typeof value === 'number' ? value : '')
+                                    }
+                                    min={0.5}
+                                    step={0.5}
+                                  />
+                                ) : null}
+                                <NumberInput
+                                  label="Área m²"
+                                  value={formaletaAreaM2}
+                                  onChange={(value) => setFormaletaAreaM2(typeof value === 'number' ? value : '')}
+                                  min={0}
+                                  step={0.01}
+                                />
+                              </SimpleGrid>
+                            </>
+                          )}
+                        </Stack>
+                      </Paper>
+                    ) : null}
+
+                    {itemType === 'GENERIC' ? (
+                      <Paper radius="md" p="md" bg="gray.0">
+                        <Stack gap="md">
+                          <Group grow className="mobile-stack">
+                            <TextInput
+                              label="Familia"
+                              value={genericFamilyName}
+                              onChange={(event) => {
+                                setGenericFamilyName(event.currentTarget.value);
+                                setIsItemConfigured(false);
+                              }}
+                              placeholder="Ej: ANDAMIO MULTIDIRECCIONAL"
+                              required
+                            />
+                            <TextInput
+                              label="Código"
+                              value={genericFamilyCode}
+                              onChange={(event) => setGenericFamilyCode(event.currentTarget.value)}
+                              placeholder="Ej: AND-MULTI"
+                            />
+                          </Group>
+                          <TextInput
+                            label="Referencia"
+                            value={genericSkuName}
+                            onChange={(event) => {
+                              setGenericSkuName(event.currentTarget.value);
+                              setIsItemConfigured(false);
+                            }}
+                            placeholder="Ej: VERTICAL 3.00M"
+                            required
+                          />
+                          <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+                            <NumberInput
+                              label="Peso"
+                              value={genericSkuUnitWeight}
+                              onChange={(value) => setGenericSkuUnitWeight(typeof value === 'number' ? value : '')}
+                              min={0}
+                              step={0.1}
+                            />
+                            <Select
+                              label="Unidad"
+                              data={weightUnitOptions}
+                              value={genericWeightUnit}
+                              onChange={(value) => setGenericWeightUnit((value as WeightUnit | null) ?? '')}
+                              searchable
+                              nothingFoundMessage="Sin unidades"
+                            />
+                            <NumberInput
+                              label="Precio"
+                              value={genericSkuPrice}
+                              onChange={(value) => setGenericSkuPrice(typeof value === 'number' ? value : '')}
+                              min={0}
+                              step={1000}
+                            />
+                            <NumberInput
+                              label="Subalquiler"
+                              value={genericSkuSubrentalPrice}
+                              onChange={(value) =>
+                                setGenericSkuSubrentalPrice(typeof value === 'number' ? value : '')
+                              }
+                              min={0}
+                              step={1000}
+                            />
+                            <Select
+                              label="Cobro"
+                              data={chargeTypeOptions}
+                              value={genericChargeType}
+                              onChange={(value) =>
+                                setGenericChargeType((value as ChargeType | null) ?? 'DAY')
+                              }
+                            />
+                            {genericChargeType === 'HOUR' ? (
+                              <NumberInput
+                                label="Mínimo horas"
+                                value={genericMinimumChargeHours}
+                                onChange={(value) =>
+                                  setGenericMinimumChargeHours(typeof value === 'number' ? value : '')
+                                }
+                                min={0.5}
+                                step={0.5}
+                              />
+                            ) : null}
+                            <NumberInput
+                              label="Área m²"
+                              value={genericAreaM2}
+                              onChange={(value) => setGenericAreaM2(typeof value === 'number' ? value : '')}
+                              min={0}
+                              step={0.01}
+                            />
+                          </SimpleGrid>
+                        </Stack>
+                      </Paper>
+                    ) : null}
+
+                    {itemType ? (
+                      <Group justify="space-between" className="mobile-actions">
+                        <Badge color={isItemConfigured ? 'green' : 'gray'} variant="light">
+                          {isItemConfigured ? 'Plantilla lista' : 'Pendiente'}
+                        </Badge>
+                        <Button variant="light" onClick={applyTypeConfiguration}>
+                          Usar esta plantilla
+                        </Button>
+                      </Group>
+                    ) : null}
+                  </Stack>
+                )}
+
+                {builtItem ? (
+                  <Paper radius="md" p="sm" bg="green.0">
+                    <Group justify="space-between" align="center">
+                      <Stack gap={2}>
+                        <Text size="sm" fw={700}>
+                          {builtItem.skuName}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {builtItem.familyName}{builtItem.familyCode ? ` · ${builtItem.familyCode}` : ''}
+                        </Text>
+                      </Stack>
+                      <Badge color="green" variant="light">
+                        Seleccionado
                       </Badge>
-                      <Button variant="light" size="xs" onClick={() => setItemConfigOpen(true)}>
-                        {isItemConfigured ? 'Editar configuración' : 'Configurar'}
-                      </Button>
                     </Group>
-                  </Group>
+                  </Paper>
                 ) : null}
               </Stack>
             </Paper>
@@ -973,9 +1020,9 @@ export default function AddBulkStockPage() {
             <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>2. Movimiento inicial</Text>
+                  <Text fw={700}>2. Entrada a bodega</Text>
                   <Text size="sm" c="dimmed">
-                    Define la bodega dueña, la ubicación de entrada y la cantidad que vas a incorporar.
+                    Define quién es dueño del stock, dónde queda y cuántas unidades entran.
                   </Text>
                 </div>
 
@@ -991,7 +1038,7 @@ export default function AddBulkStockPage() {
                     required
                   />
                   <Select
-                    label="Bodega ubicación inicial"
+                    label="Dónde queda"
                     data={warehouseOptions}
                     value={warehouseId}
                     onChange={(value) => setWarehouseId(value)}
@@ -1013,9 +1060,9 @@ export default function AddBulkStockPage() {
             <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>3. Resumen de ingreso</Text>
+                  <Text fw={700}>3. Revisión</Text>
                   <Text size="sm" c="dimmed">
-                    Revisa lo que se va a crear antes de registrar el stock.
+                    Confirma producto, ubicación y cantidad antes de guardar.
                   </Text>
                 </div>
 
@@ -1054,7 +1101,7 @@ export default function AddBulkStockPage() {
                         <IconChecks size={16} />
                       </ThemeIcon>
                       <Text size="sm" c="dimmed">
-                        Completa la configuración del item y el movimiento inicial para ver el resumen final.
+                        Completa producto, ubicación y cantidad para ver la revisión final.
                       </Text>
                     </Group>
                   </Paper>
@@ -1067,7 +1114,7 @@ export default function AddBulkStockPage() {
                 Cancelar
               </Button>
               <Button onClick={handleSubmit} loading={saving} leftSection={<IconPlus size={16} />}>
-                Agregar stock
+                Guardar entrada
               </Button>
             </Group>
           </Stack>

@@ -30,7 +30,10 @@ export class DocumentsService {
     if (!prefix) return raw;
     const cleaned = raw.replace(/^(RM|DV)[\s\-_]*/i, '').trim();
     if (!cleaned) return null;
-    return `${prefix}${cleaned.toUpperCase()}`;
+    if (!/^\d+$/.test(cleaned)) {
+      throw new BadRequestException('El consecutivo debe ser numérico');
+    }
+    return `${prefix}${cleaned.padStart(6, '0')}`;
   }
 
   private parseConsecutiveSuffix(value: string, prefix: string) {
@@ -54,8 +57,6 @@ export class DocumentsService {
         },
       },
       select: { consecutive: true },
-      orderBy: { createdAt: 'desc' },
-      take: 500,
     });
 
     let max = 0;
@@ -388,8 +389,8 @@ export class DocumentsService {
         },
       });
       if (!document) throw new NotFoundException('Document not found');
-      if (document.type !== DocumentType.REMISSION && document.type !== DocumentType.RETURN) {
-        throw new BadRequestException('Solo aplica para documentos de remisión/devolución');
+      if (document.type !== DocumentType.RETURN) {
+        throw new BadRequestException('Solo aplica para documentos de devolución');
       }
 
       const item = await tx.documentItem.findFirst({
@@ -404,13 +405,6 @@ export class DocumentsService {
 
       const nextCutoff = cutoffInput !== undefined ? cutoffInput : item.billingCutoffDate;
       const nextReturned = returnedInput !== undefined ? returnedInput : item.returnedAt;
-      if (
-        document.type === DocumentType.REMISSION &&
-        nextCutoff &&
-        this.getBusinessDateKey(nextCutoff) < this.getBusinessDateKey(document.docDate)
-      ) {
-        throw new BadRequestException('billingCutoffDate no puede ser anterior a la fecha del documento');
-      }
       if (nextCutoff && nextReturned && nextCutoff.getTime() > nextReturned.getTime()) {
         throw new BadRequestException('billingCutoffDate no puede ser posterior a returnedAt');
       }
