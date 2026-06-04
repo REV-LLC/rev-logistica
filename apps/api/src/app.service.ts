@@ -8,4 +8,12 @@ export class AppService {
   getHello(): string {
     return this.prisma ? 'Hello World!' : 'Hello World!';
   }
+
+  getHealth() {
+    return {
+      ok: true,
+      service: 'rev-logistica-api',
+      timestamp: new Date().toISOString(),
+    };
+  }
 }

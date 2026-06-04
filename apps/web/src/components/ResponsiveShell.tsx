@@ -19,6 +19,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = 
   { prefix: '/billing/prefactura', title: 'Prefactura', subtitle: 'Corte y resumen' },
   { prefix: '/customers', title: 'Clientes', subtitle: 'Relacion comercial' },
   { prefix: '/employees', title: 'Empleados', subtitle: 'Equipo interno' },
+  { prefix: '/data', title: 'Datos', subtitle: 'Backups y exportes' },
 ];
 
 function getHeaderCopy(pathname: string | null) {

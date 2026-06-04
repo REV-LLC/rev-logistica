@@ -11,6 +11,7 @@ import {
   IconChecklist,
   IconClipboardList,
   IconBox,
+  IconDatabaseExport,
   IconMap2,
   IconReceipt,
   IconTruck,
@@ -62,6 +63,7 @@ const sections: NavSection[] = [
       { href: '/billing/prefactura', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
       { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
       { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },
     ],
   },
 ];

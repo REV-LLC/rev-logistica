@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter, NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AppModule } from './app.module';
@@ -43,21 +44,31 @@ async function bootstrap() {
     AppModule,
     new ExpressAdapter(),
   );
+  const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
+      if (configuredOrigins.includes(origin)) {
+        return callback(null, true);
+      }
       const allowedPatterns = [
         /^http:\/\/localhost:\d+$/,
         /^http:\/\/127\.0\.0\.1:\d+$/,
         /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
         /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/,
         /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:\d+$/,
+        /^https:\/\/.*\.vercel\.app$/,
       ];
       const isAllowed = allowedPatterns.some((pattern) => pattern.test(origin));
       return callback(isAllowed ? null : new Error('CORS blocked'), isAllowed);
     },
     credentials: true,
   });
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();
