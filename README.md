@@ -42,3 +42,4 @@ cp apps/web/.env.example apps/web/.env.local
 
 ## Despliegue
 El flujo de ramas y despliegue esta documentado en [docs/07-ramas-despliegue.md](docs/07-ramas-despliegue.md).
+La configuracion de produccion esta documentada en [docs/08-despliegue-produccion.md](docs/08-despliegue-produccion.md).
