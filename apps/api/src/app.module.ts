@@ -20,6 +20,7 @@ import { AssetsModule } from './assets/assets.module';
 import { SkusModule } from './skus/skus.module';
 import { OwnersModule } from './owners/owners.module';
 import { BillingModule } from './billing/billing.module';
+import { BackupsModule } from './backups/backups.module';
 import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
 
 @Module({
@@ -50,6 +51,7 @@ import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.midd
     SkusModule,
     OwnersModule,
     BillingModule,
+    BackupsModule,
   ],
   controllers: [AppController],
   providers: [

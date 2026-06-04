@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter, NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AppModule } from './app.module';
@@ -58,6 +59,8 @@ async function bootstrap() {
     },
     credentials: true,
   });
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();
