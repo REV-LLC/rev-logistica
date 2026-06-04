@@ -5,6 +5,9 @@
     "buildCommand": "npm ci && npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build"
   },
   "deploy": {
+    "preDeployCommand": [
+      "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma"
+    ],
     "startCommand": "npm --workspace apps/api run start:prod",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
