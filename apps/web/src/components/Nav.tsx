@@ -50,7 +50,7 @@ const sections: NavSection[] = [
       { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
       {
         href: '/inventory/bulk-adjustments',
-        label: 'Stock',
+        label: 'Agregar inventario',
         icon: IconBox,
         roles: ['ADMIN', 'OFFICE'],
         activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],

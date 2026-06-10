@@ -5,7 +5,6 @@ import {
   Alert,
   Badge,
   Button,
-  Chip,
   Container,
   Divider,
   Group,
@@ -446,22 +445,60 @@ export default function CreateSerializedAssetPage() {
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
         >
-          <Group>
-            <Chip.Group
-              multiple={false}
-              value="serial"
-              onChange={(value) => {
-                if (value === 'bulk') {
-                  router.push('/inventory/bulk-adjustments');
-                }
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            <Paper
+              component="button"
+              type="button"
+              withBorder
+              radius="md"
+              p="xs"
+              onClick={() => router.push('/inventory/bulk-adjustments')}
+              style={{
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.78)',
+                textAlign: 'left',
               }}
             >
-              <Group gap="xs">
-                <Chip value="bulk">Items por cantidad</Chip>
-                <Chip value="serial">Equipos únicos</Chip>
+              <Group gap="sm" wrap="nowrap">
+                <img
+                  src="/inventory/certified-scaffold.png"
+                  alt=""
+                  aria-hidden="true"
+                  style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
+                />
+                <Stack gap={2}>
+                  <Text fw={700} size="sm">Items por cantidad</Text>
+                  <Text size="xs" c="dimmed">Andamios, formaleta y stock bulk</Text>
+                </Stack>
               </Group>
-            </Chip.Group>
-          </Group>
+            </Paper>
+            <Paper
+              component="button"
+              type="button"
+              withBorder
+              radius="md"
+              p="xs"
+              style={{
+                cursor: 'default',
+                borderColor: 'var(--mantine-color-blue-5)',
+                background: 'var(--mantine-color-blue-0)',
+                textAlign: 'left',
+              }}
+            >
+              <Group gap="sm" wrap="nowrap">
+                <img
+                  src="/inventory/skid-steer-loader.png"
+                  alt=""
+                  aria-hidden="true"
+                  style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
+                />
+                <Stack gap={2}>
+                  <Text fw={700} size="sm">Equipos únicos</Text>
+                  <Text size="xs" c="dimmed">Minicargadores y activos seriales</Text>
+                </Stack>
+              </Group>
+            </Paper>
+          </SimpleGrid>
 
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
             <StatCard
