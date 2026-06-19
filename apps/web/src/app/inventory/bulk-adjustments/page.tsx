@@ -21,6 +21,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   IconChecks,
   IconCubePlus,
+  IconArrowLeft,
   IconPlus,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
@@ -44,9 +45,32 @@ type CreateBulkResponse = {
 };
 
 type ItemType = 'FORMALETA' | 'GENERIC';
+type EntryMode = 'existing' | 'new';
+type FlowChoice = 'bulk';
 type WeightUnit = 'KG' | 'TON';
 type ChargeType = 'DAY' | 'HOUR';
 type FormaletaLine = 'FORMALETA' | 'FORMALETA_SARDINEL';
+
+type ExistingBulkItem = {
+  skuId: string;
+  ownerWarehouseId: string;
+  ownerWarehouseName: string | null;
+  skuName: string | null;
+  name: string | null;
+  category: string | null;
+  assetFamilyId: string | null;
+  price: number | null;
+  subrentalPrice: number | null;
+  chargeType: ChargeType | null;
+  minimumChargeHours: number | null;
+  areaM2: number | null;
+  unitWeight: number | null;
+  quantity: number;
+};
+
+type WarehouseInventoryResponse = {
+  bulk: ExistingBulkItem[];
+};
 
 type BulkPayload = {
   family: {
@@ -70,6 +94,34 @@ type BulkPayload = {
 };
 
 const FORMALETA_Y_OPTIONS = [0.3, 0.6, 1.2, 2.4, 3.0] as const;
+const CERTIFIED_SCAFFOLD_PARTS = [
+  'VERTICALES',
+  'HORIZONTALES',
+  'BASE COLLAR',
+  'RUEDAS NIVELADORAS',
+  'TORNILLOS NIVELADORES',
+  'PLATAFORMA',
+  'ESCALERA PELDAÑO',
+  'ESCALERA TIPO GATO',
+  'DIAGONALES',
+  'RODA PIE',
+] as const;
+const CERTIFIED_SCAFFOLD_MEASURES = [
+  '0.50M',
+  '0.70M',
+  '1.00M',
+  '1.40M',
+  '2.00M',
+  '2.50M',
+  '3.00M',
+] as const;
+const CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = new Set<string>([
+  'BASE COLLAR',
+  'RUEDAS NIVELADORAS',
+  'TORNILLOS NIVELADORES',
+  'ESCALERA PELDAÑO',
+  'ESCALERA TIPO GATO',
+]);
 
 const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
 const parseLocaleDecimal = (value: string) => {
@@ -123,6 +175,11 @@ export default function AddBulkStockPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [entryMode, setEntryMode] = useState<EntryMode>('existing');
+  const [existingItems, setExistingItems] = useState<ExistingBulkItem[]>([]);
+  const [existingItemsLoading, setExistingItemsLoading] = useState(false);
+  const [existingSkuId, setExistingSkuId] = useState<string | null>(null);
+
   const [itemType, setItemType] = useState<ItemType | null>(null);
   const [itemTypeSelection, setItemTypeSelection] = useState<string | null>(null);
   const [isItemConfigured, setIsItemConfigured] = useState(false);
@@ -144,6 +201,7 @@ export default function AddBulkStockPage() {
   const [genericFamilyName, setGenericFamilyName] = useState('');
   const [genericFamilyCode, setGenericFamilyCode] = useState('');
   const [genericSkuName, setGenericSkuName] = useState('');
+  const [certifiedScaffoldMeasure, setCertifiedScaffoldMeasure] = useState('');
   const [genericSkuUnitWeight, setGenericSkuUnitWeight] = useState<number | ''>('');
   const [genericSkuPrice, setGenericSkuPrice] = useState<number | ''>('');
   const [genericSkuSubrentalPrice, setGenericSkuSubrentalPrice] = useState<number | ''>('');
@@ -153,6 +211,10 @@ export default function AddBulkStockPage() {
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState<number | ''>('');
+  const [warehouseLocked, setWarehouseLocked] = useState(false);
+  const [modeLocked, setModeLocked] = useState(false);
+  const [flowChoice, setFlowChoice] = useState<FlowChoice | null>(null);
+  const [flowLeaving, setFlowLeaving] = useState(false);
 
   const formaletaRequiredSkuData: RequiredSkuData = {
     unitWeight: formaletaSkuUnitWeight,
@@ -175,6 +237,10 @@ export default function AddBulkStockPage() {
         : false;
   const showRequiredSkuErrors = confirmAttempted;
   const confirmButtonNeedsAttention = confirmAttempted && requiredSkuDataMissing;
+  const selectedExistingItem = useMemo(
+    () => existingItems.find((item) => item.skuId === existingSkuId) ?? null,
+    [existingItems, existingSkuId],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -227,6 +293,48 @@ export default function AddBulkStockPage() {
   }, [searchParams, warehouses]);
 
   useEffect(() => {
+    if (entryMode !== 'existing' || !ownerWarehouseId || !warehouseLocked || !modeLocked) {
+      setExistingItems([]);
+      setExistingSkuId(null);
+      setExistingItemsLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    setExistingItemsLoading(true);
+    setError(null);
+
+    api<WarehouseInventoryResponse>(`/inventory/warehouse/${ownerWarehouseId}`)
+      .then((data) => {
+        if (!mounted) return;
+        const bulkItems = (data.bulk ?? [])
+          .filter((item) => item.skuId && item.assetFamilyId)
+          .sort((a, b) => (a.skuName ?? a.name ?? '').localeCompare(b.skuName ?? b.name ?? ''));
+        setExistingItems(bulkItems);
+        setExistingSkuId((current) =>
+          current && bulkItems.some((item) => item.skuId === current) ? current : null,
+        );
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        if (err instanceof ApiError) {
+          setError(`${err.status}: ${err.message}`);
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Error cargando inventario');
+        }
+      })
+      .finally(() => {
+        if (mounted) setExistingItemsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [entryMode, modeLocked, ownerWarehouseId, warehouseLocked]);
+
+  useEffect(() => {
     if (itemType !== 'FORMALETA') return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -243,11 +351,15 @@ export default function AddBulkStockPage() {
     value: warehouse.id,
     label: warehouse.name,
   }));
+  const existingItemOptions = existingItems.map((item) => ({
+    value: item.skuId,
+    label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
+  }));
   const typeOptions = [
-    { value: 'FORMALETA', label: 'Formaleta' },
-    { value: 'ANDAMIO_CERTIFICADO', label: 'Andamio certificado' },
-    { value: 'ANDAMIO_CONVENCIONAL', label: 'Andamio convencional' },
-    { value: 'ENCOFRADO', label: 'Encofrado' },
+    { value: 'FORMALETA', label: 'FORMALETA' },
+    { value: 'ANDAMIO_CERTIFICADO', label: 'ANDAMIO CERTIFICADO' },
+    { value: 'ANDAMIO_CONVENCIONAL', label: 'ANDAMIO CONVENCIONAL' },
+    { value: 'ENCOFRADO', label: 'ENCOFRADO' },
   ];
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
   const chargeTypeOptions = [
@@ -258,6 +370,19 @@ export default function AddBulkStockPage() {
     { value: 'FORMALETA', label: 'Formaleta' },
     { value: 'FORMALETA_SARDINEL', label: 'Formaleta Sardinel' },
   ];
+  const certifiedScaffoldPartOptions = CERTIFIED_SCAFFOLD_PARTS.map((part) => ({
+    value: part,
+    label: part,
+  }));
+  const certifiedScaffoldMeasureOptions = CERTIFIED_SCAFFOLD_MEASURES.map((measure) => ({
+    value: measure,
+    label: measure,
+  }));
+  const isCertifiedScaffold = itemTypeSelection === 'ANDAMIO_CERTIFICADO';
+  const certifiedScaffoldNeedsMeasure =
+    isCertifiedScaffold &&
+    !!genericSkuName &&
+    !CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE.has(genericSkuName);
   const formaletaDraftName = useMemo(() => {
     if (formaletaIsAccessory) {
       const accessoryName = formaletaAccessoryName.trim();
@@ -335,11 +460,15 @@ export default function AddBulkStockPage() {
     if (!genericFamilyName.trim() || !genericSkuName.trim()) {
       return null;
     }
+    const resolvedGenericSkuName =
+      certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
+        ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+        : genericSkuName.trim();
 
     return {
       familyName: toUpperInput(genericFamilyName.trim()),
       familyCode: genericFamilyCode.trim() ? toUpperInput(genericFamilyCode.trim()) : undefined,
-      skuName: toUpperInput(genericSkuName.trim()),
+      skuName: toUpperInput(resolvedGenericSkuName),
       skuUnitWeight:
         genericSkuUnitWeight === ''
           ? undefined
@@ -370,6 +499,8 @@ export default function AddBulkStockPage() {
     genericFamilyName,
     genericFamilyCode,
     genericSkuName,
+    certifiedScaffoldMeasure,
+    certifiedScaffoldNeedsMeasure,
     genericSkuUnitWeight,
     genericSkuPrice,
     genericSkuSubrentalPrice,
@@ -381,7 +512,31 @@ export default function AddBulkStockPage() {
   ]);
 
   const payloadPreview = useMemo(() => {
-    if (!builtItem || !ownerWarehouseId || quantity === '' || Number(quantity) <= 0) {
+    if (!ownerWarehouseId || quantity === '' || Number(quantity) <= 0) {
+      return null;
+    }
+
+    if (entryMode === 'existing') {
+      if (!selectedExistingItem?.assetFamilyId) {
+        return null;
+      }
+
+      return {
+        family: {
+          id: selectedExistingItem.assetFamilyId,
+          name: selectedExistingItem.category ?? undefined,
+        },
+        sku: {
+          id: selectedExistingItem.skuId,
+          name: selectedExistingItem.skuName ?? selectedExistingItem.name ?? selectedExistingItem.skuId,
+        },
+        ownerWarehouseId,
+        warehouseId: ownerWarehouseId,
+        quantity: Number(quantity),
+      };
+    }
+
+    if (!builtItem) {
       return null;
     }
 
@@ -403,7 +558,7 @@ export default function AddBulkStockPage() {
     };
 
     return payload;
-  }, [builtItem, ownerWarehouseId, quantity]);
+  }, [builtItem, entryMode, ownerWarehouseId, quantity, selectedExistingItem]);
 
   const resetTypeForm = (type: ItemType) => {
     setIsItemConfigured(false);
@@ -429,6 +584,7 @@ export default function AddBulkStockPage() {
     setGenericFamilyName('');
     setGenericFamilyCode('');
     setGenericSkuName('');
+    setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
     setGenericSkuSubrentalPrice('');
@@ -439,6 +595,10 @@ export default function AddBulkStockPage() {
 
   const clearAllInputs = () => {
     const defaultWeightUnit = (weightUnits[0] as WeightUnit | undefined) ?? '';
+    setEntryMode('existing');
+    setExistingSkuId(null);
+    setWarehouseLocked(false);
+    setModeLocked(false);
     setItemType(null);
     setItemTypeSelection(null);
     setIsItemConfigured(false);
@@ -460,6 +620,7 @@ export default function AddBulkStockPage() {
     setGenericFamilyName('');
     setGenericFamilyCode('');
     setGenericSkuName('');
+    setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
     setGenericSkuSubrentalPrice('');
@@ -468,6 +629,83 @@ export default function AddBulkStockPage() {
     setGenericWeightUnit(defaultWeightUnit);
 
     setOwnerWarehouseId(null);
+    setQuantity('');
+  };
+
+  const handleEntryModeChange = (mode: EntryMode) => {
+    setEntryMode(mode);
+    setError(null);
+    setSuccess(null);
+    setConfirmAttempted(false);
+    setModeLocked(false);
+    setExistingSkuId(null);
+    setQuantity('');
+    if (mode === 'existing') {
+      setItemType(null);
+      setItemTypeSelection(null);
+      setIsItemConfigured(false);
+    }
+  };
+
+  const handleWarehouseChange = (value: string | null) => {
+    setOwnerWarehouseId(value);
+    setWarehouseLocked(false);
+    setModeLocked(false);
+    setExistingSkuId(null);
+    setItemType(null);
+    setItemTypeSelection(null);
+    setIsItemConfigured(false);
+    setConfirmAttempted(false);
+    setQuantity('');
+    setError(null);
+    setSuccess(null);
+  };
+
+  const confirmWarehouseSelection = () => {
+    setError(null);
+    if (!ownerWarehouseId) {
+      setError('Selecciona la bodega dueña');
+      return;
+    }
+    setWarehouseLocked(true);
+    setModeLocked(false);
+    setExistingSkuId(null);
+    setQuantity('');
+  };
+
+  const unlockWarehouseSelection = () => {
+    setWarehouseLocked(false);
+    setModeLocked(false);
+    setExistingSkuId(null);
+    setItemType(null);
+    setItemTypeSelection(null);
+    setIsItemConfigured(false);
+    setConfirmAttempted(false);
+    setQuantity('');
+  };
+
+  const confirmEntryModeSelection = () => {
+    setError(null);
+    if (!warehouseLocked) {
+      setError('Confirma primero la bodega');
+      return;
+    }
+    setModeLocked(true);
+    setExistingSkuId(null);
+    setItemType(null);
+    setItemTypeSelection(null);
+    setIsItemConfigured(false);
+    setConfirmAttempted(false);
+    setQuantity('');
+  };
+
+  const unlockEntryModeSelection = () => {
+    setModeLocked(false);
+    setExistingSkuId(null);
+    setItemType(null);
+    setItemTypeSelection(null);
+    setIsItemConfigured(false);
+    setConfirmAttempted(false);
     setQuantity('');
   };
 
@@ -509,6 +747,26 @@ export default function AddBulkStockPage() {
         block: 'center',
       });
     });
+  };
+
+  const chooseFlow = (choice: FlowChoice | 'yellow-machinery') => {
+    setFlowLeaving(true);
+    window.setTimeout(() => {
+      if (choice === 'yellow-machinery') {
+        router.push('/inventory/serialized-assets');
+        return;
+      }
+
+      setFlowChoice(choice);
+      setFlowLeaving(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 260);
+  };
+
+  const returnToFlowSelection = () => {
+    setFlowChoice(null);
+    setFlowLeaving(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const applyTypeConfiguration = () => {
@@ -572,6 +830,10 @@ export default function AddBulkStockPage() {
         setError('Ingresa el nombre del SKU para el item genérico');
         return;
       }
+      if (certifiedScaffoldNeedsMeasure && !certifiedScaffoldMeasure) {
+        setError('Selecciona la medida de la pieza');
+        return;
+      }
       if (genericChargeType === 'HOUR' && (genericMinimumChargeHours === '' || Number(genericMinimumChargeHours) <= 0)) {
         setError('Ingresa el mínimo de cobro por hora');
         return;
@@ -595,19 +857,36 @@ export default function AddBulkStockPage() {
     setError(null);
     setSuccess(null);
 
-    if (!itemType) {
-      setError('Selecciona el producto');
-      return;
-    }
-
-    if (!isItemConfigured || !builtItem) {
-      setError('Selecciona o crea una plantilla antes de agregar stock');
-      return;
-    }
-
     if (!ownerWarehouseId) {
       setError('Selecciona la bodega dueña');
       return;
+    }
+
+    if (!warehouseLocked) {
+      setError('Confirma la bodega antes de guardar');
+      return;
+    }
+
+    if (!modeLocked) {
+      setError('Confirma si vas a sumar a existente o crear item nuevo');
+      return;
+    }
+
+    if (entryMode === 'existing' && !selectedExistingItem) {
+      setError('Selecciona el item existente');
+      return;
+    }
+
+    if (entryMode === 'new') {
+      if (!itemType) {
+        setError('Selecciona el producto');
+        return;
+      }
+
+      if (!isItemConfigured || !builtItem) {
+        setError('Confirma el producto antes de agregar stock');
+        return;
+      }
     }
 
     if (quantity === '' || Number(quantity) <= 0) {
@@ -617,24 +896,37 @@ export default function AddBulkStockPage() {
 
     setSaving(true);
     try {
-      const payload: BulkPayload = {
-        family: {
-          name: builtItem.familyName,
-          code: builtItem.familyCode,
-        },
-        sku: {
-          name: builtItem.skuName,
-          unitWeight: builtItem.skuUnitWeight,
-          price: builtItem.skuPrice,
-          subrentalPrice: builtItem.skuSubrentalPrice,
-          chargeType: builtItem.chargeType,
-          minimumChargeHours: builtItem.minimumChargeHours,
-          areaM2: builtItem.areaM2,
-        },
-        ownerWarehouseId,
-        warehouseId: ownerWarehouseId,
-        quantity: Number(quantity),
-      };
+      const payload: BulkPayload =
+        entryMode === 'existing' && selectedExistingItem
+          ? {
+              family: {
+                id: selectedExistingItem.assetFamilyId ?? undefined,
+              },
+              sku: {
+                id: selectedExistingItem.skuId,
+              },
+              ownerWarehouseId,
+              warehouseId: ownerWarehouseId,
+              quantity: Number(quantity),
+            }
+          : {
+              family: {
+                name: builtItem?.familyName,
+                code: builtItem?.familyCode,
+              },
+              sku: {
+                name: builtItem?.skuName,
+                unitWeight: builtItem?.skuUnitWeight,
+                price: builtItem?.skuPrice,
+                subrentalPrice: builtItem?.skuSubrentalPrice,
+                chargeType: builtItem?.chargeType,
+                minimumChargeHours: builtItem?.minimumChargeHours,
+                areaM2: builtItem?.areaM2,
+              },
+              ownerWarehouseId,
+              warehouseId: ownerWarehouseId,
+              quantity: Number(quantity),
+            };
 
       const response = await api<CreateBulkResponse>('/inventory/bulk-adjustments', {
         method: 'POST',
@@ -642,7 +934,11 @@ export default function AddBulkStockPage() {
       });
 
       const warehouseLabel = warehouses.find((entry) => entry.id === ownerWarehouseId)?.name;
-      setSuccess(`Agregado +${response.ledger.quantity} a ${builtItem.skuName} en ${warehouseLabel}`);
+      const skuName =
+        entryMode === 'existing'
+          ? selectedExistingItem?.skuName ?? selectedExistingItem?.name ?? selectedExistingItem?.skuId
+          : builtItem?.skuName;
+      setSuccess(`Agregado +${response.ledger.quantity} a ${skuName} en ${warehouseLabel}`);
       clearAllInputs();
       router.refresh();
     } catch (err) {
@@ -659,95 +955,276 @@ export default function AddBulkStockPage() {
   };
 
   return (
-    <Container size="lg" py="xl">
+    <Container
+      size="lg"
+      py={flowChoice ? 'xl' : 0}
+      className={!flowChoice ? 'bulk-flow-page-center' : undefined}
+    >
       <Stack gap="lg">
+        {flowChoice ? (
+          <Group justify="flex-start">
+            <Button
+              variant="subtle"
+              color="gray"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={returnToFlowSelection}
+            >
+              Cambiar tipo
+            </Button>
+          </Group>
+        ) : null}
+
         <PageHeaderCard
-          title="Ingresar stock por cantidad"
-          description="Elige una plantilla del catálogo o crea una nueva y registra la entrada en bodega."
+          title={flowChoice ? 'Ingresar stock por cantidad' : 'Agregar inventario'}
+          description={
+            flowChoice
+              ? 'Elige una plantilla del catálogo o crea una nueva y registra la entrada en bodega.'
+              : 'La selección abre el formulario adecuado para el tipo de inventario.'
+          }
           icon={<IconCubePlus size={20} />}
           iconColor="green"
           accentColor="rgba(22,163,74,0.12)"
         >
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            <Paper
-              component="button"
-              type="button"
-              withBorder
-              radius="md"
-              p="xs"
-              style={{
-                cursor: 'default',
-                borderColor: 'var(--mantine-color-green-5)',
-                background: 'var(--mantine-color-green-0)',
-                textAlign: 'left',
-              }}
-            >
-              <Group gap="sm" wrap="nowrap">
-                <img
-                  src="/inventory/certified-scaffold.png"
-                  alt=""
-                  aria-hidden="true"
-                  style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
-                />
-                <Stack gap={2}>
-                  <Text fw={700} size="sm">Items por cantidad</Text>
-                  <Text size="xs" c="dimmed">Andamios, formaleta y stock bulk</Text>
-                </Stack>
-              </Group>
-            </Paper>
-            <Paper
-              component="button"
-              type="button"
-              withBorder
-              radius="md"
-              p="xs"
-              onClick={() => router.push('/inventory/serialized-assets')}
-              style={{
-                cursor: 'pointer',
-                background: 'rgba(255,255,255,0.78)',
-                textAlign: 'left',
-              }}
-            >
-              <Group gap="sm" wrap="nowrap">
-                <img
-                  src="/inventory/skid-steer-loader.png"
-                  alt=""
-                  aria-hidden="true"
-                  style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
-                />
-                <Stack gap={2}>
-                  <Text fw={700} size="sm">Equipos únicos</Text>
-                  <Text size="xs" c="dimmed">Minicargadores y activos seriales</Text>
-                </Stack>
-              </Group>
-            </Paper>
-          </SimpleGrid>
+          {!flowChoice ? (
+            <Stack className={`bulk-flow-gateway${flowLeaving ? ' is-leaving' : ''}`} gap="xl">
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+                <Paper
+                  component="button"
+                  type="button"
+                  withBorder
+                  radius="lg"
+                  p={0}
+                  className="bulk-flow-card"
+                  onClick={() => chooseFlow('bulk')}
+                >
+                  <img
+                    src="/inventory/certified-scaffold-cutout.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="bulk-flow-card-image"
+                  />
+                  <Stack gap="sm" p="md">
+                    <Group justify="space-between" align="center">
+                      <Text fw={800} size="lg">Item por cantidad</Text>
+                      <Badge color="green" variant="light">Stock masivo</Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      Formaleta, andamio certificado, encofrado y referencias que se controlan por unidades.
+                    </Text>
+                    <Text className="bulk-flow-card-action" c="green" fw={700}>
+                      Continuar
+                    </Text>
+                  </Stack>
+                </Paper>
 
-        </PageHeaderCard>
+                <Paper
+                  component="button"
+                  type="button"
+                  withBorder
+                  radius="lg"
+                  p={0}
+                  className="bulk-flow-card bulk-flow-card-yellow"
+                  onClick={() => chooseFlow('yellow-machinery')}
+                >
+                  <img
+                    src="/inventory/skid-steer-loader-cutout.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="bulk-flow-card-image"
+                  />
+                  <Stack gap="sm" p="md">
+                    <Group justify="space-between" align="center">
+                      <Text fw={800} size="lg">Maquinaria amarilla</Text>
+                      <Badge color="yellow" variant="light">Equipo único</Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      Minicargadores, equipos serializados y activos que se administran individualmente.
+                    </Text>
+                    <Text className="bulk-flow-card-action" c="yellow" fw={700}>
+                      Continuar
+                    </Text>
+                  </Stack>
+                </Paper>
+              </SimpleGrid>
+            </Stack>
+          ) : null}
 
-        {error ? (
-          <Alert color="red" variant="light" title="No se pudo completar la acción">
-            {error}
-          </Alert>
-        ) : null}
-
-        {success ? (
-          <Alert color="green" variant="light" title="Movimiento registrado">
-            {success}
-          </Alert>
-        ) : null}
-
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <Stack gap="lg">
-            <Paper ref={entrySectionRef} withBorder radius="lg" p="md">
+        {flowChoice ? (
+          <Stack gap="lg" className="bulk-flow-form">
+            <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
+                <Group justify="space-between" align="flex-start" className="mobile-stack">
+                  <div>
+                    <Text fw={700}>1. Bodega</Text>
+                    <Text size="sm" c="dimmed">
+                      Selecciona dónde va a quedar ubicado inicialmente el stock.
+                    </Text>
+                  </div>
+                  {warehouseLocked ? (
+                    <Badge color="green" variant="light">
+                      Confirmada
+                    </Badge>
+                  ) : null}
+                </Group>
+
+                <Select
+                  label="Bodega dueña"
+                  data={warehouseOptions}
+                  value={ownerWarehouseId}
+                  onChange={handleWarehouseChange}
+                  placeholder={loading ? 'Cargando...' : 'Selecciona bodega'}
+                  disabled={loading || warehouseLocked}
+                  required
+                />
+
+                <Group justify="flex-end" className="mobile-actions">
+                  {warehouseLocked ? (
+                    <Button variant="default" onClick={unlockWarehouseSelection}>
+                      Cambiar bodega
+                    </Button>
+                  ) : (
+                    <Button onClick={confirmWarehouseSelection}>
+                      Siguiente
+                    </Button>
+                  )}
+                </Group>
+              </Stack>
+            </Paper>
+
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" className="mobile-stack">
+                  <div>
+                    <Text fw={700}>2. Operación</Text>
+                    <Text size="sm" c="dimmed">
+                      Elige si vas a sumar a un item existente o crear uno nuevo.
+                    </Text>
+                  </div>
+                  {modeLocked ? (
+                    <Badge color="green" variant="light">
+                      Confirmada
+                    </Badge>
+                  ) : null}
+                </Group>
+
+                {!warehouseLocked ? (
+                  <Paper radius="md" p="sm" bg="gray.0">
+                    <Text size="sm" c="dimmed">
+                      Confirma primero la bodega.
+                    </Text>
+                  </Paper>
+                ) : null}
+
+                {warehouseLocked ? (
+                  <>
                 <div>
-                  <Text fw={700}>1. Producto</Text>
+                  <Text fw={700}>Tipo de entrada</Text>
                   <Text size="sm" c="dimmed">
-                    Elige el tipo de producto que deseas agregar.
+                    Esta selección queda bloqueada al continuar.
                   </Text>
                 </div>
 
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                  <Paper
+                    component="button"
+                    type="button"
+                    withBorder
+                    radius="md"
+                    p="md"
+                    onClick={() => handleEntryModeChange('existing')}
+                    disabled={modeLocked}
+                    style={{
+                      cursor: modeLocked ? 'default' : 'pointer',
+                      borderColor: entryMode === 'existing' ? 'var(--mantine-color-green-5)' : undefined,
+                      background: entryMode === 'existing' ? 'var(--mantine-color-green-0)' : 'white',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Stack gap={4}>
+                      <Text fw={700}>Sumar a existente</Text>
+                      <Text size="sm" c="dimmed">Usa un item ya creado en inventario.</Text>
+                    </Stack>
+                  </Paper>
+                  <Paper
+                    component="button"
+                    type="button"
+                    withBorder
+                    radius="md"
+                    p="md"
+                    onClick={() => handleEntryModeChange('new')}
+                    disabled={modeLocked}
+                    style={{
+                      cursor: modeLocked ? 'default' : 'pointer',
+                      borderColor: entryMode === 'new' ? 'var(--mantine-color-blue-5)' : undefined,
+                      background: entryMode === 'new' ? 'var(--mantine-color-blue-0)' : 'white',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Stack gap={4}>
+                      <Text fw={700}>Crear item nuevo</Text>
+                      <Text size="sm" c="dimmed">Crea la plantilla y registra stock.</Text>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
+
+                <Group justify="flex-end" className="mobile-actions">
+                  {modeLocked ? (
+                    <Button variant="default" onClick={unlockEntryModeSelection}>
+                      Cambiar selección
+                    </Button>
+                  ) : (
+                    <Button onClick={confirmEntryModeSelection}>
+                      Confirmar selección
+                    </Button>
+                  )}
+                </Group>
+                  </>
+                ) : null}
+
+                {warehouseLocked && modeLocked && entryMode === 'existing' ? (
+                  <Stack gap="md">
+                    <Select
+                      label="Item existente"
+                      data={existingItemOptions}
+                      value={existingSkuId}
+                      onChange={(value) => {
+                        setExistingSkuId(value);
+                        if (value) scrollToEntrySection();
+                      }}
+                      placeholder={
+                        !ownerWarehouseId
+                          ? 'Selecciona bodega primero'
+                          : existingItemsLoading
+                            ? 'Cargando inventario...'
+                            : 'Selecciona item'
+                      }
+                      disabled={!ownerWarehouseId || existingItemsLoading}
+                      searchable
+                      nothingFoundMessage="Sin items por cantidad"
+                      required
+                    />
+
+                    {selectedExistingItem ? (
+                      <Paper radius="md" p="sm" bg="green.0">
+                        <Group justify="space-between" align="center">
+                          <Stack gap={2}>
+                            <Text size="sm" fw={700}>
+                              {selectedExistingItem.skuName ?? selectedExistingItem.name}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {selectedExistingItem.category ?? 'Sin familia'} · Actual: {selectedExistingItem.quantity}
+                            </Text>
+                          </Stack>
+                          <Badge color="green" variant="light">
+                            Listo
+                          </Badge>
+                        </Group>
+                      </Paper>
+                    ) : null}
+                  </Stack>
+                ) : null}
+
+                {warehouseLocked && modeLocked && entryMode === 'new' ? (
                 <Stack gap="md">
                   <Select
                     label="Familia"
@@ -1023,34 +1500,74 @@ export default function AddBulkStockPage() {
                   {itemType === 'GENERIC' ? (
                       <Paper radius="md" p="md" bg="gray.0">
                         <Stack gap="md">
-                          <Group grow className="mobile-stack">
+                          {isCertifiedScaffold ? (
+                            <>
+                              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                                <Select
+                                  label="Referencia"
+                                  data={certifiedScaffoldPartOptions}
+                                  value={genericSkuName || null}
+                                  onChange={(value) => {
+                                    setGenericSkuName(value ?? '');
+                                    if (!value || CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE.has(value)) {
+                                      setCertifiedScaffoldMeasure('');
+                                    }
+                                    setIsItemConfigured(false);
+                                  }}
+                                  placeholder="Selecciona pieza"
+                                  searchable
+                                  required
+                                />
+                                {certifiedScaffoldNeedsMeasure ? (
+                                  <Select
+                                    label="Medida"
+                                    data={certifiedScaffoldMeasureOptions}
+                                    value={certifiedScaffoldMeasure || null}
+                                    onChange={(value) => {
+                                      setCertifiedScaffoldMeasure(value ?? '');
+                                      setIsItemConfigured(false);
+                                    }}
+                                    placeholder="Selecciona medida"
+                                    searchable
+                                    required
+                                  />
+                                ) : null}
+                              </SimpleGrid>
+                              <Paper
+                                radius="md"
+                                p="sm"
+                                bg={
+                                  genericSkuName && (!certifiedScaffoldNeedsMeasure || certifiedScaffoldMeasure)
+                                    ? 'green.0'
+                                    : 'gray.0'
+                                }
+                              >
+                                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                                  SKU final
+                                </Text>
+                                <Text size="sm" mt={4}>
+                                  {genericSkuName && certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
+                                    ? `${genericSkuName} (${certifiedScaffoldMeasure})`
+                                    : genericSkuName && !certifiedScaffoldNeedsMeasure
+                                      ? genericSkuName
+                                      : certifiedScaffoldNeedsMeasure
+                                        ? 'Selecciona referencia y medida.'
+                                        : 'Selecciona referencia.'}
+                                </Text>
+                              </Paper>
+                            </>
+                          ) : (
                             <TextInput
-                              label="Familia"
-                              value={genericFamilyName}
+                              label="Referencia"
+                              value={genericSkuName}
                               onChange={(event) => {
-                                setGenericFamilyName(toUpperInput(event.currentTarget.value));
+                                setGenericSkuName(toUpperInput(event.currentTarget.value));
                                 setIsItemConfigured(false);
                               }}
-                              placeholder="Ej: ANDAMIO MULTIDIRECCIONAL"
+                              placeholder="Ej: VERTICAL 3.00M"
                               required
                             />
-                            <TextInput
-                              label="Código"
-                              value={genericFamilyCode}
-                              onChange={(event) => setGenericFamilyCode(toUpperInput(event.currentTarget.value))}
-                              placeholder="Ej: AND-MULTI"
-                            />
-                          </Group>
-                          <TextInput
-                            label="Referencia"
-                            value={genericSkuName}
-                            onChange={(event) => {
-                              setGenericSkuName(toUpperInput(event.currentTarget.value));
-                              setIsItemConfigured(false);
-                            }}
-                            placeholder="Ej: VERTICAL 3.00M"
-                            required
-                          />
+                          )}
                           <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
                             <NumberInput
                               label="Peso"
@@ -1146,6 +1663,7 @@ export default function AddBulkStockPage() {
                     </Group>
                   ) : null}
                 </Stack>
+                ) : null}
 
                 {builtItem ? (
                   <Paper radius="md" p="sm" bg="green.0">
@@ -1167,40 +1685,42 @@ export default function AddBulkStockPage() {
               </Stack>
             </Paper>
 
-            <Paper withBorder radius="lg" p="md">
+            <Paper ref={entrySectionRef} withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>2. Entrada a bodega</Text>
+                  <Text fw={700}>3. Cantidad</Text>
                   <Text size="sm" c="dimmed">
-                    El stock quedará ubicado inicialmente en la misma bodega dueña.
+                    {entryMode === 'existing'
+                      ? 'La entrada se suma al item seleccionado en su bodega dueña.'
+                      : 'El stock quedará ubicado inicialmente en la misma bodega dueña.'}
                   </Text>
                 </div>
 
-                <Select
-                  label="Bodega dueña"
-                  data={warehouseOptions}
-                  value={ownerWarehouseId}
-                  onChange={(value) => setOwnerWarehouseId(value)}
-                  required
-                />
-
-                <NumberInput
-                  label="Cantidad"
-                  value={quantity}
-                  onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
-                  min={0}
-                  step={1}
-                  required
-                />
+                {warehouseLocked && modeLocked ? (
+                  <NumberInput
+                    label="Cantidad"
+                    value={quantity}
+                    onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
+                    min={0}
+                    step={1}
+                    required
+                  />
+                ) : (
+                  <Paper radius="md" p="sm" bg="gray.0">
+                    <Text size="sm" c="dimmed">
+                      Confirma bodega y operación para ingresar cantidad.
+                    </Text>
+                  </Paper>
+                )}
               </Stack>
             </Paper>
 
             <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>3. Revisión</Text>
+                  <Text fw={700}>4. Revisión</Text>
                   <Text size="sm" c="dimmed">
-                    Confirma producto, bodega y cantidad antes de guardar.
+                    Revisa el movimiento antes de ejecutar.
                   </Text>
                 </div>
 
@@ -1251,12 +1771,30 @@ export default function AddBulkStockPage() {
               <Button variant="default" onClick={() => router.back()}>
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit} loading={saving} leftSection={<IconPlus size={16} />}>
-                Guardar entrada
+              <Button
+                onClick={handleSubmit}
+                loading={saving}
+                disabled={!payloadPreview}
+                leftSection={<IconPlus size={16} />}
+              >
+                Ejecutar entrada
               </Button>
             </Group>
           </Stack>
-        </Paper>
+        ) : null}
+        </PageHeaderCard>
+
+        {error ? (
+          <Alert color="red" variant="light" title="No se pudo completar la acción">
+            {error}
+          </Alert>
+        ) : null}
+
+        {success ? (
+          <Alert color="green" variant="light" title="Movimiento registrado">
+            {success}
+          </Alert>
+        ) : null}
       </Stack>
     </Container>
   );

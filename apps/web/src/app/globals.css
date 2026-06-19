@@ -38,6 +38,107 @@ a {
   cursor: not-allowed;
 }
 
+.scaffold-modulation-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 30%) 1fr;
+  gap: var(--mantine-spacing-md);
+}
+
+.bulk-flow-page-center {
+  align-items: center;
+  display: flex;
+  min-height: calc(100vh - 32px);
+  width: 100%;
+}
+
+.bulk-flow-page-center > .mantine-Stack-root {
+  width: 100%;
+}
+
+.bulk-flow-gateway {
+  animation: bulk-flow-enter 320ms ease-out both;
+  padding-top: calc(var(--mantine-spacing-xl) * 0.625);
+}
+
+.bulk-flow-gateway.is-leaving {
+  animation: bulk-flow-leave 260ms ease-in both;
+}
+
+.bulk-flow-card {
+  appearance: none;
+  background: #ffffff;
+  cursor: pointer;
+  display: block;
+  overflow: hidden;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+  width: 100%;
+}
+
+.bulk-flow-card:hover {
+  border-color: var(--mantine-color-green-5);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.11);
+  transform: translateY(-2px);
+}
+
+.bulk-flow-card-yellow:hover {
+  border-color: #d99a18;
+}
+
+.bulk-flow-card-image {
+  aspect-ratio: 16 / 10.5;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.72));
+  display: block;
+  object-fit: contain;
+  padding: 20px;
+  width: 100%;
+}
+
+.bulk-flow-card-action {
+  align-items: center;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: var(--mantine-radius-md);
+  display: flex;
+  justify-content: center;
+  min-height: 38px;
+}
+
+.bulk-flow-card-yellow .bulk-flow-card-action {
+  background: rgba(217, 154, 24, 0.13);
+  color: #8a5a00 !important;
+}
+
+.bulk-flow-form {
+  animation: bulk-flow-enter 280ms ease-out both;
+}
+
+@keyframes bulk-flow-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bulk-flow-leave {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
 /* Responsive base rules shared across all modules. */
 @media (max-width: 1024px) {
   .mantine-Container-root {
@@ -82,7 +183,11 @@ a {
   }
 
   .mantine-Paper-root {
-    padding: 12px !important;
+    padding: 16px !important;
+  }
+
+  .mantine-Card-root {
+    padding: 16px !important;
   }
 
   .mantine-Table-root {
@@ -125,4 +230,9 @@ a {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  .scaffold-modulation-grid {
+    grid-template-columns: 1fr;
+  }
+
 }

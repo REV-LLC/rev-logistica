@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 280" fill="none">
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 236H368" stroke="#cbd5e1" stroke-width="8"/>
+    <path d="M78 232V54M160 232V54M260 232V54M342 232V54" stroke="#475569" stroke-width="9"/>
+    <path d="M70 56H350M70 116H350M70 176H350" stroke="#64748b" stroke-width="9"/>
+    <path d="M82 58L160 116M160 58L78 116M260 58L342 116M342 58L260 116" stroke="#94a3b8" stroke-width="7"/>
+    <path d="M80 118L160 176M160 118L80 176M260 118L342 176M342 118L260 176" stroke="#94a3b8" stroke-width="7"/>
+    <path d="M160 58L260 116M260 58L160 116M160 118L260 176M260 118L160 176" stroke="#94a3b8" stroke-width="6"/>
+    <path d="M52 236H104M134 236H186M234 236H286M316 236H368" stroke="#64748b" stroke-width="10"/>
+    <path d="M66 232H92M148 232H174M248 232H274M330 232H356" stroke="#334155" stroke-width="6"/>
+    <path d="M72 48H356" stroke="#e2e8f0" stroke-width="6"/>
+    <path d="M112 80V96M212 80V96M310 80V96M112 140V156M212 140V156M310 140V156" stroke="#f2b233" stroke-width="9"/>
+    <circle cx="78" cy="54" r="8" fill="#e2e8f0"/>
+    <circle cx="160" cy="54" r="8" fill="#e2e8f0"/>
+    <circle cx="260" cy="54" r="8" fill="#e2e8f0"/>
+    <circle cx="342" cy="54" r="8" fill="#e2e8f0"/>
+  </g>
+</svg>
