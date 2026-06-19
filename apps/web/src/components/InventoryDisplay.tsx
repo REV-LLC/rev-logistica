@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Button, Card, Group, Paper, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
@@ -110,6 +110,7 @@ export default function InventoryDisplay({
           string,
           {
             skuId: string;
+            assetFamilyId: string | null;
             name: string;
             category: string;
             chargeType: string | null;
@@ -128,6 +129,7 @@ export default function InventoryDisplay({
       const ownerWarehouseName = item.ownerWarehouseName ?? '-';
       const name = item.name ?? item.skuName ?? '-';
       const category = item.category ?? '-';
+      const assetFamilyId = item.assetFamilyId ?? null;
       const chargeType = item.chargeType ?? null;
       const minimumChargeHours = item.minimumChargeHours ?? null;
 
@@ -135,6 +137,7 @@ export default function InventoryDisplay({
       if (!existing) {
         map.set(key, {
           skuId: item.skuId,
+          assetFamilyId,
           name,
           category,
           chargeType,
@@ -169,6 +172,47 @@ export default function InventoryDisplay({
     });
   }, [bulk, bulkOwnerStackMode]);
 
+  const bulkFamilyGroups = useMemo(() => {
+    const rows = bulkOwnerStackMode && groupedBulk ? groupedBulk : bulk;
+    const map = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        totalQuantity: number;
+        itemCount: number;
+        items: typeof rows;
+      }
+    >();
+
+    rows.forEach((item) => {
+      const familyName = item.category || 'Sin familia';
+      const familyId = item.assetFamilyId || familyName;
+      const totalQuantity =
+        'owners' in item
+          ? item.owners.reduce((sum, owner) => sum + owner.quantity, 0)
+          : item.quantity;
+      const current = map.get(familyId);
+
+      if (!current) {
+        map.set(familyId, {
+          id: familyId,
+          name: familyName,
+          totalQuantity,
+          itemCount: 1,
+          items: [item] as typeof rows,
+        });
+        return;
+      }
+
+      current.totalQuantity += totalQuantity;
+      current.itemCount += 1;
+      current.items = [...current.items, item] as typeof rows;
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [bulk, bulkOwnerStackMode, groupedBulk]);
+
   return (
     <Stack gap="lg">
       {showBulkSection && (
@@ -182,32 +226,121 @@ export default function InventoryDisplay({
             )}
           </Group>
 
-          <Card withBorder>
-            {!isMobile ? (
-              <Table striped highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Nombre</Table.Th>
-                    <Table.Th>Categoría</Table.Th>
-                    <Table.Th>Cobro</Table.Th>
-                    <Table.Th>Bodega dueña</Table.Th>
-                    <Table.Th>Cantidad</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {bulkOwnerStackMode && groupedBulk
-                    ? groupedBulk.map((item) => (
-                        <Table.Tr key={item.skuId}>
-                          <Table.Td>{item.name}</Table.Td>
-                          <Table.Td>{item.category}</Table.Td>
-                          <Table.Td>
-                            {formatCharge(item.chargeType, item.minimumChargeHours)}
-                          </Table.Td>
-                          <Table.Td>
-                            <Group gap={6} wrap="wrap">
+          <Stack gap="md">
+            {bulkFamilyGroups.map((group) => (
+              <Paper key={group.id} withBorder radius="md" p={{ base: 'sm', md: 'md' }}>
+                <Stack gap="sm">
+                  <Group justify="space-between" align="center" wrap="wrap">
+                    <div>
+                      <Text fw={800}>{group.name}</Text>
+                      <Text size="sm" c="dimmed">
+                        {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
+                      </Text>
+                    </div>
+                    {quantityBadge(group.totalQuantity, 'orange')}
+                  </Group>
+
+                  {!isMobile ? (
+                    <Table striped highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Nombre</Table.Th>
+                          <Table.Th>Cobro</Table.Th>
+                          <Table.Th>Bodega dueña</Table.Th>
+                          <Table.Th>Cantidad</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {group.items.map((item) =>
+                          'owners' in item ? (
+                            <Table.Tr key={item.skuId}>
+                              <Table.Td>{item.name}</Table.Td>
+                              <Table.Td>
+                                {formatCharge(item.chargeType, item.minimumChargeHours)}
+                              </Table.Td>
+                              <Table.Td>
+                                <Group gap={6} wrap="wrap">
+                                  {item.visibleOwners.map((owner) => (
+                                    <Badge
+                                      key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
+                                      color={ownerColorById(owner.ownerWarehouseId)}
+                                      variant="light"
+                                    >
+                                      {owner.ownerWarehouseName}
+                                    </Badge>
+                                  ))}
+                                  {item.hiddenOwnersCount > 0 ? (
+                                    <Badge color="green" variant="filled">
+                                      +{item.hiddenOwnersCount} más
+                                    </Badge>
+                                  ) : null}
+                                </Group>
+                              </Table.Td>
+                              <Table.Td>
+                                <Group gap={6} wrap="wrap">
+                                  {item.visibleOwners.map((owner) => (
+                                    <Badge
+                                      key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
+                                      color={
+                                        isNegativeQuantity(owner.quantity)
+                                          ? 'red'
+                                          : ownerColorById(owner.ownerWarehouseId)
+                                      }
+                                      variant="filled"
+                                      leftSection={
+                                        isNegativeQuantity(owner.quantity) ? (
+                                          <IconAlertTriangle size={12} stroke={2.5} />
+                                        ) : undefined
+                                      }
+                                    >
+                                      {owner.quantity}
+                                    </Badge>
+                                  ))}
+                                  {item.hiddenOwnersCount > 0 ? (
+                                    <Badge color="green" variant="light">
+                                      +{item.hiddenOwnersCount} más
+                                    </Badge>
+                                  ) : null}
+                                </Group>
+                              </Table.Td>
+                            </Table.Tr>
+                          ) : (
+                            <Table.Tr key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}>
+                              <Table.Td>{item.name ?? item.skuName ?? '-'}</Table.Td>
+                              <Table.Td>
+                                {formatCharge(item.chargeType, item.minimumChargeHours)}
+                              </Table.Td>
+                              <Table.Td>{item.ownerWarehouseName ?? '-'}</Table.Td>
+                              <Table.Td>
+                                {isNegativeQuantity(item.quantity) ? (
+                                  <Group gap={6} wrap="nowrap">
+                                    <IconAlertTriangle size={16} stroke={2.5} color="var(--mantine-color-red-7)" />
+                                    <Text c="red" fw={700}>
+                                      {item.quantity}
+                                    </Text>
+                                  </Group>
+                                ) : (
+                                  item.quantity
+                                )}
+                              </Table.Td>
+                            </Table.Tr>
+                          ),
+                        )}
+                      </Table.Tbody>
+                    </Table>
+                  ) : (
+                    <Stack gap="sm">
+                      {group.items.map((item) =>
+                        'owners' in item ? (
+                          <Card key={item.skuId} withBorder padding="sm" radius="md">
+                            <Text fw={700}>{item.name}</Text>
+                            <Text size="xs" c="dimmed">
+                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+                            </Text>
+                            <Group mt="xs" gap={6} wrap="wrap">
                               {item.visibleOwners.map((owner) => (
                                 <Badge
-                                  key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
+                                  key={`${item.skuId}-owner-mobile-${owner.ownerWarehouseId}`}
                                   color={ownerColorById(owner.ownerWarehouseId)}
                                   variant="light"
                                 >
@@ -220,26 +353,11 @@ export default function InventoryDisplay({
                                 </Badge>
                               ) : null}
                             </Group>
-                          </Table.Td>
-                          <Table.Td>
-                            <Group gap={6} wrap="wrap">
+                            <Group mt={6} gap={6} wrap="wrap">
                               {item.visibleOwners.map((owner) => (
-                                <Badge
-                                  key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
-                                  color={
-                                    isNegativeQuantity(owner.quantity)
-                                      ? 'red'
-                                      : ownerColorById(owner.ownerWarehouseId)
-                                  }
-                                  variant="filled"
-                                  leftSection={
-                                    isNegativeQuantity(owner.quantity) ? (
-                                      <IconAlertTriangle size={12} stroke={2.5} />
-                                    ) : undefined
-                                  }
-                                >
-                                  {owner.quantity}
-                                </Badge>
+                                <span key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}>
+                                  {quantityBadge(owner.quantity, ownerColorById(owner.ownerWarehouseId))}
+                                </span>
                               ))}
                               {item.hiddenOwnersCount > 0 ? (
                                 <Badge color="green" variant="light">
@@ -247,112 +365,45 @@ export default function InventoryDisplay({
                                 </Badge>
                               ) : null}
                             </Group>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))
-                    : bulk.map((item) => (
-                        <Table.Tr key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}>
-                          <Table.Td>{item.name ?? item.skuName ?? '-'}</Table.Td>
-                          <Table.Td>{item.category ?? '-'}</Table.Td>
-                          <Table.Td>
-                            {formatCharge(item.chargeType, item.minimumChargeHours)}
-                          </Table.Td>
-                          <Table.Td>{item.ownerWarehouseName ?? '-'}</Table.Td>
-                          <Table.Td>
-                            {isNegativeQuantity(item.quantity) ? (
-                              <Group gap={6} wrap="nowrap">
-                                <IconAlertTriangle size={16} stroke={2.5} color="var(--mantine-color-red-7)" />
-                                <Text c="red" fw={700}>
+                          </Card>
+                        ) : (
+                          <Card
+                            key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}
+                            withBorder
+                            padding="sm"
+                            radius="md"
+                          >
+                            <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
+                            <Text size="xs" c="dimmed">
+                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+                            </Text>
+                            <Text mt="xs">
+                              <strong>Cantidad:</strong>{' '}
+                              {isNegativeQuantity(item.quantity) ? (
+                                <Text span c="red" fw={700}>
+                                  <IconAlertTriangle
+                                    size={14}
+                                    stroke={2.5}
+                                    style={{ verticalAlign: 'text-bottom' }}
+                                  />{' '}
                                   {item.quantity}
                                 </Text>
-                              </Group>
-                            ) : (
-                              item.quantity
-                            )}
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                </Table.Tbody>
-              </Table>
-            ) : (
-              <Stack gap="sm">
-                {bulkOwnerStackMode && groupedBulk
-                  ? groupedBulk.map((item) => (
-                      <Card key={item.skuId} withBorder padding="sm" radius="md">
-                        <Text fw={700}>{item.name}</Text>
-                        <Text size="xs" c="dimmed">
-                          {item.category}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-                        </Text>
-                        <Group mt="xs" gap={6} wrap="wrap">
-                          {item.visibleOwners.map((owner) => (
-                            <Badge
-                              key={`${item.skuId}-owner-mobile-${owner.ownerWarehouseId}`}
-                              color={ownerColorById(owner.ownerWarehouseId)}
-                              variant="light"
-                            >
-                              {owner.ownerWarehouseName}
-                            </Badge>
-                          ))}
-                          {item.hiddenOwnersCount > 0 ? (
-                            <Badge color="green" variant="filled">
-                              +{item.hiddenOwnersCount} más
-                            </Badge>
-                          ) : null}
-                        </Group>
-                        <Group mt={6} gap={6} wrap="wrap">
-                          {item.visibleOwners.map((owner) => (
-                            <span key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}>
-                              {quantityBadge(owner.quantity, ownerColorById(owner.ownerWarehouseId))}
-                            </span>
-                          ))}
-                          {item.hiddenOwnersCount > 0 ? (
-                            <Badge color="green" variant="light">
-                              +{item.hiddenOwnersCount} más
-                            </Badge>
-                          ) : null}
-                        </Group>
-                      </Card>
-                    ))
-                  : bulk.map((item) => (
-                      <Card
-                        key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}
-                        withBorder
-                        padding="sm"
-                        radius="md"
-                      >
-                        <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
-                        <Text size="xs" c="dimmed">
-                          {item.category ?? '-'}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-                        </Text>
-                        <Text mt="xs">
-                          <strong>Cantidad:</strong>{' '}
-                          {isNegativeQuantity(item.quantity) ? (
-                            <Text span c="red" fw={700}>
-                              <IconAlertTriangle
-                                size={14}
-                                stroke={2.5}
-                                style={{ verticalAlign: 'text-bottom' }}
-                              />{' '}
-                              {item.quantity}
+                              ) : (
+                                item.quantity
+                              )}
                             </Text>
-                          ) : (
-                            item.quantity
-                          )}
-                        </Text>
-                        <Text size="sm">
-                          <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
-                        </Text>
-                      </Card>
-                    ))}
-              </Stack>
-            )}
-          </Card>
+                            <Text size="sm">
+                              <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
+                            </Text>
+                          </Card>
+                        ),
+                      )}
+                    </Stack>
+                  )}
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
         </section>
       )}
 

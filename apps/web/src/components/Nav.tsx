@@ -12,6 +12,7 @@ import {
   IconClipboardList,
   IconBox,
   IconDatabaseExport,
+  IconRulerMeasure,
   IconMap2,
   IconReceipt,
   IconTruck,
@@ -48,6 +49,7 @@ const sections: NavSection[] = [
     links: [
       { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
       { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/inventory/scaffold-modulations', label: 'Modulaciones', icon: IconRulerMeasure, roles: ['ADMIN', 'OFFICE'] },
       {
         href: '/inventory/bulk-adjustments',
         label: 'Agregar inventario',

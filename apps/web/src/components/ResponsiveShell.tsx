@@ -14,6 +14,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = 
   { prefix: '/tasks', title: 'Pendientes', subtitle: 'Seguimiento operativo' },
   { prefix: '/inventory/warehouse', title: 'Bodegas', subtitle: 'Control de inventario' },
   { prefix: '/inventory/ledger', title: 'Movimientos', subtitle: 'Trazabilidad' },
+  { prefix: '/inventory/scaffold-modulations', title: 'Modulaciones', subtitle: 'Andamio certificado' },
   { prefix: '/inventory/bulk-adjustments', title: 'Agregar inventario', subtitle: 'Ingreso masivo' },
   { prefix: '/inventory/serialized-assets', title: 'Agregar inventario', subtitle: 'Equipos unicos' },
   { prefix: '/billing/prefactura', title: 'Prefactura', subtitle: 'Corte y resumen' },
