@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import StatCard from '@/components/dashboard/StatCard';
 import { useRouter } from 'next/navigation';
 import {
   ActionIcon,
@@ -25,10 +23,8 @@ import {
   Text,
   TextInput,
   ThemeIcon,
-  Title
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import { IconAdjustments, IconBuildingWarehouse, IconEdit, IconHomeCog, IconPackage, IconPlus } from '@tabler/icons-react';
+import { IconEdit, IconPlus } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
 
 interface InventoryResponse {
@@ -70,13 +66,11 @@ type Owner = {
 
 export default function WarehouseInventoryPage() {
   const router = useRouter();
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
-  const [viewFilter, setViewFilter] = useState<'ALL' | 'BULK' | 'SERIAL'>('ALL');
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [reauthEmail, setReauthEmail] = useState('');
   const [reauthPassword, setReauthPassword] = useState('');
@@ -479,23 +473,6 @@ export default function WarehouseInventoryPage() {
       })
     : [];
 
-  const metrics = useMemo(() => {
-    const activeWarehouses = warehouses.filter((warehouse) => warehouse.active).length;
-    const bulkCount = data?.bulk.length ?? 0;
-    const serialCount = data?.serial.length ?? 0;
-    return {
-      totalWarehouses: warehouses.length,
-      activeWarehouses,
-      bulkCount,
-      serialCount,
-    };
-  }, [warehouses, data]);
-
-  const selectedWarehouse = useMemo(
-    () => warehouses.find((warehouse) => warehouse.id === warehouseId) ?? null,
-    [warehouses, warehouseId],
-  );
-
   const warehouseCards = useMemo(
     () =>
       warehouses.map((warehouse) => {
@@ -521,50 +498,6 @@ export default function WarehouseInventoryPage() {
     <main>
       <Container size="xl" py="xl">
         <Stack gap="lg">
-          <PageHeaderCard
-            title="Bodegas"
-            description="Administra bodegas y consulta su inventario en tiempo real."
-            icon={<IconBuildingWarehouse size={20} />}
-            iconColor="orange"
-            accentColor="rgba(234,88,12,0.12)"
-            aside={
-              <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
-                Crear bodega
-              </Button>
-            }
-          >
-            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-              <StatCard
-                label="Bodegas"
-                value={String(metrics.totalWarehouses)}
-                hint="Registradas en el sistema"
-                color="orange"
-                icon={<IconBuildingWarehouse size={20} />}
-              />
-              <StatCard
-                label="Activas"
-                value={String(metrics.activeWarehouses)}
-                hint="Operativas actualmente"
-                color="green"
-                icon={<IconHomeCog size={20} />}
-              />
-              <StatCard
-                label="Bulk"
-                value={String(metrics.bulkCount)}
-                hint="Items masivos cargados"
-                color="blue"
-                icon={<IconPackage size={20} />}
-              />
-              <StatCard
-                label="Serial"
-                value={String(metrics.serialCount)}
-                hint="Equipos únicos visibles"
-                color="grape"
-                icon={<IconAdjustments size={20} />}
-              />
-            </SimpleGrid>
-          </PageHeaderCard>
-
           {warehousesError ? (
             <Alert color="red" variant="light" title="No se pudieron cargar las bodegas">
               {warehousesError}
@@ -583,12 +516,17 @@ export default function WarehouseInventoryPage() {
 
           <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
             <Stack gap="md">
-              <div>
-                <Text fw={700}>Inventario por bodega</Text>
-                <Text size="sm" c="dimmed">
-                  Toca una bodega para cargar su inventario. Más adelante esta tarjeta puede usar el logo real de la bodega.
-                </Text>
-              </div>
+              <Group justify="space-between" align="flex-start" wrap="wrap">
+                <div>
+                  <Text fw={700}>Inventario por bodega</Text>
+                  <Text size="sm" c="dimmed">
+                    Toca una bodega para cargar su inventario.
+                  </Text>
+                </div>
+                <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
+                  Crear bodega
+                </Button>
+              </Group>
 
               <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
                 {warehouseCards.map((warehouse) => (
@@ -685,29 +623,6 @@ export default function WarehouseInventoryPage() {
                 ))}
               </SimpleGrid>
 
-              <Group align="flex-end" justify="space-between" wrap="wrap">
-                <div>
-                  <Text fw={700}>
-                    {selectedWarehouse ? selectedWarehouse.name : 'Ninguna bodega seleccionada'}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {selectedWarehouse
-                      ? 'La vista de inventario corresponde a la bodega cargada.'
-                      : 'Selecciona una bodega para consultar existencias.'}
-                  </Text>
-                </div>
-                <Select
-                  label="Ver"
-                  value={viewFilter}
-                  onChange={(value) => setViewFilter((value as typeof viewFilter) ?? 'ALL')}
-                  data={[
-                    { value: 'ALL', label: 'Todo' },
-                    { value: 'BULK', label: 'Stock masivo' },
-                    { value: 'SERIAL', label: 'Serial' }
-                  ]}
-                  w={180}
-                />
-              </Group>
             </Stack>
           </Paper>
 
@@ -724,7 +639,6 @@ export default function WarehouseInventoryPage() {
                   bulk={data.bulk}
                   serial={data.serial}
                   onAdjust={openAdjust}
-                  viewFilter={viewFilter}
                 />
               </Stack>
             </Paper>
@@ -833,50 +747,94 @@ export default function WarehouseInventoryPage() {
         opened={createOpen}
         onClose={() => setCreateOpen(false)}
         title="Crear bodega"
+        size="lg"
       >
-        <TextInput
-          label="Nombre"
-          value={createName}
-          onChange={(event) => setCreateName(event.target.value)}
-        />
-        <Select
-          label="Tipo"
-          data={typeOptions}
-          value={createType}
-          onChange={(value) => setCreateType((value as 'OWN' | 'ALLY') ?? 'OWN')}
-          mt="sm"
-        />
-        <Select
-          label="Empresa dueña"
-          placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
-          data={ownerOptions}
-          value={createOwnerCompanyId}
-          onChange={(value) => setCreateOwnerCompanyId(value)}
-          mt="sm"
-          disabled={ownersLoading && ownerOptions.length === 0}
-          searchable
-        />
-        <Select
-          label="Estado"
-          data={activeOptions}
-          value={String(createActive)}
-          onChange={(value) => setCreateActive(value === 'true')}
-          mt="sm"
-        />
-        {createError && (
-          <Text c="red" mt="sm">
-            {createError}
-          </Text>
-        )}
-        <Group mt="md">
-          <Button
-            onClick={handleCreate}
-            loading={createLoading}
-            disabled={!createOwnerCompanyId}
+        <Stack gap="md">
+          <Paper
+            withBorder
+            radius="lg"
+            p="md"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(249,115,22,0.10) 0%, rgba(255,255,255,0.98) 100%)',
+              borderColor: 'rgba(15, 23, 42, 0.08)',
+            }}
           >
-            Crear
-          </Button>
-        </Group>
+            <Group justify="space-between" align="flex-start" wrap="wrap">
+              <div>
+                <Text fw={700}>Nueva bodega operativa</Text>
+                <Text size="sm" c="dimmed" mt={4}>
+                  Define nombre, tipo, dueño y estado inicial para dejarla lista en el sistema.
+                </Text>
+              </div>
+              <Badge color={createType === 'OWN' ? 'orange' : 'blue'} variant="light">
+                {createType === 'OWN' ? 'Propia' : 'Aliada'}
+              </Badge>
+            </Group>
+          </Paper>
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Identidad de la bodega</Text>
+                <Text size="sm" c="dimmed">
+                  Usa un nombre claro y asígnala al dueño correcto desde el inicio.
+                </Text>
+              </div>
+
+              <TextInput
+                label="Nombre"
+                placeholder="Ej. Bodega principal norte"
+                value={createName}
+                onChange={(event) => setCreateName(event.target.value)}
+              />
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Select
+                  label="Tipo"
+                  data={typeOptions}
+                  value={createType}
+                  onChange={(value) => setCreateType((value as 'OWN' | 'ALLY') ?? 'OWN')}
+                />
+                <Select
+                  label="Estado"
+                  data={activeOptions}
+                  value={String(createActive)}
+                  onChange={(value) => setCreateActive(value === 'true')}
+                />
+              </SimpleGrid>
+
+              <Select
+                label="Empresa dueña"
+                placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
+                data={ownerOptions}
+                value={createOwnerCompanyId}
+                onChange={(value) => setCreateOwnerCompanyId(value)}
+                disabled={ownersLoading && ownerOptions.length === 0}
+                searchable
+              />
+            </Stack>
+          </Paper>
+
+          {createError ? (
+            <Alert color="red" variant="light" title="No se pudo crear la bodega">
+              {createError}
+            </Alert>
+          ) : null}
+
+          <Group justify="space-between" className="mobile-actions">
+            <Button variant="default" onClick={() => setCreateOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreate}
+              loading={createLoading}
+              disabled={!createOwnerCompanyId}
+            >
+              Crear bodega
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <Modal
