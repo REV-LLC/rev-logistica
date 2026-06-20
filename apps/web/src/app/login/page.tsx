@@ -2,9 +2,9 @@
 
 import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Box, Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
-import { getToken, isTokenExpired, setToken } from '@/lib/auth';
+import { consumeSessionExpiredNotice, getToken, isTokenExpired, setToken } from '@/lib/auth';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -13,14 +13,27 @@ function LoginPageContent() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const reason = searchParams.get('reason');
+  const [showExpiredNotice, setShowExpiredNotice] = useState(false);
 
   useEffect(() => {
     const token = getToken();
     if (token && !isTokenExpired(token)) {
       router.replace('/inventory/warehouse');
+      return;
     }
-  }, [router]);
+
+    const reason = searchParams.get('reason');
+    if (reason === 'expired') {
+      setShowExpiredNotice(consumeSessionExpiredNotice());
+    }
+
+    if (reason) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('reason');
+      const query = params.toString();
+      router.replace(query ? `/login?${query}` : '/login');
+    }
+  }, [router, searchParams]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,6 +69,13 @@ function LoginPageContent() {
     <main>
       <Container size="xs" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
+          <Box ta="center" mb="lg">
+            <img
+              src="/rev-logo-clean.svg"
+              alt="Rev Logistica"
+              style={{ height: 64, width: 'auto', maxWidth: '100%' }}
+            />
+          </Box>
           <Title order={2} mb={4}>
             Ingreso
           </Title>
@@ -63,7 +83,7 @@ function LoginPageContent() {
             Accede con tu correo y contraseña.
           </Text>
           <Stack gap="sm" component="form" onSubmit={handleSubmit}>
-            {reason === 'expired' && (
+            {showExpiredNotice && (
               <Text c="red" fw={600}>
                 Tu sesión expiró. Inicia sesión nuevamente.
               </Text>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button, Center, Loader, Stack, Text } from '@mantine/core';
-import { AppRole, clearToken, getCurrentUserRole, getToken, isTokenExpired } from '@/lib/auth';
+import { AppRole, clearToken, getCurrentUserRole, getToken, isTokenExpired, markSessionExpiredNotice } from '@/lib/auth';
 
 type RouteRoleRule = {
   prefix: string;
@@ -35,7 +35,10 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
     const token = getToken();
     const expired = isTokenExpired(token);
     if (!token || expired) {
-      if (expired) clearToken();
+      if (expired) {
+        clearToken();
+        markSessionExpiredNotice();
+      }
       const params = new URLSearchParams();
       if (pathname) params.set('next', pathname);
       if (expired) params.set('reason', 'expired');

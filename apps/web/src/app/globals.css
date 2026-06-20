@@ -115,6 +115,29 @@ a {
   animation: bulk-flow-enter 280ms ease-out both;
 }
 
+.workflow-step-card {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease,
+    opacity 160ms ease;
+}
+
+.workflow-step-card.is-muted {
+  background: var(--mantine-color-gray-0);
+  border-color: var(--mantine-color-gray-3);
+  filter: grayscale(0.45);
+  opacity: 0.58;
+}
+
+.workflow-step-card.is-active {
+  background: #ffffff;
+  border-color: var(--mantine-color-green-5);
+  box-shadow: 0 12px 32px rgba(22, 163, 74, 0.12);
+  opacity: 1;
+}
+
 @keyframes bulk-flow-enter {
   from {
     opacity: 0;

@@ -38,7 +38,12 @@ import { api } from '@/lib/api';
 const VEHICLE_TYPE_OPTIONS = ['CAMION/CAMIONETA', 'AUTOMOVIL', 'MOTO', 'GRUA'];
 const CAPACITY_OPTIONS = Array.from({ length: 91 }, (_, index) => {
   const value = 1 + index / 10;
-  return value.toFixed(1).replace('.', ',');
+  const normalizedValue = value.toFixed(1).replace('.', ',');
+  const displayValue = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return {
+    value: normalizedValue,
+    label: `${displayValue} ${value === 1 ? 'tonelada' : 'toneladas'}`,
+  };
 });
 
 type Vehicle = {
@@ -105,6 +110,14 @@ function formatDisplayDate(value?: string | null) {
   }).format(date);
 }
 
+function formatCapacity(value?: string | null) {
+  if (!value) return '-';
+  const normalized = Number(value.replace(',', '.'));
+  if (Number.isNaN(normalized)) return value;
+  const displayValue = Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1);
+  return `${displayValue} ${normalized === 1 ? 'tonelada' : 'toneladas'}`;
+}
+
 function toPatchValue(value: string) {
   return value.trim() === '' ? undefined : value.trim();
 }
@@ -158,7 +171,7 @@ function VehicleDetails({
             Configuración
           </Text>
           <Stack gap={6} mt={8}>
-            <Text size="sm">Capacidad: {vehicle.capacity ?? '-'}</Text>
+            <Text size="sm">Peso (Toneladas): {formatCapacity(vehicle.capacity)}</Text>
             <Text size="sm">
               Conductores: {vehicle.drivers.length ? vehicle.drivers.map((driver) => driver.name).join(', ') : '-'}
             </Text>
@@ -490,7 +503,7 @@ export default function VehiclesPage() {
                         <Stack gap={2}>
                           <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
                           <Text size="xs" c="dimmed">
-                            Capacidad: {vehicle.capacity ?? '-'}
+                            Peso (Toneladas): {formatCapacity(vehicle.capacity)}
                           </Text>
                         </Stack>
                       </Table.Td>
@@ -644,7 +657,7 @@ export default function VehiclesPage() {
                       leftSection={<IconSteeringWheel size={16} />}
                     />
                     <Select
-                      label="Capacidad"
+                      label="Peso (Toneladas)"
                       name="capacity"
                       value={form.capacity}
                       data={CAPACITY_OPTIONS}

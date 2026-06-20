@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'revlogistica.token';
+const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
 
 export type JwtPayload = {
   sub?: string;
@@ -42,6 +43,18 @@ export function setToken(token: string) {
 export function clearToken() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(TOKEN_KEY);
+}
+
+export function markSessionExpiredNotice() {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, '1');
+}
+
+export function consumeSessionExpiredNotice() {
+  if (typeof window === 'undefined') return false;
+  const shouldShowNotice = window.sessionStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === '1';
+  window.sessionStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+  return shouldShowNotice;
 }
 
 export function getTokenPayload() {
