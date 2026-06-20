@@ -27,10 +27,12 @@ npm --workspace apps/web run dev
 ```
 
 ## Configuración
+El API usa `DATABASE_URL` y variables de R2 para archivos públicos como logos de empresas dueñas.
 Backoffice usa `NEXT_PUBLIC_API_BASE_URL` para apuntar al API.
 
 Ejemplo:
 ```bash
+cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
