@@ -35,7 +35,7 @@ export default function ResponsiveShell({ children }: { children: React.ReactNod
   return (
     <AppShell
       header={{ height: { base: 56, sm: 0 } }}
-      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      navbar={{ width: 284, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding={{ base: 'xs', sm: 'md' }}
     >
       <AppShell.Header hiddenFrom="sm" px="sm">
@@ -55,7 +55,7 @@ export default function ResponsiveShell({ children }: { children: React.ReactNod
             <img
               src="/fiesta.svg"
               alt="Rev Logistica"
-              style={{ height: 24, width: 'auto', display: 'block' }}
+              style={{ height: 30, width: 'auto', display: 'block' }}
             />
           </Link>
         </Group>

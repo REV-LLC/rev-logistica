@@ -11,6 +11,7 @@ import {
   Box,
   Button,
   Container,
+  FileButton,
   Group,
   Modal,
   NumberInput,
@@ -24,7 +25,7 @@ import {
   TextInput,
   ThemeIcon,
 } from '@mantine/core';
-import { IconEdit, IconPlus } from '@tabler/icons-react';
+import { IconEdit, IconPhoto, IconPlus, IconUpload } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
 
 interface InventoryResponse {
@@ -55,6 +56,7 @@ type Warehouse = {
   ownerCompany?: {
     id: string;
     name: string;
+    logoUrl?: string | null;
   } | null;
 };
 
@@ -62,7 +64,12 @@ type Owner = {
   id: string;
   name: string;
   active: boolean;
+  logoUrl?: string | null;
+  logoKey?: string | null;
 };
+
+const MAX_OWNER_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
+const OWNER_LOGO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
 export default function WarehouseInventoryPage() {
   const router = useRouter();
@@ -87,6 +94,8 @@ export default function WarehouseInventoryPage() {
   const [owners, setOwners] = useState<Owner[]>([]);
   const [ownersLoading, setOwnersLoading] = useState(false);
   const [ownersError, setOwnersError] = useState<string | null>(null);
+  const [ownerLogoUploadingId, setOwnerLogoUploadingId] = useState<string | null>(null);
+  const [ownerLogoError, setOwnerLogoError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createType, setCreateType] = useState<'OWN' | 'ALLY'>('OWN');
@@ -132,6 +141,10 @@ export default function WarehouseInventoryPage() {
       label: name,
     }));
   }, [owners, warehouses]);
+
+  const ownerById = useMemo(() => {
+    return new Map(owners.map((owner) => [owner.id, owner]));
+  }, [owners]);
 
   const typeOptions = [
     { value: 'OWN', label: 'Propia' },
@@ -225,6 +238,43 @@ export default function WarehouseInventoryPage() {
     }
   };
 
+  const handleOwnerLogoUpload = async (ownerId: string, file: File | null) => {
+    if (!file) return;
+    if (!OWNER_LOGO_MIME_TYPES.has(file.type)) {
+      setOwnerLogoError('El logo debe ser PNG, WEBP o JPEG. SVG no está permitido por ahora.');
+      return;
+    }
+    if (file.size > MAX_OWNER_LOGO_SIZE_BYTES) {
+      setOwnerLogoError('El logo debe pesar máximo 1 MB.');
+      return;
+    }
+
+    setOwnerLogoUploadingId(ownerId);
+    setOwnerLogoError(null);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      await api<Owner>(`/owners/${ownerId}/logo`, {
+        method: 'POST',
+        body: formData,
+      });
+      await Promise.all([loadOwners(), loadWarehouses()]);
+      if (warehouseId) {
+        await handleFetch(warehouseId);
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setOwnerLogoError(`Error ${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setOwnerLogoError(err.message);
+      } else {
+        setOwnerLogoError('Error inesperado subiendo el logo.');
+      }
+    } finally {
+      setOwnerLogoUploadingId(null);
+    }
+  };
+
   useEffect(() => {
     loadWarehouses();
     loadOwners();
@@ -243,6 +293,7 @@ export default function WarehouseInventoryPage() {
     setCreateOwnerCompanyId(ownerOptions[0]?.value ?? null);
     setCreateActive(true);
     setCreateError(null);
+    setOwnerLogoError(null);
     setCreateOpen(true);
   };
 
@@ -289,6 +340,7 @@ export default function WarehouseInventoryPage() {
     setEditOwnerCompanyId(warehouse.ownerCompanyId);
     setEditActive(warehouse.active);
     setEditError(null);
+    setOwnerLogoError(null);
     setEditOpen(true);
   };
 
@@ -477,6 +529,8 @@ export default function WarehouseInventoryPage() {
     () =>
       warehouses.map((warehouse) => {
         const ownerName = warehouse.ownerCompany?.name ?? 'Sin empresa dueña';
+        const ownerLogoUrl =
+          warehouse.ownerCompany?.logoUrl ?? ownerById.get(warehouse.ownerCompanyId)?.logoUrl ?? null;
         const initials = warehouse.name
           .split(' ')
           .filter(Boolean)
@@ -487,12 +541,93 @@ export default function WarehouseInventoryPage() {
         return {
           ...warehouse,
           ownerName,
+          ownerLogoUrl,
           initials,
           isSelected: warehouse.id === warehouseId,
         };
       }),
-    [warehouses, warehouseId],
+    [ownerById, warehouses, warehouseId],
   );
+
+  const createOwner = createOwnerCompanyId ? ownerById.get(createOwnerCompanyId) ?? null : null;
+  const editOwner = editOwnerCompanyId ? ownerById.get(editOwnerCompanyId) ?? null : null;
+
+  const renderOwnerLogoUpload = (ownerId: string | null, owner?: Owner | null) => {
+    if (!ownerId) {
+      return null;
+    }
+    const ownerName = owner?.name ?? 'empresa seleccionada';
+
+    return (
+      <Paper withBorder radius="md" p="sm">
+        <Stack gap="sm">
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+              <Box
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 10,
+                  border: '1px solid rgba(15, 23, 42, 0.10)',
+                  background: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                {owner?.logoUrl ? (
+                  <Box
+                    component="img"
+                    src={owner.logoUrl}
+                    alt={`Logo de ${ownerName}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      padding: 6,
+                    }}
+                  />
+                ) : (
+                  <IconPhoto size={22} color="var(--mantine-color-gray-5)" />
+                )}
+              </Box>
+              <div style={{ minWidth: 0 }}>
+                <Text fw={700} truncate>
+                  Logo de {ownerName}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  PNG, WEBP o JPEG. Máximo 1 MB.
+                </Text>
+              </div>
+            </Group>
+            <FileButton
+              onChange={(file) => handleOwnerLogoUpload(ownerId, file)}
+              accept="image/png,image/jpeg,image/webp"
+            >
+              {(props) => (
+                <Button
+                  {...props}
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconUpload size={14} />}
+                  loading={ownerLogoUploadingId === ownerId}
+                >
+                  {owner?.logoUrl ? 'Cambiar' : 'Subir'}
+                </Button>
+              )}
+            </FileButton>
+          </Group>
+          {ownerLogoError ? (
+            <Alert color="red" variant="light" title="No se pudo subir el logo">
+              {ownerLogoError}
+            </Alert>
+          ) : null}
+        </Stack>
+      </Paper>
+    );
+  };
 
   return (
     <main>
@@ -561,16 +696,44 @@ export default function WarehouseInventoryPage() {
                       }}
                     >
                       <Stack align="center" gap={6}>
-                        <ThemeIcon
-                          size={58}
-                          radius="xl"
-                          variant="white"
-                          color={warehouse.type === 'OWN' ? 'orange' : 'blue'}
-                        >
-                          <Text fw={800} size="lg">
-                            {warehouse.initials || 'BG'}
-                          </Text>
-                        </ThemeIcon>
+                        {warehouse.ownerLogoUrl ? (
+                          <Box
+                            style={{
+                              width: 78,
+                              height: 78,
+                              borderRadius: 14,
+                              border: '1px solid rgba(15, 23, 42, 0.10)',
+                              background: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <Box
+                              component="img"
+                              src={warehouse.ownerLogoUrl}
+                              alt={`Logo de ${warehouse.ownerName}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                padding: 8,
+                              }}
+                            />
+                          </Box>
+                        ) : (
+                          <ThemeIcon
+                            size={58}
+                            radius="xl"
+                            variant="white"
+                            color={warehouse.type === 'OWN' ? 'orange' : 'blue'}
+                          >
+                            <Text fw={800} size="lg">
+                              {warehouse.initials || 'BG'}
+                            </Text>
+                          </ThemeIcon>
+                        )}
                         <Text size="xs" c="dimmed" fw={700} tt="uppercase">
                           {warehouse.type === 'OWN' ? 'Bodega propia' : 'Bodega aliada'}
                         </Text>
@@ -809,10 +972,15 @@ export default function WarehouseInventoryPage() {
                 placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
                 data={ownerOptions}
                 value={createOwnerCompanyId}
-                onChange={(value) => setCreateOwnerCompanyId(value)}
+                onChange={(value) => {
+                  setOwnerLogoError(null);
+                  setCreateOwnerCompanyId(value);
+                }}
                 disabled={ownersLoading && ownerOptions.length === 0}
                 searchable
               />
+
+              {renderOwnerLogoUpload(createOwnerCompanyId, createOwner)}
             </Stack>
           </Paper>
 
@@ -841,6 +1009,7 @@ export default function WarehouseInventoryPage() {
         opened={editOpen}
         onClose={() => setEditOpen(false)}
         title="Editar bodega"
+        size="lg"
       >
         <TextInput
           label="Nombre"
@@ -859,11 +1028,15 @@ export default function WarehouseInventoryPage() {
           placeholder={ownersLoading ? 'Cargando dueños...' : 'Selecciona un dueño'}
           data={ownerOptions}
           value={editOwnerCompanyId}
-          onChange={(value) => setEditOwnerCompanyId(value)}
+          onChange={(value) => {
+            setOwnerLogoError(null);
+            setEditOwnerCompanyId(value);
+          }}
           mt="sm"
           disabled={ownersLoading && ownerOptions.length === 0}
           searchable
         />
+        <Box mt="sm">{renderOwnerLogoUpload(editOwnerCompanyId, editOwner)}</Box>
         <Select
           label="Estado"
           data={activeOptions}

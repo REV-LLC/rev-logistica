@@ -1,4 +1,4 @@
-import { clearToken, getToken } from './auth';
+import { clearToken, getToken, markSessionExpiredNotice } from './auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
 
@@ -43,6 +43,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   const shouldRedirect = options.redirectOnAuthError !== false;
   if (shouldRedirect && response.status === 401 && typeof window !== 'undefined') {
     clearToken();
+    markSessionExpiredNotice();
     const next = window.location.pathname || '';
     if (!window.location.pathname.startsWith('/login')) {
       const params = new URLSearchParams();

@@ -163,6 +163,9 @@ const hasMissingRequiredSkuData = ({
   isMissingPositiveNumber(price) ||
   isMissingPositiveNumber(subrentalPrice);
 
+const getWorkflowStepClassName = (isActive: boolean) =>
+  `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
+
 export default function AddBulkStockPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -559,6 +562,14 @@ export default function AddBulkStockPage() {
 
     return payload;
   }, [builtItem, entryMode, ownerWarehouseId, quantity, selectedExistingItem]);
+
+  const productReady =
+    modeLocked &&
+    (entryMode === 'existing' ? Boolean(selectedExistingItem) : isItemConfigured);
+  const isWarehouseStepActive = !warehouseLocked;
+  const isOperationStepActive = warehouseLocked && !productReady;
+  const isQuantityStepActive = productReady && !payloadPreview;
+  const isReviewStepActive = Boolean(payloadPreview);
 
   const resetTypeForm = (type: ItemType) => {
     setIsItemConfigured(false);
@@ -1051,7 +1062,12 @@ export default function AddBulkStockPage() {
 
         {flowChoice ? (
           <Stack gap="lg" className="bulk-flow-form">
-            <Paper withBorder radius="lg" p="md">
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              className={getWorkflowStepClassName(isWarehouseStepActive)}
+            >
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" className="mobile-stack">
                   <div>
@@ -1091,7 +1107,12 @@ export default function AddBulkStockPage() {
               </Stack>
             </Paper>
 
-            <Paper withBorder radius="lg" p="md">
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              className={getWorkflowStepClassName(isOperationStepActive)}
+            >
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" className="mobile-stack">
                   <div>
@@ -1685,7 +1706,13 @@ export default function AddBulkStockPage() {
               </Stack>
             </Paper>
 
-            <Paper ref={entrySectionRef} withBorder radius="lg" p="md">
+            <Paper
+              ref={entrySectionRef}
+              withBorder
+              radius="lg"
+              p="md"
+              className={getWorkflowStepClassName(isQuantityStepActive)}
+            >
               <Stack gap="md">
                 <div>
                   <Text fw={700}>3. Cantidad</Text>
@@ -1715,7 +1742,12 @@ export default function AddBulkStockPage() {
               </Stack>
             </Paper>
 
-            <Paper withBorder radius="lg" p="md">
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              className={getWorkflowStepClassName(isReviewStepActive)}
+            >
               <Stack gap="md">
                 <div>
                   <Text fw={700}>4. Revisión</Text>

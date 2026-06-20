@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import StatCard from '@/components/dashboard/StatCard';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,14 +19,10 @@ import {
   Text,
   TextInput,
   ThemeIcon,
-  Title,
 } from '@mantine/core';
 import {
-  IconAdjustments,
   IconArrowsShuffle,
-  IconBuildingWarehouse,
   IconChecklist,
-  IconClockHour4,
   IconFilter,
 } from '@tabler/icons-react';
 
@@ -167,18 +162,6 @@ export default function LedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const metrics = useMemo(() => {
-    const uniqueMovements = new Set(items.map((item) => item.movementType)).size;
-    const withDocument = items.filter((item) => item.document?.id || item.refDocumentId).length;
-    const withAsset = items.filter((item) => item.assetId).length;
-    return {
-      total: items.length,
-      uniqueMovements,
-      withDocument,
-      withAsset,
-    };
-  }, [items]);
-
   const hasActiveFilters = Object.values(filters).some(Boolean);
   const activeFiltersCount = Object.values(filters).filter(Boolean).length;
 
@@ -236,36 +219,50 @@ export default function LedgerPage() {
               </ActionIcon>
             }
           >
-            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-              <StatCard
-                label="Resultados"
-                value={String(metrics.total)}
-                hint="Movimientos cargados"
-                color="blue"
-                icon={<IconChecklist size={20} />}
-              />
-              <StatCard
-                label="Tipos"
-                value={String(metrics.uniqueMovements)}
-                hint="Clases de movimiento presentes"
-                color="grape"
-                icon={<IconAdjustments size={20} />}
-              />
-              <StatCard
-                label="Con documento"
-                value={String(metrics.withDocument)}
-                hint="Asociados a remisión o referencia"
-                color="cyan"
-                icon={<IconClockHour4 size={20} />}
-              />
-              <StatCard
-                label="Equipos"
-                value={String(metrics.withAsset)}
-                hint="Movimientos ligados a activo único"
-                color="teal"
-                icon={<IconBuildingWarehouse size={20} />}
-              />
-            </SimpleGrid>
+            {items.length > 0 ? (
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" className="mobile-stack">
+                  <div>
+                    <Text fw={700}>Resultados</Text>
+                    <Text size="sm" c="dimmed">
+                      {items.length} movimiento{items.length === 1 ? '' : 's'} cargado
+                      {items.length === 1 ? '' : 's'}.
+                    </Text>
+                  </div>
+                  {hasActiveFilters ? (
+                    <Text size="sm" c="dimmed">
+                      {activeFiltersCount} filtro{activeFiltersCount === 1 ? '' : 's'} activo
+                      {activeFiltersCount === 1 ? '' : 's'}
+                    </Text>
+                  ) : null}
+                </Group>
+                <LedgerTable items={items} />
+                <Group>
+                  <Button
+                    variant="light"
+                    disabled={!nextCursor}
+                    loading={loading}
+                    onClick={() => fetchLedger({ append: true })}
+                  >
+                    {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+                  </Button>
+                </Group>
+              </Stack>
+            ) : loading ? (
+              <Text size="sm" c="dimmed">
+                Cargando movimientos...
+              </Text>
+            ) : (
+              <Stack align="center" gap="xs" py="md">
+                <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                  <IconChecklist size={20} />
+                </ThemeIcon>
+                <Text fw={700}>No hay movimientos para mostrar</Text>
+                <Text size="sm" c="dimmed" ta="center">
+                  Ajusta los filtros o ejecuta una nueva búsqueda para consultar otro tramo del historial.
+                </Text>
+              </Stack>
+            )}
           </PageHeaderCard>
 
           {error ? (
@@ -387,44 +384,6 @@ export default function LedgerPage() {
             </Stack>
           </Modal>
 
-          {items.length > 0 ? (
-            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-              <Stack gap="md">
-                <div>
-                  <Text fw={700}>Resultados</Text>
-                  <Text size="sm" c="dimmed">
-                    {items.length} movimiento{items.length === 1 ? '' : 's'} cargado{items.length === 1 ? '' : 's'}.
-                  </Text>
-                </div>
-                <LedgerTable items={items} />
-              </Stack>
-            </Paper>
-          ) : !loading ? (
-            <Paper withBorder radius="xl" p="xl">
-              <Stack align="center" gap="xs">
-                <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                  <IconChecklist size={20} />
-                </ThemeIcon>
-                <Text fw={700}>No hay movimientos para mostrar</Text>
-                <Text size="sm" c="dimmed" ta="center">
-                  Ajusta los filtros o ejecuta una nueva búsqueda para consultar otro tramo del historial.
-                </Text>
-              </Stack>
-            </Paper>
-          ) : null}
-
-          {items.length > 0 ? (
-            <Group>
-              <Button
-                variant="light"
-                disabled={!nextCursor}
-                loading={loading}
-                onClick={() => fetchLedger({ append: true })}
-              >
-                {nextCursor ? 'Cargar más' : 'Sin más resultados'}
-              </Button>
-            </Group>
-          ) : null}
         </Stack>
       </Container>
     </main>

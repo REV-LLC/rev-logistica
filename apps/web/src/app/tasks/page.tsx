@@ -15,7 +15,6 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Switch,
   Table,
   TableTbody,
   TableTd,
@@ -26,11 +25,12 @@ import {
   TextInput,
   Textarea,
   ThemeIcon,
-  Title,
 } from '@mantine/core';
 import {
+  IconCalendarEvent,
   IconChecklist,
   IconClock,
+  IconPackage,
   IconPlus,
   IconSearch,
   IconTargetArrow,
@@ -101,14 +101,38 @@ function priorityColor(priority?: string | null) {
   return 'gray';
 }
 
+function formatStatusLabel(status?: TaskStatus | null) {
+  if (status === 'DOING') return 'EN CURSO';
+  if (status === 'DONE') return 'HECHA';
+  return 'ABIERTA';
+}
+
+function formatPriorityLabel(priority?: TaskPriority | null) {
+  if (priority === 'HIGH') return 'ALTA';
+  if (priority === 'LOW') return 'BAJA';
+  return 'MEDIA';
+}
+
+function getDueState(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const due = new Date(date);
+  due.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((due.getTime() - now.getTime()) / 86400000);
+
+  if (diffDays < 0) return { tone: 'red' as const, label: 'Vencida' };
+  if (diffDays <= 2) return { tone: 'yellow' as const, label: 'Próxima' };
+  return { tone: 'gray' as const, label: 'Programada' };
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
-  const [assignedToMe, setAssignedToMe] = useState(false);
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -130,11 +154,6 @@ export default function TasksPage() {
   const [assetQuery, setAssetQuery] = useState('');
   const [assetResults, setAssetResults] = useState<Asset[]>([]);
   const [assetSearching, setAssetSearching] = useState(false);
-
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(handle);
-  }, [query]);
 
   useEffect(() => {
     let mounted = true;
@@ -162,21 +181,13 @@ export default function TasksPage() {
     [users],
   );
 
-  const params = useMemo(() => {
-    const search = new URLSearchParams();
-    if (statusFilter !== 'ALL') search.set('status', statusFilter);
-    if (assignedToMe) search.set('assignedToMe', 'true');
-    if (debouncedQuery) search.set('q', debouncedQuery);
-    return search.toString();
-  }, [statusFilter, assignedToMe, debouncedQuery]);
-
   useEffect(() => {
     let mounted = true;
     const loadTasks = async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await api<Task[]>(`/tasks${params ? `?${params}` : ''}`);
+        const data = await api<Task[]>('/tasks');
         if (mounted) setTasks(data);
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : 'No se pudo cargar tareas');
@@ -188,19 +199,30 @@ export default function TasksPage() {
     return () => {
       mounted = false;
     };
-  }, [params]);
+  }, []);
 
   const metrics = useMemo(() => {
     const openCount = tasks.filter((task) => (task.status ?? 'OPEN') === 'OPEN').length;
     const doingCount = tasks.filter((task) => task.status === 'DOING').length;
     const doneCount = tasks.filter((task) => task.status === 'DONE').length;
     const assignedCount = tasks.filter((task) => task.assignedToUserId).length;
+    const dueSoonCount = tasks.filter((task) => {
+      if (!task.dueDate || task.status === 'DONE') return false;
+      const date = new Date(task.dueDate);
+      if (Number.isNaN(date.getTime())) return false;
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      date.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((date.getTime() - now.getTime()) / 86400000);
+      return diffDays >= 0 && diffDays <= 2;
+    }).length;
     return {
       total: tasks.length,
       openCount,
       doingCount,
       doneCount,
       assignedCount,
+      dueSoonCount,
     };
   }, [tasks]);
 
@@ -238,7 +260,7 @@ export default function TasksPage() {
       });
       closeCreate();
       resetForm();
-      const data = await api<Task[]>(`/tasks${params ? `?${params}` : ''}`);
+      const data = await api<Task[]>('/tasks');
       setTasks(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear tarea');
@@ -333,8 +355,6 @@ export default function TasksPage() {
     }
   };
 
-  const hasFilters = Boolean(query.trim()) || statusFilter !== 'ALL' || assignedToMe;
-
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -373,9 +393,9 @@ export default function TasksPage() {
               icon={<IconTargetArrow size={20} />}
             />
             <StatCard
-              label="Asignadas"
-              value={String(metrics.assignedCount)}
-              hint={`${metrics.doneCount} completadas`}
+              label="Atención"
+              value={String(metrics.dueSoonCount)}
+              hint={`${metrics.assignedCount} asignadas · ${metrics.doneCount} hechas`}
               color="green"
               icon={<IconUserCheck size={20} />}
             />
@@ -389,165 +409,253 @@ export default function TasksPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <Stack gap="md">
-            <Group justify="space-between" align="center">
-              <div>
-                <Text fw={700}>Filtros</Text>
-                <Text size="sm" c="dimmed">
-                  Filtra por estado, texto o tareas asignadas para reducir el tablero.
-                </Text>
-              </div>
-              {hasFilters ? (
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => {
-                    setStatusFilter('ALL');
-                    setAssignedToMe(false);
-                    setQuery('');
-                  }}
-                >
-                  Limpiar filtros
-                </Button>
-              ) : null}
-            </Group>
-
-            <Group align="flex-end" gap="md" wrap="wrap">
-              <Select
-                label="Estado"
-                value={statusFilter}
-                onChange={(value) => setStatusFilter((value as TaskStatus) || 'ALL')}
-                data={[{ value: 'ALL', label: 'TODOS' }, ...statusOptions]}
-                w={200}
-              />
-              <TextInput
-                label="Buscar"
-                value={query}
-                onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Título o texto..."
-                w={260}
-                leftSection={<IconSearch size={16} />}
-              />
-              <Switch
-                label="Asignadas a mí"
-                checked={assignedToMe}
-                onChange={(event) => setAssignedToMe(event.currentTarget.checked)}
-                mt={4}
-              />
-            </Group>
-          </Stack>
-        </Paper>
-
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           {loading ? (
             <Center py="xl">
               <Loader />
             </Center>
           ) : (
             <Stack gap="md">
-              <div>
-                <Text fw={700}>Lista de tareas</Text>
-                <Text size="sm" c="dimmed">
-                  {tasks.length} tarea{tasks.length === 1 ? '' : 's'} en el resultado actual.
-                </Text>
-              </div>
+              <Group justify="space-between" align="center">
+                <div>
+                  <Text fw={700}>Lista de tareas</Text>
+                  <Text size="sm" c="dimmed">
+                    {tasks.length} tarea{tasks.length === 1 ? '' : 's'} en el resultado actual.
+                  </Text>
+                </div>
+                <Badge color="gray" variant="light">
+                  Tablero general
+                </Badge>
+              </Group>
 
-              <Table withTableBorder={false} verticalSpacing="md">
-                <TableThead>
-                  <TableTr>
-                    <TableTh>Título</TableTh>
-                    <TableTh>Prioridad</TableTh>
-                    <TableTh>Vence</TableTh>
-                    <TableTh>Asignado</TableTh>
-                    <TableTh>Estado</TableTh>
-                    <TableTh>Seriales</TableTh>
-                  </TableTr>
-                </TableThead>
-                <TableTbody>
-                  {tasks.map((task) => (
-                    <TableTr key={task.id}>
-                      <TableTd>
-                        <Stack gap={2}>
-                          <Text fw={600}>{task.title}</Text>
-                          {task.description ? (
-                            <Text size="xs" c="dimmed">
-                              {task.description}
-                            </Text>
-                          ) : null}
-                          {task.bulkItemName ? (
-                            <Text size="xs" c="dimmed">
-                              BULK: {task.bulkItemName}
-                            </Text>
-                          ) : null}
-                        </Stack>
-                      </TableTd>
-                      <TableTd>
-                        <Group gap="xs">
-                          <Badge color={priorityColor(task.priority)} variant="light">
-                            {task.priority ?? 'MEDIUM'}
-                          </Badge>
-                          <Select
-                            value={task.priority ?? 'MEDIUM'}
-                            onChange={(value) =>
-                              updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })
-                            }
-                            data={priorityOptions}
-                            size="xs"
-                            w={120}
-                          />
-                        </Group>
-                      </TableTd>
-                      <TableTd>{formatDate(task.dueDate)}</TableTd>
-                      <TableTd>
-                        {userOptions.length ? (
-                          <Select
-                            value={task.assignedToUserId ?? null}
-                            onChange={(value) =>
-                              updateTask(task.id, { assignedToUserId: value || null })
-                            }
-                            data={userOptions}
-                            size="xs"
-                            w={180}
-                            placeholder="-"
-                          />
-                        ) : (
-                          task.assignedToUser?.name || task.assignedToUserId || '-'
-                        )}
-                      </TableTd>
-                      <TableTd>
-                        <Group gap="xs">
-                          <Badge color={statusColor(task.status)} variant="light">
-                            {task.status ?? 'OPEN'}
-                          </Badge>
-                          <Select
-                            value={task.status ?? 'OPEN'}
-                            onChange={(value) =>
-                              updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })
-                            }
-                            data={statusOptions}
-                            size="xs"
-                            w={120}
-                          />
-                        </Group>
-                      </TableTd>
-                      <TableTd>
-                        <Button size="xs" variant="light" onClick={() => openAssetsModal(task)}>
-                          Seriales
-                        </Button>
-                      </TableTd>
-                    </TableTr>
-                  ))}
-                  {!tasks.length && (
-                    <TableTr>
-                      <TableTd colSpan={6}>
-                        <Text c="dimmed" ta="center">
-                          No hay tareas para los filtros actuales.
-                        </Text>
-                      </TableTd>
-                    </TableTr>
-                  )}
-                </TableTbody>
-              </Table>
+              {tasks.length ? (
+                <>
+                  <Paper withBorder radius="lg" p="sm" visibleFrom="sm">
+                    <Table withTableBorder={false} verticalSpacing="md">
+                      <TableThead>
+                        <TableTr>
+                          <TableTh>Título</TableTh>
+                          <TableTh>Prioridad</TableTh>
+                          <TableTh>Vence</TableTh>
+                          <TableTh>Asignado</TableTh>
+                          <TableTh>Estado</TableTh>
+                          <TableTh>Seriales</TableTh>
+                        </TableTr>
+                      </TableThead>
+                      <TableTbody>
+                        {tasks.map((task) => {
+                          const dueState = getDueState(task.dueDate);
+                          return (
+                            <TableTr key={task.id}>
+                              <TableTd>
+                                <Stack gap={4}>
+                                  <Group gap="xs">
+                                    <Text fw={600}>{task.title}</Text>
+                                    {task.bulkItemName ? (
+                                      <Badge
+                                        variant="light"
+                                        color="grape"
+                                        leftSection={<IconPackage size={12} />}
+                                      >
+                                        {task.bulkItemName}
+                                      </Badge>
+                                    ) : null}
+                                  </Group>
+                                  {task.description ? (
+                                    <Text size="xs" c="dimmed">
+                                      {task.description}
+                                    </Text>
+                                  ) : null}
+                                </Stack>
+                              </TableTd>
+                              <TableTd>
+                                <Stack gap="xs">
+                                  <Badge color={priorityColor(task.priority)} variant="light" w="fit-content">
+                                    {formatPriorityLabel(task.priority)}
+                                  </Badge>
+                                  <Select
+                                    value={task.priority ?? 'MEDIUM'}
+                                    onChange={(value) =>
+                                      updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })
+                                    }
+                                    data={priorityOptions}
+                                    size="xs"
+                                    w={120}
+                                  />
+                                </Stack>
+                              </TableTd>
+                              <TableTd>
+                                <Stack gap="xs">
+                                  <Text size="sm">{formatDate(task.dueDate)}</Text>
+                                  {dueState ? (
+                                    <Badge color={dueState.tone} variant="light" w="fit-content">
+                                      {dueState.label}
+                                    </Badge>
+                                  ) : null}
+                                </Stack>
+                              </TableTd>
+                              <TableTd>
+                                {userOptions.length ? (
+                                  <Select
+                                    value={task.assignedToUserId ?? null}
+                                    onChange={(value) =>
+                                      updateTask(task.id, { assignedToUserId: value || null })
+                                    }
+                                    data={userOptions}
+                                    size="xs"
+                                    w={180}
+                                    placeholder="-"
+                                  />
+                                ) : (
+                                  task.assignedToUser?.name || task.assignedToUserId || '-'
+                                )}
+                              </TableTd>
+                              <TableTd>
+                                <Stack gap="xs">
+                                  <Badge color={statusColor(task.status)} variant="light" w="fit-content">
+                                    {formatStatusLabel(task.status)}
+                                  </Badge>
+                                  <Select
+                                    value={task.status ?? 'OPEN'}
+                                    onChange={(value) =>
+                                      updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })
+                                    }
+                                    data={statusOptions}
+                                    size="xs"
+                                    w={120}
+                                  />
+                                </Stack>
+                              </TableTd>
+                              <TableTd>
+                                <Button size="xs" variant="light" onClick={() => openAssetsModal(task)}>
+                                  Seriales
+                                </Button>
+                              </TableTd>
+                            </TableTr>
+                          );
+                        })}
+                      </TableTbody>
+                    </Table>
+                  </Paper>
+
+                  <Stack gap="sm" hiddenFrom="sm">
+                    {tasks.map((task) => {
+                      const dueState = getDueState(task.dueDate);
+                      return (
+                        <Paper key={task.id} withBorder radius="lg" p="md">
+                          <Stack gap="md">
+                            <Group justify="space-between" align="flex-start" wrap="nowrap">
+                              <Stack gap={4} style={{ flex: 1 }}>
+                                <Text fw={700}>{task.title}</Text>
+                                {task.description ? (
+                                  <Text size="sm" c="dimmed">
+                                    {task.description}
+                                  </Text>
+                                ) : null}
+                              </Stack>
+                              <Badge color={statusColor(task.status)} variant="light">
+                                {formatStatusLabel(task.status)}
+                              </Badge>
+                            </Group>
+
+                            <Group gap="xs">
+                              <Badge color={priorityColor(task.priority)} variant="light">
+                                {formatPriorityLabel(task.priority)}
+                              </Badge>
+                              {dueState ? (
+                                <Badge color={dueState.tone} variant="light">
+                                  {dueState.label}
+                                </Badge>
+                              ) : null}
+                              {task.bulkItemName ? (
+                                <Badge
+                                  color="grape"
+                                  variant="light"
+                                  leftSection={<IconPackage size={12} />}
+                                >
+                                  {task.bulkItemName}
+                                </Badge>
+                              ) : null}
+                            </Group>
+
+                            <SimpleGrid cols={2} spacing="sm">
+                              <Paper withBorder radius="md" p="sm" bg="gray.0">
+                                <Group gap="xs" wrap="nowrap">
+                                  <ThemeIcon size={30} radius="md" variant="light" color="gray">
+                                    <IconCalendarEvent size={16} />
+                                  </ThemeIcon>
+                                  <Stack gap={0}>
+                                    <Text size="xs" c="dimmed">Vence</Text>
+                                    <Text size="sm" fw={600}>{formatDate(task.dueDate)}</Text>
+                                  </Stack>
+                                </Group>
+                              </Paper>
+                              <Paper withBorder radius="md" p="sm" bg="gray.0">
+                                <Group gap="xs" wrap="nowrap">
+                                  <ThemeIcon size={30} radius="md" variant="light" color="blue">
+                                    <IconUserCheck size={16} />
+                                  </ThemeIcon>
+                                  <Stack gap={0}>
+                                    <Text size="xs" c="dimmed">Asignado</Text>
+                                    <Text size="sm" fw={600}>
+                                      {task.assignedToUser?.name || task.assignedToUserId || '-'}
+                                    </Text>
+                                  </Stack>
+                                </Group>
+                              </Paper>
+                            </SimpleGrid>
+
+                            <SimpleGrid cols={1} spacing="sm">
+                              <Select
+                                label="Prioridad"
+                                value={task.priority ?? 'MEDIUM'}
+                                onChange={(value) =>
+                                  updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })
+                                }
+                                data={priorityOptions}
+                              />
+                              <Select
+                                label="Estado"
+                                value={task.status ?? 'OPEN'}
+                                onChange={(value) =>
+                                  updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })
+                                }
+                                data={statusOptions}
+                              />
+                              {userOptions.length ? (
+                                <Select
+                                  label="Responsable"
+                                  value={task.assignedToUserId ?? null}
+                                  onChange={(value) =>
+                                    updateTask(task.id, { assignedToUserId: value || null })
+                                  }
+                                  data={userOptions}
+                                  placeholder="-"
+                                />
+                              ) : null}
+                            </SimpleGrid>
+
+                            <Button variant="light" onClick={() => openAssetsModal(task)}>
+                              Gestionar seriales
+                            </Button>
+                          </Stack>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
+                </>
+              ) : (
+                <Paper withBorder radius="lg" p="xl" bg="gray.0">
+                  <Stack align="center" gap="sm">
+                    <ThemeIcon size={48} radius="xl" variant="light" color="gray">
+                      <IconChecklist size={24} />
+                    </ThemeIcon>
+                    <Text fw={700}>No hay tareas para los filtros actuales</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Ajusta el estado, limpia la búsqueda o crea una nueva tarea para empezar a trabajar.
+                    </Text>
+                  </Stack>
+                </Paper>
+              )}
             </Stack>
           )}
         </Paper>
@@ -555,6 +663,20 @@ export default function TasksPage() {
 
       <Modal opened={creating} onClose={closeCreate} title="Nueva tarea" centered size="lg">
         <Stack gap="lg">
+          <Paper withBorder radius="lg" p="md" bg="yellow.0">
+            <Group justify="space-between" align="flex-start">
+              <Stack gap={2}>
+                <Text fw={700}>Alta de pendiente</Text>
+                <Text size="sm" c="dimmed">
+                  Registra una acción operativa, define prioridad y deja claro quién debe moverla.
+                </Text>
+              </Stack>
+              <Badge color={priorityColor(priority)} variant="light">
+                Prioridad {formatPriorityLabel(priority)}
+              </Badge>
+            </Group>
+          </Paper>
+
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
@@ -638,26 +760,38 @@ export default function TasksPage() {
       >
         <Stack gap="md">
           <Paper withBorder radius="md" p="md">
-            <Stack gap="xs">
-              <Text fw={700}>Activos vinculados</Text>
+            <Stack gap="sm">
+              <Group justify="space-between" align="center">
+                <div>
+                  <Text fw={700}>Activos vinculados</Text>
+                  <Text size="sm" c="dimmed">
+                    Seriales relacionados con esta tarea para seguimiento o retiro.
+                  </Text>
+                </div>
+                <Badge color="gray" variant="light">
+                  {taskAssets.length} activo{taskAssets.length === 1 ? '' : 's'}
+                </Badge>
+              </Group>
               {assetsLoading ? (
                 <Center py="sm">
                   <Loader size="sm" />
                 </Center>
               ) : (
-                <Stack gap="xs">
+                <Stack gap="sm">
                   {taskAssets.map((asset) => (
-                    <Group key={asset.id} justify="space-between">
-                      <Text size="sm">{asset.serial || asset.name || asset.id}</Text>
-                      <ActionIcon
-                        variant="light"
-                        color="red"
-                        aria-label="Quitar activo"
-                        onClick={() => removeAssetFromTask(asset.id)}
-                      >
-                        <IconTrash size={14} />
-                      </ActionIcon>
-                    </Group>
+                    <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
+                      <Group justify="space-between" align="center" wrap="nowrap">
+                        <Text size="sm" fw={600}>{asset.serial || asset.name || asset.id}</Text>
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          aria-label="Quitar activo"
+                          onClick={() => removeAssetFromTask(asset.id)}
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                      </Group>
+                    </Paper>
                   ))}
                   {!taskAssets.length && (
                     <Text size="sm" c="dimmed">
@@ -670,9 +804,14 @@ export default function TasksPage() {
           </Paper>
 
           <Paper withBorder radius="md" p="md">
-            <Stack gap="sm">
-              <Text fw={700}>Buscar activo</Text>
-              <Group align="flex-end" gap="sm" wrap="wrap">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Buscar activo</Text>
+                <Text size="sm" c="dimmed">
+                  Busca por serial o por nombre y agrégalo a la tarea si hace parte del trabajo.
+                </Text>
+              </div>
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                 <Select
                   label="Modo"
                   value={assetSearchMode}
@@ -681,30 +820,31 @@ export default function TasksPage() {
                     { value: 'serial', label: 'SERIAL' },
                     { value: 'search', label: 'NOMBRE' },
                   ]}
-                  w={140}
                 />
                 <TextInput
                   label="Buscar"
                   value={assetQuery}
                   onChange={(event) => setAssetQuery(event.currentTarget.value)}
-                  w={240}
                 />
                 <Button
+                  mt={{ base: 0, sm: 25 }}
                   leftSection={<IconSearch size={14} />}
                   onClick={searchAssets}
                   loading={assetSearching}
                 >
                   Buscar
                 </Button>
-              </Group>
-              <Stack gap="xs">
+              </SimpleGrid>
+              <Stack gap="sm">
                 {assetResults.map((asset) => (
-                  <Group key={asset.id} justify="space-between">
-                    <Text size="sm">{asset.serial || asset.name || asset.id}</Text>
-                    <Button size="xs" variant="light" onClick={() => addAssetToTask(asset.id)}>
-                      Agregar
-                    </Button>
-                  </Group>
+                  <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
+                    <Group justify="space-between" align="center" wrap="nowrap">
+                      <Text size="sm" fw={600}>{asset.serial || asset.name || asset.id}</Text>
+                      <Button size="xs" variant="light" onClick={() => addAssetToTask(asset.id)}>
+                        Agregar
+                      </Button>
+                    </Group>
+                  </Paper>
                 ))}
                 {!assetResults.length && (
                   <Text size="sm" c="dimmed">

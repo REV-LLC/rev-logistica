@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { Group, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 
 type StatCardProps = {
   label: string;
@@ -12,6 +13,12 @@ type StatCardProps = {
 };
 
 export default function StatCard({ label, value, hint, color, icon }: StatCardProps) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
+  if (isMobile) {
+    return null;
+  }
+
   return (
     <Paper
       withBorder

@@ -6,29 +6,20 @@ import {
   Badge,
   Button,
   Container,
-  Divider,
   Group,
   Paper,
   Select,
   Stack,
   Text,
   TextInput,
-  ThemeIcon,
-  Title,
   NumberInput,
   SimpleGrid,
   Switch,
 } from '@mantine/core';
 import {
-  IconBuildingWarehouse,
-  IconChecklist,
-  IconCubePlus,
-  IconHash,
-  IconMapPin,
   IconTruck,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import StatCard from '@/components/dashboard/StatCard';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -92,6 +83,9 @@ const CHARGE_TYPE_OPTIONS = [
   { value: 'HOUR', label: 'Por hora' },
 ];
 
+const getWorkflowStepClassName = (isActive: boolean) =>
+  `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
+
 export default function CreateSerializedAssetPage() {
   const router = useRouter();
   const [families, setFamilies] = useState<AssetFamily[]>([]);
@@ -136,6 +130,8 @@ export default function CreateSerializedAssetPage() {
     '',
   );
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [warehouseLocked, setWarehouseLocked] = useState(false);
+  const [familyLocked, setFamilyLocked] = useState(false);
 
   const familySelectRef = useRef<HTMLInputElement>(null);
   const familyNameRef = useRef<HTMLInputElement>(null);
@@ -259,11 +255,28 @@ export default function CreateSerializedAssetPage() {
       warehouses.find((warehouse) => warehouse.id === warehouseCurrentId) ?? null,
     [warehouseCurrentId, warehouses],
   );
-  const serialReady =
+  const hasTemplateData = Boolean(skuName.trim() && skuUnit);
+  const hasCommercialData =
+    skuPrice !== '' &&
+    Number(skuPrice) > 0 &&
+    skuSubrentalPrice !== '' &&
+    Number(skuSubrentalPrice) > 0 &&
+    (skuChargeType !== 'HOUR' ||
+      (skuMinimumChargeHours !== '' && Number(skuMinimumChargeHours) > 0));
+  const hasAssetData =
     Boolean(serialOrEngine.trim()) &&
-    Boolean(ownerWarehouseId) &&
-    Boolean(warehouseCurrentId);
-
+    (!isAlternateOwnerWarehouse ||
+      (manualInternalNumber !== '' && Number(manualInternalNumber) > 0));
+  const isWarehouseStepActive = !warehouseLocked;
+  const isFamilyStepActive = warehouseLocked && !familyLocked;
+  const canEditAssetDetails = warehouseLocked && familyLocked;
+  const isTemplateStepActive = canEditAssetDetails && !hasTemplateData;
+  const isCommercialStepActive =
+    canEditAssetDetails && hasTemplateData && !hasCommercialData;
+  const isAssetStepActive =
+    canEditAssetDetails && hasTemplateData && hasCommercialData && !hasAssetData;
+  const isReviewStepActive =
+    canEditAssetDetails && hasTemplateData && hasCommercialData && hasAssetData;
   const resetForm = () => {
     setFamilyMode('existing');
     setFamilyId(null);
@@ -287,6 +300,97 @@ export default function CreateSerializedAssetPage() {
     setOwnerWarehouseId(null);
     setWarehouseCurrentId(null);
     setManualInternalNumber('');
+    setWarehouseLocked(false);
+    setFamilyLocked(false);
+  };
+
+  const clearFamilyAndAssetInputs = () => {
+    setFamilyId(null);
+    setFamilyName('');
+    setFamilyCode('');
+    setSkuSuggestionId(null);
+    setSkuName('');
+    setSkuBrand('');
+    setSkuModel('');
+    setSkuYear('');
+    setSkuFuel('');
+    setSkuUnit('');
+    setSkuUnitWeight('');
+    setSkuPrice('');
+    setSkuSubrentalPrice('');
+    setSkuChargeType('DAY');
+    setSkuMinimumChargeHours('');
+    setSerialOrEngine('');
+    setImageFileObjectId('');
+    setActive(true);
+    setManualInternalNumber('');
+    setFamilyLocked(false);
+  };
+
+  const handleOwnerWarehouseChange = (value: string | null) => {
+    setOwnerWarehouseId(value);
+    setWarehouseCurrentId(value);
+    setWarehouseLocked(false);
+    clearFamilyAndAssetInputs();
+    const selected = warehouses.find((warehouse) => warehouse.id === value);
+    if (selected?.type !== 'ALLY') {
+      setManualInternalNumber('');
+    }
+  };
+
+  const confirmWarehouseSelection = () => {
+    setError(null);
+    if (!ownerWarehouseId) {
+      setValidationError('Selecciona la bodega dueña.', ownerWarehouseRef);
+      return;
+    }
+    if (!warehouseCurrentId) {
+      setValidationError('Selecciona la bodega de ubicación.', warehouseCurrentRef);
+      return;
+    }
+    setWarehouseLocked(true);
+  };
+
+  const unlockWarehouseSelection = () => {
+    setWarehouseLocked(false);
+    clearFamilyAndAssetInputs();
+  };
+
+  const confirmFamilySelection = () => {
+    setError(null);
+    if (!warehouseLocked) {
+      setError('Confirma primero la bodega.');
+      return;
+    }
+    if (familyMode === 'existing' && !familyId) {
+      setValidationError('Selecciona familia de equipo.', familySelectRef);
+      return;
+    }
+    if (familyMode === 'new' && !familyName.trim()) {
+      setValidationError('Ingresa el nombre de la categoría.', familyNameRef);
+      return;
+    }
+    setFamilyLocked(true);
+  };
+
+  const unlockFamilySelection = () => {
+    setFamilyLocked(false);
+    setSkuSuggestionId(null);
+    setSkuName('');
+    setSkuBrand('');
+    setSkuModel('');
+    setSkuYear('');
+    setSkuFuel('');
+    setSkuUnit('');
+    setSkuUnitWeight('');
+    setSkuPrice('');
+    setSkuSubrentalPrice('');
+    setSkuChargeType('DAY');
+    setSkuMinimumChargeHours('');
+    setSerialOrEngine('');
+    setImageFileObjectId('');
+    setActive(true);
+    setManualInternalNumber('');
   };
 
   const setValidationError = (
@@ -301,6 +405,16 @@ export default function CreateSerializedAssetPage() {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+
+    if (!warehouseLocked) {
+      setValidationError('Confirma la bodega antes de guardar.', ownerWarehouseRef);
+      return;
+    }
+
+    if (!familyLocked) {
+      setValidationError('Confirma la familia antes de guardar.', familySelectRef);
+      return;
+    }
 
     if (familyMode === 'existing' && !familyId) {
       setValidationError(
@@ -500,36 +614,6 @@ export default function CreateSerializedAssetPage() {
             </Paper>
           </SimpleGrid>
 
-          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-            <StatCard
-              label="Familias"
-              value={String(families.length)}
-              hint="Catálogo serial"
-              color="blue"
-              icon={<IconChecklist size={20} />}
-            />
-            <StatCard
-              label="Plantillas"
-              value={String(skus.length)}
-              hint={familyMode === 'existing' ? 'De la familia elegida' : 'Nueva referencia'}
-              color="cyan"
-              icon={<IconCubePlus size={20} />}
-            />
-            <StatCard
-              label="Ubicación"
-              value={String(warehouses.length)}
-              hint="Dueña y actual"
-              color="grape"
-              icon={<IconBuildingWarehouse size={20} />}
-            />
-            <StatCard
-              label="Activo"
-              value={serialReady ? 'Listo' : 'Pend.'}
-              hint={serialReady ? 'Serial y bodegas completas' : 'Faltan datos'}
-              color={serialReady ? 'teal' : 'gray'}
-              icon={<IconHash size={20} />}
-            />
-          </SimpleGrid>
         </PageHeaderCard>
 
         {error ? (
@@ -547,32 +631,109 @@ export default function CreateSerializedAssetPage() {
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           <form onSubmit={handleSubmit}>
             <Stack gap="lg">
-              <Paper withBorder radius="lg" p="md">
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isWarehouseStepActive)}
+              >
                 <Stack gap="md">
-                  <Group justify="space-between" className="mobile-stack">
+                  <Group justify="space-between" align="flex-start" className="mobile-stack">
                     <div>
-                      <Text fw={700}>1. Familia</Text>
+                      <Text fw={700}>1. Bodega</Text>
+                      <Text size="sm" c="dimmed">
+                        Selecciona dónde queda ubicado inicialmente el equipo.
+                      </Text>
+                    </div>
+                    {warehouseLocked ? (
+                      <Badge color="green" variant="light">
+                        Confirmada
+                      </Badge>
+                    ) : null}
+                  </Group>
+
+                  <Group grow className="mobile-stack">
+                    <Select
+                      ref={ownerWarehouseRef}
+                      label="Bodega dueña"
+                      name="ownerWarehouseId"
+                      data={warehouseOptions}
+                      value={ownerWarehouseId}
+                      onChange={handleOwnerWarehouseChange}
+                      disabled={warehouseLocked}
+                      required
+                    />
+                    <Select
+                      ref={warehouseCurrentRef}
+                      label="Dónde queda"
+                      name="warehouseCurrentId"
+                      data={warehouseOptions}
+                      value={warehouseCurrentId}
+                      onChange={(value) => setWarehouseCurrentId(value)}
+                      disabled={warehouseLocked}
+                      required
+                    />
+                  </Group>
+
+                  <Group justify="flex-end" className="mobile-actions">
+                    {warehouseLocked ? (
+                      <Button type="button" variant="default" onClick={unlockWarehouseSelection}>
+                        Cambiar bodega
+                      </Button>
+                    ) : (
+                      <Button type="button" onClick={confirmWarehouseSelection}>
+                        Siguiente
+                      </Button>
+                    )}
+                  </Group>
+                </Stack>
+              </Paper>
+
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isFamilyStepActive)}
+              >
+                <Stack gap="md">
+                  <Group justify="space-between" align="flex-start" className="mobile-stack">
+                    <div>
+                      <Text fw={700}>2. Familia</Text>
                       <Text size="sm" c="dimmed">
                         Elige la línea del catálogo o crea una nueva.
                       </Text>
                     </div>
-                    <Button
-                      type="button"
-                      variant="light"
-                      size="xs"
-                      onClick={() =>
-                        setFamilyMode((mode) =>
-                          mode === 'existing' ? 'new' : 'existing',
-                        )
-                      }
-                    >
-                      {familyMode === 'existing'
-                        ? 'Crear familia'
-                        : 'Usar familia existente'}
-                    </Button>
+                    <Group gap="xs">
+                      {familyLocked ? (
+                        <Badge color="green" variant="light">
+                          Confirmada
+                        </Badge>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="light"
+                        size="xs"
+                        disabled={!warehouseLocked || familyLocked}
+                        onClick={() =>
+                          setFamilyMode((mode) =>
+                            mode === 'existing' ? 'new' : 'existing',
+                          )
+                        }
+                      >
+                        {familyMode === 'existing'
+                          ? 'Crear familia'
+                          : 'Usar familia existente'}
+                      </Button>
+                    </Group>
                   </Group>
 
-                  {familyMode === 'existing' ? (
+                  {!warehouseLocked ? (
+                    <Paper radius="md" p="sm" bg="gray.0">
+                      <Text size="sm" c="dimmed">
+                        Confirma primero la bodega.
+                      </Text>
+                    </Paper>
+                  ) : familyMode === 'existing' ? (
                     <Select
                       ref={familySelectRef}
                       label="Familia"
@@ -585,7 +746,7 @@ export default function CreateSerializedAssetPage() {
                       }
                       searchable
                       nothingFoundMessage="Sin resultados"
-                      disabled={loading}
+                      disabled={loading || familyLocked}
                     />
                   ) : (
                     <Group grow className="mobile-stack">
@@ -599,6 +760,7 @@ export default function CreateSerializedAssetPage() {
                           setFamilyName(event.currentTarget.value)
                         }
                         placeholder="Ej: Cargadores"
+                        disabled={familyLocked}
                         required
                       />
                       <TextInput
@@ -610,6 +772,7 @@ export default function CreateSerializedAssetPage() {
                           setFamilyCode(event.currentTarget.value)
                         }
                         placeholder="Ej: CGD"
+                        disabled={familyLocked}
                       />
                     </Group>
                   )}
@@ -624,13 +787,34 @@ export default function CreateSerializedAssetPage() {
                       </Badge>
                     ) : null}
                   </Group>
+
+                  {warehouseLocked ? (
+                    <Group justify="flex-end" className="mobile-actions">
+                      {familyLocked ? (
+                        <Button type="button" variant="default" onClick={unlockFamilySelection}>
+                          Cambiar familia
+                        </Button>
+                      ) : (
+                        <Button type="button" onClick={confirmFamilySelection}>
+                          Confirmar familia
+                        </Button>
+                      )}
+                    </Group>
+                  ) : null}
                 </Stack>
               </Paper>
 
-              <Paper withBorder radius="lg" p="md">
+              {warehouseLocked && familyLocked ? (
+              <>
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isTemplateStepActive)}
+              >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>2. Plantilla</Text>
+                    <Text fw={700}>3. Plantilla</Text>
                     <Text size="sm" c="dimmed">
                       Reutiliza una referencia o define marca, modelo y datos base.
                     </Text>
@@ -771,10 +955,15 @@ export default function CreateSerializedAssetPage() {
                 </Stack>
               </Paper>
 
-              <Paper withBorder radius="lg" p="md">
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isCommercialStepActive)}
+              >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>3. Datos comerciales</Text>
+                    <Text fw={700}>4. Datos comerciales</Text>
                     <Text size="sm" c="dimmed">
                       Precio, subalquiler y regla de cobro.
                     </Text>
@@ -837,10 +1026,15 @@ export default function CreateSerializedAssetPage() {
                 </Stack>
               </Paper>
 
-              <Paper withBorder radius="lg" p="md">
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isAssetStepActive)}
+              >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>4. Activo</Text>
+                    <Text fw={700}>5. Activo</Text>
                     <Text size="sm" c="dimmed">
                       La unidad física que queda trazable.
                     </Text>
@@ -883,47 +1077,6 @@ export default function CreateSerializedAssetPage() {
                       required
                     />
                   ) : null}
-                </Stack>
-              </Paper>
-
-              <Paper withBorder radius="lg" p="md">
-                <Stack gap="md">
-                  <div>
-                    <Text fw={700}>5. Ubicación</Text>
-                    <Text size="sm" c="dimmed">
-                      Define la bodega dueña y dónde queda el activo.
-                    </Text>
-                  </div>
-
-                  <Group grow className="mobile-stack">
-                    <Select
-                      ref={ownerWarehouseRef}
-                      label="Bodega dueña"
-                      name="ownerWarehouseId"
-                      data={warehouseOptions}
-                      value={ownerWarehouseId}
-                      onChange={(value) => {
-                        setOwnerWarehouseId(value);
-                        setWarehouseCurrentId(value);
-                        const selected = warehouses.find(
-                          (warehouse) => warehouse.id === value,
-                        );
-                        if (selected?.type !== 'ALLY') {
-                          setManualInternalNumber('');
-                        }
-                      }}
-                      required
-                    />
-                    <Select
-                      ref={warehouseCurrentRef}
-                      label="Dónde queda"
-                      name="warehouseCurrentId"
-                      data={warehouseOptions}
-                      value={warehouseCurrentId}
-                      onChange={(value) => setWarehouseCurrentId(value)}
-                      required
-                    />
-                  </Group>
                   <Switch
                     label="Activo"
                     name="active"
@@ -933,10 +1086,15 @@ export default function CreateSerializedAssetPage() {
                 </Stack>
               </Paper>
 
-              <Paper withBorder radius="lg" p="md">
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={getWorkflowStepClassName(isReviewStepActive)}
+              >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Revisión</Text>
+                    <Text fw={700}>6. Revisión</Text>
                     <Text size="sm" c="dimmed">
                       Confirma la plantilla, el activo y la ubicación.
                     </Text>
@@ -989,6 +1147,8 @@ export default function CreateSerializedAssetPage() {
                   </Group>
                 </Stack>
               </Paper>
+              </>
+              ) : null}
 
               <Group justify="flex-end" className="mobile-actions">
                 <Button

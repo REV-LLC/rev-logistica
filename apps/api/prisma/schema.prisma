@@ -389,6 +389,8 @@ model Owner {
   nitOrId   String?
   phone     String?
   email     String?
+  logoUrl   String?
+  logoKey   String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 

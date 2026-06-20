@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge, Box, Button, Divider, Group, NavLink, Stack, Text } from '@mantine/core';
-import { AppRole, clearToken, getCurrentUserRole } from '@/lib/auth';
+import { AppRole, clearToken, getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import {
   IconArrowsShuffle,
   IconBuilding,
@@ -70,6 +70,8 @@ const sections: NavSection[] = [
   },
 ];
 
+const isTransportCostEnabled = process.env.NODE_ENV !== 'production';
+
 type NavProps = {
   onNavigate?: () => void;
 };
@@ -78,10 +80,17 @@ export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const currentRole = getCurrentUserRole();
+  const currentSession = getCurrentUserSession();
   const visibleSections = sections
     .map((section) => ({
       ...section,
-      links: section.links.filter((link) => (currentRole ? link.roles.includes(currentRole) : true)),
+      links: section.links.filter((link) => {
+        if (link.href === '/transport/cost' && !isTransportCostEnabled) {
+          return false;
+        }
+
+        return currentRole ? link.roles.includes(currentRole) : true;
+      }),
     }))
     .filter((section) => section.links.length > 0);
   const roleColor =
@@ -94,24 +103,31 @@ export default function Nav({ onNavigate }: NavProps) {
   };
 
   return (
-    <Stack h="100%" gap="md" p="md">
+    <Stack h="100%" gap="lg" p="lg">
       <Group justify="space-between" align="center" wrap="nowrap">
         <Link href="/" style={{ display: 'block' }}>
           <img
             src="/fiesta.svg"
             alt="Rev Logistica"
-            style={{ height: 36, width: 'auto', display: 'block' }}
+            style={{ height: 52, width: 'auto', display: 'block' }}
           />
         </Link>
-        <Badge color={roleColor} variant="light" radius="sm" tt="uppercase">
-          {currentRole ?? 'SIN ROL'}
-        </Badge>
+        <Stack gap={2} align="flex-end">
+          <Badge color={roleColor} variant="light" radius="sm" tt="uppercase" size="lg">
+            {currentRole ?? 'SIN ROL'}
+          </Badge>
+          {currentSession?.email ? (
+            <Text size="xs" c="dimmed" ta="right" lh={1.2}>
+              {currentSession.email}
+            </Text>
+          ) : null}
+        </Stack>
       </Group>
       <Divider />
       <Stack gap="lg">
         {visibleSections.map((section) => (
-          <Stack key={section.title} gap={6}>
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" px="sm" lh={1.2}>
+          <Stack key={section.title} gap="xs">
+            <Text size="sm" fw={700} c="dimmed" tt="uppercase" px="sm" lh={1.2}>
               {section.title}
             </Text>
             <Stack gap={4}>
@@ -130,12 +146,12 @@ export default function Nav({ onNavigate }: NavProps) {
                       root: {
                         borderRadius: 'var(--mantine-radius-md)',
                         borderLeft: isActive
-                          ? '3px solid var(--mantine-color-blue-6)'
+                          ? '3px solid #d99a18'
                           : '3px solid transparent',
-                        backgroundColor: isActive ? 'var(--mantine-color-blue-0)' : 'transparent',
+                        backgroundColor: isActive ? '#fff4d6' : 'transparent',
                         paddingLeft: 'calc(var(--mantine-spacing-sm) - 3px)',
-                        paddingTop: '10px',
-                        paddingBottom: '10px',
+                        paddingTop: '12px',
+                        paddingBottom: '12px',
                       },
                       body: {
                         minHeight: 'auto',
@@ -143,17 +159,18 @@ export default function Nav({ onNavigate }: NavProps) {
                         alignItems: 'center',
                       },
                       label: {
-                        color: isActive ? 'var(--mantine-color-blue-9)' : 'var(--mantine-color-gray-8)',
+                        color: isActive ? '#8a5a00' : 'var(--mantine-color-gray-8)',
                         fontWeight: isActive ? 700 : 500,
                         lineHeight: 1.2,
+                        fontSize: '0.92rem',
                       },
                       section: {
-                        color: isActive ? 'var(--mantine-color-blue-7)' : 'var(--mantine-color-gray-6)',
+                        color: isActive ? '#b87500' : 'var(--mantine-color-gray-6)',
                         display: 'flex',
                         alignItems: 'center',
                       },
                     }}
-                    leftSection={<Icon size={17} stroke={1.8} />}
+                    leftSection={<Icon size={20} stroke={1.8} />}
                     onClick={onNavigate}
                   />
                 );
@@ -165,7 +182,7 @@ export default function Nav({ onNavigate }: NavProps) {
       <Box mt="auto">
         <Divider mb="md" />
         <Stack gap="xs">
-          <Button variant="subtle" color="red" onClick={handleLogout} size="xs">
+          <Button variant="subtle" color="red" onClick={handleLogout} size="sm">
             Logout
           </Button>
         </Stack>

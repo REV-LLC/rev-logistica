@@ -154,6 +154,34 @@ function formatToday() {
   }).format(new Date());
 }
 
+function CompactMetric({
+  label,
+  value,
+  hint,
+  color,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  color: string;
+}) {
+  return (
+    <Paper withBorder radius="lg" p="sm" bg="rgba(255,255,255,0.78)">
+      <Stack gap={4}>
+        <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+          {label}
+        </Text>
+        <Text fw={800} size="xl" c={`${color}.7`} lh={1}>
+          {value}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {hint}
+        </Text>
+      </Stack>
+    </Paper>
+  );
+}
+
 export default function HomePage() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -273,7 +301,11 @@ export default function HomePage() {
           <Stack gap="lg">
             <PageHeaderCard
               title="Dashboard operativo"
-              description="Visibilidad rápida del equipo, la operación y los vencimientos que requieren atención."
+              description={
+                isMobile
+                  ? 'Resumen rápido de alertas y operación.'
+                  : 'Visibilidad rápida del equipo, la operación y los vencimientos que requieren atención.'
+              }
               icon={<IconAlertTriangle size={20} />}
               iconColor={dashboardStatus.color}
               accentColor={
@@ -284,7 +316,7 @@ export default function HomePage() {
                     : 'rgba(20,184,166,0.12)'
               }
               aside={
-                <Stack gap={6} align="flex-end">
+                <Stack gap={6} align={isMobile ? 'flex-start' : 'flex-end'}>
                   <Badge variant="light" color={currentRole === 'ADMIN' ? 'red' : 'blue'} size="lg">
                     {currentRole ?? 'SIN ROL'}
                   </Badge>
@@ -302,47 +334,83 @@ export default function HomePage() {
                       {dashboardStatus.description}
                     </Text>
                   </div>
-                  <div>
-                    <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Sesión
-                    </Text>
-                    <Text size="sm" mt={4}>
-                      {session?.email ?? 'Usuario autenticado'}
-                    </Text>
-                  </div>
+                  {!isMobile ? (
+                    <div>
+                      <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                        Sesión
+                      </Text>
+                      <Text size="sm" mt={4}>
+                        {session?.email ?? 'Usuario autenticado'}
+                      </Text>
+                    </div>
+                  ) : null}
                 </Group>
+                {isMobile ? (
+                  <Text size="xs" c="dimmed" mt="sm">
+                    Sesión: {session?.email ?? 'Usuario autenticado'}
+                  </Text>
+                ) : null}
               </Paper>
 
-              <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-                <StatCard
-                  label="Vencimientos críticos"
-                  value={String(dashboardMetrics.criticalVehicles)}
-                  hint="SOAT o tecnomecánica en 7 días o menos"
-                  color="red"
-                  icon={<IconAlertTriangle size={20} />}
-                />
-                <StatCard
-                  label="Tareas activas"
-                  value={String(dashboardMetrics.openTasks + dashboardMetrics.doingTasks)}
-                  hint={`${dashboardMetrics.openTasks} abiertas y ${dashboardMetrics.doingTasks} en curso`}
-                  color="yellow"
-                  icon={<IconChecklist size={20} />}
-                />
-                <StatCard
-                  label="Clientes activos"
-                  value={String(dashboardMetrics.activeCustomers)}
-                  hint="Base comercial operativa"
-                  color="teal"
-                  icon={<IconUsers size={20} />}
-                />
-                <StatCard
-                  label="Equipo con acceso"
-                  value={String(dashboardMetrics.usersWithAccess)}
-                  hint={`${dashboardMetrics.activeEmployees} empleados activos`}
-                  color="blue"
-                  icon={<IconUserStar size={20} />}
-                />
-              </SimpleGrid>
+              {isMobile ? (
+                <SimpleGrid cols={2} spacing="sm">
+                  <CompactMetric
+                    label="Críticos"
+                    value={String(dashboardMetrics.criticalVehicles)}
+                    hint="Vencimientos urgentes"
+                    color="red"
+                  />
+                  <CompactMetric
+                    label="Tareas"
+                    value={String(dashboardMetrics.openTasks + dashboardMetrics.doingTasks)}
+                    hint="Abiertas y en curso"
+                    color="yellow"
+                  />
+                  <CompactMetric
+                    label="Clientes"
+                    value={String(dashboardMetrics.activeCustomers)}
+                    hint="Activos"
+                    color="teal"
+                  />
+                  <CompactMetric
+                    label="Accesos"
+                    value={String(dashboardMetrics.usersWithAccess)}
+                    hint="Equipo con login"
+                    color="blue"
+                  />
+                </SimpleGrid>
+              ) : (
+                <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+                  <StatCard
+                    label="Vencimientos críticos"
+                    value={String(dashboardMetrics.criticalVehicles)}
+                    hint="SOAT o tecnomecánica en 7 días o menos"
+                    color="red"
+                    icon={<IconAlertTriangle size={20} />}
+                  />
+                  <StatCard
+                    label="Tareas activas"
+                    value={String(dashboardMetrics.openTasks + dashboardMetrics.doingTasks)}
+                    hint={`${dashboardMetrics.openTasks} abiertas y ${dashboardMetrics.doingTasks} en curso`}
+                    color="yellow"
+                    icon={<IconChecklist size={20} />}
+                  />
+                  <StatCard
+                    label="Clientes activos"
+                    value={String(dashboardMetrics.activeCustomers)}
+                    hint="Base comercial operativa"
+                    color="teal"
+                    icon={<IconUsers size={20} />}
+                  />
+                  <StatCard
+                    label="Equipo con acceso"
+                    value={String(dashboardMetrics.usersWithAccess)}
+                    hint={`${dashboardMetrics.activeEmployees} empleados activos`}
+                    color="blue"
+                    icon={<IconUserStar size={20} />}
+                  />
+                </SimpleGrid>
+              )}
             </PageHeaderCard>
 
             {error ? (
@@ -361,12 +429,14 @@ export default function HomePage() {
                         Entra directo a los flujos que más se usan en oficina.
                       </Text>
                     </div>
-                    <Badge color="gray" variant="light">
-                      {quickLinks.length} accesos
-                    </Badge>
+                    {!isMobile ? (
+                      <Badge color="gray" variant="light">
+                        {quickLinks.length} accesos
+                      </Badge>
+                    ) : null}
                   </Group>
 
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={isMobile ? 'sm' : 'md'}>
                     {quickLinks.map((link) => (
                       <Paper
                         key={link.href}
@@ -377,19 +447,25 @@ export default function HomePage() {
                         p="md"
                         style={{ textDecoration: 'none', color: 'inherit' }}
                       >
-                        <Group justify="space-between" align="center" wrap="nowrap">
-                          <Group gap="sm" wrap="nowrap" align="flex-start">
-                            <ThemeIcon color={link.color} variant="light" size={40} radius="xl">
+                        <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
+                          <Group gap={isMobile ? 'xs' : 'sm'} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+                            <ThemeIcon color={link.color} variant="light" size={isMobile ? 34 : 40} radius="xl">
                               {link.icon}
                             </ThemeIcon>
-                            <div>
+                            <div style={{ minWidth: 0 }}>
                               <Text fw={700}>{link.title}</Text>
-                              <Text size="sm" c="dimmed" mt={4}>
-                                {link.description}
-                              </Text>
+                              {!isMobile ? (
+                                <Text size="sm" c="dimmed" mt={4}>
+                                  {link.description}
+                                </Text>
+                              ) : (
+                                <Text size="xs" c="dimmed" mt={2} lineClamp={2}>
+                                  {link.description}
+                                </Text>
+                              )}
                             </div>
                           </Group>
-                          <IconArrowRight size={18} />
+                          <IconArrowRight size={isMobile ? 16 : 18} />
                         </Group>
                       </Paper>
                     ))}
@@ -406,20 +482,39 @@ export default function HomePage() {
                     </Text>
                   </div>
 
-                  <StatCard
-                    label="En curso"
-                    value={String(dashboardMetrics.doingTasks)}
-                    hint="Tareas actualmente ejecutándose"
-                    color="blue"
-                    icon={<IconChecklist size={20} />}
-                  />
-                  <StatCard
-                    label="Flota próxima"
-                    value={String(dashboardMetrics.upcomingVehicles)}
-                    hint="Vehículos con documentos entre 8 y 30 días"
-                    color="orange"
-                    icon={<IconTruck size={20} />}
-                  />
+                  {isMobile ? (
+                    <SimpleGrid cols={2} spacing="sm">
+                      <CompactMetric
+                        label="En curso"
+                        value={String(dashboardMetrics.doingTasks)}
+                        hint="Tareas ejecutándose"
+                        color="blue"
+                      />
+                      <CompactMetric
+                        label="Flota próxima"
+                        value={String(dashboardMetrics.upcomingVehicles)}
+                        hint="Documentos por vencer"
+                        color="orange"
+                      />
+                    </SimpleGrid>
+                  ) : (
+                    <>
+                      <StatCard
+                        label="En curso"
+                        value={String(dashboardMetrics.doingTasks)}
+                        hint="Tareas actualmente ejecutándose"
+                        color="blue"
+                        icon={<IconChecklist size={20} />}
+                      />
+                      <StatCard
+                        label="Flota próxima"
+                        value={String(dashboardMetrics.upcomingVehicles)}
+                        hint="Vehículos con documentos entre 8 y 30 días"
+                        color="orange"
+                        icon={<IconTruck size={20} />}
+                      />
+                    </>
+                  )}
                 </Stack>
               </Paper>
             </SimpleGrid>

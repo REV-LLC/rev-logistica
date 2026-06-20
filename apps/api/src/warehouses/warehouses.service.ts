@@ -16,7 +16,7 @@ export class WarehousesService {
         type: true,
         active: true,
         ownerCompanyId: true,
-        ownerCompany: { select: { id: true, name: true } },
+        ownerCompany: { select: { id: true, name: true, logoUrl: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -31,7 +31,7 @@ export class WarehousesService {
         type: true,
         active: true,
         ownerCompanyId: true,
-        ownerCompany: { select: { id: true, name: true } },
+        ownerCompany: { select: { id: true, name: true, logoUrl: true } },
       },
     });
     if (!warehouse) {
@@ -62,7 +62,7 @@ export class WarehousesService {
         type: true,
         active: true,
         ownerCompanyId: true,
-        ownerCompany: { select: { id: true, name: true } },
+        ownerCompany: { select: { id: true, name: true, logoUrl: true } },
       },
     });
   }
@@ -100,7 +100,7 @@ export class WarehousesService {
         type: true,
         active: true,
         ownerCompanyId: true,
-        ownerCompany: { select: { id: true, name: true } },
+        ownerCompany: { select: { id: true, name: true, logoUrl: true } },
       },
     });
   }
