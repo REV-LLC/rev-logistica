@@ -4,7 +4,11 @@ import { NextFunction, Request, Response } from 'express';
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function uppercaseDeep(value: unknown): unknown {
+function shouldPreserveCase(key: string | undefined) {
+  return key?.toLowerCase().includes('address') ?? false;
+}
+
+function uppercaseDeep(value: unknown, key?: string): unknown {
   if (typeof value === 'string') {
     // Keep data URLs intact; uppercasing breaks base64 payloads (e.g. signatures).
     if (/^data:[^;]+;base64,/i.test(value)) {
@@ -14,18 +18,22 @@ function uppercaseDeep(value: unknown): unknown {
     if (UUID_REGEX.test(value)) {
       return value;
     }
+    // Keep address fields in provider/user formatting, especially Google Maps output.
+    if (shouldPreserveCase(key)) {
+      return value;
+    }
     return value.toUpperCase();
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => uppercaseDeep(item));
+    return value.map((item) => uppercaseDeep(item, key));
   }
 
   if (value && typeof value === 'object') {
     const input = value as Record<string, unknown>;
     const output: Record<string, unknown> = {};
     Object.keys(input).forEach((key) => {
-      output[key] = uppercaseDeep(input[key]);
+      output[key] = uppercaseDeep(input[key], key);
     });
     return output;
   }
