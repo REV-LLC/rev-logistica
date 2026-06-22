@@ -7,6 +7,10 @@ export class UpdateEmployeeDto {
   name?: string;
 
   @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
   @IsEnum(EmployeeRole)
   role?: EmployeeRole;
 

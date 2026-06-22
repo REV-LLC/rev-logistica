@@ -473,7 +473,7 @@ export class DocumentsService {
           select: {
             id: true,
             email: true,
-            employee: { select: { name: true } },
+            employee: { select: { name: true, lastName: true } },
           },
         })
       : [];
@@ -487,7 +487,7 @@ export class DocumentsService {
         return {
           id: creator.id,
           email: creator.email,
-          name: creator.employee?.name ?? creator.email,
+          name: creator.employee ? `${creator.employee.name} ${creator.employee.lastName}`.trim() : creator.email,
         };
       })(),
     }));
@@ -732,7 +732,7 @@ export class DocumentsService {
           select: {
             id: true,
             email: true,
-            employee: { select: { name: true } },
+            employee: { select: { name: true, lastName: true } },
           },
         },
         files: {
@@ -796,7 +796,7 @@ export class DocumentsService {
               select: {
                 id: true,
                 email: true,
-                employee: { select: { name: true } },
+                employee: { select: { name: true, lastName: true } },
               },
             },
           },
@@ -815,7 +815,9 @@ export class DocumentsService {
         ? {
             id: document.creator.id,
             email: document.creator.email,
-            name: document.creator.employee?.name ?? document.creator.email,
+            name: document.creator.employee
+              ? `${document.creator.employee.name} ${document.creator.employee.lastName}`.trim()
+              : document.creator.email,
           }
         : null,
       ledger: document.ledger.map((entry) => ({
@@ -824,7 +826,9 @@ export class DocumentsService {
           ? {
               id: entry.creator.id,
               email: entry.creator.email,
-              name: entry.creator.employee?.name ?? entry.creator.email,
+              name: entry.creator.employee
+                ? `${entry.creator.employee.name} ${entry.creator.employee.lastName}`.trim()
+                : entry.creator.email,
             }
           : null,
       })),

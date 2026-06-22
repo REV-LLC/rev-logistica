@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Avatar,
   Badge,
   Button,
   Container,
@@ -35,7 +36,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
-import { api, ApiError } from '@/lib/api';
+import { api, apiBlob, ApiError } from '@/lib/api';
 
 type VehicleOption = {
   id: string;
@@ -48,6 +49,7 @@ type VehicleOption = {
 type Employee = {
   id: string;
   name: string;
+  lastName: string;
   role: RoleValue;
   phone: string | null;
   email: string | null;
@@ -76,6 +78,7 @@ type RoleValue =
 
 type EmployeeForm = {
   name: string;
+  lastName: string;
   role: RoleValue;
   phone: string;
   email: string;
@@ -93,6 +96,7 @@ type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER';
 
 const emptyForm: EmployeeForm = {
   name: '',
+  lastName: '',
   role: 'DRIVER',
   phone: '',
   email: '',
@@ -147,6 +151,44 @@ function getVehicleSummary(vehicles: VehicleOption[]) {
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 
+function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
+  return `${employee.name} ${employee.lastName}`.trim();
+}
+
+function getEmployeeInitials(employee: Pick<Employee, 'name' | 'lastName'>) {
+  const parts = getEmployeeFullName(employee).split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
+}
+
+function EmployeeAvatar({ employee, size = 40 }: { employee: Employee; size?: number }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setPhotoUrl(null);
+
+    apiBlob(`/employees/${employee.id}/photo`, { redirectOnAuthError: false })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [employee.id]);
+
+  return (
+    <Avatar src={photoUrl} radius="xl" size={size} color="blue" alt={getEmployeeFullName(employee)}>
+      {getEmployeeInitials(employee)}
+    </Avatar>
+  );
+}
+
 function EmployeeDetails({
   employee,
   onEdit,
@@ -159,14 +201,17 @@ function EmployeeDetails({
   return (
     <Stack gap="md">
       <Group justify="space-between" align="flex-start">
-        <div>
-          <Text fw={700} size="lg">
-            {employee.name}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {roleLabelByValue[employee.role] ?? employee.role}
-          </Text>
-        </div>
+        <Group align="flex-start" gap="sm" wrap="nowrap">
+          <EmployeeAvatar employee={employee} size={44} />
+          <div>
+            <Text fw={700} size="lg">
+              {getEmployeeFullName(employee)}
+            </Text>
+            <Text size="sm" c="dimmed">
+              {roleLabelByValue[employee.role] ?? employee.role}
+            </Text>
+          </div>
+        </Group>
         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
           {employee.active ? 'Activo' : 'Inactivo'}
         </Badge>
@@ -304,6 +349,7 @@ export default function EmployeesPage() {
     setEditingEmployee(employee);
     setForm({
       name: employee.name ?? '',
+      lastName: employee.lastName ?? '',
       role: employee.role ?? 'DRIVER',
       phone: employee.phone ?? '',
       email: employee.email ?? '',
@@ -332,6 +378,10 @@ export default function EmployeesPage() {
       setError('El nombre es obligatorio');
       return;
     }
+    if (!form.lastName.trim()) {
+      setError('El apellido es obligatorio');
+      return;
+    }
     if (form.loginEnabled && !form.loginEmail.trim()) {
       setError('El email de acceso es obligatorio');
       return;
@@ -345,6 +395,7 @@ export default function EmployeesPage() {
     try {
       const payload = {
         name: form.name.trim().toUpperCase(),
+        lastName: form.lastName.trim().toUpperCase(),
         role: form.role,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
@@ -368,6 +419,7 @@ export default function EmployeesPage() {
           method: 'POST',
           json: {
             name: payload.name,
+            lastName: payload.lastName,
             role: payload.role,
             phone: payload.phone,
             email: payload.email,
@@ -397,7 +449,7 @@ export default function EmployeesPage() {
   };
 
   const deleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`¿Eliminar empleado ${employee.name}?`)) return;
+    if (!window.confirm(`¿Eliminar empleado ${getEmployeeFullName(employee)}?`)) return;
 
     setError(null);
     try {
@@ -475,12 +527,15 @@ export default function EmployeesPage() {
                   <Paper key={employee.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{employee.name}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </div>
+                        <Group align="flex-start" gap="sm" wrap="nowrap">
+                          <EmployeeAvatar employee={employee} size={42} />
+                          <div>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </div>
+                        </Group>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
                           {employee.active ? 'Activo' : 'Inactivo'}
                         </Badge>
@@ -567,12 +622,15 @@ export default function EmployeesPage() {
                   employees.map((employee) => (
                     <Table.Tr key={employee.id}>
                       <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700}>{employee.name}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </Stack>
+                        <Group gap="sm" wrap="nowrap">
+                          <EmployeeAvatar employee={employee} size={36} />
+                          <Stack gap={2}>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </Stack>
+                        </Group>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
@@ -621,7 +679,7 @@ export default function EmployeesPage() {
                           <ActionIcon
                             color="gray"
                             variant="light"
-                            aria-label={`Ver detalle de ${employee.name}`}
+                            aria-label={`Ver detalle de ${getEmployeeFullName(employee)}`}
                             onClick={() => setDetailsEmployee(employee)}
                           >
                             <IconEye size={16} />
@@ -712,7 +770,7 @@ export default function EmployeesPage() {
             >
               <Group justify="space-between" align="flex-start">
                 <div>
-                  <Text fw={700}>{editingEmployee.name}</Text>
+                  <Text fw={700}>{getEmployeeFullName(editingEmployee)}</Text>
                   <Text size="sm" c="dimmed">
                     {roleLabelByValue[editingEmployee.role] ?? editingEmployee.role}
                   </Text>
@@ -735,8 +793,8 @@ export default function EmployeesPage() {
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
-                  label="Nombre"
-                  placeholder="Nombre completo"
+                  label="Nombres"
+                  placeholder="Nombres"
                   value={form.name}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -744,6 +802,19 @@ export default function EmployeesPage() {
                   }}
                   required
                 />
+                <TextInput
+                  label="Apellidos"
+                  placeholder="Apellidos"
+                  value={form.lastName}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, lastName: value }));
+                  }}
+                  required
+                />
+              </SimpleGrid>
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Select
                   label="Rol"
                   value={form.role}
@@ -754,9 +825,6 @@ export default function EmployeesPage() {
                   allowDeselect={false}
                   required
                 />
-              </SimpleGrid>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="Teléfono"
                   placeholder="Número de contacto"

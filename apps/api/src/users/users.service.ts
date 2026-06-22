@@ -26,14 +26,14 @@ export class UsersService {
         role: true,
         active: true,
         employee: {
-          select: { name: true },
+          select: { name: true, lastName: true },
         },
       },
     });
 
     return users.map((user) => ({
       id: user.id,
-      name: user.employee?.name ?? user.email,
+      name: user.employee ? `${user.employee.name} ${user.employee.lastName}`.trim() : user.email,
       email: user.email,
       role: user.role,
       active: user.active,

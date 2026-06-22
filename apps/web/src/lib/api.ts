@@ -67,3 +67,37 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
   return data as T;
 }
+
+export async function apiBlob(path: string, options: ApiOptions = {}): Promise<Blob> {
+  const headers = new Headers(options.headers ?? {});
+  const shouldAuth = options.auth !== false;
+
+  if (shouldAuth) {
+    const token = getToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  const shouldRedirect = options.redirectOnAuthError !== false;
+  if (shouldRedirect && response.status === 401 && typeof window !== 'undefined') {
+    clearToken();
+    markSessionExpiredNotice();
+    const next = window.location.pathname || '';
+    if (!window.location.pathname.startsWith('/login')) {
+      const params = new URLSearchParams();
+      if (next) params.set('next', next);
+      params.set('reason', 'expired');
+      window.location.replace(`/login?${params.toString()}`);
+    }
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, response.statusText || 'Request failed');
+  }
+
+  return response.blob();
+}

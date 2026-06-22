@@ -400,6 +400,7 @@ model Owner {
 model Employee {
   id         String       @id @default(uuid())
   name       String
+  lastName   String       @default("")
   role       EmployeeRole
   phone      String?
   email      String?

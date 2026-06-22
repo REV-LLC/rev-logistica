@@ -60,6 +60,7 @@ type CatalogAsset = {
 type Employee = {
   id: string;
   name: string;
+  lastName?: string | null;
   user?: {
     id: string;
     email: string;
@@ -67,6 +68,9 @@ type Employee = {
     active: boolean;
   } | null;
 };
+const getEmployeeFullName = (employee: Pick<Employee, 'name' | 'lastName'>) =>
+  `${employee.name} ${employee.lastName ?? ''}`.trim();
+
 type Customer = { id: string; name: string };
 type CustomerWorksite = {
   id: string;
@@ -500,7 +504,7 @@ export default function SolicitudesIpadPage() {
   }));
   const employeeOptions = employees.map((employee) => ({
     value: employee.id,
-    label: employee.name,
+    label: getEmployeeFullName(employee),
   }));
   const selectedBulkKeys = useMemo(
     () =>

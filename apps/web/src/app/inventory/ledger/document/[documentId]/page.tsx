@@ -100,7 +100,11 @@ type VehicleOption = {
 type EmployeeOption = {
   id: string;
   name: string;
+  lastName?: string | null;
 };
+
+const getEmployeeFullName = (employee: EmployeeOption) =>
+  `${employee.name} ${employee.lastName ?? ''}`.trim();
 
 type WarehouseOption = {
   id: string;
@@ -467,7 +471,7 @@ export default function DocumentDetailPage() {
     const found = employees.find(
       (employee) => employee.id.toLowerCase() === driverId.toLowerCase(),
     );
-    return found?.name ?? '-';
+    return found ? getEmployeeFullName(found) : '-';
   }, [parsedNotes.driverId, employees]);
   const dispatcherDisplay = useMemo(() => {
     const dispatcherId = parsedNotes.dispatcherId ?? '';
@@ -475,7 +479,7 @@ export default function DocumentDetailPage() {
     const found = employees.find(
       (employee) => employee.id.toLowerCase() === dispatcherId.toLowerCase(),
     );
-    return found?.name ?? '-';
+    return found ? getEmployeeFullName(found) : '-';
   }, [parsedNotes.dispatcherId, employees]);
   const transportadoPorDisplay = useMemo(() => {
     const driver = driverDisplay && driverDisplay !== '-' ? driverDisplay : '';

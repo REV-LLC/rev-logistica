@@ -43,7 +43,7 @@ type CatalogAsset = {
   skuId: string | null;
 };
 
-type Employee = { id: string; name: string };
+type Employee = { id: string; name: string; lastName?: string | null };
 type Customer = { id: string; name: string };
 type CustomerWorksite = {
   id: string;
@@ -68,6 +68,9 @@ type SelectedItem = {
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+
+const getEmployeeFullName = (employee: Employee) =>
+  `${employee.name} ${employee.lastName ?? ''}`.trim();
 
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
@@ -552,7 +555,7 @@ export default function RemisionDevolucionPage() {
                 label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
                 value={driverId}
                 onChange={(value) => setDriverId(value)}
-                data={employees.map((e) => ({ value: e.id, label: e.name }))}
+                data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
                 searchable
                 clearable
               />
@@ -562,7 +565,7 @@ export default function RemisionDevolucionPage() {
                 label={helpLabel('Despachador', 'Empleado que entrega el material desde bodega.')}
                 value={dispatcherId}
                 onChange={(value) => setDispatcherId(value)}
-                data={employees.map((e) => ({ value: e.id, label: e.name }))}
+                data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
                 searchable
                 clearable
               />

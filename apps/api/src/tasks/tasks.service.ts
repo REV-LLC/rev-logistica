@@ -67,7 +67,7 @@ export class TasksService {
           select: {
             id: true,
             email: true,
-            employee: { select: { name: true } },
+            employee: { select: { name: true, lastName: true } },
           },
         },
       },
@@ -78,7 +78,9 @@ export class TasksService {
       assignedTo: task.assignedTo
         ? {
             id: task.assignedTo.id,
-            name: task.assignedTo.employee?.name ?? task.assignedTo.email,
+            name: task.assignedTo.employee
+              ? `${task.assignedTo.employee.name} ${task.assignedTo.employee.lastName}`.trim()
+              : task.assignedTo.email,
           }
         : null,
     }));
