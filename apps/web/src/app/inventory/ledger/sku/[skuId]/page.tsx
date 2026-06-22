@@ -125,7 +125,7 @@ export default function LedgerSkuPage() {
               loading={loading}
               onClick={() => fetchLedger({ append: true })}
             >
-              {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+              {nextCursor ? 'Cargar mas' : 'No hay mas resultados'}
             </Button>
           </Group>
         )}

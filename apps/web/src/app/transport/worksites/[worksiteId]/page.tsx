@@ -110,7 +110,7 @@ export default function ObraDetailPage() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando información de la obra');
+          setError('Error loading worksite information');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -175,18 +175,18 @@ export default function ObraDetailPage() {
             <Group gap="xs" wrap="wrap">
               {worksite ? (
                 <Button variant="default" component={Link} href={`/customers?customerId=${worksite.customer.id}`}>
-                  Ver cliente
+                  View customer
                 </Button>
               ) : null}
               <Button variant="light" component={Link} href={`/inventory/ledger?customerWorksiteId=${worksiteId ?? ''}`}>
-                Ver ledger completo
+                View full ledger
               </Button>
             </Group>
           </Group>
 
           <PageHeaderCard
             title={pageTitle}
-            description="Inventario en obra, responsables dueños y trazabilidad reciente del frente operativo."
+            description="Inventario en obra, responsabilidad por dueño y trazabilidad reciente del frente operativo."
             icon={<IconBuildingEstate size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
@@ -202,7 +202,7 @@ export default function ObraDetailPage() {
               <Group gap="sm">
                 <Loader size="sm" />
                 <Text size="sm" c="dimmed">
-                  Cargando detalle de la obra...
+                  Cargando detalle de obra...
                 </Text>
               </Group>
             ) : null}
@@ -218,7 +218,7 @@ export default function ObraDetailPage() {
                     icon={<IconRoute2 size={20} />}
                   />
                   <StatCard
-                    label="Equipos únicos"
+                    label="Equipos unicos"
                     value={String(worksiteMetrics.serialAssets)}
                     hint={`${worksiteMetrics.serialUnits} equipos serializados visibles`}
                     color="teal"
@@ -227,14 +227,14 @@ export default function ObraDetailPage() {
                   <StatCard
                     label="Dueños presentes"
                     value={String(worksiteMetrics.owners.length)}
-                    hint="Empresas dueñas representadas en la obra"
+                    hint="Empresas dueñas representadas en obra"
                     color="grape"
                     icon={<IconBuildingEstate size={20} />}
                   />
                   <StatCard
                     label="Movimientos recientes"
                     value={String(worksiteMetrics.recentMoves)}
-                    hint="Últimos registros cargados en el ledger"
+                    hint="Ultimos registros cargados en el ledger"
                     color="orange"
                     icon={<IconArrowRight size={20} />}
                   />
@@ -249,7 +249,7 @@ export default function ObraDetailPage() {
                       {worksite.customer.name}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Relación comercial de la obra
+                      Relacion comercial de la obra
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
@@ -260,30 +260,30 @@ export default function ObraDetailPage() {
                       {worksite.alias ?? 'Sin alias'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Nombre corto usado en operación
+                      Nombre corto usado en operacion
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Dirección
+                      Direccion
                     </Text>
                     <Text fw={700} mt={6}>
-                      {worksite.worksite.address ?? 'Sin dirección registrada'}
+                      {worksite.worksite.address ?? 'Sin direccion registrada'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Ubicación base del frente
+                      Ubicacion base del frente
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Acciones rápidas
+                      Acciones rapidas
                     </Text>
                     <Stack gap={6} mt={6}>
                       <Button
                         size="xs"
                         variant="light"
                         component={Link}
-                        href="/transport/solicitudes"
+                        href="/transport/requests"
                         justify="space-between"
                         rightSection={<IconArrowRight size={14} />}
                       >
@@ -323,7 +323,7 @@ export default function ObraDetailPage() {
                 <div>
                   <Text fw={700}>Inventario en obra</Text>
                   <Text size="sm" c="dimmed">
-                    Equipos y materiales actualmente asociados a este frente. Los colores por dueño se mantienen en cada agrupación.
+                    Equipos y materiales asociados actualmente a este frente. Los colores por dueño se conservan en cada grupo.
                   </Text>
                 </div>
                 <InventoryDisplay
@@ -343,7 +343,7 @@ export default function ObraDetailPage() {
                 <div>
                   <Text fw={700}>Movimientos recientes</Text>
                   <Text size="sm" c="dimmed">
-                    Últimos registros del ledger relacionados con esta obra.
+                    Ultimos registros del ledger relacionados con esta obra.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
@@ -356,7 +356,7 @@ export default function ObraDetailPage() {
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text fw={700}>No hay movimientos recientes para esta obra.</Text>
                   <Text size="sm" c="dimmed" mt={6}>
-                    Cuando entren o salgan equipos y materiales, la trazabilidad aparecerá aquí.
+                    Cuando entren o salgan equipos y materiales, la trazabilidad aparecera aqui.
                   </Text>
                 </Paper>
               )}

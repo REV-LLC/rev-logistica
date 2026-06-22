@@ -348,14 +348,14 @@ export default function ScaffoldModulationsPage() {
       <Container fluid py="xl">
         <Stack gap="lg">
               <PageHeaderCard
-                title="Modulaciones de andamio certificado"
-                description="Motor inicial con tu logica: modula largo, calcula cajones, piezas requeridas, faltantes y peso desde inventario."
+                title="Certified scaffold modulations"
+                description="Initial engine with your logic: modulates length, calculates bays, required pieces, shortages, and inventory weight."
                 icon={<IconCertificate size={22} />}
                 iconColor="teal"
                 accentColor="rgba(20, 184, 166, 0.18)"
                 aside={
                   <Badge color={missingReferences ? 'red' : 'green'} variant="light" radius="sm" size="lg">
-                    {missingReferences ? `${missingReferences} faltantes` : 'Completa'}
+                    {missingReferences ? `${missingReferences} missing` : 'Complete'}
                   </Badge>
                 }
               />
@@ -367,12 +367,12 @@ export default function ScaffoldModulationsPage() {
                       <ThemeIcon color="teal" variant="light" radius="xl">
                         <IconRulerMeasure size={18} />
                       </ThemeIcon>
-                      <Title order={3}>Entrada</Title>
+                      <Title order={3}>Input</Title>
                     </Group>
 
                     <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                       <Select
-                        label="Frente"
+                        label="Front"
                         data={frontOptions}
                         value={String(targetLength)}
                         onChange={(value) => setTargetLength(Number(value ?? 0.7))}
@@ -380,7 +380,7 @@ export default function ScaffoldModulationsPage() {
                         searchable
                       />
                       <Select
-                        label="Ancho"
+                        label="Width"
                         data={frontOptions}
                         value={String(width)}
                         onChange={(value) => setWidth(Number(value ?? 0.7))}
@@ -388,7 +388,7 @@ export default function ScaffoldModulationsPage() {
                         searchable
                       />
                       <Select
-                        label="Altura"
+                        label="Height"
                         data={heightOptions}
                         value={String(height)}
                         onChange={(value) => setHeight(Number(value ?? 2))}
@@ -398,14 +398,14 @@ export default function ScaffoldModulationsPage() {
                     <Switch
                       checked={spaceLimited}
                       onChange={(event) => setSpaceLimited(event.currentTarget.checked)}
-                      label="Espacio limitado: no pasarse de la medida"
+                      label="Limited space: do not exceed the measurement"
                     />
                     <SegmentedControl
                       value={supportMode}
                       onChange={(value) => setSupportMode(value as 'leveling-jack' | 'wheel')}
                       data={[
-                        { value: 'leveling-jack', label: 'Tornillos' },
-                        { value: 'wheel', label: 'Ruedas' },
+                        { value: 'leveling-jack', label: 'Leveling jacks' },
+                        { value: 'wheel', label: 'Wheels' },
                       ]}
                     />
                   </Stack>
@@ -422,7 +422,7 @@ export default function ScaffoldModulationsPage() {
                       }))}
                       value={warehouseId}
                       onChange={setWarehouseId}
-                      placeholder="Selecciona bodega"
+                      placeholder="Seleccionar bodega"
                       searchable
                     />
                     <SimpleGrid cols={2} spacing="sm">
@@ -436,7 +436,7 @@ export default function ScaffoldModulationsPage() {
                       </Paper>
                       <Paper withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                          Cajones
+                          Modulos
                         </Text>
                         <Text fw={900} size="xl">
                           {calculation.metrics.bays * calculation.metrics.heightBodies}
@@ -445,7 +445,7 @@ export default function ScaffoldModulationsPage() {
                     </SimpleGrid>
                     {unknownWeights > 0 ? (
                       <Alert color="yellow" icon={<IconAlertTriangle size={16} />}>
-                        {unknownWeights} referencias no tienen peso o no se empataron con inventario.
+                        {unknownWeights} referencias no tienen peso o no fueron cruzadas con inventario.
                       </Alert>
                     ) : null}
                     {loadingInventory ? <Text size="sm" c="dimmed">Cargando inventario...</Text> : null}
@@ -468,32 +468,32 @@ export default function ScaffoldModulationsPage() {
               <SimpleGrid cols={{ base: 1, md: 4 }} spacing="md">
                 <Paper withBorder radius="lg" p="md">
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                    Reticula vertical
+                    Vertical grid
                   </Text>
                   <Text fw={900} size="xl">
                     {calculation.metrics.verticalLines} x {calculation.metrics.widthLines}
                   </Text>
                   <Text size="sm" c="dimmed">
-                    {calculation.metrics.supportPoints} puntos de apoyo
+                    {calculation.metrics.supportPoints} support points
                   </Text>
                 </Paper>
                 <Paper withBorder radius="lg" p="md">
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                    Cuerpos de altura
+                    Height bodies
                   </Text>
                   <Text fw={900} size="xl">{calculation.metrics.heightBodies}</Text>
-                  <Text size="sm" c="dimmed">Cuerpos de 2.00 M</Text>
+                  <Text size="sm" c="dimmed">2.00 M bodies</Text>
                 </Paper>
                 <Paper withBorder radius="lg" p="md">
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                    Niveles horizontales
+                    Horizontal levels
                   </Text>
                   <Text fw={900} size="xl">{calculation.metrics.horizontalLevels}</Text>
-                  <Text size="sm" c="dimmed">Incluye nivel 0.00</Text>
+                  <Text size="sm" c="dimmed">Includes 0.00 level</Text>
                 </Paper>
                 <Paper withBorder radius="lg" p="md">
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                    Huella
+                    Footprint
                   </Text>
                   <Text fw={900} size="xl">{calculation.metrics.footprintArea.toFixed(1)} m²</Text>
                   <Text size="sm" c="dimmed">
@@ -506,13 +506,13 @@ export default function ScaffoldModulationsPage() {
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start" wrap="wrap">
                     <div>
-                      <Title order={3}>Plano superior</Title>
+                      <Title order={3}>Top view</Title>
                       <Text size="sm" c="dimmed">
-                        Puntos verdes: verticales/apoyos. Lineas azules: horizontales por tramo de frente.
+                        Green points: verticals/supports. Blue lines: horizontals by front span.
                       </Text>
                     </div>
                     <Badge color="teal" variant="light" size="lg">
-                      {calculation.metrics.verticalLines} x {calculation.metrics.widthLines} = {calculation.metrics.supportPoints} puntos
+                      {calculation.metrics.verticalLines} x {calculation.metrics.widthLines} = {calculation.metrics.supportPoints} points
                     </Badge>
                   </Group>
                   <ScaffoldTopView
@@ -529,9 +529,9 @@ export default function ScaffoldModulationsPage() {
                       <IconCalculator size={18} />
                     </ThemeIcon>
                     <div>
-                      <Title order={3}>Modulacion</Title>
+                      <Title order={3}>Modulation</Title>
                       <Text size="sm" c="dimmed">
-                        Opciones generadas con horizontales disponibles y regla de espacio.
+                        Options generated with available horizontals and the space rule.
                       </Text>
                     </div>
                   </Group>
@@ -540,13 +540,13 @@ export default function ScaffoldModulationsPage() {
                     <Paper withBorder radius="md" p="md" bg="green.0">
                       <Stack gap={4}>
                         <Text size="xs" fw={700} tt="uppercase" c="green.8">
-                          Recomendada
+                          Recommended
                         </Text>
                         <Text fw={900} size="xl">
                           {formatModulationSegments(calculation.recommended.segments)}
                         </Text>
                         <Text size="sm" c="dimmed">
-                          Total {formatMeters(calculation.recommended.total)} | diferencia{' '}
+                          Total {formatMeters(calculation.recommended.total)} | difference{' '}
                           {formatMeters(calculation.recommended.delta)}
                         </Text>
                       </Stack>
@@ -562,24 +562,24 @@ export default function ScaffoldModulationsPage() {
                               label={
                                 <Stack gap={2}>
                                   <Text size="sm" fw={700}>
-                                    Modulación: {formatModulationSegments(option.segments)}
+                                    Modulation: {formatModulationSegments(option.segments)}
                                   </Text>
                                   <Text size="xs" c="dimmed">
-                                    Largo armado {formatMeters(option.total)} para frente de {formatMeters(targetLength)}
+                                    Built length {formatMeters(option.total)} for front of {formatMeters(targetLength)}
                                   </Text>
                                 </Stack>
                               }
                             />
                             <Badge color={optionColor(option.fit)} variant="light">
                               {option.fit === 'exact'
-                                ? 'Exacta'
+                                ? 'Exact'
                                 : option.fit === 'under'
-                                  ? `${formatMeters(Math.abs(option.delta))} abajo`
-                                  : `${formatMeters(option.delta)} arriba`}
+                                  ? `${formatMeters(Math.abs(option.delta))} under`
+                                  : `${formatMeters(option.delta)} over`}
                             </Badge>
                             {hasProviderHorizontal(option.segments) ? (
                               <Badge color="orange" variant="light">
-                                Proveedor
+                                Provider
                               </Badge>
                             ) : null}
                           </Group>
@@ -594,13 +594,13 @@ export default function ScaffoldModulationsPage() {
                 <Stack gap="md">
                   <Group justify="space-between" align="center">
                     <div>
-                      <Title order={3}>Lista de materiales</Title>
+                      <Title order={3}>Bill of materials</Title>
                       <Text size="sm" c="dimmed">
-                        Requerido segun modulacion, disponible en bodega, faltante y peso calculado con el SKU.
+                        Required by modulation, available in warehouse, missing quantity, and SKU-based weight.
                       </Text>
                     </div>
                     <Button variant="light" color="teal" leftSection={<IconCircleCheck size={16} />}>
-                      Usar para remision
+                      Use for dispatch
                     </Button>
                   </Group>
 
@@ -608,13 +608,13 @@ export default function ScaffoldModulationsPage() {
                     <Table verticalSpacing="sm">
                       <TableThead>
                         <TableTr>
-                          <TableTh>Pieza</TableTh>
-                          <TableTh>SKU encontrado</TableTh>
+                          <TableTh>Piece</TableTh>
+                          <TableTh>Matched SKU</TableTh>
                           <TableTh ta="right">Req.</TableTh>
-                          <TableTh ta="right">Disp.</TableTh>
-                          <TableTh ta="right">Debe</TableTh>
-                          <TableTh ta="right">Peso unit.</TableTh>
-                          <TableTh ta="right">Peso total</TableTh>
+                          <TableTh ta="right">Avail.</TableTh>
+                          <TableTh ta="right">Missing</TableTh>
+                          <TableTh ta="right">Unit weight</TableTh>
+                          <TableTh ta="right">Total weight</TableTh>
                           <TableTh>Estado</TableTh>
                         </TableTr>
                       </TableThead>
@@ -627,7 +627,7 @@ export default function ScaffoldModulationsPage() {
                             </TableTd>
                             <TableTd>
                               <Text size="sm" c={row.skuName ? undefined : 'dimmed'}>
-                                {row.skuName ?? 'Sin empate'}
+                                {row.skuName ?? 'No match'}
                               </Text>
                             </TableTd>
                             <TableTd ta="right">{row.quantity}</TableTd>
@@ -644,7 +644,7 @@ export default function ScaffoldModulationsPage() {
                                 color={row.missing ? 'red' : row.severity === 'warning' ? 'orange' : 'green'}
                                 variant="light"
                               >
-                                {row.missing ? 'Faltante' : row.severity === 'warning' ? 'Viable no ideal' : 'OK'}
+                                {row.missing ? 'Missing' : row.severity === 'warning' ? 'Viable, not ideal' : 'OK'}
                               </Badge>
                             </TableTd>
                           </TableTr>

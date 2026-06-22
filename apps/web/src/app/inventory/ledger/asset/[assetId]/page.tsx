@@ -93,7 +93,7 @@ export default function LedgerAssetPage() {
     <main>
       <Container size="lg" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Ledger Asset</Title>
+          <Title order={2}>Ledger de activo</Title>
           <Text c="dimmed">Asset ID: {assetId}</Text>
           <Select
             label="Movement Type"
@@ -125,7 +125,7 @@ export default function LedgerAssetPage() {
               loading={loading}
               onClick={() => fetchLedger({ append: true })}
             >
-              {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+              {nextCursor ? 'Cargar mas' : 'No hay mas resultados'}
             </Button>
           </Group>
         )}

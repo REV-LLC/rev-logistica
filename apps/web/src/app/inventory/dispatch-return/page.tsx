@@ -43,7 +43,7 @@ type CatalogAsset = {
   skuId: string | null;
 };
 
-type Employee = { id: string; name: string };
+type Employee = { id: string; name: string; lastName?: string | null };
 type Customer = { id: string; name: string };
 type CustomerWorksite = {
   id: string;
@@ -68,6 +68,9 @@ type SelectedItem = {
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+
+const getEmployeeFullName = (employee: Employee) =>
+  `${employee.name} ${employee.lastName ?? ''}`.trim();
 
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
@@ -229,7 +232,7 @@ export default function RemisionDevolucionPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error cargando inventario');
+        setError('Error loading inventory');
       }
     } finally {
       setLoadingInventory(false);
@@ -248,7 +251,7 @@ export default function RemisionDevolucionPage() {
 
   const addBulkItem = (item: InventoryBulk) => {
     if (item.quantity < 0) {
-      setError('Este item tiene alerta de inventario negativo. Ajusta el stock antes de usarlo en un documento.');
+      setError('This item has a negative inventory alert. Adjust stock before using it in a document.');
       return false;
     }
     const bulkKey = buildBulkKey(item);
@@ -314,7 +317,7 @@ export default function RemisionDevolucionPage() {
     setError(null);
     try {
       if (!docDate || !consecutive || !customerId) {
-        throw new Error('Completa los campos obligatorios.');
+        throw new Error('Complete the required fields.');
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
@@ -324,13 +327,13 @@ export default function RemisionDevolucionPage() {
           (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
         )
       ) {
-        throw new Error('Hay items con alerta de inventario negativo. Ajusta el stock antes de crear el documento.');
+        throw new Error('Some items have negative inventory alerts. Adjust stock before creating the document.');
       }
       if (!customerWorksiteId) {
-        throw new Error('Selecciona la obra (worksite).');
+        throw new Error('Selecciona la obra.');
       }
       if (docType === 'RETURN' && !warehouseId) {
-        throw new Error('Selecciona la bodega para la devolución.');
+        throw new Error('Selecciona la bodega para la devolucion.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !warehouseId) {
         throw new Error('Selecciona la bodega de despacho.');
@@ -343,10 +346,10 @@ export default function RemisionDevolucionPage() {
         warehouseId: warehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         notes: [
-          `Fecha doc: ${docDate}`,
+          `Fecha documento: ${docDate}`,
           docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehículo: ${vehicleId}` : null,
+          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
           deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
           deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
         ].filter(Boolean).join(' | ')
@@ -359,7 +362,7 @@ export default function RemisionDevolucionPage() {
 
       const movementItems = selectedItems.map((item) => {
         if (!item.ownerWarehouseId) {
-          throw new Error(`Falta bodega dueña para item ${item.name}`);
+          throw new Error(`Missing owner warehouse for item ${item.name}`);
         }
         return item.type === 'bulk'
           ? {
@@ -431,7 +434,7 @@ export default function RemisionDevolucionPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error al guardar documento.');
+        setError('Error saving document.');
       }
     } finally {
       setSubmitting(false);
@@ -442,8 +445,8 @@ export default function RemisionDevolucionPage() {
     <main>
       <Container size="lg" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Remisión / Devolución</Title>
-          <Text c="dimmed">Ingresa los datos del documento real.</Text>
+          <Title order={2}>Despacho / Devolucion</Title>
+          <Text c="dimmed">Ingresa los datos reales del documento.</Text>
 
           <Radio.Group
             mt="md"
@@ -452,21 +455,21 @@ export default function RemisionDevolucionPage() {
             label="Tipo"
           >
             <Group mt="xs">
-              <Radio value="REMISSION" label="Remisión" />
-              <Radio value="RETURN" label="Devolución" />
+              <Radio value="REMISSION" label="Despacho" />
+              <Radio value="RETURN" label="Devolucion" />
             </Group>
           </Radio.Group>
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             <TextInput
-              label={helpLabel('Consecutivo', 'Número interno del documento. El prefijo RM o DV se agrega automáticamente al guardar.', true)}
+              label={helpLabel('Consecutivo', 'Numero interno del documento. El prefijo RM o DV se agrega automaticamente al guardar.', true)}
               withAsterisk={false}
               value={consecutive}
               onChange={(event) => setConsecutive(event.target.value)}
               required
             />
             <Select
-              label="Razón social"
+              label="Legal name"
               value={customerId}
               onChange={(value) => {
                 setCustomerId(value);
@@ -479,10 +482,10 @@ export default function RemisionDevolucionPage() {
               searchable
               clearable
               required
-              placeholder="Selecciona cliente"
+              placeholder="Seleccionar cliente"
             />
             <TextInput
-              label={helpLabel('Fecha', 'Fecha del documento de remisión o devolución.', true)}
+              label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
               withAsterisk={false}
               type="date"
               value={docDate}
@@ -517,7 +520,7 @@ export default function RemisionDevolucionPage() {
             <WarehouseSelect
               value={warehouseId}
               onChange={setWarehouseId}
-              label={helpLabel('Bodega de ubicación', 'Bodega física desde donde se despacha o recibe el inventario.')}
+              label={helpLabel('Bodega de ubicacion', 'Bodega fisica donde se despacha o recibe inventario.')}
             />
             <Select
               label={helpLabel('Obra', 'Obra destino del movimiento.')}
@@ -531,12 +534,12 @@ export default function RemisionDevolucionPage() {
               }))}
               searchable
               clearable
-              placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
+              placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
               disabled={!customerId || worksitesLoading}
             />
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label={helpLabel('Vehículo', 'Vehículo que transporta la remisión on-site.')}
+                label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                 value={vehicleId}
                 onChange={(value) => setVehicleId(value)}
                 data={vehicles.map((v) => ({
@@ -549,20 +552,20 @@ export default function RemisionDevolucionPage() {
             )}
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
+                label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                 value={driverId}
                 onChange={(value) => setDriverId(value)}
-                data={employees.map((e) => ({ value: e.id, label: e.name }))}
+                data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
                 searchable
                 clearable
               />
             )}
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               <Select
-                label={helpLabel('Despachador', 'Empleado que entrega el material desde bodega.')}
+                label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                 value={dispatcherId}
                 onChange={(value) => setDispatcherId(value)}
-                data={employees.map((e) => ({ value: e.id, label: e.name }))}
+                data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
                 searchable
                 clearable
               />
@@ -577,19 +580,19 @@ export default function RemisionDevolucionPage() {
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
               <Select
-                label={helpLabel('Dueño/a', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                label={helpLabel('Owner', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                 value={sourceOwnerWarehouseId}
                 onChange={(value) => setSourceOwnerWarehouseId(value)}
                 data={ownerWarehouseOptions}
                 searchable
                 clearable
-                placeholder="Selecciona dueño/a"
+                placeholder="Seleccionar dueño"
                 w={320}
               />
             )}
             {sourceMode === 'on-site' && (
               <Select
-                label={helpLabel('Obra origen', 'Obra desde donde se devolverán los items a bodega.')}
+                label={helpLabel('Obra origen', 'Obra desde la cual se devolveran items a bodega.')}
                 value={sourceWorksiteId}
                 onChange={(value) => setSourceWorksiteId(value)}
                 data={worksites.map((item) => ({
@@ -600,7 +603,7 @@ export default function RemisionDevolucionPage() {
                 }))}
                 searchable
                 clearable
-                placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
+                placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
                 disabled={!customerId || worksitesLoading}
               />
             )}
@@ -611,7 +614,7 @@ export default function RemisionDevolucionPage() {
 
           <Divider my="md" />
           <Text size="sm" c="dimmed">
-            Carga el inventario y selecciónalo desde el modal.
+            Carga inventario y seleccionalo desde el modal.
           </Text>
           <Divider my="md" />
 

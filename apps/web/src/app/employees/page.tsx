@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Avatar,
   Badge,
   Button,
   Container,
@@ -35,7 +36,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
-import { api, ApiError } from '@/lib/api';
+import { api, apiBlob, ApiError } from '@/lib/api';
 
 type VehicleOption = {
   id: string;
@@ -48,6 +49,7 @@ type VehicleOption = {
 type Employee = {
   id: string;
   name: string;
+  lastName: string;
   role: RoleValue;
   phone: string | null;
   email: string | null;
@@ -76,6 +78,7 @@ type RoleValue =
 
 type EmployeeForm = {
   name: string;
+  lastName: string;
   role: RoleValue;
   phone: string;
   email: string;
@@ -93,6 +96,7 @@ type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER';
 
 const emptyForm: EmployeeForm = {
   name: '',
+  lastName: '',
   role: 'DRIVER',
   phone: '',
   email: '',
@@ -113,7 +117,7 @@ const roleOptions = [
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'MANAGER', label: 'Gerente' },
   { value: 'OPERATIONS_MANAGER', label: 'Jefe operaciones' },
-  { value: 'MECHANIC', label: 'Mecánico' },
+  { value: 'MECHANIC', label: 'Mecanico' },
   { value: 'WAREHOUSE_KEEPER', label: 'Bodeguero' },
   { value: 'OTHER', label: 'Otro' },
 ];
@@ -125,7 +129,7 @@ const roleLabelByValue: Record<RoleValue, string> = {
   OFFICE: 'Oficina',
   MANAGER: 'Gerente',
   OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecánico',
+  MECHANIC: 'Mecanico',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
 };
@@ -143,8 +147,46 @@ const appRoleLabelByValue: Record<AppRoleValue, string> = {
 };
 
 function getVehicleSummary(vehicles: VehicleOption[]) {
-  if (!vehicles.length) return 'Sin vehículos asignados';
+  if (!vehicles.length) return 'Sin vehiculos asignados';
   return vehicles.map((entry) => entry.plate).join(', ');
+}
+
+function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
+  return `${employee.name} ${employee.lastName}`.trim();
+}
+
+function getEmployeeInitials(employee: Pick<Employee, 'name' | 'lastName'>) {
+  const parts = getEmployeeFullName(employee).split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
+}
+
+function EmployeeAvatar({ employee, size = 40 }: { employee: Employee; size?: number }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setPhotoUrl(null);
+
+    apiBlob(`/employees/${employee.id}/photo`, { redirectOnAuthError: false })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [employee.id]);
+
+  return (
+    <Avatar src={photoUrl} radius="xl" size={size} color="blue" alt={getEmployeeFullName(employee)}>
+      {getEmployeeInitials(employee)}
+    </Avatar>
+  );
 }
 
 function EmployeeDetails({
@@ -159,14 +201,17 @@ function EmployeeDetails({
   return (
     <Stack gap="md">
       <Group justify="space-between" align="flex-start">
-        <div>
-          <Text fw={700} size="lg">
-            {employee.name}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {roleLabelByValue[employee.role] ?? employee.role}
-          </Text>
-        </div>
+        <Group align="flex-start" gap="sm" wrap="nowrap">
+          <EmployeeAvatar employee={employee} size={44} />
+          <div>
+            <Text fw={700} size="lg">
+              {getEmployeeFullName(employee)}
+            </Text>
+            <Text size="sm" c="dimmed">
+              {roleLabelByValue[employee.role] ?? employee.role}
+            </Text>
+          </div>
+        </Group>
         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
           {employee.active ? 'Activo' : 'Inactivo'}
         </Badge>
@@ -191,7 +236,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identificación
+            Identification
           </Text>
           <Text size="sm" mt={8}>
             {employee.documentId ?? '-'}
@@ -216,7 +261,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Vehículos asignados
+            Vehiculos asignados
           </Text>
           <Text size="sm" mt={8}>
             {getVehicleSummary(employee.vehicles)}
@@ -304,6 +349,7 @@ export default function EmployeesPage() {
     setEditingEmployee(employee);
     setForm({
       name: employee.name ?? '',
+      lastName: employee.lastName ?? '',
       role: employee.role ?? 'DRIVER',
       phone: employee.phone ?? '',
       email: employee.email ?? '',
@@ -332,12 +378,16 @@ export default function EmployeesPage() {
       setError('El nombre es obligatorio');
       return;
     }
+    if (!form.lastName.trim()) {
+      setError('El apellido es obligatorio');
+      return;
+    }
     if (form.loginEnabled && !form.loginEmail.trim()) {
-      setError('El email de acceso es obligatorio');
+      setError('Access email is required');
       return;
     }
     if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
-      setError('La contraseña de acceso es obligatoria');
+      setError('Access password is required');
       return;
     }
 
@@ -345,6 +395,7 @@ export default function EmployeesPage() {
     try {
       const payload = {
         name: form.name.trim().toUpperCase(),
+        lastName: form.lastName.trim().toUpperCase(),
         role: form.role,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
@@ -368,6 +419,7 @@ export default function EmployeesPage() {
           method: 'POST',
           json: {
             name: payload.name,
+            lastName: payload.lastName,
             role: payload.role,
             phone: payload.phone,
             email: payload.email,
@@ -397,7 +449,7 @@ export default function EmployeesPage() {
   };
 
   const deleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`¿Eliminar empleado ${employee.name}?`)) return;
+    if (!window.confirm(`Eliminar empleado ${getEmployeeFullName(employee)}?`)) return;
 
     setError(null);
     try {
@@ -419,7 +471,7 @@ export default function EmployeesPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Empleados"
-          description="Administra personal, accesos y asignación de vehículos desde una sola vista."
+          description="Manage staff, access, and vehicle assignments from one view."
           icon={<IconUsers size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
@@ -433,7 +485,7 @@ export default function EmployeesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Empleados registrados"
+              hint="Registered employees"
               color="blue"
               icon={<IconUsers size={20} />}
             />
@@ -445,14 +497,14 @@ export default function EmployeesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="Con acceso"
+              label="With access"
               value={String(metrics.withAccess)}
               hint="Usuarios con login habilitado"
               color="violet"
               icon={<IconBriefcase2 size={20} />}
             />
             <StatCard
-              label="Con vehículo"
+              label="With vehicle"
               value={String(metrics.assignedVehicle)}
               hint="Asignaciones vigentes"
               color="teal"
@@ -462,7 +514,7 @@ export default function EmployeesPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="No se pudo completar la acción">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}
@@ -475,12 +527,15 @@ export default function EmployeesPage() {
                   <Paper key={employee.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{employee.name}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </div>
+                        <Group align="flex-start" gap="sm" wrap="nowrap">
+                          <EmployeeAvatar employee={employee} size={42} />
+                          <div>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </div>
+                        </Group>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
                           {employee.active ? 'Activo' : 'Inactivo'}
                         </Badge>
@@ -557,7 +612,7 @@ export default function EmployeesPage() {
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Documento</Table.Th>
                   <Table.Th>Acceso</Table.Th>
-                  <Table.Th>Vehículos</Table.Th>
+                  <Table.Th>Vehiculos</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -567,12 +622,15 @@ export default function EmployeesPage() {
                   employees.map((employee) => (
                     <Table.Tr key={employee.id}>
                       <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700}>{employee.name}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </Stack>
+                        <Group gap="sm" wrap="nowrap">
+                          <EmployeeAvatar employee={employee} size={36} />
+                          <Stack gap={2}>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </Stack>
+                        </Group>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
@@ -621,7 +679,7 @@ export default function EmployeesPage() {
                           <ActionIcon
                             color="gray"
                             variant="light"
-                            aria-label={`Ver detalle de ${employee.name}`}
+                            aria-label={`Ver detalle de ${getEmployeeFullName(employee)}`}
                             onClick={() => setDetailsEmployee(employee)}
                           >
                             <IconEye size={16} />
@@ -712,7 +770,7 @@ export default function EmployeesPage() {
             >
               <Group justify="space-between" align="flex-start">
                 <div>
-                  <Text fw={700}>{editingEmployee.name}</Text>
+                  <Text fw={700}>{getEmployeeFullName(editingEmployee)}</Text>
                   <Text size="sm" c="dimmed">
                     {roleLabelByValue[editingEmployee.role] ?? editingEmployee.role}
                   </Text>
@@ -729,14 +787,14 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Perfil del empleado</Text>
                 <Text size="sm" c="dimmed">
-                  Datos básicos para identificar al colaborador dentro del sistema.
+                  Basic data to identify the collaborator in the system.
                 </Text>
               </div>
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
-                  label="Nombre"
-                  placeholder="Nombre completo"
+                  label="Nombres"
+                  placeholder="Nombres"
                   value={form.name}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -744,6 +802,19 @@ export default function EmployeesPage() {
                   }}
                   required
                 />
+                <TextInput
+                  label="Apellidos"
+                  placeholder="Apellidos"
+                  value={form.lastName}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, lastName: value }));
+                  }}
+                  required
+                />
+              </SimpleGrid>
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Select
                   label="Rol"
                   value={form.role}
@@ -754,12 +825,9 @@ export default function EmployeesPage() {
                   allowDeselect={false}
                   required
                 />
-              </SimpleGrid>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
-                  label="Teléfono"
-                  placeholder="Número de contacto"
+                  label="Phone"
+                  placeholder="Contact number"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -767,7 +835,7 @@ export default function EmployeesPage() {
                   }}
                 />
                 <TextInput
-                  label="Email"
+                  label="Correo"
                   placeholder="Correo de contacto"
                   value={form.email}
                   onChange={(event) => {
@@ -780,7 +848,7 @@ export default function EmployeesPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="Documento"
-                  placeholder="Documento o identificación"
+                  placeholder="Document or identification"
                   value={form.documentId}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -802,15 +870,15 @@ export default function EmployeesPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Asignación operativa</Text>
+                <Text fw={700}>Operational assignment</Text>
                 <Text size="sm" c="dimmed">
-                  Vincula los vehículos que este empleado tiene a cargo actualmente.
+                  Link the vehicles currently assigned to this employee.
                 </Text>
               </div>
 
               <MultiSelect
-                label="Vehículos asignados"
-                placeholder="Selecciona uno o más vehículos"
+                label="Vehiculos asignados"
+                placeholder="Selecciona uno o mas vehiculos"
                 value={form.vehicleIds}
                 onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
                 data={vehicles.map((vehicle) => ({
@@ -830,7 +898,7 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Acceso a la app</Text>
                 <Text size="sm" c="dimmed">
-                  Controla si el empleado puede entrar al sistema y con qué rol operativo.
+                  Control whether the employee can enter the system and with which operational role.
                 </Text>
               </div>
 
@@ -846,7 +914,7 @@ export default function EmployeesPage() {
                 <Stack gap="md">
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <TextInput
-                      label="Email de acceso"
+                      label="Access email"
                       placeholder="usuario@empresa.com"
                       value={form.loginEmail}
                       onChange={(event) => {
@@ -870,7 +938,7 @@ export default function EmployeesPage() {
                     <TextInput
                       label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
                       placeholder={
-                        editingEmployee ? 'Déjala vacía para conservar la actual' : 'Contraseña inicial'
+                        editingEmployee ? 'Leave empty to keep the current one' : 'Initial password'
                       }
                       type="password"
                       value={form.loginPassword}
@@ -892,7 +960,7 @@ export default function EmployeesPage() {
               ) : (
                 <Paper radius="md" p="sm" bg="gray.0">
                   <Text size="sm" c="dimmed">
-                    Este empleado quedará sin acceso al sistema. Sus datos operativos seguirán disponibles.
+                    This employee will lose system access. Their operational data will remain available.
                   </Text>
                 </Paper>
               )}

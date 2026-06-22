@@ -1,6 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { GetObjectCommand, NoSuchKey, S3Client } from '@aws-sdk/client-s3';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { EmployeeRole, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import type { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -13,6 +20,7 @@ export class EmployeesService {
       select: {
         id: true,
         name: true,
+        lastName: true,
         role: true,
         phone: true,
         email: true,
@@ -45,6 +53,7 @@ export class EmployeesService {
 
   async createEmployee(payload: {
     name: string;
+    lastName: string;
     role: string;
     phone?: string;
     email?: string;
@@ -92,6 +101,7 @@ export class EmployeesService {
         const created = await tx.employee.create({
           data: {
             name: payload.name,
+            lastName: payload.lastName,
             role: payload.role as any,
             phone: payload.phone ?? null,
             email: payload.email ?? null,
@@ -120,6 +130,7 @@ export class EmployeesService {
     employeeId: string,
     payload: {
       name?: string;
+      lastName?: string;
       role?: string;
       phone?: string;
       email?: string;
@@ -148,7 +159,6 @@ export class EmployeesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const nextName = payload.name ?? undefined;
         const nextEmployeeRole = (payload.role as EmployeeRole | undefined) ?? employee.role;
 
         const normalizedLoginEmail = payload.loginEmail?.trim().toLowerCase();
@@ -208,6 +218,7 @@ export class EmployeesService {
           where: { id: employeeId },
           data: {
             name: payload.name,
+            lastName: payload.lastName,
             role: payload.role as any,
             phone: payload.phone,
             email: payload.email,
@@ -243,6 +254,51 @@ export class EmployeesService {
     });
   }
 
+  async getEmployeePhoto(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const config = this.getR2Config();
+    const s3 = this.createR2Client(config);
+    const key = `employees/${employeeId}/profile.webp`;
+
+    try {
+      const object = await s3.send(
+        new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+        }),
+      );
+
+      if (!object.Body) {
+        throw new NotFoundException('Employee photo not found');
+      }
+
+      return {
+        body: object.Body as Readable,
+        contentType: object.ContentType ?? 'image/webp',
+        contentLength: object.ContentLength,
+        etag: object.ETag,
+      };
+    } catch (error) {
+      if (
+        error instanceof NoSuchKey ||
+        (typeof error === 'object' &&
+          error !== null &&
+          'name' in error &&
+          ['NoSuchKey', 'NotFound'].includes(String(error.name)))
+      ) {
+        throw new NotFoundException('Employee photo not found');
+      }
+      throw error;
+    }
+  }
+
   private async assertVehiclesExist(vehicleIds: string[]) {
     const unique = [...new Set(vehicleIds)];
     const count = await this.prisma.vehicle.count({ where: { id: { in: unique } } });
@@ -254,6 +310,35 @@ export class EmployeesService {
   private mapEmployeeRoleToUserRole(role: EmployeeRole): Role {
     if (role === 'DRIVER') return Role.DRIVER;
     return Role.OFFICE;
+  }
+
+  private createR2Client(config: ReturnType<EmployeesService['getR2Config']>) {
+    return new S3Client({
+      region: 'auto',
+      endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    });
+  }
+
+  private getR2Config() {
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const bucket = process.env.R2_BUCKET;
+
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+      throw new InternalServerErrorException('R2 storage is not configured');
+    }
+
+    return {
+      accountId,
+      accessKeyId,
+      secretAccessKey,
+      bucket,
+    };
   }
 
   private rethrowConstraint(error: unknown): never {

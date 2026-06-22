@@ -1746,7 +1746,7 @@ export class InventoryService {
           select: {
             id: true,
             email: true,
-            employee: { select: { name: true } },
+            employee: { select: { name: true, lastName: true } },
           },
         },
       },

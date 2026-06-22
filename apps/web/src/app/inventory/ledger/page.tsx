@@ -126,7 +126,7 @@ export default function LedgerPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLoading(false);
@@ -202,7 +202,7 @@ export default function LedgerPage() {
         <Stack gap="lg">
           <PageHeaderCard
             title="Historial de movimientos"
-            description="Consulta entradas, salidas, tránsitos y ajustes del inventario con filtros combinados."
+            description="Revisa entradas, salidas, movimientos en transito y ajustes de inventario con filtros combinados."
             icon={<IconArrowsShuffle size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
@@ -244,7 +244,7 @@ export default function LedgerPage() {
                     loading={loading}
                     onClick={() => fetchLedger({ append: true })}
                   >
-                    {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+                    {nextCursor ? 'Cargar mas' : 'No hay mas resultados'}
                   </Button>
                 </Group>
               </Stack>
@@ -259,7 +259,7 @@ export default function LedgerPage() {
                 </ThemeIcon>
                 <Text fw={700}>No hay movimientos para mostrar</Text>
                 <Text size="sm" c="dimmed" ta="center">
-                  Ajusta los filtros o ejecuta una nueva búsqueda para consultar otro tramo del historial.
+                  Adjust filters or run a new search to review another part of the history.
                 </Text>
               </Stack>
             )}
@@ -274,15 +274,15 @@ export default function LedgerPage() {
           <Modal
             opened={filtersOpen}
             onClose={() => setFiltersOpen(false)}
-            title="Filtros de consulta"
+            title="Filtros de busqueda"
             size="xl"
             centered
           >
             <Stack gap="md">
               <div>
-                <Text fw={700}>Ajusta la consulta</Text>
+                <Text fw={700}>Adjust the query</Text>
                 <Text size="sm" c="dimmed">
-                  Combina ubicación, obra, movimiento y rango de fechas para aislar el historial que necesitas.
+                  Combine location, worksite, movement type, and date range to isolate the history you need.
                 </Text>
               </div>
 
@@ -291,7 +291,7 @@ export default function LedgerPage() {
                   label="Bodega"
                   value={filters.warehouseId}
                   onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todas'}
+                  placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todos'}
                   data={warehouses.map((warehouse) => ({
                     value: warehouse.id,
                     label: warehouse.name,
@@ -305,7 +305,7 @@ export default function LedgerPage() {
                   onChange={(value) =>
                     setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
                   }
-                  placeholder={filtersLoading ? 'Cargando obras...' : 'Todas'}
+                  placeholder={filtersLoading ? 'Cargando obras...' : 'Todos'}
                   data={worksites.map((row) => ({
                     value: row.id,
                     label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
@@ -314,7 +314,7 @@ export default function LedgerPage() {
                   clearable
                 />
                 <Select
-                  label="Tipo de movimiento"
+                  label="Movement type"
                   value={filters.movementType}
                   onChange={(value) =>
                     setFilters((prev) => ({ ...prev, movementType: value ?? '' }))
@@ -336,7 +336,7 @@ export default function LedgerPage() {
                   clearable
                 />
                 <Select
-                  label="Activo"
+                  label="Asset"
                   value={filters.assetId}
                   onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
                   placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
@@ -349,13 +349,13 @@ export default function LedgerPage() {
                 />
                 <div />
                 <TextInput
-                  label="Desde"
+                  label="From"
                   type="datetime-local"
                   value={filters.from}
                   onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
                 />
                 <TextInput
-                  label="Hasta"
+                  label="To"
                   type="datetime-local"
                   value={filters.to}
                   onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}

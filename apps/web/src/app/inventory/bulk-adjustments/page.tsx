@@ -124,7 +124,32 @@ const CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = new Set<string>([
 ]);
 
 const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
-const parseLocaleDecimal = (value: string) => {
+const sanitizeDecimalInput = (value: string) => {
+  let nextValue = '';
+  let hasSeparator = false;
+
+  for (const character of value) {
+    if (/\d/.test(character)) {
+      nextValue += character;
+      continue;
+    }
+
+    if ((character === ',' || character === '.') && !hasSeparator) {
+      nextValue += ',';
+      hasSeparator = true;
+    }
+  }
+
+  return nextValue;
+};
+
+const finalizeDecimalInput = (value: string) => sanitizeDecimalInput(value).replace(/,$/, '');
+
+const parseLocaleDecimal = (value: number | string) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : NaN;
+  }
+
   const normalized = value.trim().replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : NaN;
@@ -144,11 +169,17 @@ type RequiredSkuData = {
   weightUnit: WeightUnit | '';
   price: number | '';
   subrentalPrice: number | '';
-  areaM2?: number | '';
+  areaM2?: number | string;
 };
 
-const isMissingPositiveNumber = (value: number | '') =>
-  value === '' || Number(value) <= 0;
+const isMissingPositiveNumber = (value: number | string) => {
+  if (value === '') {
+    return true;
+  }
+
+  const parsed = parseLocaleDecimal(value);
+  return !Number.isFinite(parsed) || parsed <= 0;
+};
 
 const hasMissingRequiredSkuData = ({
   unitWeight,
@@ -198,7 +229,7 @@ export default function AddBulkStockPage() {
   const [formaletaSkuSubrentalPrice, setFormaletaSkuSubrentalPrice] = useState<number | ''>('');
   const [formaletaChargeType, setFormaletaChargeType] = useState<ChargeType>('DAY');
   const [formaletaMinimumChargeHours, setFormaletaMinimumChargeHours] = useState<number | ''>('');
-  const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | ''>('');
+  const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | string>('');
   const [formaletaWeightUnit, setFormaletaWeightUnit] = useState<WeightUnit | ''>('');
 
   const [genericFamilyName, setGenericFamilyName] = useState('');
@@ -270,7 +301,7 @@ export default function AddBulkStockPage() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando datos');
+          setError('Error loading data');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -325,7 +356,7 @@ export default function AddBulkStockPage() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando inventario');
+          setError('Error loading inventory');
         }
       })
       .finally(() => {
@@ -366,8 +397,8 @@ export default function AddBulkStockPage() {
   ];
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
   const chargeTypeOptions = [
-    { value: 'DAY', label: 'Por día' },
-    { value: 'HOUR', label: 'Por hora' },
+    { value: 'DAY', label: 'Per day' },
+    { value: 'HOUR', label: 'Per hour' },
   ];
   const formaletaLineOptions = [
     { value: 'FORMALETA', label: 'Formaleta' },
@@ -432,7 +463,7 @@ export default function AddBulkStockPage() {
             formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
               ? Number(formaletaMinimumChargeHours)
               : undefined,
-          areaM2: formaletaAreaM2 === '' ? undefined : Number(formaletaAreaM2),
+          areaM2: formaletaAreaM2 === '' ? undefined : parseLocaleDecimal(formaletaAreaM2),
         };
       }
       const xValue = parseLocaleDecimal(formaletaX);
@@ -456,7 +487,7 @@ export default function AddBulkStockPage() {
           formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
             ? Number(formaletaMinimumChargeHours)
             : undefined,
-        areaM2: formaletaAreaM2 === '' ? undefined : Number(formaletaAreaM2),
+        areaM2: formaletaAreaM2 === '' ? undefined : parseLocaleDecimal(formaletaAreaM2),
       };
     }
 
@@ -675,7 +706,7 @@ export default function AddBulkStockPage() {
   const confirmWarehouseSelection = () => {
     setError(null);
     if (!ownerWarehouseId) {
-      setError('Selecciona la bodega dueña');
+      setError('Select the owner warehouse');
       return;
     }
     setWarehouseLocked(true);
@@ -698,7 +729,7 @@ export default function AddBulkStockPage() {
   const confirmEntryModeSelection = () => {
     setError(null);
     if (!warehouseLocked) {
-      setError('Confirma primero la bodega');
+      setError('Confirm the warehouse first');
       return;
     }
     setModeLocked(true);
@@ -728,23 +759,23 @@ export default function AddBulkStockPage() {
     areaM2,
   }: RequiredSkuData, requireAreaM2: boolean) => {
     if (unitWeight === '' || Number(unitWeight) <= 0) {
-      setError('Ingresa el peso del producto');
+      setError('Enter the product weight');
       return false;
     }
     if (!weightUnit) {
-      setError('Selecciona la unidad de peso');
+      setError('Select the weight unit');
       return false;
     }
     if (requireAreaM2 && isMissingPositiveNumber(areaM2 ?? '')) {
-      setError('Ingresa el área m² del producto');
+      setError('Enter the product area in m²');
       return false;
     }
     if (price === '' || Number(price) <= 0) {
-      setError('Ingresa el precio del producto');
+      setError('Enter the product price');
       return false;
     }
     if (subrentalPrice === '' || Number(subrentalPrice) <= 0) {
-      setError('Ingresa el precio sub alquiler del producto');
+      setError('Enter the product subrental price');
       return false;
     }
 
@@ -785,14 +816,14 @@ export default function AddBulkStockPage() {
     setConfirmAttempted(true);
 
     if (!itemType) {
-      setError('Selecciona un tipo de item');
+      setError('Select an item type');
       return;
     }
 
     if (itemType === 'FORMALETA') {
       if (formaletaIsAccessory) {
         if (!formaletaAccessoryName.trim()) {
-          setError('Ingresa el nombre del accesorio');
+          setError('Enter the accessory name');
           return;
         }
         if (!validateRequiredSkuData({
@@ -812,15 +843,15 @@ export default function AddBulkStockPage() {
       const xValue = parseLocaleDecimal(formaletaX);
       const yValue = Number(formaletaY);
       if (!Number.isFinite(xValue) || xValue <= 0) {
-        setError('Ingresa una medida X válida para formaleta');
+        setError('Enter a valid X measurement for formwork');
         return;
       }
       if (!FORMALETA_Y_OPTIONS.includes(yValue as (typeof FORMALETA_Y_OPTIONS)[number])) {
-        setError('La medida Y de formaleta no es válida');
+        setError('The Y formwork measurement is invalid');
         return;
       }
       if (formaletaChargeType === 'HOUR' && (formaletaMinimumChargeHours === '' || Number(formaletaMinimumChargeHours) <= 0)) {
-        setError('Ingresa el mínimo de cobro por hora');
+        setError('Enter the minimum hourly charge');
         return;
       }
       if (!validateRequiredSkuData({
@@ -834,19 +865,19 @@ export default function AddBulkStockPage() {
       }
     } else {
       if (!genericFamilyName.trim()) {
-        setError('Ingresa el tipo/familia para el item genérico');
+        setError('Enter the type/family for the generic item');
         return;
       }
       if (!genericSkuName.trim()) {
-        setError('Ingresa el nombre del SKU para el item genérico');
+        setError('Enter the SKU name for the generic item');
         return;
       }
       if (certifiedScaffoldNeedsMeasure && !certifiedScaffoldMeasure) {
-        setError('Selecciona la medida de la pieza');
+        setError('Select the piece measurement');
         return;
       }
       if (genericChargeType === 'HOUR' && (genericMinimumChargeHours === '' || Number(genericMinimumChargeHours) <= 0)) {
-        setError('Ingresa el mínimo de cobro por hora');
+        setError('Enter the minimum hourly charge');
         return;
       }
       if (!validateRequiredSkuData({
@@ -869,12 +900,12 @@ export default function AddBulkStockPage() {
     setSuccess(null);
 
     if (!ownerWarehouseId) {
-      setError('Selecciona la bodega dueña');
+      setError('Select the owner warehouse');
       return;
     }
 
     if (!warehouseLocked) {
-      setError('Confirma la bodega antes de guardar');
+      setError('Confirm the warehouse before saving');
       return;
     }
 
@@ -884,24 +915,24 @@ export default function AddBulkStockPage() {
     }
 
     if (entryMode === 'existing' && !selectedExistingItem) {
-      setError('Selecciona el item existente');
+      setError('Select the existing item');
       return;
     }
 
     if (entryMode === 'new') {
       if (!itemType) {
-        setError('Selecciona el producto');
+        setError('Select the product');
         return;
       }
 
       if (!isItemConfigured || !builtItem) {
-        setError('Confirma el producto antes de agregar stock');
+        setError('Confirm the product before adding stock');
         return;
       }
     }
 
     if (quantity === '' || Number(quantity) <= 0) {
-      setError('Cantidad inválida');
+      setError('Invalid quantity');
       return;
     }
 
@@ -958,7 +989,7 @@ export default function AddBulkStockPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error agregando stock');
+        setError('Error adding stock');
       }
     } finally {
       setSaving(false);
@@ -980,17 +1011,17 @@ export default function AddBulkStockPage() {
               leftSection={<IconArrowLeft size={16} />}
               onClick={returnToFlowSelection}
             >
-              Cambiar tipo
+              Change type
             </Button>
           </Group>
         ) : null}
 
         <PageHeaderCard
-          title={flowChoice ? 'Ingresar stock por cantidad' : 'Agregar inventario'}
+          title={flowChoice ? 'Enter quantity stock' : 'Agregar inventario'}
           description={
             flowChoice
-              ? 'Elige una plantilla del catálogo o crea una nueva y registra la entrada en bodega.'
-              : 'La selección abre el formulario adecuado para el tipo de inventario.'
+              ? 'Choose a catalog template or create a new one and register the warehouse entry.'
+              : 'The selection opens the right form for the inventory type.'
           }
           icon={<IconCubePlus size={20} />}
           iconColor="green"
@@ -1020,7 +1051,7 @@ export default function AddBulkStockPage() {
                       <Badge color="green" variant="light">Stock masivo</Badge>
                     </Group>
                     <Text size="sm" c="dimmed">
-                      Formaleta, andamio certificado, encofrado y referencias que se controlan por unidades.
+                      Formaleta, andamio certificado, apuntalamiento y referencias controladas por unidades.
                     </Text>
                     <Text className="bulk-flow-card-action" c="green" fw={700}>
                       Continuar
@@ -1046,7 +1077,7 @@ export default function AddBulkStockPage() {
                   <Stack gap="sm" p="md">
                     <Group justify="space-between" align="center">
                       <Text fw={800} size="lg">Maquinaria amarilla</Text>
-                      <Badge color="yellow" variant="light">Equipo único</Badge>
+                      <Badge color="yellow" variant="light">Equipos unicos</Badge>
                     </Group>
                     <Text size="sm" c="dimmed">
                       Minicargadores, equipos serializados y activos que se administran individualmente.
@@ -1073,7 +1104,7 @@ export default function AddBulkStockPage() {
                   <div>
                     <Text fw={700}>1. Bodega</Text>
                     <Text size="sm" c="dimmed">
-                      Selecciona dónde va a quedar ubicado inicialmente el stock.
+                      Selecciona donde quedara ubicado inicialmente el stock.
                     </Text>
                   </div>
                   {warehouseLocked ? (
@@ -1088,7 +1119,7 @@ export default function AddBulkStockPage() {
                   data={warehouseOptions}
                   value={ownerWarehouseId}
                   onChange={handleWarehouseChange}
-                  placeholder={loading ? 'Cargando...' : 'Selecciona bodega'}
+                  placeholder={loading ? 'Cargando...' : 'Seleccionar bodega'}
                   disabled={loading || warehouseLocked}
                   required
                 />
@@ -1116,7 +1147,7 @@ export default function AddBulkStockPage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" className="mobile-stack">
                   <div>
-                    <Text fw={700}>2. Operación</Text>
+                    <Text fw={700}>2. Operacion</Text>
                     <Text size="sm" c="dimmed">
                       Elige si vas a sumar a un item existente o crear uno nuevo.
                     </Text>
@@ -1141,7 +1172,7 @@ export default function AddBulkStockPage() {
                 <div>
                   <Text fw={700}>Tipo de entrada</Text>
                   <Text size="sm" c="dimmed">
-                    Esta selección queda bloqueada al continuar.
+                    Esta seleccion queda bloqueada despues de continuar.
                   </Text>
                 </div>
 
@@ -1191,11 +1222,11 @@ export default function AddBulkStockPage() {
                 <Group justify="flex-end" className="mobile-actions">
                   {modeLocked ? (
                     <Button variant="default" onClick={unlockEntryModeSelection}>
-                      Cambiar selección
+                      Cambiar seleccion
                     </Button>
                   ) : (
                     <Button onClick={confirmEntryModeSelection}>
-                      Confirmar selección
+                      Confirmar seleccion
                     </Button>
                   )}
                 </Group>
@@ -1214,14 +1245,14 @@ export default function AddBulkStockPage() {
                       }}
                       placeholder={
                         !ownerWarehouseId
-                          ? 'Selecciona bodega primero'
+                          ? 'Selecciona primero una bodega'
                           : existingItemsLoading
                             ? 'Cargando inventario...'
-                            : 'Selecciona item'
+                            : 'Seleccionar item'
                       }
                       disabled={!ownerWarehouseId || existingItemsLoading}
                       searchable
-                      nothingFoundMessage="Sin items por cantidad"
+                      nothingFoundMessage="No hay items por cantidad"
                       required
                     />
 
@@ -1279,7 +1310,7 @@ export default function AddBulkStockPage() {
                         setGenericFamilyCode('ENCOFRADO');
                       }
                     }}
-                    placeholder={loading ? 'Cargando...' : 'Selecciona familia'}
+                    placeholder={loading ? 'Cargando...' : 'Seleccionar familia'}
                     disabled={loading}
                     required
                   />
@@ -1289,7 +1320,7 @@ export default function AddBulkStockPage() {
                       <Stack gap="lg">
                         <Group justify="space-between" align="flex-start">
                           <Stack gap={2}>
-                            <Text fw={700}>Configuración de formaleta</Text>
+                            <Text fw={700}>Configuracion de formaleta</Text>
                             <Text size="sm" c="dimmed">
                               Define si vas a registrar un panel principal o un accesorio y completa
                               la ficha base antes de crear la plantilla.
@@ -1313,7 +1344,7 @@ export default function AddBulkStockPage() {
                           <Stack gap="xs">
                             <Switch
                               label="Registrar como accesorio"
-                              description="Actívalo cuando la referencia no dependa de medidas X/Y sino de un nombre comercial."
+                              description="Activalo cuando la referencia no depende de medidas X/Y sino de un nombre comercial."
                               checked={formaletaIsAccessory}
                               onChange={(event) => {
                                 setFormaletaIsAccessory(event.currentTarget.checked);
@@ -1327,9 +1358,9 @@ export default function AddBulkStockPage() {
                           <Paper withBorder radius="md" p="md" bg="gray.0">
                             <Stack gap="sm">
                               <div>
-                                <Text fw={600} size="sm">Referencia del accesorio</Text>
+                                <Text fw={600} size="sm">Referencia de accesorio</Text>
                                 <Text size="xs" c="dimmed">
-                                  Usa el nombre corto con el que lo identifica operación.
+                                  Usa el nombre corto que operaciones usa para identificarlo.
                                 </Text>
                               </div>
                               <TextInput
@@ -1339,7 +1370,7 @@ export default function AddBulkStockPage() {
                                   setFormaletaAccessoryName(toUpperInput(event.currentTarget.value));
                                   setIsItemConfigured(false);
                                 }}
-                                placeholder="Ej: CUÑA, CRUCETA"
+                                placeholder="Ejemplo: CUÑA, RIOSTRA"
                                 required
                               />
                             </Stack>
@@ -1348,14 +1379,14 @@ export default function AddBulkStockPage() {
                           <Paper withBorder radius="md" p="md" bg="gray.0">
                             <Stack gap="md">
                               <div>
-                                <Text fw={600} size="sm">Geometría base</Text>
+                                <Text fw={600} size="sm">Geometria base</Text>
                                 <Text size="xs" c="dimmed">
-                                  La línea y las medidas definen el nombre automático de la formaleta.
+                                  La linea y las medidas definen el nombre automatico de la formaleta.
                                 </Text>
                               </div>
                               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
                                 <Select
-                                  label="Línea"
+                                  label="Linea"
                                   data={formaletaLineOptions}
                                   value={formaletaLine}
                                   onChange={(value) => {
@@ -1368,9 +1399,10 @@ export default function AddBulkStockPage() {
                                   label="Ancho X (m)"
                                   value={formaletaX}
                                   onChange={(event) => {
-                                    setFormaletaX(event.currentTarget.value);
+                                    setFormaletaX(sanitizeDecimalInput(event.currentTarget.value));
                                     setIsItemConfigured(false);
                                   }}
+                                  onBlur={() => setFormaletaX((value) => finalizeDecimalInput(value))}
                                   inputMode="decimal"
                                   placeholder="0,10"
                                   required
@@ -1396,9 +1428,9 @@ export default function AddBulkStockPage() {
                         <Paper withBorder radius="md" p="md" bg="gray.0">
                           <Stack gap="md">
                             <div>
-                              <Text fw={600} size="sm">Parámetros comerciales</Text>
+                              <Text fw={600} size="sm">Commercial parameters</Text>
                               <Text size="xs" c="dimmed">
-                                Peso, área, precio y precio sub alquiler son obligatorios.
+                                Weight, area, price, and subrental price are required.
                               </Text>
                             </div>
                             <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
@@ -1425,7 +1457,7 @@ export default function AddBulkStockPage() {
                                   setFormaletaWeightUnit((value as WeightUnit | null) ?? '')
                                 }
                                 searchable
-                                nothingFoundMessage="Sin unidades"
+                                nothingFoundMessage="No hay unidades"
                                 error={
                                   showRequiredSkuErrors && !formaletaWeightUnit
                                     ? 'Obligatorio'
@@ -1433,14 +1465,18 @@ export default function AddBulkStockPage() {
                                 }
                                 required
                               />
-                              <NumberInput
-                                label="Área m²"
+                              <TextInput
+                                label="Area m²"
                                 value={formaletaAreaM2}
-                                onChange={(value) =>
-                                  setFormaletaAreaM2(typeof value === 'number' ? value : '')
+                                onChange={(event) => {
+                                  setFormaletaAreaM2(sanitizeDecimalInput(event.currentTarget.value));
+                                  setIsItemConfigured(false);
+                                }}
+                                onBlur={() =>
+                                  setFormaletaAreaM2((value) => finalizeDecimalInput(String(value)))
                                 }
-                                min={0}
-                                step={0.01}
+                                inputMode="decimal"
+                                placeholder="Ej: 2,50"
                                 error={
                                   showRequiredSkuErrors && isMissingPositiveNumber(formaletaAreaM2)
                                     ? 'Obligatorio'
@@ -1488,7 +1524,7 @@ export default function AddBulkStockPage() {
                               />
                               {formaletaChargeType === 'HOUR' ? (
                                 <NumberInput
-                                  label="Mínimo horas"
+                                  label="Horas minimas"
                                   value={formaletaMinimumChargeHours}
                                   onChange={(value) =>
                                     setFormaletaMinimumChargeHours(typeof value === 'number' ? value : '')
@@ -1535,7 +1571,7 @@ export default function AddBulkStockPage() {
                                     }
                                     setIsItemConfigured(false);
                                   }}
-                                  placeholder="Selecciona pieza"
+                                  placeholder="Seleccionar pieza"
                                   searchable
                                   required
                                 />
@@ -1548,7 +1584,7 @@ export default function AddBulkStockPage() {
                                       setCertifiedScaffoldMeasure(value ?? '');
                                       setIsItemConfigured(false);
                                     }}
-                                    placeholder="Selecciona medida"
+                                    placeholder="Seleccionar medida"
                                     searchable
                                     required
                                   />
@@ -1609,7 +1645,7 @@ export default function AddBulkStockPage() {
                               value={genericWeightUnit}
                               onChange={(value) => setGenericWeightUnit((value as WeightUnit | null) ?? '')}
                               searchable
-                              nothingFoundMessage="Sin unidades"
+                              nothingFoundMessage="No hay unidades"
                               error={
                                 showRequiredSkuErrors && !genericWeightUnit
                                   ? 'Obligatorio'
@@ -1655,7 +1691,7 @@ export default function AddBulkStockPage() {
                             />
                             {genericChargeType === 'HOUR' ? (
                               <NumberInput
-                                label="Mínimo horas"
+                                label="Horas minimas"
                                 value={genericMinimumChargeHours}
                                 onChange={(value) =>
                                   setGenericMinimumChargeHours(typeof value === 'number' ? value : '')
@@ -1719,7 +1755,7 @@ export default function AddBulkStockPage() {
                   <Text size="sm" c="dimmed">
                     {entryMode === 'existing'
                       ? 'La entrada se suma al item seleccionado en su bodega dueña.'
-                      : 'El stock quedará ubicado inicialmente en la misma bodega dueña.'}
+                      : 'El stock quedara ubicado inicialmente en la misma bodega dueña.'}
                   </Text>
                 </div>
 
@@ -1735,7 +1771,7 @@ export default function AddBulkStockPage() {
                 ) : (
                   <Paper radius="md" p="sm" bg="gray.0">
                     <Text size="sm" c="dimmed">
-                      Confirma bodega y operación para ingresar cantidad.
+                      Confirma bodega y operacion para ingresar cantidad.
                     </Text>
                   </Paper>
                 )}
@@ -1750,7 +1786,7 @@ export default function AddBulkStockPage() {
             >
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>4. Revisión</Text>
+                  <Text fw={700}>4. Revision</Text>
                   <Text size="sm" c="dimmed">
                     Revisa el movimiento antes de ejecutar.
                   </Text>
@@ -1777,10 +1813,10 @@ export default function AddBulkStockPage() {
                         Cantidad: {payloadPreview.quantity}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Dueña: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
+                        Dueño: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Ubicación inicial: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
+                        Ubicacion inicial: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
                       </Text>
                     </Paper>
                   </SimpleGrid>
@@ -1791,7 +1827,7 @@ export default function AddBulkStockPage() {
                         <IconChecks size={16} />
                       </ThemeIcon>
                       <Text size="sm" c="dimmed">
-                        Completa producto, bodega y cantidad para ver la revisión final.
+                        Completa producto, bodega y cantidad para ver la revision final.
                       </Text>
                     </Group>
                   </Paper>
@@ -1817,13 +1853,13 @@ export default function AddBulkStockPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="No se pudo completar la acción">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}
 
         {success ? (
-          <Alert color="green" variant="light" title="Movimiento registrado">
+          <Alert color="green" variant="light" title="Movement registered">
             {success}
           </Alert>
         ) : null}

@@ -63,7 +63,7 @@ type AssetLedgerResponse = {
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Eléctrico' },
+  { value: 'ELECTRICO', label: 'Electric' },
 ];
 
 export default function EditSerializedAssetPage() {
@@ -202,7 +202,7 @@ export default function EditSerializedAssetPage() {
 
   const handleSave = async () => {
     if (!assetId || !warehouseCurrentId) {
-      setError('Bodega actual es obligatoria');
+      setError('Current warehouse is required');
       return;
     }
     setSaving(true);
@@ -230,7 +230,7 @@ export default function EditSerializedAssetPage() {
             })
           : Promise.resolve(null),
       ]);
-      setSuccess('Equipo actualizado');
+      setSuccess('Equipment updated');
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -254,9 +254,9 @@ export default function EditSerializedAssetPage() {
         <Group justify="space-between" align="flex-start" mb="md" className="mobile-stack">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flex: 1 }}>
             <div>
-              <Title order={2}>Ficha de equipo</Title>
+              <Title order={2}>Ficha del equipo</Title>
               <Text c="dimmed" size="sm">
-                Información y estado del equipo serial.
+                Informacion y estado del equipo serializado.
               </Text>
             </div>
 
@@ -266,14 +266,14 @@ export default function EditSerializedAssetPage() {
               radius="xl"
               leftSection={<IconMapPin size={14} />}
             >
-              Ubicación: {locationBadge.label}
+              Ubicacion: {locationBadge.label}
             </Badge>
           </div>
           {asset ? (
             <ActionIcon
               variant={editing ? 'filled' : 'light'}
               color={editing ? 'blue' : 'gray'}
-              aria-label={editing ? 'Cerrar edición' : 'Editar equipo'}
+              aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
               onClick={() => setEditing((prev) => !prev)}
             >
               <IconPencil size={16} />
@@ -322,10 +322,10 @@ export default function EditSerializedAssetPage() {
                 )}
 
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                <Text size="sm"><strong>Descripción:</strong> {autoDescription}</Text>
+                <Text size="sm"><strong>Descripcion:</strong> {autoDescription}</Text>
                 <Text size="sm"><strong>Serial/Motor:</strong> {asset.serialOrEngine || '-'}</Text>
                 <Text size="sm"><strong>Dueño:</strong> {asset.warehouseOwner?.name ?? '-'}</Text>
-                <Text size="sm"><strong>Código público:</strong> {asset.publicCode ?? '-'}</Text>
+                <Text size="sm"><strong>Codigo publico:</strong> {asset.publicCode ?? '-'}</Text>
                 <Text size="sm"><strong>Modelo:</strong> {model || '-'}</Text>
                 <Text size="sm"><strong>Año:</strong> {year === '' ? '-' : String(year)}</Text>
                 <Text size="sm"><strong>Combustible:</strong> {fuelLabel}</Text>

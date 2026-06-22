@@ -7,20 +7,20 @@ import { useDisclosure } from '@mantine/hooks';
 import Nav from '@/components/Nav';
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = [
-  { prefix: '/transport/solicitudes', title: 'Solicitudes', subtitle: 'Operacion diaria' },
-  { prefix: '/transport/cost', title: 'Transporte', subtitle: 'Costos y despacho' },
+  { prefix: '/transport/requests', title: 'Solicitudes', subtitle: 'Operacion diaria' },
+  { prefix: '/transport/cost', title: 'Transport', subtitle: 'Costos y despacho' },
   { prefix: '/transport/vehicles', title: 'Vehiculos', subtitle: 'Flota y documentos' },
-  { prefix: '/transport/obras', title: 'Obras', subtitle: 'Frentes activos' },
+  { prefix: '/transport/worksites', title: 'Obras', subtitle: 'Frentes activos' },
   { prefix: '/tasks', title: 'Pendientes', subtitle: 'Seguimiento operativo' },
   { prefix: '/inventory/warehouse', title: 'Bodegas', subtitle: 'Control de inventario' },
   { prefix: '/inventory/ledger', title: 'Movimientos', subtitle: 'Trazabilidad' },
   { prefix: '/inventory/scaffold-modulations', title: 'Modulaciones', subtitle: 'Andamio certificado' },
   { prefix: '/inventory/bulk-adjustments', title: 'Agregar inventario', subtitle: 'Ingreso masivo' },
   { prefix: '/inventory/serialized-assets', title: 'Agregar inventario', subtitle: 'Equipos unicos' },
-  { prefix: '/billing/prefactura', title: 'Prefactura', subtitle: 'Corte y resumen' },
+  { prefix: '/billing/pre-invoice', title: 'Prefactura', subtitle: 'Resumen del periodo' },
   { prefix: '/customers', title: 'Clientes', subtitle: 'Relacion comercial' },
   { prefix: '/employees', title: 'Empleados', subtitle: 'Equipo interno' },
-  { prefix: '/data', title: 'Datos', subtitle: 'Backups y exportes' },
+  { prefix: '/data', title: 'Datos', subtitle: 'Backups y exportaciones' },
 ];
 
 function getHeaderCopy(pathname: string | null) {
@@ -41,7 +41,7 @@ export default function ResponsiveShell({ children }: { children: React.ReactNod
       <AppShell.Header hiddenFrom="sm" px="sm">
         <Group h="100%" justify="space-between" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
-            <Burger opened={opened} onClick={toggle} size="sm" aria-label="Abrir menú" />
+            <Burger opened={opened} onClick={toggle} size="sm" aria-label="Abrir menu" />
             <div>
               <Text fw={700} size="sm" lh={1.1}>
                 {headerCopy.title}

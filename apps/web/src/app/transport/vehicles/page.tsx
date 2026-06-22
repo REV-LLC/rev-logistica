@@ -134,9 +134,9 @@ function daysUntil(value?: string | null) {
 
 function getDocumentStatus(days: number | null) {
   if (days === null) return { label: 'Sin fecha', color: 'gray' };
-  if (days < 0) return { label: 'Vencido', color: 'red' };
-  if (days <= 30) return { label: `${days} días`, color: 'orange' };
-  return { label: `${days} días`, color: 'green' };
+  if (days < 0) return { label: 'Expired', color: 'red' };
+  if (days <= 30) return { label: `${days} days`, color: 'orange' };
+  return { label: `${days} days`, color: 'green' };
 }
 
 function VehicleDetails({
@@ -157,7 +157,7 @@ function VehicleDetails({
             {vehicle.plate}
           </Text>
           <Text size="sm" c="dimmed">
-            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
           </Text>
         </div>
         <Badge color="blue" variant="light">
@@ -168,7 +168,7 @@ function VehicleDetails({
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Configuración
+            Configuracion
           </Text>
           <Stack gap={6} mt={8}>
             <Text size="sm">Peso (Toneladas): {formatCapacity(vehicle.capacity)}</Text>
@@ -180,7 +180,7 @@ function VehicleDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Documentación
+            Documentation
           </Text>
           <Stack gap={8} mt={8}>
             <Group justify="space-between">
@@ -193,7 +193,7 @@ function VehicleDetails({
               Vence: {formatDisplayDate(vehicle.soatVigencia)}
             </Text>
             <Group justify="space-between">
-              <Text size="sm">Tecnomecánica</Text>
+              <Text size="sm">Technical inspection</Text>
               <Badge color={technoStatus.color} variant="light">
                 {technoStatus.label}
               </Badge>
@@ -251,7 +251,7 @@ export default function VehiclesPage() {
       const data = await api<Vehicle[]>('/vehicles');
       setVehicles(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar vehículos');
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar vehiculos');
     } finally {
       setLoading(false);
     }
@@ -337,7 +337,7 @@ export default function VehiclesPage() {
       }
 
       await loadVehicles();
-      setSuccess('Vehículo guardado.');
+      setSuccess('Vehicle saved.');
       closeEdit();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'No se pudo guardar');
@@ -350,14 +350,14 @@ export default function VehiclesPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Vehículos"
-          description="Administra flota, documentación y disponibilidad operativa desde una sola vista."
+          title="Vehiculos"
+          description="Manage fleet, documentation, and operational availability from one view."
           icon={<IconTruck size={20} />}
           iconColor="orange"
           accentColor="rgba(249,115,22,0.12)"
           aside={
             <Button onClick={startCreate} leftSection={<IconPlus size={16} />}>
-              Nuevo vehículo
+              Nuevo vehiculo
             </Button>
           }
         >
@@ -365,7 +365,7 @@ export default function VehiclesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Vehículos registrados"
+              hint="Registered vehicles"
               color="orange"
               icon={<IconTruck size={20} />}
             />
@@ -377,16 +377,16 @@ export default function VehiclesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="SOAT próximo"
+              label="Upcoming SOAT"
               value={String(metrics.soatSoon)}
-              hint="Vence en 30 días o menos"
+              hint="Expires in 30 days or less"
               color="red"
               icon={<IconFileDescription size={20} />}
             />
             <StatCard
-              label="Tecnomecánica próxima"
+              label="Upcoming inspection"
               value={String(metrics.technoSoon)}
-              hint="Vence en 30 días o menos"
+              hint="Expires in 30 days or less"
               color="grape"
               icon={<IconCalendarDue size={20} />}
             />
@@ -425,7 +425,7 @@ export default function VehiclesPage() {
                         <div>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                           </Text>
                         </div>
                         <Badge color={soatStatus.color} variant="light">
@@ -466,9 +466,9 @@ export default function VehiclesPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconCar size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>Sin vehículos registrados</Text>
+                    <Text fw={700}>No hay vehiculos registrados</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Crea un nuevo vehículo para empezar.
+                      Crea un vehiculo para empezar.
                     </Text>
                   </Stack>
                 </Paper>
@@ -478,10 +478,10 @@ export default function VehiclesPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Vehículo</Table.Th>
+                  <Table.Th>Vehiculo</Table.Th>
                   <Table.Th>Tipo / capacidad</Table.Th>
                   <Table.Th>Conductores</Table.Th>
-                  <Table.Th>Documentación</Table.Th>
+                  <Table.Th>Documentation</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
@@ -495,7 +495,7 @@ export default function VehiclesPage() {
                         <Stack gap={2}>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                           </Text>
                         </Stack>
                       </Table.Td>
@@ -548,9 +548,9 @@ export default function VehiclesPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconCar size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>Sin vehículos registrados</Text>
+                        <Text fw={700}>No hay vehiculos registrados</Text>
                         <Text size="sm" c="dimmed">
-                          Crea un nuevo vehículo.
+                          Crea un vehiculo.
                         </Text>
                       </Stack>
                     </Table.Td>
@@ -562,7 +562,7 @@ export default function VehiclesPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehículo" size="lg">
+      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Vehicle details" size="lg">
         {detailsVehicle ? (
           <VehicleDetails
             vehicle={detailsVehicle}
@@ -574,7 +574,7 @@ export default function VehiclesPage() {
         ) : null}
       </Modal>
 
-      <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Editar vehículo' : 'Nuevo vehículo'} size="lg">
+      <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Editar vehiculo' : 'Nuevo vehiculo'} size="lg">
         {form ? (
           <form onSubmit={handleSaveSubmit}>
             <Stack gap="lg">
@@ -592,7 +592,7 @@ export default function VehiclesPage() {
                     <div>
                       <Text fw={700}>{editing.plate}</Text>
                       <Text size="sm" c="dimmed">
-                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca ni modelo'}
+                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                       </Text>
                     </div>
                     <Badge color="orange" variant="light">
@@ -611,15 +611,15 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Ficha del vehículo</Text>
+                    <Text fw={700}>Vehicle record</Text>
                     <Text size="sm" c="dimmed">
-                      Datos básicos para identificar el vehículo dentro de la flota.
+                      Basic data to identify the vehicle within the fleet.
                     </Text>
                   </div>
 
                   <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                     <TextInput
-                      label="Placa"
+                      label="Plate"
                       name="plate"
                       autoComplete="off"
                       value={form.plate}
@@ -672,7 +672,7 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Documentación</Text>
+                    <Text fw={700}>Documentation</Text>
                     <Text size="sm" c="dimmed">
                       Registra fechas de vencimiento para control preventivo de la flota.
                     </Text>
@@ -688,7 +688,7 @@ export default function VehiclesPage() {
                       onChange={(event) => setForm({ ...form, soatVigencia: event.currentTarget.value })}
                     />
                     <TextInput
-                      label="Tecnomecánica vence"
+                      label="Inspection expires"
                       name="tecnomecanicaVigencia"
                       autoComplete="off"
                       type="date"
@@ -706,7 +706,7 @@ export default function VehiclesPage() {
                   Cancelar
                 </Button>
                 <Button type="submit" loading={saving}>
-                  {editing ? 'Guardar cambios' : 'Crear vehículo'}
+                  {editing ? 'Guardar cambios' : 'Crear vehiculo'}
                 </Button>
               </Group>
             </Stack>

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CustomerRutPdfParserService } from './customer-rut-pdf-parser.service';
+import type { CustomerRutPdfUpload, ParsedCustomerRutData } from './customer-rut-pdf-parser.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateWorksiteDto } from './dto/create-worksite.dto';
@@ -7,7 +9,10 @@ import { UpdateWorksiteDto } from './dto/update-worksite.dto';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rutPdfParser: CustomerRutPdfParserService,
+  ) {}
 
   async list() {
     return this.prisma.customer.findMany({
@@ -21,6 +26,10 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
     return customer;
+  }
+
+  async parseRutPdf(file?: CustomerRutPdfUpload): Promise<ParsedCustomerRutData> {
+    return this.rutPdfParser.parse(file);
   }
 
   async create(payload: CreateCustomerDto) {
@@ -272,4 +281,5 @@ export class CustomersService {
       return { id: customerWorksiteId, deleted: true };
     });
   }
+
 }

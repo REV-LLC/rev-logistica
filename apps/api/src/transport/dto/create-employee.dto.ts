@@ -5,6 +5,9 @@ export class CreateEmployeeDto {
   @IsString()
   name: string;
 
+  @IsString()
+  lastName: string;
+
   @IsEnum(EmployeeRole)
   role: EmployeeRole;
 

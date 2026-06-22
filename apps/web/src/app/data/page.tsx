@@ -78,7 +78,7 @@ export default function DataPage() {
         setTables(items);
         setSelectedTable(items[0]?.key ?? null);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron cargar las tablas'));
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron cargar tablas'));
   }, []);
 
   const tableOptions = useMemo(
@@ -133,7 +133,7 @@ export default function DataPage() {
       const message =
         err instanceof ApiError || err instanceof Error
           ? err.message
-          : 'No se pudo cargar el backup';
+          : 'No se pudo subir el backup';
       setError(message);
     } finally {
       setLoading(false);
@@ -145,7 +145,7 @@ export default function DataPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Datos"
-          description="Backups JSON y exportes CSV"
+          description="JSON backups and CSV exports"
           icon={<IconDatabaseExport size={20} />}
           iconColor="blue"
           accentColor="rgba(34, 139, 230, 0.14)"
@@ -158,9 +158,9 @@ export default function DataPage() {
         )}
 
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-          <StatCard label="Formato backup" value="JSON" hint="Restauracion por upsert" icon={<IconDatabaseExport size={20} />} color="blue" />
-          <StatCard label="Formato plano" value="CSV" hint="Una tabla por archivo" icon={<IconFileSpreadsheet size={20} />} color="green" />
-          <StatCard label="Acceso" value="Admin" hint="Operacion protegida" icon={<IconUpload size={20} />} color="red" />
+          <StatCard label="Backup format" value="JSON" hint="Upsert restore" icon={<IconDatabaseExport size={20} />} color="blue" />
+          <StatCard label="Flat format" value="CSV" hint="One table per file" icon={<IconFileSpreadsheet size={20} />} color="green" />
+          <StatCard label="Access" value="Admin" hint="Protected operation" icon={<IconUpload size={20} />} color="red" />
         </SimpleGrid>
 
         <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
@@ -172,15 +172,15 @@ export default function DataPage() {
                 </ThemeIcon>
                 <div>
                   <Title order={3} size="h4">
-                    Backup completo
+                    Full backup
                   </Title>
                   <Text size="sm" c="dimmed">
-                    Archivo JSON con todas las tablas operativas.
+                    JSON file with every operational table.
                   </Text>
                 </div>
               </Group>
               <Button leftSection={<IconDownload size={16} />} onClick={handleDownloadJson} loading={loading}>
-                Descargar backup JSON
+                Download JSON backup
               </Button>
             </Stack>
           </Paper>
@@ -193,10 +193,10 @@ export default function DataPage() {
                 </ThemeIcon>
                 <div>
                   <Title order={3} size="h4">
-                    Exportar tabla
+                    Export table
                   </Title>
                   <Text size="sm" c="dimmed">
-                    CSV plano para Excel, analisis o revision.
+                    Flat CSV for Excel, analysis, or review.
                   </Text>
                 </div>
               </Group>
@@ -209,7 +209,7 @@ export default function DataPage() {
                 disabled={!selectedTable}
                 loading={loading}
               >
-                Descargar CSV
+                Download CSV
               </Button>
             </Stack>
           </Paper>
@@ -244,7 +244,7 @@ export default function DataPage() {
                 disabled={!backupFile}
                 loading={loading}
               >
-                Cargar backup
+                Upload backup
               </Button>
             </Group>
 
@@ -253,8 +253,8 @@ export default function DataPage() {
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Tabla</Table.Th>
-                      <Table.Th>Recibidos</Table.Th>
+                      <Table.Th>Table</Table.Th>
+                      <Table.Th>Received</Table.Th>
                       <Table.Th>Cargados</Table.Th>
                     </Table.Tr>
                   </Table.Thead>

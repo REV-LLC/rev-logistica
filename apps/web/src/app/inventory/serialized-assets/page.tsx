@@ -74,13 +74,13 @@ type CreateSerializedResponse = {
 };
 
 const FUEL_OPTIONS = [
-  { value: 'GASOLINA', label: 'Gasolina' },
+  { value: 'GASOLINA', label: 'Gasoline' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Eléctrico' },
+  { value: 'ELECTRICO', label: 'Electric' },
 ];
 const CHARGE_TYPE_OPTIONS = [
-  { value: 'DAY', label: 'Por día' },
-  { value: 'HOUR', label: 'Por hora' },
+  { value: 'DAY', label: 'Per day' },
+  { value: 'HOUR', label: 'Per hour' },
 ];
 
 const getWorkflowStepClassName = (isActive: boolean) =>
@@ -167,7 +167,7 @@ export default function CreateSerializedAssetPage() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando datos');
+          setError('Error loading data');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -341,11 +341,11 @@ export default function CreateSerializedAssetPage() {
   const confirmWarehouseSelection = () => {
     setError(null);
     if (!ownerWarehouseId) {
-      setValidationError('Selecciona la bodega dueña.', ownerWarehouseRef);
+      setValidationError('Select the owner warehouse.', ownerWarehouseRef);
       return;
     }
     if (!warehouseCurrentId) {
-      setValidationError('Selecciona la bodega de ubicación.', warehouseCurrentRef);
+      setValidationError('Select the location warehouse.', warehouseCurrentRef);
       return;
     }
     setWarehouseLocked(true);
@@ -359,15 +359,15 @@ export default function CreateSerializedAssetPage() {
   const confirmFamilySelection = () => {
     setError(null);
     if (!warehouseLocked) {
-      setError('Confirma primero la bodega.');
+      setError('Confirm the warehouse first.');
       return;
     }
     if (familyMode === 'existing' && !familyId) {
-      setValidationError('Selecciona familia de equipo.', familySelectRef);
+      setValidationError('Select an equipment family.', familySelectRef);
       return;
     }
     if (familyMode === 'new' && !familyName.trim()) {
-      setValidationError('Ingresa el nombre de la categoría.', familyNameRef);
+      setValidationError('Enter the category name.', familyNameRef);
       return;
     }
     setFamilyLocked(true);
@@ -407,31 +407,31 @@ export default function CreateSerializedAssetPage() {
     setSuccess(null);
 
     if (!warehouseLocked) {
-      setValidationError('Confirma la bodega antes de guardar.', ownerWarehouseRef);
+      setValidationError('Confirm the warehouse before saving.', ownerWarehouseRef);
       return;
     }
 
     if (!familyLocked) {
-      setValidationError('Confirma la familia antes de guardar.', familySelectRef);
+      setValidationError('Confirm the family before saving.', familySelectRef);
       return;
     }
 
     if (familyMode === 'existing' && !familyId) {
       setValidationError(
-        'Selecciona familia de equipo.',
+        'Select an equipment family.',
         familySelectRef,
       );
       return;
     }
 
     if (familyMode === 'new' && !familyName.trim()) {
-      setValidationError('Ingresa el nombre de la categoría.', familyNameRef);
+      setValidationError('Enter the category name.', familyNameRef);
       return;
     }
 
     if (!skuName.trim() && !skuBrand.trim() && !skuModel.trim()) {
       setValidationError(
-        'Ingresa el nombre de la referencia o al menos marca/modelo.',
+        'Enter the reference name or at least brand/model.',
         skuNameRef,
       );
       return;
@@ -439,20 +439,20 @@ export default function CreateSerializedAssetPage() {
 
     if (!serialOrEngine.trim()) {
       setValidationError(
-        'El serial o motor es obligatorio.',
+        'Serial or engine number is required.',
         serialOrEngineRef,
       );
       return;
     }
 
     if (!ownerWarehouseId) {
-      setValidationError('Selecciona la bodega dueña.', ownerWarehouseRef);
+      setValidationError('Select the owner warehouse.', ownerWarehouseRef);
       return;
     }
 
     if (!warehouseCurrentId) {
       setValidationError(
-        'Selecciona la bodega de ubicación.',
+        'Select the location warehouse.',
         warehouseCurrentRef,
       );
       return;
@@ -463,7 +463,7 @@ export default function CreateSerializedAssetPage() {
       (skuMinimumChargeHours === '' || skuMinimumChargeHours <= 0)
     ) {
       setValidationError(
-        'Ingresa el mínimo de cobro por hora.',
+        'Enter the minimum hourly charge.',
         skuMinimumChargeHoursRef,
       );
       return;
@@ -474,7 +474,7 @@ export default function CreateSerializedAssetPage() {
       (manualInternalNumber === '' || manualInternalNumber <= 0)
     ) {
       setValidationError(
-        'Ingresa el número interno de la bodega alterna.',
+        'Enter the alternate warehouse internal number.',
         manualInternalNumberRef,
       );
       return;
@@ -532,7 +532,7 @@ export default function CreateSerializedAssetPage() {
           ? familyNameById.get(familyId ?? '')?.name
           : familyName.trim();
       setSuccess(
-        `Creado: ${resolvedFamilyName ?? 'Equipo'} #${response.asset.internalNumber}`,
+        `Created: ${resolvedFamilyName ?? 'Equipment'} #${response.asset.internalNumber}`,
       );
       resetForm();
       router.refresh();
@@ -553,8 +553,8 @@ export default function CreateSerializedAssetPage() {
     <Container size="lg" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Registrar activo único"
-          description="Crea la plantilla del equipo y registra la unidad física con su ubicación inicial."
+          title="Registrar equipo unico"
+          description="Crea la plantilla del equipo y registra la unidad fisica con su ubicacion inicial."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -582,7 +582,7 @@ export default function CreateSerializedAssetPage() {
                 />
                 <Stack gap={2}>
                   <Text fw={700} size="sm">Items por cantidad</Text>
-                  <Text size="xs" c="dimmed">Andamios, formaleta y stock bulk</Text>
+                  <Text size="xs" c="dimmed">Andamio, formaleta y stock masivo</Text>
                 </Stack>
               </Group>
             </Paper>
@@ -607,8 +607,8 @@ export default function CreateSerializedAssetPage() {
                   style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
                 />
                 <Stack gap={2}>
-                  <Text fw={700} size="sm">Equipos únicos</Text>
-                  <Text size="xs" c="dimmed">Minicargadores y activos seriales</Text>
+                  <Text fw={700} size="sm">Equipos unicos</Text>
+                  <Text size="xs" c="dimmed">Minicargadores y activos serializados</Text>
                 </Stack>
               </Group>
             </Paper>
@@ -642,7 +642,7 @@ export default function CreateSerializedAssetPage() {
                     <div>
                       <Text fw={700}>1. Bodega</Text>
                       <Text size="sm" c="dimmed">
-                        Selecciona dónde queda ubicado inicialmente el equipo.
+                        Selecciona donde quedara ubicado inicialmente el equipo.
                       </Text>
                     </div>
                     {warehouseLocked ? (
@@ -665,7 +665,7 @@ export default function CreateSerializedAssetPage() {
                     />
                     <Select
                       ref={warehouseCurrentRef}
-                      label="Dónde queda"
+                      label="Ubicacion actual"
                       name="warehouseCurrentId"
                       data={warehouseOptions}
                       value={warehouseCurrentId}
@@ -700,7 +700,7 @@ export default function CreateSerializedAssetPage() {
                     <div>
                       <Text fw={700}>2. Familia</Text>
                       <Text size="sm" c="dimmed">
-                        Elige la línea del catálogo o crea una nueva.
+                        Elige una linea del catalogo o crea una nueva.
                       </Text>
                     </div>
                     <Group gap="xs">
@@ -742,7 +742,7 @@ export default function CreateSerializedAssetPage() {
                       value={familyId}
                       onChange={(value) => setFamilyId(value)}
                       placeholder={
-                        loading ? 'Cargando…' : 'Selecciona familia'
+                        loading ? 'Cargando...' : 'Seleccionar familia'
                       }
                       searchable
                       nothingFoundMessage="Sin resultados"
@@ -752,26 +752,26 @@ export default function CreateSerializedAssetPage() {
                     <Group grow className="mobile-stack">
                       <TextInput
                         ref={familyNameRef}
-                        label="Nombre de la familia"
+                        label="Nombre de familia"
                         name="familyName"
                         autoComplete="off"
                         value={familyName}
                         onChange={(event) =>
                           setFamilyName(event.currentTarget.value)
                         }
-                        placeholder="Ej: Cargadores"
+                        placeholder="Ejemplo: Minicargadores"
                         disabled={familyLocked}
                         required
                       />
                       <TextInput
-                        label="Código interno"
+                        label="Codigo interno"
                         name="familyCode"
                         autoComplete="off"
                         value={familyCode}
                         onChange={(event) =>
                           setFamilyCode(event.currentTarget.value)
                         }
-                        placeholder="Ej: CGD"
+                        placeholder="Ejemplo: MCG"
                         disabled={familyLocked}
                       />
                     </Group>
@@ -779,7 +779,7 @@ export default function CreateSerializedAssetPage() {
 
                   <Group gap="xs">
                     <Badge color={familyMode === 'existing' ? 'blue' : 'violet'} variant="light">
-                      {familyMode === 'existing' ? 'Familia existente' : 'Nueva familia'}
+                      {familyMode === 'existing' ? 'Familia existente' : 'Familia nueva'}
                     </Badge>
                     {(selectedFamily || familyName.trim()) ? (
                       <Badge color="teal" variant="light">
@@ -871,8 +871,8 @@ export default function CreateSerializedAssetPage() {
                     }}
                     placeholder={
                       loadingSkus
-                        ? 'Cargando…'
-                        : 'Selecciona una plantilla parecida'
+                        ? 'Cargando...'
+                        : 'Seleccionar una plantilla similar'
                     }
                     searchable
                     clearable
@@ -887,7 +887,7 @@ export default function CreateSerializedAssetPage() {
                     autoComplete="off"
                     value={skuName}
                     onChange={(event) => setSkuName(event.currentTarget.value)}
-                    placeholder="Ej: Mini cargador S650"
+                    placeholder="Ejemplo: Minicargador S650"
                   />
 
                   <Group grow className="mobile-stack">
@@ -937,11 +937,11 @@ export default function CreateSerializedAssetPage() {
                       value={skuUnit}
                       onChange={(value) => setSkuUnit(value ?? '')}
                       searchable
-                      nothingFoundMessage="Sin unidades"
+                      nothingFoundMessage="No hay unidades"
                       required
                     />
                     <NumberInput
-                      label="Peso por unidad"
+                      label="Peso unitario"
                       name="skuUnitWeight"
                       autoComplete="off"
                       value={skuUnitWeight}
@@ -984,7 +984,7 @@ export default function CreateSerializedAssetPage() {
                       thousandSeparator=","
                     />
                     <NumberInput
-                      label="Precio subalquiler"
+                      label="Precio sub alquiler"
                       name="skuSubrentalPrice"
                       autoComplete="off"
                       value={skuSubrentalPrice}
@@ -1008,7 +1008,7 @@ export default function CreateSerializedAssetPage() {
                     {skuChargeType === 'HOUR' ? (
                       <NumberInput
                         ref={skuMinimumChargeHoursRef}
-                        label="Mínimo de cobro"
+                        label="Cobro minimo"
                         name="skuMinimumChargeHours"
                         autoComplete="off"
                         value={skuMinimumChargeHours}
@@ -1036,7 +1036,7 @@ export default function CreateSerializedAssetPage() {
                   <div>
                     <Text fw={700}>5. Activo</Text>
                     <Text size="sm" c="dimmed">
-                      La unidad física que queda trazable.
+                      La unidad fisica que quedara trazable.
                     </Text>
                   </div>
 
@@ -1064,7 +1064,7 @@ export default function CreateSerializedAssetPage() {
                   {isAlternateOwnerWarehouse ? (
                     <NumberInput
                       ref={manualInternalNumberRef}
-                      label="Número interno (bodega alterna)"
+                      label="Numero interno (bodega alterna)"
                       name="manualInternalNumber"
                       autoComplete="off"
                       value={manualInternalNumber}
@@ -1094,9 +1094,9 @@ export default function CreateSerializedAssetPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>6. Revisión</Text>
+                    <Text fw={700}>6. Revision</Text>
                     <Text size="sm" c="dimmed">
-                      Confirma la plantilla, el activo y la ubicación.
+                      Confirma la plantilla, el activo y la ubicacion.
                     </Text>
                   </div>
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -1105,7 +1105,7 @@ export default function CreateSerializedAssetPage() {
                         Familia y referencia
                       </Text>
                       <Text size="sm" mt={8}>
-                        {(selectedFamily?.name ?? familyName.trim()) || 'Sin categoría'}
+                        {(selectedFamily?.name ?? familyName.trim()) || 'Sin categoria'}
                       </Text>
                       <Text size="sm" c="dimmed">
                         {skuName.trim() || 'Sin referencia'}
@@ -1113,16 +1113,16 @@ export default function CreateSerializedAssetPage() {
                     </Paper>
                     <Paper radius="md" p="sm" bg="gray.0">
                       <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                        Serial y ubicación
+                        Serial y ubicacion
                       </Text>
                       <Text size="sm" mt={8}>
                         {serialOrEngine.trim() || 'Sin serial'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Dueña: {selectedOwnerWarehouse?.name ?? '-'}
+                        Dueño: {selectedOwnerWarehouse?.name ?? '-'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Ubicación: {selectedCurrentWarehouse?.name ?? '-'}
+                        Ubicacion: {selectedCurrentWarehouse?.name ?? '-'}
                       </Text>
                     </Paper>
                   </SimpleGrid>
@@ -1136,7 +1136,7 @@ export default function CreateSerializedAssetPage() {
                       </Badge>
                     ) : (
                       <Badge color="blue" variant="light">
-                        Cobro por día
+                        Cobro diario
                       </Badge>
                     )}
                     {isAlternateOwnerWarehouse ? (

@@ -37,10 +37,10 @@ const sections: NavSection[] = [
   {
     title: 'Operacion',
     links: [
-      { href: '/transport/solicitudes', label: 'Solicitudes', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
-      { href: '/transport/cost', label: 'Transporte', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/requests', label: 'Solicitudes', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+      { href: '/transport/cost', label: 'Transport', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
       { href: '/transport/vehicles', label: 'Vehiculos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/transport/obras', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
       { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
     ],
   },
@@ -62,7 +62,7 @@ const sections: NavSection[] = [
   {
     title: 'Administracion',
     links: [
-      { href: '/billing/prefactura', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/billing/pre-invoice', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
       { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
       { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
       { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },
@@ -104,20 +104,39 @@ export default function Nav({ onNavigate }: NavProps) {
 
   return (
     <Stack h="100%" gap="lg" p="lg">
-      <Group justify="space-between" align="center" wrap="nowrap">
-        <Link href="/" style={{ display: 'block' }}>
+      <Group justify="space-between" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
+        <Link href="/" style={{ display: 'block', flexShrink: 0 }}>
           <img
             src="/fiesta.svg"
             alt="Rev Logistica"
             style={{ height: 52, width: 'auto', display: 'block' }}
           />
         </Link>
-        <Stack gap={2} align="flex-end">
-          <Badge color={roleColor} variant="light" radius="sm" tt="uppercase" size="lg">
+        <Stack gap={2} align="flex-end" style={{ minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
+          <Badge
+            color={roleColor}
+            variant="light"
+            radius="sm"
+            tt="uppercase"
+            size="lg"
+            style={{ flexShrink: 0, maxWidth: '100%' }}
+          >
             {currentRole ?? 'SIN ROL'}
           </Badge>
           {currentSession?.email ? (
-            <Text size="xs" c="dimmed" ta="right" lh={1.2}>
+            <Text
+              size="xs"
+              c="dimmed"
+              ta="right"
+              lh={1.2}
+              title={currentSession.email}
+              w="100%"
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {currentSession.email}
             </Text>
           ) : null}
@@ -183,7 +202,7 @@ export default function Nav({ onNavigate }: NavProps) {
         <Divider mb="md" />
         <Stack gap="xs">
           <Button variant="subtle" color="red" onClick={handleLogout} size="sm">
-            Logout
+            Cerrar sesion
           </Button>
         </Stack>
       </Box>

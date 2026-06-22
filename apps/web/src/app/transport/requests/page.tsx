@@ -60,6 +60,7 @@ type CatalogAsset = {
 type Employee = {
   id: string;
   name: string;
+  lastName?: string | null;
   user?: {
     id: string;
     email: string;
@@ -67,6 +68,9 @@ type Employee = {
     active: boolean;
   } | null;
 };
+const getEmployeeFullName = (employee: Pick<Employee, 'name' | 'lastName'>) =>
+  `${employee.name} ${employee.lastName ?? ''}`.trim();
+
 type Customer = { id: string; name: string };
 type CustomerWorksite = {
   id: string;
@@ -185,8 +189,8 @@ type CreateSerializedAssetResponse = {
     warehouseCurrentId: string;
   };
 };
-const WAREHOUSES_CACHE_KEY = 'solicitudes.warehouses.v1';
-const PRINCIPAL_TAGS_CACHE_KEY = 'solicitudes.principalTags.v1';
+const WAREHOUSES_CACHE_KEY = 'requests.warehouses.v1';
+const PRINCIPAL_TAGS_CACHE_KEY = 'requests.principalTags.v1';
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
@@ -252,7 +256,7 @@ function requestTypeColor(type: string) {
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Eléctrico' },
+  { value: 'ELECTRICO', label: 'Electric' },
 ];
 
 function normalizeQuantityInput(value: string | number, fallback = 1) {
@@ -500,7 +504,7 @@ export default function SolicitudesIpadPage() {
   }));
   const employeeOptions = employees.map((employee) => ({
     value: employee.id,
-    label: employee.name,
+    label: getEmployeeFullName(employee),
   }));
   const selectedBulkKeys = useMemo(
     () =>
@@ -548,8 +552,8 @@ export default function SolicitudesIpadPage() {
     onSiteItemOptions.forEach((option) => {
       const ownerId = option.ownerWarehouseId ?? null;
       const ownerName = ownerId
-        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño/a'
-        : 'Sin dueño/a';
+        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño'
+        : 'Sin dueño';
       map.set(option.value, { ownerId, ownerName });
     });
     return map;
@@ -740,7 +744,7 @@ export default function SolicitudesIpadPage() {
       if (err instanceof Error) {
         setRequestsError(err.message);
       } else {
-        setRequestsError('Error al procesar solicitud');
+        setRequestsError('Error processing request');
       }
       return;
     }
@@ -751,7 +755,7 @@ export default function SolicitudesIpadPage() {
     );
     if (hasAssetUnavailableError) {
       setRequestsError(
-        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Verifica si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
+        'Cannot approve: the equipment is not available in the source warehouse. Check if it is on site or select/load the correct equipment before approving.',
       );
       return;
     }
@@ -767,13 +771,13 @@ export default function SolicitudesIpadPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const warehouseLabel = ownerName ?? 'the alternate warehouse';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `Primero debes hacer ajuste de "${warehouseLabel}" bodega para hacer movimientos.${missingItemsBlock}`,
+        `First adjust "${warehouseLabel}" warehouse before making movements.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);
@@ -965,7 +969,7 @@ export default function SolicitudesIpadPage() {
         if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
         if (selectedOwner?.type === 'ALLY') {
-          throw new Error('Para bodega alterna usa captura por tag libre.');
+          throw new Error('For alternate warehouse, use free tag capture.');
         }
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/warehouse/${sourceOwnerWarehouseId}`,
@@ -995,7 +999,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error cargando inventario');
+        setError('Error loading inventory');
       }
     } finally {
       setLoadingInventory(false);
@@ -1057,7 +1061,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setRequestsError(err.message);
       } else {
-        setRequestsError('Error cargando solicitudes');
+        setRequestsError('Error loading requests');
       }
     } finally {
       setRequestsLoading(false);
@@ -1178,13 +1182,13 @@ export default function SolicitudesIpadPage() {
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('La línea no tiene bodega dueña.');
+      setCreateSerialError('The line has no owner warehouse.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
     const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
     if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      setCreateSerialError('Selecciona primero un SKU serial.');
+      setCreateSerialError('Selecciona primero un SKU serializado.');
       return;
     }
     if (!createSerialSerialOrEngine.trim()) {
@@ -1192,7 +1196,7 @@ export default function SolicitudesIpadPage() {
       return;
     }
     if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
-      setCreateSerialError('Número interno inválido.');
+      setCreateSerialError('Invalid internal number.');
       return;
     }
 
@@ -1242,7 +1246,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setCreateSerialError(err.message);
       } else {
-        setCreateSerialError('Error creando equipo.');
+        setCreateSerialError('Error creating equipment.');
       }
     } finally {
       setCreateSerialSaving(false);
@@ -1290,7 +1294,7 @@ export default function SolicitudesIpadPage() {
       if (doc.type === 'RETURN') {
         const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
         if (missingCutoff) {
-          setRequestsError('Antes de aprobar la devolución debes definir la fecha de corte por item.');
+          setRequestsError('Before approving the return, define the cutoff date per item.');
           router.push(`/inventory/ledger/document/${documentId}`);
           return;
         }
@@ -1314,7 +1318,7 @@ export default function SolicitudesIpadPage() {
         return;
       }
 
-      if (!window.confirm('¿Aprobar esta solicitud y ejecutar el movimiento de inventario?')) return;
+      if (!window.confirm('Approve this request and execute the inventory movement?')) return;
       await approveWithDecision(documentId);
     } catch (err) {
       handleApprovalError(err);
@@ -1323,7 +1327,7 @@ export default function SolicitudesIpadPage() {
 
   const addBulkItem = (item: InventoryBulk) => {
     if (item.quantity < 0) {
-      setError('Este item tiene alerta de inventario negativo. Ajusta el stock antes de usarlo en un documento.');
+      setError('This item has a negative inventory alert. Adjust stock before using it in a document.');
       return false;
     }
     const bulkKey = buildBulkKey(item);
@@ -1367,7 +1371,7 @@ export default function SolicitudesIpadPage() {
       return !resolveAssetByIndex[index];
     });
     if (serialMissingAsset.length > 0) {
-      setRequestsError('Falta seleccionar o crear equipo para uno o más tags seriales.');
+      setRequestsError('Missing selected or created equipment for one or more serial tags.');
       return;
     }
 
@@ -1481,7 +1485,7 @@ export default function SolicitudesIpadPage() {
       if (isAlternateSerial) {
         const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : 0;
         if (!internal || internal <= 0) {
-          setError('Ingresa el número interno del equipo');
+          setError('Enter the equipment internal number');
           return;
         }
         const serialLabel = `${tag} #${internal}`;
@@ -1511,7 +1515,7 @@ export default function SolicitudesIpadPage() {
         return;
       }
       if (!qty || qty <= 0) {
-        setError('Cantidad inválida para el item');
+        setError('Invalid quantity for the item');
         return;
       }
       setError(null);
@@ -1532,7 +1536,7 @@ export default function SolicitudesIpadPage() {
       return;
     }
 
-    setError('Captura manual solo aplica para bodega alterna.');
+    setError('Manual capture only applies to alternate warehouse.');
   };
 
   const resolveFreeItemToSku = (index: number, skuId: string | null) => {
@@ -1668,7 +1672,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error cargando solicitud para editar');
+        setError('Error loading request for editing');
       }
     }
   };
@@ -1679,7 +1683,7 @@ export default function SolicitudesIpadPage() {
     setError(null);
     try {
       if (!docDate || !customerId) {
-        throw new Error('Completa los campos obligatorios.');
+        throw new Error('Complete the required fields.');
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
@@ -1689,29 +1693,29 @@ export default function SolicitudesIpadPage() {
           (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
         )
       ) {
-        throw new Error('Hay items con alerta de inventario negativo. Ajusta el stock antes de crear el documento.');
+        throw new Error('Some items have negative inventory alerts. Adjust stock before creating the document.');
       }
       if (!customerWorksiteId) {
-        throw new Error('Selecciona la obra (worksite).');
+        throw new Error('Selecciona la obra.');
       }
       if (!editingRequestId && !receivedSignature) {
-        throw new Error('Captura la firma del cliente antes de enviar.');
+        throw new Error('Capture the customer signature before sending.');
       }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
-        throw new Error('Selecciona la bodega para la devolución.');
+        throw new Error('Selecciona la bodega para la devolucion.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !effectiveWarehouseId) {
         throw new Error('Selecciona la bodega de despacho.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
-        throw new Error('Tu usuario no está vinculado a un empleado conductor.');
+        throw new Error('Your user is not linked to a driver employee.');
       }
       const damagedWithoutDescription = selectedItems.find(
         (item) => item.isDamaged && !item.damageDescription?.trim(),
       );
       if (docType === 'RETURN' && damagedWithoutDescription) {
-        throw new Error(`Describe el daño de ${damagedWithoutDescription.name}.`);
+        throw new Error(`Describe the damage for ${damagedWithoutDescription.name}.`);
       }
 
       const documentPayload = {
@@ -1721,10 +1725,10 @@ export default function SolicitudesIpadPage() {
         customerWorksiteId: customerWorksiteId || undefined,
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
-          `Fecha doc: ${docDate}`,
+          `Fecha documento: ${docDate}`,
           docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehículo: ${vehicleId}` : null,
+          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
           deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
           deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
         ].filter(Boolean).join(' | ')
@@ -1732,7 +1736,7 @@ export default function SolicitudesIpadPage() {
 
       const movementItems = selectedItems.map((item) => {
         if (!item.ownerWarehouseId) {
-          throw new Error(`Falta dueño/a para item ${item.name}`);
+          throw new Error(`Missing owner for item ${item.name}`);
         }
         if (item.type === 'free') {
           return {
@@ -1776,8 +1780,8 @@ export default function SolicitudesIpadPage() {
         },
       );
       const successMessage = editingRequestId
-        ? `Solicitud actualizada (${created.id}).`
-        : `Solicitud enviada en borrador (${created.id}).`;
+        ? `Request updated (${created.id}).`
+        : `Request sent as draft (${created.id}).`;
       resetGenerateForm();
       setSubmitResult(successMessage);
       setItemsModalOpen(false);
@@ -1791,7 +1795,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error al enviar solicitud.');
+        setError('Error sending request.');
       }
     } finally {
       setSubmitting(false);
@@ -1801,7 +1805,7 @@ export default function SolicitudesIpadPage() {
   const goToItemsStep = () => {
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
-    if (!customerId) nextFieldErrors.customerId = 'Selecciona la razón social.';
+    if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
     if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
     if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
@@ -1856,8 +1860,8 @@ export default function SolicitudesIpadPage() {
         />
         {item.isDamaged ? (
           <Textarea
-            label="Descripción del daño"
-            placeholder="Describe el daño reportado al recibir el equipo"
+            label="Damage description"
+            placeholder="Describe the damage reported when receiving the equipment"
             value={item.damageDescription ?? ''}
             onChange={(event) =>
               updateSelected(index, {
@@ -1883,8 +1887,8 @@ export default function SolicitudesIpadPage() {
   const requestMetrics = {
     drafts: requests.length,
     selected: selectedItems.length,
-    activeDoc: editingRequestId ? 'Edición' : 'Nueva',
-    tab: activeTab === 'list' ? 'Borradores' : 'Generación',
+    activeDoc: editingRequestId ? 'Editando' : 'Nuevo',
+    tab: activeTab === 'list' ? 'Drafts' : 'Generation',
   };
 
   return (
@@ -1893,14 +1897,14 @@ export default function SolicitudesIpadPage() {
         <Stack gap="lg">
           <PageHeaderCard
             title="Solicitudes de documentos"
-            description="Gestiona borradores de remisión y devolución, arma items y controla su envío operativo."
+            description="Manage dispatch and return drafts, build items, and control operational submission."
             icon={<IconFileText size={20} />}
             iconColor="blue"
             accentColor="rgba(14,165,233,0.12)"
           >
             <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
               <StatCard
-                label="Borradores"
+                label="Drafts"
                 value={String(requestMetrics.drafts)}
                 hint="Solicitudes cargadas en lista"
                 color="blue"
@@ -1923,7 +1927,7 @@ export default function SolicitudesIpadPage() {
               <StatCard
                 label="Vista"
                 value={requestMetrics.tab}
-                hint="Tab actualmente activo"
+                hint="Tab activo actualmente"
                 color="cyan"
                 icon={<IconFileText size={20} />}
               />
@@ -1933,7 +1937,7 @@ export default function SolicitudesIpadPage() {
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Tabs value={activeTab} onChange={handleActiveTabChange}>
             <Tabs.List grow={isMobile}>
-              <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes documentos'}</Tabs.Tab>
+              <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes de documentos'}</Tabs.Tab>
               <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
             </Tabs.List>
 
@@ -1942,7 +1946,7 @@ export default function SolicitudesIpadPage() {
                 <div>
                   <Text fw={700}>Solicitudes en borrador</Text>
                   <Text size="sm" c="dimmed">
-                    Revisa solicitudes pendientes, entra a detalle o decide aprobación y rechazo.
+                    Revisa solicitudes pendientes, abre detalles o decide aprobacion y rechazo.
                   </Text>
                 </div>
                 <Button variant="light" onClick={loadRequests} loading={requestsLoading}>
@@ -2135,20 +2139,20 @@ export default function SolicitudesIpadPage() {
                   {editingRequestId ? `Editando solicitud ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
                   </Text>
                   <Text size="sm" c="dimmed">
-                    Completa información, agrega items y registra la firma antes de enviar.
+                    Complete information, add items, and register the signature before sending.
                   </Text>
                 </div>
                 {editingRequestId ? (
                   <Button variant="light" color="gray" onClick={resetGenerateForm}>
-                    Cancelar edición
+                    Cancelar edicion
                   </Button>
                 ) : null}
               </Group>
               <Tabs value={generateStep} onChange={handleGenerateStepChange} mb="md">
                 <Tabs.List grow={isMobile}>
-                  <Tabs.Tab value="info">1. Información</Tabs.Tab>
+                  <Tabs.Tab value="info">1. Information</Tabs.Tab>
                   <Tabs.Tab value="items">2. Items</Tabs.Tab>
-                  <Tabs.Tab value="sign">3. Firma y envío</Tabs.Tab>
+                  <Tabs.Tab value="sign">3. Signature and submission</Tabs.Tab>
                 </Tabs.List>
               </Tabs>
               {generateStep === 'info' ? (
@@ -2161,15 +2165,15 @@ export default function SolicitudesIpadPage() {
                 label="Tipo"
               >
                 <Group mt="xs">
-                  <Radio value="REMISSION" label="Remisión" />
-                  <Radio value="RETURN" label="Devolución" />
+                  <Radio value="REMISSION" label="Despacho" />
+                  <Radio value="RETURN" label="Devolucion" />
                 </Group>
               </Radio.Group>
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             {!isDriverRole ? (
               <TextInput
-                label={helpLabel('Consecutivo (opcional)', 'Si lo dejas vacío, oficina podrá asignarlo al confirmar.')}
+                label={helpLabel('Consecutivo (opcional)', 'Si queda vacio, oficina puede asignarlo en la confirmacion.')}
                 withAsterisk={false}
                 value={consecutive}
                 onChange={(event) => setConsecutive(event.target.value)}
@@ -2177,7 +2181,7 @@ export default function SolicitudesIpadPage() {
             ) : null}
             {isMobile ? (
               <NativeSelect
-                label="Razón social"
+                label="Legal name"
                 value={customerId ?? ''}
                 onChange={(event) => {
                   setCustomerId(event.currentTarget.value || null);
@@ -2185,7 +2189,7 @@ export default function SolicitudesIpadPage() {
                   setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
                 }}
                 data={[
-                  { value: '', label: 'Selecciona cliente' },
+                  { value: '', label: 'Seleccionar cliente' },
                   ...customers.map((customer) => ({
                     value: customer.id,
                     label: customer.name,
@@ -2196,7 +2200,7 @@ export default function SolicitudesIpadPage() {
               />
             ) : (
               <Select
-                label="Razón social"
+                label="Legal name"
                 value={customerId}
                 onChange={(value) => {
                   setCustomerId(value);
@@ -2210,12 +2214,12 @@ export default function SolicitudesIpadPage() {
                 searchable
                 clearable
                 required
-                placeholder="Selecciona cliente"
+                placeholder="Seleccionar cliente"
                 error={generateFieldErrors.customerId}
               />
             )}
             <TextInput
-              label={helpLabel('Fecha', 'Fecha del documento de remisión o devolución.', true)}
+              label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
               withAsterisk={false}
               type="date"
               value={docDate}
@@ -2244,7 +2248,7 @@ export default function SolicitudesIpadPage() {
               label="Entrega"
             >
               <Group mt="xs">
-                <Radio value="WAREHOUSE" label="Despacho en bodega" />
+                <Radio value="WAREHOUSE" label="Despacho desde bodega" />
                 <Radio value="ON_SITE" label="Entrega on-site" />
               </Group>
             </Radio.Group>
@@ -2260,7 +2264,7 @@ export default function SolicitudesIpadPage() {
                   setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
                 }}
                 data={[
-                  { value: '', label: customerId ? 'Selecciona obra' : 'Selecciona cliente primero' },
+                  { value: '', label: customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente' },
                   ...worksiteOptions,
                 ]}
                 disabled={!customerId || worksitesLoading}
@@ -2277,7 +2281,7 @@ export default function SolicitudesIpadPage() {
                 data={worksiteOptions}
                 searchable
                 clearable
-                placeholder={customerId ? 'Selecciona obra' : 'Selecciona cliente primero'}
+                placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
                 disabled={!customerId || worksitesLoading}
                 error={generateFieldErrors.customerWorksiteId}
               />
@@ -2285,14 +2289,14 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Vehículo', 'Vehículo que transporta la remisión on-site.')}
+                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                   value={vehicleId ?? ''}
                   onChange={(event) => setVehicleId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Selecciona vehículo' }, ...vehicleOptions]}
+                  data={[{ value: '', label: 'Seleccionar vehiculo' }, ...vehicleOptions]}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Vehículo', 'Vehículo que transporta la remisión on-site.')}
+                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                   value={vehicleId}
                   onChange={(value) => setVehicleId(value)}
                   data={vehicleOptions}
@@ -2304,19 +2308,19 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
+                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                   value={driverId ?? ''}
                   onChange={(event) => {
                     setDriverId(event.currentTarget.value || null);
                     setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
                   }}
-                  data={[{ value: '', label: 'Selecciona conductor' }, ...employeeOptions]}
+                  data={[{ value: '', label: 'Seleccionar conductor' }, ...employeeOptions]}
                   disabled={isDriverRole}
                   error={generateFieldErrors.driverId}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Conductor', 'Persona responsable del transporte de la remisión.')}
+                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                   value={driverId}
                   onChange={(value) => {
                     setDriverId(value);
@@ -2333,15 +2337,15 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Despachador', 'Empleado que entrega el material desde bodega.')}
+                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                   value={dispatcherId ?? ''}
                   onChange={(event) => setDispatcherId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Selecciona despachador' }, ...employeeOptions]}
+                  data={[{ value: '', label: 'Seleccionar despachador' }, ...employeeOptions]}
                   disabled={isDriverRole}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Despachador', 'Empleado que entrega el material desde bodega.')}
+                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                   value={dispatcherId}
                   onChange={(value) => setDispatcherId(value)}
                   data={employeeOptions}
@@ -2386,9 +2390,9 @@ export default function SolicitudesIpadPage() {
               · {docDate || '-'} ·{' '}
               {docType === 'REMISSION'
                 ? deliveryMode === 'ON_SITE'
-                  ? `On-site (${selectedDriver?.name ?? '-'})`
+                  ? `En obra (${selectedDriver?.name ?? '-'})`
                   : `Bodega (${selectedDispatcher?.name ?? '-'})`
-                : 'Devolución'}
+                : 'Devolucion'}
             </Text>
           </Paper>
           <Text c="dimmed">Agregar los equipos y su origen.</Text>
@@ -2397,21 +2401,21 @@ export default function SolicitudesIpadPage() {
             {sourceMode === 'warehouse' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                   value={sourceOwnerWarehouseId ?? ''}
                   onChange={(event) => setSourceOwnerWarehouseId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Selecciona dueño/a' }, ...ownerWarehouseOptions]}
+                  data={[{ value: '', label: 'Seleccionar dueño' }, ...ownerWarehouseOptions]}
                   w="100%"
                 />
               ) : (
                 <Select
-                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicación.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                   value={sourceOwnerWarehouseId}
                   onChange={(value) => setSourceOwnerWarehouseId(value)}
                   data={ownerWarehouseOptions}
                   searchable
                   clearable
-                  placeholder="Selecciona dueño/a"
+                  placeholder="Seleccionar dueño"
                   w={320}
                 />
               )
@@ -2513,7 +2517,7 @@ export default function SolicitudesIpadPage() {
                         <Select
                           mt="xs"
                           label="Resolver a SKU"
-                          placeholder="Selecciona SKU"
+                          placeholder="Seleccionar SKU"
                           searchable
                           clearable
                           data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
@@ -2564,7 +2568,7 @@ export default function SolicitudesIpadPage() {
                     {canResolveInline && item.type === 'free' ? (
                       <Select
                         label="Resolver a SKU"
-                        placeholder="Selecciona SKU"
+                        placeholder="Seleccionar SKU"
                         searchable
                         clearable
                         data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
@@ -2584,7 +2588,7 @@ export default function SolicitudesIpadPage() {
             <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
               Volver a info
             </Button>
-            <Button onClick={goToSignStep}>Siguiente: Firma</Button>
+            <Button onClick={goToSignStep}>Next: Signature</Button>
           </Group>
         </Paper>
         ) : null}
@@ -2604,9 +2608,9 @@ export default function SolicitudesIpadPage() {
         >
           <Group justify="space-between" align="center" mb="sm">
             <div>
-              <Title order={4}>Firma y envío</Title>
+              <Title order={4}>Signature and submission</Title>
               <Text size="sm" c="dimmed">
-                Verifica el resumen final, captura la firma y envía la solicitud.
+                Verify the final summary, capture the signature, and send the request.
               </Text>
             </div>
             <Button type="button" variant="light" color="gray" onClick={() => setGenerateStep('items')}>
@@ -2617,7 +2621,7 @@ export default function SolicitudesIpadPage() {
 
           <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
             <Text size="sm">
-              <strong>Resumen:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
+              <strong>Summary:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
               {selectedWorksite
                 ? selectedWorksite.alias
                   ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
@@ -2641,7 +2645,7 @@ export default function SolicitudesIpadPage() {
                     <Text>{item.name}</Text>
                     {docType === 'RETURN' && item.isDamaged ? (
                       <Text size="xs" c="red">
-                        Averiado: {item.damageDescription?.trim() || 'Sin descripción'}
+                        Damaged: {item.damageDescription?.trim() || 'Sin descripcion'}
                       </Text>
                     ) : null}
                   </Table.Td>
@@ -2654,14 +2658,14 @@ export default function SolicitudesIpadPage() {
           </Table>
 
           <Stack gap="xs">
-            <Text fw={600}>Firma recibido por</Text>
+            <Text fw={600}>Signature received by</Text>
             <Group justify="space-between" align="center">
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
               {editingRequestId ? (
                 <Text size="xs" c="dimmed">
-                  Firma bloqueada en edición
+                  Signature locked while editing
                 </Text>
               ) : (
                 <Button
@@ -2679,7 +2683,7 @@ export default function SolicitudesIpadPage() {
             {receivedSignature ? (
               <img
                 src={receivedSignature}
-                alt="Firma recibida"
+                alt="Received signature"
                 style={{
                   width: '100%',
                   maxWidth: 420,
@@ -2712,7 +2716,7 @@ export default function SolicitudesIpadPage() {
       <Modal
         opened={signatureModalOpen}
         onClose={() => setSignatureModalOpen(false)}
-        title="Firma recibido por"
+        title="Signature received by"
         centered
       >
         <Stack gap="md">
@@ -2746,7 +2750,7 @@ export default function SolicitudesIpadPage() {
                   setSignatureModalOpen(false);
                 }}
               >
-                Confirmar y guardar
+                Confirm and save
               </Button>
             </Group>
           </Group>
@@ -2765,7 +2769,7 @@ export default function SolicitudesIpadPage() {
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
             {adjustWarningMessage ??
-              'Primero debes hacer ajuste de bodega para hacer movimientos.'}
+              'First adjust warehouse stock before making movements.'}
           </Text>
           <Group justify="flex-end">
             <Button
@@ -2796,7 +2800,7 @@ export default function SolicitudesIpadPage() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Bulk se resuelve por SKU. Serial se resuelve por equipo específico (# interno).
+            Masivo resuelve por SKU. Serializado resuelve por equipo especifico (interno #).
           </Text>
           {(resolveDocument?.items ?? [])
             .map((item, index) => ({ item, index }))
@@ -2813,7 +2817,7 @@ export default function SolicitudesIpadPage() {
                   </Text>
                   <Select
                     label="Equipo"
-                    placeholder="Selecciona SKU"
+                    placeholder="Seleccionar SKU"
                     searchable
                     data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
                     value={resolveSkuByIndex[index] ?? null}
@@ -2856,11 +2860,11 @@ export default function SolicitudesIpadPage() {
                       <Stack gap={6}>
                         <Select
                           label="Equipo serial"
-                          placeholder="Selecciona el equipo"
+                          placeholder="Seleccionar equipo"
                           searchable
                           data={serialOptions}
                           value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No hay equipos de este SKU en esa bodega"
+                          nothingFoundMessage="No hay equipo para este SKU en esa bodega"
                           onChange={(value) =>
                             setResolveAssetByIndex((prev) => ({
                               ...prev,
@@ -2870,7 +2874,7 @@ export default function SolicitudesIpadPage() {
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            El tag pide #{expectedInternal}, pero no existe en esa bodega.
+                            The tag requests #{expectedInternal}, but it does not exist in that warehouse.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
@@ -2918,7 +2922,7 @@ export default function SolicitudesIpadPage() {
         isDriverRole={isDriverRole}
         sourceMode={sourceMode}
         emptyStateText={
-          useManualWarehouseCapture ? 'Usa captura por descripción en la sección principal.' : null
+          useManualWarehouseCapture ? 'Use description capture in the main section.' : null
         }
         onItemAddedNotice={setItemsAddedNotice}
       />
@@ -2935,7 +2939,7 @@ export default function SolicitudesIpadPage() {
           setCreateSerialYear('');
           setCreateSerialFuel(null);
         }}
-        title="Crear equipo serial faltante"
+        title="Crear equipo serializado faltante"
         centered
       >
         <Stack gap="sm">
@@ -2947,7 +2951,7 @@ export default function SolicitudesIpadPage() {
             required
           />
           <NumberInput
-            label="Número interno"
+            label="Internal number"
             value={createSerialInternalNumber}
             onChange={(value) =>
               setCreateSerialInternalNumber(typeof value === 'number' ? value : '')
@@ -2969,7 +2973,7 @@ export default function SolicitudesIpadPage() {
           </Group>
           <Group grow>
             <NumberInput
-              label="Año (opcional)"
+              label="Year (optional)"
               value={createSerialYear}
               onChange={(value) => setCreateSerialYear(typeof value === 'number' ? value : '')}
               min={1900}

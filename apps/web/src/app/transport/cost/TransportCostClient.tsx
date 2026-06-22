@@ -111,7 +111,7 @@ export default function TransportCostPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLocationsLoading(false);
@@ -143,7 +143,7 @@ export default function TransportCostPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLocationsLoading(false);
@@ -175,7 +175,7 @@ export default function TransportCostPage() {
       !originAddressLine ||
       !destinationAddressLine
     ) {
-      setError('Dirección, departamento y ciudad son obligatorios.');
+      setError('Address, department, and city are required.');
       return null;
     }
     const originDepartmentName =
@@ -223,7 +223,7 @@ export default function TransportCostPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLoading(false);
@@ -265,7 +265,7 @@ export default function TransportCostPage() {
       } else if (err instanceof Error) {
         setAuthError(err.message);
       } else {
-        setAuthError('Error inesperado.');
+        setAuthError('Unexpected error.');
       }
     } finally {
       setAuthLoading(false);
@@ -293,20 +293,20 @@ export default function TransportCostPage() {
     <main>
       <Container size="lg" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Costo de Transporte</Title>
+          <Title order={2}>Transport Cost</Title>
           <Text c="dimmed" mt="xs">
-            Calcula el costo según la distancia real por calles con Mapbox.
+            Calculate cost based on real street distance with Mapbox.
           </Text>
         </Paper>
 
         <Stack mt="lg" gap="lg">
           <Paper shadow="sm" p="xl" radius="md" withBorder>
-            <Title order={4}>Ruta</Title>
+            <Title order={4}>Route</Title>
             <Stack mt="md" gap="sm">
               <Group grow>
                 <Select
-                  label="Origen - Departamento"
-                  placeholder="Selecciona departamento"
+                  label="Origin - Department"
+                  placeholder="Select department"
                   data={departments}
                   value={originDepartment}
                   onChange={(value) => {
@@ -320,8 +320,8 @@ export default function TransportCostPage() {
                   className="select-pointer"
                 />
                 <Select
-                  label="Origen - Ciudad"
-                  placeholder="Selecciona ciudad"
+                  label="Origin - City"
+                  placeholder="Select city"
                   data={originCities}
                   value={originCity}
                   onChange={setOriginCity}
@@ -332,7 +332,7 @@ export default function TransportCostPage() {
               </Group>
               <Group grow>
                 <TextInput
-                  label="Origen - Dirección"
+                  label="Origin - Address"
                   placeholder="Cra 47 #3A-50"
                   value={originAddressLine}
                   onChange={(e) => setOriginAddressLine(e.target.value)}
@@ -340,8 +340,8 @@ export default function TransportCostPage() {
               </Group>
               <Group grow>
                 <Select
-                  label="Destino - Departamento"
-                  placeholder="Selecciona departamento"
+                  label="Destination - Department"
+                  placeholder="Select department"
                   data={departments}
                   value={destinationDepartment}
                   onChange={(value) => {
@@ -355,8 +355,8 @@ export default function TransportCostPage() {
                   className="select-pointer"
                 />
                 <Select
-                  label="Destino - Ciudad"
-                  placeholder="Selecciona ciudad"
+                  label="Destination - City"
+                  placeholder="Select city"
                   data={destinationCities}
                   value={destinationCity}
                   onChange={setDestinationCity}
@@ -367,7 +367,7 @@ export default function TransportCostPage() {
               </Group>
               <Group grow>
                 <TextInput
-                  label="Destino - Dirección"
+                  label="Destination - Address"
                   placeholder="Cra 22 #5A-7"
                   value={destinationAddressLine}
                   onChange={(e) => setDestinationAddressLine(e.target.value)}
@@ -378,13 +378,13 @@ export default function TransportCostPage() {
 
           <Paper shadow="sm" p="xl" radius="md" withBorder>
             <Group justify="space-between" align="flex-start">
-              <Title order={4}>Tarifa</Title>
+              <Title order={4}>Rate</Title>
               {!rateEditable && (
                 <ActionIcon
                   className="rate-edit-icon-card"
                   variant="light"
                   onClick={handleOpenAuth}
-                  aria-label="Editar tarifa"
+                  aria-label="Edit rate"
                 >
                   <svg
                     width="16"
@@ -414,7 +414,7 @@ export default function TransportCostPage() {
             <Stack mt="md" gap="sm">
               <Group grow>
                 <NumberInput
-                  label="Tarifa por Km"
+                  label="Rate per Km"
                   value={ratePerKm}
                   onChange={(value) => setRatePerKm(typeof value === 'number' ? value : '')}
                   decimalScale={2}
@@ -439,13 +439,13 @@ export default function TransportCostPage() {
               <Title order={4}>Resultado</Title>
               <Stack mt="md" gap="xs">
                 <Text>
-                  Distancia: {result.distanceKm.toFixed(2)} km ({result.breakdown.distanceSource})
+                  Distance: {result.distanceKm.toFixed(2)} km ({result.breakdown.distanceSource})
                 </Text>
                 <Text>
-                  Duración: {result.durationSeconds ? `${Math.round(result.durationSeconds / 60)} min` : 'N/A'}
+                  Duration: {result.durationSeconds ? `${Math.round(result.durationSeconds / 60)} min` : 'N/A'}
                 </Text>
                 <Text fw={600}>
-                  Costo: {result.cost.toFixed(2)} {result.currency ?? ''}
+                  Cost: {result.cost.toFixed(2)} {result.currency ?? ''}
                 </Text>
               </Stack>
             </Paper>
@@ -456,15 +456,15 @@ export default function TransportCostPage() {
       <Modal
         opened={authOpen}
         onClose={() => setAuthOpen(false)}
-        title="Autenticación de administrador"
+        title="Admin authentication"
         centered
       >
         <Stack gap="sm">
           <Text c="dimmed" size="sm">
-            Ingresa credenciales de admin para habilitar edición de la tarifa.
+            Enter admin credentials to enable rate editing.
           </Text>
           <TextInput
-            label="Email"
+            label="Correo"
             type="email"
             value={authEmail}
             onChange={(event) => setAuthEmail(event.target.value)}
@@ -472,7 +472,7 @@ export default function TransportCostPage() {
             required
           />
           <PasswordInput
-            label="Password"
+            label="Contraseña"
             value={authPassword}
             onChange={(event) => setAuthPassword(event.target.value)}
             placeholder="••••••••"

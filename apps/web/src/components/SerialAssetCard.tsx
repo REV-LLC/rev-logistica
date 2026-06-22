@@ -34,7 +34,7 @@ function getStatusColor(status?: string | null) {
 
 function getStatusLabel(status?: string | null, isWorksiteView?: boolean) {
   const normalized = (status ?? 'IN').toString().toUpperCase();
-  if (isWorksiteView && normalized === 'OUT') return 'En obra';
+  if (isWorksiteView && normalized === 'OUT') return 'On site';
   return normalized;
 }
 
@@ -48,12 +48,12 @@ function formatCharge(chargeType?: string | null, minimumChargeHours?: number | 
           ? Number(minimumChargeHours)
           : null;
     if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
-      return `Hora (mín ${minimum}h)`;
+      return `Hour (min ${minimum}h)`;
     }
-    return 'Hora';
+    return 'Hour';
   }
   if (normalized === 'DAY') {
-    return 'Día';
+    return 'Day';
   }
   return '-';
 }
@@ -172,7 +172,7 @@ export default function SerialAssetCard({
             {item.serialOrEngine ?? '-'}
           </Text>
           <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-            Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+            Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
           </Text>
         </Stack>
 

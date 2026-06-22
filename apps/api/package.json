@@ -5,9 +5,6 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
-  },
   "scripts": {
     "build": "nest build",
     "import:cervino": "ts-node scripts/import-cervino.ts",
@@ -36,6 +33,7 @@
     "cache-manager": "^6.4.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "pdf-parse": "^2.4.5",
     "prisma": "^6.19.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

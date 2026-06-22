@@ -93,7 +93,7 @@ export default function InventoryItemPickerModal({
                         if (disabled) return;
                         const added = onAddBulk(item);
                         if (added && onItemAddedNotice) {
-                          onItemAddedNotice(`${item.skuName ?? 'Item'} agregado a la lista.`);
+                          onItemAddedNotice(`${item.skuName ?? 'Item'} added to the list.`);
                         }
                       }}
                     >
@@ -116,7 +116,7 @@ export default function InventoryItemPickerModal({
                             variant="filled"
                             leftSection={<IconAlertTriangle size={12} stroke={2.5} />}
                           >
-                            Requiere ajuste
+                            Requires adjustment
                           </Badge>
                         ) : (
                           <Badge variant="light">
@@ -137,7 +137,7 @@ export default function InventoryItemPickerModal({
             <Divider />
 
             <Stack gap="xs">
-              <Title order={5}>Equipos seriales</Title>
+              <Title order={5}>Serialized equipment</Title>
               {serialItems.length ? (
                 <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
                   {serialItems.map((item) => {
@@ -153,7 +153,7 @@ export default function InventoryItemPickerModal({
                             : () => {
                                 const added = onAddSerial(item);
                                 if (added && onItemAddedNotice) {
-                                  onItemAddedNotice(`${getSerialDisplayName(item)} agregado a la lista.`);
+                                  onItemAddedNotice(`${getSerialDisplayName(item)} added to the list.`);
                                 }
                               }
                         }
@@ -163,7 +163,7 @@ export default function InventoryItemPickerModal({
                 </SimpleGrid>
               ) : (
                 <Text size="sm" c="dimmed">
-                  No hay equipos seriales disponibles.
+                  No hay equipos unicos disponibles.
                 </Text>
               )}
             </Stack>
@@ -172,7 +172,7 @@ export default function InventoryItemPickerModal({
 
         <Group justify="flex-end" className="mobile-actions">
           <Button variant="default" onClick={onClose}>
-            Cerrar
+            Close
           </Button>
         </Group>
       </Stack>

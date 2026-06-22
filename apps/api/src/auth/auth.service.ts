@@ -23,7 +23,7 @@ export class AuthService {
       where: { email: normalizedEmail },
       include: {
         employee: {
-          select: { name: true },
+          select: { name: true, lastName: true },
         },
       },
     });
@@ -59,11 +59,12 @@ export class AuthService {
     id: string;
     email: string;
     role: Role;
-    employee?: { name: string } | null;
+    employee?: { name: string; lastName: string } | null;
   }) {
+    const employeeName = user.employee ? `${user.employee.name} ${user.employee.lastName}`.trim() : null;
     return {
       id: user.id,
-      name: user.employee?.name ?? user.email,
+      name: employeeName ?? user.email,
       email: user.email,
       role: user.role,
     };

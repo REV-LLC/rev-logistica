@@ -39,13 +39,13 @@ export type LedgerItem = {
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('es-CO');
+  return date.toLocaleString('en-US');
 }
 
 function formatMovementType(item: LedgerItem) {
   if (item.movementType === 'ADJUST') {
-    if (item.assetId && item.quantity > 0) return 'CREACION';
-    return 'AJUSTE';
+    if (item.assetId && item.quantity > 0) return 'CREATION';
+    return 'ADJUSTMENT';
   }
   return item.movementType;
 }
@@ -83,10 +83,10 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
             <Table.Th style={isMobile ? { width: '15%', textAlign: 'center' } : { textAlign: 'center' }}>
               {isMobile ? 'Cant.' : 'Cantidad'}
             </Table.Th>
-            {isMobile ? <Table.Th style={{ width: '15%' }}>Ver</Table.Th> : null}
-            {!isMobile ? <Table.Th>Ubicación</Table.Th> : null}
-            {!isMobile ? <Table.Th>Creado por</Table.Th> : null}
-            {!isMobile ? <Table.Th>Referencia</Table.Th> : null}
+            {isMobile ? <Table.Th style={{ width: '15%' }}>View</Table.Th> : null}
+            {!isMobile ? <Table.Th>Location</Table.Th> : null}
+            {!isMobile ? <Table.Th>Created by</Table.Th> : null}
+            {!isMobile ? <Table.Th>Reference</Table.Th> : null}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -106,7 +106,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
               ? item.warehouse.name
               : item.customerWorksite
               ? `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${
-                  item.customerWorksite.worksite?.name ?? 'Worksite'
+                  item.customerWorksite.worksite?.name ?? 'Obra'
                 }`
               : '-';
             const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
@@ -133,7 +133,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
                   )}
                   {item.assetId ? (
                     <Text size="xs">
-                      <Link href={`/inventory/serialized-assets/${item.assetId}`}>Ver equipo</Link>
+                      <Link href={`/inventory/serialized-assets/${item.assetId}`}>View equipment</Link>
                     </Text>
                   ) : null}
                 </Table.Td>
@@ -142,7 +142,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
                   <Table.Td>
                     <ActionIcon
                       variant="light"
-                      aria-label={`Ver detalles del movimiento ${item.id}`}
+                      aria-label={`View movement details ${item.id}`}
                       onClick={() => openDetails(item)}
                     >
                       <IconEye size={16} />
@@ -158,37 +158,37 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
         </Table.Tbody>
       </Table>
 
-      <Modal opened={detailsOpen} onClose={() => setDetailsOpen(false)} title="Detalle de movimiento">
+      <Modal opened={detailsOpen} onClose={() => setDetailsOpen(false)} title="Movement details">
         {detailsItem ? (
           <>
             <Text>
               <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
             </Text>
             <Text mt="xs">
-              <strong>Movimiento:</strong> {formatMovementType(detailsItem)}
+              <strong>Movement:</strong> {formatMovementType(detailsItem)}
             </Text>
             <Text mt="xs">
               <strong>Cantidad:</strong> {detailsItem.quantity}
             </Text>
             <Text mt="xs">
-              <strong>Ubicación:</strong>{' '}
+              <strong>Location:</strong>{' '}
               {detailsItem.warehouse
                 ? detailsItem.warehouse.name
                 : detailsItem.customerWorksite
                 ? `${detailsItem.customerWorksite.customer?.name ?? 'Cliente'} / ${
-                    detailsItem.customerWorksite.worksite?.name ?? 'Worksite'
+                    detailsItem.customerWorksite.worksite?.name ?? 'Obra'
                   }`
                 : '-'}
             </Text>
             <Text mt="xs">
-              <strong>Creado por:</strong> {detailsItem.creator?.employee?.name ?? detailsItem.creator?.email ?? '-'}
+              <strong>Created by:</strong> {detailsItem.creator?.employee?.name ?? detailsItem.creator?.email ?? '-'}
             </Text>
             <Text mt="xs">
-              <strong>Referencia:</strong> {renderReference(detailsItem)}
+              <strong>Reference:</strong> {renderReference(detailsItem)}
             </Text>
             {detailsItem.assetId ? (
               <Text mt="xs">
-                <strong>Equipo:</strong>{' '}
+                <strong>Equipment:</strong>{' '}
                 <Link href={`/inventory/serialized-assets/${detailsItem.assetId}`}>Abrir ficha del equipo</Link>
               </Text>
             ) : null}

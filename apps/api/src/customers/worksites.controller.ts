@@ -17,12 +17,17 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CustomersService } from './customers.service';
 import { CreateWorksiteDto } from './dto/create-worksite.dto';
 import { UpdateWorksiteDto } from './dto/update-worksite.dto';
+import { ValidateWorksiteAddressDto } from './dto/validate-worksite-address.dto';
+import { WorksiteAddressValidationService } from './worksite-address-validation.service';
 
 @Controller('worksites')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE)
 export class WorksitesController {
-  constructor(private readonly customersService: CustomersService) {}
+  constructor(
+    private readonly customersService: CustomersService,
+    private readonly addressValidationService: WorksiteAddressValidationService,
+  ) {}
 
   @Get()
   list() {
@@ -41,6 +46,20 @@ export class WorksitesController {
     payload: CreateWorksiteDto,
   ) {
     return this.customersService.createWorksite(payload);
+  }
+
+  @Post('address/validate')
+  validateAddress(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: ValidateWorksiteAddressDto,
+  ) {
+    return this.addressValidationService.validate(payload);
   }
 
   @Patch(':customerWorksiteId')

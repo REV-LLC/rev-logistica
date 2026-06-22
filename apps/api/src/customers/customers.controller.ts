@@ -7,16 +7,24 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomersService } from './customers.service';
+import {
+  CUSTOMER_RUT_PDF_MAX_SIZE_BYTES,
+  type CustomerRutPdfUpload,
+} from './customer-rut-pdf-parser.service';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,6 +35,18 @@ export class CustomersController {
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   list() {
     return this.customersService.list();
+  }
+
+  @Post('parse-rut')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  @UseInterceptors(
+    FileInterceptor('rut', {
+      storage: memoryStorage(),
+      limits: { fileSize: CUSTOMER_RUT_PDF_MAX_SIZE_BYTES },
+    }),
+  )
+  parseRut(@UploadedFile() file?: CustomerRutPdfUpload) {
+    return this.customersService.parseRutPdf(file);
   }
 
   @Get(':id')
