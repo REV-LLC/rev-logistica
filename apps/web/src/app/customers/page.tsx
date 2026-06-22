@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Container,
+  FileInput,
   Group,
   Modal,
   Paper,
@@ -23,10 +24,12 @@ import { useMediaQuery } from '@mantine/hooks';
 import {
   IconBuildingEstate,
   IconEye,
+  IconFileCheck,
   IconFileText,
   IconPhone,
   IconPlus,
   IconRoad,
+  IconUpload,
   IconUserCheck,
   IconUsersGroup,
 } from '@tabler/icons-react';
@@ -52,6 +55,12 @@ type CustomerForm = {
   initialWorksiteAlias: string;
   initialWorksiteAddress: string;
   initialWorksiteActive: boolean;
+};
+
+type ParsedRutCustomer = {
+  name: string | null;
+  nitOrId: string | null;
+  phone: string | null;
 };
 
 const emptyForm: CustomerForm = {
@@ -80,18 +89,18 @@ function CustomerDetails({
             {customer.name}
           </Text>
           <Text size="sm" c="dimmed">
-            Cliente registrado
+            Registered customer
           </Text>
         </div>
         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-          {customer.active ? 'Activo' : 'Inactivo'}
+          {customer.active ? 'Active' : 'Inactive'}
         </Badge>
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identificación
+            Identification
           </Text>
           <Text size="sm" mt={8}>
             {customer.nitOrId ?? '-'}
@@ -111,7 +120,7 @@ function CustomerDetails({
       {onEdit ? (
         <Group className="mobile-actions">
           <Button variant="light" onClick={() => onEdit(customer)}>
-            Editar
+            Edit
           </Button>
         </Group>
       ) : null}
@@ -130,6 +139,10 @@ export default function CustomersPage() {
   const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
+  const [rutFile, setRutFile] = useState<File | null>(null);
+  const [rutParsing, setRutParsing] = useState(false);
+  const [rutParseMessage, setRutParseMessage] = useState<string | null>(null);
+  const [rutParseStatus, setRutParseStatus] = useState<'success' | 'error' | null>(null);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -143,7 +156,7 @@ export default function CustomersPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error cargando clientes');
+        setError('Error loading customers');
       }
     } finally {
       setLoading(false);
@@ -169,11 +182,17 @@ export default function CustomersPage() {
   const openCreate = () => {
     setEditingCustomer(null);
     setForm(emptyForm);
+    setRutFile(null);
+    setRutParseMessage(null);
+    setRutParseStatus(null);
     setModalOpen(true);
   };
 
   const openEdit = (customer: Customer) => {
     setEditingCustomer(customer);
+    setRutFile(null);
+    setRutParseMessage(null);
+    setRutParseStatus(null);
     setForm({
       name: customer.name ?? '',
       nitOrId: customer.nitOrId ?? '',
@@ -191,6 +210,54 @@ export default function CustomersPage() {
     setModalOpen(false);
     setEditingCustomer(null);
     setForm(emptyForm);
+    setRutFile(null);
+    setRutParseMessage(null);
+    setRutParseStatus(null);
+  };
+
+  const parseRutPdf = async () => {
+    if (!rutFile) {
+      setRutParseMessage('Select a RUT PDF');
+      setRutParseStatus('error');
+      return;
+    }
+    if (rutFile.type !== 'application/pdf') {
+      setRutParseMessage('The RUT must be a PDF');
+      setRutParseStatus('error');
+      return;
+    }
+
+    setRutParsing(true);
+    setRutParseMessage(null);
+    setRutParseStatus(null);
+    try {
+      const formData = new FormData();
+      formData.append('rut', rutFile);
+      const parsed = await api<ParsedRutCustomer>('/customers/parse-rut', {
+        method: 'POST',
+        body: formData,
+      });
+
+      setForm((prev) => ({
+        ...prev,
+        name: parsed.name ?? prev.name,
+        nitOrId: parsed.nitOrId ?? prev.nitOrId,
+        phone: parsed.phone ?? prev.phone,
+      }));
+      setRutParseMessage('RUT data loaded. Review the information before saving.');
+      setRutParseStatus('success');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setRutParseMessage(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setRutParseMessage(err.message);
+      } else {
+        setRutParseMessage('Error reading the RUT');
+      }
+      setRutParseStatus('error');
+    } finally {
+      setRutParsing(false);
+    }
   };
 
   const saveCustomer = async () => {
@@ -242,7 +309,7 @@ export default function CustomersPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error guardando cliente');
+        setError('Error saving customer');
       }
     } finally {
       setSaving(false);
@@ -253,14 +320,14 @@ export default function CustomersPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Clientes"
-          description="Centraliza la información comercial y deja listo el arranque operativo de cada cliente."
+          title="Customers"
+          description="Centralize commercial information and prepare each customer for operational startup."
           icon={<IconUsersGroup size={20} />}
           iconColor="green"
           accentColor="rgba(34,197,94,0.12)"
           aside={
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              Nuevo cliente
+              New customer
             </Button>
           }
         >
@@ -268,7 +335,7 @@ export default function CustomersPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Clientes registrados"
+              hint="Registered customers"
               color="green"
               icon={<IconUsersGroup size={20} />}
             />
@@ -280,14 +347,14 @@ export default function CustomersPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="Con documento"
+              label="With document"
               value={String(metrics.identified)}
-              hint="NIT o documento cargado"
+              hint="NIT or document loaded"
               color="lime"
               icon={<IconFileText size={20} />}
             />
             <StatCard
-              label="Con teléfono"
+              label="With phone"
               value={String(metrics.withPhone)}
               hint="Canal de contacto disponible"
               color="blue"
@@ -297,7 +364,7 @@ export default function CustomersPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="No se pudo completar la acción">
+          <Alert color="red" variant="light" title="Could not complete the action">
             {error}
           </Alert>
         ) : null}
@@ -313,11 +380,11 @@ export default function CustomersPage() {
                         <div>
                           <Text fw={700}>{customer.name}</Text>
                           <Text size="sm" c="dimmed">
-                            {customer.nitOrId ?? 'Sin documento'}
+                            {customer.nitOrId ?? 'No document'}
                           </Text>
                         </div>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Activo' : 'Inactivo'}
+                          {customer.active ? 'Active' : 'Inactive'}
                         </Badge>
                       </Group>
 
@@ -353,7 +420,7 @@ export default function CustomersPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconUsersGroup size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No hay clientes registrados</Text>
+                    <Text fw={700}>No customers registered</Text>
                     <Text size="sm" c="dimmed" ta="center">
                       Crea un nuevo cliente para empezar.
                     </Text>
@@ -364,7 +431,7 @@ export default function CustomersPage() {
               {loading ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
-                    Cargando...
+                    Loading...
                   </Text>
                 </Paper>
               ) : null}
@@ -373,8 +440,8 @@ export default function CustomersPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Cliente</Table.Th>
-                  <Table.Th>Identificación</Table.Th>
+                  <Table.Th>Customer</Table.Th>
+                  <Table.Th>Identification</Table.Th>
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
@@ -388,23 +455,23 @@ export default function CustomersPage() {
                         <Stack gap={2}>
                           <Text fw={700}>{customer.name}</Text>
                           <Text size="sm" c="dimmed">
-                            Cliente registrado
+                            Registered customer
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
                       <Table.Td>
-                        <Text size="sm">{customer.phone ?? 'Sin teléfono'}</Text>
+                        <Text size="sm">{customer.phone ?? 'No phone'}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Activo' : 'Inactivo'}
+                          {customer.active ? 'Active' : 'Inactive'}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
-                            Editar
+                            Edit
                           </Button>
                           <ActionIcon
                             color="gray"
@@ -426,7 +493,7 @@ export default function CustomersPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsersGroup size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No hay clientes para mostrar</Text>
+                        <Text fw={700}>No customers to show</Text>
                         <Text size="sm" c="dimmed">
                           Registra un nuevo cliente.
                         </Text>
@@ -439,7 +506,7 @@ export default function CustomersPage() {
                   <Table.Tr>
                     <Table.Td colSpan={5}>
                       <Text c="dimmed" ta="center">
-                        Cargando...
+                        Loading...
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -471,7 +538,7 @@ export default function CustomersPage() {
       <Modal
         opened={modalOpen}
         onClose={closeFormModal}
-        title={editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}
+        title={editingCustomer ? 'Edit customer' : 'New customer'}
         centered
         size="lg"
       >
@@ -490,13 +557,68 @@ export default function CustomersPage() {
                 <div>
                   <Text fw={700}>{editingCustomer.name}</Text>
                   <Text size="sm" c="dimmed">
-                    {editingCustomer.nitOrId ?? 'Sin documento'}
+                    {editingCustomer.nitOrId ?? 'No document'}
                   </Text>
                 </div>
                 <Badge color={form.active ? 'green' : 'gray'} variant="light">
-                  {form.active ? 'Activo' : 'Inactivo'}
+                  {form.active ? 'Active' : 'Inactive'}
                 </Badge>
               </Group>
+            </Paper>
+          ) : null}
+
+          {!editingCustomer ? (
+            <Paper withBorder radius="lg" p="md">
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start">
+                  <div>
+                    <Text fw={700}>RUT en PDF</Text>
+                    <Text size="sm" c="dimmed">
+                      Preload name, NIT, and phone from the document.
+                    </Text>
+                  </div>
+                  <ThemeIcon color="green" variant="light" size={32} radius="xl">
+                    <IconFileCheck size={16} />
+                  </ThemeIcon>
+                </Group>
+
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <FileInput
+                    accept="application/pdf,.pdf"
+                    label="RUT file"
+                    placeholder="Select PDF"
+                    value={rutFile}
+                    onChange={(file) => {
+                      setRutFile(file);
+                      setRutParseMessage(null);
+                      setRutParseStatus(null);
+                    }}
+                    clearable
+                  />
+                  <Group align="flex-end">
+                    <Button
+                      fullWidth
+                      variant="light"
+                      leftSection={<IconUpload size={16} />}
+                      onClick={parseRutPdf}
+                      disabled={!rutFile}
+                      loading={rutParsing}
+                    >
+                      Read RUT
+                    </Button>
+                  </Group>
+                </SimpleGrid>
+
+	                {rutParseMessage ? (
+	                  <Alert
+	                    color={rutParseStatus === 'error' ? 'red' : 'green'}
+	                    variant="light"
+	                    title={rutParseStatus === 'error' ? 'Could not read the RUT' : 'RUT read'}
+	                  >
+                    {rutParseMessage}
+                  </Alert>
+                ) : null}
+              </Stack>
             </Paper>
           ) : null}
 
@@ -505,13 +627,13 @@ export default function CustomersPage() {
               <div>
                 <Text fw={700}>Perfil comercial</Text>
                 <Text size="sm" c="dimmed">
-                  Datos base para identificar y contactar al cliente.
+                  Base data to identify and contact the customer.
                 </Text>
               </div>
 
               <TextInput
                 label="Nombre"
-                placeholder="Razón social o nombre del cliente"
+                placeholder="Legal name or customer name"
                 value={form.name}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
@@ -523,7 +645,7 @@ export default function CustomersPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="NIT / Documento"
-                  placeholder="Identificación tributaria o documento"
+                  placeholder="Tax ID or document"
                   value={form.nitOrId}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -531,8 +653,8 @@ export default function CustomersPage() {
                   }}
                 />
                 <TextInput
-                  label="Teléfono"
-                  placeholder="Número de contacto"
+                  label="Phone"
+                  placeholder="Contact number"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -544,7 +666,7 @@ export default function CustomersPage() {
               {editingCustomer ? (
                 <Switch
                   checked={form.active}
-                  label="Cliente activo"
+                  label="Active customer"
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
                   }
@@ -562,7 +684,7 @@ export default function CustomersPage() {
                       <IconBuildingEstate size={16} />
                     </ThemeIcon>
                     <div>
-                      <Text fw={700}>Obra inicial</Text>
+                      <Text fw={700}>Initial worksite</Text>
                       <Text size="sm" c="dimmed">
                         Crea la primera obra junto con el cliente para dejar listo el arranque.
                       </Text>
@@ -592,8 +714,8 @@ export default function CustomersPage() {
                     }}
                   />
                   <TextInput
-                    label="Dirección de la obra"
-                    placeholder="Ubicación o dirección principal"
+                    label="Worksite address"
+                    placeholder="Main location or address"
                     value={form.initialWorksiteAddress}
                     onChange={(event) => {
                       const value = event.currentTarget.value;
@@ -608,7 +730,7 @@ export default function CustomersPage() {
                       <IconRoad size={14} />
                     </ThemeIcon>
                     <Text size="sm" c="dimmed">
-                      La obra inicial se creará activa junto con el cliente.
+                      The initial worksite will be created active with the customer.
                     </Text>
                   </Group>
                 </Paper>
@@ -618,10 +740,10 @@ export default function CustomersPage() {
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={closeFormModal}>
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={saveCustomer} loading={saving}>
-              {editingCustomer ? 'Guardar cambios' : 'Crear cliente'}
+              {editingCustomer ? 'Save changes' : 'Create customer'}
             </Button>
           </Group>
         </Stack>
