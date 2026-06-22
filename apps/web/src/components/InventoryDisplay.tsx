@@ -56,7 +56,7 @@ export default function InventoryDisplay({
   viewFilter = 'ALL',
   bulkOwnerStackMode = false,
   isWorksiteView = false,
-  serialSectionTitle = 'EQUIPOS UNICOS',
+  serialSectionTitle = 'UNIQUE EQUIPMENT',
 }: {
   bulk: BulkItem[];
   serial: SerialItem[];
@@ -78,12 +78,12 @@ export default function InventoryDisplay({
             ? Number(minimumChargeHours)
             : null;
       if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
-        return `Hora (mín ${minimum}h)`;
+        return `Hour (min ${minimum}h)`;
       }
-      return 'Hora';
+      return 'Hour';
     }
     if (normalized === 'DAY') {
-      return 'Día';
+      return 'Day';
     }
     return '-';
   };
@@ -186,7 +186,7 @@ export default function InventoryDisplay({
     >();
 
     rows.forEach((item) => {
-      const familyName = item.category || 'Sin familia';
+      const familyName = item.category || 'No family';
       const familyId = item.assetFamilyId || familyName;
       const totalQuantity =
         'owners' in item
@@ -234,7 +234,7 @@ export default function InventoryDisplay({
                     <div>
                       <Text fw={800}>{group.name}</Text>
                       <Text size="sm" c="dimmed">
-                        {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
+                        {group.itemCount} reference{group.itemCount === 1 ? '' : 's'}
                       </Text>
                     </div>
                     {quantityBadge(group.totalQuantity, 'orange')}
@@ -244,10 +244,10 @@ export default function InventoryDisplay({
                     <Table striped highlightOnHover>
                       <Table.Thead>
                         <Table.Tr>
-                          <Table.Th>Nombre</Table.Th>
-                          <Table.Th>Cobro</Table.Th>
-                          <Table.Th>Bodega dueña</Table.Th>
-                          <Table.Th>Cantidad</Table.Th>
+                          <Table.Th>Name</Table.Th>
+                          <Table.Th>Billing</Table.Th>
+                          <Table.Th>Owner warehouse</Table.Th>
+                          <Table.Th>Quantity</Table.Th>
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
@@ -271,7 +271,7 @@ export default function InventoryDisplay({
                                   ))}
                                   {item.hiddenOwnersCount > 0 ? (
                                     <Badge color="green" variant="filled">
-                                      +{item.hiddenOwnersCount} más
+                                      +{item.hiddenOwnersCount} more
                                     </Badge>
                                   ) : null}
                                 </Group>
@@ -298,7 +298,7 @@ export default function InventoryDisplay({
                                   ))}
                                   {item.hiddenOwnersCount > 0 ? (
                                     <Badge color="green" variant="light">
-                                      +{item.hiddenOwnersCount} más
+                                      +{item.hiddenOwnersCount} more
                                     </Badge>
                                   ) : null}
                                 </Group>
@@ -335,7 +335,7 @@ export default function InventoryDisplay({
                           <Card key={item.skuId} withBorder padding="sm" radius="md">
                             <Text fw={700}>{item.name}</Text>
                             <Text size="xs" c="dimmed">
-                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+                              Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
                             </Text>
                             <Group mt="xs" gap={6} wrap="wrap">
                               {item.visibleOwners.map((owner) => (
@@ -349,7 +349,7 @@ export default function InventoryDisplay({
                               ))}
                               {item.hiddenOwnersCount > 0 ? (
                                 <Badge color="green" variant="filled">
-                                  +{item.hiddenOwnersCount} más
+                                  +{item.hiddenOwnersCount} more
                                 </Badge>
                               ) : null}
                             </Group>
@@ -361,7 +361,7 @@ export default function InventoryDisplay({
                               ))}
                               {item.hiddenOwnersCount > 0 ? (
                                 <Badge color="green" variant="light">
-                                  +{item.hiddenOwnersCount} más
+                                  +{item.hiddenOwnersCount} more
                                 </Badge>
                               ) : null}
                             </Group>
@@ -375,10 +375,10 @@ export default function InventoryDisplay({
                           >
                             <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
                             <Text size="xs" c="dimmed">
-                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+                              Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
                             </Text>
                             <Text mt="xs">
-                              <strong>Cantidad:</strong>{' '}
+                              <strong>Quantity:</strong>{' '}
                               {isNegativeQuantity(item.quantity) ? (
                                 <Text span c="red" fw={700}>
                                   <IconAlertTriangle
@@ -393,7 +393,7 @@ export default function InventoryDisplay({
                               )}
                             </Text>
                             <Text size="sm">
-                              <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
+                              <strong>Owner warehouse:</strong> {item.ownerWarehouseName ?? '-'}
                             </Text>
                           </Card>
                         ),

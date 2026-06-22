@@ -34,7 +34,7 @@ function getStatusColor(status?: string | null) {
 
 function getStatusLabel(status?: string | null, isWorksiteView?: boolean) {
   const normalized = (status ?? 'IN').toString().toUpperCase();
-  if (isWorksiteView && normalized === 'OUT') return 'En obra';
+  if (isWorksiteView && normalized === 'OUT') return 'On site';
   return normalized;
 }
 
@@ -48,12 +48,12 @@ function formatCharge(chargeType?: string | null, minimumChargeHours?: number | 
           ? Number(minimumChargeHours)
           : null;
     if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
-      return `Hora (mín ${minimum}h)`;
+      return `Hour (min ${minimum}h)`;
     }
-    return 'Hora';
+    return 'Hour';
   }
   if (normalized === 'DAY') {
-    return 'Día';
+    return 'Day';
   }
   return '-';
 }
@@ -138,7 +138,7 @@ export default function SerialAssetCard({
           />
         ) : (
           <Text size="sm" c="dimmed" ta="center" px="sm">
-            {item.imageFileObjectId ? 'Imagen cargada' : 'Sin imagen'}
+            {item.imageFileObjectId ? 'Image loaded' : 'No image'}
           </Text>
         )}
       </Box>
@@ -164,7 +164,7 @@ export default function SerialAssetCard({
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
               <Badge color={ownerColorById(item.ownerWarehouseId)} variant="light">
-                Dueño: {ownerChipLabel}
+                Owner: {ownerChipLabel}
               </Badge>
             </Group>
           ) : null}
@@ -172,13 +172,13 @@ export default function SerialAssetCard({
             {item.serialOrEngine ?? '-'}
           </Text>
           <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-            Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+            Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
           </Text>
         </Stack>
 
         {onAction ? (
           <Button size="xs" fullWidth={isMobile} onClick={onAction}>
-            {actionLabel ?? 'Agregar'}
+            {actionLabel ?? 'Add'}
           </Button>
         ) : null}
       </Stack>

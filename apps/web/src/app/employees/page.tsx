@@ -111,25 +111,25 @@ const emptyForm: EmployeeForm = {
 };
 
 const roleOptions = [
-  { value: 'DRIVER', label: 'Conductor' },
+  { value: 'DRIVER', label: 'Driver' },
   { value: 'HEAVY_MACHINERY_OPERATOR', label: 'Operario maquinaria amarilla' },
   { value: 'MACHINIST', label: 'Machinero' },
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'MANAGER', label: 'Gerente' },
   { value: 'OPERATIONS_MANAGER', label: 'Jefe operaciones' },
-  { value: 'MECHANIC', label: 'Mecánico' },
+  { value: 'MECHANIC', label: 'Mechanic' },
   { value: 'WAREHOUSE_KEEPER', label: 'Bodeguero' },
   { value: 'OTHER', label: 'Otro' },
 ];
 
 const roleLabelByValue: Record<RoleValue, string> = {
-  DRIVER: 'Conductor',
+  DRIVER: 'Driver',
   HEAVY_MACHINERY_OPERATOR: 'Operario maquinaria amarilla',
   MACHINIST: 'Machinero',
   OFFICE: 'Oficina',
   MANAGER: 'Gerente',
   OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecánico',
+  MECHANIC: 'Mechanic',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
 };
@@ -137,17 +137,17 @@ const roleLabelByValue: Record<RoleValue, string> = {
 const appRoleOptions = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OFFICE', label: 'Oficina' },
-  { value: 'DRIVER', label: 'Conductor' },
+  { value: 'DRIVER', label: 'Driver' },
 ];
 
 const appRoleLabelByValue: Record<AppRoleValue, string> = {
   ADMIN: 'Admin',
   OFFICE: 'Oficina',
-  DRIVER: 'Conductor',
+  DRIVER: 'Driver',
 };
 
 function getVehicleSummary(vehicles: VehicleOption[]) {
-  if (!vehicles.length) return 'Sin vehículos asignados';
+  if (!vehicles.length) return 'No assigned vehicles';
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 
@@ -213,7 +213,7 @@ function EmployeeDetails({
           </div>
         </Group>
         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-          {employee.active ? 'Activo' : 'Inactivo'}
+          {employee.active ? 'Active' : 'Inactive'}
         </Badge>
       </Group>
 
@@ -236,7 +236,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identificación
+            Identification
           </Text>
           <Text size="sm" mt={8}>
             {employee.documentId ?? '-'}
@@ -248,11 +248,11 @@ function EmployeeDetails({
             Acceso a la app
           </Text>
           <Stack gap={4} mt={8}>
-            <Text size="sm">{employee.user?.email ?? 'Sin acceso creado'}</Text>
+            <Text size="sm">{employee.user?.email ?? 'No access created'}</Text>
             <Text size="xs" c="dimmed">
               {employee.user
                 ? `${appRoleLabelByValue[employee.user.role]} · ${
-                    employee.user.active ? 'Activo' : 'Inactivo'
+                    employee.user.active ? 'Active' : 'Inactive'
                   }`
                 : 'Este empleado no tiene usuario asociado'}
             </Text>
@@ -261,7 +261,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Vehículos asignados
+            Assigned vehicles
           </Text>
           <Text size="sm" mt={8}>
             {getVehicleSummary(employee.vehicles)}
@@ -273,12 +273,12 @@ function EmployeeDetails({
         <Group className="mobile-actions">
           {onDelete ? (
             <Button color="red" variant="light" onClick={() => onDelete(employee)}>
-              Eliminar
+              Delete
             </Button>
           ) : null}
           {onEdit ? (
             <Button variant="light" onClick={() => onEdit(employee)}>
-              Editar
+              Edit
             </Button>
           ) : null}
         </Group>
@@ -383,11 +383,11 @@ export default function EmployeesPage() {
       return;
     }
     if (form.loginEnabled && !form.loginEmail.trim()) {
-      setError('El email de acceso es obligatorio');
+      setError('Access email is required');
       return;
     }
     if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
-      setError('La contraseña de acceso es obligatoria');
+      setError('Access password is required');
       return;
     }
 
@@ -449,7 +449,7 @@ export default function EmployeesPage() {
   };
 
   const deleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`¿Eliminar empleado ${getEmployeeFullName(employee)}?`)) return;
+    if (!window.confirm(`Delete employee ${getEmployeeFullName(employee)}?`)) return;
 
     setError(null);
     try {
@@ -470,14 +470,14 @@ export default function EmployeesPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Empleados"
-          description="Administra personal, accesos y asignación de vehículos desde una sola vista."
+          title="Employees"
+          description="Manage staff, access, and vehicle assignments from one view."
           icon={<IconUsers size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
           aside={
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              Nuevo empleado
+              New employee
             </Button>
           }
         >
@@ -485,7 +485,7 @@ export default function EmployeesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Empleados registrados"
+              hint="Registered employees"
               color="blue"
               icon={<IconUsers size={20} />}
             />
@@ -497,14 +497,14 @@ export default function EmployeesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="Con acceso"
+              label="With access"
               value={String(metrics.withAccess)}
               hint="Usuarios con login habilitado"
               color="violet"
               icon={<IconBriefcase2 size={20} />}
             />
             <StatCard
-              label="Con vehículo"
+              label="With vehicle"
               value={String(metrics.assignedVehicle)}
               hint="Asignaciones vigentes"
               color="teal"
@@ -514,7 +514,7 @@ export default function EmployeesPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="No se pudo completar la acción">
+          <Alert color="red" variant="light" title="Could not complete the action">
             {error}
           </Alert>
         ) : null}
@@ -537,7 +537,7 @@ export default function EmployeesPage() {
                           </div>
                         </Group>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Activo' : 'Inactivo'}
+                          {employee.active ? 'Active' : 'Inactive'}
                         </Badge>
                       </Group>
 
@@ -572,7 +572,7 @@ export default function EmployeesPage() {
                           color="red"
                           variant="light"
                           size={36}
-                          aria-label="Eliminar empleado"
+                          aria-label="Delete employee"
                           onClick={() => deleteEmployee(employee)}
                         >
                           <IconTrash size={18} />
@@ -588,7 +588,7 @@ export default function EmployeesPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconUsers size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No hay empleados registrados</Text>
+                    <Text fw={700}>No employees registered</Text>
                     <Text size="sm" c="dimmed" ta="center">
                       Crea un nuevo empleado para empezar.
                     </Text>
@@ -599,7 +599,7 @@ export default function EmployeesPage() {
               {loading ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
-                    Cargando...
+                    Loading...
                   </Text>
                 </Paper>
               ) : null}
@@ -608,11 +608,11 @@ export default function EmployeesPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Empleado</Table.Th>
+                  <Table.Th>Employee</Table.Th>
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Documento</Table.Th>
                   <Table.Th>Acceso</Table.Th>
-                  <Table.Th>Vehículos</Table.Th>
+                  <Table.Th>Vehicles</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -636,7 +636,7 @@ export default function EmployeesPage() {
                         <Stack gap={2}>
                           <Text size="sm">{employee.phone ?? '-'}</Text>
                           <Text size="xs" c="dimmed">
-                            {employee.email ?? 'Sin correo'}
+                            {employee.email ?? 'No email'}
                           </Text>
                         </Stack>
                       </Table.Td>
@@ -652,12 +652,12 @@ export default function EmployeesPage() {
                               style={{ width: 'fit-content' }}
                             >
                               {appRoleLabelByValue[employee.user.role]} ·{' '}
-                              {employee.user.active ? 'Activo' : 'Inactivo'}
+                              {employee.user.active ? 'Active' : 'Inactive'}
                             </Badge>
                           </Stack>
                         ) : (
                           <Text size="sm" c="dimmed">
-                            Sin acceso
+                            No access
                           </Text>
                         )}
                       </Table.Td>
@@ -668,13 +668,13 @@ export default function EmployeesPage() {
                       </Table.Td>
                       <Table.Td>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Activo' : 'Inactivo'}
+                          {employee.active ? 'Active' : 'Inactive'}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="light" onClick={() => openEdit(employee)}>
-                            Editar
+                            Edit
                           </Button>
                           <ActionIcon
                             color="gray"
@@ -687,7 +687,7 @@ export default function EmployeesPage() {
                           <ActionIcon
                             color="red"
                             variant="light"
-                            aria-label="Eliminar empleado"
+                            aria-label="Delete employee"
                             onClick={() => deleteEmployee(employee)}
                           >
                             <IconTrash size={16} />
@@ -704,7 +704,7 @@ export default function EmployeesPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsers size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No hay empleados para mostrar</Text>
+                        <Text fw={700}>No employees to show</Text>
                         <Text size="sm" c="dimmed">
                           Registra un nuevo empleado.
                         </Text>
@@ -717,7 +717,7 @@ export default function EmployeesPage() {
                   <Table.Tr>
                     <Table.Td colSpan={7}>
                       <Text c="dimmed" ta="center">
-                        Cargando...
+                        Loading...
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -753,7 +753,7 @@ export default function EmployeesPage() {
       <Modal
         opened={modalOpen}
         onClose={closeFormModal}
-        title={editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}
+        title={editingEmployee ? 'Edit employee' : 'New employee'}
         centered
         size="lg"
       >
@@ -776,7 +776,7 @@ export default function EmployeesPage() {
                   </Text>
                 </div>
                 <Badge color={form.active ? 'green' : 'gray'} variant="light">
-                  {form.active ? 'Activo' : 'Inactivo'}
+                  {form.active ? 'Active' : 'Inactive'}
                 </Badge>
               </Group>
             </Paper>
@@ -787,7 +787,7 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Perfil del empleado</Text>
                 <Text size="sm" c="dimmed">
-                  Datos básicos para identificar al colaborador dentro del sistema.
+                  Basic data to identify the collaborator in the system.
                 </Text>
               </div>
 
@@ -826,8 +826,8 @@ export default function EmployeesPage() {
                   required
                 />
                 <TextInput
-                  label="Teléfono"
-                  placeholder="Número de contacto"
+                  label="Phone"
+                  placeholder="Contact number"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -848,7 +848,7 @@ export default function EmployeesPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="Documento"
-                  placeholder="Documento o identificación"
+                  placeholder="Document or identification"
                   value={form.documentId}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -858,7 +858,7 @@ export default function EmployeesPage() {
                 <Switch
                   mt="xl"
                   checked={form.active}
-                  label="Empleado activo"
+                  label="Active employee"
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
                   }
@@ -870,15 +870,15 @@ export default function EmployeesPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Asignación operativa</Text>
+                <Text fw={700}>Operational assignment</Text>
                 <Text size="sm" c="dimmed">
-                  Vincula los vehículos que este empleado tiene a cargo actualmente.
+                  Link the vehicles currently assigned to this employee.
                 </Text>
               </div>
 
               <MultiSelect
-                label="Vehículos asignados"
-                placeholder="Selecciona uno o más vehículos"
+                label="Assigned vehicles"
+                placeholder="Select one or more vehicles"
                 value={form.vehicleIds}
                 onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
                 data={vehicles.map((vehicle) => ({
@@ -888,7 +888,7 @@ export default function EmployeesPage() {
                   }`,
                 }))}
                 searchable
-                nothingFoundMessage="Sin resultados"
+                nothingFoundMessage="No results"
               />
             </Stack>
           </Paper>
@@ -898,13 +898,13 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Acceso a la app</Text>
                 <Text size="sm" c="dimmed">
-                  Controla si el empleado puede entrar al sistema y con qué rol operativo.
+                  Control whether the employee can enter the system and with which operational role.
                 </Text>
               </div>
 
               <Switch
                 checked={form.loginEnabled}
-                label="Crear o mantener acceso para este empleado"
+                label="Create or keep access for this employee"
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, loginEnabled: event.currentTarget.checked }))
                 }
@@ -914,7 +914,7 @@ export default function EmployeesPage() {
                 <Stack gap="md">
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <TextInput
-                      label="Email de acceso"
+                      label="Access email"
                       placeholder="usuario@empresa.com"
                       value={form.loginEmail}
                       onChange={(event) => {
@@ -936,9 +936,9 @@ export default function EmployeesPage() {
 
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <TextInput
-                      label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+                      label={editingEmployee ? 'New password (optional)' : 'Password'}
                       placeholder={
-                        editingEmployee ? 'Déjala vacía para conservar la actual' : 'Contraseña inicial'
+                        editingEmployee ? 'Leave empty to keep the current one' : 'Initial password'
                       }
                       type="password"
                       value={form.loginPassword}
@@ -960,7 +960,7 @@ export default function EmployeesPage() {
               ) : (
                 <Paper radius="md" p="sm" bg="gray.0">
                   <Text size="sm" c="dimmed">
-                    Este empleado quedará sin acceso al sistema. Sus datos operativos seguirán disponibles.
+                    This employee will lose system access. Their operational data will remain available.
                   </Text>
                 </Paper>
               )}
@@ -969,10 +969,10 @@ export default function EmployeesPage() {
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={closeFormModal}>
-              Cancelar
+              Cancel
             </Button>
             <Button loading={saving} onClick={saveEmployee}>
-              {editingEmployee ? 'Guardar cambios' : 'Crear empleado'}
+              {editingEmployee ? 'Save changes' : 'Create employee'}
             </Button>
           </Group>
         </Stack>

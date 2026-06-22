@@ -47,7 +47,7 @@ type WorksiteRow = {
   };
 };
 
-type PrefacturaLine = {
+type PreInvoiceLine = {
   documentId: string;
   documentConsecutive: string | null;
   documentItemId: string;
@@ -75,7 +75,7 @@ type PrefacturaLine = {
   total: number;
 };
 
-type PrefacturaResponse = {
+type PreInvoiceResponse = {
   customerWorksite: {
     id: string;
     alias: string | null;
@@ -92,7 +92,7 @@ type PrefacturaResponse = {
     iva: number;
     total: number;
   };
-  lines: PrefacturaLine[];
+  lines: PreInvoiceLine[];
 };
 
 function todayKey() {
@@ -108,7 +108,7 @@ function formatDate(value: string | null) {
   if (!value) return '-';
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('es-CO');
+  return date.toLocaleDateString('en-US');
 }
 
 function formatMoney(value: number) {
@@ -120,9 +120,9 @@ function formatMoney(value: number) {
 }
 
 function billingStatusLabel(value: string) {
-  if (value === 'OPEN') return 'Abierto';
-  if (value === 'CUT') return 'Cortado';
-  if (value === 'CLOSED') return 'Cerrado';
+  if (value === 'OPEN') return 'Open';
+  if (value === 'CUT') return 'Cut';
+  if (value === 'CLOSED') return 'Closed';
   return value;
 }
 
@@ -133,7 +133,7 @@ function billingStatusColor(value: string) {
   return 'blue';
 }
 
-export default function PrefacturaPage() {
+export default function PreInvoicePage() {
   const [worksites, setWorksites] = useState<WorksiteRow[]>([]);
   const [customerWorksiteId, setCustomerWorksiteId] = useState<string | null>(null);
   const [from, setFrom] = useState(firstDayOfMonthKey());
@@ -142,7 +142,7 @@ export default function PrefacturaPage() {
   const [loading, setLoading] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [prefactura, setPrefactura] = useState<PrefacturaResponse | null>(null);
+  const [preInvoice, setPreInvoice] = useState<PreInvoiceResponse | null>(null);
 
   const worksiteOptions = useMemo(
     () =>
@@ -170,7 +170,7 @@ export default function PrefacturaPage() {
         setCustomerWorksiteId((current) => current ?? data[0]?.id ?? null);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'Error cargando obras');
+        setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'Error loading worksites');
       } finally {
         if (mounted) setBootLoading(false);
       }
@@ -181,9 +181,9 @@ export default function PrefacturaPage() {
     };
   }, []);
 
-  const loadPrefactura = async () => {
+  const loadPreInvoice = async () => {
     if (!customerWorksiteId) {
-      setError('Selecciona una obra');
+      setError('Select a worksite');
       return;
     }
     setLoading(true);
@@ -196,17 +196,17 @@ export default function PrefacturaPage() {
         ivaRate: String(ivaRate),
       });
       if (from) params.set('from', from);
-      const data = await api<PrefacturaResponse>(`/billing/prefactura?${params.toString()}`, {
+      const data = await api<PreInvoiceResponse>(`/billing/prefactura?${params.toString()}`, {
         method: 'GET',
       });
-      setPrefactura(data);
+      setPreInvoice(data);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error generando prefactura');
+        setError('Error generating pre-invoice');
       }
     } finally {
       setLoading(false);
@@ -215,7 +215,7 @@ export default function PrefacturaPage() {
 
   useEffect(() => {
     if (!bootLoading && customerWorksiteId) {
-      loadPrefactura();
+      loadPreInvoice();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootLoading, customerWorksiteId]);
@@ -224,20 +224,20 @@ export default function PrefacturaPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Anexo / Prefactura"
-          description="Consolida equipos alquilados por obra y periodo para revisar valores antes de facturar."
+          title="Annex / Pre-invoice"
+          description="Consolidate rented equipment by worksite and period to review values before invoicing."
           icon={<IconFileInvoice size={20} />}
           iconColor="teal"
           accentColor="rgba(16,185,129,0.12)"
           aside={
-            <Button onClick={loadPrefactura} loading={loading || bootLoading}>
-              Generar prefactura
+            <Button onClick={loadPreInvoice} loading={loading || bootLoading}>
+              Generate pre-invoice
             </Button>
           }
         />
 
         {error ? (
-          <Alert color="red" variant="light" title="No se pudo generar la prefactura">
+          <Alert color="red" variant="light" title="Could not generate the pre-invoice">
             {error}
           </Alert>
         ) : null}
@@ -245,16 +245,16 @@ export default function PrefacturaPage() {
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           <Stack gap="md">
             <div>
-              <Text fw={700}>1. Selecciona la obra y el periodo</Text>
+              <Text fw={700}>1. Select the worksite and period</Text>
               <Text size="sm" c="dimmed">
-                La obra define el universo facturable. Luego ajusta fechas e IVA para regenerar el anexo.
+                The worksite defines the billable universe. Then adjust dates and VAT to regenerate the annex.
               </Text>
             </div>
 
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               <Select
-                label="Cliente / obra"
-                placeholder="Selecciona"
+                label="Customer / worksite"
+                placeholder="Select"
                 searchable
                 data={worksiteOptions}
                 value={customerWorksiteId}
@@ -268,17 +268,17 @@ export default function PrefacturaPage() {
                   </ThemeIcon>
                   <div>
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                      Obra seleccionada
+                      Selected worksite
                     </Text>
                     <Text size="sm" fw={600} mt={6}>
                       {selectedWorksite
                         ? selectedWorksite.alias || selectedWorksite.worksite.name
-                        : 'Sin selección'}
+                        : 'No selection'}
                     </Text>
                     <Text size="sm" c="dimmed">
                       {selectedWorksite
                         ? `${selectedWorksite.customer.name}${selectedWorksite.worksite.address ? ` · ${selectedWorksite.worksite.address}` : ''}`
-                        : 'Selecciona una obra para habilitar el cálculo'}
+                        : 'Select a worksite to enable calculation'}
                     </Text>
                   </div>
                 </Group>
@@ -287,13 +287,13 @@ export default function PrefacturaPage() {
 
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
               <TextInput
-                label="Desde"
+                label="From"
                 type="date"
                 value={from}
                 onChange={(event) => setFrom(event.currentTarget.value)}
               />
               <TextInput
-                label="Hasta"
+                label="To"
                 type="date"
                 value={to}
                 onChange={(event) => setTo(event.currentTarget.value)}
@@ -312,50 +312,50 @@ export default function PrefacturaPage() {
 
         <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
           <StatCard
-            label="Obras"
+            label="Worksites"
             value={String(worksites.length)}
-            hint="Disponibles para consultar"
+            hint="Available to query"
             color="teal"
             icon={<IconChecklist size={20} />}
           />
           <StatCard
-            label="Periodo"
+            label="Period"
             value={from && to ? `${formatDate(from)} - ${formatDate(to)}` : '-'}
-            hint="Rango actual"
+            hint="Current range"
             color="blue"
             icon={<IconCalendarStats size={20} />}
           />
           <StatCard
             label="IVA"
             value={`${Number(ivaPercent) || 0}%`}
-            hint="Tasa aplicada al cálculo"
+            hint="Rate applied to the calculation"
             color="grape"
             icon={<IconReceipt2 size={20} />}
           />
           <StatCard
-            label="Obra activa"
+            label="Active worksite"
             value={selectedWorksite ? (selectedWorksite.alias || selectedWorksite.worksite.name) : '-'}
-            hint={selectedWorksite ? selectedWorksite.customer.name : 'Selecciona una obra'}
+            hint={selectedWorksite ? selectedWorksite.customer.name : 'Select a worksite'}
             color="cyan"
             icon={<IconMapPin size={20} />}
           />
         </SimpleGrid>
 
-        {prefactura ? (
+        {preInvoice ? (
           <>
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Group justify="space-between" align="flex-start">
                 <div>
-                  <Title order={3}>{prefactura.customerWorksite.customer.name}</Title>
+                  <Title order={3}>{preInvoice.customerWorksite.customer.name}</Title>
                   <Text fw={600}>
-                    {prefactura.customerWorksite.alias || prefactura.customerWorksite.worksite.name}
+                    {preInvoice.customerWorksite.alias || preInvoice.customerWorksite.worksite.name}
                   </Text>
                   <Text c="dimmed" size="sm">
-                    {formatDate(prefactura.period.from)} - {formatDate(prefactura.period.to)}
+                    {formatDate(preInvoice.period.from)} - {formatDate(preInvoice.period.to)}
                   </Text>
-                  {prefactura.customerWorksite.worksite.address ? (
+                  {preInvoice.customerWorksite.worksite.address ? (
                     <Text c="dimmed" size="sm">
-                      {prefactura.customerWorksite.worksite.address}
+                      {preInvoice.customerWorksite.worksite.address}
                     </Text>
                   ) : null}
                 </div>
@@ -365,7 +365,7 @@ export default function PrefacturaPage() {
                       Subtotal
                     </Text>
                     <Text fw={700} mt={8}>
-                      {formatMoney(prefactura.totals.subtotal)}
+                      {formatMoney(preInvoice.totals.subtotal)}
                     </Text>
                   </Paper>
                   <Paper radius="md" p="sm" bg="gray.0">
@@ -373,7 +373,7 @@ export default function PrefacturaPage() {
                       IVA
                     </Text>
                     <Text fw={700} mt={8}>
-                      {formatMoney(prefactura.totals.iva)}
+                      {formatMoney(preInvoice.totals.iva)}
                     </Text>
                   </Paper>
                   <Paper radius="md" p="sm" bg="teal.0">
@@ -381,7 +381,7 @@ export default function PrefacturaPage() {
                       Total
                     </Text>
                     <Text fw={800} mt={8}>
-                      {formatMoney(prefactura.totals.total)}
+                      {formatMoney(preInvoice.totals.total)}
                     </Text>
                   </Paper>
                 </SimpleGrid>
@@ -393,7 +393,7 @@ export default function PrefacturaPage() {
                 <div>
                   <Text fw={700}>Detalle facturable</Text>
                   <Text size="sm" c="dimmed">
-                    Línea por línea de los equipos incluidos en el periodo seleccionado.
+                    Line by line for equipment included in the selected period.
                   </Text>
                 </div>
 
@@ -401,8 +401,8 @@ export default function PrefacturaPage() {
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Equipo</Table.Th>
-                      <Table.Th>Remisión</Table.Th>
-                      <Table.Th>Periodo</Table.Th>
+                      <Table.Th>Dispatch</Table.Th>
+                      <Table.Th>Period</Table.Th>
                       <Table.Th>Unidades</Table.Th>
                       <Table.Th>Precio</Table.Th>
                       <Table.Th>Subtotal</Table.Th>
@@ -411,7 +411,7 @@ export default function PrefacturaPage() {
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {prefactura.lines.map((line) => (
+                    {preInvoice.lines.map((line) => (
                       <Table.Tr key={line.documentItemId}>
                         <Table.Td>
                           <Stack gap={2}>
@@ -435,7 +435,7 @@ export default function PrefacturaPage() {
                               {formatDate(line.from)} - {formatDate(line.to)}
                             </Text>
                             <Text size="xs" c="dimmed">
-                              {line.days} días
+                              {line.days} days
                             </Text>
                           </Stack>
                         </Table.Td>
@@ -457,11 +457,11 @@ export default function PrefacturaPage() {
                         </Table.Td>
                       </Table.Tr>
                     ))}
-                    {!prefactura.lines.length && (
+                    {!preInvoice.lines.length && (
                       <Table.Tr>
                         <Table.Td colSpan={8}>
                           <Text c="dimmed" ta="center" py="md">
-                            No hay equipos para prefacturar en este periodo.
+                            No equipment to pre-invoice in this period.
                           </Text>
                         </Table.Td>
                       </Table.Tr>

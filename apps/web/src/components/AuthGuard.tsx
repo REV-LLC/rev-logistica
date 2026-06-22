@@ -63,7 +63,7 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
         <Center h="60vh">
           <Stack align="center">
             <Loader />
-            <Text c="dimmed">Validando sesión...</Text>
+            <Text c="dimmed">Validating session...</Text>
           </Stack>
         </Center>
       </main>
@@ -78,12 +78,12 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
             <Text fw={700} size="xl">
               403
             </Text>
-            <Text fw={600}>No tienes permisos para esta página.</Text>
+            <Text fw={600}>You do not have permission to access this page.</Text>
             <Text c="dimmed" size="sm">
-              Solicita acceso o ingresa con un rol autorizado.
+              Request access or sign in with an authorized role.
             </Text>
-            <Button mt="sm" variant="light" onClick={() => router.replace('/transport/solicitudes')}>
-              Ir a inicio
+            <Button mt="sm" variant="light" onClick={() => router.replace('/transport/requests')}>
+              Go home
             </Button>
           </Stack>
         </Center>

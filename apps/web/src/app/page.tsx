@@ -77,30 +77,30 @@ type PendingVehicle = {
 
 const quickLinks = [
   {
-    href: '/transport/solicitudes',
-    title: 'Solicitudes',
-    description: 'Arma remisiones y devoluciones con seguimiento operativo.',
+    href: '/transport/requests',
+    title: 'Requests',
+    description: 'Build dispatch and return requests with operational tracking.',
     icon: <IconClipboardList size={18} />,
     color: 'blue',
   },
   {
     href: '/tasks',
-    title: 'Pendientes',
-    description: 'Revisa tareas abiertas y seguimientos del equipo.',
+    title: 'Tasks',
+    description: 'Review open tasks and team follow-ups.',
     icon: <IconChecklist size={18} />,
     color: 'yellow',
   },
   {
     href: '/transport/vehicles',
-    title: 'Vehículos',
-    description: 'Controla flota, SOAT y tecnomecánica próximos.',
+    title: 'Vehicles',
+    description: 'Track fleet documents and upcoming expirations.',
     icon: <IconTruck size={18} />,
     color: 'orange',
   },
   {
-    href: '/billing/prefactura',
-    title: 'Prefactura',
-    description: 'Consolida periodos facturables por obra y cliente.',
+    href: '/billing/pre-invoice',
+    title: 'Pre-invoice',
+    description: 'Consolidate billable periods by worksite and customer.',
     icon: <IconReceipt2 size={18} />,
     color: 'teal',
   },
@@ -142,7 +142,7 @@ function formatDate(value: Date | null) {
 function daysChipLabel(prefix: string, daysLeft: number | null) {
   if (daysLeft === null) return `${prefix}: sin fecha`;
   if (daysLeft < 0) return `${prefix}: vencido`;
-  return `${prefix}: ${daysLeft} días`;
+  return `${prefix}: ${daysLeft} days`;
 }
 
 function formatToday() {
@@ -216,7 +216,7 @@ export default function HomePage() {
         setEmployees(employeesData);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
+        setError(err instanceof Error ? err.message : 'Could not load dashboard');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -278,19 +278,19 @@ export default function HomePage() {
   const dashboardStatus =
     dashboardMetrics.criticalVehicles > 0
       ? {
-          title: 'Atención inmediata',
-          description: `${dashboardMetrics.criticalVehicles} vencimientos críticos en flota requieren revisión hoy.`,
+          title: 'Immediate attention',
+          description: `${dashboardMetrics.criticalVehicles} critical fleet expirations require review today.`,
           color: 'red',
         }
       : dashboardMetrics.openTasks > 0
         ? {
             title: 'Seguimiento operativo',
-            description: `${dashboardMetrics.openTasks} tareas abiertas siguen pendientes de atención.`,
+            description: `${dashboardMetrics.openTasks} open tasks still need attention.`,
             color: 'yellow',
           }
         : {
-            title: 'Operación estable',
-            description: 'No hay alertas críticas visibles en la vista principal.',
+            title: 'Stable operation',
+            description: 'No critical alerts are visible in the main view.',
             color: 'teal',
           };
 
@@ -303,8 +303,8 @@ export default function HomePage() {
               title="Dashboard operativo"
               description={
                 isMobile
-                  ? 'Resumen rápido de alertas y operación.'
-                  : 'Visibilidad rápida del equipo, la operación y los vencimientos que requieren atención.'
+                  ? 'Quick summary of alerts and operation.'
+                  : 'Quick visibility into team, operation, and expirations that require attention.'
               }
               icon={<IconAlertTriangle size={20} />}
               iconColor={dashboardStatus.color}
@@ -337,7 +337,7 @@ export default function HomePage() {
                   {!isMobile ? (
                     <div>
                       <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                        Sesión
+                        Session
                       </Text>
                       <Text size="sm" mt={4}>
                         {session?.email ?? 'Usuario autenticado'}
@@ -347,7 +347,7 @@ export default function HomePage() {
                 </Group>
                 {isMobile ? (
                   <Text size="xs" c="dimmed" mt="sm">
-                    Sesión: {session?.email ?? 'Usuario autenticado'}
+                    Session: {session?.email ?? 'Authenticated user'}
                   </Text>
                 ) : null}
               </Paper>
@@ -355,7 +355,7 @@ export default function HomePage() {
               {isMobile ? (
                 <SimpleGrid cols={2} spacing="sm">
                   <CompactMetric
-                    label="Críticos"
+                    label="Critical"
                     value={String(dashboardMetrics.criticalVehicles)}
                     hint="Vencimientos urgentes"
                     color="red"
@@ -382,9 +382,9 @@ export default function HomePage() {
               ) : (
                 <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
                   <StatCard
-                    label="Vencimientos críticos"
+                    label="Critical expirations"
                     value={String(dashboardMetrics.criticalVehicles)}
-                    hint="SOAT o tecnomecánica en 7 días o menos"
+                    hint="SOAT or inspection in 7 days or less"
                     color="red"
                     icon={<IconAlertTriangle size={20} />}
                   />
@@ -426,7 +426,7 @@ export default function HomePage() {
                     <div>
                       <Text fw={700}>Atajos operativos</Text>
                       <Text size="sm" c="dimmed">
-                        Entra directo a los flujos que más se usan en oficina.
+                        Jump directly into the flows most used by the office.
                       </Text>
                     </div>
                     {!isMobile ? (
@@ -476,7 +476,7 @@ export default function HomePage() {
               <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Pulso de operación</Text>
+                    <Text fw={700}>Operation pulse</Text>
                     <Text size="sm" c="dimmed">
                       Una lectura breve de carga y cobertura actual.
                     </Text>
@@ -487,11 +487,11 @@ export default function HomePage() {
                       <CompactMetric
                         label="En curso"
                         value={String(dashboardMetrics.doingTasks)}
-                        hint="Tareas ejecutándose"
+                        hint="Tasks in progress"
                         color="blue"
                       />
                       <CompactMetric
-                        label="Flota próxima"
+                        label="Upcoming fleet"
                         value={String(dashboardMetrics.upcomingVehicles)}
                         hint="Documentos por vencer"
                         color="orange"
@@ -502,14 +502,14 @@ export default function HomePage() {
                       <StatCard
                         label="En curso"
                         value={String(dashboardMetrics.doingTasks)}
-                        hint="Tareas actualmente ejecutándose"
+                        hint="Tasks currently running"
                         color="blue"
                         icon={<IconChecklist size={20} />}
                       />
                       <StatCard
-                        label="Flota próxima"
+                        label="Upcoming fleet"
                         value={String(dashboardMetrics.upcomingVehicles)}
-                        hint="Vehículos con documentos entre 8 y 30 días"
+                        hint="Vehicles with documents between 8 and 30 days"
                         color="orange"
                         icon={<IconTruck size={20} />}
                       />
@@ -523,13 +523,13 @@ export default function HomePage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                   <div>
-                    <Text fw={700}>Vencimientos de vehículos</Text>
+                    <Text fw={700}>Vehicle expirations</Text>
                     <Text size="sm" c="dimmed">
-                      Prioridad ordenada por la fecha más cercana entre SOAT y tecnomecánica.
+                      Priority sorted by the closest date between SOAT and inspection.
                     </Text>
                   </div>
                   <Badge color={dashboardMetrics.criticalVehicles > 0 ? 'red' : 'orange'} variant="light">
-                    {pendingVehicles.length} vehículos
+                    {pendingVehicles.length} vehicles
                   </Badge>
                 </Group>
 
@@ -539,9 +539,9 @@ export default function HomePage() {
                   </Center>
                 ) : topVehicles.length === 0 ? (
                   <Paper radius="lg" p="xl" bg="gray.0">
-                    <Text fw={700}>No hay vencimientos visibles.</Text>
+                    <Text fw={700}>No visible expirations.</Text>
                     <Text size="sm" c="dimmed" mt={6}>
-                      Cuando la flota tenga fechas de SOAT o tecnomecánica, aparecerán aquí ordenadas por prioridad.
+                      When the fleet has SOAT or inspection dates, they will appear here sorted by priority.
                     </Text>
                   </Paper>
                 ) : isMobile ? (
@@ -555,11 +555,11 @@ export default function HomePage() {
                                 {vehicle.plate}
                               </Text>
                               <Text size="sm" c="dimmed">
-                                Próximo vencimiento en {vehicle.minDays < 0 ? 'estado vencido' : `${vehicle.minDays} días`}
+                                Next expiration in {vehicle.minDays < 0 ? 'expired status' : `${vehicle.minDays} days`}
                               </Text>
                             </div>
                             <Badge color={badgeColor(vehicle.minDays)} variant="light">
-                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} días`}
+                              {vehicle.minDays < 0 ? 'Expired' : `${vehicle.minDays} days`}
                             </Badge>
                           </Group>
 
@@ -577,7 +577,7 @@ export default function HomePage() {
                             </Paper>
                             <Paper radius="md" p="sm" bg="gray.0">
                               <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                                Tecnomecánica
+                                Inspection
                               </Text>
                               <Text size="sm" mt={4}>
                                 {formatDate(vehicle.technoDate)}
@@ -597,7 +597,7 @@ export default function HomePage() {
                       <TableTr>
                         <TableTh>Placa</TableTh>
                         <TableTh>SOAT</TableTh>
-                        <TableTh>Tecnomecánica</TableTh>
+                        <TableTh>Inspection</TableTh>
                         <TableTh>Prioridad</TableTh>
                       </TableTr>
                     </TableThead>
@@ -630,7 +630,7 @@ export default function HomePage() {
                           </TableTd>
                           <TableTd>
                             <Badge color={badgeColor(vehicle.minDays)} variant="light">
-                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} días`}
+                              {vehicle.minDays < 0 ? 'Expired' : `${vehicle.minDays} days`}
                             </Badge>
                           </TableTd>
                         </TableTr>

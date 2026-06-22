@@ -126,7 +126,7 @@ export default function LedgerPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLoading(false);
@@ -202,7 +202,7 @@ export default function LedgerPage() {
         <Stack gap="lg">
           <PageHeaderCard
             title="Historial de movimientos"
-            description="Consulta entradas, salidas, tránsitos y ajustes del inventario con filtros combinados."
+            description="Review inventory entries, exits, transit movements, and adjustments with combined filters."
             icon={<IconArrowsShuffle size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
@@ -212,7 +212,7 @@ export default function LedgerPage() {
                 color={hasActiveFilters ? 'blue' : 'gray'}
                 size="lg"
                 radius="xl"
-                aria-label={hasActiveFilters ? `Filtros activos (${activeFiltersCount})` : 'Abrir filtros'}
+                aria-label={hasActiveFilters ? `Active filters (${activeFiltersCount})` : 'Open filters'}
                 onClick={() => setFiltersOpen(true)}
               >
                 <IconFilter size={18} />
@@ -244,22 +244,22 @@ export default function LedgerPage() {
                     loading={loading}
                     onClick={() => fetchLedger({ append: true })}
                   >
-                    {nextCursor ? 'Cargar más' : 'Sin más resultados'}
+                    {nextCursor ? 'Load more' : 'No more results'}
                   </Button>
                 </Group>
               </Stack>
             ) : loading ? (
               <Text size="sm" c="dimmed">
-                Cargando movimientos...
+                Loading movements...
               </Text>
             ) : (
               <Stack align="center" gap="xs" py="md">
                 <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                   <IconChecklist size={20} />
                 </ThemeIcon>
-                <Text fw={700}>No hay movimientos para mostrar</Text>
+                <Text fw={700}>No movements to show</Text>
                 <Text size="sm" c="dimmed" ta="center">
-                  Ajusta los filtros o ejecuta una nueva búsqueda para consultar otro tramo del historial.
+                  Adjust filters or run a new search to review another part of the history.
                 </Text>
               </Stack>
             )}
@@ -274,24 +274,24 @@ export default function LedgerPage() {
           <Modal
             opened={filtersOpen}
             onClose={() => setFiltersOpen(false)}
-            title="Filtros de consulta"
+            title="Search filters"
             size="xl"
             centered
           >
             <Stack gap="md">
               <div>
-                <Text fw={700}>Ajusta la consulta</Text>
+                <Text fw={700}>Adjust the query</Text>
                 <Text size="sm" c="dimmed">
-                  Combina ubicación, obra, movimiento y rango de fechas para aislar el historial que necesitas.
+                  Combine location, worksite, movement type, and date range to isolate the history you need.
                 </Text>
               </div>
 
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
                 <Select
-                  label="Bodega"
+                  label="Warehouse"
                   value={filters.warehouseId}
                   onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todas'}
+                  placeholder={filtersLoading ? 'Loading warehouses...' : 'All'}
                   data={warehouses.map((warehouse) => ({
                     value: warehouse.id,
                     label: warehouse.name,
@@ -300,12 +300,12 @@ export default function LedgerPage() {
                   clearable
                 />
                 <Select
-                  label="Obra"
+                  label="Worksite"
                   value={filters.customerWorksiteId}
                   onChange={(value) =>
                     setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
                   }
-                  placeholder={filtersLoading ? 'Cargando obras...' : 'Todas'}
+                  placeholder={filtersLoading ? 'Loading worksites...' : 'All'}
                   data={worksites.map((row) => ({
                     value: row.id,
                     label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
@@ -314,20 +314,20 @@ export default function LedgerPage() {
                   clearable
                 />
                 <Select
-                  label="Tipo de movimiento"
+                  label="Movement type"
                   value={filters.movementType}
                   onChange={(value) =>
                     setFilters((prev) => ({ ...prev, movementType: value ?? '' }))
                   }
                   clearable
-                  placeholder="Todos"
+                  placeholder="All"
                   data={MOVEMENT_TYPES.map((t) => ({ value: t, label: t }))}
                 />
                 <Select
                   label="SKU"
                   value={filters.skuId}
                   onChange={(value) => setFilters((prev) => ({ ...prev, skuId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando SKUs...' : 'Todos'}
+                  placeholder={filtersLoading ? 'Loading SKUs...' : 'All'}
                   data={skus.map((sku) => ({
                     value: sku.id,
                     label: sku.name,
@@ -336,10 +336,10 @@ export default function LedgerPage() {
                   clearable
                 />
                 <Select
-                  label="Activo"
+                  label="Asset"
                   value={filters.assetId}
                   onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
+                  placeholder={filtersLoading ? 'Loading assets...' : 'All'}
                   data={assets.map((asset) => ({
                     value: asset.id,
                     label: asset.description || asset.serialOrEngine || asset.id,
@@ -349,13 +349,13 @@ export default function LedgerPage() {
                 />
                 <div />
                 <TextInput
-                  label="Desde"
+                  label="From"
                   type="datetime-local"
                   value={filters.from}
                   onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
                 />
                 <TextInput
-                  label="Hasta"
+                  label="To"
                   type="datetime-local"
                   value={filters.to}
                   onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
@@ -369,7 +369,7 @@ export default function LedgerPage() {
                   onClick={clearFilters}
                   disabled={!hasActiveFilters}
                 >
-                  Limpiar filtros
+                  Clear filters
                 </Button>
                 <Button
                   onClick={async () => {
@@ -378,7 +378,7 @@ export default function LedgerPage() {
                   }}
                   loading={loading}
                 >
-                  Buscar movimientos
+                  Search movements
                 </Button>
               </Group>
             </Stack>

@@ -110,7 +110,7 @@ export default function ObraDetailPage() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando información de la obra');
+          setError('Error loading worksite information');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -123,7 +123,7 @@ export default function ObraDetailPage() {
   }, [worksiteId]);
 
   const pageTitle = useMemo(() => {
-    if (!worksite) return 'Obra';
+    if (!worksite) return 'Worksite';
     return `${worksite.customer.name} / ${worksite.worksite.name}`;
   }, [worksite]);
 
@@ -136,7 +136,7 @@ export default function ObraDetailPage() {
 
     bulkItems.forEach((item) => {
       const ownerId = item.ownerWarehouseId ?? 'unknown';
-      const ownerName = item.ownerWarehouseName ?? 'Sin dueño';
+      const ownerName = item.ownerWarehouseName ?? 'No owner';
       const current = ownerEntries.get(ownerId) ?? { id: ownerId, name: ownerName, bulk: 0, serial: 0 };
       current.bulk += item.quantity;
       ownerEntries.set(ownerId, current);
@@ -144,7 +144,7 @@ export default function ObraDetailPage() {
 
     serialItems.forEach((item) => {
       const ownerId = item.ownerWarehouseId ?? 'unknown';
-      const ownerName = item.ownerWarehouseName ?? 'Sin dueño';
+      const ownerName = item.ownerWarehouseName ?? 'No owner';
       const current = ownerEntries.get(ownerId) ?? { id: ownerId, name: ownerName, bulk: 0, serial: 0 };
       current.serial += item.quantity;
       ownerEntries.set(ownerId, current);
@@ -175,25 +175,25 @@ export default function ObraDetailPage() {
             <Group gap="xs" wrap="wrap">
               {worksite ? (
                 <Button variant="default" component={Link} href={`/customers?customerId=${worksite.customer.id}`}>
-                  Ver cliente
+                  View customer
                 </Button>
               ) : null}
               <Button variant="light" component={Link} href={`/inventory/ledger?customerWorksiteId=${worksiteId ?? ''}`}>
-                Ver ledger completo
+                View full ledger
               </Button>
             </Group>
           </Group>
 
           <PageHeaderCard
             title={pageTitle}
-            description="Inventario en obra, responsables dueños y trazabilidad reciente del frente operativo."
+            description="On-site inventory, owner responsibility, and recent traceability for the operational front."
             icon={<IconBuildingEstate size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
             aside={
               worksite ? (
                 <Badge color={worksite.active ? 'green' : 'gray'} variant="light" size="lg">
-                  {worksite.active ? 'Obra activa' : 'Obra inactiva'}
+                  {worksite.active ? 'Active worksite' : 'Inactive worksite'}
                 </Badge>
               ) : null
             }
@@ -202,7 +202,7 @@ export default function ObraDetailPage() {
               <Group gap="sm">
                 <Loader size="sm" />
                 <Text size="sm" c="dimmed">
-                  Cargando detalle de la obra...
+                  Loading worksite details...
                 </Text>
               </Group>
             ) : null}
@@ -218,23 +218,23 @@ export default function ObraDetailPage() {
                     icon={<IconRoute2 size={20} />}
                   />
                   <StatCard
-                    label="Equipos únicos"
+                    label="Unique equipment"
                     value={String(worksiteMetrics.serialAssets)}
                     hint={`${worksiteMetrics.serialUnits} equipos serializados visibles`}
                     color="teal"
                     icon={<IconTruck size={20} />}
                   />
                   <StatCard
-                    label="Dueños presentes"
+                    label="Owners present"
                     value={String(worksiteMetrics.owners.length)}
-                    hint="Empresas dueñas representadas en la obra"
+                    hint="Owner companies represented on site"
                     color="grape"
                     icon={<IconBuildingEstate size={20} />}
                   />
                   <StatCard
-                    label="Movimientos recientes"
+                    label="Recent movements"
                     value={String(worksiteMetrics.recentMoves)}
-                    hint="Últimos registros cargados en el ledger"
+                    hint="Latest records loaded into the ledger"
                     color="orange"
                     icon={<IconArrowRight size={20} />}
                   />
@@ -243,13 +243,13 @@ export default function ObraDetailPage() {
                 <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} spacing="md">
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Cliente
+                      Customer
                     </Text>
                     <Text fw={700} mt={6}>
                       {worksite.customer.name}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Relación comercial de la obra
+                      Commercial relationship for the worksite
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
@@ -257,37 +257,37 @@ export default function ObraDetailPage() {
                       Alias operativo
                     </Text>
                     <Text fw={700} mt={6}>
-                      {worksite.alias ?? 'Sin alias'}
+                      {worksite.alias ?? 'No alias'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Nombre corto usado en operación
+                      Short name used in operations
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Dirección
+                      Address
                     </Text>
                     <Text fw={700} mt={6}>
-                      {worksite.worksite.address ?? 'Sin dirección registrada'}
+                      {worksite.worksite.address ?? 'No registered address'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Ubicación base del frente
+                      Base location for the front
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Acciones rápidas
+                      Quick actions
                     </Text>
                     <Stack gap={6} mt={6}>
                       <Button
                         size="xs"
                         variant="light"
                         component={Link}
-                        href="/transport/solicitudes"
+                        href="/transport/requests"
                         justify="space-between"
                         rightSection={<IconArrowRight size={14} />}
                       >
-                        Ir a solicitudes
+                        Go to requests
                       </Button>
                       {worksite.worksite.address ? (
                         <Button
@@ -323,7 +323,7 @@ export default function ObraDetailPage() {
                 <div>
                   <Text fw={700}>Inventario en obra</Text>
                   <Text size="sm" c="dimmed">
-                    Equipos y materiales actualmente asociados a este frente. Los colores por dueño se mantienen en cada agrupación.
+                    Equipment and materials currently associated with this front. Owner colors are preserved in each group.
                   </Text>
                 </div>
                 <InventoryDisplay
@@ -341,9 +341,9 @@ export default function ObraDetailPage() {
             <Stack gap="md">
               <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                 <div>
-                  <Text fw={700}>Movimientos recientes</Text>
+                  <Text fw={700}>Recent movements</Text>
                   <Text size="sm" c="dimmed">
-                    Últimos registros del ledger relacionados con esta obra.
+                    Latest ledger records related to this worksite.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
@@ -354,9 +354,9 @@ export default function ObraDetailPage() {
                 <LedgerTable items={ledgerItems} />
               ) : (
                 <Paper radius="lg" p="xl" bg="gray.0">
-                  <Text fw={700}>No hay movimientos recientes para esta obra.</Text>
+                  <Text fw={700}>No recent movements for this worksite.</Text>
                   <Text size="sm" c="dimmed" mt={6}>
-                    Cuando entren o salgan equipos y materiales, la trazabilidad aparecerá aquí.
+                    When equipment and materials move in or out, traceability will appear here.
                   </Text>
                 </Paper>
               )}

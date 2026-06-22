@@ -47,7 +47,7 @@ function LoginPageContent() {
         json: { email, password }
       });
       if (!data?.accessToken) {
-        throw new Error('Respuesta inválida del servidor.');
+        throw new Error('Invalid server response.');
       }
       setToken(data.accessToken);
       const next = searchParams.get('next');
@@ -58,7 +58,7 @@ function LoginPageContent() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error inesperado.');
+        setError('Unexpected error.');
       }
     } finally {
       setLoading(false);
@@ -77,15 +77,15 @@ function LoginPageContent() {
             />
           </Box>
           <Title order={2} mb={4}>
-            Ingreso
+            Sign in
           </Title>
           <Text c="dimmed" mb="md">
-            Accede con tu correo y contraseña.
+            Access with your email and password.
           </Text>
           <Stack gap="sm" component="form" onSubmit={handleSubmit}>
             {showExpiredNotice && (
               <Text c="red" fw={600}>
-                Tu sesión expiró. Inicia sesión nuevamente.
+                Your session expired. Sign in again.
               </Text>
             )}
             <TextInput
@@ -93,7 +93,7 @@ function LoginPageContent() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="user@empresa.com"
+              placeholder="user@company.com"
               required
             />
             <PasswordInput
@@ -105,7 +105,7 @@ function LoginPageContent() {
             />
             {error && <Text c="red">{error}</Text>}
             <Button type="submit" loading={loading}>
-              Entrar
+              Sign in
             </Button>
           </Stack>
         </Paper>

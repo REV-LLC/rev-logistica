@@ -21,7 +21,7 @@ export default function WarehouseSelect({
   value,
   onChange,
   defaultName = 'Main Warehouse',
-  label = 'Bodega de ubicación',
+  label = 'Location warehouse',
 }: Props) {
   const [items, setItems] = useState<Warehouse[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -50,7 +50,7 @@ export default function WarehouseSelect({
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Error cargando bodegas');
+          setError('Error loading warehouses');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -101,7 +101,7 @@ export default function WarehouseSelect({
       return;
     }
 
-    setError('Selecciona una bodega válida');
+    setError('Select a valid warehouse');
     onChange(null);
   };
 
@@ -114,7 +114,7 @@ export default function WarehouseSelect({
     <div>
       <Autocomplete
         label={label}
-        placeholder={loading ? 'Cargando bodegas...' : 'Busca por nombre'}
+        placeholder={loading ? 'Loading warehouses...' : 'Search by name'}
         data={items.map((warehouse) => warehouse.name)}
         value={inputValue}
         onChange={handleNameChange}

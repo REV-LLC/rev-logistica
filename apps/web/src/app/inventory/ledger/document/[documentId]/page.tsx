@@ -145,7 +145,7 @@ type CreateSerializedAssetResponse = {
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Eléctrico' },
+  { value: 'ELECTRICO', label: 'Electric' },
 ];
 
 function formatDocType(value: string) {
@@ -586,8 +586,8 @@ export default function DocumentDetailPage() {
     setBillingLoading(true);
     setBillingError(null);
     try {
-      const cutoffValue = toApiDateInput(billingCutoffDate, 'Fecha corte');
-      const returnedValue = toApiDateInput(billingReturnedAt, 'Fecha devolución real');
+      const cutoffValue = toApiDateInput(billingCutoffDate, 'Cutoff date');
+      const returnedValue = toApiDateInput(billingReturnedAt, 'Actual return date');
       await api(`/documents/${document.id}/items/${selectedBillingItem.id}/billing`, {
         method: 'PATCH',
         json: {
@@ -628,7 +628,7 @@ export default function DocumentDetailPage() {
     );
     if (hasAssetUnavailableError) {
       setError(
-        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Verifica si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
+        'Cannot approve: the equipment is not available in the source warehouse. Check if it is on site or select/load the correct equipment before approving.',
       );
       return;
     }
@@ -644,13 +644,13 @@ export default function DocumentDetailPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const warehouseLabel = ownerName ?? 'the alternate warehouse';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `Primero debes hacer ajuste de "${warehouseLabel}" bodega para hacer movimientos.${missingItemsBlock}`,
+        `First adjust "${warehouseLabel}" warehouse before making movements.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setError(null);
@@ -743,13 +743,13 @@ export default function DocumentDetailPage() {
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('La línea no tiene bodega dueña.');
+      setCreateSerialError('The line has no owner warehouse.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
     const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
     if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      setCreateSerialError('Selecciona primero un SKU serial.');
+      setCreateSerialError('Select a serial SKU first.');
       return;
     }
     if (!createSerialSerialOrEngine.trim()) {
@@ -757,7 +757,7 @@ export default function DocumentDetailPage() {
       return;
     }
     if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
-      setCreateSerialError('Número interno inválido.');
+      setCreateSerialError('Invalid internal number.');
       return;
     }
 
@@ -806,7 +806,7 @@ export default function DocumentDetailPage() {
       } else if (err instanceof Error) {
         setCreateSerialError(err.message);
       } else {
-        setCreateSerialError('Error creando equipo.');
+        setCreateSerialError('Error creating equipment.');
       }
     } finally {
       setCreateSerialSaving(false);
@@ -866,7 +866,7 @@ export default function DocumentDetailPage() {
       if (doc.type === 'RETURN') {
         const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
         if (missingCutoff) {
-          setError('Antes de aprobar la devolución debes definir la fecha de corte por item.');
+          setError('Before approving the return, define the cutoff date per item.');
           return;
         }
       }
@@ -889,7 +889,7 @@ export default function DocumentDetailPage() {
         return;
       }
 
-      if (!window.confirm('¿Aprobar esta solicitud y ejecutar el movimiento de inventario?')) return;
+      if (!window.confirm('Approve this request and execute the inventory movement?')) return;
       await approveWithDecision(document.id);
     } catch (err) {
       handleApprovalError(err);
@@ -915,7 +915,7 @@ export default function DocumentDetailPage() {
       return !resolveAssetByIndex[index];
     });
     if (serialMissingAsset.length > 0) {
-      setError('Falta seleccionar o crear equipo para uno o más tags seriales.');
+      setError('Missing selected or created equipment for one or more serial tags.');
       return;
     }
 
@@ -1031,7 +1031,7 @@ export default function DocumentDetailPage() {
             </Group>
           </Group>
 
-          {loading ? <Text mt="md">Cargando...</Text> : null}
+          {loading ? <Text mt="md">Loading...</Text> : null}
           {error ? (
             <Text c="red" mt="md">
               {error}
@@ -1039,14 +1039,14 @@ export default function DocumentDetailPage() {
           ) : null}
           {document?.type === 'RETURN' ? (
             <Paper withBorder p="md" mt="md">
-              <Title order={5}>Corte por item (facturación)</Title>
+              <Title order={5}>Item cutoff (billing)</Title>
               <Table mt="sm" striped>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Item</Table.Th>
-                    <Table.Th>Cantidad</Table.Th>
-                    <Table.Th>Corte</Table.Th>
-                    <Table.Th>Devolución real</Table.Th>
+                    <Table.Th>Quantity</Table.Th>
+                    <Table.Th>Cutoff</Table.Th>
+                    <Table.Th>Actual return</Table.Th>
                     <Table.Th>Estado</Table.Th>
                     <Table.Th></Table.Th>
                   </Table.Tr>
@@ -1117,7 +1117,7 @@ export default function DocumentDetailPage() {
 
             <div className={styles.topRow}>
               <div>
-                <strong>Fecha:</strong> {formatDateTime(document.docDate)}
+                <strong>Date:</strong> {formatDateTime(document.docDate)}
               </div>
               <div>
                 <strong>Consecutivo:</strong> {title}
@@ -1128,17 +1128,17 @@ export default function DocumentDetailPage() {
               <div className={styles.blockTitle}>INFORMACION DE CLIENTE</div>
               <div className={styles.grid2}>
                 <div>
-                  <strong>Razón Social:</strong> {document.customerWorksite?.customer?.name ?? '-'}
+                  <strong>Legal name:</strong> {document.customerWorksite?.customer?.name ?? '-'}
                 </div>
                 <div>
-                  <strong>Obra:</strong> {document.customerWorksite?.worksite?.name ?? '-'}
+                  <strong>Worksite:</strong> {document.customerWorksite?.worksite?.name ?? '-'}
                 </div>
                 <div>
-                  <strong>Dirección de envío:</strong>{' '}
+                  <strong>Shipping address:</strong>{' '}
                   {document.customerWorksite?.worksite?.address ?? '-'}
                 </div>
                 <div>
-                  <strong>Bodega:</strong> {document.warehouse?.name ?? '-'}
+                  <strong>Warehouse:</strong> {document.warehouse?.name ?? '-'}
                 </div>
               </div>
             </section>
@@ -1174,12 +1174,12 @@ export default function DocumentDetailPage() {
             <section className={styles.block}>
               <div className={styles.blockTitle}>OBSERVACIONES</div>
               <div className={styles.observations}>
-                {observationText || 'Sin observaciones.'}
+                {observationText || 'No observations.'}
                 {parsedNotes.deliveryMode ? ` | Entrega: ${parsedNotes.deliveryMode}` : ''}
-                {parsedNotes.vehicleId ? ` | Vehículo: ${vehicleDisplay}` : ''}
-                {parsedNotes.driverId ? ` | Conductor: ${driverDisplay}` : ''}
-                {parsedNotes.dispatcherId ? ` | Despachador: ${parsedNotes.dispatcherId}` : ''}
-                {parsedNotes.cutOffDate ? ` | Fecha corte: ${parsedNotes.cutOffDate}` : ''}
+                {parsedNotes.vehicleId ? ` | Vehicle: ${vehicleDisplay}` : ''}
+                {parsedNotes.driverId ? ` | Driver: ${driverDisplay}` : ''}
+                {parsedNotes.dispatcherId ? ` | Dispatcher: ${parsedNotes.dispatcherId}` : ''}
+                {parsedNotes.cutOffDate ? ` | Cutoff date: ${parsedNotes.cutOffDate}` : ''}
               </div>
             </section>
 
@@ -1193,7 +1193,7 @@ export default function DocumentDetailPage() {
                 {hasRenderableSignature ? (
                   <img
                     src={receivedSignature ?? undefined}
-                    alt="Firma recibido por"
+                    alt="Signature received by"
                     className={styles.signatureImage}
                   />
                 ) : (
@@ -1218,14 +1218,14 @@ export default function DocumentDetailPage() {
             {selectedBillingItem ? describeItem(selectedBillingItem) : '-'}
           </Text>
           <TextInput
-            label="Fecha corte (opcional)"
+            label="Cutoff date (optional)"
             value={billingCutoffDate ? toDisplayDateInput(billingCutoffDate) : ''}
             placeholder="dd/mm/aaaa"
             readOnly
             rightSection={
               <ActionIcon
                 variant="subtle"
-                aria-label="Seleccionar fecha corte"
+                aria-label="Select cutoff date"
                 onClick={() => billingCutoffPickerRef.current?.showPicker?.()}
               >
                 <IconCalendar size={16} />
@@ -1242,14 +1242,14 @@ export default function DocumentDetailPage() {
             aria-hidden="true"
           />
           <TextInput
-            label="Fecha devolución real (opcional)"
+            label="Actual return date (optional)"
             value={billingReturnedAt ? toDisplayDateInput(billingReturnedAt) : ''}
             placeholder="dd/mm/aaaa"
             readOnly
             rightSection={
               <ActionIcon
                 variant="subtle"
-                aria-label="Seleccionar fecha devolución real"
+                aria-label="Select actual return date"
                 onClick={() => billingReturnedPickerRef.current?.showPicker?.()}
               >
                 <IconCalendar size={16} />
@@ -1277,10 +1277,10 @@ export default function DocumentDetailPage() {
               onClick={() => setBillingModalOpen(false)}
               disabled={billingLoading}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={saveBilling} loading={billingLoading}>
-              Guardar
+              Save
             </Button>
           </Group>
         </Stack>
@@ -1296,7 +1296,7 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-            {adjustWarningMessage ?? 'Primero debes hacer ajuste de bodega para hacer movimientos.'}
+            {adjustWarningMessage ?? 'First adjust warehouse stock before making movements.'}
           </Text>
           <Group justify="flex-end">
             <Button
@@ -1326,7 +1326,7 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Bulk se resuelve por SKU. Serial se resuelve por equipo específico (# interno).
+            Bulk resolves by SKU. Serial resolves by specific equipment (internal #).
           </Text>
           {(resolveDocument?.items ?? [])
             .map((item, index) => ({ item, index }))
@@ -1336,14 +1336,14 @@ export default function DocumentDetailPage() {
                 <Stack gap={6}>
                   <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
                   <Text size="xs" c="dimmed">
-                    Cantidad: {Number(item.quantity ?? 1) || 1}
+                    Quantity: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Warehouse: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
                   <Select
                     label="Equipo"
-                    placeholder="Selecciona SKU"
+                    placeholder="Select SKU"
                     searchable
                     data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
                     value={resolveSkuByIndex[index] ?? null}
@@ -1386,11 +1386,11 @@ export default function DocumentDetailPage() {
                       <Stack gap={6}>
                         <Select
                           label="Equipo serial"
-                          placeholder="Selecciona el equipo"
+                          placeholder="Select equipment"
                           searchable
                           data={serialOptions}
                           value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No hay equipos de este SKU en esa bodega"
+                          nothingFoundMessage="No equipment for this SKU in that warehouse"
                           onChange={(value) =>
                             setResolveAssetByIndex((prev) => ({
                               ...prev,
@@ -1400,12 +1400,12 @@ export default function DocumentDetailPage() {
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            El tag pide #{expectedInternal}, pero no existe en esa bodega.
+                            The tag requests #{expectedInternal}, but it does not exist in that warehouse.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
                           <Button size="xs" variant="light" onClick={() => openCreateSerialForRow(index)}>
-                            Crear equipo faltante
+                            Create missing equipment
                           </Button>
                         ) : null}
                       </Stack>
@@ -1417,7 +1417,7 @@ export default function DocumentDetailPage() {
 
           <Group justify="flex-end">
             <Button variant="default" onClick={closeResolveModal} disabled={resolvingApprove}>
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={resolveAndApprove} loading={resolvingApprove}>
               Resolver y aprobar
@@ -1437,7 +1437,7 @@ export default function DocumentDetailPage() {
           setCreateSerialYear('');
           setCreateSerialFuel(null);
         }}
-        title="Crear equipo serial faltante"
+        title="Create missing serial equipment"
         centered
       >
         <Stack gap="sm">
@@ -1449,7 +1449,7 @@ export default function DocumentDetailPage() {
             required
           />
           <NumberInput
-            label="Número interno"
+            label="Internal number"
             value={createSerialInternalNumber}
             onChange={(value) =>
               setCreateSerialInternalNumber(typeof value === 'number' ? value : '')
@@ -1471,7 +1471,7 @@ export default function DocumentDetailPage() {
           </Group>
           <Group grow>
             <NumberInput
-              label="Año (opcional)"
+              label="Year (optional)"
               value={createSerialYear}
               onChange={(value) => setCreateSerialYear(typeof value === 'number' ? value : '')}
               min={1900}
@@ -1499,10 +1499,10 @@ export default function DocumentDetailPage() {
                 setCreateSerialFuel(null);
               }}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
-              Crear y usar
+              Create and use
             </Button>
           </Group>
         </Stack>

@@ -43,7 +43,7 @@ function buildBulkItemKey(item: InventoryItemPickerBulkItem) {
 export default function InventoryItemPickerModal({
   opened,
   onClose,
-  title = 'Seleccionar items',
+  title = 'Select items',
   bulkItems,
   serialItems,
   selectedBulkKeys,
@@ -72,7 +72,7 @@ export default function InventoryItemPickerModal({
         ) : (
           <Stack gap="md">
             <Stack gap="xs">
-              <Title order={5}>Stock masivo</Title>
+              <Title order={5}>Bulk stock</Title>
               {bulkItems.length ? (
                 bulkItems.map((item) => {
                   const bulkKey = buildBulkItemKey(item);
@@ -93,7 +93,7 @@ export default function InventoryItemPickerModal({
                         if (disabled) return;
                         const added = onAddBulk(item);
                         if (added && onItemAddedNotice) {
-                          onItemAddedNotice(`${item.skuName ?? 'Item'} agregado a la lista.`);
+                          onItemAddedNotice(`${item.skuName ?? 'Item'} added to the list.`);
                         }
                       }}
                     >
@@ -102,13 +102,13 @@ export default function InventoryItemPickerModal({
                           <Text fw={600}>{item.skuName ?? 'SKU'}</Text>
                           {!isDriverRole || sourceMode === 'on-site' ? (
                             <Text size="sm" c="dimmed">
-                              {item.ownerWarehouseName ?? 'Sin bodega dueña'}
+                              {item.ownerWarehouseName ?? 'No owner warehouse'}
                             </Text>
                           ) : null}
                         </div>
                         {alreadySelected ? (
                           <Badge color="green" variant="light">
-                            Agregado
+                            Added
                           </Badge>
                         ) : hasNegativeStock ? (
                           <Badge
@@ -116,11 +116,11 @@ export default function InventoryItemPickerModal({
                             variant="filled"
                             leftSection={<IconAlertTriangle size={12} stroke={2.5} />}
                           >
-                            Requiere ajuste
+                            Requires adjustment
                           </Badge>
                         ) : (
                           <Badge variant="light">
-                            {isDriverRole && sourceMode === 'warehouse' ? 'Agregar' : item.quantity}
+                            {isDriverRole && sourceMode === 'warehouse' ? 'Add' : item.quantity}
                           </Badge>
                         )}
                       </Group>
@@ -129,7 +129,7 @@ export default function InventoryItemPickerModal({
                 })
               ) : (
                 <Text size="sm" c="dimmed">
-                  No hay stock masivo disponible.
+                  No bulk stock available.
                 </Text>
               )}
             </Stack>
@@ -137,7 +137,7 @@ export default function InventoryItemPickerModal({
             <Divider />
 
             <Stack gap="xs">
-              <Title order={5}>Equipos seriales</Title>
+              <Title order={5}>Serialized equipment</Title>
               {serialItems.length ? (
                 <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
                   {serialItems.map((item) => {
@@ -146,14 +146,14 @@ export default function InventoryItemPickerModal({
                       <SerialAssetCard
                         key={item.assetId}
                         item={item}
-                        actionLabel={alreadySelected ? 'Agregado' : 'Agregar'}
+                        actionLabel={alreadySelected ? 'Added' : 'Add'}
                         onAction={
                           alreadySelected
                             ? undefined
                             : () => {
                                 const added = onAddSerial(item);
                                 if (added && onItemAddedNotice) {
-                                  onItemAddedNotice(`${getSerialDisplayName(item)} agregado a la lista.`);
+                                  onItemAddedNotice(`${getSerialDisplayName(item)} added to the list.`);
                                 }
                               }
                         }
@@ -163,7 +163,7 @@ export default function InventoryItemPickerModal({
                 </SimpleGrid>
               ) : (
                 <Text size="sm" c="dimmed">
-                  No hay equipos seriales disponibles.
+                  No serialized equipment available.
                 </Text>
               )}
             </Stack>
@@ -172,7 +172,7 @@ export default function InventoryItemPickerModal({
 
         <Group justify="flex-end" className="mobile-actions">
           <Button variant="default" onClick={onClose}>
-            Cerrar
+            Close
           </Button>
         </Group>
       </Stack>
