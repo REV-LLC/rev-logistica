@@ -124,7 +124,32 @@ const CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = new Set<string>([
 ]);
 
 const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
-const parseLocaleDecimal = (value: string) => {
+const sanitizeDecimalInput = (value: string) => {
+  let nextValue = '';
+  let hasSeparator = false;
+
+  for (const character of value) {
+    if (/\d/.test(character)) {
+      nextValue += character;
+      continue;
+    }
+
+    if ((character === ',' || character === '.') && !hasSeparator) {
+      nextValue += ',';
+      hasSeparator = true;
+    }
+  }
+
+  return nextValue;
+};
+
+const finalizeDecimalInput = (value: string) => sanitizeDecimalInput(value).replace(/,$/, '');
+
+const parseLocaleDecimal = (value: number | string) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : NaN;
+  }
+
   const normalized = value.trim().replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : NaN;
@@ -144,11 +169,17 @@ type RequiredSkuData = {
   weightUnit: WeightUnit | '';
   price: number | '';
   subrentalPrice: number | '';
-  areaM2?: number | '';
+  areaM2?: number | string;
 };
 
-const isMissingPositiveNumber = (value: number | '') =>
-  value === '' || Number(value) <= 0;
+const isMissingPositiveNumber = (value: number | string) => {
+  if (value === '') {
+    return true;
+  }
+
+  const parsed = parseLocaleDecimal(value);
+  return !Number.isFinite(parsed) || parsed <= 0;
+};
 
 const hasMissingRequiredSkuData = ({
   unitWeight,
@@ -198,7 +229,7 @@ export default function AddBulkStockPage() {
   const [formaletaSkuSubrentalPrice, setFormaletaSkuSubrentalPrice] = useState<number | ''>('');
   const [formaletaChargeType, setFormaletaChargeType] = useState<ChargeType>('DAY');
   const [formaletaMinimumChargeHours, setFormaletaMinimumChargeHours] = useState<number | ''>('');
-  const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | ''>('');
+  const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | string>('');
   const [formaletaWeightUnit, setFormaletaWeightUnit] = useState<WeightUnit | ''>('');
 
   const [genericFamilyName, setGenericFamilyName] = useState('');
@@ -432,7 +463,7 @@ export default function AddBulkStockPage() {
             formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
               ? Number(formaletaMinimumChargeHours)
               : undefined,
-          areaM2: formaletaAreaM2 === '' ? undefined : Number(formaletaAreaM2),
+          areaM2: formaletaAreaM2 === '' ? undefined : parseLocaleDecimal(formaletaAreaM2),
         };
       }
       const xValue = parseLocaleDecimal(formaletaX);
@@ -456,7 +487,7 @@ export default function AddBulkStockPage() {
           formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
             ? Number(formaletaMinimumChargeHours)
             : undefined,
-        areaM2: formaletaAreaM2 === '' ? undefined : Number(formaletaAreaM2),
+        areaM2: formaletaAreaM2 === '' ? undefined : parseLocaleDecimal(formaletaAreaM2),
       };
     }
 
@@ -1368,9 +1399,10 @@ export default function AddBulkStockPage() {
                                   label="Ancho X (m)"
                                   value={formaletaX}
                                   onChange={(event) => {
-                                    setFormaletaX(event.currentTarget.value);
+                                    setFormaletaX(sanitizeDecimalInput(event.currentTarget.value));
                                     setIsItemConfigured(false);
                                   }}
+                                  onBlur={() => setFormaletaX((value) => finalizeDecimalInput(value))}
                                   inputMode="decimal"
                                   placeholder="0,10"
                                   required
@@ -1433,14 +1465,18 @@ export default function AddBulkStockPage() {
                                 }
                                 required
                               />
-                              <NumberInput
+                              <TextInput
                                 label="Área m²"
                                 value={formaletaAreaM2}
-                                onChange={(value) =>
-                                  setFormaletaAreaM2(typeof value === 'number' ? value : '')
+                                onChange={(event) => {
+                                  setFormaletaAreaM2(sanitizeDecimalInput(event.currentTarget.value));
+                                  setIsItemConfigured(false);
+                                }}
+                                onBlur={() =>
+                                  setFormaletaAreaM2((value) => finalizeDecimalInput(String(value)))
                                 }
-                                min={0}
-                                step={0.01}
+                                inputMode="decimal"
+                                placeholder="Ej: 2,50"
                                 error={
                                   showRequiredSkuErrors && isMissingPositiveNumber(formaletaAreaM2)
                                     ? 'Obligatorio'
