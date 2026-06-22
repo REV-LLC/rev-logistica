@@ -28,4 +28,8 @@ export class CreateTaskDto {
   @IsOptional()
   @IsUUID()
   assignedToUserId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assignedToEmployeeId?: string;
 }

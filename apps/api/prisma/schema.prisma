@@ -236,15 +236,18 @@ model Task {
   dueDate          DateTime?
   createdByUserId  String
   assignedToUserId String?
+  assignedToEmployeeId String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  createdBy  User  @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
-  assignedTo User? @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
-  assets     TaskAsset[]
+  createdBy          User  @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo         User? @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+  assignedToEmployee Employee? @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
+  assets             TaskAsset[]
 
   @@index([createdByUserId])
   @@index([assignedToUserId])
+  @@index([assignedToEmployeeId])
   @@index([status])
   @@index([priority])
 }
@@ -411,6 +414,7 @@ model Employee {
 
   vehicles EmployeeVehicle[]
   user     User?          @relation(fields: [userId], references: [id])
+  tasksAssigned Task[]    @relation("TaskAssignedToEmployee")
 }
 
 model Vehicle {

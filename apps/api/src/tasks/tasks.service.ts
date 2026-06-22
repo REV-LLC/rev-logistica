@@ -18,7 +18,18 @@ export class TasksService {
     return parsed;
   }
 
+  private assertSingleAssignee(payload: {
+    assignedToUserId?: string | null;
+    assignedToEmployeeId?: string | null;
+  }) {
+    if (payload.assignedToUserId && payload.assignedToEmployeeId) {
+      throw new BadRequestException('Task can only be assigned to one responsible');
+    }
+  }
+
   async createTask(payload: CreateTaskDto, createdByUserId: string) {
+    this.assertSingleAssignee(payload);
+
     return this.prisma.task.create({
       data: {
         title: payload.title,
@@ -29,6 +40,7 @@ export class TasksService {
         dueDate: this.toDateOrNull(payload.dueDate),
         createdByUserId,
         assignedToUserId: payload.assignedToUserId ?? null,
+        assignedToEmployeeId: payload.assignedToEmployeeId ?? null,
       },
     });
   }
@@ -70,23 +82,44 @@ export class TasksService {
             employee: { select: { name: true, lastName: true } },
           },
         },
+        assignedToEmployee: {
+          select: {
+            id: true,
+            name: true,
+            lastName: true,
+            active: true,
+          },
+        },
       },
     });
 
-    return tasks.map((task) => ({
-      ...task,
-      assignedTo: task.assignedTo
-        ? {
-            id: task.assignedTo.id,
-            name: task.assignedTo.employee
-              ? `${task.assignedTo.employee.name} ${task.assignedTo.employee.lastName}`.trim()
-              : task.assignedTo.email,
-          }
-        : null,
-    }));
+    return tasks.map((task) => {
+      const { assignedTo, assignedToEmployee, ...rest } = task;
+
+      return {
+        ...rest,
+        assignedToUser: assignedTo
+          ? {
+              id: assignedTo.id,
+              name: assignedTo.employee
+                ? `${assignedTo.employee.name} ${assignedTo.employee.lastName}`.trim()
+                : assignedTo.email,
+            }
+          : null,
+        assignedToEmployee: assignedToEmployee
+          ? {
+              id: assignedToEmployee.id,
+              name: `${assignedToEmployee.name} ${assignedToEmployee.lastName}`.trim(),
+              active: assignedToEmployee.active,
+            }
+          : null,
+      };
+    });
   }
 
   async updateTask(id: string, payload: UpdateTaskDto) {
+    this.assertSingleAssignee(payload);
+
     const existing = await this.prisma.task.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Task not found');
@@ -103,7 +136,20 @@ export class TasksService {
         : payload.assignedToUserId === null
         ? { disconnect: true }
         : undefined,
+      assignedToEmployee: payload.assignedToEmployeeId
+        ? { connect: { id: payload.assignedToEmployeeId } }
+        : payload.assignedToEmployeeId === null
+        ? { disconnect: true }
+        : undefined,
     };
+
+    if (payload.assignedToUserId) {
+      data.assignedToEmployee = { disconnect: true };
+    }
+
+    if (payload.assignedToEmployeeId) {
+      data.assignedTo = { disconnect: true };
+    }
 
     if (payload.dueDate !== undefined) {
       data.dueDate = this.toDateOrNull(payload.dueDate);

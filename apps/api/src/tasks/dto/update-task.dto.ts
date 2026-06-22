@@ -28,5 +28,9 @@ export class UpdateTaskDto {
 
   @IsOptional()
   @IsUUID()
-  assignedToUserId?: string;
+  assignedToUserId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  assignedToEmployeeId?: string | null;
 }
