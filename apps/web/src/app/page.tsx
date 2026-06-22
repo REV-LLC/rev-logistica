@@ -78,28 +78,28 @@ type PendingVehicle = {
 const quickLinks = [
   {
     href: '/transport/requests',
-    title: 'Requests',
-    description: 'Build dispatch and return requests with operational tracking.',
+    title: 'Solicitudes',
+    description: 'Arma solicitudes de despacho y devolucion con seguimiento operativo.',
     icon: <IconClipboardList size={18} />,
     color: 'blue',
   },
   {
     href: '/tasks',
-    title: 'Tasks',
-    description: 'Review open tasks and team follow-ups.',
+    title: 'Pendientes',
+    description: 'Revisa pendientes abiertos y seguimientos del equipo.',
     icon: <IconChecklist size={18} />,
     color: 'yellow',
   },
   {
     href: '/transport/vehicles',
-    title: 'Vehicles',
-    description: 'Track fleet documents and upcoming expirations.',
+    title: 'Vehiculos',
+    description: 'Controla documentos de flota y proximos vencimientos.',
     icon: <IconTruck size={18} />,
     color: 'orange',
   },
   {
     href: '/billing/pre-invoice',
-    title: 'Pre-invoice',
+    title: 'Prefactura',
     description: 'Consolidate billable periods by worksite and customer.',
     icon: <IconReceipt2 size={18} />,
     color: 'teal',
@@ -216,7 +216,7 @@ export default function HomePage() {
         setEmployees(employeesData);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Could not load dashboard');
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -290,7 +290,7 @@ export default function HomePage() {
           }
         : {
             title: 'Stable operation',
-            description: 'No critical alerts are visible in the main view.',
+            description: 'No hay alertas criticas visibles en la vista principal.',
             color: 'teal',
           };
 
@@ -487,7 +487,7 @@ export default function HomePage() {
                       <CompactMetric
                         label="En curso"
                         value={String(dashboardMetrics.doingTasks)}
-                        hint="Tasks in progress"
+                        hint="Tareas en curso"
                         color="blue"
                       />
                       <CompactMetric
@@ -502,14 +502,14 @@ export default function HomePage() {
                       <StatCard
                         label="En curso"
                         value={String(dashboardMetrics.doingTasks)}
-                        hint="Tasks currently running"
+                        hint="Tareas actualmente en curso"
                         color="blue"
                         icon={<IconChecklist size={20} />}
                       />
                       <StatCard
                         label="Upcoming fleet"
                         value={String(dashboardMetrics.upcomingVehicles)}
-                        hint="Vehicles with documents between 8 and 30 days"
+                        hint="Vehiculos con documentos entre 8 y 30 dias"
                         color="orange"
                         icon={<IconTruck size={20} />}
                       />
@@ -523,13 +523,13 @@ export default function HomePage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                   <div>
-                    <Text fw={700}>Vehicle expirations</Text>
+                    <Text fw={700}>Vencimientos de vehiculos</Text>
                     <Text size="sm" c="dimmed">
-                      Priority sorted by the closest date between SOAT and inspection.
+                      Prioridad ordenada por la fecha mas cercana entre SOAT y tecnomecanica.
                     </Text>
                   </div>
                   <Badge color={dashboardMetrics.criticalVehicles > 0 ? 'red' : 'orange'} variant="light">
-                    {pendingVehicles.length} vehicles
+                    {pendingVehicles.length} vehiculos
                   </Badge>
                 </Group>
 
@@ -539,7 +539,7 @@ export default function HomePage() {
                   </Center>
                 ) : topVehicles.length === 0 ? (
                   <Paper radius="lg" p="xl" bg="gray.0">
-                    <Text fw={700}>No visible expirations.</Text>
+                    <Text fw={700}>No hay vencimientos visibles.</Text>
                     <Text size="sm" c="dimmed" mt={6}>
                       When the fleet has SOAT or inspection dates, they will appear here sorted by priority.
                     </Text>

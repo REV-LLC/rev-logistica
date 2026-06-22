@@ -47,7 +47,7 @@ async function downloadFile(path: string, fallbackName: string) {
 
   const response = await fetch(`${API_BASE}${path}`, { headers });
   if (!response.ok) {
-    throw new Error((await response.text()) || 'Could not download the file');
+    throw new Error((await response.text()) || 'No se pudo descargar el archivo');
   }
 
   const blob = await response.blob();
@@ -78,7 +78,7 @@ export default function DataPage() {
         setTables(items);
         setSelectedTable(items[0]?.key ?? null);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load tables'));
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron cargar tablas'));
   }, []);
 
   const tableOptions = useMemo(
@@ -97,7 +97,7 @@ export default function DataPage() {
     try {
       await downloadFile('/backups/export/json', 'rev-logistica-backup.json');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not download the backup');
+      setError(err instanceof Error ? err.message : 'No se pudo descargar el backup');
     } finally {
       setLoading(false);
     }
@@ -110,7 +110,7 @@ export default function DataPage() {
     try {
       await downloadFile(`/backups/export/csv/${selectedTable}`, `${selectedTable}.csv`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not download the CSV');
+      setError(err instanceof Error ? err.message : 'No se pudo descargar el CSV');
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export default function DataPage() {
       const message =
         err instanceof ApiError || err instanceof Error
           ? err.message
-          : 'Could not upload the backup';
+          : 'No se pudo subir el backup';
       setError(message);
     } finally {
       setLoading(false);
@@ -144,7 +144,7 @@ export default function DataPage() {
     <Container size="xl" py="md">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Data"
+          title="Datos"
           description="JSON backups and CSV exports"
           icon={<IconDatabaseExport size={20} />}
           iconColor="blue"
@@ -223,10 +223,10 @@ export default function DataPage() {
               </ThemeIcon>
               <div>
                 <Title order={3} size="h4">
-                  Upload JSON backup
+                  Cargar backup JSON
                 </Title>
                 <Text size="sm" c="dimmed">
-                  Create or update records using the file IDs.
+                  Crea o actualiza registros usando los IDs del archivo.
                 </Text>
               </div>
             </Group>
@@ -234,7 +234,7 @@ export default function DataPage() {
               accept="application/json,.json"
               value={backupFile}
               onChange={setBackupFile}
-              placeholder="Select .json file"
+              placeholder="Seleccionar archivo .json"
             />
             <Group justify="flex-end">
               <Button
@@ -255,7 +255,7 @@ export default function DataPage() {
                     <Table.Tr>
                       <Table.Th>Table</Table.Th>
                       <Table.Th>Received</Table.Th>
-                      <Table.Th>Loaded</Table.Th>
+                      <Table.Th>Cargados</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>

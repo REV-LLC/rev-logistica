@@ -186,7 +186,7 @@ export default function InventoryDisplay({
     >();
 
     rows.forEach((item) => {
-      const familyName = item.category || 'No family';
+      const familyName = item.category || 'Sin familia';
       const familyId = item.assetFamilyId || familyName;
       const totalQuantity =
         'owners' in item
@@ -246,8 +246,8 @@ export default function InventoryDisplay({
                         <Table.Tr>
                           <Table.Th>Name</Table.Th>
                           <Table.Th>Billing</Table.Th>
-                          <Table.Th>Owner warehouse</Table.Th>
-                          <Table.Th>Quantity</Table.Th>
+                          <Table.Th>Bodega dueña</Table.Th>
+                          <Table.Th>Cantidad</Table.Th>
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
@@ -378,7 +378,7 @@ export default function InventoryDisplay({
                               Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
                             </Text>
                             <Text mt="xs">
-                              <strong>Quantity:</strong>{' '}
+                              <strong>Cantidad:</strong>{' '}
                               {isNegativeQuantity(item.quantity) ? (
                                 <Text span c="red" fw={700}>
                                   <IconAlertTriangle
@@ -393,7 +393,7 @@ export default function InventoryDisplay({
                               )}
                             </Text>
                             <Text size="sm">
-                              <strong>Owner warehouse:</strong> {item.ownerWarehouseName ?? '-'}
+                              <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
                             </Text>
                           </Card>
                         ),

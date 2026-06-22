@@ -133,7 +133,7 @@ function daysUntil(value?: string | null) {
 }
 
 function getDocumentStatus(days: number | null) {
-  if (days === null) return { label: 'No date', color: 'gray' };
+  if (days === null) return { label: 'Sin fecha', color: 'gray' };
   if (days < 0) return { label: 'Expired', color: 'red' };
   if (days <= 30) return { label: `${days} days`, color: 'orange' };
   return { label: `${days} days`, color: 'green' };
@@ -157,18 +157,18 @@ function VehicleDetails({
             {vehicle.plate}
           </Text>
           <Text size="sm" c="dimmed">
-            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'No brand or model'}
+            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
           </Text>
         </div>
         <Badge color="blue" variant="light">
-          {vehicle.type ?? 'No type'}
+          {vehicle.type ?? 'Sin tipo'}
         </Badge>
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Configuration
+            Configuracion
           </Text>
           <Stack gap={6} mt={8}>
             <Text size="sm">Peso (Toneladas): {formatCapacity(vehicle.capacity)}</Text>
@@ -208,7 +208,7 @@ function VehicleDetails({
       {onEdit ? (
         <Group className="mobile-actions">
           <Button variant="light" onClick={() => onEdit(vehicle)}>
-            Edit
+            Editar
           </Button>
         </Group>
       ) : null}
@@ -251,7 +251,7 @@ export default function VehiclesPage() {
       const data = await api<Vehicle[]>('/vehicles');
       setVehicles(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load vehicles');
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar vehiculos');
     } finally {
       setLoading(false);
     }
@@ -350,14 +350,14 @@ export default function VehiclesPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Vehicles"
+          title="Vehiculos"
           description="Manage fleet, documentation, and operational availability from one view."
           icon={<IconTruck size={20} />}
           iconColor="orange"
           accentColor="rgba(249,115,22,0.12)"
           aside={
             <Button onClick={startCreate} leftSection={<IconPlus size={16} />}>
-              New vehicle
+              Nuevo vehiculo
             </Button>
           }
         >
@@ -411,7 +411,7 @@ export default function VehiclesPage() {
           {loading ? (
             <Paper radius="lg" p="xl" bg="gray.0">
               <Text c="dimmed" ta="center">
-                Loading...
+                Cargando...
               </Text>
             </Paper>
           ) : isMobile ? (
@@ -425,7 +425,7 @@ export default function VehiclesPage() {
                         <div>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'No brand or model'}
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                           </Text>
                         </div>
                         <Badge color={soatStatus.color} variant="light">
@@ -466,9 +466,9 @@ export default function VehiclesPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconCar size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No vehicles registered</Text>
+                    <Text fw={700}>No hay vehiculos registrados</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Create a new vehicle to start.
+                      Crea un vehiculo para empezar.
                     </Text>
                   </Stack>
                 </Paper>
@@ -478,7 +478,7 @@ export default function VehiclesPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Vehicle</Table.Th>
+                  <Table.Th>Vehiculo</Table.Th>
                   <Table.Th>Tipo / capacidad</Table.Th>
                   <Table.Th>Conductores</Table.Th>
                   <Table.Th>Documentation</Table.Th>
@@ -495,13 +495,13 @@ export default function VehiclesPage() {
                         <Stack gap={2}>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'No brand or model'}
+                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
-                          <Text size="sm">{vehicle.type ?? 'No type'}</Text>
+                          <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
                           <Text size="xs" c="dimmed">
                             Peso (Toneladas): {formatCapacity(vehicle.capacity)}
                           </Text>
@@ -511,7 +511,7 @@ export default function VehiclesPage() {
                         <Text size="sm">
                           {vehicle.drivers.length
                             ? vehicle.drivers.map((driver) => driver.name).join(', ')
-                            : 'No drivers'}
+                            : 'Sin conductores'}
                         </Text>
                       </Table.Td>
                       <Table.Td>
@@ -527,7 +527,7 @@ export default function VehiclesPage() {
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="light" onClick={() => startEdit(vehicle)}>
-                            Edit
+                            Editar
                           </Button>
                           <ActionIcon
                             variant="light"
@@ -548,9 +548,9 @@ export default function VehiclesPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconCar size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No vehicles registered</Text>
+                        <Text fw={700}>No hay vehiculos registrados</Text>
                         <Text size="sm" c="dimmed">
-                          Create a new vehicle.
+                          Crea un vehiculo.
                         </Text>
                       </Stack>
                     </Table.Td>
@@ -574,7 +574,7 @@ export default function VehiclesPage() {
         ) : null}
       </Modal>
 
-      <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Edit vehicle' : 'New vehicle'} size="lg">
+      <Modal opened={!!form} onClose={closeEdit} title={editing ? 'Editar vehiculo' : 'Nuevo vehiculo'} size="lg">
         {form ? (
           <form onSubmit={handleSaveSubmit}>
             <Stack gap="lg">
@@ -592,11 +592,11 @@ export default function VehiclesPage() {
                     <div>
                       <Text fw={700}>{editing.plate}</Text>
                       <Text size="sm" c="dimmed">
-                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'No brand or model'}
+                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
                       </Text>
                     </div>
                     <Badge color="orange" variant="light">
-                      {editing.type ?? 'No type'}
+                      {editing.type ?? 'Sin tipo'}
                     </Badge>
                   </Group>
                 </Paper>
@@ -703,10 +703,10 @@ export default function VehiclesPage() {
 
               <Group justify="flex-end" className="mobile-actions">
                 <Button type="button" variant="default" onClick={closeEdit}>
-                  Cancel
+                  Cancelar
                 </Button>
                 <Button type="submit" loading={saving}>
-                  {editing ? 'Save changes' : 'Create vehicle'}
+                  {editing ? 'Guardar cambios' : 'Crear vehiculo'}
                 </Button>
               </Group>
             </Stack>

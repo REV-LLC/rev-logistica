@@ -214,10 +214,10 @@ function parseNotes(notes: string | null) {
   });
   return {
     deliveryMode: map.get('entrega') ?? '',
-    vehicleId: map.get('vehículo') ?? '',
+    vehicleId: map.get('vehiculo') ?? map.get('vehículo') ?? map.get('vehicle') ?? '',
     driverId: map.get('conductor') ?? '',
     dispatcherId: map.get('despachador') ?? '',
-    cutOffDate: map.get('fecha corte') ?? '',
+    cutOffDate: map.get('fecha corte') ?? map.get('cutoff date') ?? '',
   };
 }
 
@@ -225,10 +225,17 @@ function buildObservationText(notes: string | null) {
   if (!notes) return '';
   const hiddenPrefixes = [
     'fecha doc:',
+    'fecha documento:',
     'fecha corte:',
+    'document date:',
+    'cutoff date:',
     'entrega:',
+    'vehicle:',
     'vehículo:',
+    'vehiculo:',
+    'driver:',
     'conductor:',
+    'dispatcher:',
     'despachador:',
   ];
   return notes
@@ -586,7 +593,7 @@ export default function DocumentDetailPage() {
     setBillingLoading(true);
     setBillingError(null);
     try {
-      const cutoffValue = toApiDateInput(billingCutoffDate, 'Cutoff date');
+      const cutoffValue = toApiDateInput(billingCutoffDate, 'Fecha corte');
       const returnedValue = toApiDateInput(billingReturnedAt, 'Actual return date');
       await api(`/documents/${document.id}/items/${selectedBillingItem.id}/billing`, {
         method: 'PATCH',
@@ -749,7 +756,7 @@ export default function DocumentDetailPage() {
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
     const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
     if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      setCreateSerialError('Select a serial SKU first.');
+      setCreateSerialError('Selecciona primero un SKU serializado.');
       return;
     }
     if (!createSerialSerialOrEngine.trim()) {
@@ -1031,7 +1038,7 @@ export default function DocumentDetailPage() {
             </Group>
           </Group>
 
-          {loading ? <Text mt="md">Loading...</Text> : null}
+          {loading ? <Text mt="md">Cargando...</Text> : null}
           {error ? (
             <Text c="red" mt="md">
               {error}
@@ -1044,7 +1051,7 @@ export default function DocumentDetailPage() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Item</Table.Th>
-                    <Table.Th>Quantity</Table.Th>
+                    <Table.Th>Cantidad</Table.Th>
                     <Table.Th>Cutoff</Table.Th>
                     <Table.Th>Actual return</Table.Th>
                     <Table.Th>Estado</Table.Th>
@@ -1131,7 +1138,7 @@ export default function DocumentDetailPage() {
                   <strong>Legal name:</strong> {document.customerWorksite?.customer?.name ?? '-'}
                 </div>
                 <div>
-                  <strong>Worksite:</strong> {document.customerWorksite?.worksite?.name ?? '-'}
+                  <strong>Obra:</strong> {document.customerWorksite?.worksite?.name ?? '-'}
                 </div>
                 <div>
                   <strong>Shipping address:</strong>{' '}
@@ -1174,12 +1181,12 @@ export default function DocumentDetailPage() {
             <section className={styles.block}>
               <div className={styles.blockTitle}>OBSERVACIONES</div>
               <div className={styles.observations}>
-                {observationText || 'No observations.'}
+                {observationText || 'Sin observaciones.'}
                 {parsedNotes.deliveryMode ? ` | Entrega: ${parsedNotes.deliveryMode}` : ''}
-                {parsedNotes.vehicleId ? ` | Vehicle: ${vehicleDisplay}` : ''}
-                {parsedNotes.driverId ? ` | Driver: ${driverDisplay}` : ''}
-                {parsedNotes.dispatcherId ? ` | Dispatcher: ${parsedNotes.dispatcherId}` : ''}
-                {parsedNotes.cutOffDate ? ` | Cutoff date: ${parsedNotes.cutOffDate}` : ''}
+                {parsedNotes.vehicleId ? ` | Vehiculo: ${vehicleDisplay}` : ''}
+                {parsedNotes.driverId ? ` | Conductor: ${driverDisplay}` : ''}
+                {parsedNotes.dispatcherId ? ` | Despachador: ${parsedNotes.dispatcherId}` : ''}
+                {parsedNotes.cutOffDate ? ` | Fecha corte: ${parsedNotes.cutOffDate}` : ''}
               </div>
             </section>
 
@@ -1218,14 +1225,14 @@ export default function DocumentDetailPage() {
             {selectedBillingItem ? describeItem(selectedBillingItem) : '-'}
           </Text>
           <TextInput
-            label="Cutoff date (optional)"
+            label="Fecha de corte (opcional)"
             value={billingCutoffDate ? toDisplayDateInput(billingCutoffDate) : ''}
             placeholder="dd/mm/aaaa"
             readOnly
             rightSection={
               <ActionIcon
                 variant="subtle"
-                aria-label="Select cutoff date"
+                aria-label="Seleccionar fecha de corte"
                 onClick={() => billingCutoffPickerRef.current?.showPicker?.()}
               >
                 <IconCalendar size={16} />
@@ -1249,7 +1256,7 @@ export default function DocumentDetailPage() {
             rightSection={
               <ActionIcon
                 variant="subtle"
-                aria-label="Select actual return date"
+                aria-label="Seleccionar fecha real de devolucion"
                 onClick={() => billingReturnedPickerRef.current?.showPicker?.()}
               >
                 <IconCalendar size={16} />
@@ -1277,10 +1284,10 @@ export default function DocumentDetailPage() {
               onClick={() => setBillingModalOpen(false)}
               disabled={billingLoading}
             >
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={saveBilling} loading={billingLoading}>
-              Save
+              Guardar
             </Button>
           </Group>
         </Stack>
@@ -1326,7 +1333,7 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Bulk resolves by SKU. Serial resolves by specific equipment (internal #).
+            Masivo resuelve por SKU. Serializado resuelve por equipo especifico (interno #).
           </Text>
           {(resolveDocument?.items ?? [])
             .map((item, index) => ({ item, index }))
@@ -1336,14 +1343,14 @@ export default function DocumentDetailPage() {
                 <Stack gap={6}>
                   <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
                   <Text size="xs" c="dimmed">
-                    Quantity: {Number(item.quantity ?? 1) || 1}
+                    Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Warehouse: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
                   <Select
                     label="Equipo"
-                    placeholder="Select SKU"
+                    placeholder="Seleccionar SKU"
                     searchable
                     data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
                     value={resolveSkuByIndex[index] ?? null}
@@ -1386,11 +1393,11 @@ export default function DocumentDetailPage() {
                       <Stack gap={6}>
                         <Select
                           label="Equipo serial"
-                          placeholder="Select equipment"
+                          placeholder="Seleccionar equipo"
                           searchable
                           data={serialOptions}
                           value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No equipment for this SKU in that warehouse"
+                          nothingFoundMessage="No hay equipo para este SKU en esa bodega"
                           onChange={(value) =>
                             setResolveAssetByIndex((prev) => ({
                               ...prev,
@@ -1405,7 +1412,7 @@ export default function DocumentDetailPage() {
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
                           <Button size="xs" variant="light" onClick={() => openCreateSerialForRow(index)}>
-                            Create missing equipment
+                            Crear equipo faltante
                           </Button>
                         ) : null}
                       </Stack>
@@ -1417,7 +1424,7 @@ export default function DocumentDetailPage() {
 
           <Group justify="flex-end">
             <Button variant="default" onClick={closeResolveModal} disabled={resolvingApprove}>
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={resolveAndApprove} loading={resolvingApprove}>
               Resolver y aprobar
@@ -1437,7 +1444,7 @@ export default function DocumentDetailPage() {
           setCreateSerialYear('');
           setCreateSerialFuel(null);
         }}
-        title="Create missing serial equipment"
+        title="Crear equipo serializado faltante"
         centered
       >
         <Stack gap="sm">
@@ -1499,10 +1506,10 @@ export default function DocumentDetailPage() {
                 setCreateSerialFuel(null);
               }}
             >
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
-              Create and use
+              Crear y usar
             </Button>
           </Group>
         </Stack>

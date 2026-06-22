@@ -147,8 +147,8 @@ export default function WarehouseInventoryPage() {
   }, [owners]);
 
   const typeOptions = [
-    { value: 'OWN', label: 'Owned' },
-    { value: 'ALLY', label: 'Partner' },
+    { value: 'OWN', label: 'Propia' },
+    { value: 'ALLY', label: 'Aliada' },
   ];
 
   const activeOptions = [
@@ -299,7 +299,7 @@ export default function WarehouseInventoryPage() {
 
   const handleCreate = async () => {
     if (!createOwnerCompanyId) {
-      setCreateError('Select an owner company.');
+      setCreateError('Selecciona una empresa dueña.');
       return;
     }
     if (!createName.trim()) {
@@ -347,7 +347,7 @@ export default function WarehouseInventoryPage() {
   const handleEdit = async () => {
     if (!editTarget) return;
     if (!editOwnerCompanyId) {
-      setEditError('Select an owner company.');
+      setEditError('Selecciona una empresa dueña.');
       return;
     }
     if (!editName.trim()) {
@@ -620,7 +620,7 @@ export default function WarehouseInventoryPage() {
             </FileButton>
           </Group>
           {ownerLogoError ? (
-            <Alert color="red" variant="light" title="Could not upload the logo">
+            <Alert color="red" variant="light" title="No se pudo subir el logo">
               {ownerLogoError}
             </Alert>
           ) : null}
@@ -634,17 +634,17 @@ export default function WarehouseInventoryPage() {
       <Container size="xl" py="xl">
         <Stack gap="lg">
           {warehousesError ? (
-            <Alert color="red" variant="light" title="Could not load warehouses">
+            <Alert color="red" variant="light" title="No se pudieron cargar bodegas">
               {warehousesError}
             </Alert>
           ) : null}
           {ownersError ? (
-            <Alert color="red" variant="light" title="Could not load owner companies">
+            <Alert color="red" variant="light" title="No se pudieron cargar las empresas dueñas">
               {ownersError}
             </Alert>
           ) : null}
           {error ? (
-            <Alert color="red" variant="light" title="Could not query inventory">
+            <Alert color="red" variant="light" title="No se pudo consultar el inventario">
               {error}
             </Alert>
           ) : null}
@@ -653,13 +653,13 @@ export default function WarehouseInventoryPage() {
             <Stack gap="md">
               <Group justify="space-between" align="flex-start" wrap="wrap">
                 <div>
-                  <Text fw={700}>Inventory by warehouse</Text>
+                  <Text fw={700}>Inventario por bodega</Text>
                   <Text size="sm" c="dimmed">
-                    Tap a warehouse to load its inventory.
+                    Haz clic en una bodega para cargar su inventario.
                   </Text>
                 </div>
                 <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
-                  Create warehouse
+                  Crear bodega
                 </Button>
               </Group>
 
@@ -735,7 +735,7 @@ export default function WarehouseInventoryPage() {
                           </ThemeIcon>
                         )}
                         <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                          {warehouse.type === 'OWN' ? 'Owned warehouse' : 'Partner warehouse'}
+                          {warehouse.type === 'OWN' ? 'Bodega propia' : 'Bodega aliada'}
                         </Text>
                       </Stack>
                     </Box>
@@ -750,13 +750,13 @@ export default function WarehouseInventoryPage() {
                         </div>
                         <Group gap="xs" align="flex-start" wrap="nowrap">
                           <Badge color={warehouse.active ? 'green' : 'gray'} variant="light">
-                            {warehouse.active ? 'Active' : 'Inactive'}
+                            {warehouse.active ? 'Activo' : 'Inactivo'}
                           </Badge>
                           <ActionIcon
                             variant="subtle"
                             color="gray"
                             radius="xl"
-                            aria-label={`Edit ${warehouse.name}`}
+                            aria-label={`Editar ${warehouse.name}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               openEdit(warehouse);
@@ -769,15 +769,15 @@ export default function WarehouseInventoryPage() {
 
                       <Group justify="space-between" align="center" wrap="nowrap">
                         <Badge color={warehouse.type === 'OWN' ? 'orange' : 'blue'} variant="light">
-                          {warehouse.type === 'OWN' ? 'Owned' : 'Partner'}
+                          {warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}
                         </Badge>
                         {warehouse.isSelected ? (
                           <Badge color="orange" variant="filled">
-                            Loaded
+                            Cargada
                           </Badge>
                         ) : (
                           <Text size="sm" c="dimmed">
-                            Tap to load
+                            Clic para cargar
                           </Text>
                         )}
                       </Group>
@@ -793,9 +793,9 @@ export default function WarehouseInventoryPage() {
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>Inventory result</Text>
+                  <Text fw={700}>Resultado de inventario</Text>
                   <Text size="sm" c="dimmed">
-                    Bulk stock and unique equipment from the selected warehouse.
+                    Stock masivo y equipos unicos de la bodega seleccionada.
                   </Text>
                 </div>
                 <InventoryDisplay
@@ -812,22 +812,22 @@ export default function WarehouseInventoryPage() {
       <Modal
         opened={adjustOpen}
         onClose={() => setAdjustOpen(false)}
-        title="Bulk Stock Adjustment"
+        title="Ajuste de stock masivo"
         size="lg"
       >
         {!adjustReady ? (
           <div>
             <Text c="dimmed" mb="sm">
-              Confirm your admin credentials to continue.
+              Confirma tus credenciales de administrador para continuar.
             </Text>
             <TextInput
-              label="Email"
+              label="Correo"
               type="email"
               value={reauthEmail}
               onChange={(event) => setReauthEmail(event.target.value)}
             />
             <TextInput
-              label="Password"
+              label="Contraseña"
               type="password"
               mt="sm"
               value={reauthPassword}
@@ -840,17 +840,17 @@ export default function WarehouseInventoryPage() {
             )}
             <Group mt="md">
               <Button onClick={handleReauth} loading={reauthLoading}>
-                Confirm
+                Confirmar
               </Button>
             </Group>
           </div>
         ) : (
           <div>
             <Text c="dimmed" mb="sm">
-              Enter the desired final quantity by SKU (0 removes it from bulk stock).
+              Ingresa la cantidad final deseada por SKU (0 lo elimina del stock masivo).
             </Text>
             <TextInput
-              label="Search SKU"
+              label="Buscar SKU"
               placeholder="Nombre o UUID"
               value={adjustSearch}
               onChange={(event) => setAdjustSearch(event.target.value)}
@@ -861,7 +861,7 @@ export default function WarehouseInventoryPage() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>SKU</Table.Th>
-                    <Table.Th>Current</Table.Th>
+                    <Table.Th>Actual</Table.Th>
                     <Table.Th>Final</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -899,7 +899,7 @@ export default function WarehouseInventoryPage() {
             )}
             <Group mt="md">
               <Button onClick={handleApplyAdjust} loading={adjustLoading}>
-                Apply adjustments
+                Aplicar ajustes
               </Button>
             </Group>
           </div>
@@ -909,7 +909,7 @@ export default function WarehouseInventoryPage() {
       <Modal
         opened={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Create warehouse"
+        title="Crear bodega"
         size="lg"
       >
         <Stack gap="md">
@@ -925,13 +925,13 @@ export default function WarehouseInventoryPage() {
           >
             <Group justify="space-between" align="flex-start" wrap="wrap">
               <div>
-                <Text fw={700}>New operational warehouse</Text>
+                <Text fw={700}>Nueva bodega operativa</Text>
                 <Text size="sm" c="dimmed" mt={4}>
-                  Define name, type, owner, and initial status to make it ready in the system.
+                  Define nombre, tipo, dueño y estado inicial para dejarla lista en el sistema.
                 </Text>
               </div>
               <Badge color={createType === 'OWN' ? 'orange' : 'blue'} variant="light">
-                {createType === 'OWN' ? 'Owned' : 'Partner'}
+                {createType === 'OWN' ? 'Propia' : 'Aliada'}
               </Badge>
             </Group>
           </Paper>
@@ -939,28 +939,28 @@ export default function WarehouseInventoryPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Warehouse identity</Text>
+                <Text fw={700}>Identidad de la bodega</Text>
                 <Text size="sm" c="dimmed">
-                  Use a clear name and assign it to the correct owner from the start.
+                  Usa un nombre claro y asignala al dueño correcto desde el inicio.
                 </Text>
               </div>
 
               <TextInput
-                label="Name"
-                placeholder="Example: North main warehouse"
+                label="Nombre"
+                placeholder="Ejemplo: Bodega principal norte"
                 value={createName}
                 onChange={(event) => setCreateName(event.target.value)}
               />
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Select
-                  label="Type"
+                  label="Tipo"
                   data={typeOptions}
                   value={createType}
                   onChange={(value) => setCreateType((value as 'OWN' | 'ALLY') ?? 'OWN')}
                 />
                 <Select
-                  label="Status"
+                  label="Estado"
                   data={activeOptions}
                   value={String(createActive)}
                   onChange={(value) => setCreateActive(value === 'true')}
@@ -968,8 +968,8 @@ export default function WarehouseInventoryPage() {
               </SimpleGrid>
 
               <Select
-                label="Owner company"
-                placeholder={ownersLoading ? 'Loading owners...' : 'Select an owner'}
+                label="Empresa dueña"
+                placeholder={ownersLoading ? 'Cargando dueños...' : 'Seleccionar dueño'}
                 data={ownerOptions}
                 value={createOwnerCompanyId}
                 onChange={(value) => {
@@ -985,21 +985,21 @@ export default function WarehouseInventoryPage() {
           </Paper>
 
           {createError ? (
-            <Alert color="red" variant="light" title="Could not create warehouse">
+            <Alert color="red" variant="light" title="No se pudo crear la bodega">
               {createError}
             </Alert>
           ) : null}
 
           <Group justify="space-between" className="mobile-actions">
             <Button variant="default" onClick={() => setCreateOpen(false)}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               onClick={handleCreate}
               loading={createLoading}
               disabled={!createOwnerCompanyId}
             >
-              Create warehouse
+              Crear bodega
             </Button>
           </Group>
         </Stack>
@@ -1008,24 +1008,24 @@ export default function WarehouseInventoryPage() {
       <Modal
         opened={editOpen}
         onClose={() => setEditOpen(false)}
-        title="Edit warehouse"
+        title="Editar bodega"
         size="lg"
       >
         <TextInput
-          label="Name"
+          label="Nombre"
           value={editName}
           onChange={(event) => setEditName(event.target.value)}
         />
         <Select
-          label="Type"
+          label="Tipo"
           data={typeOptions}
           value={editType}
           onChange={(value) => setEditType((value as 'OWN' | 'ALLY') ?? 'OWN')}
           mt="sm"
         />
         <Select
-          label="Owner company"
-          placeholder={ownersLoading ? 'Loading owners...' : 'Select an owner'}
+          label="Empresa dueña"
+          placeholder={ownersLoading ? 'Cargando dueños...' : 'Seleccionar dueño'}
           data={ownerOptions}
           value={editOwnerCompanyId}
           onChange={(value) => {
@@ -1038,7 +1038,7 @@ export default function WarehouseInventoryPage() {
         />
         <Box mt="sm">{renderOwnerLogoUpload(editOwnerCompanyId, editOwner)}</Box>
         <Select
-          label="Status"
+          label="Estado"
           data={activeOptions}
           value={String(editActive)}
           onChange={(value) => setEditActive(value === 'true')}
@@ -1059,14 +1059,14 @@ export default function WarehouseInventoryPage() {
               openDelete(editTarget);
             }}
           >
-            Delete
+            Eliminar
           </Button>
           <Button
             onClick={handleEdit}
             loading={editLoading}
             disabled={!editOwnerCompanyId}
           >
-            Save
+            Guardar
           </Button>
         </Group>
       </Modal>
@@ -1074,12 +1074,12 @@ export default function WarehouseInventoryPage() {
       <Modal
         opened={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        title="Delete warehouse"
+        title="Eliminar bodega"
       >
         <Text>
           {deleteTarget
-            ? `Are you sure you want to delete warehouse "${deleteTarget.name}"?`
-            : 'Are you sure you want to delete this warehouse?'}
+            ? `Seguro que quieres eliminar la bodega "${deleteTarget.name}"?`
+            : 'Seguro que quieres eliminar esta bodega?'}
         </Text>
         {deleteError && (
           <Text c="red" mt="sm">
@@ -1088,10 +1088,10 @@ export default function WarehouseInventoryPage() {
         )}
         <Group mt="md">
           <Button variant="default" onClick={() => setDeleteOpen(false)}>
-            Cancel
+            Cancelar
           </Button>
           <Button color="red" onClick={handleDelete} loading={deleteLoading}>
-            Delete
+            Eliminar
           </Button>
         </Group>
       </Modal>

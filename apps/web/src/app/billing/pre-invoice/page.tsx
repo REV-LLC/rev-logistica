@@ -120,9 +120,9 @@ function formatMoney(value: number) {
 }
 
 function billingStatusLabel(value: string) {
-  if (value === 'OPEN') return 'Open';
+  if (value === 'OPEN') return 'Abierto';
   if (value === 'CUT') return 'Cut';
-  if (value === 'CLOSED') return 'Closed';
+  if (value === 'CLOSED') return 'Cerrado';
   return value;
 }
 
@@ -183,7 +183,7 @@ export default function PreInvoicePage() {
 
   const loadPreInvoice = async () => {
     if (!customerWorksiteId) {
-      setError('Select a worksite');
+      setError('Selecciona una obra');
       return;
     }
     setLoading(true);
@@ -224,20 +224,20 @@ export default function PreInvoicePage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Annex / Pre-invoice"
-          description="Consolidate rented equipment by worksite and period to review values before invoicing."
+          title="Anexo / Prefactura"
+          description="Consolida equipos alquilados por obra y periodo para revisar valores antes de facturar."
           icon={<IconFileInvoice size={20} />}
           iconColor="teal"
           accentColor="rgba(16,185,129,0.12)"
           aside={
             <Button onClick={loadPreInvoice} loading={loading || bootLoading}>
-              Generate pre-invoice
+              Generar prefactura
             </Button>
           }
         />
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not generate the pre-invoice">
+          <Alert color="red" variant="light" title="No se pudo generar la prefactura">
             {error}
           </Alert>
         ) : null}
@@ -245,16 +245,16 @@ export default function PreInvoicePage() {
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           <Stack gap="md">
             <div>
-              <Text fw={700}>1. Select the worksite and period</Text>
+              <Text fw={700}>1. Selecciona la obra y el periodo</Text>
               <Text size="sm" c="dimmed">
-                The worksite defines the billable universe. Then adjust dates and VAT to regenerate the annex.
+                La obra define el universo facturable. Luego ajusta fechas e IVA para regenerar el anexo.
               </Text>
             </div>
 
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               <Select
-                label="Customer / worksite"
-                placeholder="Select"
+                label="Cliente / obra"
+                placeholder="Seleccionar"
                 searchable
                 data={worksiteOptions}
                 value={customerWorksiteId}
@@ -268,17 +268,17 @@ export default function PreInvoicePage() {
                   </ThemeIcon>
                   <div>
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                      Selected worksite
+                      Obra seleccionada
                     </Text>
                     <Text size="sm" fw={600} mt={6}>
                       {selectedWorksite
                         ? selectedWorksite.alias || selectedWorksite.worksite.name
-                        : 'No selection'}
+                        : 'Sin seleccion'}
                     </Text>
                     <Text size="sm" c="dimmed">
                       {selectedWorksite
                         ? `${selectedWorksite.customer.name}${selectedWorksite.worksite.address ? ` · ${selectedWorksite.worksite.address}` : ''}`
-                        : 'Select a worksite to enable calculation'}
+                        : 'Selecciona una obra para habilitar el calculo'}
                     </Text>
                   </div>
                 </Group>
@@ -287,13 +287,13 @@ export default function PreInvoicePage() {
 
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
               <TextInput
-                label="From"
+                label="Desde"
                 type="date"
                 value={from}
                 onChange={(event) => setFrom(event.currentTarget.value)}
               />
               <TextInput
-                label="To"
+                label="Hasta"
                 type="date"
                 value={to}
                 onChange={(event) => setTo(event.currentTarget.value)}
@@ -312,30 +312,30 @@ export default function PreInvoicePage() {
 
         <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
           <StatCard
-            label="Worksites"
+            label="Obras"
             value={String(worksites.length)}
-            hint="Available to query"
+            hint="Disponibles para consultar"
             color="teal"
             icon={<IconChecklist size={20} />}
           />
           <StatCard
-            label="Period"
+            label="Periodo"
             value={from && to ? `${formatDate(from)} - ${formatDate(to)}` : '-'}
-            hint="Current range"
+            hint="Rango actual"
             color="blue"
             icon={<IconCalendarStats size={20} />}
           />
           <StatCard
             label="IVA"
             value={`${Number(ivaPercent) || 0}%`}
-            hint="Rate applied to the calculation"
+            hint="Tarifa aplicada al calculo"
             color="grape"
             icon={<IconReceipt2 size={20} />}
           />
           <StatCard
-            label="Active worksite"
+            label="Obra activa"
             value={selectedWorksite ? (selectedWorksite.alias || selectedWorksite.worksite.name) : '-'}
-            hint={selectedWorksite ? selectedWorksite.customer.name : 'Select a worksite'}
+            hint={selectedWorksite ? selectedWorksite.customer.name : 'Selecciona una obra'}
             color="cyan"
             icon={<IconMapPin size={20} />}
           />
@@ -393,7 +393,7 @@ export default function PreInvoicePage() {
                 <div>
                   <Text fw={700}>Detalle facturable</Text>
                   <Text size="sm" c="dimmed">
-                    Line by line for equipment included in the selected period.
+                    Linea por linea de los equipos incluidos en el periodo seleccionado.
                   </Text>
                 </div>
 
@@ -401,8 +401,8 @@ export default function PreInvoicePage() {
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Equipo</Table.Th>
-                      <Table.Th>Dispatch</Table.Th>
-                      <Table.Th>Period</Table.Th>
+                      <Table.Th>Remision</Table.Th>
+                      <Table.Th>Periodo</Table.Th>
                       <Table.Th>Unidades</Table.Th>
                       <Table.Th>Precio</Table.Th>
                       <Table.Th>Subtotal</Table.Th>
@@ -435,7 +435,7 @@ export default function PreInvoicePage() {
                               {formatDate(line.from)} - {formatDate(line.to)}
                             </Text>
                             <Text size="xs" c="dimmed">
-                              {line.days} days
+                              {line.days} dias
                             </Text>
                           </Stack>
                         </Table.Td>
@@ -461,7 +461,7 @@ export default function PreInvoicePage() {
                       <Table.Tr>
                         <Table.Td colSpan={8}>
                           <Text c="dimmed" ta="center" py="md">
-                            No equipment to pre-invoice in this period.
+                            No hay equipos para prefacturar en este periodo.
                           </Text>
                         </Table.Td>
                       </Table.Tr>

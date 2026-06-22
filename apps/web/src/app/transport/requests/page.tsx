@@ -552,8 +552,8 @@ export default function SolicitudesIpadPage() {
     onSiteItemOptions.forEach((option) => {
       const ownerId = option.ownerWarehouseId ?? null;
       const ownerName = ownerId
-        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'No owner'
-        : 'No owner';
+        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño'
+        : 'Sin dueño';
       map.set(option.value, { ownerId, ownerName });
     });
     return map;
@@ -966,7 +966,7 @@ export default function SolicitudesIpadPage() {
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
-        if (!sourceOwnerWarehouseId) throw new Error('Select the owner warehouse to filter items.');
+        if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
         if (selectedOwner?.type === 'ALLY') {
           throw new Error('For alternate warehouse, use free tag capture.');
@@ -982,7 +982,7 @@ export default function SolicitudesIpadPage() {
           data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
       } else if (sourceMode === 'on-site') {
-        if (!effectiveSourceWorksiteId) throw new Error('Select a worksite');
+        if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/on-site/${effectiveSourceWorksiteId}`,
           { method: 'GET' }
@@ -1188,7 +1188,7 @@ export default function SolicitudesIpadPage() {
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
     const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
     if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      setCreateSerialError('Select a serial SKU first.');
+      setCreateSerialError('Selecciona primero un SKU serializado.');
       return;
     }
     if (!createSerialSerialOrEngine.trim()) {
@@ -1475,7 +1475,7 @@ export default function SolicitudesIpadPage() {
       return;
     }
     if (!sourceOwnerWarehouseId) {
-      setError('Select the owner warehouse first');
+      setError('Selecciona primero la bodega dueña');
       return;
     }
     const selectedOwnerType = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.type;
@@ -1686,7 +1686,7 @@ export default function SolicitudesIpadPage() {
         throw new Error('Complete the required fields.');
       }
       if (!selectedItems.length) {
-        throw new Error('Select at least one item.');
+        throw new Error('Selecciona al menos un item.');
       }
       if (
         selectedItems.some(
@@ -1696,17 +1696,17 @@ export default function SolicitudesIpadPage() {
         throw new Error('Some items have negative inventory alerts. Adjust stock before creating the document.');
       }
       if (!customerWorksiteId) {
-        throw new Error('Select the worksite.');
+        throw new Error('Selecciona la obra.');
       }
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Capture the customer signature before sending.');
       }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
-        throw new Error('Select the warehouse for the return.');
+        throw new Error('Selecciona la bodega para la devolucion.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !effectiveWarehouseId) {
-        throw new Error('Select the dispatch warehouse.');
+        throw new Error('Selecciona la bodega de despacho.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
         throw new Error('Your user is not linked to a driver employee.');
@@ -1725,12 +1725,12 @@ export default function SolicitudesIpadPage() {
         customerWorksiteId: customerWorksiteId || undefined,
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
-          `Document date: ${docDate}`,
-          docType === 'RETURN' && cutOffDate ? `Cutoff date: ${cutOffDate}` : null,
+          `Fecha documento: ${docDate}`,
+          docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehicle: ${vehicleId}` : null,
-          deliveryMode === 'ON_SITE' && driverId ? `Driver: ${driverId}` : null,
-          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Dispatcher: ${dispatcherId}` : null
+          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
+          deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
+          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
         ].filter(Boolean).join(' | ')
       } as const;
 
@@ -1805,11 +1805,11 @@ export default function SolicitudesIpadPage() {
   const goToItemsStep = () => {
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
-    if (!customerId) nextFieldErrors.customerId = 'Select the legal name.';
-    if (!docDate) nextFieldErrors.docDate = 'Select the date.';
-    if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Select the worksite.';
+    if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
+    if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
+    if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
-      nextFieldErrors.driverId = 'Select the driver.';
+      nextFieldErrors.driverId = 'Selecciona el conductor.';
     }
     setGenerateFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -1822,7 +1822,7 @@ export default function SolicitudesIpadPage() {
   const goToSignStep = () => {
     setError(null);
     if (!selectedItems.length) {
-      setError('Select at least one item.');
+      setError('Selecciona al menos un item.');
       return;
     }
     setGenerateStep('sign');
@@ -1887,7 +1887,7 @@ export default function SolicitudesIpadPage() {
   const requestMetrics = {
     drafts: requests.length,
     selected: selectedItems.length,
-    activeDoc: editingRequestId ? 'Editing' : 'New',
+    activeDoc: editingRequestId ? 'Editando' : 'Nuevo',
     tab: activeTab === 'list' ? 'Drafts' : 'Generation',
   };
 
@@ -1896,7 +1896,7 @@ export default function SolicitudesIpadPage() {
       <Container size="xl" py="xl">
         <Stack gap="lg">
           <PageHeaderCard
-            title="Document requests"
+            title="Solicitudes de documentos"
             description="Manage dispatch and return drafts, build items, and control operational submission."
             icon={<IconFileText size={20} />}
             iconColor="blue"
@@ -1906,7 +1906,7 @@ export default function SolicitudesIpadPage() {
               <StatCard
                 label="Drafts"
                 value={String(requestMetrics.drafts)}
-                hint="Requests loaded in list"
+                hint="Solicitudes cargadas en lista"
                 color="blue"
                 icon={<IconChecklist size={20} />}
               />
@@ -1927,7 +1927,7 @@ export default function SolicitudesIpadPage() {
               <StatCard
                 label="Vista"
                 value={requestMetrics.tab}
-                hint="Currently active tab"
+                hint="Tab activo actualmente"
                 color="cyan"
                 icon={<IconFileText size={20} />}
               />
@@ -1937,16 +1937,16 @@ export default function SolicitudesIpadPage() {
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Tabs value={activeTab} onChange={handleActiveTabChange}>
             <Tabs.List grow={isMobile}>
-              <Tabs.Tab value="list">{isMobile ? 'Requests' : 'Document requests'}</Tabs.Tab>
+              <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes de documentos'}</Tabs.Tab>
               <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="list" pt="md">
               <Group justify="space-between" mb="sm">
                 <div>
-                  <Text fw={700}>Draft requests</Text>
+                  <Text fw={700}>Solicitudes en borrador</Text>
                   <Text size="sm" c="dimmed">
-                    Review pending requests, open details, or decide approval and rejection.
+                    Revisa solicitudes pendientes, abre detalles o decide aprobacion y rechazo.
                   </Text>
                 </div>
                 <Button variant="light" onClick={loadRequests} loading={requestsLoading}>
@@ -1969,7 +1969,7 @@ export default function SolicitudesIpadPage() {
                     <Paper key={row.id} withBorder radius="md" p="sm">
                       <Stack gap={6}>
                         <Group justify="space-between" align="flex-start">
-                          <Text fw={700}>{row.consecutive ?? 'No consecutive'}</Text>
+                          <Text fw={700}>{row.consecutive ?? 'Sin consecutivo'}</Text>
                           <Badge color="yellow" variant="light">
                             {row.status}
                           </Badge>
@@ -1981,10 +1981,10 @@ export default function SolicitudesIpadPage() {
                           </Badge>
                         </Text>
                         <Text size="sm">
-                          <strong>Customer:</strong> {row.customerWorksite?.customer?.name ?? '-'}
+                          <strong>Cliente:</strong> {row.customerWorksite?.customer?.name ?? '-'}
                         </Text>
                         <Text size="sm">
-                          <strong>Worksite:</strong>{' '}
+                          <strong>Obra:</strong>{' '}
                           {row.customerWorksite?.alias ?? row.customerWorksite?.worksite?.name ?? '-'}
                         </Text>
                         <Text size="sm">
@@ -1994,7 +1994,7 @@ export default function SolicitudesIpadPage() {
                           <strong>Creado por:</strong> {row.creator?.name ?? row.creator?.email ?? '-'}
                         </Text>
                         <Text size="sm">
-                          <strong>Date:</strong> {formatDateTime(row.createdAt)}
+                          <strong>Fecha:</strong> {formatDateTime(row.createdAt)}
                         </Text>
                         {canDecide ? (
                           <Group gap="xs" wrap="wrap" mt={4}>
@@ -2012,7 +2012,7 @@ export default function SolicitudesIpadPage() {
                               size="xs"
                               onClick={() => editRequest(row.id)}
                             >
-                              Edit
+                              Editar
                             </Button>
                             <Button
                               color="green"
@@ -2037,7 +2037,7 @@ export default function SolicitudesIpadPage() {
                     </Paper>
                   ))}
                   {!requestsLoading && requests.length === 0 ? (
-                    <Text c="dimmed">No draft requests.</Text>
+                    <Text c="dimmed">No hay solicitudes en borrador.</Text>
                   ) : null}
                 </Stack>
               ) : (
@@ -2045,11 +2045,11 @@ export default function SolicitudesIpadPage() {
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Tipo</Table.Th>
-                      <Table.Th>Consecutive</Table.Th>
-                      <Table.Th>Customer / Worksite</Table.Th>
+                      <Table.Th>Consecutivo</Table.Th>
+                      <Table.Th>Cliente / Obra</Table.Th>
                       <Table.Th>Items</Table.Th>
                       <Table.Th>Creado por</Table.Th>
-                      <Table.Th>Date</Table.Th>
+                      <Table.Th>Fecha</Table.Th>
                       <Table.Th>Estado</Table.Th>
                       <Table.Th style={{ width: 220, whiteSpace: 'nowrap' }}>Acciones</Table.Th>
                     </Table.Tr>
@@ -2095,7 +2095,7 @@ export default function SolicitudesIpadPage() {
                                   size="xs"
                                   onClick={() => editRequest(row.id)}
                                 >
-                                  Edit
+                                  Editar
                                 </Button>
                                 <Button
                                   color="green"
@@ -2123,7 +2123,7 @@ export default function SolicitudesIpadPage() {
                     {!requestsLoading && requests.length === 0 ? (
                       <Table.Tr>
                         <Table.Td colSpan={8}>
-                          <Text c="dimmed">No draft requests.</Text>
+                          <Text c="dimmed">No hay solicitudes en borrador.</Text>
                         </Table.Td>
                       </Table.Tr>
                     ) : null}
@@ -2144,7 +2144,7 @@ export default function SolicitudesIpadPage() {
                 </div>
                 {editingRequestId ? (
                   <Button variant="light" color="gray" onClick={resetGenerateForm}>
-                    Cancel editing
+                    Cancelar edicion
                   </Button>
                 ) : null}
               </Group>
@@ -2165,15 +2165,15 @@ export default function SolicitudesIpadPage() {
                 label="Tipo"
               >
                 <Group mt="xs">
-                  <Radio value="REMISSION" label="Dispatch" />
-                  <Radio value="RETURN" label="Return" />
+                  <Radio value="REMISSION" label="Despacho" />
+                  <Radio value="RETURN" label="Devolucion" />
                 </Group>
               </Radio.Group>
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             {!isDriverRole ? (
               <TextInput
-                label={helpLabel('Consecutive (optional)', 'If left empty, office can assign it on confirmation.')}
+                label={helpLabel('Consecutivo (opcional)', 'Si queda vacio, oficina puede asignarlo en la confirmacion.')}
                 withAsterisk={false}
                 value={consecutive}
                 onChange={(event) => setConsecutive(event.target.value)}
@@ -2189,7 +2189,7 @@ export default function SolicitudesIpadPage() {
                   setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
                 }}
                 data={[
-                  { value: '', label: 'Select customer' },
+                  { value: '', label: 'Seleccionar cliente' },
                   ...customers.map((customer) => ({
                     value: customer.id,
                     label: customer.name,
@@ -2214,12 +2214,12 @@ export default function SolicitudesIpadPage() {
                 searchable
                 clearable
                 required
-                placeholder="Select customer"
+                placeholder="Seleccionar cliente"
                 error={generateFieldErrors.customerId}
               />
             )}
             <TextInput
-              label={helpLabel('Date', 'Dispatch or return document date.', true)}
+              label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
               withAsterisk={false}
               type="date"
               value={docDate}
@@ -2232,7 +2232,7 @@ export default function SolicitudesIpadPage() {
             />
             {docType === 'RETURN' && !isDriverRole && (
               <TextInput
-                label="Cutoff date (optional)"
+                label="Fecha de corte (opcional)"
                 type="date"
                 value={cutOffDate}
                 onChange={(event) => setCutOffDate(event.target.value)}
@@ -2248,7 +2248,7 @@ export default function SolicitudesIpadPage() {
               label="Entrega"
             >
               <Group mt="xs">
-                <Radio value="WAREHOUSE" label="Warehouse dispatch" />
+                <Radio value="WAREHOUSE" label="Despacho desde bodega" />
                 <Radio value="ON_SITE" label="Entrega on-site" />
               </Group>
             </Radio.Group>
@@ -2257,14 +2257,14 @@ export default function SolicitudesIpadPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             {isMobile ? (
               <NativeSelect
-                label={helpLabel('Worksite', 'Destination worksite for the movement.')}
+                label={helpLabel('Obra', 'Obra destino del movimiento.')}
                 value={customerWorksiteId}
                 onChange={(event) => {
                   setCustomerWorksiteId(event.currentTarget.value);
                   setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
                 }}
                 data={[
-                  { value: '', label: customerId ? 'Select worksite' : 'Select customer first' },
+                  { value: '', label: customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente' },
                   ...worksiteOptions,
                 ]}
                 disabled={!customerId || worksitesLoading}
@@ -2272,7 +2272,7 @@ export default function SolicitudesIpadPage() {
               />
             ) : (
               <Select
-                label={helpLabel('Worksite', 'Destination worksite for the movement.')}
+                label={helpLabel('Obra', 'Obra destino del movimiento.')}
                 value={customerWorksiteId}
                 onChange={(value) => {
                   setCustomerWorksiteId(value ?? '');
@@ -2281,7 +2281,7 @@ export default function SolicitudesIpadPage() {
                 data={worksiteOptions}
                 searchable
                 clearable
-                placeholder={customerId ? 'Select worksite' : 'Select customer first'}
+                placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
                 disabled={!customerId || worksitesLoading}
                 error={generateFieldErrors.customerWorksiteId}
               />
@@ -2289,14 +2289,14 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Vehicle', 'Vehicle transporting the on-site dispatch.')}
+                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                   value={vehicleId ?? ''}
                   onChange={(event) => setVehicleId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Select vehicle' }, ...vehicleOptions]}
+                  data={[{ value: '', label: 'Seleccionar vehiculo' }, ...vehicleOptions]}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Vehicle', 'Vehicle transporting the on-site dispatch.')}
+                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                   value={vehicleId}
                   onChange={(value) => setVehicleId(value)}
                   data={vehicleOptions}
@@ -2308,19 +2308,19 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Driver', 'Person responsible for dispatch transport.')}
+                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                   value={driverId ?? ''}
                   onChange={(event) => {
                     setDriverId(event.currentTarget.value || null);
                     setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
                   }}
-                  data={[{ value: '', label: 'Select driver' }, ...employeeOptions]}
+                  data={[{ value: '', label: 'Seleccionar conductor' }, ...employeeOptions]}
                   disabled={isDriverRole}
                   error={generateFieldErrors.driverId}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Driver', 'Person responsible for dispatch transport.')}
+                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                   value={driverId}
                   onChange={(value) => {
                     setDriverId(value);
@@ -2337,15 +2337,15 @@ export default function SolicitudesIpadPage() {
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Dispatcher', 'Employee who delivers material from warehouse.')}
+                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                   value={dispatcherId ?? ''}
                   onChange={(event) => setDispatcherId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Select dispatcher' }, ...employeeOptions]}
+                  data={[{ value: '', label: 'Seleccionar despachador' }, ...employeeOptions]}
                   disabled={isDriverRole}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Dispatcher', 'Employee who delivers material from warehouse.')}
+                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                   value={dispatcherId}
                   onChange={(value) => setDispatcherId(value)}
                   data={employeeOptions}
@@ -2381,7 +2381,7 @@ export default function SolicitudesIpadPage() {
           {renderGenerateError()}
           <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
             <Text size="sm">
-              <strong>Summary:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
+              <strong>Resumen:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
               {selectedWorksite
                 ? selectedWorksite.alias
                   ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
@@ -2390,9 +2390,9 @@ export default function SolicitudesIpadPage() {
               · {docDate || '-'} ·{' '}
               {docType === 'REMISSION'
                 ? deliveryMode === 'ON_SITE'
-                  ? `On-site (${selectedDriver?.name ?? '-'})`
-                  : `Warehouse (${selectedDispatcher?.name ?? '-'})`
-                : 'Return'}
+                  ? `En obra (${selectedDriver?.name ?? '-'})`
+                  : `Bodega (${selectedDispatcher?.name ?? '-'})`
+                : 'Devolucion'}
             </Text>
           </Paper>
           <Text c="dimmed">Agregar los equipos y su origen.</Text>
@@ -2401,21 +2401,21 @@ export default function SolicitudesIpadPage() {
             {sourceMode === 'warehouse' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Origin', 'Owner of the inventory to dispatch. This filter does not change the location warehouse.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                   value={sourceOwnerWarehouseId ?? ''}
                   onChange={(event) => setSourceOwnerWarehouseId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Select owner' }, ...ownerWarehouseOptions]}
+                  data={[{ value: '', label: 'Seleccionar dueño' }, ...ownerWarehouseOptions]}
                   w="100%"
                 />
               ) : (
                 <Select
-                  label={helpLabel('Origin', 'Owner of the inventory to dispatch. This filter does not change the location warehouse.')}
+                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                   value={sourceOwnerWarehouseId}
                   onChange={(value) => setSourceOwnerWarehouseId(value)}
                   data={ownerWarehouseOptions}
                   searchable
                   clearable
-                  placeholder="Select owner"
+                  placeholder="Seleccionar dueño"
                   w={320}
                 />
               )
@@ -2432,7 +2432,7 @@ export default function SolicitudesIpadPage() {
               <Group align="flex-end" wrap="wrap">
                 <Autocomplete
                   label="Item/s"
-                  placeholder={loadingPrincipalTags ? 'Loading items...' : 'Select or type the item'}
+                  placeholder={loadingPrincipalTags ? 'Cargando items...' : 'Selecciona o escribe el item'}
                   data={alternateTagCatalog.map((entry) => entry.label)}
                   value={freeTagInput}
                   onChange={(value) => {
@@ -2453,7 +2453,7 @@ export default function SolicitudesIpadPage() {
                 ) : null}
                 {alternateTagMatch?.type !== 'serial' ? (
                   <NumberInput
-                    label="Quantity"
+                    label="Cantidad"
                     min={1}
                     value={freeQtyInput}
                     onChange={(value) => setFreeQtyInput(typeof value === 'number' ? value : '')}
@@ -2477,14 +2477,14 @@ export default function SolicitudesIpadPage() {
           <Title order={4}>Seleccionados</Title>
           {selectedItems.length === 0 ? (
             <Text size="sm" c="dimmed" mt="md">
-              No equipment added
+              No hay equipos agregados
             </Text>
           ) : !isTabletOrMobile ? (
             <Table striped highlightOnHover mt="md">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Desc.</Table.Th>
-                  <Table.Th style={{ width: 120, textAlign: 'center' }}>Quantity</Table.Th>
+                  <Table.Th style={{ width: 120, textAlign: 'center' }}>Cantidad</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -2517,7 +2517,7 @@ export default function SolicitudesIpadPage() {
                         <Select
                           mt="xs"
                           label="Resolver a SKU"
-                          placeholder="Select SKU"
+                          placeholder="Seleccionar SKU"
                           searchable
                           clearable
                           data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
@@ -2552,7 +2552,7 @@ export default function SolicitudesIpadPage() {
                     </div>
                     {item.type === 'bulk' || item.type === 'free' ? (
                       <NumberInput
-                        label="Quantity"
+                        label="Cantidad"
                         min={1}
                         value={item.quantity ?? 1}
                         onChange={(value) =>
@@ -2562,13 +2562,13 @@ export default function SolicitudesIpadPage() {
                         }
                       />
                     ) : (
-                      <Text size="sm">Quantity: 1</Text>
+                      <Text size="sm">Cantidad: 1</Text>
                     )}
                     {renderDamageFields(item, index)}
                     {canResolveInline && item.type === 'free' ? (
                       <Select
                         label="Resolver a SKU"
-                        placeholder="Select SKU"
+                        placeholder="Seleccionar SKU"
                         searchable
                         clearable
                         data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
@@ -2635,7 +2635,7 @@ export default function SolicitudesIpadPage() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Item</Table.Th>
-                <Table.Th style={{ width: 110, textAlign: 'center' }}>Quantity</Table.Th>
+                <Table.Th style={{ width: 110, textAlign: 'center' }}>Cantidad</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -2645,7 +2645,7 @@ export default function SolicitudesIpadPage() {
                     <Text>{item.name}</Text>
                     {docType === 'RETURN' && item.isDamaged ? (
                       <Text size="xs" c="red">
-                        Damaged: {item.damageDescription?.trim() || 'No description'}
+                        Damaged: {item.damageDescription?.trim() || 'Sin descripcion'}
                       </Text>
                     ) : null}
                   </Table.Td>
@@ -2661,7 +2661,7 @@ export default function SolicitudesIpadPage() {
             <Text fw={600}>Signature received by</Text>
             <Group justify="space-between" align="center">
               <Text size="sm" c="dimmed">
-                {receivedSignature ? 'Signature captured' : 'No signature'}
+                {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
               {editingRequestId ? (
                 <Text size="xs" c="dimmed">
@@ -2705,7 +2705,7 @@ export default function SolicitudesIpadPage() {
 
           <Group mt="md">
             <Button type="submit" loading={submitting}>
-              {editingRequestId ? 'Save changes' : 'Send request'}
+              {editingRequestId ? 'Guardar cambios' : 'Enviar solicitud'}
             </Button>
           </Group>
         </Paper>
@@ -2742,7 +2742,7 @@ export default function SolicitudesIpadPage() {
             </Button>
             <Group>
               <Button variant="default" onClick={() => setSignatureModalOpen(false)}>
-                Cancel
+                Cancelar
               </Button>
               <Button
                 onClick={() => {
@@ -2800,7 +2800,7 @@ export default function SolicitudesIpadPage() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Bulk resolves by SKU. Serial resolves by specific equipment (internal #).
+            Masivo resuelve por SKU. Serializado resuelve por equipo especifico (interno #).
           </Text>
           {(resolveDocument?.items ?? [])
             .map((item, index) => ({ item, index }))
@@ -2810,14 +2810,14 @@ export default function SolicitudesIpadPage() {
                 <Stack gap={6}>
                   <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
                   <Text size="xs" c="dimmed">
-                    Quantity: {Number(item.quantity ?? 1) || 1}
+                    Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Warehouse: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
                   <Select
                     label="Equipo"
-                    placeholder="Select SKU"
+                    placeholder="Seleccionar SKU"
                     searchable
                     data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
                     value={resolveSkuByIndex[index] ?? null}
@@ -2860,11 +2860,11 @@ export default function SolicitudesIpadPage() {
                       <Stack gap={6}>
                         <Select
                           label="Equipo serial"
-                          placeholder="Select equipment"
+                          placeholder="Seleccionar equipo"
                           searchable
                           data={serialOptions}
                           value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No equipment for this SKU in that warehouse"
+                          nothingFoundMessage="No hay equipo para este SKU en esa bodega"
                           onChange={(value) =>
                             setResolveAssetByIndex((prev) => ({
                               ...prev,
@@ -2883,7 +2883,7 @@ export default function SolicitudesIpadPage() {
                             variant="light"
                             onClick={() => openCreateSerialForRow(index)}
                           >
-                            Create missing equipment
+                            Crear equipo faltante
                           </Button>
                         ) : null}
                       </Stack>
@@ -2899,7 +2899,7 @@ export default function SolicitudesIpadPage() {
               onClick={closeResolveModal}
               disabled={resolvingApprove}
             >
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={resolveAndApprove} loading={resolvingApprove}>
               Resolver y aprobar
@@ -2911,7 +2911,7 @@ export default function SolicitudesIpadPage() {
       <InventoryItemPickerModal
         opened={itemsModalOpen && !useManualWarehouseCapture}
         onClose={() => setItemsModalOpen(false)}
-        title="Select items"
+        title="Seleccionar items"
         bulkItems={availableBulkItems}
         serialItems={availableSerialItems}
         selectedBulkKeys={selectedBulkKeys}
@@ -2939,7 +2939,7 @@ export default function SolicitudesIpadPage() {
           setCreateSerialYear('');
           setCreateSerialFuel(null);
         }}
-        title="Create missing serial equipment"
+        title="Crear equipo serializado faltante"
         centered
       >
         <Stack gap="sm">
@@ -3001,10 +3001,10 @@ export default function SolicitudesIpadPage() {
                 setCreateSerialFuel(null);
               }}
             >
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
-              Create and use
+              Crear y usar
             </Button>
           </Group>
         </Stack>

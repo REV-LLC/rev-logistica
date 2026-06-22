@@ -123,7 +123,7 @@ export default function ObraDetailPage() {
   }, [worksiteId]);
 
   const pageTitle = useMemo(() => {
-    if (!worksite) return 'Worksite';
+    if (!worksite) return 'Obra';
     return `${worksite.customer.name} / ${worksite.worksite.name}`;
   }, [worksite]);
 
@@ -136,7 +136,7 @@ export default function ObraDetailPage() {
 
     bulkItems.forEach((item) => {
       const ownerId = item.ownerWarehouseId ?? 'unknown';
-      const ownerName = item.ownerWarehouseName ?? 'No owner';
+      const ownerName = item.ownerWarehouseName ?? 'Sin dueño';
       const current = ownerEntries.get(ownerId) ?? { id: ownerId, name: ownerName, bulk: 0, serial: 0 };
       current.bulk += item.quantity;
       ownerEntries.set(ownerId, current);
@@ -144,7 +144,7 @@ export default function ObraDetailPage() {
 
     serialItems.forEach((item) => {
       const ownerId = item.ownerWarehouseId ?? 'unknown';
-      const ownerName = item.ownerWarehouseName ?? 'No owner';
+      const ownerName = item.ownerWarehouseName ?? 'Sin dueño';
       const current = ownerEntries.get(ownerId) ?? { id: ownerId, name: ownerName, bulk: 0, serial: 0 };
       current.serial += item.quantity;
       ownerEntries.set(ownerId, current);
@@ -186,14 +186,14 @@ export default function ObraDetailPage() {
 
           <PageHeaderCard
             title={pageTitle}
-            description="On-site inventory, owner responsibility, and recent traceability for the operational front."
+            description="Inventario en obra, responsabilidad por dueño y trazabilidad reciente del frente operativo."
             icon={<IconBuildingEstate size={20} />}
             iconColor="blue"
             accentColor="rgba(59,130,246,0.12)"
             aside={
               worksite ? (
                 <Badge color={worksite.active ? 'green' : 'gray'} variant="light" size="lg">
-                  {worksite.active ? 'Active worksite' : 'Inactive worksite'}
+                  {worksite.active ? 'Obra activa' : 'Obra inactiva'}
                 </Badge>
               ) : null
             }
@@ -202,7 +202,7 @@ export default function ObraDetailPage() {
               <Group gap="sm">
                 <Loader size="sm" />
                 <Text size="sm" c="dimmed">
-                  Loading worksite details...
+                  Cargando detalle de obra...
                 </Text>
               </Group>
             ) : null}
@@ -218,23 +218,23 @@ export default function ObraDetailPage() {
                     icon={<IconRoute2 size={20} />}
                   />
                   <StatCard
-                    label="Unique equipment"
+                    label="Equipos unicos"
                     value={String(worksiteMetrics.serialAssets)}
                     hint={`${worksiteMetrics.serialUnits} equipos serializados visibles`}
                     color="teal"
                     icon={<IconTruck size={20} />}
                   />
                   <StatCard
-                    label="Owners present"
+                    label="Dueños presentes"
                     value={String(worksiteMetrics.owners.length)}
-                    hint="Owner companies represented on site"
+                    hint="Empresas dueñas representadas en obra"
                     color="grape"
                     icon={<IconBuildingEstate size={20} />}
                   />
                   <StatCard
-                    label="Recent movements"
+                    label="Movimientos recientes"
                     value={String(worksiteMetrics.recentMoves)}
-                    hint="Latest records loaded into the ledger"
+                    hint="Ultimos registros cargados en el ledger"
                     color="orange"
                     icon={<IconArrowRight size={20} />}
                   />
@@ -243,13 +243,13 @@ export default function ObraDetailPage() {
                 <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} spacing="md">
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Customer
+                      Cliente
                     </Text>
                     <Text fw={700} mt={6}>
                       {worksite.customer.name}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Commercial relationship for the worksite
+                      Relacion comercial de la obra
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
@@ -257,26 +257,26 @@ export default function ObraDetailPage() {
                       Alias operativo
                     </Text>
                     <Text fw={700} mt={6}>
-                      {worksite.alias ?? 'No alias'}
+                      {worksite.alias ?? 'Sin alias'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Short name used in operations
+                      Nombre corto usado en operacion
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Address
+                      Direccion
                     </Text>
                     <Text fw={700} mt={6}>
-                      {worksite.worksite.address ?? 'No registered address'}
+                      {worksite.worksite.address ?? 'Sin direccion registrada'}
                     </Text>
                     <Text size="sm" c="dimmed" mt={4}>
-                      Base location for the front
+                      Ubicacion base del frente
                     </Text>
                   </Paper>
                   <Paper withBorder radius="lg" p="md">
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      Quick actions
+                      Acciones rapidas
                     </Text>
                     <Stack gap={6} mt={6}>
                       <Button
@@ -287,7 +287,7 @@ export default function ObraDetailPage() {
                         justify="space-between"
                         rightSection={<IconArrowRight size={14} />}
                       >
-                        Go to requests
+                        Ir a solicitudes
                       </Button>
                       {worksite.worksite.address ? (
                         <Button
@@ -323,7 +323,7 @@ export default function ObraDetailPage() {
                 <div>
                   <Text fw={700}>Inventario en obra</Text>
                   <Text size="sm" c="dimmed">
-                    Equipment and materials currently associated with this front. Owner colors are preserved in each group.
+                    Equipos y materiales asociados actualmente a este frente. Los colores por dueño se conservan en cada grupo.
                   </Text>
                 </div>
                 <InventoryDisplay
@@ -341,9 +341,9 @@ export default function ObraDetailPage() {
             <Stack gap="md">
               <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                 <div>
-                  <Text fw={700}>Recent movements</Text>
+                  <Text fw={700}>Movimientos recientes</Text>
                   <Text size="sm" c="dimmed">
-                    Latest ledger records related to this worksite.
+                    Ultimos registros del ledger relacionados con esta obra.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
@@ -354,9 +354,9 @@ export default function ObraDetailPage() {
                 <LedgerTable items={ledgerItems} />
               ) : (
                 <Paper radius="lg" p="xl" bg="gray.0">
-                  <Text fw={700}>No recent movements for this worksite.</Text>
+                  <Text fw={700}>No hay movimientos recientes para esta obra.</Text>
                   <Text size="sm" c="dimmed" mt={6}>
-                    When equipment and materials move in or out, traceability will appear here.
+                    Cuando entren o salgan equipos y materiales, la trazabilidad aparecera aqui.
                   </Text>
                 </Paper>
               )}

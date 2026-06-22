@@ -205,7 +205,7 @@ export default function RemisionDevolucionPage() {
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
-        if (!sourceOwnerWarehouseId) throw new Error('Select the owner warehouse to filter items.');
+        if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/warehouse/${sourceOwnerWarehouseId}`,
           { method: 'GET' }
@@ -217,7 +217,7 @@ export default function RemisionDevolucionPage() {
           data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
       } else if (sourceMode === 'on-site') {
-        if (!sourceWorksiteId) throw new Error('Select a source worksite');
+        if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/on-site/${sourceWorksiteId}`,
           { method: 'GET' }
@@ -320,7 +320,7 @@ export default function RemisionDevolucionPage() {
         throw new Error('Complete the required fields.');
       }
       if (!selectedItems.length) {
-        throw new Error('Select at least one item.');
+        throw new Error('Selecciona al menos un item.');
       }
       if (
         selectedItems.some(
@@ -330,13 +330,13 @@ export default function RemisionDevolucionPage() {
         throw new Error('Some items have negative inventory alerts. Adjust stock before creating the document.');
       }
       if (!customerWorksiteId) {
-        throw new Error('Select the worksite.');
+        throw new Error('Selecciona la obra.');
       }
       if (docType === 'RETURN' && !warehouseId) {
-        throw new Error('Select the warehouse for the return.');
+        throw new Error('Selecciona la bodega para la devolucion.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !warehouseId) {
-        throw new Error('Select the dispatch warehouse.');
+        throw new Error('Selecciona la bodega de despacho.');
       }
 
       const documentPayload = {
@@ -346,12 +346,12 @@ export default function RemisionDevolucionPage() {
         warehouseId: warehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         notes: [
-          `Document date: ${docDate}`,
-          docType === 'RETURN' && cutOffDate ? `Cutoff date: ${cutOffDate}` : null,
+          `Fecha documento: ${docDate}`,
+          docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehicle: ${vehicleId}` : null,
-          deliveryMode === 'ON_SITE' && driverId ? `Driver: ${driverId}` : null,
-          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Dispatcher: ${dispatcherId}` : null
+          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
+          deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
+          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
         ].filter(Boolean).join(' | ')
       } as const;
 
@@ -445,8 +445,8 @@ export default function RemisionDevolucionPage() {
     <main>
       <Container size="lg" py="xl">
         <Paper shadow="sm" p="xl" radius="md" withBorder>
-          <Title order={2}>Dispatch / Return</Title>
-          <Text c="dimmed">Enter the real document data.</Text>
+          <Title order={2}>Despacho / Devolucion</Title>
+          <Text c="dimmed">Ingresa los datos reales del documento.</Text>
 
           <Radio.Group
             mt="md"
@@ -455,14 +455,14 @@ export default function RemisionDevolucionPage() {
             label="Tipo"
           >
             <Group mt="xs">
-              <Radio value="REMISSION" label="Dispatch" />
-              <Radio value="RETURN" label="Return" />
+              <Radio value="REMISSION" label="Despacho" />
+              <Radio value="RETURN" label="Devolucion" />
             </Group>
           </Radio.Group>
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
             <TextInput
-              label={helpLabel('Consecutive', 'Internal document number. The RM or DV prefix is added automatically when saving.', true)}
+              label={helpLabel('Consecutivo', 'Numero interno del documento. El prefijo RM o DV se agrega automaticamente al guardar.', true)}
               withAsterisk={false}
               value={consecutive}
               onChange={(event) => setConsecutive(event.target.value)}
@@ -482,10 +482,10 @@ export default function RemisionDevolucionPage() {
               searchable
               clearable
               required
-              placeholder="Select customer"
+              placeholder="Seleccionar cliente"
             />
             <TextInput
-              label={helpLabel('Date', 'Dispatch or return document date.', true)}
+              label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
               withAsterisk={false}
               type="date"
               value={docDate}
@@ -494,7 +494,7 @@ export default function RemisionDevolucionPage() {
             />
             {docType === 'RETURN' && (
               <TextInput
-                label="Cutoff date (optional)"
+                label="Fecha de corte (opcional)"
                 type="date"
                 value={cutOffDate}
                 onChange={(event) => setCutOffDate(event.target.value)}
@@ -520,10 +520,10 @@ export default function RemisionDevolucionPage() {
             <WarehouseSelect
               value={warehouseId}
               onChange={setWarehouseId}
-              label={helpLabel('Location warehouse', 'Physical warehouse where inventory is dispatched or received.')}
+              label={helpLabel('Bodega de ubicacion', 'Bodega fisica donde se despacha o recibe inventario.')}
             />
             <Select
-              label={helpLabel('Worksite', 'Destination worksite for the movement.')}
+              label={helpLabel('Obra', 'Obra destino del movimiento.')}
               value={customerWorksiteId}
               onChange={(value) => setCustomerWorksiteId(value ?? '')}
               data={worksites.map((item) => ({
@@ -534,12 +534,12 @@ export default function RemisionDevolucionPage() {
               }))}
               searchable
               clearable
-              placeholder={customerId ? 'Select worksite' : 'Select customer first'}
+              placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
               disabled={!customerId || worksitesLoading}
             />
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label={helpLabel('Vehicle', 'Vehicle transporting the on-site dispatch.')}
+                label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
                 value={vehicleId}
                 onChange={(value) => setVehicleId(value)}
                 data={vehicles.map((v) => ({
@@ -552,7 +552,7 @@ export default function RemisionDevolucionPage() {
             )}
             {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
               <Select
-                label={helpLabel('Driver', 'Person responsible for dispatch transport.')}
+                label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
                 value={driverId}
                 onChange={(value) => setDriverId(value)}
                 data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
@@ -562,7 +562,7 @@ export default function RemisionDevolucionPage() {
             )}
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               <Select
-                label={helpLabel('Dispatcher', 'Employee who delivers material from warehouse.')}
+                label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
                 value={dispatcherId}
                 onChange={(value) => setDispatcherId(value)}
                 data={employees.map((e) => ({ value: e.id, label: getEmployeeFullName(e) }))}
@@ -580,19 +580,19 @@ export default function RemisionDevolucionPage() {
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
               <Select
-                label={helpLabel('Owner', 'Owner of the inventory to dispatch. This filter does not change the location warehouse.')}
+                label={helpLabel('Owner', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                 value={sourceOwnerWarehouseId}
                 onChange={(value) => setSourceOwnerWarehouseId(value)}
                 data={ownerWarehouseOptions}
                 searchable
                 clearable
-                placeholder="Select owner"
+                placeholder="Seleccionar dueño"
                 w={320}
               />
             )}
             {sourceMode === 'on-site' && (
               <Select
-                label={helpLabel('Source worksite', 'Worksite from which items will be returned to warehouse.')}
+                label={helpLabel('Obra origen', 'Obra desde la cual se devolveran items a bodega.')}
                 value={sourceWorksiteId}
                 onChange={(value) => setSourceWorksiteId(value)}
                 data={worksites.map((item) => ({
@@ -603,18 +603,18 @@ export default function RemisionDevolucionPage() {
                 }))}
                 searchable
                 clearable
-                placeholder={customerId ? 'Select worksite' : 'Select customer first'}
+                placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
                 disabled={!customerId || worksitesLoading}
               />
             )}
             <Button onClick={loadInventory} loading={loadingInventory}>
-              Load items
+              Cargar items
             </Button>
           </Group>
 
           <Divider my="md" />
           <Text size="sm" c="dimmed">
-            Load inventory and select it from the modal.
+            Carga inventario y seleccionalo desde el modal.
           </Text>
           <Divider my="md" />
 
@@ -624,7 +624,7 @@ export default function RemisionDevolucionPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Item</Table.Th>
-                  <Table.Th>Quantity</Table.Th>
+                  <Table.Th>Cantidad</Table.Th>
                   <Table.Th></Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -683,7 +683,7 @@ export default function RemisionDevolucionPage() {
                     </div>
                     {item.type === 'bulk' ? (
                       <NumberInput
-                        label="Quantity"
+                        label="Cantidad"
                         min={0}
                         value={item.quantity ?? 1}
                         onChange={(value) =>
@@ -693,7 +693,7 @@ export default function RemisionDevolucionPage() {
                         }
                       />
                     ) : (
-                      <Text size="sm">Quantity: 1</Text>
+                      <Text size="sm">Cantidad: 1</Text>
                     )}
                     <Button variant="light" color="red" onClick={() => removeSelected(index)}>
                       Quitar
@@ -717,7 +717,7 @@ export default function RemisionDevolucionPage() {
 
           <Group mt="md">
             <Button onClick={handleSubmit} loading={submitting}>
-              Save and execute
+              Guardar y ejecutar
             </Button>
           </Group>
         </Paper>
@@ -726,7 +726,7 @@ export default function RemisionDevolucionPage() {
       <InventoryItemPickerModal
         opened={itemsModalOpen}
         onClose={() => setItemsModalOpen(false)}
-        title="Select items"
+        title="Seleccionar items"
         bulkItems={bulkItems}
         serialItems={serialItems}
         selectedBulkKeys={selectedBulkKeys}

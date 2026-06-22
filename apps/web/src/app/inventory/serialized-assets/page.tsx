@@ -542,7 +542,7 @@ export default function CreateSerializedAssetPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error creating equipment');
+        setError('Error creando equipo');
       }
     } finally {
       setSaving(false);
@@ -553,8 +553,8 @@ export default function CreateSerializedAssetPage() {
     <Container size="lg" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Register unique asset"
-          description="Create the equipment template and register the physical unit with its initial location."
+          title="Registrar equipo unico"
+          description="Crea la plantilla del equipo y registra la unidad fisica con su ubicacion inicial."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -581,8 +581,8 @@ export default function CreateSerializedAssetPage() {
                   style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
                 />
                 <Stack gap={2}>
-                  <Text fw={700} size="sm">Quantity items</Text>
-                  <Text size="xs" c="dimmed">Scaffold, formwork, and bulk stock</Text>
+                  <Text fw={700} size="sm">Items por cantidad</Text>
+                  <Text size="xs" c="dimmed">Andamio, formaleta y stock masivo</Text>
                 </Stack>
               </Group>
             </Paper>
@@ -607,8 +607,8 @@ export default function CreateSerializedAssetPage() {
                   style={{ width: 72, height: 58, borderRadius: 8, objectFit: 'cover' }}
                 />
                 <Stack gap={2}>
-                  <Text fw={700} size="sm">Unique equipment</Text>
-                  <Text size="xs" c="dimmed">Skid steers and serialized assets</Text>
+                  <Text fw={700} size="sm">Equipos unicos</Text>
+                  <Text size="xs" c="dimmed">Minicargadores y activos serializados</Text>
                 </Stack>
               </Group>
             </Paper>
@@ -617,13 +617,13 @@ export default function CreateSerializedAssetPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete registration" role="alert">
+          <Alert color="red" variant="light" title="No se pudo completar el registro" role="alert">
             {error}
           </Alert>
         ) : null}
 
         {success ? (
-          <Alert color="green" variant="light" title="Equipment registered" role="status" aria-live="polite">
+          <Alert color="green" variant="light" title="Equipo registrado" role="status" aria-live="polite">
             {success}
           </Alert>
         ) : null}
@@ -640,14 +640,14 @@ export default function CreateSerializedAssetPage() {
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start" className="mobile-stack">
                     <div>
-                      <Text fw={700}>1. Warehouse</Text>
+                      <Text fw={700}>1. Bodega</Text>
                       <Text size="sm" c="dimmed">
-                        Select where the equipment will be initially located.
+                        Selecciona donde quedara ubicado inicialmente el equipo.
                       </Text>
                     </div>
                     {warehouseLocked ? (
                       <Badge color="green" variant="light">
-                        Confirmed
+                        Confirmada
                       </Badge>
                     ) : null}
                   </Group>
@@ -655,7 +655,7 @@ export default function CreateSerializedAssetPage() {
                   <Group grow className="mobile-stack">
                     <Select
                       ref={ownerWarehouseRef}
-                      label="Owner warehouse"
+                      label="Bodega dueña"
                       name="ownerWarehouseId"
                       data={warehouseOptions}
                       value={ownerWarehouseId}
@@ -665,7 +665,7 @@ export default function CreateSerializedAssetPage() {
                     />
                     <Select
                       ref={warehouseCurrentRef}
-                      label="Current location"
+                      label="Ubicacion actual"
                       name="warehouseCurrentId"
                       data={warehouseOptions}
                       value={warehouseCurrentId}
@@ -678,11 +678,11 @@ export default function CreateSerializedAssetPage() {
                   <Group justify="flex-end" className="mobile-actions">
                     {warehouseLocked ? (
                       <Button type="button" variant="default" onClick={unlockWarehouseSelection}>
-                        Change warehouse
+                        Cambiar bodega
                       </Button>
                     ) : (
                       <Button type="button" onClick={confirmWarehouseSelection}>
-                        Next
+                        Siguiente
                       </Button>
                     )}
                   </Group>
@@ -698,15 +698,15 @@ export default function CreateSerializedAssetPage() {
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start" className="mobile-stack">
                     <div>
-                      <Text fw={700}>2. Family</Text>
+                      <Text fw={700}>2. Familia</Text>
                       <Text size="sm" c="dimmed">
-                        Choose a catalog line or create a new one.
+                        Elige una linea del catalogo o crea una nueva.
                       </Text>
                     </div>
                     <Group gap="xs">
                       {familyLocked ? (
                         <Badge color="green" variant="light">
-                          Confirmed
+                          Confirmada
                         </Badge>
                       ) : null}
                       <Button
@@ -721,8 +721,8 @@ export default function CreateSerializedAssetPage() {
                         }
                       >
                         {familyMode === 'existing'
-                          ? 'Create family'
-                          : 'Use existing family'}
+                          ? 'Crear familia'
+                          : 'Usar familia existente'}
                       </Button>
                     </Group>
                   </Group>
@@ -730,48 +730,48 @@ export default function CreateSerializedAssetPage() {
                   {!warehouseLocked ? (
                     <Paper radius="md" p="sm" bg="gray.0">
                       <Text size="sm" c="dimmed">
-                        Confirm the warehouse first.
+                        Confirma primero la bodega.
                       </Text>
                     </Paper>
                   ) : familyMode === 'existing' ? (
                     <Select
                       ref={familySelectRef}
-                      label="Family"
+                      label="Familia"
                       name="familyId"
                       data={familyOptions}
                       value={familyId}
                       onChange={(value) => setFamilyId(value)}
                       placeholder={
-                        loading ? 'Loading...' : 'Select family'
+                        loading ? 'Cargando...' : 'Seleccionar familia'
                       }
                       searchable
-                      nothingFoundMessage="No results"
+                      nothingFoundMessage="Sin resultados"
                       disabled={loading || familyLocked}
                     />
                   ) : (
                     <Group grow className="mobile-stack">
                       <TextInput
                         ref={familyNameRef}
-                        label="Family name"
+                        label="Nombre de familia"
                         name="familyName"
                         autoComplete="off"
                         value={familyName}
                         onChange={(event) =>
                           setFamilyName(event.currentTarget.value)
                         }
-                        placeholder="Example: Loaders"
+                        placeholder="Ejemplo: Minicargadores"
                         disabled={familyLocked}
                         required
                       />
                       <TextInput
-                        label="Internal code"
+                        label="Codigo interno"
                         name="familyCode"
                         autoComplete="off"
                         value={familyCode}
                         onChange={(event) =>
                           setFamilyCode(event.currentTarget.value)
                         }
-                        placeholder="Example: LDR"
+                        placeholder="Ejemplo: MCG"
                         disabled={familyLocked}
                       />
                     </Group>
@@ -779,7 +779,7 @@ export default function CreateSerializedAssetPage() {
 
                   <Group gap="xs">
                     <Badge color={familyMode === 'existing' ? 'blue' : 'violet'} variant="light">
-                      {familyMode === 'existing' ? 'Existing family' : 'New family'}
+                      {familyMode === 'existing' ? 'Familia existente' : 'Familia nueva'}
                     </Badge>
                     {(selectedFamily || familyName.trim()) ? (
                       <Badge color="teal" variant="light">
@@ -792,11 +792,11 @@ export default function CreateSerializedAssetPage() {
                     <Group justify="flex-end" className="mobile-actions">
                       {familyLocked ? (
                         <Button type="button" variant="default" onClick={unlockFamilySelection}>
-                          Change family
+                          Cambiar familia
                         </Button>
                       ) : (
                         <Button type="button" onClick={confirmFamilySelection}>
-                          Confirm family
+                          Confirmar familia
                         </Button>
                       )}
                     </Group>
@@ -814,14 +814,14 @@ export default function CreateSerializedAssetPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>3. Template</Text>
+                    <Text fw={700}>3. Plantilla</Text>
                     <Text size="sm" c="dimmed">
-                      Reuse a reference or define brand, model, and base data.
+                      Reutiliza una referencia o define marca, modelo y datos base.
                     </Text>
                   </div>
 
                   <Select
-                    label="Search template"
+                    label="Buscar plantilla"
                     name="skuSuggestionId"
                     data={skuOptions}
                     value={skuSuggestionId}
@@ -871,35 +871,35 @@ export default function CreateSerializedAssetPage() {
                     }}
                     placeholder={
                       loadingSkus
-                        ? 'Loading...'
-                        : 'Select a similar template'
+                        ? 'Cargando...'
+                        : 'Seleccionar una plantilla similar'
                     }
                     searchable
                     clearable
-                    nothingFoundMessage="No results"
+                    nothingFoundMessage="Sin resultados"
                     disabled={familyMode === 'new' || loadingSkus || !familyId}
                   />
 
                   <TextInput
                     ref={skuNameRef}
-                    label="Reference"
+                    label="Referencia"
                     name="skuName"
                     autoComplete="off"
                     value={skuName}
                     onChange={(event) => setSkuName(event.currentTarget.value)}
-                    placeholder="Example: Skid steer S650"
+                    placeholder="Ejemplo: Minicargador S650"
                   />
 
                   <Group grow className="mobile-stack">
                     <TextInput
-                      label="Brand"
+                      label="Marca"
                       name="skuBrand"
                       autoComplete="off"
                       value={skuBrand}
                       onChange={(event) => setSkuBrand(event.currentTarget.value)}
                     />
                     <TextInput
-                      label="Model"
+                      label="Modelo"
                       name="skuModel"
                       autoComplete="off"
                       value={skuModel}
@@ -909,7 +909,7 @@ export default function CreateSerializedAssetPage() {
 
                   <Group grow className="mobile-stack">
                     <NumberInput
-                      label="Year"
+                      label="Año"
                       name="skuYear"
                       autoComplete="off"
                       value={skuYear}
@@ -920,7 +920,7 @@ export default function CreateSerializedAssetPage() {
                       max={2100}
                     />
                     <Select
-                      label="Fuel"
+                      label="Combustible"
                       name="skuFuel"
                       data={FUEL_OPTIONS}
                       value={skuFuel}
@@ -931,17 +931,17 @@ export default function CreateSerializedAssetPage() {
 
                   <Group grow className="mobile-stack">
                     <Select
-                      label="Unit of measure"
+                      label="Unidad de medida"
                       name="skuUnit"
                       data={unitOptions}
                       value={skuUnit}
                       onChange={(value) => setSkuUnit(value ?? '')}
                       searchable
-                      nothingFoundMessage="No units"
+                      nothingFoundMessage="No hay unidades"
                       required
                     />
                     <NumberInput
-                      label="Unit weight"
+                      label="Peso unitario"
                       name="skuUnitWeight"
                       autoComplete="off"
                       value={skuUnitWeight}
@@ -963,15 +963,15 @@ export default function CreateSerializedAssetPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>4. Commercial data</Text>
+                    <Text fw={700}>4. Datos comerciales</Text>
                     <Text size="sm" c="dimmed">
-                      Price, subrental, and billing rule.
+                      Precio, subalquiler y regla de cobro.
                     </Text>
                   </div>
 
                   <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
                     <NumberInput
-                      label="Price"
+                      label="Precio"
                       name="skuPrice"
                       autoComplete="off"
                       value={skuPrice}
@@ -984,7 +984,7 @@ export default function CreateSerializedAssetPage() {
                       thousandSeparator=","
                     />
                     <NumberInput
-                      label="Subrental price"
+                      label="Precio sub alquiler"
                       name="skuSubrentalPrice"
                       autoComplete="off"
                       value={skuSubrentalPrice}
@@ -997,7 +997,7 @@ export default function CreateSerializedAssetPage() {
                       thousandSeparator=","
                     />
                     <Select
-                      label="Billing type"
+                      label="Tipo de cobro"
                       name="skuChargeType"
                       data={CHARGE_TYPE_OPTIONS}
                       value={skuChargeType}
@@ -1008,7 +1008,7 @@ export default function CreateSerializedAssetPage() {
                     {skuChargeType === 'HOUR' ? (
                       <NumberInput
                         ref={skuMinimumChargeHoursRef}
-                        label="Minimum charge"
+                        label="Cobro minimo"
                         name="skuMinimumChargeHours"
                         autoComplete="off"
                         value={skuMinimumChargeHours}
@@ -1019,7 +1019,7 @@ export default function CreateSerializedAssetPage() {
                         }
                         min={0.5}
                         step={0.5}
-                        suffix=" hours"
+                        suffix=" horas"
                       />
                     ) : null}
                   </SimpleGrid>
@@ -1034,15 +1034,15 @@ export default function CreateSerializedAssetPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>5. Asset</Text>
+                    <Text fw={700}>5. Activo</Text>
                     <Text size="sm" c="dimmed">
-                      The physical unit that will remain traceable.
+                      La unidad fisica que quedara trazable.
                     </Text>
                   </div>
 
                   <TextInput
                     ref={serialOrEngineRef}
-                    label="Serial or engine"
+                    label="Serial o motor"
                     name="serialOrEngine"
                     autoComplete="off"
                     value={serialOrEngine}
@@ -1053,7 +1053,7 @@ export default function CreateSerializedAssetPage() {
                     required
                   />
                   <TextInput
-                    label="Image (internal ID, optional)"
+                    label="Imagen (ID interno, opcional)"
                     name="imageFileObjectId"
                     autoComplete="off"
                     value={imageFileObjectId}
@@ -1064,7 +1064,7 @@ export default function CreateSerializedAssetPage() {
                   {isAlternateOwnerWarehouse ? (
                     <NumberInput
                       ref={manualInternalNumberRef}
-                      label="Internal number (alternate warehouse)"
+                      label="Numero interno (bodega alterna)"
                       name="manualInternalNumber"
                       autoComplete="off"
                       value={manualInternalNumber}
@@ -1078,7 +1078,7 @@ export default function CreateSerializedAssetPage() {
                     />
                   ) : null}
                   <Switch
-                    label="Active"
+                    label="Activo"
                     name="active"
                     checked={active}
                     onChange={(event) => setActive(event.currentTarget.checked)}
@@ -1094,54 +1094,54 @@ export default function CreateSerializedAssetPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>6. Review</Text>
+                    <Text fw={700}>6. Revision</Text>
                     <Text size="sm" c="dimmed">
-                      Confirm the template, asset, and location.
+                      Confirma la plantilla, el activo y la ubicacion.
                     </Text>
                   </div>
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <Paper radius="md" p="sm" bg="gray.0">
                       <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                        Family and reference
+                        Familia y referencia
                       </Text>
                       <Text size="sm" mt={8}>
-                        {(selectedFamily?.name ?? familyName.trim()) || 'No category'}
+                        {(selectedFamily?.name ?? familyName.trim()) || 'Sin categoria'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        {skuName.trim() || 'No reference'}
+                        {skuName.trim() || 'Sin referencia'}
                       </Text>
                     </Paper>
                     <Paper radius="md" p="sm" bg="gray.0">
                       <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                        Serial and location
+                        Serial y ubicacion
                       </Text>
                       <Text size="sm" mt={8}>
-                        {serialOrEngine.trim() || 'No serial'}
+                        {serialOrEngine.trim() || 'Sin serial'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Owner: {selectedOwnerWarehouse?.name ?? '-'}
+                        Dueño: {selectedOwnerWarehouse?.name ?? '-'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Location: {selectedCurrentWarehouse?.name ?? '-'}
+                        Ubicacion: {selectedCurrentWarehouse?.name ?? '-'}
                       </Text>
                     </Paper>
                   </SimpleGrid>
                   <Group gap="xs">
                     <Badge color={active ? 'green' : 'gray'} variant="light">
-                      {active ? 'Active' : 'Inactive'}
+                      {active ? 'Activo' : 'Inactivo'}
                     </Badge>
                     {skuChargeType === 'HOUR' ? (
                       <Badge color="orange" variant="light">
-                        Hourly billing
+                        Cobro por hora
                       </Badge>
                     ) : (
                       <Badge color="blue" variant="light">
-                        Daily billing
+                        Cobro diario
                       </Badge>
                     )}
                     {isAlternateOwnerWarehouse ? (
                       <Badge color="grape" variant="light">
-                        Alternate warehouse
+                        Bodega alterna
                       </Badge>
                     ) : null}
                   </Group>
@@ -1156,10 +1156,10 @@ export default function CreateSerializedAssetPage() {
                   variant="default"
                   onClick={() => router.back()}
                 >
-                  Cancel
+                  Cancelar
                 </Button>
                 <Button type="submit" loading={saving}>
-                  Save asset
+                  Guardar activo
                 </Button>
               </Group>
             </Stack>

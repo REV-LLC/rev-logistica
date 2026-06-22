@@ -35,24 +35,24 @@ type NavSection = {
 
 const sections: NavSection[] = [
   {
-    title: 'Operations',
+    title: 'Operacion',
     links: [
-      { href: '/transport/requests', label: 'Requests', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+      { href: '/transport/requests', label: 'Solicitudes', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
       { href: '/transport/cost', label: 'Transport', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/transport/vehicles', label: 'Vehicles', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/transport/worksites', label: 'Worksites', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/tasks', label: 'Tasks', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/vehicles', label: 'Vehiculos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
     ],
   },
   {
-    title: 'Inventory',
+    title: 'Inventario',
     links: [
-      { href: '/inventory/warehouse', label: 'Warehouses', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/inventory/ledger', label: 'Movements', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/inventory/scaffold-modulations', label: 'Modulations', icon: IconRulerMeasure, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/inventory/scaffold-modulations', label: 'Modulaciones', icon: IconRulerMeasure, roles: ['ADMIN', 'OFFICE'] },
       {
         href: '/inventory/bulk-adjustments',
-        label: 'Add inventory',
+        label: 'Agregar inventario',
         icon: IconBox,
         roles: ['ADMIN', 'OFFICE'],
         activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
@@ -60,12 +60,12 @@ const sections: NavSection[] = [
     ],
   },
   {
-    title: 'Administration',
+    title: 'Administracion',
     links: [
-      { href: '/billing/pre-invoice', label: 'Pre-invoice', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/customers', label: 'Customers', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/employees', label: 'Employees', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/data', label: 'Data', icon: IconDatabaseExport, roles: ['ADMIN'] },
+      { href: '/billing/pre-invoice', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },
     ],
   },
 ];
@@ -202,7 +202,7 @@ export default function Nav({ onNavigate }: NavProps) {
         <Divider mb="md" />
         <Stack gap="xs">
           <Button variant="subtle" color="red" onClick={handleLogout} size="sm">
-            Logout
+            Cerrar sesion
           </Button>
         </Stack>
       </Box>

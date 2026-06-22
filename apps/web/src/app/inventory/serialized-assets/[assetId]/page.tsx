@@ -193,7 +193,7 @@ export default function EditSerializedAssetPage() {
     const currentName =
       warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name ??
       asset.warehouseCurrent?.name ??
-      'Warehouse';
+      'Bodega';
     if (warehouseCurrentId === asset.warehouseOwnerId) {
       return { color: 'blue' as const, label: currentName };
     }
@@ -238,7 +238,7 @@ export default function EditSerializedAssetPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error updating equipment');
+        setError('Error actualizando equipo');
       }
     } finally {
       setSaving(false);
@@ -247,16 +247,16 @@ export default function EditSerializedAssetPage() {
 
   return (
     <Container size="md" py="xl">
-      <ActionIcon variant="light" size="lg" mb="sm" aria-label="Back" onClick={() => router.back()}>
+      <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
         <IconArrowLeft size={18} />
       </ActionIcon>
       <Paper withBorder shadow="sm" p="xl" radius="md">
         <Group justify="space-between" align="flex-start" mb="md" className="mobile-stack">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flex: 1 }}>
             <div>
-              <Title order={2}>Equipment record</Title>
+              <Title order={2}>Ficha del equipo</Title>
               <Text c="dimmed" size="sm">
-                Serial equipment information and status.
+                Informacion y estado del equipo serializado.
               </Text>
             </div>
 
@@ -266,14 +266,14 @@ export default function EditSerializedAssetPage() {
               radius="xl"
               leftSection={<IconMapPin size={14} />}
             >
-              Location: {locationBadge.label}
+              Ubicacion: {locationBadge.label}
             </Badge>
           </div>
           {asset ? (
             <ActionIcon
               variant={editing ? 'filled' : 'light'}
               color={editing ? 'blue' : 'gray'}
-              aria-label={editing ? 'Close editing' : 'Edit equipment'}
+              aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
               onClick={() => setEditing((prev) => !prev)}
             >
               <IconPencil size={16} />
@@ -282,7 +282,7 @@ export default function EditSerializedAssetPage() {
         </Group>
 
         {loading ? (
-          <Text c="dimmed">Loading...</Text>
+          <Text c="dimmed">Cargando...</Text>
         ) : null}
 
         {error ? (
@@ -318,24 +318,24 @@ export default function EditSerializedAssetPage() {
                     style={{ width: '30%', height: '100%', objectFit: 'contain', background: '#fff' }}
                   />
                 ) : (
-                  <Text c="dimmed">No image</Text>
+                  <Text c="dimmed">Sin imagen</Text>
                 )}
 
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                <Text size="sm"><strong>Description:</strong> {autoDescription}</Text>
+                <Text size="sm"><strong>Descripcion:</strong> {autoDescription}</Text>
                 <Text size="sm"><strong>Serial/Motor:</strong> {asset.serialOrEngine || '-'}</Text>
-                <Text size="sm"><strong>Owner:</strong> {asset.warehouseOwner?.name ?? '-'}</Text>
-                <Text size="sm"><strong>Public code:</strong> {asset.publicCode ?? '-'}</Text>
-                <Text size="sm"><strong>Model:</strong> {model || '-'}</Text>
-                <Text size="sm"><strong>Year:</strong> {year === '' ? '-' : String(year)}</Text>
-                <Text size="sm"><strong>Fuel:</strong> {fuelLabel}</Text>
+                <Text size="sm"><strong>Dueño:</strong> {asset.warehouseOwner?.name ?? '-'}</Text>
+                <Text size="sm"><strong>Codigo publico:</strong> {asset.publicCode ?? '-'}</Text>
+                <Text size="sm"><strong>Modelo:</strong> {model || '-'}</Text>
+                <Text size="sm"><strong>Año:</strong> {year === '' ? '-' : String(year)}</Text>
+                <Text size="sm"><strong>Combustible:</strong> {fuelLabel}</Text>
               </SimpleGrid>
               
               </div>
               <Group justify="space-between" px="md" py="sm">
                 <Text fw={700}>{autoDescription}</Text>
                 <Badge color={active ? 'green' : 'gray'} variant="light">
-                  {active ? 'Active' : 'Inactive'}
+                  {active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </Group>
             </Paper>

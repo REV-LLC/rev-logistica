@@ -89,7 +89,7 @@ function LoginPageContent() {
               </Text>
             )}
             <TextInput
-              label="Email"
+              label="Correo"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -97,7 +97,7 @@ function LoginPageContent() {
               required
             />
             <PasswordInput
-              label="Password"
+              label="Contraseña"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"

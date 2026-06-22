@@ -7,20 +7,20 @@ import { useDisclosure } from '@mantine/hooks';
 import Nav from '@/components/Nav';
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = [
-  { prefix: '/transport/requests', title: 'Requests', subtitle: 'Daily operation' },
-  { prefix: '/transport/cost', title: 'Transport', subtitle: 'Costs and dispatch' },
-  { prefix: '/transport/vehicles', title: 'Vehicles', subtitle: 'Fleet and documents' },
-  { prefix: '/transport/worksites', title: 'Worksites', subtitle: 'Active fronts' },
-  { prefix: '/tasks', title: 'Tasks', subtitle: 'Operational follow-up' },
-  { prefix: '/inventory/warehouse', title: 'Warehouses', subtitle: 'Inventory control' },
-  { prefix: '/inventory/ledger', title: 'Movements', subtitle: 'Traceability' },
-  { prefix: '/inventory/scaffold-modulations', title: 'Modulations', subtitle: 'Certified scaffold' },
-  { prefix: '/inventory/bulk-adjustments', title: 'Add inventory', subtitle: 'Bulk entry' },
-  { prefix: '/inventory/serialized-assets', title: 'Add inventory', subtitle: 'Unique equipment' },
-  { prefix: '/billing/pre-invoice', title: 'Pre-invoice', subtitle: 'Period summary' },
-  { prefix: '/customers', title: 'Customers', subtitle: 'Commercial relationship' },
-  { prefix: '/employees', title: 'Employees', subtitle: 'Internal team' },
-  { prefix: '/data', title: 'Data', subtitle: 'Backups and exports' },
+  { prefix: '/transport/requests', title: 'Solicitudes', subtitle: 'Operacion diaria' },
+  { prefix: '/transport/cost', title: 'Transport', subtitle: 'Costos y despacho' },
+  { prefix: '/transport/vehicles', title: 'Vehiculos', subtitle: 'Flota y documentos' },
+  { prefix: '/transport/worksites', title: 'Obras', subtitle: 'Frentes activos' },
+  { prefix: '/tasks', title: 'Pendientes', subtitle: 'Seguimiento operativo' },
+  { prefix: '/inventory/warehouse', title: 'Bodegas', subtitle: 'Control de inventario' },
+  { prefix: '/inventory/ledger', title: 'Movimientos', subtitle: 'Trazabilidad' },
+  { prefix: '/inventory/scaffold-modulations', title: 'Modulaciones', subtitle: 'Andamio certificado' },
+  { prefix: '/inventory/bulk-adjustments', title: 'Agregar inventario', subtitle: 'Ingreso masivo' },
+  { prefix: '/inventory/serialized-assets', title: 'Agregar inventario', subtitle: 'Equipos unicos' },
+  { prefix: '/billing/pre-invoice', title: 'Prefactura', subtitle: 'Resumen del periodo' },
+  { prefix: '/customers', title: 'Clientes', subtitle: 'Relacion comercial' },
+  { prefix: '/employees', title: 'Empleados', subtitle: 'Equipo interno' },
+  { prefix: '/data', title: 'Datos', subtitle: 'Backups y exportaciones' },
 ];
 
 function getHeaderCopy(pathname: string | null) {
@@ -41,7 +41,7 @@ export default function ResponsiveShell({ children }: { children: React.ReactNod
       <AppShell.Header hiddenFrom="sm" px="sm">
         <Group h="100%" justify="space-between" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
-            <Burger opened={opened} onClick={toggle} size="sm" aria-label="Open menu" />
+            <Burger opened={opened} onClick={toggle} size="sm" aria-label="Abrir menu" />
             <div>
               <Text fw={700} size="sm" lh={1.1}>
                 {headerCopy.title}

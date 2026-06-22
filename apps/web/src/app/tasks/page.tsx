@@ -220,7 +220,7 @@ export default function TasksPage() {
         }
       } catch (err) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : 'Could not load assignees');
+          setError(err instanceof Error ? err.message : 'No se pudieron cargar asignados');
         }
       } finally {
         if (mounted) setAssigneesLoading(false);
@@ -235,14 +235,14 @@ export default function TasksPage() {
   const assigneeOptions = useMemo(
     () => [
       {
-        group: 'Active users',
+        group: 'Usuarios activos',
         items: users.map((user) => ({
           value: `user:${user.id}`,
           label: user.email ? `${user.name} · ${user.email}` : user.name,
         })),
       },
       {
-        group: 'Employees',
+        group: 'Empleados',
         items: employees.map((employee) => ({
           value: `employee:${employee.id}`,
           label: getEmployeeName(employee),
@@ -261,7 +261,7 @@ export default function TasksPage() {
         const data = await api<Task[]>('/tasks');
         if (mounted) setTasks(data);
       } catch (err) {
-        if (mounted) setError(err instanceof Error ? err.message : 'Could not load tasks');
+        if (mounted) setError(err instanceof Error ? err.message : 'No se pudieron cargar pendientes');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -334,7 +334,7 @@ export default function TasksPage() {
       const data = await api<Task[]>('/tasks');
       setTasks(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create task');
+      setError(err instanceof Error ? err.message : 'No se pudo crear el pendiente');
     } finally {
       setSaving(false);
     }
@@ -366,7 +366,7 @@ export default function TasksPage() {
       await api(`/tasks/${id}`, { method: 'PATCH', json: patch });
     } catch (err) {
       setTasks(previous);
-      setError(err instanceof Error ? err.message : 'Could not update task');
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el pendiente');
     }
   };
 
@@ -392,7 +392,7 @@ export default function TasksPage() {
       const data = await api<Asset[]>(`/tasks/${taskId}/assets`);
       setTaskAssets(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load assets');
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar activos');
     } finally {
       setAssetsLoading(false);
     }
@@ -406,7 +406,7 @@ export default function TasksPage() {
       const data = await api<Asset[]>(`/assets?${param}=${encodeURIComponent(assetQuery.trim())}`);
       setAssetResults(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not search assets');
+      setError(err instanceof Error ? err.message : 'No se pudieron buscar activos');
     } finally {
       setAssetSearching(false);
     }
@@ -418,7 +418,7 @@ export default function TasksPage() {
       await api(`/tasks/${selectedTask.id}/assets`, { method: 'POST', json: { assetId } });
       await loadTaskAssets(selectedTask.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not link asset');
+      setError(err instanceof Error ? err.message : 'No se pudo vincular el activo');
     }
   };
 
@@ -428,7 +428,7 @@ export default function TasksPage() {
       await api(`/tasks/${selectedTask.id}/assets/${assetId}`, { method: 'DELETE' });
       await loadTaskAssets(selectedTask.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not remove asset');
+      setError(err instanceof Error ? err.message : 'No se pudo quitar el activo');
     }
   };
 
@@ -436,14 +436,14 @@ export default function TasksPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Tasks"
+          title="Pendientes"
           description="Organize tasks, follow-ups, and related assets from one operational view."
           icon={<IconChecklist size={20} />}
           iconColor="yellow"
           accentColor="rgba(245,158,11,0.12)"
           aside={
             <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
-              New task
+              Nuevo pendiente
             </Button>
           }
         >
@@ -458,7 +458,7 @@ export default function TasksPage() {
             <StatCard
               label="Abiertas"
               value={String(metrics.openCount)}
-              hint="Pending start"
+              hint="Pendientes por iniciar"
               color="gray"
               icon={<IconClock size={20} />}
             />
@@ -480,7 +480,7 @@ export default function TasksPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete the operation">
+          <Alert color="red" variant="light" title="No se pudo completar la operacion">
             {error}
           </Alert>
         ) : null}
@@ -494,9 +494,9 @@ export default function TasksPage() {
             <Stack gap="md">
               <Group justify="space-between" align="center">
                 <div>
-                  <Text fw={700}>Task list</Text>
+                  <Text fw={700}>Lista de pendientes</Text>
                   <Text size="sm" c="dimmed">
-                    {tasks.length} task{tasks.length === 1 ? '' : 's'} in the current result.
+                    {tasks.length} pendiente{tasks.length === 1 ? '' : 's'} en el resultado actual.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
@@ -722,7 +722,7 @@ export default function TasksPage() {
                     <ThemeIcon size={48} radius="xl" variant="light" color="gray">
                       <IconChecklist size={24} />
                     </ThemeIcon>
-                    <Text fw={700}>No tasks for the current filters</Text>
+                    <Text fw={700}>No hay pendientes para los filtros actuales</Text>
                     <Text size="sm" c="dimmed" ta="center">
                       Adjust the status, clear the search, or create a new task to start working.
                     </Text>
@@ -734,7 +734,7 @@ export default function TasksPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={creating} onClose={closeCreate} title="New task" centered size="lg">
+      <Modal opened={creating} onClose={closeCreate} title="Nuevo pendiente" centered size="lg">
         <Stack gap="lg">
           <Paper withBorder radius="lg" p="md" bg="yellow.0">
             <Group justify="space-between" align="flex-start">
@@ -753,7 +753,7 @@ export default function TasksPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>General information</Text>
+                <Text fw={700}>Informacion general</Text>
                 <Text size="sm" c="dimmed">
                   Define the objective, details, and task priority.
                 </Text>
@@ -813,17 +813,17 @@ export default function TasksPage() {
                 searchable
                 clearable
                 disabled={assigneesLoading}
-                placeholder={assigneesLoading ? 'Loading...' : 'Select'}
+                placeholder={assigneesLoading ? 'Cargando...' : 'Seleccionar'}
               />
             </Stack>
           </Paper>
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="light" onClick={closeCreate} disabled={saving}>
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={handleCreate} loading={saving} disabled={!title.trim()}>
-              Save
+              Guardar
             </Button>
           </Group>
         </Stack>
@@ -873,7 +873,7 @@ export default function TasksPage() {
                   ))}
                   {!taskAssets.length && (
                     <Text size="sm" c="dimmed">
-                      No linked assets.
+                      Sin activos vinculados.
                     </Text>
                   )}
                 </Stack>
@@ -884,9 +884,9 @@ export default function TasksPage() {
           <Paper withBorder radius="md" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Search asset</Text>
+                <Text fw={700}>Buscar activo</Text>
                 <Text size="sm" c="dimmed">
-                  Search by serial or name and add it to the task if it belongs to the work.
+                  Busca por serial o nombre y agregalo al pendiente si pertenece a la obra.
                 </Text>
               </div>
               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
@@ -900,7 +900,7 @@ export default function TasksPage() {
                   ]}
                 />
                 <TextInput
-                  label="Search"
+                  label="Buscar"
                   value={assetQuery}
                   onChange={(event) => setAssetQuery(event.currentTarget.value)}
                 />
@@ -910,7 +910,7 @@ export default function TasksPage() {
                   onClick={searchAssets}
                   loading={assetSearching}
                 >
-                  Search
+                  Buscar
                 </Button>
               </SimpleGrid>
               <Stack gap="sm">
@@ -926,7 +926,7 @@ export default function TasksPage() {
                 ))}
                 {!assetResults.length && (
                   <Text size="sm" c="dimmed">
-                    No results.
+                    Sin resultados.
                   </Text>
                 )}
               </Stack>

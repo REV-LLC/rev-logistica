@@ -138,7 +138,7 @@ export default function SerialAssetCard({
           />
         ) : (
           <Text size="sm" c="dimmed" ta="center" px="sm">
-            {item.imageFileObjectId ? 'Image loaded' : 'No image'}
+            {item.imageFileObjectId ? 'Imagen cargada' : 'Sin imagen'}
           </Text>
         )}
       </Box>
@@ -164,7 +164,7 @@ export default function SerialAssetCard({
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
               <Badge color={ownerColorById(item.ownerWarehouseId)} variant="light">
-                Owner: {ownerChipLabel}
+                Dueño: {ownerChipLabel}
               </Badge>
             </Group>
           ) : null}
@@ -178,7 +178,7 @@ export default function SerialAssetCard({
 
         {onAction ? (
           <Button size="xs" fullWidth={isMobile} onClick={onAction}>
-            {actionLabel ?? 'Add'}
+            {actionLabel ?? 'Agregar'}
           </Button>
         ) : null}
       </Stack>

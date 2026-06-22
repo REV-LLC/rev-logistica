@@ -77,11 +77,11 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
       <Table striped highlightOnHover className={isMobile ? 'table-mobile-fit' : undefined}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th style={isMobile ? { width: '25%' } : undefined}>Date</Table.Th>
-            {!isMobile ? <Table.Th>Movement</Table.Th> : null}
+            <Table.Th style={isMobile ? { width: '25%' } : undefined}>Fecha</Table.Th>
+            {!isMobile ? <Table.Th>Movimiento</Table.Th> : null}
             <Table.Th style={isMobile ? { width: '45%' } : undefined}>Item</Table.Th>
             <Table.Th style={isMobile ? { width: '15%', textAlign: 'center' } : { textAlign: 'center' }}>
-              {isMobile ? 'Qty.' : 'Quantity'}
+              {isMobile ? 'Cant.' : 'Cantidad'}
             </Table.Th>
             {isMobile ? <Table.Th style={{ width: '15%' }}>View</Table.Th> : null}
             {!isMobile ? <Table.Th>Location</Table.Th> : null}
@@ -105,8 +105,8 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
             const location = item.warehouse
               ? item.warehouse.name
               : item.customerWorksite
-              ? `${item.customerWorksite.customer?.name ?? 'Customer'} / ${
-                  item.customerWorksite.worksite?.name ?? 'Worksite'
+              ? `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${
+                  item.customerWorksite.worksite?.name ?? 'Obra'
                 }`
               : '-';
             const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
@@ -162,21 +162,21 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
         {detailsItem ? (
           <>
             <Text>
-              <strong>Date:</strong> {formatDate(detailsItem.createdAt)}
+              <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
             </Text>
             <Text mt="xs">
               <strong>Movement:</strong> {formatMovementType(detailsItem)}
             </Text>
             <Text mt="xs">
-              <strong>Quantity:</strong> {detailsItem.quantity}
+              <strong>Cantidad:</strong> {detailsItem.quantity}
             </Text>
             <Text mt="xs">
               <strong>Location:</strong>{' '}
               {detailsItem.warehouse
                 ? detailsItem.warehouse.name
                 : detailsItem.customerWorksite
-                ? `${detailsItem.customerWorksite.customer?.name ?? 'Customer'} / ${
-                    detailsItem.customerWorksite.worksite?.name ?? 'Worksite'
+                ? `${detailsItem.customerWorksite.customer?.name ?? 'Cliente'} / ${
+                    detailsItem.customerWorksite.worksite?.name ?? 'Obra'
                   }`
                 : '-'}
             </Text>
@@ -189,7 +189,7 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
             {detailsItem.assetId ? (
               <Text mt="xs">
                 <strong>Equipment:</strong>{' '}
-                <Link href={`/inventory/serialized-assets/${detailsItem.assetId}`}>Open equipment record</Link>
+                <Link href={`/inventory/serialized-assets/${detailsItem.assetId}`}>Abrir ficha del equipo</Link>
               </Text>
             ) : null}
           </>

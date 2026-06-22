@@ -157,15 +157,15 @@ function WorksiteDetails({
             {row.worksite.name}
           </Text>
           <Text size="sm" c="dimmed">
-            {row.alias ?? 'No alias'}
+            {row.alias ?? 'Sin alias'}
           </Text>
         </div>
         <Stack gap="xs" align="flex-end">
           <Badge color={row.active ? 'green' : 'gray'} variant="light">
-            Relationship {row.active ? 'active' : 'inactive'}
+            Relacion {row.active ? 'activa' : 'inactiva'}
           </Badge>
           <Badge color={row.worksite.active ? 'green' : 'gray'} variant="light">
-            Worksite {row.worksite.active ? 'active' : 'inactive'}
+            Obra {row.worksite.active ? 'activa' : 'inactiva'}
           </Badge>
         </Stack>
       </Group>
@@ -173,7 +173,7 @@ function WorksiteDetails({
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Customer
+            Cliente
           </Text>
           <Text size="sm" mt={8}>
             {row.customer.name}
@@ -196,11 +196,11 @@ function WorksiteDetails({
           component={Link}
           href={`/transport/worksites/${row.id}`}
         >
-          Open worksite
+          Abrir obra
         </Button>
         {onEdit ? (
           <Button variant="light" onClick={() => onEdit(row)}>
-            Edit
+            Editar
           </Button>
         ) : null}
       </Group>
@@ -393,7 +393,7 @@ export default function WorksitesPage() {
       } else if (err instanceof Error) {
         setAddressValidationError(err.message);
       } else {
-        setAddressValidationError('Could not review the address with Maps.');
+        setAddressValidationError('No se pudo revisar la direccion con Maps.');
       }
     } finally {
       setAddressValidationLoading(false);
@@ -404,7 +404,7 @@ export default function WorksitesPage() {
     setError(null);
 
     if (!form.customerId) {
-      setError('Select a customer');
+      setError('Selecciona un cliente');
       return;
     }
     if (!form.name.trim()) {
@@ -458,14 +458,14 @@ export default function WorksitesPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Worksites"
+          title="Obras"
           description="Manage work fronts, associated customers, and operational status from one view."
           icon={<IconBuildingEstate size={20} />}
           iconColor="blue"
           accentColor="rgba(59,130,246,0.12)"
           aside={
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              New worksite
+              Nueva obra
             </Button>
           }
         >
@@ -473,33 +473,33 @@ export default function WorksitesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Registered worksites"
+              hint="Obras registradas"
               color="blue"
               icon={<IconBuildingEstate size={20} />}
             />
             <StatCard
               label="Relaciones activas"
               value={String(metrics.activeRelations)}
-              hint="Customer-worksite in operation"
+              hint="Cliente-obra en operacion"
               color="green"
               icon={<IconRoute2 size={20} />}
             />
             <StatCard
-              label="Active worksites"
+              label="Obras activas"
               value={String(metrics.activeWorksites)}
-              hint="Worksite own status"
+              hint="Estado propio de la obra"
               color="teal"
               icon={<IconBuilding size={20} />}
             />
             <StatCard
-              label="With address"
+              label="Con direccion"
               value={String(metrics.withAddress)}
-              hint="Location loaded"
+              hint="Ubicacion cargada"
               color="grape"
               icon={<IconMapPin size={20} />}
             />
             <StatCard
-              label="Customers"
+              label="Clientes"
               value={String(metrics.uniqueCustomers)}
               hint="Con obras vinculadas"
               color="cyan"
@@ -509,7 +509,7 @@ export default function WorksitesPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete the action">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}
@@ -529,7 +529,7 @@ export default function WorksitesPage() {
                           </Text>
                         </div>
                         <Badge color={row.worksite.active ? 'green' : 'gray'} variant="light">
-                          {row.worksite.active ? 'Active' : 'Inactive'}
+                          {row.worksite.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </Group>
 
@@ -544,12 +544,12 @@ export default function WorksitesPage() {
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Relationship
                           </Text>
-                          <Text size="sm">{row.active ? 'Active' : 'Inactive'}</Text>
+                          <Text size="sm">{row.active ? 'Activo' : 'Inactivo'}</Text>
                         </div>
                       </SimpleGrid>
 
                       <Text size="sm" c="dimmed">
-                        {row.worksite.address ?? 'No registered address'}
+                        {row.worksite.address ?? 'Sin direccion registrada'}
                       </Text>
 
                       <Button
@@ -569,9 +569,9 @@ export default function WorksitesPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconBuildingEstate size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No worksites registered</Text>
+                    <Text fw={700}>No hay obras registradas</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Create a new worksite to start.
+                      Crea una obra para empezar.
                     </Text>
                   </Stack>
                 </Paper>
@@ -580,7 +580,7 @@ export default function WorksitesPage() {
               {loading ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
-                    Loading...
+                    Cargando...
                   </Text>
                 </Paper>
               ) : null}
@@ -589,11 +589,11 @@ export default function WorksitesPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Worksite</Table.Th>
-                  <Table.Th>Customer</Table.Th>
+                  <Table.Th>Obra</Table.Th>
+                  <Table.Th>Cliente</Table.Th>
                   <Table.Th>Alias</Table.Th>
                   <Table.Th>Address</Table.Th>
-                  <Table.Th>Status</Table.Th>
+                  <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
@@ -613,7 +613,7 @@ export default function WorksitesPage() {
                             {row.worksite.name}
                           </Text>
                           <Text size="sm" c="dimmed">
-                            {row.worksite.active ? 'Active worksite' : 'Inactive worksite'}
+                            {row.worksite.active ? 'Obra activa' : 'Obra inactiva'}
                           </Text>
                         </Stack>
                       </Table.Td>
@@ -630,30 +630,30 @@ export default function WorksitesPage() {
                       <Table.Td>{row.alias ?? '-'}</Table.Td>
                       <Table.Td>
                         <Text size="sm" maw={280}>
-                          {row.worksite.address ?? 'No address'}
+                          {row.worksite.address ?? 'Sin direccion'}
                         </Text>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap="xs">
                           <Badge variant="light" color={row.active ? 'green' : 'gray'} style={{ width: 'fit-content' }}>
-                            Relationship: {row.active ? 'Active' : 'Inactive'}
+                            Relationship: {row.active ? 'Activo' : 'Inactivo'}
                           </Badge>
                           <Badge
                             variant="light"
                             color={row.worksite.active ? 'green' : 'gray'}
                             style={{ width: 'fit-content' }}
                           >
-                            Worksite: {row.worksite.active ? 'Active' : 'Inactive'}
+                            Worksite: {row.worksite.active ? 'Activo' : 'Inactivo'}
                           </Badge>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="default" component={Link} href={`/transport/worksites/${row.id}`}>
-                            Open
+                            Abierto
                           </Button>
                           <Button size="xs" variant="light" onClick={() => openEdit(row)}>
-                            Edit
+                            Editar
                           </Button>
                           <ActionIcon
                             color="gray"
@@ -675,7 +675,7 @@ export default function WorksitesPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconBuildingEstate size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No worksites to show</Text>
+                        <Text fw={700}>No hay obras para mostrar</Text>
                         <Text size="sm" c="dimmed">
                           Register a new worksite.
                         </Text>
@@ -688,7 +688,7 @@ export default function WorksitesPage() {
                   <Table.Tr>
                     <Table.Td colSpan={6}>
                       <Text c="dimmed" ta="center">
-                        Loading...
+                        Cargando...
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -699,7 +699,7 @@ export default function WorksitesPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={!!detailsRow} onClose={() => setDetailsRow(null)} title="Worksite details" centered size="lg">
+      <Modal opened={!!detailsRow} onClose={() => setDetailsRow(null)} title="Detalle de obra" centered size="lg">
         {detailsRow ? (
           <WorksiteDetails
             row={detailsRow}
@@ -714,7 +714,7 @@ export default function WorksitesPage() {
       <Modal
         opened={modalOpen}
         onClose={closeFormModal}
-        title={editing ? 'Edit worksite' : 'New worksite'}
+        title={editing ? 'Editar obra' : 'Nueva obra'}
         centered
         size="lg"
       >
@@ -737,7 +737,7 @@ export default function WorksitesPage() {
                   </Text>
                 </div>
                 <Badge color={form.worksiteActive ? 'green' : 'gray'} variant="light">
-                  {form.worksiteActive ? 'Active worksite' : 'Inactive worksite'}
+                  {form.worksiteActive ? 'Obra activa' : 'Obra inactiva'}
                 </Badge>
               </Group>
             </Paper>
@@ -746,15 +746,15 @@ export default function WorksitesPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Linking</Text>
+                <Text fw={700}>Vinculacion</Text>
                 <Text size="sm" c="dimmed">
-                  Define the customer that owns this worksite and the visible operational name.
+                  Define el cliente dueño de esta obra y el nombre operativo visible.
                 </Text>
               </div>
 
               <Select
-                label="Customer"
-                placeholder="Select a customer"
+                label="Cliente"
+                placeholder="Selecciona un cliente"
                 value={form.customerId}
                 onChange={(value) => setForm((prev) => ({ ...prev, customerId: value }))}
                 data={customers.map((customer) => ({
@@ -768,8 +768,8 @@ export default function WorksitesPage() {
 
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
-                  label="Worksite name"
-                  placeholder="Primary worksite name"
+                  label="Nombre de la obra"
+                  placeholder="Nombre principal de la obra"
                   value={form.name}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -989,14 +989,14 @@ export default function WorksitesPage() {
                 </div>
 
                 <Switch
-                  label="Active relationship"
+                  label="Relacion activa"
                   checked={form.active}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
                   }
                 />
                 <Switch
-                  label="Active worksite"
+                  label="Obra activa"
                   checked={form.worksiteActive}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, worksiteActive: event.currentTarget.checked }))
@@ -1008,10 +1008,10 @@ export default function WorksitesPage() {
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={closeFormModal}>
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={saveWorksite} loading={saving}>
-              {editing ? 'Save changes' : 'Create worksite'}
+              {editing ? 'Guardar cambios' : 'Crear obra'}
             </Button>
           </Group>
         </Stack>

@@ -43,7 +43,7 @@ function buildBulkItemKey(item: InventoryItemPickerBulkItem) {
 export default function InventoryItemPickerModal({
   opened,
   onClose,
-  title = 'Select items',
+  title = 'Seleccionar items',
   bulkItems,
   serialItems,
   selectedBulkKeys,
@@ -72,7 +72,7 @@ export default function InventoryItemPickerModal({
         ) : (
           <Stack gap="md">
             <Stack gap="xs">
-              <Title order={5}>Bulk stock</Title>
+              <Title order={5}>Stock masivo</Title>
               {bulkItems.length ? (
                 bulkItems.map((item) => {
                   const bulkKey = buildBulkItemKey(item);
@@ -102,13 +102,13 @@ export default function InventoryItemPickerModal({
                           <Text fw={600}>{item.skuName ?? 'SKU'}</Text>
                           {!isDriverRole || sourceMode === 'on-site' ? (
                             <Text size="sm" c="dimmed">
-                              {item.ownerWarehouseName ?? 'No owner warehouse'}
+                              {item.ownerWarehouseName ?? 'Sin bodega dueña'}
                             </Text>
                           ) : null}
                         </div>
                         {alreadySelected ? (
                           <Badge color="green" variant="light">
-                            Added
+                            Agregado
                           </Badge>
                         ) : hasNegativeStock ? (
                           <Badge
@@ -120,7 +120,7 @@ export default function InventoryItemPickerModal({
                           </Badge>
                         ) : (
                           <Badge variant="light">
-                            {isDriverRole && sourceMode === 'warehouse' ? 'Add' : item.quantity}
+                            {isDriverRole && sourceMode === 'warehouse' ? 'Agregar' : item.quantity}
                           </Badge>
                         )}
                       </Group>
@@ -129,7 +129,7 @@ export default function InventoryItemPickerModal({
                 })
               ) : (
                 <Text size="sm" c="dimmed">
-                  No bulk stock available.
+                  No hay stock masivo disponible.
                 </Text>
               )}
             </Stack>
@@ -146,7 +146,7 @@ export default function InventoryItemPickerModal({
                       <SerialAssetCard
                         key={item.assetId}
                         item={item}
-                        actionLabel={alreadySelected ? 'Added' : 'Add'}
+                        actionLabel={alreadySelected ? 'Agregado' : 'Agregar'}
                         onAction={
                           alreadySelected
                             ? undefined
@@ -163,7 +163,7 @@ export default function InventoryItemPickerModal({
                 </SimpleGrid>
               ) : (
                 <Text size="sm" c="dimmed">
-                  No serialized equipment available.
+                  No hay equipos unicos disponibles.
                 </Text>
               )}
             </Stack>

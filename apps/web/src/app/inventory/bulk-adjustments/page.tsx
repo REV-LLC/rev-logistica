@@ -387,7 +387,7 @@ export default function AddBulkStockPage() {
   }));
   const existingItemOptions = existingItems.map((item) => ({
     value: item.skuId,
-    label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'No family'} · ${item.quantity}`,
+    label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
   }));
   const typeOptions = [
     { value: 'FORMALETA', label: 'FORMALETA' },
@@ -1017,7 +1017,7 @@ export default function AddBulkStockPage() {
         ) : null}
 
         <PageHeaderCard
-          title={flowChoice ? 'Enter quantity stock' : 'Add inventory'}
+          title={flowChoice ? 'Enter quantity stock' : 'Agregar inventario'}
           description={
             flowChoice
               ? 'Choose a catalog template or create a new one and register the warehouse entry.'
@@ -1047,11 +1047,11 @@ export default function AddBulkStockPage() {
                   />
                   <Stack gap="sm" p="md">
                     <Group justify="space-between" align="center">
-                      <Text fw={800} size="lg">Quantity item</Text>
+                      <Text fw={800} size="lg">Item por cantidad</Text>
                       <Badge color="green" variant="light">Stock masivo</Badge>
                     </Group>
                     <Text size="sm" c="dimmed">
-                      Formwork, certified scaffold, shoring, and references controlled by units.
+                      Formaleta, andamio certificado, apuntalamiento y referencias controladas por unidades.
                     </Text>
                     <Text className="bulk-flow-card-action" c="green" fw={700}>
                       Continuar
@@ -1077,7 +1077,7 @@ export default function AddBulkStockPage() {
                   <Stack gap="sm" p="md">
                     <Group justify="space-between" align="center">
                       <Text fw={800} size="lg">Maquinaria amarilla</Text>
-                      <Badge color="yellow" variant="light">Unique equipment</Badge>
+                      <Badge color="yellow" variant="light">Equipos unicos</Badge>
                     </Group>
                     <Text size="sm" c="dimmed">
                       Minicargadores, equipos serializados y activos que se administran individualmente.
@@ -1102,9 +1102,9 @@ export default function AddBulkStockPage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" className="mobile-stack">
                   <div>
-                    <Text fw={700}>1. Warehouse</Text>
+                    <Text fw={700}>1. Bodega</Text>
                     <Text size="sm" c="dimmed">
-                      Select where the stock will be initially located.
+                      Selecciona donde quedara ubicado inicialmente el stock.
                     </Text>
                   </div>
                   {warehouseLocked ? (
@@ -1115,11 +1115,11 @@ export default function AddBulkStockPage() {
                 </Group>
 
                 <Select
-                  label="Owner warehouse"
+                  label="Bodega dueña"
                   data={warehouseOptions}
                   value={ownerWarehouseId}
                   onChange={handleWarehouseChange}
-                  placeholder={loading ? 'Loading...' : 'Select warehouse'}
+                  placeholder={loading ? 'Cargando...' : 'Seleccionar bodega'}
                   disabled={loading || warehouseLocked}
                   required
                 />
@@ -1127,7 +1127,7 @@ export default function AddBulkStockPage() {
                 <Group justify="flex-end" className="mobile-actions">
                   {warehouseLocked ? (
                     <Button variant="default" onClick={unlockWarehouseSelection}>
-                      Change warehouse
+                      Cambiar bodega
                     </Button>
                   ) : (
                     <Button onClick={confirmWarehouseSelection}>
@@ -1147,7 +1147,7 @@ export default function AddBulkStockPage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" className="mobile-stack">
                   <div>
-                    <Text fw={700}>2. Operation</Text>
+                    <Text fw={700}>2. Operacion</Text>
                     <Text size="sm" c="dimmed">
                       Elige si vas a sumar a un item existente o crear uno nuevo.
                     </Text>
@@ -1162,7 +1162,7 @@ export default function AddBulkStockPage() {
                 {!warehouseLocked ? (
                   <Paper radius="md" p="sm" bg="gray.0">
                     <Text size="sm" c="dimmed">
-                      Confirm the warehouse first.
+                      Confirma primero la bodega.
                     </Text>
                   </Paper>
                 ) : null}
@@ -1172,7 +1172,7 @@ export default function AddBulkStockPage() {
                 <div>
                   <Text fw={700}>Tipo de entrada</Text>
                   <Text size="sm" c="dimmed">
-                    This selection is locked after continuing.
+                    Esta seleccion queda bloqueada despues de continuar.
                   </Text>
                 </div>
 
@@ -1213,8 +1213,8 @@ export default function AddBulkStockPage() {
                     }}
                   >
                     <Stack gap={4}>
-                      <Text fw={700}>Create new item</Text>
-                      <Text size="sm" c="dimmed">Create the template and register stock.</Text>
+                      <Text fw={700}>Crear item nuevo</Text>
+                      <Text size="sm" c="dimmed">Crea la plantilla y registra stock.</Text>
                     </Stack>
                   </Paper>
                 </SimpleGrid>
@@ -1222,11 +1222,11 @@ export default function AddBulkStockPage() {
                 <Group justify="flex-end" className="mobile-actions">
                   {modeLocked ? (
                     <Button variant="default" onClick={unlockEntryModeSelection}>
-                      Change selection
+                      Cambiar seleccion
                     </Button>
                   ) : (
                     <Button onClick={confirmEntryModeSelection}>
-                      Confirm selection
+                      Confirmar seleccion
                     </Button>
                   )}
                 </Group>
@@ -1245,14 +1245,14 @@ export default function AddBulkStockPage() {
                       }}
                       placeholder={
                         !ownerWarehouseId
-                          ? 'Select warehouse first'
+                          ? 'Selecciona primero una bodega'
                           : existingItemsLoading
-                            ? 'Loading inventory...'
-                            : 'Select item'
+                            ? 'Cargando inventario...'
+                            : 'Seleccionar item'
                       }
                       disabled={!ownerWarehouseId || existingItemsLoading}
                       searchable
-                      nothingFoundMessage="No quantity items"
+                      nothingFoundMessage="No hay items por cantidad"
                       required
                     />
 
@@ -1264,7 +1264,7 @@ export default function AddBulkStockPage() {
                               {selectedExistingItem.skuName ?? selectedExistingItem.name}
                             </Text>
                             <Text size="xs" c="dimmed">
-                              {selectedExistingItem.category ?? 'No family'} · Current: {selectedExistingItem.quantity}
+                              {selectedExistingItem.category ?? 'Sin familia'} · Actual: {selectedExistingItem.quantity}
                             </Text>
                           </Stack>
                           <Badge color="green" variant="light">
@@ -1279,7 +1279,7 @@ export default function AddBulkStockPage() {
                 {warehouseLocked && modeLocked && entryMode === 'new' ? (
                 <Stack gap="md">
                   <Select
-                    label="Family"
+                    label="Familia"
                     data={typeOptions}
                     value={itemTypeSelection}
                     onChange={(value) => {
@@ -1310,7 +1310,7 @@ export default function AddBulkStockPage() {
                         setGenericFamilyCode('ENCOFRADO');
                       }
                     }}
-                    placeholder={loading ? 'Loading...' : 'Select family'}
+                    placeholder={loading ? 'Cargando...' : 'Seleccionar familia'}
                     disabled={loading}
                     required
                   />
@@ -1320,7 +1320,7 @@ export default function AddBulkStockPage() {
                       <Stack gap="lg">
                         <Group justify="space-between" align="flex-start">
                           <Stack gap={2}>
-                            <Text fw={700}>Formwork configuration</Text>
+                            <Text fw={700}>Configuracion de formaleta</Text>
                             <Text size="sm" c="dimmed">
                               Define si vas a registrar un panel principal o un accesorio y completa
                               la ficha base antes de crear la plantilla.
@@ -1344,7 +1344,7 @@ export default function AddBulkStockPage() {
                           <Stack gap="xs">
                             <Switch
                               label="Registrar como accesorio"
-                              description="Enable it when the reference does not depend on X/Y measurements but on a commercial name."
+                              description="Activalo cuando la referencia no depende de medidas X/Y sino de un nombre comercial."
                               checked={formaletaIsAccessory}
                               onChange={(event) => {
                                 setFormaletaIsAccessory(event.currentTarget.checked);
@@ -1358,9 +1358,9 @@ export default function AddBulkStockPage() {
                           <Paper withBorder radius="md" p="md" bg="gray.0">
                             <Stack gap="sm">
                               <div>
-                                <Text fw={600} size="sm">Accessory reference</Text>
+                                <Text fw={600} size="sm">Referencia de accesorio</Text>
                                 <Text size="xs" c="dimmed">
-                                  Use the short name operations uses to identify it.
+                                  Usa el nombre corto que operaciones usa para identificarlo.
                                 </Text>
                               </div>
                               <TextInput
@@ -1370,7 +1370,7 @@ export default function AddBulkStockPage() {
                                   setFormaletaAccessoryName(toUpperInput(event.currentTarget.value));
                                   setIsItemConfigured(false);
                                 }}
-                                placeholder="Example: WEDGE, CROSS BRACE"
+                                placeholder="Ejemplo: CUÑA, RIOSTRA"
                                 required
                               />
                             </Stack>
@@ -1379,14 +1379,14 @@ export default function AddBulkStockPage() {
                           <Paper withBorder radius="md" p="md" bg="gray.0">
                             <Stack gap="md">
                               <div>
-                                <Text fw={600} size="sm">Base geometry</Text>
+                                <Text fw={600} size="sm">Geometria base</Text>
                                 <Text size="xs" c="dimmed">
-                                  The line and measurements define the automatic formwork name.
+                                  La linea y las medidas definen el nombre automatico de la formaleta.
                                 </Text>
                               </div>
                               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
                                 <Select
-                                  label="Line"
+                                  label="Linea"
                                   data={formaletaLineOptions}
                                   value={formaletaLine}
                                   onChange={(value) => {
@@ -1457,7 +1457,7 @@ export default function AddBulkStockPage() {
                                   setFormaletaWeightUnit((value as WeightUnit | null) ?? '')
                                 }
                                 searchable
-                                nothingFoundMessage="No units"
+                                nothingFoundMessage="No hay unidades"
                                 error={
                                   showRequiredSkuErrors && !formaletaWeightUnit
                                     ? 'Obligatorio'
@@ -1524,7 +1524,7 @@ export default function AddBulkStockPage() {
                               />
                               {formaletaChargeType === 'HOUR' ? (
                                 <NumberInput
-                                  label="Minimum hours"
+                                  label="Horas minimas"
                                   value={formaletaMinimumChargeHours}
                                   onChange={(value) =>
                                     setFormaletaMinimumChargeHours(typeof value === 'number' ? value : '')
@@ -1546,7 +1546,7 @@ export default function AddBulkStockPage() {
                           <Stack gap={4}>
                             <Text fw={600} size="sm">Vista previa de la referencia</Text>
                             <Text size="sm" c={formaletaDraftName ? undefined : 'dimmed'}>
-                              {formaletaDraftName ?? 'Complete the base data to generate the template name.'}
+                              {formaletaDraftName ?? 'Completa los datos base para generar el nombre de la plantilla.'}
                             </Text>
                           </Stack>
                         </Paper>
@@ -1561,7 +1561,7 @@ export default function AddBulkStockPage() {
                             <>
                               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                                 <Select
-                                  label="Reference"
+                                  label="Referencia"
                                   data={certifiedScaffoldPartOptions}
                                   value={genericSkuName || null}
                                   onChange={(value) => {
@@ -1571,7 +1571,7 @@ export default function AddBulkStockPage() {
                                     }
                                     setIsItemConfigured(false);
                                   }}
-                                  placeholder="Select piece"
+                                  placeholder="Seleccionar pieza"
                                   searchable
                                   required
                                 />
@@ -1584,7 +1584,7 @@ export default function AddBulkStockPage() {
                                       setCertifiedScaffoldMeasure(value ?? '');
                                       setIsItemConfigured(false);
                                     }}
-                                    placeholder="Select measurement"
+                                    placeholder="Seleccionar medida"
                                     searchable
                                     required
                                   />
@@ -1608,14 +1608,14 @@ export default function AddBulkStockPage() {
                                     : genericSkuName && !certifiedScaffoldNeedsMeasure
                                       ? genericSkuName
                                       : certifiedScaffoldNeedsMeasure
-                                        ? 'Select reference and measurement.'
-                                        : 'Select reference.'}
+                                        ? 'Selecciona referencia y medida.'
+                                        : 'Selecciona referencia.'}
                                 </Text>
                               </Paper>
                             </>
                           ) : (
                             <TextInput
-                              label="Reference"
+                              label="Referencia"
                               value={genericSkuName}
                               onChange={(event) => {
                                 setGenericSkuName(toUpperInput(event.currentTarget.value));
@@ -1645,7 +1645,7 @@ export default function AddBulkStockPage() {
                               value={genericWeightUnit}
                               onChange={(value) => setGenericWeightUnit((value as WeightUnit | null) ?? '')}
                               searchable
-                              nothingFoundMessage="No units"
+                              nothingFoundMessage="No hay unidades"
                               error={
                                 showRequiredSkuErrors && !genericWeightUnit
                                   ? 'Obligatorio'
@@ -1691,7 +1691,7 @@ export default function AddBulkStockPage() {
                             />
                             {genericChargeType === 'HOUR' ? (
                               <NumberInput
-                                label="Minimum hours"
+                                label="Horas minimas"
                                 value={genericMinimumChargeHours}
                                 onChange={(value) =>
                                   setGenericMinimumChargeHours(typeof value === 'number' ? value : '')
@@ -1708,14 +1708,14 @@ export default function AddBulkStockPage() {
                   {itemType ? (
                     <Group justify="space-between" className="mobile-actions">
                       <Badge color={isItemConfigured ? 'green' : 'gray'} variant="light">
-                        {isItemConfigured ? 'Product confirmed' : 'Unconfirmed'}
+                        {isItemConfigured ? 'Producto confirmado' : 'Sin confirmar'}
                       </Badge>
                       <Button
                         variant={confirmButtonNeedsAttention ? 'filled' : 'light'}
                         color={confirmButtonNeedsAttention ? 'red' : undefined}
                         onClick={applyTypeConfiguration}
                       >
-                        Confirm product
+                        Confirmar producto
                       </Button>
                     </Group>
                   ) : null}
@@ -1751,17 +1751,17 @@ export default function AddBulkStockPage() {
             >
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>3. Quantity</Text>
+                  <Text fw={700}>3. Cantidad</Text>
                   <Text size="sm" c="dimmed">
                     {entryMode === 'existing'
-                      ? 'The entry is added to the selected item in its owner warehouse.'
-                      : 'The stock will be initially located in the same owner warehouse.'}
+                      ? 'La entrada se suma al item seleccionado en su bodega dueña.'
+                      : 'El stock quedara ubicado inicialmente en la misma bodega dueña.'}
                   </Text>
                 </div>
 
                 {warehouseLocked && modeLocked ? (
                   <NumberInput
-                    label="Quantity"
+                    label="Cantidad"
                     value={quantity}
                     onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
                     min={0}
@@ -1771,7 +1771,7 @@ export default function AddBulkStockPage() {
                 ) : (
                   <Paper radius="md" p="sm" bg="gray.0">
                     <Text size="sm" c="dimmed">
-                      Confirm warehouse and operation to enter quantity.
+                      Confirma bodega y operacion para ingresar cantidad.
                     </Text>
                   </Paper>
                 )}
@@ -1786,7 +1786,7 @@ export default function AddBulkStockPage() {
             >
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>4. Review</Text>
+                  <Text fw={700}>4. Revision</Text>
                   <Text size="sm" c="dimmed">
                     Revisa el movimiento antes de ejecutar.
                   </Text>
@@ -1807,16 +1807,16 @@ export default function AddBulkStockPage() {
                     </Paper>
                     <Paper radius="md" p="sm" bg="gray.0">
                       <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                        Movement
+                        Movimiento
                       </Text>
                       <Text size="sm" mt={8}>
-                        Quantity: {payloadPreview.quantity}
+                        Cantidad: {payloadPreview.quantity}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Owner: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
+                        Dueño: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Initial location: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
+                        Ubicacion inicial: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
                       </Text>
                     </Paper>
                   </SimpleGrid>
@@ -1827,7 +1827,7 @@ export default function AddBulkStockPage() {
                         <IconChecks size={16} />
                       </ThemeIcon>
                       <Text size="sm" c="dimmed">
-                        Complete product, warehouse, and quantity to see the final review.
+                        Completa producto, bodega y cantidad para ver la revision final.
                       </Text>
                     </Group>
                   </Paper>
@@ -1837,7 +1837,7 @@ export default function AddBulkStockPage() {
 
             <Group justify="flex-end" className="mobile-actions">
               <Button variant="default" onClick={() => router.back()}>
-                Cancel
+                Cancelar
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -1853,7 +1853,7 @@ export default function AddBulkStockPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete the action">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}

@@ -20,7 +20,7 @@ type Props = {
 export default function WarehouseSelect({
   value,
   onChange,
-  defaultName = 'Main Warehouse',
+  defaultName = 'Bodega principal',
   label = 'Location warehouse',
 }: Props) {
   const [items, setItems] = useState<Warehouse[]>([]);
@@ -101,7 +101,7 @@ export default function WarehouseSelect({
       return;
     }
 
-    setError('Select a valid warehouse');
+    setError('Selecciona una bodega valida');
     onChange(null);
   };
 
@@ -114,7 +114,7 @@ export default function WarehouseSelect({
     <div>
       <Autocomplete
         label={label}
-        placeholder={loading ? 'Loading warehouses...' : 'Search by name'}
+        placeholder={loading ? 'Cargando bodegas...' : 'Buscar por nombre'}
         data={items.map((warehouse) => warehouse.name)}
         value={inputValue}
         onChange={handleNameChange}

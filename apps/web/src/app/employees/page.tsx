@@ -111,25 +111,25 @@ const emptyForm: EmployeeForm = {
 };
 
 const roleOptions = [
-  { value: 'DRIVER', label: 'Driver' },
+  { value: 'DRIVER', label: 'Conductor' },
   { value: 'HEAVY_MACHINERY_OPERATOR', label: 'Operario maquinaria amarilla' },
   { value: 'MACHINIST', label: 'Machinero' },
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'MANAGER', label: 'Gerente' },
   { value: 'OPERATIONS_MANAGER', label: 'Jefe operaciones' },
-  { value: 'MECHANIC', label: 'Mechanic' },
+  { value: 'MECHANIC', label: 'Mecanico' },
   { value: 'WAREHOUSE_KEEPER', label: 'Bodeguero' },
   { value: 'OTHER', label: 'Otro' },
 ];
 
 const roleLabelByValue: Record<RoleValue, string> = {
-  DRIVER: 'Driver',
+  DRIVER: 'Conductor',
   HEAVY_MACHINERY_OPERATOR: 'Operario maquinaria amarilla',
   MACHINIST: 'Machinero',
   OFFICE: 'Oficina',
   MANAGER: 'Gerente',
   OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mechanic',
+  MECHANIC: 'Mecanico',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
 };
@@ -137,17 +137,17 @@ const roleLabelByValue: Record<RoleValue, string> = {
 const appRoleOptions = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OFFICE', label: 'Oficina' },
-  { value: 'DRIVER', label: 'Driver' },
+  { value: 'DRIVER', label: 'Conductor' },
 ];
 
 const appRoleLabelByValue: Record<AppRoleValue, string> = {
   ADMIN: 'Admin',
   OFFICE: 'Oficina',
-  DRIVER: 'Driver',
+  DRIVER: 'Conductor',
 };
 
 function getVehicleSummary(vehicles: VehicleOption[]) {
-  if (!vehicles.length) return 'No assigned vehicles';
+  if (!vehicles.length) return 'Sin vehiculos asignados';
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 
@@ -213,7 +213,7 @@ function EmployeeDetails({
           </div>
         </Group>
         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-          {employee.active ? 'Active' : 'Inactive'}
+          {employee.active ? 'Activo' : 'Inactivo'}
         </Badge>
       </Group>
 
@@ -248,11 +248,11 @@ function EmployeeDetails({
             Acceso a la app
           </Text>
           <Stack gap={4} mt={8}>
-            <Text size="sm">{employee.user?.email ?? 'No access created'}</Text>
+            <Text size="sm">{employee.user?.email ?? 'Sin acceso creado'}</Text>
             <Text size="xs" c="dimmed">
               {employee.user
                 ? `${appRoleLabelByValue[employee.user.role]} · ${
-                    employee.user.active ? 'Active' : 'Inactive'
+                    employee.user.active ? 'Activo' : 'Inactivo'
                   }`
                 : 'Este empleado no tiene usuario asociado'}
             </Text>
@@ -261,7 +261,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Assigned vehicles
+            Vehiculos asignados
           </Text>
           <Text size="sm" mt={8}>
             {getVehicleSummary(employee.vehicles)}
@@ -273,12 +273,12 @@ function EmployeeDetails({
         <Group className="mobile-actions">
           {onDelete ? (
             <Button color="red" variant="light" onClick={() => onDelete(employee)}>
-              Delete
+              Eliminar
             </Button>
           ) : null}
           {onEdit ? (
             <Button variant="light" onClick={() => onEdit(employee)}>
-              Edit
+              Editar
             </Button>
           ) : null}
         </Group>
@@ -449,7 +449,7 @@ export default function EmployeesPage() {
   };
 
   const deleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`Delete employee ${getEmployeeFullName(employee)}?`)) return;
+    if (!window.confirm(`Eliminar empleado ${getEmployeeFullName(employee)}?`)) return;
 
     setError(null);
     try {
@@ -470,14 +470,14 @@ export default function EmployeesPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Employees"
+          title="Empleados"
           description="Manage staff, access, and vehicle assignments from one view."
           icon={<IconUsers size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
           aside={
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              New employee
+              Nuevo empleado
             </Button>
           }
         >
@@ -514,7 +514,7 @@ export default function EmployeesPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete the action">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}
@@ -537,7 +537,7 @@ export default function EmployeesPage() {
                           </div>
                         </Group>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Active' : 'Inactive'}
+                          {employee.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </Group>
 
@@ -572,7 +572,7 @@ export default function EmployeesPage() {
                           color="red"
                           variant="light"
                           size={36}
-                          aria-label="Delete employee"
+                          aria-label="Eliminar empleado"
                           onClick={() => deleteEmployee(employee)}
                         >
                           <IconTrash size={18} />
@@ -588,7 +588,7 @@ export default function EmployeesPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconUsers size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No employees registered</Text>
+                    <Text fw={700}>No hay empleados registrados</Text>
                     <Text size="sm" c="dimmed" ta="center">
                       Crea un nuevo empleado para empezar.
                     </Text>
@@ -599,7 +599,7 @@ export default function EmployeesPage() {
               {loading ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
-                    Loading...
+                    Cargando...
                   </Text>
                 </Paper>
               ) : null}
@@ -608,11 +608,11 @@ export default function EmployeesPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Employee</Table.Th>
+                  <Table.Th>Empleado</Table.Th>
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Documento</Table.Th>
                   <Table.Th>Acceso</Table.Th>
-                  <Table.Th>Vehicles</Table.Th>
+                  <Table.Th>Vehiculos</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -636,7 +636,7 @@ export default function EmployeesPage() {
                         <Stack gap={2}>
                           <Text size="sm">{employee.phone ?? '-'}</Text>
                           <Text size="xs" c="dimmed">
-                            {employee.email ?? 'No email'}
+                            {employee.email ?? 'Sin correo'}
                           </Text>
                         </Stack>
                       </Table.Td>
@@ -652,12 +652,12 @@ export default function EmployeesPage() {
                               style={{ width: 'fit-content' }}
                             >
                               {appRoleLabelByValue[employee.user.role]} ·{' '}
-                              {employee.user.active ? 'Active' : 'Inactive'}
+                              {employee.user.active ? 'Activo' : 'Inactivo'}
                             </Badge>
                           </Stack>
                         ) : (
                           <Text size="sm" c="dimmed">
-                            No access
+                            Sin acceso
                           </Text>
                         )}
                       </Table.Td>
@@ -668,13 +668,13 @@ export default function EmployeesPage() {
                       </Table.Td>
                       <Table.Td>
                         <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Active' : 'Inactive'}
+                          {employee.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="light" onClick={() => openEdit(employee)}>
-                            Edit
+                            Editar
                           </Button>
                           <ActionIcon
                             color="gray"
@@ -687,7 +687,7 @@ export default function EmployeesPage() {
                           <ActionIcon
                             color="red"
                             variant="light"
-                            aria-label="Delete employee"
+                            aria-label="Eliminar empleado"
                             onClick={() => deleteEmployee(employee)}
                           >
                             <IconTrash size={16} />
@@ -704,7 +704,7 @@ export default function EmployeesPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsers size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No employees to show</Text>
+                        <Text fw={700}>No hay empleados para mostrar</Text>
                         <Text size="sm" c="dimmed">
                           Registra un nuevo empleado.
                         </Text>
@@ -717,7 +717,7 @@ export default function EmployeesPage() {
                   <Table.Tr>
                     <Table.Td colSpan={7}>
                       <Text c="dimmed" ta="center">
-                        Loading...
+                        Cargando...
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -753,7 +753,7 @@ export default function EmployeesPage() {
       <Modal
         opened={modalOpen}
         onClose={closeFormModal}
-        title={editingEmployee ? 'Edit employee' : 'New employee'}
+        title={editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}
         centered
         size="lg"
       >
@@ -776,7 +776,7 @@ export default function EmployeesPage() {
                   </Text>
                 </div>
                 <Badge color={form.active ? 'green' : 'gray'} variant="light">
-                  {form.active ? 'Active' : 'Inactive'}
+                  {form.active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </Group>
             </Paper>
@@ -835,7 +835,7 @@ export default function EmployeesPage() {
                   }}
                 />
                 <TextInput
-                  label="Email"
+                  label="Correo"
                   placeholder="Correo de contacto"
                   value={form.email}
                   onChange={(event) => {
@@ -858,7 +858,7 @@ export default function EmployeesPage() {
                 <Switch
                   mt="xl"
                   checked={form.active}
-                  label="Active employee"
+                  label="Empleado activo"
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
                   }
@@ -877,8 +877,8 @@ export default function EmployeesPage() {
               </div>
 
               <MultiSelect
-                label="Assigned vehicles"
-                placeholder="Select one or more vehicles"
+                label="Vehiculos asignados"
+                placeholder="Selecciona uno o mas vehiculos"
                 value={form.vehicleIds}
                 onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
                 data={vehicles.map((vehicle) => ({
@@ -888,7 +888,7 @@ export default function EmployeesPage() {
                   }`,
                 }))}
                 searchable
-                nothingFoundMessage="No results"
+                nothingFoundMessage="Sin resultados"
               />
             </Stack>
           </Paper>
@@ -904,7 +904,7 @@ export default function EmployeesPage() {
 
               <Switch
                 checked={form.loginEnabled}
-                label="Create or keep access for this employee"
+                label="Crear o mantener acceso para este empleado"
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, loginEnabled: event.currentTarget.checked }))
                 }
@@ -936,7 +936,7 @@ export default function EmployeesPage() {
 
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <TextInput
-                      label={editingEmployee ? 'New password (optional)' : 'Password'}
+                      label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
                       placeholder={
                         editingEmployee ? 'Leave empty to keep the current one' : 'Initial password'
                       }
@@ -969,10 +969,10 @@ export default function EmployeesPage() {
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={closeFormModal}>
-              Cancel
+              Cancelar
             </Button>
             <Button loading={saving} onClick={saveEmployee}>
-              {editingEmployee ? 'Save changes' : 'Create employee'}
+              {editingEmployee ? 'Guardar cambios' : 'Crear empleado'}
             </Button>
           </Group>
         </Stack>

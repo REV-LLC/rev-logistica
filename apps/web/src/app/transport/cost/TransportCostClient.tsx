@@ -464,7 +464,7 @@ export default function TransportCostPage() {
             Enter admin credentials to enable rate editing.
           </Text>
           <TextInput
-            label="Email"
+            label="Correo"
             type="email"
             value={authEmail}
             onChange={(event) => setAuthEmail(event.target.value)}
@@ -472,7 +472,7 @@ export default function TransportCostPage() {
             required
           />
           <PasswordInput
-            label="Password"
+            label="Contraseña"
             value={authPassword}
             onChange={(event) => setAuthPassword(event.target.value)}
             placeholder="••••••••"
@@ -481,7 +481,7 @@ export default function TransportCostPage() {
           {authError && <Text c="red">{authError}</Text>}
           <Group justify="flex-end">
             <Button variant="light" onClick={() => setAuthOpen(false)}>
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={handleAdminAuth} loading={authLoading}>
               Verificar

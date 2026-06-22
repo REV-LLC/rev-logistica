@@ -413,22 +413,22 @@ export default function ScaffoldModulationsPage() {
 
                 <Paper withBorder radius="lg" p="lg">
                   <Stack gap="md">
-                    <Title order={3}>Inventory and weight</Title>
+                    <Title order={3}>Inventario y peso</Title>
                     <Select
-                      label="Warehouse"
+                      label="Bodega"
                       data={warehouses.map((warehouse) => ({
                         value: warehouse.id,
                         label: `${warehouse.name}${warehouse.ownerCompany?.name ? ` | ${warehouse.ownerCompany.name}` : ''}`,
                       }))}
                       value={warehouseId}
                       onChange={setWarehouseId}
-                      placeholder="Select warehouse"
+                      placeholder="Seleccionar bodega"
                       searchable
                     />
                     <SimpleGrid cols={2} spacing="sm">
                       <Paper withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                          Total weight
+                          Peso total
                         </Text>
                         <Text fw={900} size="xl">
                           {totalWeight.toFixed(1)} kg
@@ -436,7 +436,7 @@ export default function ScaffoldModulationsPage() {
                       </Paper>
                       <Paper withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                          Bays
+                          Modulos
                         </Text>
                         <Text fw={900} size="xl">
                           {calculation.metrics.bays * calculation.metrics.heightBodies}
@@ -445,10 +445,10 @@ export default function ScaffoldModulationsPage() {
                     </SimpleGrid>
                     {unknownWeights > 0 ? (
                       <Alert color="yellow" icon={<IconAlertTriangle size={16} />}>
-                        {unknownWeights} references have no weight or were not matched with inventory.
+                        {unknownWeights} referencias no tienen peso o no fueron cruzadas con inventario.
                       </Alert>
                     ) : null}
-                    {loadingInventory ? <Text size="sm" c="dimmed">Loading inventory...</Text> : null}
+                    {loadingInventory ? <Text size="sm" c="dimmed">Cargando inventario...</Text> : null}
                   </Stack>
                 </Paper>
               </SimpleGrid>
@@ -615,7 +615,7 @@ export default function ScaffoldModulationsPage() {
                           <TableTh ta="right">Missing</TableTh>
                           <TableTh ta="right">Unit weight</TableTh>
                           <TableTh ta="right">Total weight</TableTh>
-                          <TableTh>Status</TableTh>
+                          <TableTh>Estado</TableTh>
                         </TableTr>
                       </TableThead>
                       <TableTbody>

@@ -93,7 +93,7 @@ function CustomerDetails({
           </Text>
         </div>
         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-          {customer.active ? 'Active' : 'Inactive'}
+          {customer.active ? 'Activo' : 'Inactivo'}
         </Badge>
       </Group>
 
@@ -120,7 +120,7 @@ function CustomerDetails({
       {onEdit ? (
         <Group className="mobile-actions">
           <Button variant="light" onClick={() => onEdit(customer)}>
-            Edit
+            Editar
           </Button>
         </Group>
       ) : null}
@@ -217,7 +217,7 @@ export default function CustomersPage() {
 
   const parseRutPdf = async () => {
     if (!rutFile) {
-      setRutParseMessage('Select a RUT PDF');
+      setRutParseMessage('Selecciona un PDF del RUT');
       setRutParseStatus('error');
       return;
     }
@@ -244,7 +244,7 @@ export default function CustomersPage() {
         nitOrId: parsed.nitOrId ?? prev.nitOrId,
         phone: parsed.phone ?? prev.phone,
       }));
-      setRutParseMessage('RUT data loaded. Review the information before saving.');
+      setRutParseMessage('Datos del RUT cargados. Revisa la informacion antes de guardar.');
       setRutParseStatus('success');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -320,14 +320,14 @@ export default function CustomersPage() {
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <PageHeaderCard
-          title="Customers"
+          title="Clientes"
           description="Centralize commercial information and prepare each customer for operational startup."
           icon={<IconUsersGroup size={20} />}
           iconColor="green"
           accentColor="rgba(34,197,94,0.12)"
           aside={
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              New customer
+              Nuevo cliente
             </Button>
           }
         >
@@ -364,7 +364,7 @@ export default function CustomersPage() {
         </PageHeaderCard>
 
         {error ? (
-          <Alert color="red" variant="light" title="Could not complete the action">
+          <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
         ) : null}
@@ -380,11 +380,11 @@ export default function CustomersPage() {
                         <div>
                           <Text fw={700}>{customer.name}</Text>
                           <Text size="sm" c="dimmed">
-                            {customer.nitOrId ?? 'No document'}
+                            {customer.nitOrId ?? 'Sin documento'}
                           </Text>
                         </div>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Active' : 'Inactive'}
+                          {customer.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </Group>
 
@@ -420,7 +420,7 @@ export default function CustomersPage() {
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconUsersGroup size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No customers registered</Text>
+                    <Text fw={700}>No hay clientes registrados</Text>
                     <Text size="sm" c="dimmed" ta="center">
                       Crea un nuevo cliente para empezar.
                     </Text>
@@ -431,7 +431,7 @@ export default function CustomersPage() {
               {loading ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text c="dimmed" ta="center">
-                    Loading...
+                    Cargando...
                   </Text>
                 </Paper>
               ) : null}
@@ -440,7 +440,7 @@ export default function CustomersPage() {
             <Table highlightOnHover verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Customer</Table.Th>
+                  <Table.Th>Cliente</Table.Th>
                   <Table.Th>Identification</Table.Th>
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Estado</Table.Th>
@@ -461,17 +461,17 @@ export default function CustomersPage() {
                       </Table.Td>
                       <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
                       <Table.Td>
-                        <Text size="sm">{customer.phone ?? 'No phone'}</Text>
+                        <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Active' : 'Inactive'}
+                          {customer.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
-                            Edit
+                            Editar
                           </Button>
                           <ActionIcon
                             color="gray"
@@ -493,7 +493,7 @@ export default function CustomersPage() {
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsersGroup size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No customers to show</Text>
+                        <Text fw={700}>No hay clientes para mostrar</Text>
                         <Text size="sm" c="dimmed">
                           Registra un nuevo cliente.
                         </Text>
@@ -506,7 +506,7 @@ export default function CustomersPage() {
                   <Table.Tr>
                     <Table.Td colSpan={5}>
                       <Text c="dimmed" ta="center">
-                        Loading...
+                        Cargando...
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -538,7 +538,7 @@ export default function CustomersPage() {
       <Modal
         opened={modalOpen}
         onClose={closeFormModal}
-        title={editingCustomer ? 'Edit customer' : 'New customer'}
+        title={editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}
         centered
         size="lg"
       >
@@ -557,11 +557,11 @@ export default function CustomersPage() {
                 <div>
                   <Text fw={700}>{editingCustomer.name}</Text>
                   <Text size="sm" c="dimmed">
-                    {editingCustomer.nitOrId ?? 'No document'}
+                    {editingCustomer.nitOrId ?? 'Sin documento'}
                   </Text>
                 </div>
                 <Badge color={form.active ? 'green' : 'gray'} variant="light">
-                  {form.active ? 'Active' : 'Inactive'}
+                  {form.active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </Group>
             </Paper>
@@ -586,7 +586,7 @@ export default function CustomersPage() {
                   <FileInput
                     accept="application/pdf,.pdf"
                     label="RUT file"
-                    placeholder="Select PDF"
+                    placeholder="Seleccionar PDF"
                     value={rutFile}
                     onChange={(file) => {
                       setRutFile(file);
@@ -613,7 +613,7 @@ export default function CustomersPage() {
 	                  <Alert
 	                    color={rutParseStatus === 'error' ? 'red' : 'green'}
 	                    variant="light"
-	                    title={rutParseStatus === 'error' ? 'Could not read the RUT' : 'RUT read'}
+	                    title={rutParseStatus === 'error' ? 'No se pudo leer el RUT' : 'RUT leido'}
 	                  >
                     {rutParseMessage}
                   </Alert>
@@ -666,7 +666,7 @@ export default function CustomersPage() {
               {editingCustomer ? (
                 <Switch
                   checked={form.active}
-                  label="Active customer"
+                  label="Cliente activo"
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
                   }
@@ -740,10 +740,10 @@ export default function CustomersPage() {
 
           <Group justify="flex-end" className="mobile-actions">
             <Button variant="default" onClick={closeFormModal}>
-              Cancel
+              Cancelar
             </Button>
             <Button onClick={saveCustomer} loading={saving}>
-              {editingCustomer ? 'Save changes' : 'Create customer'}
+              {editingCustomer ? 'Guardar cambios' : 'Crear cliente'}
             </Button>
           </Group>
         </Stack>
