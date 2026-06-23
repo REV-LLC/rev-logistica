@@ -96,6 +96,13 @@ export default function WarehouseInventoryPage() {
   const [ownersError, setOwnersError] = useState<string | null>(null);
   const [ownerLogoUploadingId, setOwnerLogoUploadingId] = useState<string | null>(null);
   const [ownerLogoError, setOwnerLogoError] = useState<string | null>(null);
+  const [ownerCreateOpen, setOwnerCreateOpen] = useState(false);
+  const [ownerCreateName, setOwnerCreateName] = useState('');
+  const [ownerCreateNitOrId, setOwnerCreateNitOrId] = useState('');
+  const [ownerCreatePhone, setOwnerCreatePhone] = useState('');
+  const [ownerCreateEmail, setOwnerCreateEmail] = useState('');
+  const [ownerCreateLoading, setOwnerCreateLoading] = useState(false);
+  const [ownerCreateError, setOwnerCreateError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createType, setCreateType] = useState<'OWN' | 'ALLY'>('OWN');
@@ -295,6 +302,57 @@ export default function WarehouseInventoryPage() {
     setCreateError(null);
     setOwnerLogoError(null);
     setCreateOpen(true);
+  };
+
+  const openCreateOwner = () => {
+    setOwnerCreateName('');
+    setOwnerCreateNitOrId('');
+    setOwnerCreatePhone('');
+    setOwnerCreateEmail('');
+    setOwnerCreateError(null);
+    setOwnerCreateOpen(true);
+  };
+
+  const handleCreateOwner = async () => {
+    if (!ownerCreateName.trim()) {
+      setOwnerCreateError('El nombre del dueño es requerido.');
+      return;
+    }
+
+    setOwnerCreateLoading(true);
+    setOwnerCreateError(null);
+    try {
+      const owner = await api<Owner>('/owners', {
+        method: 'POST',
+        json: {
+          name: ownerCreateName.trim(),
+          nitOrId: ownerCreateNitOrId.trim() || undefined,
+          phone: ownerCreatePhone.trim() || undefined,
+          email: ownerCreateEmail.trim() || undefined,
+          active: true,
+        },
+      });
+      setOwners((prev) =>
+        [...prev.filter((item) => item.id !== owner.id), owner].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      );
+      setCreateOwnerCompanyId(owner.id);
+      if (editOpen) {
+        setEditOwnerCompanyId(owner.id);
+      }
+      setOwnerCreateOpen(false);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setOwnerCreateError(`Error ${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setOwnerCreateError(err.message);
+      } else {
+        setOwnerCreateError('No se pudo crear el dueño.');
+      }
+    } finally {
+      setOwnerCreateLoading(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -967,18 +1025,24 @@ export default function WarehouseInventoryPage() {
                 />
               </SimpleGrid>
 
-              <Select
-                label="Empresa dueña"
-                placeholder={ownersLoading ? 'Cargando dueños...' : 'Seleccionar dueño'}
-                data={ownerOptions}
-                value={createOwnerCompanyId}
-                onChange={(value) => {
-                  setOwnerLogoError(null);
-                  setCreateOwnerCompanyId(value);
-                }}
-                disabled={ownersLoading && ownerOptions.length === 0}
-                searchable
-              />
+              <Group align="flex-end" wrap="nowrap">
+                <Select
+                  label="Empresa dueña"
+                  placeholder={ownersLoading ? 'Cargando dueños...' : 'Seleccionar dueño'}
+                  data={ownerOptions}
+                  value={createOwnerCompanyId}
+                  onChange={(value) => {
+                    setOwnerLogoError(null);
+                    setCreateOwnerCompanyId(value);
+                  }}
+                  disabled={ownersLoading && ownerOptions.length === 0}
+                  searchable
+                  style={{ flex: 1 }}
+                />
+                <Button variant="light" onClick={openCreateOwner} leftSection={<IconPlus size={16} />}>
+                  Crear dueño
+                </Button>
+              </Group>
 
               {renderOwnerLogoUpload(createOwnerCompanyId, createOwner)}
             </Stack>
@@ -1000,6 +1064,60 @@ export default function WarehouseInventoryPage() {
               disabled={!createOwnerCompanyId}
             >
               Crear bodega
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={ownerCreateOpen}
+        onClose={() => setOwnerCreateOpen(false)}
+        title="Crear dueño"
+        size="md"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Crea la empresa dueña y quedara seleccionada automaticamente para la bodega.
+          </Text>
+          <TextInput
+            label="Nombre"
+            placeholder="Ejemplo: VEREAL SA"
+            value={ownerCreateName}
+            onChange={(event) => setOwnerCreateName(event.target.value)}
+            required
+          />
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <TextInput
+              label="NIT / ID"
+              placeholder="Opcional"
+              value={ownerCreateNitOrId}
+              onChange={(event) => setOwnerCreateNitOrId(event.target.value)}
+            />
+            <TextInput
+              label="Telefono"
+              placeholder="Opcional"
+              value={ownerCreatePhone}
+              onChange={(event) => setOwnerCreatePhone(event.target.value)}
+            />
+          </SimpleGrid>
+          <TextInput
+            label="Email"
+            placeholder="Opcional"
+            type="email"
+            value={ownerCreateEmail}
+            onChange={(event) => setOwnerCreateEmail(event.target.value)}
+          />
+          {ownerCreateError ? (
+            <Alert color="red" variant="light" title="No se pudo crear el dueño">
+              {ownerCreateError}
+            </Alert>
+          ) : null}
+          <Group justify="space-between" className="mobile-actions">
+            <Button variant="default" onClick={() => setOwnerCreateOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateOwner} loading={ownerCreateLoading}>
+              Crear dueño
             </Button>
           </Group>
         </Stack>

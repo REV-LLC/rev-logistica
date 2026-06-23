@@ -106,6 +106,9 @@ const quickLinks = [
   },
 ];
 
+const prodDisabledRoutes = ['/billing/pre-invoice'];
+const isProduction = process.env.NODE_ENV === 'production';
+
 function startOfToday() {
   const today = new Date();
   return new Date(today.toDateString());
@@ -184,6 +187,9 @@ function CompactMetric({
 
 export default function HomePage() {
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const visibleQuickLinks = quickLinks.filter(
+    (link) => !isProduction || !prodDisabledRoutes.includes(link.href)
+  );
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -431,13 +437,13 @@ export default function HomePage() {
                     </div>
                     {!isMobile ? (
                       <Badge color="gray" variant="light">
-                        {quickLinks.length} accesos
+                        {visibleQuickLinks.length} accesos
                       </Badge>
                     ) : null}
                   </Group>
 
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={isMobile ? 'sm' : 'md'}>
-                    {quickLinks.map((link) => (
+                    {visibleQuickLinks.map((link) => (
                       <Paper
                         key={link.href}
                         component={Link}

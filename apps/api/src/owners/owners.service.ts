@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateOwnerDto } from './dto/create-owner.dto';
 
 export type OwnerLogoFile = {
   buffer: Buffer;
@@ -41,6 +42,24 @@ export class OwnersService {
       orderBy: {
         name: 'asc',
       },
+    });
+  }
+
+  async createOwner(payload: CreateOwnerDto) {
+    const name = payload.name.trim();
+    if (!name) {
+      throw new BadRequestException('Owner name is required');
+    }
+
+    return this.prisma.owner.create({
+      data: {
+        name,
+        nitOrId: this.normalizeOptionalString(payload.nitOrId),
+        phone: this.normalizeOptionalString(payload.phone),
+        email: this.normalizeOptionalString(payload.email),
+        active: payload.active ?? true,
+      },
+      select: OWNER_SELECT,
     });
   }
 
@@ -100,6 +119,11 @@ export class OwnersService {
     if (!this.hasExpectedImageSignature(file.buffer, file.mimetype)) {
       throw new BadRequestException('Logo content does not match the declared image type');
     }
+  }
+
+  private normalizeOptionalString(value?: string) {
+    const normalized = value?.trim();
+    return normalized ? normalized : undefined;
   }
 
   private hasExpectedImageSignature(buffer: Buffer, mimetype: string) {

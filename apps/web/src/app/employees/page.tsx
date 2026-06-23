@@ -151,6 +151,10 @@ function getVehicleSummary(vehicles: VehicleOption[]) {
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 
+function toUppercaseInput(value?: string | null) {
+  return (value ?? '').toUpperCase();
+}
+
 function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
   return `${employee.name} ${employee.lastName}`.trim();
 }
@@ -348,12 +352,12 @@ export default function EmployeesPage() {
   const openEdit = (employee: Employee) => {
     setEditingEmployee(employee);
     setForm({
-      name: employee.name ?? '',
-      lastName: employee.lastName ?? '',
+      name: toUppercaseInput(employee.name),
+      lastName: toUppercaseInput(employee.lastName),
       role: employee.role ?? 'DRIVER',
       phone: employee.phone ?? '',
       email: employee.email ?? '',
-      documentId: employee.documentId ?? '',
+      documentId: toUppercaseInput(employee.documentId),
       active: employee.active,
       vehicleIds: employee.vehicles.map((entry) => entry.id),
       loginEnabled: Boolean(employee.user),
@@ -797,7 +801,7 @@ export default function EmployeesPage() {
                   placeholder="Nombres"
                   value={form.name}
                   onChange={(event) => {
-                    const value = event.currentTarget.value;
+                    const value = toUppercaseInput(event.currentTarget.value);
                     setForm((prev) => ({ ...prev, name: value }));
                   }}
                   required
@@ -807,7 +811,7 @@ export default function EmployeesPage() {
                   placeholder="Apellidos"
                   value={form.lastName}
                   onChange={(event) => {
-                    const value = event.currentTarget.value;
+                    const value = toUppercaseInput(event.currentTarget.value);
                     setForm((prev) => ({ ...prev, lastName: value }));
                   }}
                   required
@@ -851,7 +855,7 @@ export default function EmployeesPage() {
                   placeholder="Document or identification"
                   value={form.documentId}
                   onChange={(event) => {
-                    const value = event.currentTarget.value;
+                    const value = toUppercaseInput(event.currentTarget.value);
                     setForm((prev) => ({ ...prev, documentId: value }));
                   }}
                 />

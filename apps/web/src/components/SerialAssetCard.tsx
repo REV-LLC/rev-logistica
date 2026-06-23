@@ -48,12 +48,12 @@ function formatCharge(chargeType?: string | null, minimumChargeHours?: number | 
           ? Number(minimumChargeHours)
           : null;
     if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
-      return `Hour (min ${minimum}h)`;
+      return `Hora (min ${minimum}h)`;
     }
-    return 'Hour';
+    return 'Hora';
   }
   if (normalized === 'DAY') {
-    return 'Day';
+    return 'Dia';
   }
   return '-';
 }
@@ -172,7 +172,7 @@ export default function SerialAssetCard({
             {item.serialOrEngine ?? '-'}
           </Text>
           <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-            Billing: {formatCharge(item.chargeType, item.minimumChargeHours)}
+            Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
           </Text>
         </Stack>
 

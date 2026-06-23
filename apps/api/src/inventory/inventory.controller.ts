@@ -19,6 +19,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
+import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
@@ -88,6 +90,40 @@ export class InventoryController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.inventoryService.addBulkAdjustment(payload, request.user.sub);
+  }
+
+  @Post('bulk-adjustments/delete')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OFFICE)
+  deleteBulkStock(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: DeleteBulkStockDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.deleteBulkStock(payload, request.user.sub);
+  }
+
+  @Post('bulk-skus/archive')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  archiveBulkSku(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: ArchiveBulkSkuDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.archiveBulkSku(payload, request.user.sub);
   }
 
   @Post('bulk-stock')
@@ -178,8 +214,11 @@ export class InventoryController {
   @Get('warehouse/:warehouseId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
-  getWarehouseInventory(@Param('warehouseId', new ParseUUIDPipe()) warehouseId: string) {
-    return this.inventoryService.getWarehouseInventory(warehouseId);
+  getWarehouseInventory(
+    @Param('warehouseId', new ParseUUIDPipe()) warehouseId: string,
+    @Query('includeZero') includeZero?: string,
+  ) {
+    return this.inventoryService.getWarehouseInventory(warehouseId, includeZero === 'true');
   }
 
   @Get('on-site/:customerWorksiteId')
