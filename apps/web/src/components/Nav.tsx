@@ -71,6 +71,7 @@ const sections: NavSection[] = [
 ];
 
 const isTransportCostEnabled = process.env.NODE_ENV !== 'production';
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION;
 
 type NavProps = {
   onNavigate?: () => void;
@@ -124,21 +125,40 @@ export default function Nav({ onNavigate }: NavProps) {
             {currentRole ?? 'SIN ROL'}
           </Badge>
           {currentSession?.email ? (
-            <Text
-              size="xs"
-              c="dimmed"
-              ta="right"
-              lh={1.2}
-              title={currentSession.email}
-              w="100%"
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {currentSession.email}
-            </Text>
+            <>
+              <Text
+                size="xs"
+                c="dimmed"
+                ta="right"
+                lh={1.2}
+                title={currentSession.email}
+                w="100%"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {currentSession.email}
+              </Text>
+              {appVersion ? (
+                <Text
+                  size="10px"
+                  c="dimmed"
+                  ta="right"
+                  lh={1.1}
+                  title={appVersion}
+                  w="100%"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {appVersion}
+                </Text>
+              ) : null}
+            </>
           ) : null}
         </Stack>
       </Group>
