@@ -80,6 +80,47 @@ export class DocumentsService {
     return this.generateNextConsecutive(type, tx);
   }
 
+  private isConsecutiveConflict(error: unknown) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+    if (error.code !== 'P2002') return false;
+    const targets = Array.isArray(error.meta?.target)
+      ? error.meta.target.map((value) => String(value))
+      : [String(error.meta?.target ?? '')];
+    return targets.some((target) => target.includes('consecutive'));
+  }
+
+  private async buildRejectedConsecutive(
+    tx: Prisma.TransactionClient,
+    currentConsecutive?: string | null,
+  ) {
+    const normalized = currentConsecutive?.trim();
+    if (!normalized) return null;
+
+    const base = `RJ-${normalized.toUpperCase()}`;
+    const rows = await tx.document.findMany({
+      where: {
+        consecutive: {
+          startsWith: base,
+        },
+      },
+      select: { consecutive: true },
+    });
+
+    const used = new Set(
+      rows
+        .map((row) => row.consecutive?.trim().toUpperCase())
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    if (!used.has(base)) return base;
+
+    let attempt = 2;
+    while (used.has(`${base}-${attempt}`)) {
+      attempt += 1;
+    }
+    return `${base}-${attempt}`;
+  }
+
   private parseSignatureMimeType(signatureDataUrl: string) {
     const match = signatureDataUrl.match(/^data:([^;]+);base64,/i);
     return match?.[1] ?? 'image/png';
@@ -175,12 +216,11 @@ export class DocumentsService {
           });
         });
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002' &&
-          !payload.number
-        ) {
+        if (this.isConsecutiveConflict(error) && !payload.number) {
           continue;
+        }
+        if (this.isConsecutiveConflict(error)) {
+          throw new BadRequestException('El consecutivo ya existe');
         }
         throw error;
       }
@@ -304,56 +344,63 @@ export class DocumentsService {
       throw new BadRequestException('Solo se permiten solicitudes de remisión o devolución');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const consecutive =
-        payload.number !== undefined
-          ? await this.resolveConsecutive(nextType, tx, payload.number)
-          : existing.consecutive;
-      const updated = await tx.document.update({
-        where: { id: documentId },
-        data: {
-          type: nextType,
-          consecutive,
-          warehouseId:
-            payload.warehouseId !== undefined
-              ? (payload.warehouseId ?? null)
-              : existing.warehouseId,
-          customerWorksiteId:
-            payload.customerWorksiteId !== undefined
-              ? (payload.customerWorksiteId ?? null)
-              : existing.customerWorksiteId,
-          notes: payload.notes !== undefined ? payload.notes ?? null : existing.notes,
-        },
-        select: { id: true },
-      });
-
-      await tx.documentItem.deleteMany({
-        where: { documentId },
-      });
-
-      if (payload.items.length) {
-        await tx.documentItem.createMany({
-          data: payload.items.map((item) => ({
-            documentId,
-            skuId: item.skuId ?? null,
-            assetId: item.assetId ?? null,
-            quantity: item.quantity ?? (item.skuId ? 1 : null),
-            requestedTag: item.requestedTag?.trim() || null,
-            condition: item.ownerWarehouseId ?? null,
-            conditionNote: item.conditionNote?.trim() || null,
-          })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const consecutive =
+          payload.number !== undefined
+            ? await this.resolveConsecutive(nextType, tx, payload.number)
+            : existing.consecutive;
+        const updated = await tx.document.update({
+          where: { id: documentId },
+          data: {
+            type: nextType,
+            consecutive,
+            warehouseId:
+              payload.warehouseId !== undefined
+                ? (payload.warehouseId ?? null)
+                : existing.warehouseId,
+            customerWorksiteId:
+              payload.customerWorksiteId !== undefined
+                ? (payload.customerWorksiteId ?? null)
+                : existing.customerWorksiteId,
+            notes: payload.notes !== undefined ? payload.notes ?? null : existing.notes,
+          },
+          select: { id: true },
         });
+
+        await tx.documentItem.deleteMany({
+          where: { documentId },
+        });
+
+        if (payload.items.length) {
+          await tx.documentItem.createMany({
+            data: payload.items.map((item) => ({
+              documentId,
+              skuId: item.skuId ?? null,
+              assetId: item.assetId ?? null,
+              quantity: item.quantity ?? (item.skuId ? 1 : null),
+              requestedTag: item.requestedTag?.trim() || null,
+              condition: item.ownerWarehouseId ?? null,
+              conditionNote: item.conditionNote?.trim() || null,
+            })),
+          });
+        }
+
+        await this.saveReceivedSignature(
+          tx,
+          documentId,
+          existing.createdBy,
+          payload.receivedSignature,
+        );
+
+        return updated;
+      });
+    } catch (error) {
+      if (this.isConsecutiveConflict(error)) {
+        throw new BadRequestException('El consecutivo ya existe');
       }
-
-      await this.saveReceivedSignature(
-        tx,
-        documentId,
-        existing.createdBy,
-        payload.receivedSignature,
-      );
-
-      return updated;
-    });
+      throw error;
+    }
   }
 
   async updateDocumentItemBilling(
@@ -693,24 +740,30 @@ export class DocumentsService {
   }
 
   async rejectRequestDocument(documentId: string, userId: string, reason?: string) {
-    const updated = await this.prisma.document.updateMany({
-      where: { id: documentId, status: DocumentStatus.DRAFT },
-      data: {
-        status: DocumentStatus.VOID,
-        voidReason: reason?.trim() || null,
-        voidedBy: userId,
-        voidedAt: new Date(),
-      },
+    const existing = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: { id: true, status: true, consecutive: true },
     });
-    if (!updated.count) {
-      const found = await this.prisma.document.findUnique({
-        where: { id: documentId },
-        select: { id: true, status: true },
-      });
-      if (!found) throw new NotFoundException('Document not found');
+    if (!existing) throw new NotFoundException('Document not found');
+    if (existing.status !== DocumentStatus.DRAFT) {
       throw new BadRequestException('Solo se puede rechazar un documento en estado DRAFT');
     }
-    return { id: documentId, status: DocumentStatus.VOID };
+
+    return this.prisma.$transaction(async (tx) => {
+      const rejectedConsecutive = await this.buildRejectedConsecutive(tx, existing.consecutive);
+      const updated = await tx.document.update({
+        where: { id: documentId },
+        data: {
+          status: DocumentStatus.VOID,
+          consecutive: rejectedConsecutive,
+          voidReason: reason?.trim() || null,
+          voidedBy: userId,
+          voidedAt: new Date(),
+        },
+        select: { id: true, status: true },
+      });
+      return updated;
+    });
   }
 
   async getDocument(documentId: string) {
