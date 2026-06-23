@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AppShell, Burger, Group, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = [
@@ -27,10 +28,25 @@ function getHeaderCopy(pathname: string | null) {
   return routeTitles.find((item) => pathname?.startsWith(item.prefix)) ?? { title: 'Rev Logistica', subtitle: 'Panel operativo' };
 }
 
-export default function ResponsiveShell({ children }: { children: React.ReactNode }) {
+export default function ResponsiveShell({
+  children,
+  hideNavigation = false,
+}: {
+  children: React.ReactNode;
+  hideNavigation?: boolean;
+}) {
   const [opened, { toggle, close }] = useDisclosure(false);
+  const [isEmbedded, setIsEmbedded] = useState(false);
   const pathname = usePathname();
   const headerCopy = getHeaderCopy(pathname);
+
+  useEffect(() => {
+    setIsEmbedded(new URLSearchParams(window.location.search).get('embed') === '1');
+  }, []);
+
+  if (hideNavigation || isEmbedded) {
+    return <>{children}</>;
+  }
 
   return (
     <AppShell

@@ -124,6 +124,7 @@ export default function WarehouseInventoryPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [emptyInventoryOpen, setEmptyInventoryOpen] = useState(false);
   const [emptyInventoryWarehouseName, setEmptyInventoryWarehouseName] = useState<string>('');
+  const [addStockOpen, setAddStockOpen] = useState(false);
 
   const ownerOptions = useMemo(() => {
     const ownersFromWarehouses = new Map<string, string>();
@@ -286,6 +287,24 @@ export default function WarehouseInventoryPage() {
     loadWarehouses();
     loadOwners();
   }, []);
+
+  useEffect(() => {
+    const handleBulkStockMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'bulk-stock-cancelled') {
+        setAddStockOpen(false);
+        return;
+      }
+      if (event.data?.type !== 'bulk-stock-added') return;
+
+      setAddStockOpen(false);
+      void loadWarehouses();
+      void handleFetch(event.data.warehouseId ?? warehouseId);
+    };
+
+    window.addEventListener('message', handleBulkStockMessage);
+    return () => window.removeEventListener('message', handleBulkStockMessage);
+  }, [warehouseId]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -502,6 +521,20 @@ export default function WarehouseInventoryPage() {
     });
     setDesiredMap(initial);
   };
+
+  const openAddStock = () => {
+    if (!warehouseId) return;
+    setAddStockOpen(true);
+  };
+
+  const addStockUrl = warehouseId
+    ? `/inventory/bulk-adjustments?${new URLSearchParams({
+        warehouseId,
+        flow: 'bulk',
+        step: 'operation',
+        embed: '1',
+      }).toString()}`
+    : '';
 
   const handleReauth = async () => {
     setReauthLoading(true);
@@ -860,6 +893,7 @@ export default function WarehouseInventoryPage() {
                   bulk={data.bulk}
                   serial={data.serial}
                   onAdjust={openAdjust}
+                  onAddStock={openAddStock}
                 />
               </Stack>
             </Paper>
@@ -962,6 +996,33 @@ export default function WarehouseInventoryPage() {
             </Group>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        opened={addStockOpen}
+        onClose={() => setAddStockOpen(false)}
+        title="Agregar stock"
+        size="95%"
+        centered
+        styles={{
+          body: { padding: 0 },
+          content: { overflow: 'hidden' },
+        }}
+      >
+        {addStockUrl ? (
+          <Box
+            component="iframe"
+            src={addStockUrl}
+            title="Agregar stock masivo"
+            style={{
+              width: '100%',
+              height: 'min(82vh, 920px)',
+              border: 0,
+              display: 'block',
+              background: '#f8fafc',
+            }}
+          />
+        ) : null}
       </Modal>
 
       <Modal
