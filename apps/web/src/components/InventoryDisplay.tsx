@@ -56,6 +56,7 @@ export default function InventoryDisplay({
   bulk,
   serial,
   onAdjust,
+  onAddStock,
   viewFilter = 'ALL',
   bulkOwnerStackMode = false,
   isWorksiteView = false,
@@ -64,6 +65,7 @@ export default function InventoryDisplay({
   bulk: BulkItem[];
   serial: SerialItem[];
   onAdjust?: () => void;
+  onAddStock?: () => void;
   viewFilter?: 'ALL' | 'BULK' | 'SERIAL';
   bulkOwnerStackMode?: boolean;
   isWorksiteView?: boolean;
@@ -222,11 +224,18 @@ export default function InventoryDisplay({
         <section>
           <Group justify="space-between" align="center" mb="sm">
             <Title order={3}>STOCK MASIVO</Title>
-            {onAdjust && (
-              <Button variant="outline" size="xs" onClick={onAdjust}>
-                Adjust: Admin
-              </Button>
-            )}
+            <Group gap="xs">
+              {onAddStock ? (
+                <Button color="green" size="xs" onClick={onAddStock}>
+                  Agregar stock
+                </Button>
+              ) : null}
+              {onAdjust && (
+                <Button variant="outline" size="xs" onClick={onAdjust}>
+                  Ajuste: Admin
+                </Button>
+              )}
+            </Group>
           </Group>
 
           <Stack gap="md">

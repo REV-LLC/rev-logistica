@@ -1395,9 +1395,7 @@ export class InventoryService {
       }
       bulkBySkuAndOwner.set(key, { skuId, ownerWarehouseId, quantity: -quantity });
     });
-    const bulkBase = Array.from(bulkBySkuAndOwner.values()).filter(
-      (row) => includeZero || row.quantity !== 0,
-    );
+    const bulkBase = Array.from(bulkBySkuAndOwner.values());
 
     const serialByAsset = new Map<string, number>();
     serialRows.forEach((row) => {

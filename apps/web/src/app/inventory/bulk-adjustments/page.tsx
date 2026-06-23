@@ -245,6 +245,7 @@ export default function AddBulkStockPage() {
   const searchParams = useSearchParams();
   const formaletaFormRef = useRef<HTMLDivElement | null>(null);
   const entrySectionRef = useRef<HTMLDivElement | null>(null);
+  const isEmbedded = searchParams.get('embed') === '1';
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [weightUnits, setWeightUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -290,7 +291,9 @@ export default function AddBulkStockPage() {
   const [quantity, setQuantity] = useState<number | ''>('');
   const [warehouseLocked, setWarehouseLocked] = useState(false);
   const [modeLocked, setModeLocked] = useState(false);
-  const [flowChoice, setFlowChoice] = useState<FlowChoice | null>(null);
+  const [flowChoice, setFlowChoice] = useState<FlowChoice | null>(
+    searchParams.get('flow') === 'bulk' || searchParams.get('warehouseId') ? 'bulk' : null,
+  );
   const [flowLeaving, setFlowLeaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteQuantity, setDeleteQuantity] = useState<number | ''>('');
@@ -373,12 +376,24 @@ export default function AddBulkStockPage() {
     if (!warehouses.length) return;
     const ownerFromQuery = searchParams.get('ownerWarehouseId');
     const warehouseFromQuery = searchParams.get('warehouseId');
+    const shouldOpenOperationStep =
+      searchParams.get('flow') === 'bulk' || searchParams.get('step') === 'operation';
     if (ownerFromQuery && warehouses.some((warehouse) => warehouse.id === ownerFromQuery)) {
       setOwnerWarehouseId(ownerFromQuery);
+      if (shouldOpenOperationStep) {
+        setFlowChoice('bulk');
+        setWarehouseLocked(true);
+        setModeLocked(false);
+      }
       return;
     }
     if (warehouseFromQuery && warehouses.some((warehouse) => warehouse.id === warehouseFromQuery)) {
       setOwnerWarehouseId(warehouseFromQuery);
+      if (shouldOpenOperationStep) {
+        setFlowChoice('bulk');
+        setWarehouseLocked(true);
+        setModeLocked(false);
+      }
     }
   }, [searchParams, warehouses]);
 
@@ -909,9 +924,18 @@ export default function AddBulkStockPage() {
   };
 
   const returnToFlowSelection = () => {
+    if (isEmbedded) return;
     setFlowChoice(null);
     setFlowLeaving(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancel = () => {
+    if (isEmbedded) {
+      window.parent.postMessage({ type: 'bulk-stock-cancelled' }, window.location.origin);
+      return;
+    }
+    router.back();
   };
 
   const applyTypeConfiguration = () => {
@@ -1088,6 +1112,17 @@ export default function AddBulkStockPage() {
           ? selectedExistingItem?.skuName ?? selectedExistingItem?.name ?? selectedExistingItem?.skuId
           : builtItem?.skuName;
       setSuccess(`Agregado +${response.ledger.quantity} a ${skuName} en ${warehouseLabel}`);
+      if (isEmbedded) {
+        window.parent.postMessage(
+          {
+            type: 'bulk-stock-added',
+            warehouseId: ownerWarehouseId,
+            skuId: response.sku.id,
+            quantity: response.ledger.quantity,
+          },
+          window.location.origin,
+        );
+      }
       clearAllInputs();
       router.refresh();
     } catch (err) {
@@ -1231,11 +1266,11 @@ export default function AddBulkStockPage() {
   return (
     <Container
       size="lg"
-      py={flowChoice ? 'xl' : 0}
+      py={isEmbedded ? 'md' : flowChoice ? 'xl' : 0}
       className={!flowChoice ? 'bulk-flow-page-center' : undefined}
     >
       <Stack gap="lg">
-        {flowChoice ? (
+        {flowChoice && !isEmbedded ? (
           <Group justify="flex-start">
             <Button
               variant="subtle"
@@ -2146,7 +2181,7 @@ export default function AddBulkStockPage() {
             </Paper>
 
             <Group justify="flex-end" className="mobile-actions">
-              <Button variant="default" onClick={() => router.back()}>
+              <Button variant="default" onClick={handleCancel}>
                 Cancelar
               </Button>
               <Button
