@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -7,6 +8,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
@@ -14,6 +16,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { CreateOwnerDto } from './dto/create-owner.dto';
 import { OwnersService } from './owners.service';
 import type { OwnerLogoFile } from './owners.service';
 
@@ -28,6 +31,20 @@ export class OwnersController {
   @Get()
   listOwners() {
     return this.ownersService.listOwners();
+  }
+
+  @Post()
+  createOwner(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: CreateOwnerDto,
+  ) {
+    return this.ownersService.createOwner(payload);
   }
 
   @Post(':ownerId/logo')
