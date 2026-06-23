@@ -19,6 +19,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
@@ -88,6 +89,23 @@ export class InventoryController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.inventoryService.addBulkAdjustment(payload, request.user.sub);
+  }
+
+  @Post('bulk-adjustments/delete')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OFFICE)
+  deleteBulkStock(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: DeleteBulkStockDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.deleteBulkStock(payload, request.user.sub);
   }
 
   @Post('bulk-stock')

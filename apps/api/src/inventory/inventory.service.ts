@@ -4,10 +4,12 @@ import {
   InternalServerErrorException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { ChargeType, DocumentType, MovementType, Prisma, SkuControlType } from '@prisma/client';
+import { ChargeType, DocumentType, MovementType, Prisma, Role, SkuControlType } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
@@ -17,6 +19,7 @@ import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import {
   GetInventoryLedgerDto,
   LEDGER_DEFAULT_TAKE,
@@ -472,6 +475,86 @@ export class InventoryService {
 
       return {
         sku: { id: sku.id, assetFamilyId: assetFamily.id },
+        ledger,
+      };
+    });
+  }
+
+  async deleteBulkStock(payload: DeleteBulkStockDto, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, active: true, passwordHash: true, role: true },
+      });
+      if (!user || !user.active || user.role !== Role.OFFICE) {
+        throw new UnauthorizedException('No autorizado');
+      }
+
+      const passwordMatches = await bcrypt.compare(payload.password, user.passwordHash);
+      if (!passwordMatches) {
+        throw new UnauthorizedException('Credenciales inválidas');
+      }
+
+      const sku = await tx.sku.findUnique({
+        where: { id: payload.skuId },
+        select: {
+          id: true,
+          assetFamilyId: true,
+          assetFamily: { select: { controlType: true } },
+        },
+      });
+      if (!sku) {
+        throw new NotFoundException('SKU no encontrado');
+      }
+      if (sku.assetFamily.controlType !== SkuControlType.BULK) {
+        throw new BadRequestException('El SKU debe ser de stock por cantidad');
+      }
+
+      const [ownerWarehouse, warehouse] = await Promise.all([
+        tx.warehouse.findUnique({ where: { id: payload.ownerWarehouseId }, select: { id: true } }),
+        tx.warehouse.findUnique({ where: { id: payload.warehouseId }, select: { id: true } }),
+      ]);
+      if (!ownerWarehouse) {
+        throw new NotFoundException('Bodega dueña no encontrada');
+      }
+      if (!warehouse) {
+        throw new NotFoundException('Bodega no encontrada');
+      }
+
+      const currentRows = await tx.stockLedger.groupBy({
+        by: ['skuId'],
+        where: {
+          skuId: payload.skuId,
+          ownerWarehouseId: payload.ownerWarehouseId,
+          warehouseId: payload.warehouseId,
+        },
+        _sum: { quantity: true },
+      });
+      const available = Number(currentRows[0]?._sum.quantity ?? 0);
+      if (available < payload.quantity) {
+        throw new BadRequestException(`Stock insuficiente. Disponible: ${available}`);
+      }
+
+      const ledger = await tx.stockLedger.create({
+        data: {
+          movementType: MovementType.ADJUST,
+          warehouseId: payload.warehouseId,
+          ownerWarehouseId: payload.ownerWarehouseId,
+          customerWorksiteId: null,
+          skuId: payload.skuId,
+          assetId: null,
+          quantity: -payload.quantity,
+          createdBy: userId,
+        },
+        select: { id: true, movementType: true, quantity: true },
+      });
+
+      await this.invalidateInventoryCache({
+        warehouseId: payload.warehouseId,
+      });
+
+      return {
+        sku: { id: sku.id, assetFamilyId: sku.assetFamilyId },
         ledger,
       };
     });

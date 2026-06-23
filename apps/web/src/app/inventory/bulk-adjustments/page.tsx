@@ -7,8 +7,10 @@ import {
   Button,
   Container,
   Group,
+  Modal,
   NumberInput,
   Paper,
+  PasswordInput,
   Select,
   SimpleGrid,
   Stack,
@@ -27,6 +29,7 @@ import {
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import { api, ApiError } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 
 type Warehouse = {
   id: string;
@@ -44,6 +47,8 @@ type CreateBulkResponse = {
     quantity: number;
   };
 };
+
+type DeleteBulkResponse = CreateBulkResponse;
 
 type ItemType = 'FORMALETA' | 'GENERIC';
 type EntryMode = 'existing' | 'new';
@@ -115,6 +120,11 @@ const CONVENTIONAL_SCAFFOLD_PARTS = [
   'TABLONES',
   'PLATAFORMAS',
 ] as const;
+const CONVENTIONAL_SCAFFOLD_MEASURES = ['1.00M', '1.50M'] as const;
+const CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE = new Set<string>([
+  'NAVE',
+  'TIJERAS',
+]);
 const CERTIFIED_SCAFFOLD_MEASURES = [
   '0.50M',
   '0.70M',
@@ -258,6 +268,12 @@ export default function AddBulkStockPage() {
   const [modeLocked, setModeLocked] = useState(false);
   const [flowChoice, setFlowChoice] = useState<FlowChoice | null>(null);
   const [flowLeaving, setFlowLeaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteQuantity, setDeleteQuantity] = useState<number | ''>('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const isOfficeRole = getCurrentUserRole() === 'OFFICE';
 
   const formaletaRequiredSkuData: RequiredSkuData = {
     unitWeight: formaletaSkuUnitWeight,
@@ -417,6 +433,10 @@ export default function AddBulkStockPage() {
     value: part,
     label: part,
   }));
+  const conventionalScaffoldMeasureOptions = CONVENTIONAL_SCAFFOLD_MEASURES.map((measure) => ({
+    value: measure,
+    label: measure,
+  }));
   const certifiedScaffoldMeasureOptions = CERTIFIED_SCAFFOLD_MEASURES.map((measure) => ({
     value: measure,
     label: measure,
@@ -427,6 +447,10 @@ export default function AddBulkStockPage() {
     isCertifiedScaffold &&
     !!genericSkuName &&
     !CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE.has(genericSkuName);
+  const conventionalScaffoldNeedsMeasure =
+    isConventionalScaffold &&
+    !!genericSkuName &&
+    CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE.has(genericSkuName);
   const formaletaDraftName = useMemo(() => {
     if (formaletaIsAccessory) {
       const accessoryName = formaletaAccessoryName.trim();
@@ -507,6 +531,8 @@ export default function AddBulkStockPage() {
     const resolvedGenericSkuName =
       certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
         ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+        : conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
+          ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
         : genericSkuName.trim();
 
     return {
@@ -545,6 +571,7 @@ export default function AddBulkStockPage() {
     genericSkuName,
     certifiedScaffoldMeasure,
     certifiedScaffoldNeedsMeasure,
+    conventionalScaffoldNeedsMeasure,
     genericSkuUnitWeight,
     genericSkuPrice,
     genericSkuSubrentalPrice,
@@ -801,6 +828,20 @@ export default function AddBulkStockPage() {
     });
   };
 
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setDeleteQuantity('');
+    setDeletePassword('');
+    setDeleteError(null);
+  };
+
+  const openDeleteModal = () => {
+    setDeleteQuantity('');
+    setDeletePassword('');
+    setDeleteError(null);
+    setDeleteModalOpen(true);
+  };
+
   const chooseFlow = (choice: FlowChoice | 'yellow-machinery') => {
     setFlowLeaving(true);
     window.setTimeout(() => {
@@ -883,6 +924,10 @@ export default function AddBulkStockPage() {
         return;
       }
       if (certifiedScaffoldNeedsMeasure && !certifiedScaffoldMeasure) {
+        setError('Select the piece measurement');
+        return;
+      }
+      if (conventionalScaffoldNeedsMeasure && !certifiedScaffoldMeasure) {
         setError('Select the piece measurement');
         return;
       }
@@ -1003,6 +1048,78 @@ export default function AddBulkStockPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteStock = async () => {
+    setDeleteError(null);
+
+    if (!isOfficeRole) {
+      setDeleteError('Solo el rol office puede eliminar stock.');
+      return;
+    }
+
+    if (!selectedExistingItem || !ownerWarehouseId) {
+      setDeleteError('Selecciona primero un item existente.');
+      return;
+    }
+
+    if (deleteQuantity === '' || Number(deleteQuantity) <= 0) {
+      setDeleteError('Ingresa una cantidad valida.');
+      return;
+    }
+
+    if (Number(deleteQuantity) > selectedExistingItem.quantity) {
+      setDeleteError(`La cantidad supera el stock actual (${selectedExistingItem.quantity}).`);
+      return;
+    }
+
+    if (!deletePassword.trim()) {
+      setDeleteError('Ingresa tu contraseña.');
+      return;
+    }
+
+    setDeleteLoading(true);
+    try {
+      const response = await api<DeleteBulkResponse>('/inventory/bulk-adjustments/delete', {
+        method: 'POST',
+        json: {
+          skuId: selectedExistingItem.skuId,
+          ownerWarehouseId,
+          warehouseId: ownerWarehouseId,
+          quantity: Number(deleteQuantity),
+          password: deletePassword,
+        },
+        redirectOnAuthError: false,
+      });
+
+      const skuName = selectedExistingItem.skuName ?? selectedExistingItem.name ?? selectedExistingItem.skuId;
+      setSuccess(`Eliminado ${Math.abs(response.ledger.quantity)} de ${skuName}.`);
+      setExistingItems((items) =>
+        items
+          .map((item) =>
+            item.skuId === selectedExistingItem.skuId
+              ? { ...item, quantity: item.quantity - Number(deleteQuantity) }
+              : item,
+          )
+          .filter((item) => item.quantity !== 0),
+      );
+      closeDeleteModal();
+      if (selectedExistingItem.quantity - Number(deleteQuantity) <= 0) {
+        setExistingSkuId(null);
+      }
+      setQuantity('');
+      router.refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setDeleteError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setDeleteError(err.message);
+      } else {
+        setDeleteError('Error eliminando stock.');
+      }
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -1281,6 +1398,19 @@ export default function AddBulkStockPage() {
                             Listo
                           </Badge>
                         </Group>
+                        {isOfficeRole ? (
+                          <Group justify="flex-end" mt="sm">
+                            <Button
+                              type="button"
+                              color="red"
+                              variant="light"
+                              size="xs"
+                              onClick={openDeleteModal}
+                            >
+                              Eliminar stock
+                            </Button>
+                          </Group>
+                        ) : null}
                       </Paper>
                     ) : null}
                   </Stack>
@@ -1620,19 +1750,59 @@ export default function AddBulkStockPage() {
                               </Paper>
                             </>
                           ) : isConventionalScaffold ? (
-                            <Select
-                              label="Referencia"
-                              data={conventionalScaffoldPartOptions}
-                              value={genericSkuName || null}
-                              onChange={(value) => {
-                                setGenericSkuName(value ?? '');
-                                setCertifiedScaffoldMeasure('');
-                                setIsItemConfigured(false);
-                              }}
-                              placeholder="Seleccionar pieza"
-                              searchable
-                              required
-                            />
+                            <>
+                              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                                <Select
+                                  label="Referencia"
+                                  data={conventionalScaffoldPartOptions}
+                                  value={genericSkuName || null}
+                                  onChange={(value) => {
+                                    setGenericSkuName(value ?? '');
+                                    setCertifiedScaffoldMeasure('');
+                                    setIsItemConfigured(false);
+                                  }}
+                                  placeholder="Seleccionar pieza"
+                                  searchable
+                                  required
+                                />
+                                {conventionalScaffoldNeedsMeasure ? (
+                                  <Select
+                                    label="Medida"
+                                    data={conventionalScaffoldMeasureOptions}
+                                    value={certifiedScaffoldMeasure || null}
+                                    onChange={(value) => {
+                                      setCertifiedScaffoldMeasure(value ?? '');
+                                      setIsItemConfigured(false);
+                                    }}
+                                    placeholder="Seleccionar medida"
+                                    searchable
+                                    required
+                                  />
+                                ) : null}
+                              </SimpleGrid>
+                              <Paper
+                                radius="md"
+                                p="sm"
+                                bg={
+                                  genericSkuName && (!conventionalScaffoldNeedsMeasure || certifiedScaffoldMeasure)
+                                    ? 'green.0'
+                                    : 'gray.0'
+                                }
+                              >
+                                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                                  SKU final
+                                </Text>
+                                <Text size="sm" mt={4}>
+                                  {genericSkuName && conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
+                                    ? `${genericSkuName} (${certifiedScaffoldMeasure})`
+                                    : genericSkuName && !conventionalScaffoldNeedsMeasure
+                                      ? genericSkuName
+                                      : conventionalScaffoldNeedsMeasure
+                                        ? 'Selecciona referencia y medida.'
+                                        : 'Selecciona referencia.'}
+                                </Text>
+                              </Paper>
+                            </>
                           ) : (
                             <TextInput
                               label="Referencia"
@@ -1867,6 +2037,57 @@ export default function AddBulkStockPage() {
           </Stack>
         ) : null}
         </PageHeaderCard>
+
+        <Modal
+          opened={deleteModalOpen}
+          onClose={closeDeleteModal}
+          title="Eliminar stock"
+          centered
+        >
+          <Stack gap="md">
+            <Text size="sm" c="dimmed">
+              Esta accion registra un ajuste negativo. Confirma tu contraseña de office antes de eliminar stock.
+            </Text>
+            {selectedExistingItem ? (
+              <Paper radius="md" p="sm" bg="gray.0">
+                <Text size="sm" fw={700}>
+                  {selectedExistingItem.skuName ?? selectedExistingItem.name}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Stock actual: {selectedExistingItem.quantity}
+                </Text>
+              </Paper>
+            ) : null}
+            <NumberInput
+              label="Cantidad a eliminar"
+              value={deleteQuantity}
+              onChange={(value) => setDeleteQuantity(typeof value === 'number' ? value : '')}
+              min={0}
+              max={selectedExistingItem?.quantity ?? undefined}
+              step={1}
+              required
+            />
+            <PasswordInput
+              label="Contraseña"
+              value={deletePassword}
+              onChange={(event) => setDeletePassword(event.currentTarget.value)}
+              required
+            />
+            {deleteError ? (
+              <Alert color="red" variant="light">
+                {deleteError}
+              </Alert>
+            ) : null}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={closeDeleteModal}>
+                Cancelar
+              </Button>
+              <Button color="red" onClick={handleDeleteStock} loading={deleteLoading}>
+                Eliminar
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">

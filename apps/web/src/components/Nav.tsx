@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Badge, Box, Button, Divider, Group, NavLink, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Divider, Group, NavLink, Stack, Text, Tooltip } from '@mantine/core';
 import { AppRole, clearToken, getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import {
   IconArrowsShuffle,
@@ -15,6 +15,7 @@ import {
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
+  IconTag,
   IconTruck,
   IconUsers,
   IconUser,
@@ -63,6 +64,7 @@ const sections: NavSection[] = [
     title: 'Administracion',
     links: [
       { href: '/billing/pre-invoice', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
+      { href: '/billing/price-list', label: 'Lista de precios', icon: IconTag, roles: ['ADMIN', 'OFFICE'] },
       { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
       { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
       { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },
@@ -70,7 +72,8 @@ const sections: NavSection[] = [
   },
 ];
 
-const isTransportCostEnabled = process.env.NODE_ENV !== 'production';
+const prodDisabledRoutes = ['/transport/cost', '/billing/pre-invoice'];
+const isProduction = process.env.NODE_ENV === 'production';
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION;
 
 type NavProps = {
@@ -86,7 +89,7 @@ export default function Nav({ onNavigate }: NavProps) {
     .map((section) => ({
       ...section,
       links: section.links.filter((link) => {
-        if (link.href === '/transport/cost' && !isTransportCostEnabled) {
+        if (isProduction && prodDisabledRoutes.includes(link.href)) {
           return false;
         }
 
@@ -142,21 +145,29 @@ export default function Nav({ onNavigate }: NavProps) {
                 {currentSession.email}
               </Text>
               {appVersion ? (
-                <Text
-                  size="10px"
-                  c="dimmed"
-                  ta="right"
-                  lh={1.1}
-                  title={appVersion}
-                  w="100%"
-                  style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
+                <Tooltip
+                  label={appVersion}
+                  position="bottom-end"
+                  withArrow
+                  multiline
+                  maw={260}
+                  openDelay={250}
                 >
-                  {appVersion}
-                </Text>
+                  <Text
+                    size="10px"
+                    c="dimmed"
+                    ta="right"
+                    lh={1.1}
+                    w="100%"
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {appVersion}
+                  </Text>
+                </Tooltip>
               ) : null}
             </>
           ) : null}
