@@ -20,6 +20,7 @@ import {
   IconTruck,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -78,11 +79,6 @@ const FUEL_OPTIONS = [
   { value: 'DIESEL', label: 'Diesel' },
   { value: 'ELECTRICO', label: 'Electric' },
 ];
-const CHARGE_TYPE_OPTIONS = [
-  { value: 'DAY', label: 'Per day' },
-  { value: 'HOUR', label: 'Per hour' },
-];
-
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
 
@@ -996,14 +992,11 @@ export default function CreateSerializedAssetPage() {
                       prefix="$ "
                       thousandSeparator=","
                     />
-                    <Select
+                    <ChargeTypeSelect
                       label="Tipo de cobro"
                       name="skuChargeType"
-                      data={CHARGE_TYPE_OPTIONS}
                       value={skuChargeType}
-                      onChange={(value) =>
-                        setSkuChargeType((value as 'DAY' | 'HOUR' | null) ?? 'DAY')
-                      }
+                      onChange={setSkuChargeType}
                     />
                     {skuChargeType === 'HOUR' ? (
                       <NumberInput
