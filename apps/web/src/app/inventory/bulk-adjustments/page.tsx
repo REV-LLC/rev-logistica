@@ -50,6 +50,19 @@ type CreateBulkResponse = {
 
 type DeleteBulkResponse = CreateBulkResponse;
 
+type ArchiveBulkSkuResponse = {
+  sku: {
+    id: string;
+    name: string;
+    active: boolean;
+  };
+  adjustments: {
+    warehouseId: string;
+    ownerWarehouseId: string;
+    quantity: number;
+  }[];
+};
+
 type ItemType = 'FORMALETA' | 'GENERIC';
 type EntryMode = 'existing' | 'new';
 type FlowChoice = 'bulk';
@@ -200,18 +213,29 @@ const isMissingPositiveNumber = (value: number | string) => {
   return !Number.isFinite(parsed) || parsed <= 0;
 };
 
+const isMissingNonNegativeNumber = (value: number | string) => {
+  if (value === '') {
+    return true;
+  }
+
+  const parsed = parseLocaleDecimal(value);
+  return !Number.isFinite(parsed) || parsed < 0;
+};
+
 const hasMissingRequiredSkuData = ({
   unitWeight,
   weightUnit,
   price,
   subrentalPrice,
   areaM2,
-}: RequiredSkuData, requireAreaM2: boolean) =>
+}: RequiredSkuData, requireAreaM2: boolean, allowZeroPricing = false) =>
   isMissingPositiveNumber(unitWeight) ||
   !weightUnit ||
   (requireAreaM2 && isMissingPositiveNumber(areaM2 ?? '')) ||
-  isMissingPositiveNumber(price) ||
-  isMissingPositiveNumber(subrentalPrice);
+  (allowZeroPricing ? isMissingNonNegativeNumber(price) : isMissingPositiveNumber(price)) ||
+  (allowZeroPricing
+    ? isMissingNonNegativeNumber(subrentalPrice)
+    : isMissingPositiveNumber(subrentalPrice));
 
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
@@ -273,7 +297,13 @@ export default function AddBulkStockPage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const isOfficeRole = getCurrentUserRole() === 'OFFICE';
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [archivePassword, setArchivePassword] = useState('');
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const currentUserRole = getCurrentUserRole();
+  const isOfficeRole = currentUserRole === 'OFFICE';
+  const isAdminRole = currentUserRole === 'ADMIN';
 
   const formaletaRequiredSkuData: RequiredSkuData = {
     unitWeight: formaletaSkuUnitWeight,
@@ -288,11 +318,12 @@ export default function AddBulkStockPage() {
     price: genericSkuPrice,
     subrentalPrice: genericSkuSubrentalPrice,
   };
+  const allowZeroPricing = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
   const requiredSkuDataMissing =
     itemType === 'FORMALETA'
       ? hasMissingRequiredSkuData(formaletaRequiredSkuData, true)
       : itemType === 'GENERIC'
-        ? hasMissingRequiredSkuData(genericRequiredSkuData, false)
+        ? hasMissingRequiredSkuData(genericRequiredSkuData, false, allowZeroPricing)
         : false;
   const showRequiredSkuErrors = confirmAttempted;
   const confirmButtonNeedsAttention = confirmAttempted && requiredSkuDataMissing;
@@ -363,7 +394,8 @@ export default function AddBulkStockPage() {
     setExistingItemsLoading(true);
     setError(null);
 
-    api<WarehouseInventoryResponse>(`/inventory/warehouse/${ownerWarehouseId}`)
+    const includeZeroParam = isAdminRole ? '?includeZero=true' : '';
+    api<WarehouseInventoryResponse>(`/inventory/warehouse/${ownerWarehouseId}${includeZeroParam}`)
       .then((data) => {
         if (!mounted) return;
         const bulkItems = (data.bulk ?? [])
@@ -391,7 +423,7 @@ export default function AddBulkStockPage() {
     return () => {
       mounted = false;
     };
-  }, [entryMode, modeLocked, ownerWarehouseId, warehouseLocked]);
+  }, [entryMode, isAdminRole, modeLocked, ownerWarehouseId, warehouseLocked]);
 
   useEffect(() => {
     if (itemType !== 'FORMALETA') return;
@@ -442,7 +474,7 @@ export default function AddBulkStockPage() {
     label: measure,
   }));
   const isCertifiedScaffold = itemTypeSelection === 'ANDAMIO_CERTIFICADO';
-  const isConventionalScaffold = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
+  const isConventionalScaffold = allowZeroPricing;
   const certifiedScaffoldNeedsMeasure =
     isCertifiedScaffold &&
     !!genericSkuName &&
@@ -794,7 +826,7 @@ export default function AddBulkStockPage() {
     price,
     subrentalPrice,
     areaM2,
-  }: RequiredSkuData, requireAreaM2: boolean) => {
+  }: RequiredSkuData, requireAreaM2: boolean, allowZeroPricingForItem = false) => {
     if (unitWeight === '' || Number(unitWeight) <= 0) {
       setError('Enter the product weight');
       return false;
@@ -807,11 +839,19 @@ export default function AddBulkStockPage() {
       setError('Enter the product area in m²');
       return false;
     }
-    if (price === '' || Number(price) <= 0) {
+    if (
+      price === '' ||
+      !Number.isFinite(Number(price)) ||
+      (allowZeroPricingForItem ? Number(price) < 0 : Number(price) <= 0)
+    ) {
       setError('Enter the product price');
       return false;
     }
-    if (subrentalPrice === '' || Number(subrentalPrice) <= 0) {
+    if (
+      subrentalPrice === '' ||
+      !Number.isFinite(Number(subrentalPrice)) ||
+      (allowZeroPricingForItem ? Number(subrentalPrice) < 0 : Number(subrentalPrice) <= 0)
+    ) {
       setError('Enter the product subrental price');
       return false;
     }
@@ -840,6 +880,18 @@ export default function AddBulkStockPage() {
     setDeletePassword('');
     setDeleteError(null);
     setDeleteModalOpen(true);
+  };
+
+  const closeArchiveModal = () => {
+    setArchiveModalOpen(false);
+    setArchivePassword('');
+    setArchiveError(null);
+  };
+
+  const openArchiveModal = () => {
+    setArchivePassword('');
+    setArchiveError(null);
+    setArchiveModalOpen(true);
   };
 
   const chooseFlow = (choice: FlowChoice | 'yellow-machinery') => {
@@ -940,7 +992,7 @@ export default function AddBulkStockPage() {
         weightUnit: genericWeightUnit,
         price: genericSkuPrice,
         subrentalPrice: genericSkuSubrentalPrice,
-      }, false)) {
+      }, false, allowZeroPricing)) {
         return;
       }
     }
@@ -1120,6 +1172,59 @@ export default function AddBulkStockPage() {
       }
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleArchiveSku = async () => {
+    setArchiveError(null);
+
+    if (!isAdminRole) {
+      setArchiveError('Solo admin puede archivar referencias.');
+      return;
+    }
+
+    if (!selectedExistingItem) {
+      setArchiveError('Selecciona primero una referencia.');
+      return;
+    }
+
+    if (!archivePassword.trim()) {
+      setArchiveError('Ingresa tu contraseña.');
+      return;
+    }
+
+    setArchiveLoading(true);
+    try {
+      const response = await api<ArchiveBulkSkuResponse>('/inventory/bulk-skus/archive', {
+        method: 'POST',
+        json: {
+          skuId: selectedExistingItem.skuId,
+          password: archivePassword,
+        },
+        redirectOnAuthError: false,
+      });
+
+      const skuName = response.sku.name || selectedExistingItem.skuName || selectedExistingItem.skuId;
+      const adjusted = response.adjustments.reduce((sum, item) => sum + Math.abs(item.quantity), 0);
+      setSuccess(
+        adjusted > 0
+          ? `Referencia archivada: ${skuName}. Se registro ajuste por ${adjusted}.`
+          : `Referencia archivada: ${skuName}.`,
+      );
+      setExistingItems((items) => items.filter((item) => item.skuId !== selectedExistingItem.skuId));
+      setExistingSkuId(null);
+      closeArchiveModal();
+      router.refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setArchiveError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setArchiveError(err.message);
+      } else {
+        setArchiveError('Error archivando referencia.');
+      }
+    } finally {
+      setArchiveLoading(false);
     }
   };
 
@@ -1398,17 +1503,30 @@ export default function AddBulkStockPage() {
                             Listo
                           </Badge>
                         </Group>
-                        {isOfficeRole ? (
+                        {isOfficeRole || isAdminRole ? (
                           <Group justify="flex-end" mt="sm">
-                            <Button
-                              type="button"
-                              color="red"
-                              variant="light"
-                              size="xs"
-                              onClick={openDeleteModal}
-                            >
-                              Eliminar stock
-                            </Button>
+                            {isOfficeRole ? (
+                              <Button
+                                type="button"
+                                color="red"
+                                variant="light"
+                                size="xs"
+                                onClick={openDeleteModal}
+                              >
+                                Eliminar stock
+                              </Button>
+                            ) : null}
+                            {isAdminRole ? (
+                              <Button
+                                type="button"
+                                color="red"
+                                variant="outline"
+                                size="xs"
+                                onClick={openArchiveModal}
+                              >
+                                Archivar referencia
+                              </Button>
+                            ) : null}
                           </Group>
                         ) : null}
                       </Paper>
@@ -1850,7 +1968,10 @@ export default function AddBulkStockPage() {
                               min={0}
                               step={1000}
                               error={
-                                showRequiredSkuErrors && isMissingPositiveNumber(genericSkuPrice)
+                                showRequiredSkuErrors &&
+                                (allowZeroPricing
+                                  ? isMissingNonNegativeNumber(genericSkuPrice)
+                                  : isMissingPositiveNumber(genericSkuPrice))
                                   ? 'Obligatorio'
                                   : undefined
                               }
@@ -1865,7 +1986,10 @@ export default function AddBulkStockPage() {
                               min={0}
                               step={1000}
                               error={
-                                showRequiredSkuErrors && isMissingPositiveNumber(genericSkuSubrentalPrice)
+                                showRequiredSkuErrors &&
+                                (allowZeroPricing
+                                  ? isMissingNonNegativeNumber(genericSkuSubrentalPrice)
+                                  : isMissingPositiveNumber(genericSkuSubrentalPrice))
                                   ? 'Obligatorio'
                                   : undefined
                               }
@@ -2084,6 +2208,48 @@ export default function AddBulkStockPage() {
               </Button>
               <Button color="red" onClick={handleDeleteStock} loading={deleteLoading}>
                 Eliminar
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
+        <Modal
+          opened={archiveModalOpen}
+          onClose={closeArchiveModal}
+          title="Archivar referencia"
+          centered
+        >
+          <Stack gap="md">
+            <Text size="sm" c="dimmed">
+              La referencia quedara inactiva y no se podra volver a seleccionar. Si tiene stock, se registra un ajuste para dejarla en cero.
+            </Text>
+            {selectedExistingItem ? (
+              <Paper radius="md" p="sm" bg="gray.0">
+                <Text size="sm" fw={700}>
+                  {selectedExistingItem.skuName ?? selectedExistingItem.name}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {selectedExistingItem.category ?? 'Sin familia'} · Stock actual: {selectedExistingItem.quantity}
+                </Text>
+              </Paper>
+            ) : null}
+            <PasswordInput
+              label="Contraseña admin"
+              value={archivePassword}
+              onChange={(event) => setArchivePassword(event.currentTarget.value)}
+              required
+            />
+            {archiveError ? (
+              <Alert color="red" variant="light">
+                {archiveError}
+              </Alert>
+            ) : null}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={closeArchiveModal}>
+                Cancelar
+              </Button>
+              <Button color="red" onClick={handleArchiveSku} loading={archiveLoading}>
+                Archivar
               </Button>
             </Group>
           </Stack>
