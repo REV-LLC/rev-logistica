@@ -25,6 +25,7 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import { api, ApiError } from '@/lib/api';
 
 type Warehouse = {
@@ -105,6 +106,14 @@ const CERTIFIED_SCAFFOLD_PARTS = [
   'ESCALERA TIPO GATO',
   'DIAGONALES',
   'RODA PIE',
+] as const;
+const CONVENTIONAL_SCAFFOLD_PARTS = [
+  'NAVE',
+  'TIJERAS',
+  'TUERCAS',
+  'RUEDAS',
+  'TABLONES',
+  'PLATAFORMAS',
 ] as const;
 const CERTIFIED_SCAFFOLD_MEASURES = [
   '0.50M',
@@ -396,10 +405,6 @@ export default function AddBulkStockPage() {
     { value: 'ENCOFRADO', label: 'ENCOFRADO' },
   ];
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
-  const chargeTypeOptions = [
-    { value: 'DAY', label: 'Per day' },
-    { value: 'HOUR', label: 'Per hour' },
-  ];
   const formaletaLineOptions = [
     { value: 'FORMALETA', label: 'Formaleta' },
     { value: 'FORMALETA_SARDINEL', label: 'Formaleta Sardinel' },
@@ -408,11 +413,16 @@ export default function AddBulkStockPage() {
     value: part,
     label: part,
   }));
+  const conventionalScaffoldPartOptions = CONVENTIONAL_SCAFFOLD_PARTS.map((part) => ({
+    value: part,
+    label: part,
+  }));
   const certifiedScaffoldMeasureOptions = CERTIFIED_SCAFFOLD_MEASURES.map((measure) => ({
     value: measure,
     label: measure,
   }));
   const isCertifiedScaffold = itemTypeSelection === 'ANDAMIO_CERTIFICADO';
+  const isConventionalScaffold = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
   const certifiedScaffoldNeedsMeasure =
     isCertifiedScaffold &&
     !!genericSkuName &&
@@ -1514,13 +1524,9 @@ export default function AddBulkStockPage() {
                                 }
                                 required
                               />
-                              <Select
-                                label="Cobro"
-                                data={chargeTypeOptions}
+                              <ChargeTypeSelect
                                 value={formaletaChargeType}
-                                onChange={(value) =>
-                                  setFormaletaChargeType((value as ChargeType | null) ?? 'DAY')
-                                }
+                                onChange={setFormaletaChargeType}
                               />
                               {formaletaChargeType === 'HOUR' ? (
                                 <NumberInput
@@ -1613,6 +1619,20 @@ export default function AddBulkStockPage() {
                                 </Text>
                               </Paper>
                             </>
+                          ) : isConventionalScaffold ? (
+                            <Select
+                              label="Referencia"
+                              data={conventionalScaffoldPartOptions}
+                              value={genericSkuName || null}
+                              onChange={(value) => {
+                                setGenericSkuName(value ?? '');
+                                setCertifiedScaffoldMeasure('');
+                                setIsItemConfigured(false);
+                              }}
+                              placeholder="Seleccionar pieza"
+                              searchable
+                              required
+                            />
                           ) : (
                             <TextInput
                               label="Referencia"
@@ -1681,13 +1701,9 @@ export default function AddBulkStockPage() {
                               }
                               required
                             />
-                            <Select
-                              label="Cobro"
-                              data={chargeTypeOptions}
+                            <ChargeTypeSelect
                               value={genericChargeType}
-                              onChange={(value) =>
-                                setGenericChargeType((value as ChargeType | null) ?? 'DAY')
-                              }
+                              onChange={setGenericChargeType}
                             />
                             {genericChargeType === 'HOUR' ? (
                               <NumberInput
