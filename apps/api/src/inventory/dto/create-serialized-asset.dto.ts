@@ -38,6 +38,10 @@ export class SerializedSkuInput {
   price?: number;
 
   @IsOptional()
+  @IsNumber()
+  replacementValue?: number;
+
+  @IsOptional()
   @IsEnum(ChargeType)
   chargeType?: ChargeType;
 

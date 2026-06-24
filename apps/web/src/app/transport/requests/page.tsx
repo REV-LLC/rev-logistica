@@ -1884,11 +1884,17 @@ export default function SolicitudesIpadPage() {
       </Alert>
     ) : null;
 
+  const selectedWorksiteLabel = selectedWorksite
+    ? selectedWorksite.alias
+      ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
+      : selectedWorksite.worksite.name
+    : 'Sin obra';
+
   const requestMetrics = {
     drafts: requests.length,
     selected: selectedItems.length,
     activeDoc: editingRequestId ? 'Editando' : 'Nuevo',
-    tab: activeTab === 'list' ? 'Drafts' : 'Generation',
+    tab: activeTab === 'list' ? 'Borradores' : 'Generacion',
   };
 
   return (
@@ -2133,44 +2139,81 @@ export default function SolicitudesIpadPage() {
             </Tabs.Panel>
 
             <Tabs.Panel value="generate" pt="md">
-              <Group justify="space-between" mb="sm">
-                <div>
-                  <Text fw={700}>
-                  {editingRequestId ? `Editando solicitud ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    Complete information, add items, and register the signature before sending.
-                  </Text>
-                </div>
-                {editingRequestId ? (
-                  <Button variant="light" color="gray" onClick={resetGenerateForm}>
-                    Cancelar edicion
-                  </Button>
-                ) : null}
-              </Group>
-              <Tabs value={generateStep} onChange={handleGenerateStepChange} mb="md">
-                <Tabs.List grow={isMobile}>
-                  <Tabs.Tab value="info">1. Information</Tabs.Tab>
-                  <Tabs.Tab value="items">2. Items</Tabs.Tab>
-                  <Tabs.Tab value="sign">3. Signature and submission</Tabs.Tab>
-                </Tabs.List>
-              </Tabs>
+              <Paper
+                withBorder
+                radius="lg"
+                p={{ base: 'sm', md: 'md' }}
+                mb="lg"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(239,246,255,0.78) 100%)',
+                }}
+              >
+                <Stack gap="sm">
+                  <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+                    <div>
+                      <Group gap="xs" mb={4}>
+                        <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
+                          {formatDocType(docType)}
+                        </Badge>
+                        <Badge color={editingRequestId ? 'grape' : 'teal'} variant="light">
+                          {editingRequestId ? `Editando ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
+                        </Badge>
+                      </Group>
+                      <Text fw={800} size="lg">
+                        Generar documento
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {selectedCustomer?.name ?? 'Sin cliente'} · {selectedWorksiteLabel} · {selectedItems.length} item
+                        {selectedItems.length === 1 ? '' : 's'} · {receivedSignature ? 'Firma lista' : 'Firma pendiente'}
+                      </Text>
+                    </div>
+                    {editingRequestId ? (
+                      <Button variant="light" color="gray" onClick={resetGenerateForm}>
+                        Cancelar edicion
+                      </Button>
+                    ) : null}
+                  </Group>
+
+                  <Tabs value={generateStep} onChange={handleGenerateStepChange} variant="pills">
+                    <Tabs.List grow={isTabletOrMobile}>
+                      <Tabs.Tab value="info">1. Informacion</Tabs.Tab>
+                      <Tabs.Tab value="items">2. Items</Tabs.Tab>
+                      <Tabs.Tab value="sign">3. Firma</Tabs.Tab>
+                    </Tabs.List>
+                  </Tabs>
+                </Stack>
+              </Paper>
               {generateStep === 'info' ? (
                 <>
               {renderGenerateError()}
-              <Radio.Group
-                mt="md"
-                value={docType}
-                onChange={(value) => setDocType(value as 'REMISSION' | 'RETURN')}
-                label="Tipo"
-              >
-                <Group mt="xs">
-                  <Radio value="REMISSION" label="Despacho" />
-                  <Radio value="RETURN" label="Devolucion" />
-                </Group>
-              </Radio.Group>
+              <Stack gap="md">
+                <Paper withBorder radius="lg" p="md" bg="gray.0">
+                  <Stack gap="md">
+                    <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                      <div>
+                        <Text fw={800}>Documento</Text>
+                        <Text size="sm" c="dimmed">
+                          Define el tipo, consecutivo y fecha base del movimiento.
+                        </Text>
+                      </div>
+                      <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
+                        {formatDocType(docType)}
+                      </Badge>
+                    </Group>
 
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
+                    <Radio.Group
+                      value={docType}
+                      onChange={(value) => setDocType(value as 'REMISSION' | 'RETURN')}
+                      label="Tipo"
+                    >
+                      <Group mt="xs">
+                        <Radio value="REMISSION" label="Despacho" />
+                        <Radio value="RETURN" label="Devolucion" />
+                      </Group>
+                    </Radio.Group>
+
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             {!isDriverRole ? (
               <TextInput
                 label={helpLabel('Consecutivo (opcional)', 'Si queda vacio, oficina puede asignarlo en la confirmacion.')}
@@ -2181,7 +2224,7 @@ export default function SolicitudesIpadPage() {
             ) : null}
             {isMobile ? (
               <NativeSelect
-                label="Legal name"
+                label="Razón social"
                 value={customerId ?? ''}
                 onChange={(event) => {
                   setCustomerId(event.currentTarget.value || null);
@@ -2200,7 +2243,7 @@ export default function SolicitudesIpadPage() {
               />
             ) : (
               <Select
-                label="Legal name"
+                label="Razón social"
                 value={customerId}
                 onChange={(value) => {
                   setCustomerId(value);
@@ -2238,23 +2281,37 @@ export default function SolicitudesIpadPage() {
                 onChange={(event) => setCutOffDate(event.target.value)}
               />
             )}
-              </SimpleGrid>
+                    </SimpleGrid>
+                  </Stack>
+                </Paper>
 
               {docType === 'REMISSION' && (
-            <Radio.Group
-              mt="md"
-              value={deliveryMode}
-              onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
-              label="Entrega"
-            >
-              <Group mt="xs">
-                <Radio value="WAREHOUSE" label="Despacho desde bodega" />
-                <Radio value="ON_SITE" label="Entrega on-site" />
-              </Group>
-            </Radio.Group>
+                <Paper withBorder radius="lg" p="md">
+                  <Stack gap="sm">
+                    <Text fw={800}>Modo de entrega</Text>
+                    <Radio.Group
+                      value={deliveryMode}
+                      onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
+                      label="Entrega"
+                    >
+                      <Group mt="xs">
+                        <Radio value="WAREHOUSE" label="Despacho desde bodega" />
+                        <Radio value="ON_SITE" label="Entrega en obra" />
+                      </Group>
+                    </Radio.Group>
+                  </Stack>
+                </Paper>
               )}
 
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
+                <Paper withBorder radius="lg" p="md">
+                  <Stack gap="md">
+                    <div>
+                      <Text fw={800}>Cliente, obra y responsables</Text>
+                      <Text size="sm" c="dimmed">
+                        Selecciona el destino y quien responde por el despacho.
+                      </Text>
+                    </div>
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             {isMobile ? (
               <NativeSelect
                 label={helpLabel('Obra', 'Obra destino del movimiento.')}
@@ -2355,7 +2412,10 @@ export default function SolicitudesIpadPage() {
                 />
               )
             )}
-              </SimpleGrid>
+                    </SimpleGrid>
+                  </Stack>
+                </Paper>
+              </Stack>
               <Group mt="md" justify="flex-end" className="mobile-actions">
                 <Button onClick={goToItemsStep}>Siguiente: Items</Button>
               </Group>
@@ -2366,9 +2426,15 @@ export default function SolicitudesIpadPage() {
           </Paper>
 
         {activeTab === 'generate' && generateStep === 'items' ? (
-        <Paper shadow="sm" p="xl" radius="xl" withBorder mt="lg">
+        <Paper shadow="sm" p={{ base: 'md', md: 'xl' }} radius="xl" withBorder mt="lg">
           <Group justify="space-between" align="center" mb="sm">
             <div>
+              <Group gap="xs" mb={4}>
+                <Badge color="teal" variant="light">Paso 2</Badge>
+                <Badge color={sourceMode === 'warehouse' ? 'blue' : 'orange'} variant="light">
+                  {sourceMode === 'warehouse' ? 'Desde bodega' : 'Desde obra'}
+                </Badge>
+              </Group>
               <Title order={4}>Items del documento</Title>
               <Text size="sm" c="dimmed">
                 Agrega equipos, cantidades y condiciones para construir el documento.
@@ -2379,21 +2445,31 @@ export default function SolicitudesIpadPage() {
             </Button>
           </Group>
           {renderGenerateError()}
-          <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
-            <Text size="sm">
-              <strong>Resumen:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
-              {selectedWorksite
-                ? selectedWorksite.alias
-                  ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
-                  : selectedWorksite.worksite.name
-                : '-'}{' '}
-              · {docDate || '-'} ·{' '}
-              {docType === 'REMISSION'
-                ? deliveryMode === 'ON_SITE'
-                  ? `En obra (${selectedDriver?.name ?? '-'})`
-                  : `Bodega (${selectedDispatcher?.name ?? '-'})`
-                : 'Devolucion'}
-            </Text>
+          <Paper withBorder radius="lg" p="md" bg="teal.0" mb="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Cliente</Text>
+                <Text size="sm" fw={700}>{selectedCustomer?.name ?? '-'}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Obra</Text>
+                <Text size="sm" fw={700}>{selectedWorksiteLabel}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Fecha</Text>
+                <Text size="sm" fw={700}>{docDate || '-'}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Entrega</Text>
+                <Text size="sm" fw={700}>
+                  {docType === 'REMISSION'
+                    ? deliveryMode === 'ON_SITE'
+                      ? `En obra (${selectedDriver?.name ?? '-'})`
+                      : `Bodega (${selectedDispatcher?.name ?? '-'})`
+                    : 'Devolucion'}
+                </Text>
+              </div>
+            </SimpleGrid>
           </Paper>
           <Text c="dimmed">Agregar los equipos y su origen.</Text>
 
@@ -2476,9 +2552,12 @@ export default function SolicitudesIpadPage() {
 
           <Title order={4}>Seleccionados</Title>
           {selectedItems.length === 0 ? (
-            <Text size="sm" c="dimmed" mt="md">
-              No hay equipos agregados
-            </Text>
+            <Paper radius="lg" p="lg" bg="gray.0" mt="md">
+              <Text fw={700}>No hay equipos agregados</Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                Carga items desde el origen o agrega manualmente para continuar con la firma.
+              </Text>
+            </Paper>
           ) : !isTabletOrMobile ? (
             <Table striped highlightOnHover mt="md">
               <Table.Thead>
@@ -2588,7 +2667,7 @@ export default function SolicitudesIpadPage() {
             <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
               Volver a info
             </Button>
-            <Button onClick={goToSignStep}>Next: Signature</Button>
+            <Button onClick={goToSignStep}>Siguiente: Firma</Button>
           </Group>
         </Paper>
         ) : null}
@@ -2601,16 +2680,22 @@ export default function SolicitudesIpadPage() {
             void handleSubmit();
           }}
           shadow="sm"
-          p="xl"
+          p={{ base: 'md', md: 'xl' }}
           radius="xl"
           withBorder
           mt="lg"
         >
           <Group justify="space-between" align="center" mb="sm">
             <div>
-              <Title order={4}>Signature and submission</Title>
+              <Group gap="xs" mb={4}>
+                <Badge color="orange" variant="light">Paso 3</Badge>
+                <Badge color={receivedSignature ? 'green' : 'gray'} variant="light">
+                  {receivedSignature ? 'Firma lista' : 'Firma pendiente'}
+                </Badge>
+              </Group>
+              <Title order={4}>Firma y envio</Title>
               <Text size="sm" c="dimmed">
-                Verify the final summary, capture the signature, and send the request.
+                Verifica el resumen final, captura la firma y envia la solicitud.
               </Text>
             </div>
             <Button type="button" variant="light" color="gray" onClick={() => setGenerateStep('items')}>
@@ -2619,16 +2704,25 @@ export default function SolicitudesIpadPage() {
           </Group>
           {renderGenerateError()}
 
-          <Paper withBorder radius="md" p="sm" bg="gray.1" mb="md">
-            <Text size="sm">
-              <strong>Summary:</strong> {selectedCustomer?.name ?? '-'} ·{' '}
-              {selectedWorksite
-                ? selectedWorksite.alias
-                  ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
-                  : selectedWorksite.worksite.name
-                : '-'}{' '}
-              · {docDate || '-'} · {selectedItems.length} item(s)
-            </Text>
+          <Paper withBorder radius="lg" p="md" bg="orange.0" mb="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Cliente</Text>
+                <Text size="sm" fw={700}>{selectedCustomer?.name ?? '-'}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Obra</Text>
+                <Text size="sm" fw={700}>{selectedWorksiteLabel}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Fecha</Text>
+                <Text size="sm" fw={700}>{docDate || '-'}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Items</Text>
+                <Text size="sm" fw={700}>{selectedItems.length} item{selectedItems.length === 1 ? '' : 's'}</Text>
+              </div>
+            </SimpleGrid>
           </Paper>
 
           <Table striped highlightOnHover mb="md">
@@ -2645,7 +2739,7 @@ export default function SolicitudesIpadPage() {
                     <Text>{item.name}</Text>
                     {docType === 'RETURN' && item.isDamaged ? (
                       <Text size="xs" c="red">
-                        Damaged: {item.damageDescription?.trim() || 'Sin descripcion'}
+                        Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
                       </Text>
                     ) : null}
                   </Table.Td>
@@ -2658,14 +2752,14 @@ export default function SolicitudesIpadPage() {
           </Table>
 
           <Stack gap="xs">
-            <Text fw={600}>Signature received by</Text>
+            <Text fw={600}>Firma de recibido</Text>
             <Group justify="space-between" align="center">
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
               {editingRequestId ? (
                 <Text size="xs" c="dimmed">
-                  Signature locked while editing
+                  Firma bloqueada durante la edicion
                 </Text>
               ) : (
                 <Button
@@ -2683,7 +2777,7 @@ export default function SolicitudesIpadPage() {
             {receivedSignature ? (
               <img
                 src={receivedSignature}
-                alt="Received signature"
+                alt="Firma de recibido"
                 style={{
                   width: '100%',
                   maxWidth: 420,
@@ -2716,7 +2810,7 @@ export default function SolicitudesIpadPage() {
       <Modal
         opened={signatureModalOpen}
         onClose={() => setSignatureModalOpen(false)}
-        title="Signature received by"
+        title="Firma de recibido"
         centered
       >
         <Stack gap="md">
@@ -2750,7 +2844,7 @@ export default function SolicitudesIpadPage() {
                   setSignatureModalOpen(false);
                 }}
               >
-                Confirm and save
+                Confirmar y guardar
               </Button>
             </Group>
           </Group>

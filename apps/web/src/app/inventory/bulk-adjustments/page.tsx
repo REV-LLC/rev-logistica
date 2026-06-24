@@ -36,6 +36,13 @@ type Warehouse = {
   name: string;
 };
 
+type CatalogOption = {
+  groupKey: string;
+  value: string;
+  label: string;
+  active: boolean;
+};
+
 type CreateBulkResponse = {
   sku: {
     id: string;
@@ -80,6 +87,7 @@ type ExistingBulkItem = {
   assetFamilyId: string | null;
   price: number | null;
   subrentalPrice: number | null;
+  replacementValue: number | null;
   chargeType: ChargeType | null;
   minimumChargeHours: number | null;
   areaM2: number | null;
@@ -103,6 +111,7 @@ type BulkPayload = {
     unitWeight?: number;
     price?: number;
     subrentalPrice?: number;
+    replacementValue?: number;
     chargeType?: ChargeType;
     minimumChargeHours?: number;
     areaM2?: number;
@@ -112,8 +121,8 @@ type BulkPayload = {
   quantity: number;
 };
 
-const FORMALETA_Y_OPTIONS = [0.3, 0.6, 1.2, 2.4, 3.0] as const;
-const CERTIFIED_SCAFFOLD_PARTS = [
+const DEFAULT_FORMALETA_Y_OPTIONS = ['0.30', '0.60', '1.20', '2.40', '3.00'] as const;
+const DEFAULT_CERTIFIED_SCAFFOLD_PARTS = [
   'VERTICALES',
   'HORIZONTALES',
   'BASE COLLAR',
@@ -125,7 +134,7 @@ const CERTIFIED_SCAFFOLD_PARTS = [
   'DIAGONALES',
   'RODA PIE',
 ] as const;
-const CONVENTIONAL_SCAFFOLD_PARTS = [
+const DEFAULT_CONVENTIONAL_SCAFFOLD_PARTS = [
   'NAVE',
   'TIJERAS',
   'TUERCAS',
@@ -133,12 +142,12 @@ const CONVENTIONAL_SCAFFOLD_PARTS = [
   'TABLONES',
   'PLATAFORMAS',
 ] as const;
-const CONVENTIONAL_SCAFFOLD_MEASURES = ['1.00M', '1.50M'] as const;
-const CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE = new Set<string>([
+const DEFAULT_CONVENTIONAL_SCAFFOLD_MEASURES = ['1.00M', '1.50M'] as const;
+const DEFAULT_CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE = [
   'NAVE',
   'TIJERAS',
-]);
-const CERTIFIED_SCAFFOLD_MEASURES = [
+];
+const DEFAULT_CERTIFIED_SCAFFOLD_MEASURES = [
   '0.50M',
   '0.70M',
   '1.00M',
@@ -147,13 +156,13 @@ const CERTIFIED_SCAFFOLD_MEASURES = [
   '2.50M',
   '3.00M',
 ] as const;
-const CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = new Set<string>([
+const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'BASE COLLAR',
   'RUEDAS NIVELADORAS',
   'TORNILLOS NIVELADORES',
   'ESCALERA PELDAÑO',
   'ESCALERA TIPO GATO',
-]);
+];
 
 const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
 const sanitizeDecimalInput = (value: string) => {
@@ -201,6 +210,7 @@ type RequiredSkuData = {
   weightUnit: WeightUnit | '';
   price: number | '';
   subrentalPrice: number | '';
+  replacementValue: number | '';
   areaM2?: number | string;
 };
 
@@ -227,15 +237,15 @@ const hasMissingRequiredSkuData = ({
   weightUnit,
   price,
   subrentalPrice,
+  replacementValue,
   areaM2,
-}: RequiredSkuData, requireAreaM2: boolean, allowZeroPricing = false) =>
+}: RequiredSkuData, requireAreaM2: boolean) =>
   isMissingPositiveNumber(unitWeight) ||
   !weightUnit ||
   (requireAreaM2 && isMissingPositiveNumber(areaM2 ?? '')) ||
-  (allowZeroPricing ? isMissingNonNegativeNumber(price) : isMissingPositiveNumber(price)) ||
-  (allowZeroPricing
-    ? isMissingNonNegativeNumber(subrentalPrice)
-    : isMissingPositiveNumber(subrentalPrice));
+  isMissingNonNegativeNumber(price) ||
+  isMissingNonNegativeNumber(subrentalPrice) ||
+  isMissingNonNegativeNumber(replacementValue);
 
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
@@ -248,6 +258,7 @@ export default function AddBulkStockPage() {
   const isEmbedded = searchParams.get('embed') === '1';
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [weightUnits, setWeightUnits] = useState<string[]>([]);
+  const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -264,13 +275,14 @@ export default function AddBulkStockPage() {
   const [confirmAttempted, setConfirmAttempted] = useState(false);
 
   const [formaletaX, setFormaletaX] = useState<string>('0,10');
-  const [formaletaY, setFormaletaY] = useState<string>(String(FORMALETA_Y_OPTIONS[0]));
+  const [formaletaY, setFormaletaY] = useState<string>(DEFAULT_FORMALETA_Y_OPTIONS[0]);
   const [formaletaLine, setFormaletaLine] = useState<FormaletaLine>('FORMALETA');
   const [formaletaIsAccessory, setFormaletaIsAccessory] = useState(false);
   const [formaletaAccessoryName, setFormaletaAccessoryName] = useState('');
   const [formaletaSkuUnitWeight, setFormaletaSkuUnitWeight] = useState<number | ''>('');
   const [formaletaSkuPrice, setFormaletaSkuPrice] = useState<number | ''>('');
   const [formaletaSkuSubrentalPrice, setFormaletaSkuSubrentalPrice] = useState<number | ''>('');
+  const [formaletaSkuReplacementValue, setFormaletaSkuReplacementValue] = useState<number | ''>('');
   const [formaletaChargeType, setFormaletaChargeType] = useState<ChargeType>('DAY');
   const [formaletaMinimumChargeHours, setFormaletaMinimumChargeHours] = useState<number | ''>('');
   const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | string>('');
@@ -283,6 +295,7 @@ export default function AddBulkStockPage() {
   const [genericSkuUnitWeight, setGenericSkuUnitWeight] = useState<number | ''>('');
   const [genericSkuPrice, setGenericSkuPrice] = useState<number | ''>('');
   const [genericSkuSubrentalPrice, setGenericSkuSubrentalPrice] = useState<number | ''>('');
+  const [genericSkuReplacementValue, setGenericSkuReplacementValue] = useState<number | ''>('');
   const [genericChargeType, setGenericChargeType] = useState<ChargeType>('DAY');
   const [genericMinimumChargeHours, setGenericMinimumChargeHours] = useState<number | ''>('');
   const [genericWeightUnit, setGenericWeightUnit] = useState<WeightUnit | ''>('');
@@ -313,6 +326,7 @@ export default function AddBulkStockPage() {
     weightUnit: formaletaWeightUnit,
     price: formaletaSkuPrice,
     subrentalPrice: formaletaSkuSubrentalPrice,
+    replacementValue: formaletaSkuReplacementValue,
     areaM2: formaletaAreaM2,
   };
   const genericRequiredSkuData: RequiredSkuData = {
@@ -320,13 +334,13 @@ export default function AddBulkStockPage() {
     weightUnit: genericWeightUnit,
     price: genericSkuPrice,
     subrentalPrice: genericSkuSubrentalPrice,
+    replacementValue: genericSkuReplacementValue,
   };
-  const allowZeroPricing = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
   const requiredSkuDataMissing =
     itemType === 'FORMALETA'
       ? hasMissingRequiredSkuData(formaletaRequiredSkuData, true)
       : itemType === 'GENERIC'
-        ? hasMissingRequiredSkuData(genericRequiredSkuData, false, allowZeroPricing)
+        ? hasMissingRequiredSkuData(genericRequiredSkuData, false)
         : false;
   const showRequiredSkuErrors = confirmAttempted;
   const confirmButtonNeedsAttention = confirmAttempted && requiredSkuDataMissing;
@@ -341,13 +355,15 @@ export default function AddBulkStockPage() {
       setLoading(true);
       setError(null);
       try {
-        const [warehouseData, weightUnitData] = await Promise.all([
+        const [warehouseData, weightUnitData, catalogData] = await Promise.all([
           api<Warehouse[]>('/warehouses'),
           api<string[]>('/skus/units'),
+          api<CatalogOption[]>('/catalog/options').catch(() => []),
         ]);
         if (!mounted) return;
         setWarehouses(warehouseData);
         setWeightUnits(weightUnitData);
+        setCatalogOptions(catalogData.filter((option) => option.active));
 
         const defaultWeightUnit = (weightUnitData[0] as WeightUnit | undefined) ?? '';
 
@@ -461,6 +477,15 @@ export default function AddBulkStockPage() {
     value: item.skuId,
     label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
   }));
+  const catalogGroupOptions = (groupKey: string, fallback: readonly string[]) => {
+    const options = catalogOptions
+      .filter((option) => option.groupKey === groupKey)
+      .map((option) => ({ value: option.value, label: option.label }));
+
+    return options.length ? options : fallback.map((value) => ({ value, label: value }));
+  };
+  const catalogGroupValues = (groupKey: string, fallback: readonly string[]) =>
+    catalogGroupOptions(groupKey, fallback).map((option) => option.value);
   const typeOptions = [
     { value: 'FORMALETA', label: 'FORMALETA' },
     { value: 'ANDAMIO_CERTIFICADO', label: 'ANDAMIO CERTIFICADO' },
@@ -468,36 +493,43 @@ export default function AddBulkStockPage() {
     { value: 'ENCOFRADO', label: 'ENCOFRADO' },
   ];
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
-  const formaletaLineOptions = [
-    { value: 'FORMALETA', label: 'Formaleta' },
-    { value: 'FORMALETA_SARDINEL', label: 'Formaleta Sardinel' },
-  ];
-  const certifiedScaffoldPartOptions = CERTIFIED_SCAFFOLD_PARTS.map((part) => ({
-    value: part,
-    label: part,
-  }));
-  const conventionalScaffoldPartOptions = CONVENTIONAL_SCAFFOLD_PARTS.map((part) => ({
-    value: part,
-    label: part,
-  }));
-  const conventionalScaffoldMeasureOptions = CONVENTIONAL_SCAFFOLD_MEASURES.map((measure) => ({
-    value: measure,
-    label: measure,
-  }));
-  const certifiedScaffoldMeasureOptions = CERTIFIED_SCAFFOLD_MEASURES.map((measure) => ({
-    value: measure,
-    label: measure,
-  }));
+  const formaletaLineOptions = catalogGroupOptions('BULK_FORMWORK_LINES', [
+    'FORMALETA',
+    'FORMALETA_SARDINEL',
+  ]);
+  const formaletaYOptions = catalogGroupOptions('BULK_FORMWORK_HEIGHTS', DEFAULT_FORMALETA_Y_OPTIONS);
+  const certifiedScaffoldPartOptions = catalogGroupOptions(
+    'BULK_CERTIFIED_SCAFFOLD_PARTS',
+    DEFAULT_CERTIFIED_SCAFFOLD_PARTS,
+  );
+  const conventionalScaffoldPartOptions = catalogGroupOptions(
+    'BULK_CONVENTIONAL_SCAFFOLD_PARTS',
+    DEFAULT_CONVENTIONAL_SCAFFOLD_PARTS,
+  );
+  const conventionalScaffoldMeasureOptions = catalogGroupOptions(
+    'BULK_CONVENTIONAL_SCAFFOLD_MEASURES',
+    DEFAULT_CONVENTIONAL_SCAFFOLD_MEASURES,
+  );
+  const certifiedScaffoldMeasureOptions = catalogGroupOptions(
+    'BULK_CERTIFIED_SCAFFOLD_MEASURES',
+    DEFAULT_CERTIFIED_SCAFFOLD_MEASURES,
+  );
+  const certifiedScaffoldPartsWithoutMeasure = new Set(
+    catalogGroupValues('BULK_CERTIFIED_SCAFFOLD_WITHOUT_MEASURE', DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE),
+  );
+  const conventionalScaffoldPartsWithMeasure = new Set(
+    catalogGroupValues('BULK_CONVENTIONAL_SCAFFOLD_WITH_MEASURE', DEFAULT_CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE),
+  );
   const isCertifiedScaffold = itemTypeSelection === 'ANDAMIO_CERTIFICADO';
-  const isConventionalScaffold = allowZeroPricing;
+  const isConventionalScaffold = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
   const certifiedScaffoldNeedsMeasure =
     isCertifiedScaffold &&
     !!genericSkuName &&
-    !CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE.has(genericSkuName);
+    !certifiedScaffoldPartsWithoutMeasure.has(genericSkuName);
   const conventionalScaffoldNeedsMeasure =
     isConventionalScaffold &&
     !!genericSkuName &&
-    CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE.has(genericSkuName);
+    conventionalScaffoldPartsWithMeasure.has(genericSkuName);
   const formaletaDraftName = useMemo(() => {
     if (formaletaIsAccessory) {
       const accessoryName = formaletaAccessoryName.trim();
@@ -539,6 +571,8 @@ export default function AddBulkStockPage() {
           skuPrice: formaletaSkuPrice === '' ? undefined : Number(formaletaSkuPrice),
           skuSubrentalPrice:
             formaletaSkuSubrentalPrice === '' ? undefined : Number(formaletaSkuSubrentalPrice),
+          skuReplacementValue:
+            formaletaSkuReplacementValue === '' ? undefined : Number(formaletaSkuReplacementValue),
           chargeType: formaletaChargeType,
           minimumChargeHours:
             formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
@@ -563,6 +597,8 @@ export default function AddBulkStockPage() {
         skuPrice: formaletaSkuPrice === '' ? undefined : Number(formaletaSkuPrice),
         skuSubrentalPrice:
           formaletaSkuSubrentalPrice === '' ? undefined : Number(formaletaSkuSubrentalPrice),
+        skuReplacementValue:
+          formaletaSkuReplacementValue === '' ? undefined : Number(formaletaSkuReplacementValue),
         chargeType: formaletaChargeType,
         minimumChargeHours:
           formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
@@ -593,6 +629,8 @@ export default function AddBulkStockPage() {
       skuPrice: genericSkuPrice === '' ? undefined : Number(genericSkuPrice),
       skuSubrentalPrice:
         genericSkuSubrentalPrice === '' ? undefined : Number(genericSkuSubrentalPrice),
+      skuReplacementValue:
+        genericSkuReplacementValue === '' ? undefined : Number(genericSkuReplacementValue),
       chargeType: genericChargeType,
       minimumChargeHours:
         genericChargeType === 'HOUR' && genericMinimumChargeHours !== ''
@@ -609,6 +647,7 @@ export default function AddBulkStockPage() {
     formaletaSkuUnitWeight,
     formaletaSkuPrice,
     formaletaSkuSubrentalPrice,
+    formaletaSkuReplacementValue,
     formaletaChargeType,
     formaletaMinimumChargeHours,
     formaletaAreaM2,
@@ -622,6 +661,7 @@ export default function AddBulkStockPage() {
     genericSkuUnitWeight,
     genericSkuPrice,
     genericSkuSubrentalPrice,
+    genericSkuReplacementValue,
     genericChargeType,
     genericMinimumChargeHours,
     genericWeightUnit,
@@ -668,6 +708,7 @@ export default function AddBulkStockPage() {
         unitWeight: builtItem.skuUnitWeight,
         price: builtItem.skuPrice,
         subrentalPrice: builtItem.skuSubrentalPrice,
+        replacementValue: builtItem.skuReplacementValue,
         areaM2: builtItem.areaM2,
       },
       ownerWarehouseId,
@@ -693,13 +734,14 @@ export default function AddBulkStockPage() {
     const defaultWeightUnit = (weightUnits[0] as WeightUnit | undefined) ?? '';
     if (type === 'FORMALETA') {
       setFormaletaX('0,10');
-      setFormaletaY(String(FORMALETA_Y_OPTIONS[0]));
+      setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
       setFormaletaLine('FORMALETA');
       setFormaletaIsAccessory(false);
       setFormaletaAccessoryName('');
       setFormaletaSkuUnitWeight('');
       setFormaletaSkuPrice('');
       setFormaletaSkuSubrentalPrice('');
+      setFormaletaSkuReplacementValue('');
       setFormaletaChargeType('DAY');
       setFormaletaMinimumChargeHours('');
       setFormaletaAreaM2('');
@@ -714,6 +756,7 @@ export default function AddBulkStockPage() {
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
     setGenericSkuSubrentalPrice('');
+    setGenericSkuReplacementValue('');
     setGenericChargeType('DAY');
     setGenericMinimumChargeHours('');
     setGenericWeightUnit(defaultWeightUnit);
@@ -731,13 +774,14 @@ export default function AddBulkStockPage() {
     setConfirmAttempted(false);
 
     setFormaletaX('0,10');
-    setFormaletaY(String(FORMALETA_Y_OPTIONS[0]));
+    setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
     setFormaletaLine('FORMALETA');
     setFormaletaIsAccessory(false);
     setFormaletaAccessoryName('');
     setFormaletaSkuUnitWeight('');
     setFormaletaSkuPrice('');
     setFormaletaSkuSubrentalPrice('');
+    setFormaletaSkuReplacementValue('');
     setFormaletaChargeType('DAY');
     setFormaletaMinimumChargeHours('');
     setFormaletaAreaM2('');
@@ -750,6 +794,7 @@ export default function AddBulkStockPage() {
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
     setGenericSkuSubrentalPrice('');
+    setGenericSkuReplacementValue('');
     setGenericChargeType('DAY');
     setGenericMinimumChargeHours('');
     setGenericWeightUnit(defaultWeightUnit);
@@ -840,8 +885,9 @@ export default function AddBulkStockPage() {
     weightUnit,
     price,
     subrentalPrice,
+    replacementValue,
     areaM2,
-  }: RequiredSkuData, requireAreaM2: boolean, allowZeroPricingForItem = false) => {
+  }: RequiredSkuData, requireAreaM2: boolean) => {
     if (unitWeight === '' || Number(unitWeight) <= 0) {
       setError('Enter the product weight');
       return false;
@@ -857,7 +903,7 @@ export default function AddBulkStockPage() {
     if (
       price === '' ||
       !Number.isFinite(Number(price)) ||
-      (allowZeroPricingForItem ? Number(price) < 0 : Number(price) <= 0)
+      Number(price) < 0
     ) {
       setError('Enter the product price');
       return false;
@@ -865,9 +911,17 @@ export default function AddBulkStockPage() {
     if (
       subrentalPrice === '' ||
       !Number.isFinite(Number(subrentalPrice)) ||
-      (allowZeroPricingForItem ? Number(subrentalPrice) < 0 : Number(subrentalPrice) <= 0)
+      Number(subrentalPrice) < 0
     ) {
       setError('Enter the product subrental price');
+      return false;
+    }
+    if (
+      replacementValue === '' ||
+      !Number.isFinite(Number(replacementValue)) ||
+      Number(replacementValue) < 0
+    ) {
+      setError('Enter the replacement value');
       return false;
     }
 
@@ -958,6 +1012,7 @@ export default function AddBulkStockPage() {
           weightUnit: formaletaWeightUnit,
           price: formaletaSkuPrice,
           subrentalPrice: formaletaSkuSubrentalPrice,
+          replacementValue: formaletaSkuReplacementValue,
           areaM2: formaletaAreaM2,
         }, true)) {
           return;
@@ -973,7 +1028,7 @@ export default function AddBulkStockPage() {
         setError('Enter a valid X measurement for formwork');
         return;
       }
-      if (!FORMALETA_Y_OPTIONS.includes(yValue as (typeof FORMALETA_Y_OPTIONS)[number])) {
+      if (!formaletaYOptions.some((option) => Number(option.value) === yValue)) {
         setError('The Y formwork measurement is invalid');
         return;
       }
@@ -986,6 +1041,7 @@ export default function AddBulkStockPage() {
         weightUnit: formaletaWeightUnit,
         price: formaletaSkuPrice,
         subrentalPrice: formaletaSkuSubrentalPrice,
+        replacementValue: formaletaSkuReplacementValue,
         areaM2: formaletaAreaM2,
       }, true)) {
         return;
@@ -1016,7 +1072,8 @@ export default function AddBulkStockPage() {
         weightUnit: genericWeightUnit,
         price: genericSkuPrice,
         subrentalPrice: genericSkuSubrentalPrice,
-      }, false, allowZeroPricing)) {
+        replacementValue: genericSkuReplacementValue,
+      }, false)) {
         return;
       }
     }
@@ -1092,6 +1149,7 @@ export default function AddBulkStockPage() {
                 unitWeight: builtItem?.skuUnitWeight,
                 price: builtItem?.skuPrice,
                 subrentalPrice: builtItem?.skuSubrentalPrice,
+                replacementValue: builtItem?.skuReplacementValue,
                 chargeType: builtItem?.chargeType,
                 minimumChargeHours: builtItem?.minimumChargeHours,
                 areaM2: builtItem?.areaM2,
@@ -1702,13 +1760,13 @@ export default function AddBulkStockPage() {
                                 />
                                 <Select
                                   label="Alto Y (m)"
-                                  data={FORMALETA_Y_OPTIONS.map((value) => ({
-                                    value: String(value),
-                                    label: formatMeasure(value),
+                                  data={formaletaYOptions.map((option) => ({
+                                    value: option.value,
+                                    label: formatMeasure(Number(option.value)),
                                   }))}
                                   value={formaletaY}
                                   onChange={(value) => {
-                                    setFormaletaY(value ?? String(FORMALETA_Y_OPTIONS[0]));
+                                    setFormaletaY(value ?? formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
                                     setIsItemConfigured(false);
                                   }}
                                   required
@@ -1723,7 +1781,7 @@ export default function AddBulkStockPage() {
                             <div>
                               <Text fw={600} size="sm">Commercial parameters</Text>
                               <Text size="xs" c="dimmed">
-                                Weight, area, price, and subrental price are required.
+                                Peso, area, precio, subalquiler y valor reposicion son obligatorios.
                               </Text>
                             </div>
                             <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
@@ -1784,12 +1842,12 @@ export default function AddBulkStockPage() {
                                   setFormaletaSkuPrice(typeof value === 'number' ? value : '')
                                 }
                                 min={0}
-                                step={1000}
-                                error={
-                                  showRequiredSkuErrors && isMissingPositiveNumber(formaletaSkuPrice)
-                                    ? 'Obligatorio'
-                                    : undefined
-                                }
+                              step={1000}
+                              error={
+                                showRequiredSkuErrors && isMissingNonNegativeNumber(formaletaSkuPrice)
+                                  ? 'Obligatorio'
+                                  : undefined
+                              }
                                 required
                               />
                               <NumberInput
@@ -1799,9 +1857,24 @@ export default function AddBulkStockPage() {
                                   setFormaletaSkuSubrentalPrice(typeof value === 'number' ? value : '')
                                 }
                                 min={0}
+                              step={1000}
+                              error={
+                                showRequiredSkuErrors && isMissingNonNegativeNumber(formaletaSkuSubrentalPrice)
+                                  ? 'Obligatorio'
+                                  : undefined
+                              }
+                                required
+                              />
+                              <NumberInput
+                                label="Valor reposicion"
+                                value={formaletaSkuReplacementValue}
+                                onChange={(value) =>
+                                  setFormaletaSkuReplacementValue(typeof value === 'number' ? value : '')
+                                }
+                                min={0}
                                 step={1000}
                                 error={
-                                  showRequiredSkuErrors && isMissingPositiveNumber(formaletaSkuSubrentalPrice)
+                                  showRequiredSkuErrors && isMissingNonNegativeNumber(formaletaSkuReplacementValue)
                                     ? 'Obligatorio'
                                     : undefined
                                 }
@@ -1855,7 +1928,7 @@ export default function AddBulkStockPage() {
                                   value={genericSkuName || null}
                                   onChange={(value) => {
                                     setGenericSkuName(value ?? '');
-                                    if (!value || CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE.has(value)) {
+                                    if (!value || certifiedScaffoldPartsWithoutMeasure.has(value)) {
                                       setCertifiedScaffoldMeasure('');
                                     }
                                     setIsItemConfigured(false);
@@ -2003,10 +2076,7 @@ export default function AddBulkStockPage() {
                               min={0}
                               step={1000}
                               error={
-                                showRequiredSkuErrors &&
-                                (allowZeroPricing
-                                  ? isMissingNonNegativeNumber(genericSkuPrice)
-                                  : isMissingPositiveNumber(genericSkuPrice))
+                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuPrice)
                                   ? 'Obligatorio'
                                   : undefined
                               }
@@ -2021,10 +2091,22 @@ export default function AddBulkStockPage() {
                               min={0}
                               step={1000}
                               error={
-                                showRequiredSkuErrors &&
-                                (allowZeroPricing
-                                  ? isMissingNonNegativeNumber(genericSkuSubrentalPrice)
-                                  : isMissingPositiveNumber(genericSkuSubrentalPrice))
+                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuSubrentalPrice)
+                                  ? 'Obligatorio'
+                                  : undefined
+                              }
+                              required
+                            />
+                            <NumberInput
+                              label="Valor reposicion"
+                              value={genericSkuReplacementValue}
+                              onChange={(value) =>
+                                setGenericSkuReplacementValue(typeof value === 'number' ? value : '')
+                              }
+                              min={0}
+                              step={1000}
+                              error={
+                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuReplacementValue)
                                   ? 'Obligatorio'
                                   : undefined
                               }

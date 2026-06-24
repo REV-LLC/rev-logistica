@@ -32,6 +32,10 @@ export class CreateSkuDto {
   subrentalPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  replacementValue?: number;
+
+  @IsOptional()
   @IsEnum(ChargeType)
   chargeType?: ChargeType;
 

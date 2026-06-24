@@ -1468,6 +1468,7 @@ export class InventoryService {
             assetFamily: { select: { id: true, code: true, name: true } },
             price: true,
             subrentalPrice: true,
+            replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
             areaM2: true,
@@ -1514,6 +1515,7 @@ export class InventoryService {
           assetFamilyId: sku?.assetFamily?.id ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
@@ -1746,6 +1748,7 @@ export class InventoryService {
             imageFileObjectId: true,
             price: true,
             subrentalPrice: true,
+            replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
             areaM2: true,
@@ -1788,6 +1791,7 @@ export class InventoryService {
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
@@ -2063,6 +2067,7 @@ export class InventoryService {
             imageFileObjectId: true,
             price: true,
             subrentalPrice: true,
+            replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
             areaM2: true,
@@ -2102,6 +2107,7 @@ export class InventoryService {
           imageFileObjectId: sku?.imageFileObjectId ?? null,
           price: sku?.price ?? null,
           subrentalPrice: sku?.subrentalPrice ?? null,
+          replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
           areaM2: sku?.areaM2 ?? null,
@@ -2273,6 +2279,7 @@ export class InventoryService {
       unitWeight?: number;
       price?: number;
       subrentalPrice?: number;
+      replacementValue?: number;
       chargeType?: ChargeType;
       minimumChargeHours?: number;
       areaM2?: number;
@@ -2316,6 +2323,7 @@ export class InventoryService {
         assetFamilyId,
         price: input.price ?? null,
         subrentalPrice: input.subrentalPrice ?? null,
+        replacementValue: input.replacementValue ?? null,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
         areaM2: input.areaM2 ?? null,
@@ -2325,6 +2333,7 @@ export class InventoryService {
       update: {
         price: input.price ?? undefined,
         subrentalPrice: input.subrentalPrice ?? undefined,
+        replacementValue: input.replacementValue ?? undefined,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
         areaM2: input.areaM2 ?? undefined,

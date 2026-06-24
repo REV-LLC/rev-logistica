@@ -46,6 +46,10 @@ export class BulkSkuInput {
   subrentalPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  replacementValue?: number;
+
+  @IsOptional()
   @IsEnum(ChargeType)
   chargeType?: ChargeType;
 

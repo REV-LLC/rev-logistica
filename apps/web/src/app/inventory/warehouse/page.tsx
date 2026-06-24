@@ -306,17 +306,10 @@ export default function WarehouseInventoryPage() {
     return () => window.removeEventListener('message', handleBulkStockMessage);
   }, [warehouseId]);
 
-  useEffect(() => {
-    if (!createOpen) return;
-    if (createOwnerCompanyId) return;
-    if (!ownerOptions.length) return;
-    setCreateOwnerCompanyId(ownerOptions[0].value);
-  }, [createOpen, createOwnerCompanyId, ownerOptions]);
-
   const openCreate = () => {
     setCreateName('');
     setCreateType('OWN');
-    setCreateOwnerCompanyId(ownerOptions[0]?.value ?? null);
+    setCreateOwnerCompanyId(null);
     setCreateActive(true);
     setCreateError(null);
     setOwnerLogoError(null);
@@ -1283,11 +1276,11 @@ export default function WarehouseInventoryPage() {
           ¯\_(ツ)_/¯
         </Text>
         <Text>
-          <strong>{emptyInventoryWarehouseName.toUpperCase()}</strong> is cleaner than a brand-new
-          fridge: there is nothing to show yet.
+          <strong>{emptyInventoryWarehouseName.toUpperCase()}</strong> esta vacia: todavia no hay
+          inventario para mostrar.
         </Text>
         <Group mt="md" justify="flex-end">
-          <Button onClick={() => setEmptyInventoryOpen(false)}>Got it</Button>
+          <Button onClick={() => setEmptyInventoryOpen(false)}>Entendido</Button>
         </Group>
       </Modal>
     </main>
