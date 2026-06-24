@@ -306,17 +306,10 @@ export default function WarehouseInventoryPage() {
     return () => window.removeEventListener('message', handleBulkStockMessage);
   }, [warehouseId]);
 
-  useEffect(() => {
-    if (!createOpen) return;
-    if (createOwnerCompanyId) return;
-    if (!ownerOptions.length) return;
-    setCreateOwnerCompanyId(ownerOptions[0].value);
-  }, [createOpen, createOwnerCompanyId, ownerOptions]);
-
   const openCreate = () => {
     setCreateName('');
     setCreateType('OWN');
-    setCreateOwnerCompanyId(ownerOptions[0]?.value ?? null);
+    setCreateOwnerCompanyId(null);
     setCreateActive(true);
     setCreateError(null);
     setOwnerLogoError(null);
