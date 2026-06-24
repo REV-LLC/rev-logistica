@@ -259,3 +259,23 @@ a {
   }
 
 }
+
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+
+  .mantine-AppShell-header,
+  .mantine-AppShell-navbar {
+    display: none !important;
+  }
+
+  .mantine-AppShell-main {
+    padding: 0 !important;
+  }
+
+  .mantine-Container-root {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

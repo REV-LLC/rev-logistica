@@ -1011,8 +1011,15 @@ export default function DocumentDetailPage() {
 
   return (
     <main>
-      <Container size="lg" py="xl">
-        <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
+      <Container size="lg" py="xl" className={styles.printContainer}>
+        <ActionIcon
+          variant="light"
+          size="lg"
+          mb="sm"
+          aria-label="Volver"
+          onClick={() => router.back()}
+          className={styles.noPrint}
+        >
           <IconArrowLeft size={18} />
         </ActionIcon>
         <Paper shadow="sm" p="xl" radius="md" withBorder className={styles.noPrint}>
@@ -1139,7 +1146,7 @@ export default function DocumentDetailPage() {
 
             <div className={styles.topRow}>
               <div>
-                <strong>Date:</strong> {formatDateTime(document.docDate)}
+                <strong>Fecha:</strong> {formatDateTime(document.docDate)}
               </div>
               <div>
                 <strong>Consecutivo:</strong> {title}
@@ -1151,17 +1158,17 @@ export default function DocumentDetailPage() {
               <div className={styles.blockTitle}>INFORMACION DE CLIENTE</div>
               <div className={styles.grid2}>
                 <div>
-                  <strong>Legal name:</strong> {document.customerWorksite?.customer?.name ?? '-'}
+                  <strong>Razon social:</strong> {document.customerWorksite?.customer?.name ?? '-'}
                 </div>
                 <div>
                   <strong>Obra:</strong> {document.customerWorksite?.worksite?.name ?? '-'}
                 </div>
                 <div>
-                  <strong>Shipping address:</strong>{' '}
+                  <strong>Direccion de entrega:</strong>{' '}
                   {document.customerWorksite?.worksite?.address ?? '-'}
                 </div>
                 <div>
-                  <strong>Warehouse:</strong> {document.warehouse?.name ?? '-'}
+                  <strong>Bodega:</strong> {document.warehouse?.name ?? '-'}
                 </div>
               </div>
             </section>
