@@ -524,6 +524,15 @@ export default function SolicitudesIpadPage() {
       ),
     [selectedItems],
   );
+  const selectedItemsTotalQuantity = useMemo(
+    () =>
+      selectedItems.reduce((total, item) => {
+        if (item.type === 'serial') return total + 1;
+        const quantity = Number(item.quantity ?? 1);
+        return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 1);
+      }, 0),
+    [selectedItems],
+  );
   const availableBulkItems = useMemo(
     () => bulkItems.filter((item) => !selectedBulkKeys.has(buildBulkKey(item))),
     [bulkItems, selectedBulkKeys],
@@ -2748,6 +2757,14 @@ export default function SolicitudesIpadPage() {
                   </Table.Td>
                 </Table.Tr>
               ))}
+              <Table.Tr>
+                <Table.Td>
+                  <Text fw={800}>Total</Text>
+                </Table.Td>
+                <Table.Td style={{ textAlign: 'center' }}>
+                  <Text fw={800}>{selectedItemsTotalQuantity}</Text>
+                </Table.Td>
+              </Table.Tr>
             </Table.Tbody>
           </Table>
 
