@@ -7,6 +7,10 @@
   font-family: 'Arial Narrow', Arial, sans-serif;
 }
 
+.printContainer {
+  width: 100%;
+}
+
 .pageBreakAfter {
   break-after: page;
   page-break-after: always;
@@ -152,7 +156,7 @@
   font-size: 9px;
   font-weight: 700;
   padding: 3px 6px;
-  letter-spacing: 0.2px;
+  letter-spacing: 0;
 }
 
 .termsText {
@@ -214,16 +218,141 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 6mm;
   }
 
   .noPrint {
     display: none !important;
   }
 
+  .printContainer {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
   .sheet {
+    break-inside: avoid;
+    box-shadow: none;
     margin-top: 0;
     border: 1px solid #111;
-    padding: 8px;
+    padding: 6px;
+    width: 100%;
+  }
+
+  .header {
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .logoWrap {
+    width: 150px;
+  }
+
+  .company {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .meta {
+    font-size: 8px;
+    line-height: 1.1;
+  }
+
+  .statusBox {
+    margin-top: 0;
+    min-width: 145px;
+    max-width: 145px;
+    padding: 4px 6px;
+  }
+
+  .statusLine {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+
+  .checkbox {
+    width: 11px;
+    height: 11px;
+    margin-right: 4px;
+    font-size: 8px;
+  }
+
+  .topRow {
+    font-size: 10px;
+    margin-top: 4px;
+  }
+
+  .block,
+  .termsBlock,
+  .signatures {
+    margin-top: 4px;
+  }
+
+  .blockTitle {
+    font-size: 10px;
+    padding: 2px 5px;
+  }
+
+  .grid2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .grid2 > div {
+    border-right: 1px solid #111;
+    min-height: 18px;
+    padding: 2px 5px;
+    font-size: 9px;
+  }
+
+  .grid2 > div:nth-child(2n) {
+    border-right: none;
+  }
+
+  .table th,
+  .table td {
+    font-size: 8px;
+    padding: 1px 3px;
+  }
+
+  .table tbody tr td {
+    height: 13px;
+  }
+
+  .termsBlock,
+  .block,
+  .signatures {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .termsTitle {
+    font-size: 7px;
+    padding: 2px 5px;
+  }
+
+  .termsText {
+    font-size: 5.6px;
+    line-height: 1.05;
+    padding: 3px 5px;
+  }
+
+  .observations {
+    min-height: 28px;
+    padding: 4px 5px;
+    font-size: 8px;
+  }
+
+  .signatures {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .signatures > div {
+    min-height: 34px;
+    padding: 4px;
+    font-size: 8px;
+  }
+
+  .signatureImage {
+    max-height: 24px;
   }
 }
