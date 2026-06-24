@@ -35,6 +35,7 @@ type PriceListSku = {
   name: string;
   price: number | string | null;
   subrentalPrice: number | string | null;
+  replacementValue: number | string | null;
   chargeType: 'DAY' | 'HOUR' | string;
   minimumChargeHours: number | string | null;
   active: boolean;
@@ -151,7 +152,7 @@ export default function PriceListPage() {
   );
 
   const exportCsv = () => {
-    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio', 'Sub precio', 'Tipo de cobro', 'Estado'];
+    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio', 'Sub precio', 'Valor reposicion', 'Tipo de cobro', 'Estado'];
     const rows = filteredItems.map((item) => [
       item.controlType,
       item.name,
@@ -159,6 +160,7 @@ export default function PriceListPage() {
       item.assetFamily.name,
       toNumber(item.price) ?? '',
       toNumber(item.subrentalPrice) ?? '',
+      toNumber(item.replacementValue) ?? '',
       formatChargeType(item.chargeType, item.minimumChargeHours),
       item.active ? 'Activo' : 'Inactivo',
     ]);
@@ -270,7 +272,7 @@ export default function PriceListPage() {
               </Badge>
             </Group>
 
-            <Table.ScrollContainer minWidth={860}>
+            <Table.ScrollContainer minWidth={980}>
               <Table striped highlightOnHover verticalSpacing="sm">
                 <Table.Thead>
                   <Table.Tr>
@@ -279,6 +281,7 @@ export default function PriceListPage() {
                     <Table.Th>Familia</Table.Th>
                     <Table.Th>Precio</Table.Th>
                     <Table.Th>Sub precio</Table.Th>
+                    <Table.Th>Valor reposicion</Table.Th>
                     <Table.Th>Tipo de cobro</Table.Th>
                     <Table.Th>Estado</Table.Th>
                   </Table.Tr>
@@ -297,6 +300,7 @@ export default function PriceListPage() {
                       <Table.Td>{item.assetFamily.name}</Table.Td>
                       <Table.Td>{formatMoney(item.price)}</Table.Td>
                       <Table.Td>{formatMoney(item.subrentalPrice)}</Table.Td>
+                      <Table.Td>{formatMoney(item.replacementValue)}</Table.Td>
                       <Table.Td>{formatChargeType(item.chargeType, item.minimumChargeHours)}</Table.Td>
                       <Table.Td>
                         <Badge color={item.active ? 'green' : 'gray'} variant="light">

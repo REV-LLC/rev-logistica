@@ -1283,11 +1283,11 @@ export default function WarehouseInventoryPage() {
           ¯\_(ツ)_/¯
         </Text>
         <Text>
-          <strong>{emptyInventoryWarehouseName.toUpperCase()}</strong> is cleaner than a brand-new
-          fridge: there is nothing to show yet.
+          <strong>{emptyInventoryWarehouseName.toUpperCase()}</strong> esta vacia: todavia no hay
+          inventario para mostrar.
         </Text>
         <Group mt="md" justify="flex-end">
-          <Button onClick={() => setEmptyInventoryOpen(false)}>Got it</Button>
+          <Button onClick={() => setEmptyInventoryOpen(false)}>Entendido</Button>
         </Group>
       </Modal>
     </main>

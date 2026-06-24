@@ -180,6 +180,7 @@ model Sku {
   assetFamilyId String
   price       Decimal?
   subrentalPrice Decimal?
+  replacementValue Decimal?
   chargeType  ChargeType     @default(DAY)
   minimumChargeHours Decimal?
   areaM2      Decimal?
@@ -194,6 +195,20 @@ model Sku {
   assetFamily AssetFamily @relation(fields: [assetFamilyId], references: [id])
 
   @@unique([assetFamilyId, name])
+}
+
+model CatalogOption {
+  id        String   @id @default(uuid())
+  groupKey  String
+  value     String
+  label     String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupKey, value])
+  @@index([groupKey])
 }
 
 model Asset {

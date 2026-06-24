@@ -39,6 +39,7 @@ export class SkusService {
         assetFamilyId: true,
         price: true,
         subrentalPrice: true,
+        replacementValue: true,
         chargeType: true,
         minimumChargeHours: true,
         areaM2: true,
@@ -73,6 +74,7 @@ export class SkusService {
     assetFamilyId: string;
     price?: number;
     subrentalPrice?: number;
+    replacementValue?: number;
     chargeType?: ChargeType;
     minimumChargeHours?: number;
     areaM2?: number;
@@ -97,6 +99,7 @@ export class SkusService {
           assetFamilyId: payload.assetFamilyId,
           price: payload.price ?? null,
           subrentalPrice: payload.subrentalPrice ?? null,
+          replacementValue: payload.replacementValue ?? null,
           chargeType: chargeConfig.chargeType,
           minimumChargeHours: chargeConfig.minimumChargeHours,
           areaM2: payload.areaM2 ?? null,
@@ -110,6 +113,7 @@ export class SkusService {
           assetFamilyId: true,
           price: true,
           subrentalPrice: true,
+          replacementValue: true,
           chargeType: true,
           minimumChargeHours: true,
           areaM2: true,
@@ -144,6 +148,7 @@ export class SkusService {
       assetFamilyId?: string;
       price?: number;
       subrentalPrice?: number;
+      replacementValue?: number;
       chargeType?: ChargeType;
       minimumChargeHours?: number;
       areaM2?: number;
@@ -186,6 +191,7 @@ export class SkusService {
           assetFamilyId: payload.assetFamilyId ?? undefined,
           price: payload.price ?? undefined,
           subrentalPrice: payload.subrentalPrice ?? undefined,
+          replacementValue: payload.replacementValue ?? undefined,
           chargeType: chargeConfig.chargeType,
           minimumChargeHours: chargeConfig.minimumChargeHours,
           areaM2: payload.areaM2 ?? undefined,
@@ -199,6 +205,7 @@ export class SkusService {
           assetFamilyId: true,
           price: true,
           subrentalPrice: true,
+          replacementValue: true,
           chargeType: true,
           minimumChargeHours: true,
           areaM2: true,

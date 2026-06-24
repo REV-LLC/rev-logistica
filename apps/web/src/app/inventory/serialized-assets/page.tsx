@@ -42,6 +42,7 @@ type Sku = {
   unitWeight?: number | null;
   price?: number | null;
   subrentalPrice?: number | null;
+  replacementValue?: number | null;
   chargeType?: 'DAY' | 'HOUR' | null;
   minimumChargeHours?: number | null;
 };
@@ -109,6 +110,7 @@ export default function CreateSerializedAssetPage() {
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | ''>('');
   const [skuPrice, setSkuPrice] = useState<number | ''>('');
   const [skuSubrentalPrice, setSkuSubrentalPrice] = useState<number | ''>('');
+  const [skuReplacementValue, setSkuReplacementValue] = useState<number | ''>('');
   const [skuChargeType, setSkuChargeType] = useState<'DAY' | 'HOUR'>('DAY');
   const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<
     number | ''
@@ -254,9 +256,11 @@ export default function CreateSerializedAssetPage() {
   const hasTemplateData = Boolean(skuName.trim() && skuUnit);
   const hasCommercialData =
     skuPrice !== '' &&
-    Number(skuPrice) > 0 &&
+    Number(skuPrice) >= 0 &&
     skuSubrentalPrice !== '' &&
-    Number(skuSubrentalPrice) > 0 &&
+    Number(skuSubrentalPrice) >= 0 &&
+    skuReplacementValue !== '' &&
+    Number(skuReplacementValue) >= 0 &&
     (skuChargeType !== 'HOUR' ||
       (skuMinimumChargeHours !== '' && Number(skuMinimumChargeHours) > 0));
   const hasAssetData =
@@ -288,6 +292,7 @@ export default function CreateSerializedAssetPage() {
     setSkuUnitWeight('');
     setSkuPrice('');
     setSkuSubrentalPrice('');
+    setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
@@ -314,6 +319,7 @@ export default function CreateSerializedAssetPage() {
     setSkuUnitWeight('');
     setSkuPrice('');
     setSkuSubrentalPrice('');
+    setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
@@ -381,6 +387,7 @@ export default function CreateSerializedAssetPage() {
     setSkuUnitWeight('');
     setSkuPrice('');
     setSkuSubrentalPrice('');
+    setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
@@ -492,6 +499,8 @@ export default function CreateSerializedAssetPage() {
           price: skuPrice === '' ? undefined : skuPrice,
           subrentalPrice:
             skuSubrentalPrice === '' ? undefined : skuSubrentalPrice,
+          replacementValue:
+            skuReplacementValue === '' ? undefined : skuReplacementValue,
           chargeType: skuChargeType,
           minimumChargeHours:
             skuChargeType === 'HOUR' && skuMinimumChargeHours !== ''
@@ -841,6 +850,11 @@ export default function CreateSerializedAssetPage() {
                           ? selectedSku.subrentalPrice
                           : '',
                       );
+                      setSkuReplacementValue(
+                        typeof selectedSku.replacementValue === 'number'
+                          ? selectedSku.replacementValue
+                          : '',
+                      );
                       setSkuChargeType(
                         selectedSku.chargeType === 'HOUR' ? 'HOUR' : 'DAY',
                       );
@@ -961,7 +975,7 @@ export default function CreateSerializedAssetPage() {
                   <div>
                     <Text fw={700}>4. Datos comerciales</Text>
                     <Text size="sm" c="dimmed">
-                      Precio, subalquiler y regla de cobro.
+                      Precio, subalquiler, reposicion y regla de cobro.
                     </Text>
                   </div>
 
@@ -986,6 +1000,19 @@ export default function CreateSerializedAssetPage() {
                       value={skuSubrentalPrice}
                       onChange={(value) =>
                         setSkuSubrentalPrice(typeof value === 'number' ? value : '')
+                      }
+                      min={0}
+                      step={1000}
+                      prefix="$ "
+                      thousandSeparator=","
+                    />
+                    <NumberInput
+                      label="Valor reposicion"
+                      name="skuReplacementValue"
+                      autoComplete="off"
+                      value={skuReplacementValue}
+                      onChange={(value) =>
+                        setSkuReplacementValue(typeof value === 'number' ? value : '')
                       }
                       min={0}
                       step={1000}

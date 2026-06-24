@@ -9,7 +9,7 @@ import Nav from '@/components/Nav';
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = [
   { prefix: '/transport/requests', title: 'Solicitudes', subtitle: 'Operacion diaria' },
-  { prefix: '/transport/cost', title: 'Transport', subtitle: 'Costos y despacho' },
+  { prefix: '/transport/cost', title: 'Transporte', subtitle: 'Costos y despacho' },
   { prefix: '/transport/vehicles', title: 'Vehiculos', subtitle: 'Flota y documentos' },
   { prefix: '/transport/worksites', title: 'Obras', subtitle: 'Frentes activos' },
   { prefix: '/tasks', title: 'Pendientes', subtitle: 'Seguimiento operativo' },
@@ -18,6 +18,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = 
   { prefix: '/inventory/scaffold-modulations', title: 'Modulaciones', subtitle: 'Andamio certificado' },
   { prefix: '/inventory/bulk-adjustments', title: 'Agregar inventario', subtitle: 'Ingreso masivo' },
   { prefix: '/inventory/serialized-assets', title: 'Agregar inventario', subtitle: 'Equipos unicos' },
+  { prefix: '/settings/catalog-options', title: 'Catalogo items', subtitle: 'Ajustes' },
   { prefix: '/billing/pre-invoice', title: 'Prefactura', subtitle: 'Resumen del periodo' },
   { prefix: '/customers', title: 'Clientes', subtitle: 'Relacion comercial' },
   { prefix: '/employees', title: 'Empleados', subtitle: 'Equipo interno' },
