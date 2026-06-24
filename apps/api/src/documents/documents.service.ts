@@ -3,6 +3,8 @@ import { DocumentItemBillingStatus, DocumentStatus, DocumentType, Prisma, Role }
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 
+const REMISSION_ITEMS_PER_DOCUMENT = 20;
+
 @Injectable()
 export class DocumentsService {
   private readonly businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -119,6 +121,222 @@ export class DocumentsService {
       attempt += 1;
     }
     return `${base}-${attempt}`;
+  }
+
+  private chunkItems<T>(items: T[], size: number) {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+      chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
+  }
+
+  private buildDocumentItemCreateManyData(
+    documentId: string,
+    items: Array<{
+      skuId: string | null;
+      assetId: string | null;
+      quantity: Prisma.Decimal | null;
+      requestedTag: string | null;
+      condition: string | null;
+      conditionNote: string | null;
+      damageCostEstimate?: Prisma.Decimal | null;
+      billingCutoffDate?: Date | null;
+      returnedAt?: Date | null;
+      billingStatus?: DocumentItemBillingStatus;
+      billingNote?: string | null;
+      billingUpdatedAt?: Date | null;
+      billingUpdatedBy?: string | null;
+    }>,
+  ) {
+    return items.map((item) => ({
+      documentId,
+      skuId: item.skuId ?? null,
+      assetId: item.assetId ?? null,
+      quantity: item.quantity ?? (item.skuId ? 1 : null),
+      requestedTag: item.requestedTag?.trim() || null,
+      condition: item.condition?.trim() || null,
+      conditionNote: item.conditionNote?.trim() || null,
+      damageCostEstimate: item.damageCostEstimate ?? null,
+      billingCutoffDate: item.billingCutoffDate ?? null,
+      returnedAt: item.returnedAt ?? null,
+      billingStatus: item.billingStatus ?? DocumentItemBillingStatus.OPEN,
+      billingNote: item.billingNote?.trim() || null,
+      billingUpdatedAt: item.billingUpdatedAt ?? null,
+      billingUpdatedBy: item.billingUpdatedBy ?? null,
+    }));
+  }
+
+  private async splitRemissionDraftDocument(
+    document: {
+      id: string;
+      type: DocumentType;
+      status: DocumentStatus;
+      consecutive: string | null;
+      warehouseId: string | null;
+      customerWorksiteId: string | null;
+      createdBy: string;
+      docDate: Date;
+      notes: string | null;
+      items: Array<{
+        id: string;
+        skuId: string | null;
+        assetId: string | null;
+        quantity: Prisma.Decimal | null;
+        requestedTag: string | null;
+        condition: string | null;
+        conditionNote: string | null;
+        damageCostEstimate: Prisma.Decimal | null;
+        billingCutoffDate: Date | null;
+        returnedAt: Date | null;
+        billingStatus: DocumentItemBillingStatus;
+        billingNote: string | null;
+        billingUpdatedAt: Date | null;
+        billingUpdatedBy: string | null;
+      }>;
+      files: Array<{
+        fileType: string;
+        storageKey: string;
+        mimeType: string | null;
+      }>;
+    },
+  ) {
+    const chunks = this.chunkItems(document.items, REMISSION_ITEMS_PER_DOCUMENT);
+    if (chunks.length <= 1) return [document.id];
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const createdDocumentIds: string[] = [document.id];
+
+          await tx.documentItem.deleteMany({
+            where: { documentId: document.id },
+          });
+          await tx.documentItem.createMany({
+            data: this.buildDocumentItemCreateManyData(document.id, chunks[0]),
+          });
+
+          for (const chunk of chunks.slice(1)) {
+            const consecutive = await this.resolveConsecutive(document.type, tx);
+            const created = await tx.document.create({
+              data: {
+                type: document.type,
+                status: DocumentStatus.DRAFT,
+                consecutive,
+                warehouseId: document.warehouseId,
+                customerWorksiteId: document.customerWorksiteId,
+                createdBy: document.createdBy,
+                docDate: document.docDate,
+                notes: document.notes,
+              },
+              select: { id: true },
+            });
+
+            await tx.documentItem.createMany({
+              data: this.buildDocumentItemCreateManyData(created.id, chunk),
+            });
+
+            if (document.files.length) {
+              await tx.fileObject.createMany({
+                data: document.files.map((file) => ({
+                  documentId: created.id,
+                  fileType: file.fileType,
+                  storageKey: file.storageKey,
+                  mimeType: file.mimeType ?? null,
+                  createdBy: document.createdBy,
+                })),
+              });
+            }
+
+            createdDocumentIds.push(created.id);
+          }
+
+          return createdDocumentIds;
+        });
+      } catch (error) {
+        if (this.isConsecutiveConflict(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new BadRequestException('No se pudo dividir la remisión con consecutivos únicos');
+  }
+
+  private async approveLoadedRequestDocument(
+    document: {
+      id: string;
+      type: DocumentType;
+      status: DocumentStatus;
+      warehouseId: string | null;
+      customerWorksiteId: string | null;
+      notes: string | null;
+      items: Array<{
+        skuId: string | null;
+        assetId: string | null;
+        quantity: Prisma.Decimal | null;
+        condition: string | null;
+        requestedTag?: string | null;
+      }>;
+    },
+    userId: string,
+  ) {
+    const items = await this.mapDocumentItemsToMovementItems(document.items);
+
+    if (document.type === DocumentType.REMISSION) {
+      if (!document.customerWorksiteId) {
+        throw new BadRequestException('La remisión no tiene obra destino');
+      }
+      const deliveryMode = this.parseDeliveryMode(document.notes);
+      if (deliveryMode === 'ON_SITE') {
+        await this.inventoryService.moveOnSite(
+          {
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      } else {
+        if (!document.warehouseId) {
+          throw new BadRequestException('La remisión no tiene bodega de ubicación');
+        }
+        await this.inventoryService.moveOut(
+          {
+            warehouseId: document.warehouseId,
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      }
+    } else {
+      if (!document.warehouseId || !document.customerWorksiteId) {
+        throw new BadRequestException('La devolución requiere bodega y obra');
+      }
+      await this.inventoryService.moveIn(
+        {
+          warehouseId: document.warehouseId,
+          customerWorksiteId: document.customerWorksiteId,
+          items,
+          documentId: document.id,
+        },
+        userId,
+      );
+    }
+
+    return this.prisma.document.update({
+      where: { id: document.id },
+      data: {
+        status: DocumentStatus.CONFIRMED,
+        voidReason: null,
+        voidedAt: null,
+        voidedBy: null,
+      },
+      select: { id: true, status: true, consecutive: true },
+    });
   }
 
   private parseSignatureMimeType(signatureDataUrl: string) {
@@ -669,7 +887,21 @@ export class DocumentsService {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: {
-        items: true,
+        items: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+        files: {
+          where: {
+            fileType: 'SIGNATURE_RECEIVED',
+          },
+          select: {
+            fileType: true,
+            storageKey: true,
+            mimeType: true,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 1,
+        },
       },
     });
     if (!document) {
@@ -682,61 +914,45 @@ export class DocumentsService {
       throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
     }
 
-    const items = await this.mapDocumentItemsToMovementItems(document.items);
-
-    if (document.type === DocumentType.REMISSION) {
-      if (!document.customerWorksiteId) {
-        throw new BadRequestException('La remisión no tiene obra destino');
-      }
-      const deliveryMode = this.parseDeliveryMode(document.notes);
-      if (deliveryMode === 'ON_SITE') {
-        await this.inventoryService.moveOnSite(
-          {
-            customerWorksiteId: document.customerWorksiteId,
-            items,
-            documentId: document.id,
+    if (
+      document.type === DocumentType.REMISSION &&
+      document.items.length > REMISSION_ITEMS_PER_DOCUMENT
+    ) {
+      const splitDocumentIds = await this.splitRemissionDraftDocument(document);
+      const confirmedDocuments: Array<{
+        id: string;
+        status: DocumentStatus;
+        consecutive: string | null;
+      }> = [];
+      for (const splitDocumentId of splitDocumentIds) {
+        const splitDocument = await this.prisma.document.findUnique({
+          where: { id: splitDocumentId },
+          include: {
+            items: true,
           },
-          userId,
-        );
-      } else {
-        if (!document.warehouseId) {
-          throw new BadRequestException('La remisión no tiene bodega de ubicación');
+        });
+        if (!splitDocument) {
+          throw new NotFoundException('Document not found after split');
         }
-        await this.inventoryService.moveOut(
-          {
-            warehouseId: document.warehouseId,
-            customerWorksiteId: document.customerWorksiteId,
-            items,
-            documentId: document.id,
-          },
-          userId,
+        confirmedDocuments.push(
+          await this.approveLoadedRequestDocument(splitDocument, userId),
         );
       }
-    } else {
-      if (!document.warehouseId || !document.customerWorksiteId) {
-        throw new BadRequestException('La devolución requiere bodega y obra');
-      }
-      await this.inventoryService.moveIn(
-        {
-          warehouseId: document.warehouseId,
-          customerWorksiteId: document.customerWorksiteId,
-          items,
-          documentId: document.id,
-        },
-        userId,
-      );
+      return {
+        id: confirmedDocuments[0]?.id ?? document.id,
+        status: DocumentStatus.CONFIRMED,
+        splitDocumentIds: confirmedDocuments.map((entry) => entry.id),
+        splitConsecutives: confirmedDocuments.map((entry) => entry.consecutive).filter(Boolean),
+      };
     }
 
-    return this.prisma.document.update({
-      where: { id: document.id },
-      data: {
-        status: DocumentStatus.CONFIRMED,
-        voidReason: null,
-        voidedAt: null,
-        voidedBy: null,
-      },
-      select: { id: true, status: true },
-    });
+    const confirmed = await this.approveLoadedRequestDocument(document, userId);
+    return {
+      id: confirmed.id,
+      status: confirmed.status,
+      splitDocumentIds: [confirmed.id],
+      splitConsecutives: confirmed.consecutive ? [confirmed.consecutive] : [],
+    };
   }
 
   async rejectRequestDocument(documentId: string, userId: string, reason?: string) {
