@@ -25,6 +25,8 @@ import styles from './remdev-print.module.css';
 import Image from 'next/image';
 import { IconArrowLeft, IconCalendar } from '@tabler/icons-react';
 
+const PRINT_LINES_PER_PAGE = 20;
+
 type DocumentDetail = {
   id: string;
   type: string;
@@ -507,7 +509,7 @@ export default function DocumentDetailPage() {
     [warehouses],
   );
 
-  const lines = useMemo(() => {
+  const linePages = useMemo(() => {
     const sourceRows = document?.type === 'RETURN'
       ? document?.items ?? []
       : (document?.ledger?.length ? document.ledger : document?.items ?? []);
@@ -535,10 +537,19 @@ export default function DocumentDetailPage() {
           })();
       return { qty, desc, eq, origin };
     });
-    while (rows.length < 11) {
+    if (!rows.length) {
       rows.push({ qty: 0, desc: '', eq: '', origin: '' });
     }
-    return rows.slice(0, 11);
+
+    const pages: Array<Array<{ qty: number; desc: string; eq: string; origin: string }>> = [];
+    for (let index = 0; index < rows.length; index += PRINT_LINES_PER_PAGE) {
+      const page = rows.slice(index, index + PRINT_LINES_PER_PAGE);
+      while (page.length < PRINT_LINES_PER_PAGE) {
+        page.push({ qty: 0, desc: '', eq: '', origin: '' });
+      }
+      pages.push(page);
+    }
+    return pages;
   }, [document?.items, document?.ledger, document?.type, warehouseNameById]);
   const describeItem = (item: DocumentDetail['items'][number]) => {
     return (
@@ -1091,7 +1102,11 @@ export default function DocumentDetailPage() {
         </Paper>
 
         {document ? (
-          <div className={styles.sheet}>
+          linePages.map((lines, pageIndex) => (
+          <div
+            key={`${document.id}-page-${pageIndex + 1}`}
+            className={`${styles.sheet}${pageIndex < linePages.length - 1 ? ` ${styles.pageBreakAfter}` : ''}`}
+          >
             <header className={styles.header}>
               <div>
                 <div className={styles.logoWrap}>
@@ -1128,6 +1143,7 @@ export default function DocumentDetailPage() {
               </div>
               <div>
                 <strong>Consecutivo:</strong> {title}
+                {linePages.length > 1 ? ` | Página ${pageIndex + 1} de ${linePages.length}` : ''}
               </div>
             </div>
 
@@ -1209,6 +1225,7 @@ export default function DocumentDetailPage() {
               </div>
             </section>
           </div>
+          ))
         ) : null}
       </Container>
       <Modal
