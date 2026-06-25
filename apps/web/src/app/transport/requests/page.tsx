@@ -176,6 +176,7 @@ type SkuOption = {
   name: string;
   assetFamilyId: string;
   controlType: 'BULK' | 'SERIAL';
+  category?: string | null;
 };
 
 type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
@@ -472,6 +473,7 @@ export default function SolicitudesIpadPage() {
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const skipNextFlowUrlSyncRef = useRef(false);
+  const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isDriverRole = userRole === 'DRIVER';
@@ -1017,10 +1019,18 @@ export default function SolicitudesIpadPage() {
 
   useEffect(() => {
     if (sourceMode !== 'warehouse') return;
-    if (!sourceOwnerWarehouseId) return;
+    if (!sourceOwnerWarehouseId) {
+      lastAutoOpenedWarehouseRef.current = null;
+      return;
+    }
     const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
-    if (selectedOwner?.type === 'ALLY') return;
-    void loadInventory(false);
+    if (selectedOwner?.type === 'ALLY') {
+      lastAutoOpenedWarehouseRef.current = null;
+      return;
+    }
+    if (lastAutoOpenedWarehouseRef.current === sourceOwnerWarehouseId) return;
+    lastAutoOpenedWarehouseRef.current = sourceOwnerWarehouseId;
+    void loadInventory(true);
   }, [sourceMode, sourceOwnerWarehouseId, warehouses]);
 
   useEffect(() => {
@@ -1084,10 +1094,15 @@ export default function SolicitudesIpadPage() {
   useEffect(() => {
     let mounted = true;
     const loadSkuOptions = async () => {
-      if (!canDecide) return;
       try {
         const data = await api<
-          Array<{ id: string; name: string; assetFamilyId: string; controlType: 'BULK' | 'SERIAL' }>
+          Array<{
+            id: string;
+            name: string;
+            assetFamilyId: string;
+            controlType: 'BULK' | 'SERIAL';
+            category?: string | null;
+          }>
         >('/skus', { method: 'GET' });
         if (!mounted) return;
         setSkuOptions(
@@ -1096,6 +1111,7 @@ export default function SolicitudesIpadPage() {
             name: item.name,
             assetFamilyId: item.assetFamilyId,
             controlType: item.controlType,
+            category: item.category ?? null,
           })),
         );
       } catch {
@@ -1106,7 +1122,7 @@ export default function SolicitudesIpadPage() {
     return () => {
       mounted = false;
     };
-  }, [canDecide]);
+  }, []);
 
   const closeResolveModal = () => {
     if (resolvingApprove) return;
@@ -2734,39 +2750,74 @@ export default function SolicitudesIpadPage() {
             </SimpleGrid>
           </Paper>
 
-          <Table striped highlightOnHover mb="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Item</Table.Th>
-                <Table.Th style={{ width: 110, textAlign: 'center' }}>Cantidad</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
+          {isTabletOrMobile ? (
+            <Stack gap="xs" mb="md">
               {selectedItems.map((item, index) => (
-                <Table.Tr key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}>
-                  <Table.Td>
-                    <Text>{item.name}</Text>
-                    {docType === 'RETURN' && item.isDamaged ? (
-                      <Text size="xs" c="red">
-                        Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
+                <Paper
+                  key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}
+                  withBorder
+                  radius="md"
+                  p="sm"
+                >
+                  <Group justify="space-between" align="flex-start" wrap="nowrap">
+                    <div style={{ minWidth: 0 }}>
+                      <Text fw={600} style={{ overflowWrap: 'anywhere' }}>
+                        {item.name}
                       </Text>
-                    ) : null}
+                      {docType === 'RETURN' && item.isDamaged ? (
+                        <Text size="xs" c="red" style={{ overflowWrap: 'anywhere' }}>
+                          Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
+                        </Text>
+                      ) : null}
+                    </div>
+                    <Text fw={800} ta="right" style={{ flex: '0 0 auto' }}>
+                      {item.type === 'serial' ? 1 : item.quantity ?? 1}
+                    </Text>
+                  </Group>
+                </Paper>
+              ))}
+              <Paper withBorder radius="md" p="sm" bg="gray.0">
+                <Group justify="space-between" wrap="nowrap">
+                  <Text fw={800}>Total</Text>
+                  <Text fw={900}>{selectedItemsTotalQuantity}</Text>
+                </Group>
+              </Paper>
+            </Stack>
+          ) : (
+            <Table striped highlightOnHover mb="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Item</Table.Th>
+                  <Table.Th style={{ width: 110, textAlign: 'center' }}>Cantidad</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {selectedItems.map((item, index) => (
+                  <Table.Tr key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}>
+                    <Table.Td>
+                      <Text>{item.name}</Text>
+                      {docType === 'RETURN' && item.isDamaged ? (
+                        <Text size="xs" c="red">
+                          Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
+                        </Text>
+                      ) : null}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'center' }}>
+                      {item.type === 'serial' ? 1 : item.quantity ?? 1}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+                <Table.Tr>
+                  <Table.Td>
+                    <Text fw={800}>Total</Text>
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'center' }}>
-                    {item.type === 'serial' ? 1 : item.quantity ?? 1}
+                    <Text fw={800}>{selectedItemsTotalQuantity}</Text>
                   </Table.Td>
                 </Table.Tr>
-              ))}
-              <Table.Tr>
-                <Table.Td>
-                  <Text fw={800}>Total</Text>
-                </Table.Td>
-                <Table.Td style={{ textAlign: 'center' }}>
-                  <Text fw={800}>{selectedItemsTotalQuantity}</Text>
-                </Table.Td>
-              </Table.Tr>
-            </Table.Tbody>
-          </Table>
+              </Table.Tbody>
+            </Table>
+          )}
 
           <Stack gap="xs">
             <Text fw={600}>Firma de recibido</Text>
@@ -3029,6 +3080,7 @@ export default function SolicitudesIpadPage() {
         selectedSerialIds={selectedSerialIds}
         onAddBulk={addBulkItem}
         onAddSerial={addSerialItem}
+        skuOptions={skuOptions}
         itemsAddedNotice={itemsAddedNotice}
         isDriverRole={isDriverRole}
         sourceMode={sourceMode}
