@@ -39,6 +39,8 @@ export class CustomersService {
           name: payload.name,
           nitOrId: payload.nitOrId ?? null,
           phone: payload.phone ?? null,
+          email: this.normalizeOptionalEmail(payload.email),
+          documentsEmail: this.normalizeOptionalEmail(payload.documentsEmail),
           active: payload.active ?? true,
         },
       });
@@ -74,6 +76,12 @@ export class CustomersService {
         name: payload.name,
         nitOrId: payload.nitOrId,
         phone: payload.phone,
+        email:
+          payload.email !== undefined ? this.normalizeOptionalEmail(payload.email) : undefined,
+        documentsEmail:
+          payload.documentsEmail !== undefined
+            ? this.normalizeOptionalEmail(payload.documentsEmail)
+            : undefined,
         active: payload.active,
       },
     });
@@ -282,4 +290,8 @@ export class CustomersService {
     });
   }
 
+  private normalizeOptionalEmail(value?: string) {
+    const email = value?.trim().toLowerCase();
+    return email || null;
+  }
 }

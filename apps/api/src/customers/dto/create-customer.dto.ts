@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class CustomerInitialWorksiteDto {
   @IsString()
@@ -29,6 +29,14 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsEmail()
+  documentsEmail?: string;
 
   @IsOptional()
   @IsBoolean()

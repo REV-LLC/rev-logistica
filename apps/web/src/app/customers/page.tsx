@@ -26,6 +26,7 @@ import {
   IconEye,
   IconFileCheck,
   IconFileText,
+  IconMail,
   IconPhone,
   IconPlus,
   IconRoad,
@@ -42,6 +43,8 @@ type Customer = {
   name: string;
   nitOrId: string | null;
   phone: string | null;
+  email: string | null;
+  documentsEmail: string | null;
   active: boolean;
   createdAt: string;
 };
@@ -50,6 +53,8 @@ type CustomerForm = {
   name: string;
   nitOrId: string;
   phone: string;
+  email: string;
+  documentsEmail: string;
   active: boolean;
   initialWorksiteName: string;
   initialWorksiteAlias: string;
@@ -67,6 +72,8 @@ const emptyForm: CustomerForm = {
   name: '',
   nitOrId: '',
   phone: '',
+  email: '',
+  documentsEmail: '',
   active: true,
   initialWorksiteName: '',
   initialWorksiteAlias: '',
@@ -113,6 +120,24 @@ function CustomerDetails({
           </Text>
           <Text size="sm" mt={8}>
             {customer.phone ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Correo
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.email ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Correo documentos
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.documentsEmail ?? '-'}
           </Text>
         </Paper>
       </SimpleGrid>
@@ -171,11 +196,15 @@ export default function CustomersPage() {
     const activeCount = customers.filter((customer) => customer.active).length;
     const identifiedCount = customers.filter((customer) => customer.nitOrId?.trim()).length;
     const withPhoneCount = customers.filter((customer) => customer.phone?.trim()).length;
+    const withDocumentsEmailCount = customers.filter((customer) =>
+      customer.documentsEmail?.trim(),
+    ).length;
     return {
       total: customers.length,
       active: activeCount,
       identified: identifiedCount,
       withPhone: withPhoneCount,
+      withDocumentsEmail: withDocumentsEmailCount,
     };
   }, [customers]);
 
@@ -197,6 +226,8 @@ export default function CustomersPage() {
       name: customer.name ?? '',
       nitOrId: customer.nitOrId ?? '',
       phone: customer.phone ?? '',
+      email: customer.email ?? '',
+      documentsEmail: customer.documentsEmail ?? '',
       active: customer.active,
       initialWorksiteName: '',
       initialWorksiteAlias: '',
@@ -278,6 +309,8 @@ export default function CustomersPage() {
         name: form.name.trim().toUpperCase(),
         nitOrId: form.nitOrId.trim().toUpperCase() || undefined,
         phone: form.phone.trim().toUpperCase() || undefined,
+        email: form.email.trim().toLowerCase() || undefined,
+        documentsEmail: form.documentsEmail.trim().toLowerCase() || undefined,
         active: editingCustomer ? form.active : true,
         initialWorksite: editingCustomer
           ? undefined
@@ -347,18 +380,25 @@ export default function CustomersPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="With document"
+              label="Con telefono"
+              value={String(metrics.withPhone)}
+              hint="Numero de contacto registrado"
+              color="blue"
+              icon={<IconPhone size={20} />}
+            />
+            <StatCard
+              label="Con documento"
               value={String(metrics.identified)}
-              hint="NIT or document loaded"
+              hint="NIT o documento cargado"
               color="lime"
               icon={<IconFileText size={20} />}
             />
             <StatCard
-              label="With phone"
-              value={String(metrics.withPhone)}
-              hint="Canal de contacto disponible"
-              color="blue"
-              icon={<IconPhone size={20} />}
+              label="Correo docs"
+              value={String(metrics.withDocumentsEmail)}
+              hint="Correo para recibir documentos"
+              color="violet"
+              icon={<IconMail size={20} />}
             />
           </SimpleGrid>
         </PageHeaderCard>
@@ -391,9 +431,21 @@ export default function CustomersPage() {
                       <SimpleGrid cols={2} spacing="sm">
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Contacto
+                            Telefono
                           </Text>
                           <Text size="sm">{customer.phone ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Correo documentos
+                          </Text>
+                          <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Correo
+                          </Text>
+                          <Text size="sm">{customer.email ?? '-'}</Text>
                         </div>
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -443,6 +495,7 @@ export default function CustomersPage() {
                   <Table.Th>Cliente</Table.Th>
                   <Table.Th>Identification</Table.Th>
                   <Table.Th>Contacto</Table.Th>
+                  <Table.Th>Correo documentos</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -461,7 +514,15 @@ export default function CustomersPage() {
                       </Table.Td>
                       <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
                       <Table.Td>
-                        <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
+                        <Stack gap={2}>
+                          <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
+                          <Text size="xs" c="dimmed">
+                            {customer.email ?? 'Sin correo'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
@@ -488,7 +549,7 @@ export default function CustomersPage() {
 
                 {!loading && customers.length === 0 && (
                   <Table.Tr>
-                    <Table.Td colSpan={5}>
+                    <Table.Td colSpan={6}>
                       <Stack align="center" gap="xs" py="lg">
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsersGroup size={20} />
@@ -504,7 +565,7 @@ export default function CustomersPage() {
 
                 {loading && (
                   <Table.Tr>
-                    <Table.Td colSpan={5}>
+                    <Table.Td colSpan={6}>
                       <Text c="dimmed" ta="center">
                         Cargando...
                       </Text>
@@ -653,12 +714,32 @@ export default function CustomersPage() {
                   }}
                 />
                 <TextInput
-                  label="Phone"
-                  placeholder="Contact number"
+                  label="Telefono"
+                  placeholder="Numero de contacto"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
                     setForm((prev) => ({ ...prev, phone: value }));
+                  }}
+                />
+                <TextInput
+                  label="Correo"
+                  placeholder="correo@cliente.com"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, email: value }));
+                  }}
+                />
+                <TextInput
+                  label="Correo para documentos"
+                  placeholder="documentos@cliente.com"
+                  type="email"
+                  value={form.documentsEmail}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, documentsEmail: value }));
                   }}
                 />
               </SimpleGrid>

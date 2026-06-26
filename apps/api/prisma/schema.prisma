@@ -109,6 +109,8 @@ model Customer {
   name      String
   nitOrId   String?
   phone     String?
+  email     String?
+  documentsEmail String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
