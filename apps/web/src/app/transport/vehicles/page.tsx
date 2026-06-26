@@ -52,6 +52,7 @@ type Vehicle = {
   plate: string;
   brand?: string | null;
   model?: string | null;
+  year?: number | null;
   type?: string | null;
   capacity?: string | null;
   soatVigencia?: string | null;
@@ -67,6 +68,7 @@ type VehicleForm = {
   plate: string;
   brand: string;
   model: string;
+  year: string;
   type: string;
   capacity: string;
   soatVigencia: string;
@@ -77,6 +79,7 @@ const formFromVehicle = (vehicle: Vehicle): VehicleForm => ({
   plate: vehicle.plate ?? '',
   brand: vehicle.brand ?? '',
   model: vehicle.model ?? '',
+  year: vehicle.year ? String(vehicle.year) : '',
   type: vehicle.type ?? '',
   capacity: vehicle.capacity ?? '',
   soatVigencia: toDateInput(vehicle.soatVigencia),
@@ -87,6 +90,7 @@ const emptyForm: VehicleForm = {
   plate: '',
   brand: '',
   model: '',
+  year: '',
   type: '',
   capacity: '',
   soatVigencia: '',
@@ -117,6 +121,10 @@ function formatCapacity(value?: string | null) {
   if (Number.isNaN(normalized)) return value;
   const displayValue = Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1);
   return `${displayValue} ${normalized === 1 ? 'tonelada' : 'toneladas'}`;
+}
+
+function formatVehicleIdentity(vehicle: Pick<Vehicle, 'brand' | 'model' | 'year'>) {
+  return [vehicle.brand, vehicle.model, vehicle.year ? String(vehicle.year) : null].filter(Boolean).join(' · ');
 }
 
 function toPatchValue(value: string) {
@@ -158,7 +166,7 @@ function VehicleDetails({
             {vehicle.plate}
           </Text>
           <Text size="sm" c="dimmed">
-            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
           </Text>
         </div>
         <Badge color="blue" variant="light">
@@ -172,6 +180,7 @@ function VehicleDetails({
             Configuracion
           </Text>
           <Stack gap={6} mt={8}>
+            <Text size="sm">Año: {vehicle.year ?? '-'}</Text>
             <Text size="sm">Peso (Toneladas): {formatCapacity(vehicle.capacity)}</Text>
             <Text size="sm">
               Conductores: {vehicle.drivers.length ? vehicle.drivers.map((driver) => driver.name).join(', ') : '-'}
@@ -312,6 +321,11 @@ export default function VehiclesPage() {
       setFormError('La placa es obligatoria');
       return;
     }
+    const parsedYear = form.year.trim() ? Number(form.year.trim()) : undefined;
+    if (parsedYear !== undefined && (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100)) {
+      setFormError('El año del vehículo debe estar entre 1900 y 2100');
+      return;
+    }
     setSaving(true);
     setFormError(null);
     setSuccess(null);
@@ -320,6 +334,7 @@ export default function VehiclesPage() {
         plate: form.plate.trim().toUpperCase(),
         brand: toPatchValue(form.brand)?.toUpperCase(),
         model: toPatchValue(form.model)?.toUpperCase(),
+        year: parsedYear,
         type: toPatchValue(form.type)?.toUpperCase(),
         capacity: toPatchValue(form.capacity)?.toUpperCase(),
         soatVigencia: toPatchValue(form.soatVigencia),
@@ -427,7 +442,7 @@ export default function VehiclesPage() {
                         <div>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
                           </Text>
                         </div>
                         <Badge color={soatStatus.color} variant="light">
@@ -438,9 +453,9 @@ export default function VehiclesPage() {
                       <SimpleGrid cols={2} spacing="sm">
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Tipo
+                            Año
                           </Text>
-                          <Text size="sm">{vehicle.type ?? '-'}</Text>
+                          <Text size="sm">{vehicle.year ?? '-'}</Text>
                         </div>
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -490,7 +505,7 @@ export default function VehiclesPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Vehiculo</Table.Th>
-                  <Table.Th>Tipo / capacidad</Table.Th>
+                  <Table.Th>Tipo / año / peso</Table.Th>
                   <Table.Th>Conductores</Table.Th>
                   <Table.Th>Documentation</Table.Th>
                   <Table.Th />
@@ -506,13 +521,16 @@ export default function VehiclesPage() {
                         <Stack gap={2}>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
                           <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
+                          <Text size="xs" c="dimmed">
+                            Año: {vehicle.year ?? '-'}
+                          </Text>
                           <Text size="xs" c="dimmed">
                             Peso (Toneladas): {formatCapacity(vehicle.capacity)}
                           </Text>
@@ -627,7 +645,7 @@ export default function VehiclesPage() {
                     <div>
                       <Text fw={700}>{editing.plate}</Text>
                       <Text size="sm" c="dimmed">
-                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                        {formatVehicleIdentity(editing) || 'Sin marca, modelo o año'}
                       </Text>
                     </div>
                     <Badge color="orange" variant="light">
@@ -652,7 +670,7 @@ export default function VehiclesPage() {
                     </Text>
                   </div>
 
-                  <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+                  <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="sm">
                     <TextInput
                       label="Plate"
                       name="plate"
@@ -678,6 +696,17 @@ export default function VehiclesPage() {
                       data={modelOptions}
                       onChange={(value) => setForm({ ...form, model: value })}
                       placeholder="Escribe para sugerir"
+                    />
+                    <TextInput
+                      label="Año"
+                      name="year"
+                      autoComplete="off"
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={form.year}
+                      onChange={(event) => setForm({ ...form, year: event.currentTarget.value })}
+                      placeholder="Ej. 2024"
                     />
                   </SimpleGrid>
 

@@ -20,6 +20,7 @@ export class VehiclesService {
         plate: true,
         brand: true,
         model: true,
+        year: true,
         type: true,
         capacity: true,
         soatVigencia: true,
@@ -53,6 +54,7 @@ export class VehiclesService {
     plate: string;
     brand?: string;
     model?: string;
+    year?: number;
     type?: string;
     capacity?: string;
     soatVigencia?: string;
@@ -70,6 +72,7 @@ export class VehiclesService {
           plate: payload.plate,
           brand: payload.brand ?? null,
           model: payload.model ?? null,
+          year: payload.year ?? null,
           type: payload.type ?? null,
           capacity: payload.capacity ?? null,
           soatVigencia: this.toDateOrNull(payload.soatVigencia),
@@ -96,6 +99,7 @@ export class VehiclesService {
       plate?: string;
       brand?: string;
       model?: string;
+      year?: number;
       type?: string;
       capacity?: string;
       soatVigencia?: string;
@@ -124,6 +128,7 @@ export class VehiclesService {
           plate: payload.plate,
           brand: payload.brand,
           model: payload.model,
+          year: payload.year,
           type: payload.type,
           capacity: payload.capacity,
           soatVigencia: this.toDateOrNull(payload.soatVigencia),
