@@ -90,37 +90,39 @@ enum TaskPriority {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
   passwordHash String
-  role      Role
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  documentsCreated Document[] @relation("CreatedBy")
+  documentsCreated Document[]    @relation("CreatedBy")
   ledgerCreated    StockLedger[] @relation("LedgerCreatedBy")
-  tasksCreated     Task[] @relation("TaskCreatedBy")
-  tasksAssigned    Task[] @relation("TaskAssignedTo")
+  tasksCreated     Task[]        @relation("TaskCreatedBy")
+  tasksAssigned    Task[]        @relation("TaskAssignedTo")
   employee         Employee?
 }
 
 model Customer {
-  id        String   @id @default(uuid())
-  name      String
-  nitOrId   String?
-  phone     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  name           String
+  nitOrId        String?
+  phone          String?
+  email          String?
+  documentsEmail String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
 
   customerWorksites CustomerWorksite[]
 }
 
 model Worksite {
-  id         String   @id @default(uuid())
-  name       String
-  address    String?
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 
   customerWorksites CustomerWorksite[]
 
@@ -145,54 +147,54 @@ model CustomerWorksite {
 }
 
 model Warehouse {
-  id        String   @id @default(uuid())
-  name      String
-  type      WarehouseType
+  id             String        @id @default(uuid())
+  name           String
+  type           WarehouseType
   ownerCompanyId String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
 
-  assetsOwned   Asset[] @relation("OwnerWarehouse")
-  assetsCurrent Asset[] @relation("CurrentWarehouse")
-  ledger        StockLedger[]
-  ledgerOwned   StockLedger[] @relation("LedgerOwnerWarehouse")
-  documents     Document[]
-  ownerCompany  Owner    @relation(fields: [ownerCompanyId], references: [id])
+  assetsOwned      Asset[]                @relation("OwnerWarehouse")
+  assetsCurrent    Asset[]                @relation("CurrentWarehouse")
+  ledger           StockLedger[]
+  ledgerOwned      StockLedger[]          @relation("LedgerOwnerWarehouse")
+  documents        Document[]
+  ownerCompany     Owner                  @relation(fields: [ownerCompanyId], references: [id])
   internalCounters AssetInternalCounter[]
 }
 
 model AssetFamily {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
+  id          String         @id @default(uuid())
+  code        String         @unique
+  name        String
   controlType SkuControlType
-  createdAt DateTime @default(now())
+  createdAt   DateTime       @default(now())
 
-  skus   Sku[]
+  skus             Sku[]
   internalCounters AssetInternalCounter[]
 }
 
 model Sku {
-  id          String         @id @default(uuid())
-  name        String
-  imageUrl    String?
-  imageFileObjectId String?
-  assetFamilyId String
-  price       Decimal?
-  subrentalPrice Decimal?
-  replacementValue Decimal?
-  chargeType  ChargeType     @default(DAY)
+  id                 String     @id @default(uuid())
+  name               String
+  imageUrl           String?
+  imageFileObjectId  String?
+  assetFamilyId      String
+  price              Decimal?
+  subrentalPrice     Decimal?
+  replacementValue   Decimal?
+  chargeType         ChargeType @default(DAY)
   minimumChargeHours Decimal?
-  areaM2      Decimal?
-  unitWeight  Decimal?
-  active      Boolean        @default(true)
-  createdAt   DateTime       @default(now())
+  areaM2             Decimal?
+  unitWeight         Decimal?
+  active             Boolean    @default(true)
+  createdAt          DateTime   @default(now())
 
-  assets       Asset[]
-  documentItems DocumentItem[]
-  ledger       StockLedger[]
-  imageFileObject FileObject? @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily AssetFamily @relation(fields: [assetFamilyId], references: [id])
+  assets          Asset[]
+  documentItems   DocumentItem[]
+  ledger          StockLedger[]
+  imageFileObject FileObject?    @relation("SkuImage", fields: [imageFileObjectId], references: [id])
+  assetFamily     AssetFamily    @relation(fields: [assetFamilyId], references: [id])
 
   @@unique([assetFamilyId, name])
 }
@@ -212,26 +214,26 @@ model CatalogOption {
 }
 
 model Asset {
-  id                String   @id @default(uuid())
-  skuId             String
-  publicCode        String   @unique
-  serialOrEngine    String   @unique
-  description       String?
-  brand             String?
-  model             String?
-  year              Int?
-  fuel              String?
-  imageFileObjectId String?
-  internalNumber    Int
-  weight            Decimal?
-  warehouseOwnerId  String
+  id                 String   @id @default(uuid())
+  skuId              String
+  publicCode         String   @unique
+  serialOrEngine     String   @unique
+  description        String?
+  brand              String?
+  model              String?
+  year               Int?
+  fuel               String?
+  imageFileObjectId  String?
+  internalNumber     Int
+  weight             Decimal?
+  warehouseOwnerId   String
   warehouseCurrentId String?
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
-  sku              Sku       @relation(fields: [skuId], references: [id])
-  warehouseOwner   Warehouse @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
-  warehouseCurrent Warehouse? @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
+  sku              Sku         @relation(fields: [skuId], references: [id])
+  warehouseOwner   Warehouse   @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
+  warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
 
   documentItems DocumentItem[]
@@ -242,22 +244,22 @@ model Asset {
 }
 
 model Task {
-  id               String       @id @default(uuid())
-  title            String
-  description      String?
-  bulkItemName     String?
-  status           TaskStatus   @default(OPEN)
-  priority         TaskPriority @default(MEDIUM)
-  dueDate          DateTime?
-  createdByUserId  String
-  assignedToUserId String?
+  id                   String       @id @default(uuid())
+  title                String
+  description          String?
+  bulkItemName         String?
+  status               TaskStatus   @default(OPEN)
+  priority             TaskPriority @default(MEDIUM)
+  dueDate              DateTime?
+  createdByUserId      String
+  assignedToUserId     String?
   assignedToEmployeeId String?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
-  createdBy          User  @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
-  assignedTo         User? @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
-  assignedToEmployee Employee? @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
+  createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+  assignedToEmployee Employee?   @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
   assets             TaskAsset[]
 
   @@index([createdByUserId])
@@ -281,24 +283,24 @@ model TaskAsset {
 }
 
 model Document {
-  id        String        @id @default(uuid())
-  type      DocumentType
-  status    DocumentStatus @default(DRAFT)
-  consecutive String?      @unique
+  id                 String         @id @default(uuid())
+  type               DocumentType
+  status             DocumentStatus @default(DRAFT)
+  consecutive        String?        @unique
   customerWorksiteId String?
-  warehouseId String?
-  createdBy String
-  docDate   DateTime      @default(now())
-  notes     String?
+  warehouseId        String?
+  createdBy          String
+  docDate            DateTime       @default(now())
+  notes              String?
 
   // Failed fields
   failedReason         String?
   failedResponsibility FailureResponsibility?
-  failedFeeApplicable  Boolean @default(false)
+  failedFeeApplicable  Boolean                @default(false)
 
   // Retry chain
   retryOfDocumentId String?
-  retryOfDocument   Document? @relation("RetryChain", fields: [retryOfDocumentId], references: [id])
+  retryOfDocument   Document?  @relation("RetryChain", fields: [retryOfDocumentId], references: [id])
   retries           Document[] @relation("RetryChain")
 
   // Void fields
@@ -310,24 +312,24 @@ model Document {
 
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
-  creator          User             @relation("CreatedBy", fields: [createdBy], references: [id])
+  creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
-  items     DocumentItem[]
-  ledger    StockLedger[]
-  files     FileObject[]
+  items  DocumentItem[]
+  ledger StockLedger[]
+  files  FileObject[]
 }
 
 model DocumentItem {
-  id         String   @id @default(uuid())
+  id         String @id @default(uuid())
   documentId String
 
   // BULK
-  skuId     String?
-  quantity  Decimal?
+  skuId        String?
+  quantity     Decimal?
   requestedTag String?
 
   // SERIAL
-  assetId   String?
+  assetId String?
 
   condition          String?
   conditionNote      String?
@@ -352,17 +354,17 @@ model DocumentItem {
 }
 
 model StockLedger {
-  id        String      @id @default(uuid())
+  id String @id @default(uuid())
 
   // Identificador del item (uno de los dos)
-  skuId     String?
-  assetId   String?
+  skuId   String?
+  assetId String?
 
-  warehouseId String?
-  ownerWarehouseId String
+  warehouseId        String?
+  ownerWarehouseId   String
   customerWorksiteId String?
-  movementType MovementType
-  quantity    Decimal
+  movementType       MovementType
+  quantity           Decimal
 
   refDocumentId   String?
   refDocumentType DocumentType?
@@ -370,10 +372,10 @@ model StockLedger {
   createdAt DateTime @default(now())
   createdBy String
 
-  warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id])
-  ownerWarehouse    Warehouse        @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])
-  customerWorksite  CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
-  document          Document?         @relation(fields: [refDocumentId], references: [id])
+  warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
+  ownerWarehouse   Warehouse         @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])
+  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
+  document         Document?         @relation(fields: [refDocumentId], references: [id])
 
   sku   Sku?   @relation(fields: [skuId], references: [id])
   asset Asset? @relation(fields: [assetId], references: [id])
@@ -395,7 +397,7 @@ model AssetInternalCounter {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  ownerWarehouse Warehouse @relation(fields: [ownerWarehouseId], references: [id])
+  ownerWarehouse Warehouse   @relation(fields: [ownerWarehouseId], references: [id])
   assetFamily    AssetFamily @relation(fields: [assetFamilyId], references: [id])
 
   @@unique([ownerWarehouseId, assetFamilyId])
@@ -427,22 +429,22 @@ model Employee {
   active     Boolean      @default(true)
   createdAt  DateTime     @default(now())
 
-  vehicles EmployeeVehicle[]
-  user     User?          @relation(fields: [userId], references: [id])
-  tasksAssigned Task[]    @relation("TaskAssignedToEmployee")
+  vehicles      EmployeeVehicle[]
+  user          User?             @relation(fields: [userId], references: [id])
+  tasksAssigned Task[]            @relation("TaskAssignedToEmployee")
 }
 
 model Vehicle {
-  id        String   @id @default(uuid())
-  plate     String   @unique
-  brand     String?
-  model     String?
-  type      String?
-  capacity  String?
-  soatVigencia DateTime?
+  id                    String    @id @default(uuid())
+  plate                 String    @unique
+  brand                 String?
+  model                 String?
+  type                  String?
+  capacity              String?
+  soatVigencia          DateTime?
   tecnomecanicaVigencia DateTime?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
 
   drivers EmployeeVehicle[]
 }
@@ -461,15 +463,15 @@ model EmployeeVehicle {
 }
 
 model FileObject {
-  id        String   @id @default(uuid())
+  id         String   @id @default(uuid())
   documentId String
-  fileType  String   // SIGNATURE | PHOTO
+  fileType   String // SIGNATURE | PHOTO
   storageKey String
-  mimeType  String?
-  createdAt DateTime @default(now())
-  createdBy String
+  mimeType   String?
+  createdAt  DateTime @default(now())
+  createdBy  String
 
-  document Document @relation(fields: [documentId], references: [id])
-  skuImages   Sku[]   @relation("SkuImage")
-  assetImages Asset[] @relation("AssetImage")
+  document    Document @relation(fields: [documentId], references: [id])
+  skuImages   Sku[]    @relation("SkuImage")
+  assetImages Asset[]  @relation("AssetImage")
 }
