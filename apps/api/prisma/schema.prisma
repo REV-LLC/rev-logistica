@@ -439,6 +439,7 @@ model Vehicle {
   plate                 String    @unique
   brand                 String?
   model                 String?
+  year                  Int?
   type                  String?
   capacity              String?
   soatVigencia          DateTime?
