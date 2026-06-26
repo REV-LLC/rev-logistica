@@ -10,6 +10,7 @@ import {
   Modal,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -501,7 +502,12 @@ export default function DocumentDetailPage() {
   const isRemission = document?.type === 'REMISSION';
   const isReturn = document?.type === 'RETURN';
   const isChange = document?.type === 'CUTOVER' || document?.type === 'CHANGE';
-  const receivedSignature = document?.files?.[0]?.storageKey ?? null;
+  const receivedSignature =
+    document?.files?.find((file) => file.fileType === 'SIGNATURE_RECEIVED')?.storageKey ?? null;
+  const evidenceFiles = useMemo(
+    () => document?.files?.filter((file) => file.fileType === 'PHOTO_EVIDENCE') ?? [],
+    [document?.files],
+  );
   const hasRenderableSignature = Boolean(receivedSignature?.startsWith('data:image/'));
   const deliveredByDisplay = document?.creator?.name ?? document?.creator?.email ?? dispatcherDisplay ?? '-';
   const warehouseNameById = useMemo(
@@ -571,6 +577,15 @@ export default function DocumentDetailPage() {
     if (status === 'CLOSED') return 'gray';
     return 'green';
   };
+  const formatBillingStatus = (status?: string | null) => {
+    if (status === 'CUT') return 'Corte definido';
+    if (status === 'CLOSED') return 'Cerrado';
+    return 'Abierto';
+  };
+  const getEffectiveBillingCutoffDate = (item: DocumentDetail['items'][number]) =>
+    item.billingCutoffDate ?? (document?.type === 'RETURN' ? document.docDate : null);
+  const getEffectiveBillingStatus = (item: DocumentDetail['items'][number]) =>
+    item.billingStatus ?? (getEffectiveBillingCutoffDate(item) ? 'CUT' : 'OPEN');
   const isResolvePendingItem = (item: DocumentDetail['items'][number]) => {
     const hasTag = Boolean(item.requestedTag?.trim());
     if (!item.skuId && !item.assetId) {
@@ -588,7 +603,7 @@ export default function DocumentDetailPage() {
         ? toPickerDateInput(item.returnedAt ?? document.docDate ?? document.createdAt)
         : toPickerDateInput(item.returnedAt);
     setBillingItemId(item.id);
-    setBillingCutoffDate(toPickerDateInput(item.billingCutoffDate));
+    setBillingCutoffDate(toPickerDateInput(getEffectiveBillingCutoffDate(item)));
     setBillingReturnedAt(defaultReturnedAt);
     setBillingNote(item.billingNote ?? '');
     setBillingError(null);
@@ -605,7 +620,7 @@ export default function DocumentDetailPage() {
     setBillingError(null);
     try {
       const cutoffValue = toApiDateInput(billingCutoffDate, 'Fecha corte');
-      const returnedValue = toApiDateInput(billingReturnedAt, 'Actual return date');
+      const returnedValue = toApiDateInput(billingReturnedAt, 'Fecha real de devolución');
       await api(`/documents/${document.id}/items/${selectedBillingItem.id}/billing`, {
         method: 'PATCH',
         json: {
@@ -881,13 +896,6 @@ export default function DocumentDetailPage() {
 
     try {
       const doc = await api<DocumentDetail>(`/documents/${document.id}`, { method: 'GET' });
-      if (doc.type === 'RETURN') {
-        const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
-        if (missingCutoff) {
-          setError('Before approving the return, define the cutoff date per item.');
-          return;
-        }
-      }
       const unresolved = doc.items
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => isResolvePendingItem(item));
@@ -1064,46 +1072,83 @@ export default function DocumentDetailPage() {
           ) : null}
           {document?.type === 'RETURN' ? (
             <Paper withBorder p="md" mt="md">
-              <Title order={5}>Item cutoff (billing)</Title>
+              <Title order={5}>Corte de items</Title>
               <Table mt="sm" striped>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Item</Table.Th>
                     <Table.Th>Cantidad</Table.Th>
-                    <Table.Th>Cutoff</Table.Th>
-                    <Table.Th>Actual return</Table.Th>
+                    <Table.Th>Fecha de corte</Table.Th>
+                    <Table.Th>Fecha real de devolución</Table.Th>
                     <Table.Th>Estado</Table.Th>
                     <Table.Th></Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {document.items.map((item) => (
-                    <Table.Tr key={`billing-${item.id}`}>
-                      <Table.Td>
-                        <Text>{describeItem(item)}</Text>
-                        {item.conditionNote ? (
-                          <Text size="xs" c="red">
-                            Averia: {item.conditionNote}
-                          </Text>
-                        ) : null}
-                      </Table.Td>
-                      <Table.Td>{displayQuantity(item.quantity)}</Table.Td>
-                      <Table.Td>{item.billingCutoffDate ? formatDate(item.billingCutoffDate) : '-'}</Table.Td>
-                      <Table.Td>{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Table.Td>
-                      <Table.Td>
-                        <Badge size="sm" variant="light" color={billingStatusColor(item.billingStatus)}>
-                          {item.billingStatus ?? 'OPEN'}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Button size="xs" variant="light" onClick={() => openBillingModal(item)}>
-                          Definir corte
-                        </Button>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
+                  {document.items.map((item) => {
+                    const cutoffDate = getEffectiveBillingCutoffDate(item);
+                    const billingStatus = getEffectiveBillingStatus(item);
+                    return (
+                      <Table.Tr key={`billing-${item.id}`}>
+                        <Table.Td>
+                          <Text>{describeItem(item)}</Text>
+                          {item.conditionNote ? (
+                            <Text size="xs" c="red">
+                              Averia: {item.conditionNote}
+                            </Text>
+                          ) : null}
+                        </Table.Td>
+                        <Table.Td>{displayQuantity(item.quantity)}</Table.Td>
+                        <Table.Td>{cutoffDate ? formatDate(cutoffDate) : '-'}</Table.Td>
+                        <Table.Td>{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Table.Td>
+                        <Table.Td>
+                          <Badge size="sm" variant="light" color={billingStatusColor(billingStatus)}>
+                            {formatBillingStatus(billingStatus)}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Button size="xs" variant="light" onClick={() => openBillingModal(item)}>
+                            Definir corte
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
                 </Table.Tbody>
               </Table>
+            </Paper>
+          ) : null}
+          {evidenceFiles.length ? (
+            <Paper withBorder p="md" mt="md">
+              <Title order={5}>Evidencias visuales</Title>
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm" mt="sm">
+                {evidenceFiles.map((file, index) => (
+                  <a
+                    key={file.id}
+                    href={file.storageKey}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'inherit', textDecoration: 'none' }}
+                  >
+                    <Paper withBorder radius="md" p={6}>
+                      <img
+                        src={file.storageKey}
+                        alt={`Evidencia ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          aspectRatio: '4 / 3',
+                          objectFit: 'cover',
+                          borderRadius: 6,
+                          display: 'block',
+                        }}
+                      />
+                      <Text size="xs" c="dimmed" mt={4}>
+                        {formatDateTime(file.createdAt)}
+                      </Text>
+                    </Paper>
+                  </a>
+                ))}
+              </SimpleGrid>
             </Paper>
           ) : null}
         </Paper>
@@ -1273,7 +1318,7 @@ export default function DocumentDetailPage() {
             aria-hidden="true"
           />
           <TextInput
-            label="Actual return date (optional)"
+            label="Fecha real de devolución (opcional)"
             value={billingReturnedAt ? toDisplayDateInput(billingReturnedAt) : ''}
             placeholder="dd/mm/aaaa"
             readOnly

@@ -198,6 +198,11 @@ export class DocumentsService {
         fileType: string;
         storageKey: string;
         mimeType: string | null;
+        objectKey?: string | null;
+        originalName?: string | null;
+        displayName?: string | null;
+        sizeBytes?: number | null;
+        expiresAt?: Date | null;
       }>;
     },
   ) {
@@ -240,9 +245,17 @@ export class DocumentsService {
               await tx.fileObject.createMany({
                 data: document.files.map((file) => ({
                   documentId: created.id,
+                  entityType: 'DOCUMENT',
+                  entityId: created.id,
                   fileType: file.fileType,
+                  category: file.fileType,
+                  displayName: file.displayName ?? null,
+                  originalName: file.originalName ?? null,
                   storageKey: file.storageKey,
+                  objectKey: file.objectKey ?? null,
                   mimeType: file.mimeType ?? null,
+                  sizeBytes: file.sizeBytes ?? null,
+                  expiresAt: file.expiresAt ?? null,
                   createdBy: document.createdBy,
                 })),
               });
@@ -271,6 +284,7 @@ export class DocumentsService {
       status: DocumentStatus;
       warehouseId: string | null;
       customerWorksiteId: string | null;
+      docDate: Date;
       notes: string | null;
       items: Array<{
         skuId: string | null;
@@ -325,6 +339,16 @@ export class DocumentsService {
         },
         userId,
       );
+      await this.prisma.documentItem.updateMany({
+        where: {
+          documentId: document.id,
+          billingCutoffDate: null,
+        },
+        data: {
+          billingCutoffDate: document.docDate,
+          billingStatus: DocumentItemBillingStatus.CUT,
+        },
+      });
     }
 
     return this.prisma.document.update({
@@ -378,6 +402,16 @@ export class DocumentsService {
     return DocumentItemBillingStatus.OPEN;
   }
 
+  private parseDocumentDateFromNotes(notes?: string | null) {
+    if (!notes) return undefined;
+    const parts = notes.split('|').map((value) => value.trim());
+    const entry = parts.find((part) => part.toLowerCase().startsWith('fecha documento:'));
+    if (!entry) return undefined;
+    const [, ...rest] = entry.split(':');
+    const rawDate = rest.join(':').trim();
+    return this.parseBillingDate(rawDate, 'Fecha documento') ?? undefined;
+  }
+
   private async saveReceivedSignature(
     tx: Prisma.TransactionClient,
     documentId: string,
@@ -396,7 +430,10 @@ export class DocumentsService {
     await tx.fileObject.create({
       data: {
         documentId,
+        entityType: 'DOCUMENT',
+        entityId: documentId,
         fileType: 'SIGNATURE_RECEIVED',
+        category: 'SIGNATURE_RECEIVED',
         storageKey: normalized,
         mimeType: this.parseSignatureMimeType(normalized),
         createdBy,
@@ -470,6 +507,9 @@ export class DocumentsService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           const consecutive = await this.resolveConsecutive(type, tx, payload.number);
+          const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
+          const defaultBillingCutoffDate =
+            type === DocumentType.RETURN ? documentDate : null;
           const document = await tx.document.create({
             data: {
               type,
@@ -477,6 +517,7 @@ export class DocumentsService {
               consecutive,
               warehouseId: payload.warehouseId ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
+              docDate: documentDate,
               notes: payload.notes ?? null,
               createdBy: payload.createdBy,
             },
@@ -492,6 +533,8 @@ export class DocumentsService {
                 requestedTag: item.requestedTag?.trim() || null,
                 condition: item.ownerWarehouseId ?? null,
                 conditionNote: item.conditionNote?.trim() || null,
+                billingCutoffDate: defaultBillingCutoffDate,
+                billingStatus: this.getBillingStatus(defaultBillingCutoffDate, null),
               })),
             });
           }
@@ -550,6 +593,7 @@ export class DocumentsService {
         warehouseId: true,
         customerWorksiteId: true,
         notes: true,
+        docDate: true,
       },
     });
     if (!existing) throw new NotFoundException('Document not found');
@@ -568,6 +612,10 @@ export class DocumentsService {
           payload.number !== undefined
             ? await this.resolveConsecutive(nextType, tx, payload.number)
             : existing.consecutive;
+        const nextNotes = payload.notes !== undefined ? payload.notes ?? null : existing.notes;
+        const nextDocDate = this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
+        const defaultBillingCutoffDate =
+          nextType === DocumentType.RETURN ? nextDocDate : null;
         const updated = await tx.document.update({
           where: { id: documentId },
           data: {
@@ -581,7 +629,8 @@ export class DocumentsService {
               payload.customerWorksiteId !== undefined
                 ? (payload.customerWorksiteId ?? null)
                 : existing.customerWorksiteId,
-            notes: payload.notes !== undefined ? payload.notes ?? null : existing.notes,
+            docDate: nextDocDate,
+            notes: nextNotes,
           },
           select: { id: true },
         });
@@ -600,6 +649,8 @@ export class DocumentsService {
               requestedTag: item.requestedTag?.trim() || null,
               condition: item.ownerWarehouseId ?? null,
               conditionNote: item.conditionNote?.trim() || null,
+              billingCutoffDate: defaultBillingCutoffDate,
+              billingStatus: this.getBillingStatus(defaultBillingCutoffDate, null),
             })),
           });
         }
@@ -892,12 +943,20 @@ export class DocumentsService {
         },
         files: {
           where: {
-            fileType: 'SIGNATURE_RECEIVED',
+            fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE'] },
           },
           select: {
+            id: true,
             fileType: true,
+            category: true,
+            displayName: true,
+            originalName: true,
             storageKey: true,
+            objectKey: true,
             mimeType: true,
+            sizeBytes: true,
+            expiresAt: true,
+            createdAt: true,
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 1,
@@ -1008,15 +1067,20 @@ export class DocumentsService {
           select: {
             id: true,
             fileType: true,
+            category: true,
+            displayName: true,
+            originalName: true,
             storageKey: true,
+            objectKey: true,
             mimeType: true,
+            sizeBytes: true,
+            expiresAt: true,
             createdAt: true,
           },
           where: {
-            fileType: 'SIGNATURE_RECEIVED',
+            fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE'] },
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 1,
         },
         items: {
           include: {

@@ -253,7 +253,16 @@ export default function CreateSerializedAssetPage() {
       warehouses.find((warehouse) => warehouse.id === warehouseCurrentId) ?? null,
     [warehouseCurrentId, warehouses],
   );
-  const hasTemplateData = Boolean(skuName.trim() && skuUnit);
+  const resolvedSkuName = useMemo(() => {
+    const manualName = skuName.trim();
+    if (manualName) return manualName;
+
+    const brandModelName = [skuBrand.trim(), skuModel.trim()].filter(Boolean).join(' ').trim();
+    if (brandModelName) return brandModelName;
+
+    return (selectedFamily?.name ?? familyName.trim()).trim();
+  }, [familyName, selectedFamily?.name, skuBrand, skuModel, skuName]);
+  const hasTemplateData = Boolean(resolvedSkuName && skuUnit);
   const hasCommercialData =
     skuPrice !== '' &&
     Number(skuPrice) >= 0 &&
@@ -432,9 +441,9 @@ export default function CreateSerializedAssetPage() {
       return;
     }
 
-    if (!skuName.trim() && !skuBrand.trim() && !skuModel.trim()) {
+    if (!resolvedSkuName) {
       setValidationError(
-        'Enter the reference name or at least brand/model.',
+        'Ingresa marca/modelo o confirma una familia.',
         skuNameRef,
       );
       return;
@@ -494,7 +503,7 @@ export default function CreateSerializedAssetPage() {
                 code: familyCode.trim() || undefined,
               },
         sku: {
-          name: skuName.trim() || undefined,
+          name: resolvedSkuName || undefined,
           unitWeight: skuUnitWeight === '' ? undefined : skuUnitWeight,
           price: skuPrice === '' ? undefined : skuPrice,
           subrentalPrice:
@@ -890,15 +899,26 @@ export default function CreateSerializedAssetPage() {
                     disabled={familyMode === 'new' || loadingSkus || !familyId}
                   />
 
-                  <TextInput
-                    ref={skuNameRef}
-                    label="Referencia"
-                    name="skuName"
-                    autoComplete="off"
-                    value={skuName}
-                    onChange={(event) => setSkuName(event.currentTarget.value)}
-                    placeholder="Ejemplo: Minicargador S650"
-                  />
+                  {familyMode === 'existing' ? (
+                    <TextInput
+                      ref={skuNameRef}
+                      label="Referencia"
+                      name="skuName"
+                      autoComplete="off"
+                      value={skuName}
+                      onChange={(event) => setSkuName(event.currentTarget.value)}
+                      placeholder="Ejemplo: Minicargador S650"
+                    />
+                  ) : (
+                    <Paper radius="md" p="sm" bg="gray.0">
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                        Referencia
+                      </Text>
+                      <Text size="sm" mt={4}>
+                        {resolvedSkuName || 'Se genera con marca y modelo'}
+                      </Text>
+                    </Paper>
+                  )}
 
                   <Group grow className="mobile-stack">
                     <TextInput
@@ -1128,7 +1148,7 @@ export default function CreateSerializedAssetPage() {
                         {(selectedFamily?.name ?? familyName.trim()) || 'Sin categoria'}
                       </Text>
                       <Text size="sm" c="dimmed">
-                        {skuName.trim() || 'Sin referencia'}
+                        {resolvedSkuName || 'Sin referencia'}
                       </Text>
                     </Paper>
                     <Paper radius="md" p="sm" bg="gray.0">

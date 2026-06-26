@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Button,
@@ -20,6 +20,7 @@ import {
   Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { IconCamera, IconTrash } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import InventoryItemPickerModal, {
   type InventoryItemPickerBulkItem,
@@ -65,6 +66,16 @@ type SelectedItem = {
   availableQuantity?: number;
   ownerWarehouseId?: string | null;
 };
+
+type EvidencePhotoDraft = {
+  id: string;
+  file: File;
+  previewUrl: string;
+};
+
+const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_EVIDENCE_PHOTO_COUNT = 12;
+const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
@@ -127,6 +138,9 @@ export default function RemisionDevolucionPage() {
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
+  const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
+  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
   const ownerWarehouseOptions = warehouses.map((warehouse) => ({
     value: warehouse.id,
@@ -248,6 +262,84 @@ export default function RemisionDevolucionPage() {
       setSourceOwnerWarehouseId(null);
     }
   }, [docType]);
+
+  useEffect(() => {
+    evidencePhotosRef.current = evidencePhotos;
+  }, [evidencePhotos]);
+
+  useEffect(() => {
+    return () => {
+      evidencePhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    };
+  }, []);
+
+  const addEvidencePhotos = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setError(null);
+    const files = Array.from(fileList);
+    const nextPhotos: EvidencePhotoDraft[] = [];
+    for (const file of files) {
+      if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
+        setError('Las evidencias deben ser fotos PNG, WEBP o JPEG.');
+        continue;
+      }
+      if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
+        setError('Cada foto de evidencia debe pesar maximo 10 MB.');
+        continue;
+      }
+      nextPhotos.push({
+        id: `${file.name}-${file.lastModified}-${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+    if (!nextPhotos.length) return;
+    const availableSlots = MAX_EVIDENCE_PHOTO_COUNT - evidencePhotos.length;
+    if (availableSlots <= 0) {
+      nextPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      setError(`Puedes adjuntar maximo ${MAX_EVIDENCE_PHOTO_COUNT} fotos por documento.`);
+      return;
+    }
+    const accepted = nextPhotos.slice(0, availableSlots);
+    nextPhotos.slice(availableSlots).forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    if (accepted.length < nextPhotos.length) {
+      setError(`Solo se agregaron ${accepted.length} fotos. El maximo es ${MAX_EVIDENCE_PHOTO_COUNT}.`);
+    }
+    setEvidencePhotos((prev) => [...prev, ...accepted]);
+    if (evidenceInputRef.current) {
+      evidenceInputRef.current.value = '';
+    }
+  };
+
+  const removeEvidencePhoto = (photoId: string) => {
+    setEvidencePhotos((prev) => {
+      const photo = prev.find((entry) => entry.id === photoId);
+      if (photo) URL.revokeObjectURL(photo.previewUrl);
+      return prev.filter((entry) => entry.id !== photoId);
+    });
+  };
+
+  const clearEvidencePhotos = () => {
+    setEvidencePhotos((prev) => {
+      prev.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      return [];
+    });
+    if (evidenceInputRef.current) {
+      evidenceInputRef.current.value = '';
+    }
+  };
+
+  const uploadEvidencePhotos = async (documentId: string) => {
+    if (!evidencePhotos.length) return;
+    const formData = new FormData();
+    evidencePhotos.forEach((photo) => {
+      formData.append('photos', photo.file);
+    });
+    await api(`/files/documents/${documentId}/evidence`, {
+      method: 'POST',
+      body: formData,
+    });
+  };
 
   const addBulkItem = (item: InventoryBulk) => {
     if (item.quantity < 0) {
@@ -409,6 +501,20 @@ export default function RemisionDevolucionPage() {
         });
       }
 
+      try {
+        await uploadEvidencePhotos(created.id);
+      } catch (uploadError) {
+        const message =
+          uploadError instanceof ApiError
+            ? `${uploadError.status}: ${uploadError.message}`
+            : uploadError instanceof Error
+              ? uploadError.message
+              : 'No se pudieron subir las evidencias.';
+        setError(`Documento creado y movimiento registrado, pero fallaron las fotos: ${message}`);
+        setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
+        return;
+      }
+
       setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
       setConsecutive('');
       setCustomerId(null);
@@ -425,6 +531,7 @@ export default function RemisionDevolucionPage() {
       setBulkItems([]);
       setSerialItems([]);
       setSelectedItems([]);
+      clearEvidencePhotos();
       setItemsModalOpen(false);
       setWorksites([]);
       router.refresh();
@@ -571,6 +678,70 @@ export default function RemisionDevolucionPage() {
               />
             )}
           </SimpleGrid>
+        </Paper>
+
+        <Paper shadow="sm" p="xl" radius="md" withBorder mt="lg">
+          <Title order={4}>Evidencias visuales</Title>
+          <Text c="dimmed">
+            Toma fotos desde la tablet o adjunta imagenes del estado de entrega/recibo.
+          </Text>
+          <Group mt="md">
+            <Button
+              variant="light"
+              leftSection={<IconCamera size={16} />}
+              onClick={() => evidenceInputRef.current?.click()}
+            >
+              Tomar / adjuntar fotos
+            </Button>
+            {evidencePhotos.length ? (
+              <Button variant="subtle" color="red" onClick={clearEvidencePhotos}>
+                Limpiar fotos
+              </Button>
+            ) : null}
+          </Group>
+          <input
+            ref={evidenceInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            capture="environment"
+            multiple
+            onChange={(event) => addEvidencePhotos(event.currentTarget.files)}
+            style={{ display: 'none' }}
+          />
+          {evidencePhotos.length ? (
+            <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm" mt="md">
+              {evidencePhotos.map((photo) => (
+                <Paper key={photo.id} withBorder radius="md" p={6}>
+                  <div style={{ position: 'relative' }}>
+                    <img
+                      src={photo.previewUrl}
+                      alt="Vista previa de evidencia"
+                      style={{
+                        width: '100%',
+                        aspectRatio: '4 / 3',
+                        objectFit: 'cover',
+                        borderRadius: 6,
+                        display: 'block',
+                      }}
+                    />
+                    <Button
+                      size="xs"
+                      color="red"
+                      variant="filled"
+                      leftSection={<IconTrash size={12} />}
+                      onClick={() => removeEvidencePhoto(photo.id)}
+                      style={{ position: 'absolute', top: 6, right: 6 }}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                  <Text size="xs" c="dimmed" mt={4} truncate>
+                    {photo.file.name}
+                  </Text>
+                </Paper>
+              ))}
+            </SimpleGrid>
+          ) : null}
         </Paper>
 
         <Paper shadow="sm" p="xl" radius="md" withBorder mt="lg">

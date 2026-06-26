@@ -14,6 +14,7 @@ import {
   IconClipboardList,
   IconBox,
   IconDatabaseExport,
+  IconFileDollar,
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
@@ -80,6 +81,7 @@ const sections: NavSection[] = [
 ];
 
 const toolLinks: NavLinkItem[] = [
+  { href: '/tools/quotation', label: 'Cotizacion', icon: IconFileDollar, roles: ['ADMIN', 'OFFICE'] },
   { href: '/transport/cost', label: 'Transporte', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
   { href: '/inventory/scaffold-modulations', label: 'Modulaciones', icon: IconRulerMeasure, roles: ['ADMIN', 'OFFICE'] },
   { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },

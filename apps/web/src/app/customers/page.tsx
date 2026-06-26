@@ -26,15 +26,13 @@ import {
   IconEye,
   IconFileCheck,
   IconFileText,
-  IconPhone,
   IconPlus,
   IconRoad,
+  IconSearch,
   IconUpload,
-  IconUserCheck,
   IconUsersGroup,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import StatCard from '@/components/dashboard/StatCard';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -42,6 +40,8 @@ type Customer = {
   name: string;
   nitOrId: string | null;
   phone: string | null;
+  email: string | null;
+  documentsEmail: string | null;
   active: boolean;
   createdAt: string;
 };
@@ -50,6 +50,8 @@ type CustomerForm = {
   name: string;
   nitOrId: string;
   phone: string;
+  email: string;
+  documentsEmail: string;
   active: boolean;
   initialWorksiteName: string;
   initialWorksiteAlias: string;
@@ -67,6 +69,8 @@ const emptyForm: CustomerForm = {
   name: '',
   nitOrId: '',
   phone: '',
+  email: '',
+  documentsEmail: '',
   active: true,
   initialWorksiteName: '',
   initialWorksiteAlias: '',
@@ -89,7 +93,7 @@ function CustomerDetails({
             {customer.name}
           </Text>
           <Text size="sm" c="dimmed">
-            Registered customer
+            Cliente registrado
           </Text>
         </div>
         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
@@ -100,7 +104,7 @@ function CustomerDetails({
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identification
+            Identificacion
           </Text>
           <Text size="sm" mt={8}>
             {customer.nitOrId ?? '-'}
@@ -113,6 +117,24 @@ function CustomerDetails({
           </Text>
           <Text size="sm" mt={8}>
             {customer.phone ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Correo
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.email ?? '-'}
+          </Text>
+        </Paper>
+
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+            Correo documentos
+          </Text>
+          <Text size="sm" mt={8}>
+            {customer.documentsEmail ?? '-'}
           </Text>
         </Paper>
       </SimpleGrid>
@@ -137,12 +159,14 @@ export default function CustomersPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
+  const [documentsCustomer, setDocumentsCustomer] = useState<Customer | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
   const [rutFile, setRutFile] = useState<File | null>(null);
   const [rutParsing, setRutParsing] = useState(false);
   const [rutParseMessage, setRutParseMessage] = useState<string | null>(null);
   const [rutParseStatus, setRutParseStatus] = useState<'success' | 'error' | null>(null);
+  const [search, setSearch] = useState('');
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -156,7 +180,7 @@ export default function CustomersPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error loading customers');
+        setError('Error cargando clientes');
       }
     } finally {
       setLoading(false);
@@ -169,13 +193,9 @@ export default function CustomersPage() {
 
   const metrics = useMemo(() => {
     const activeCount = customers.filter((customer) => customer.active).length;
-    const identifiedCount = customers.filter((customer) => customer.nitOrId?.trim()).length;
-    const withPhoneCount = customers.filter((customer) => customer.phone?.trim()).length;
     return {
       total: customers.length,
       active: activeCount,
-      identified: identifiedCount,
-      withPhone: withPhoneCount,
     };
   }, [customers]);
 
@@ -197,6 +217,8 @@ export default function CustomersPage() {
       name: customer.name ?? '',
       nitOrId: customer.nitOrId ?? '',
       phone: customer.phone ?? '',
+      email: customer.email ?? '',
+      documentsEmail: customer.documentsEmail ?? '',
       active: customer.active,
       initialWorksiteName: '',
       initialWorksiteAlias: '',
@@ -222,7 +244,7 @@ export default function CustomersPage() {
       return;
     }
     if (rutFile.type !== 'application/pdf') {
-      setRutParseMessage('The RUT must be a PDF');
+      setRutParseMessage('El RUT debe ser un PDF');
       setRutParseStatus('error');
       return;
     }
@@ -252,7 +274,7 @@ export default function CustomersPage() {
       } else if (err instanceof Error) {
         setRutParseMessage(err.message);
       } else {
-        setRutParseMessage('Error reading the RUT');
+        setRutParseMessage('Error leyendo el RUT');
       }
       setRutParseStatus('error');
     } finally {
@@ -278,6 +300,8 @@ export default function CustomersPage() {
         name: form.name.trim().toUpperCase(),
         nitOrId: form.nitOrId.trim().toUpperCase() || undefined,
         phone: form.phone.trim().toUpperCase() || undefined,
+        email: form.email.trim().toLowerCase() || undefined,
+        documentsEmail: form.documentsEmail.trim().toLowerCase() || undefined,
         active: editingCustomer ? form.active : true,
         initialWorksite: editingCustomer
           ? undefined
@@ -309,59 +333,53 @@ export default function CustomersPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error saving customer');
+        setError('Error guardando cliente');
       }
     } finally {
       setSaving(false);
     }
   };
 
+  const filteredCustomers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return customers;
+    return customers.filter((customer) =>
+      [
+        customer.name,
+        customer.nitOrId,
+        customer.phone,
+        customer.email,
+        customer.documentsEmail,
+      ]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(term)),
+    );
+  }, [customers, search]);
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Clientes"
-          description="Centralize commercial information and prepare each customer for operational startup."
-          icon={<IconUsersGroup size={20} />}
-          iconColor="green"
-          accentColor="rgba(34,197,94,0.12)"
-          aside={
+        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+            <div>
+              <Group gap="xs" mb={6}>
+                <ThemeIcon color="green" variant="light" size={34} radius="xl">
+                  <IconUsersGroup size={18} />
+                </ThemeIcon>
+                <Badge color="green" variant="light">
+                  {metrics.active} activos
+                </Badge>
+              </Group>
+              <Title order={2}>Clientes</Title>
+              <Text c="dimmed" size="sm" maw={680}>
+                Centraliza informacion comercial, contactos y documentos del cliente para operar sin buscar en varias fuentes.
+              </Text>
+            </div>
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
               Nuevo cliente
             </Button>
-          }
-        >
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <StatCard
-              label="Total"
-              value={String(metrics.total)}
-              hint="Registered customers"
-              color="green"
-              icon={<IconUsersGroup size={20} />}
-            />
-            <StatCard
-              label="Activos"
-              value={String(metrics.active)}
-              hint={`${Math.max(metrics.total - metrics.active, 0)} inactivos`}
-              color="teal"
-              icon={<IconUserCheck size={20} />}
-            />
-            <StatCard
-              label="With document"
-              value={String(metrics.identified)}
-              hint="NIT or document loaded"
-              color="lime"
-              icon={<IconFileText size={20} />}
-            />
-            <StatCard
-              label="With phone"
-              value={String(metrics.withPhone)}
-              hint="Canal de contacto disponible"
-              color="blue"
-              icon={<IconPhone size={20} />}
-            />
-          </SimpleGrid>
-        </PageHeaderCard>
+          </Group>
+        </Paper>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">
@@ -370,10 +388,25 @@ export default function CustomersPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Group justify="space-between" align="flex-end" mb="md" gap="md" wrap="wrap">
+            <div>
+              <Text fw={800}>Directorio de clientes</Text>
+              <Text size="sm" c="dimmed">
+                {filteredCustomers.length} de {metrics.total} clientes visibles
+              </Text>
+            </div>
+            <TextInput
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              placeholder="Buscar cliente, NIT, telefono o correo"
+              leftSection={<IconSearch size={16} />}
+              w={isMobile ? '100%' : 360}
+            />
+          </Group>
           {isMobile ? (
             <Stack gap="sm">
               {!loading &&
-                customers.map((customer) => (
+                filteredCustomers.map((customer) => (
                   <Paper key={customer.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
@@ -391,9 +424,21 @@ export default function CustomersPage() {
                       <SimpleGrid cols={2} spacing="sm">
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Contacto
+                            Telefono
                           </Text>
                           <Text size="sm">{customer.phone ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Correo documentos
+                          </Text>
+                          <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+                            Correo
+                          </Text>
+                          <Text size="sm">{customer.email ?? '-'}</Text>
                         </div>
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -403,26 +448,36 @@ export default function CustomersPage() {
                         </div>
                       </SimpleGrid>
 
-                      <Button
-                        variant="light"
-                        leftSection={<IconEye size={16} />}
-                        onClick={() => setDetailsCustomer(customer)}
-                      >
-                        Ver detalle
-                      </Button>
+                      <Group grow>
+                        <Button
+                          variant="light"
+                          leftSection={<IconEye size={16} />}
+                          onClick={() => setDetailsCustomer(customer)}
+                        >
+                          Ver detalle
+                        </Button>
+                        <Button
+                          variant="filled"
+                          color="blue"
+                          leftSection={<IconFileText size={16} />}
+                          onClick={() => setDocumentsCustomer(customer)}
+                        >
+                          Documentos
+                        </Button>
+                      </Group>
                     </Stack>
                   </Paper>
                 ))}
 
-              {!loading && customers.length === 0 ? (
+              {!loading && filteredCustomers.length === 0 ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Stack align="center" gap="xs">
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconUsersGroup size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No hay clientes registrados</Text>
+                    <Text fw={700}>{customers.length ? 'No hay resultados' : 'No hay clientes registrados'}</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Crea un nuevo cliente para empezar.
+                      {customers.length ? 'Ajusta la busqueda para ver mas clientes.' : 'Crea un nuevo cliente para empezar.'}
                     </Text>
                   </Stack>
                 </Paper>
@@ -441,27 +496,36 @@ export default function CustomersPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Cliente</Table.Th>
-                  <Table.Th>Identification</Table.Th>
+                  <Table.Th>Identificacion</Table.Th>
                   <Table.Th>Contacto</Table.Th>
+                  <Table.Th>Correo documentos</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {!loading &&
-                  customers.map((customer) => (
+                  filteredCustomers.map((customer) => (
                     <Table.Tr key={customer.id}>
                       <Table.Td>
                         <Stack gap={2}>
                           <Text fw={700}>{customer.name}</Text>
                           <Text size="sm" c="dimmed">
-                            Registered customer
+                            Cliente registrado
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
                       <Table.Td>
-                        <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
+                        <Stack gap={2}>
+                          <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
+                          <Text size="xs" c="dimmed">
+                            {customer.email ?? 'Sin correo'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
@@ -481,21 +545,31 @@ export default function CustomersPage() {
                           >
                             <IconEye size={16} />
                           </ActionIcon>
+                          <Button
+                            size="xs"
+                            variant="light"
+                            color="blue"
+                            leftSection={<IconFileText size={14} />}
+                            aria-label={`Documentos de ${customer.name}`}
+                            onClick={() => setDocumentsCustomer(customer)}
+                          >
+                            Documentos
+                          </Button>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
                   ))}
 
-                {!loading && customers.length === 0 && (
+                {!loading && filteredCustomers.length === 0 && (
                   <Table.Tr>
-                    <Table.Td colSpan={5}>
+                    <Table.Td colSpan={6}>
                       <Stack align="center" gap="xs" py="lg">
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconUsersGroup size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No hay clientes para mostrar</Text>
+                        <Text fw={700}>{customers.length ? 'No hay resultados' : 'No hay clientes para mostrar'}</Text>
                         <Text size="sm" c="dimmed">
-                          Registra un nuevo cliente.
+                          {customers.length ? 'Ajusta la busqueda para ver mas clientes.' : 'Registra un nuevo cliente.'}
                         </Text>
                       </Stack>
                     </Table.Td>
@@ -504,7 +578,7 @@ export default function CustomersPage() {
 
                 {loading && (
                   <Table.Tr>
-                    <Table.Td colSpan={5}>
+                    <Table.Td colSpan={6}>
                       <Text c="dimmed" ta="center">
                         Cargando...
                       </Text>
@@ -532,6 +606,37 @@ export default function CustomersPage() {
               openEdit(customer);
             }}
           />
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!documentsCustomer}
+        onClose={() => setDocumentsCustomer(null)}
+        title="Documentos del cliente"
+        centered
+        size="xl"
+      >
+        {documentsCustomer ? (
+          <Stack gap="md">
+            <Paper withBorder radius="lg" p="md" bg="gray.0">
+              <Group justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+                <div>
+                  <Text fw={800}>{documentsCustomer.name}</Text>
+                  <Text size="sm" c="dimmed">
+                    {documentsCustomer.nitOrId ?? 'Sin identificacion'} · {documentsCustomer.documentsEmail ?? 'Sin correo de documentos'}
+                  </Text>
+                </div>
+                <Badge color={documentsCustomer.active ? 'green' : 'gray'} variant="light">
+                  {documentsCustomer.active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </Group>
+            </Paper>
+            <FileAttachmentsPanel
+              entityType="CUSTOMER"
+              entityId={documentsCustomer.id}
+              title="Archivo documental"
+            />
+          </Stack>
         ) : null}
       </Modal>
 
@@ -574,7 +679,7 @@ export default function CustomersPage() {
                   <div>
                     <Text fw={700}>RUT en PDF</Text>
                     <Text size="sm" c="dimmed">
-                      Preload name, NIT, and phone from the document.
+                      Precarga nombre, NIT y telefono desde el documento.
                     </Text>
                   </div>
                   <ThemeIcon color="green" variant="light" size={32} radius="xl">
@@ -585,7 +690,7 @@ export default function CustomersPage() {
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                   <FileInput
                     accept="application/pdf,.pdf"
-                    label="RUT file"
+                    label="Archivo RUT"
                     placeholder="Seleccionar PDF"
                     value={rutFile}
                     onChange={(file) => {
@@ -604,7 +709,7 @@ export default function CustomersPage() {
                       disabled={!rutFile}
                       loading={rutParsing}
                     >
-                      Read RUT
+                      Leer RUT
                     </Button>
                   </Group>
                 </SimpleGrid>
@@ -627,13 +732,13 @@ export default function CustomersPage() {
               <div>
                 <Text fw={700}>Perfil comercial</Text>
                 <Text size="sm" c="dimmed">
-                  Base data to identify and contact the customer.
+                  Datos base para identificar y contactar al cliente.
                 </Text>
               </div>
 
               <TextInput
                 label="Nombre"
-                placeholder="Legal name or customer name"
+                placeholder="Razon social o nombre del cliente"
                 value={form.name}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
@@ -645,7 +750,7 @@ export default function CustomersPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="NIT / Documento"
-                  placeholder="Tax ID or document"
+                  placeholder="NIT o documento"
                   value={form.nitOrId}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -653,12 +758,32 @@ export default function CustomersPage() {
                   }}
                 />
                 <TextInput
-                  label="Phone"
-                  placeholder="Contact number"
+                  label="Telefono"
+                  placeholder="Numero de contacto"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
                     setForm((prev) => ({ ...prev, phone: value }));
+                  }}
+                />
+                <TextInput
+                  label="Correo"
+                  placeholder="correo@cliente.com"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, email: value }));
+                  }}
+                />
+                <TextInput
+                  label="Correo para documentos"
+                  placeholder="documentos@cliente.com"
+                  type="email"
+                  value={form.documentsEmail}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, documentsEmail: value }));
                   }}
                 />
               </SimpleGrid>
@@ -684,7 +809,7 @@ export default function CustomersPage() {
                       <IconBuildingEstate size={16} />
                     </ThemeIcon>
                     <div>
-                      <Text fw={700}>Initial worksite</Text>
+                      <Text fw={700}>Obra inicial</Text>
                       <Text size="sm" c="dimmed">
                         Crea la primera obra junto con el cliente para dejar listo el arranque.
                       </Text>
@@ -714,8 +839,8 @@ export default function CustomersPage() {
                     }}
                   />
                   <TextInput
-                    label="Worksite address"
-                    placeholder="Main location or address"
+                    label="Direccion de la obra"
+                    placeholder="Ubicacion principal o direccion"
                     value={form.initialWorksiteAddress}
                     onChange={(event) => {
                       const value = event.currentTarget.value;
@@ -730,7 +855,7 @@ export default function CustomersPage() {
                       <IconRoad size={14} />
                     </ThemeIcon>
                     <Text size="sm" c="dimmed">
-                      The initial worksite will be created active with the customer.
+                      La obra inicial se creara activa junto con el cliente.
                     </Text>
                   </Group>
                 </Paper>
