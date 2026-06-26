@@ -30,8 +30,6 @@ import {
   IconClipboardList,
   IconReceipt2,
   IconTruck,
-  IconUsers,
-  IconUserStar,
 } from '@tabler/icons-react';
 import AuthGuard from '@/components/AuthGuard';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
@@ -54,15 +52,9 @@ type Task = {
   assignedToUserId?: string | null;
 };
 
-type Customer = {
+type RequestDocument = {
   id: string;
-  active: boolean;
-};
-
-type Employee = {
-  id: string;
-  active: boolean;
-  user?: { id: string; active: boolean } | null;
+  status?: string | null;
 };
 
 type PendingVehicle = {
@@ -100,7 +92,7 @@ const quickLinks = [
   {
     href: '/billing/pre-invoice',
     title: 'Prefactura',
-    description: 'Consolidate billable periods by worksite and customer.',
+    description: 'Consolida periodos facturables por obra y cliente.',
     icon: <IconReceipt2 size={18} />,
     color: 'teal',
   },
@@ -145,7 +137,7 @@ function formatDate(value: Date | null) {
 function daysChipLabel(prefix: string, daysLeft: number | null) {
   if (daysLeft === null) return `${prefix}: sin fecha`;
   if (daysLeft < 0) return `${prefix}: vencido`;
-  return `${prefix}: ${daysLeft} days`;
+  return `${prefix}: ${daysLeft} dias`;
 }
 
 function formatToday() {
@@ -192,8 +184,7 @@ export default function HomePage() {
   );
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [requests, setRequests] = useState<RequestDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,21 +199,19 @@ export default function HomePage() {
       setError(null);
 
       try {
-        const [vehiclesData, tasksData, customersData, employeesData] = await Promise.all([
+        const [vehiclesData, tasksData, requestsData] = await Promise.all([
           api<Vehicle[]>('/vehicles'),
           api<Task[]>('/tasks'),
-          api<Customer[]>('/customers'),
-          api<Employee[]>('/employees'),
+          api<RequestDocument[]>('/documents?status=DRAFT&take=200'),
         ]);
 
         if (!mounted) return;
         setVehicles(vehiclesData);
         setTasks(tasksData);
-        setCustomers(customersData);
-        setEmployees(employeesData);
+        setRequests(requestsData);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el panel');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -262,40 +251,40 @@ export default function HomePage() {
 
   const dashboardMetrics = useMemo(() => {
     const criticalVehicles = pendingVehicles.filter((vehicle) => vehicle.minDays <= 7).length;
-    const upcomingVehicles = pendingVehicles.filter((vehicle) => vehicle.minDays > 7 && vehicle.minDays <= 30).length;
-    const activeCustomers = customers.filter((customer) => customer.active).length;
-    const activeEmployees = employees.filter((employee) => employee.active).length;
-    const usersWithAccess = employees.filter((employee) => employee.user?.active).length;
+    const pendingRequests = requests.length;
     const openTasks = tasks.filter((task) => task.status === 'OPEN').length;
     const doingTasks = tasks.filter((task) => task.status === 'DOING').length;
 
     return {
       criticalVehicles,
-      upcomingVehicles,
-      activeCustomers,
-      activeEmployees,
-      usersWithAccess,
+      pendingRequests,
       openTasks,
       doingTasks,
     };
-  }, [customers, employees, pendingVehicles, tasks]);
+  }, [pendingVehicles, requests, tasks]);
 
   const topVehicles = pendingVehicles.slice(0, 8);
   const dashboardStatus =
     dashboardMetrics.criticalVehicles > 0
       ? {
-          title: 'Immediate attention',
-          description: `${dashboardMetrics.criticalVehicles} critical fleet expirations require review today.`,
+          title: 'Atencion inmediata',
+          description: `${dashboardMetrics.criticalVehicles} vencimientos criticos de flota requieren revision hoy.`,
           color: 'red',
         }
+      : dashboardMetrics.pendingRequests > 0
+        ? {
+            title: 'Solicitudes pendientes',
+            description: `${dashboardMetrics.pendingRequests} solicitudes pendientes esperan revision o confirmacion.`,
+            color: 'blue',
+          }
       : dashboardMetrics.openTasks > 0
         ? {
             title: 'Seguimiento operativo',
-            description: `${dashboardMetrics.openTasks} open tasks still need attention.`,
+            description: `${dashboardMetrics.openTasks} tareas abiertas todavia requieren atencion.`,
             color: 'yellow',
           }
         : {
-            title: 'Stable operation',
+            title: 'Operacion estable',
             description: 'No hay alertas criticas visibles en la vista principal.',
             color: 'teal',
           };
@@ -306,11 +295,11 @@ export default function HomePage() {
         <Container size="xl" py="xl">
           <Stack gap="lg">
             <PageHeaderCard
-              title="Dashboard operativo"
+              title="Panel operativo"
               description={
                 isMobile
-                  ? 'Quick summary of alerts and operation.'
-                  : 'Quick visibility into team, operation, and expirations that require attention.'
+                  ? 'Resumen rapido de alertas y operacion.'
+                  : 'Visibilidad rapida de solicitudes, tareas y vencimientos que requieren atencion.'
               }
               icon={<IconAlertTriangle size={20} />}
               iconColor={dashboardStatus.color}
@@ -343,7 +332,7 @@ export default function HomePage() {
                   {!isMobile ? (
                     <div>
                       <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                        Session
+                        Sesion
                       </Text>
                       <Text size="sm" mt={4}>
                         {session?.email ?? 'Usuario autenticado'}
@@ -353,7 +342,7 @@ export default function HomePage() {
                 </Group>
                 {isMobile ? (
                   <Text size="xs" c="dimmed" mt="sm">
-                    Session: {session?.email ?? 'Authenticated user'}
+                    Sesion: {session?.email ?? 'Usuario autenticado'}
                   </Text>
                 ) : null}
               </Paper>
@@ -361,7 +350,7 @@ export default function HomePage() {
               {isMobile ? (
                 <SimpleGrid cols={2} spacing="sm">
                   <CompactMetric
-                    label="Critical"
+                    label="Criticos"
                     value={String(dashboardMetrics.criticalVehicles)}
                     hint="Vencimientos urgentes"
                     color="red"
@@ -373,24 +362,18 @@ export default function HomePage() {
                     color="yellow"
                   />
                   <CompactMetric
-                    label="Clientes"
-                    value={String(dashboardMetrics.activeCustomers)}
-                    hint="Activos"
+                    label="Solicitudes"
+                    value={String(dashboardMetrics.pendingRequests)}
+                    hint="Pendientes"
                     color="teal"
-                  />
-                  <CompactMetric
-                    label="Accesos"
-                    value={String(dashboardMetrics.usersWithAccess)}
-                    hint="Equipo con login"
-                    color="blue"
                   />
                 </SimpleGrid>
               ) : (
-                <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+                <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
                   <StatCard
-                    label="Critical expirations"
+                    label="Vencimientos criticos"
                     value={String(dashboardMetrics.criticalVehicles)}
-                    hint="SOAT or inspection in 7 days or less"
+                    hint="SOAT o tecnomecanica en 7 dias o menos"
                     color="red"
                     icon={<IconAlertTriangle size={20} />}
                   />
@@ -402,37 +385,30 @@ export default function HomePage() {
                     icon={<IconChecklist size={20} />}
                   />
                   <StatCard
-                    label="Clientes activos"
-                    value={String(dashboardMetrics.activeCustomers)}
-                    hint="Base comercial operativa"
+                    label="Solicitudes pendientes"
+                    value={String(dashboardMetrics.pendingRequests)}
+                    hint="Documentos en borrador por revisar"
                     color="teal"
-                    icon={<IconUsers size={20} />}
-                  />
-                  <StatCard
-                    label="Equipo con acceso"
-                    value={String(dashboardMetrics.usersWithAccess)}
-                    hint={`${dashboardMetrics.activeEmployees} empleados activos`}
-                    color="blue"
-                    icon={<IconUserStar size={20} />}
+                    icon={<IconClipboardList size={20} />}
                   />
                 </SimpleGrid>
               )}
             </PageHeaderCard>
 
             {error ? (
-              <Alert color="red" variant="light" title="No se pudo cargar la home">
+              <Alert color="red" variant="light" title="No se pudo cargar el inicio">
                 {error}
               </Alert>
             ) : null}
 
-            <SimpleGrid cols={{ base: 1, xl: 3 }} spacing="lg">
-              <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }} style={{ gridColumn: 'span 2' }}>
+            <SimpleGrid cols={1} spacing="lg">
+              <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                     <div>
                       <Text fw={700}>Atajos operativos</Text>
                       <Text size="sm" c="dimmed">
-                        Jump directly into the flows most used by the office.
+                        Entra directo a los flujos mas usados por oficina.
                       </Text>
                     </div>
                     {!isMobile ? (
@@ -479,50 +455,6 @@ export default function HomePage() {
                 </Stack>
               </Paper>
 
-              <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-                <Stack gap="md">
-                  <div>
-                    <Text fw={700}>Operation pulse</Text>
-                    <Text size="sm" c="dimmed">
-                      Una lectura breve de carga y cobertura actual.
-                    </Text>
-                  </div>
-
-                  {isMobile ? (
-                    <SimpleGrid cols={2} spacing="sm">
-                      <CompactMetric
-                        label="En curso"
-                        value={String(dashboardMetrics.doingTasks)}
-                        hint="Tareas en curso"
-                        color="blue"
-                      />
-                      <CompactMetric
-                        label="Upcoming fleet"
-                        value={String(dashboardMetrics.upcomingVehicles)}
-                        hint="Documentos por vencer"
-                        color="orange"
-                      />
-                    </SimpleGrid>
-                  ) : (
-                    <>
-                      <StatCard
-                        label="En curso"
-                        value={String(dashboardMetrics.doingTasks)}
-                        hint="Tareas actualmente en curso"
-                        color="blue"
-                        icon={<IconChecklist size={20} />}
-                      />
-                      <StatCard
-                        label="Upcoming fleet"
-                        value={String(dashboardMetrics.upcomingVehicles)}
-                        hint="Vehiculos con documentos entre 8 y 30 dias"
-                        color="orange"
-                        icon={<IconTruck size={20} />}
-                      />
-                    </>
-                  )}
-                </Stack>
-              </Paper>
             </SimpleGrid>
 
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
@@ -547,7 +479,7 @@ export default function HomePage() {
                   <Paper radius="lg" p="xl" bg="gray.0">
                     <Text fw={700}>No hay vencimientos visibles.</Text>
                     <Text size="sm" c="dimmed" mt={6}>
-                      When the fleet has SOAT or inspection dates, they will appear here sorted by priority.
+                      Cuando la flota tenga fechas de SOAT o tecnomecanica, apareceran aqui ordenadas por prioridad.
                     </Text>
                   </Paper>
                 ) : isMobile ? (
@@ -561,11 +493,11 @@ export default function HomePage() {
                                 {vehicle.plate}
                               </Text>
                               <Text size="sm" c="dimmed">
-                                Next expiration in {vehicle.minDays < 0 ? 'expired status' : `${vehicle.minDays} days`}
+                                Proximo vencimiento: {vehicle.minDays < 0 ? 'vencido' : `${vehicle.minDays} dias`}
                               </Text>
                             </div>
                             <Badge color={badgeColor(vehicle.minDays)} variant="light">
-                              {vehicle.minDays < 0 ? 'Expired' : `${vehicle.minDays} days`}
+                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} dias`}
                             </Badge>
                           </Group>
 
@@ -583,7 +515,7 @@ export default function HomePage() {
                             </Paper>
                             <Paper radius="md" p="sm" bg="gray.0">
                               <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                                Inspection
+                                Tecnomecanica
                               </Text>
                               <Text size="sm" mt={4}>
                                 {formatDate(vehicle.technoDate)}
@@ -603,7 +535,7 @@ export default function HomePage() {
                       <TableTr>
                         <TableTh>Placa</TableTh>
                         <TableTh>SOAT</TableTh>
-                        <TableTh>Inspection</TableTh>
+                        <TableTh>Tecnomecanica</TableTh>
                         <TableTh>Prioridad</TableTh>
                       </TableTr>
                     </TableThead>
@@ -636,7 +568,7 @@ export default function HomePage() {
                           </TableTd>
                           <TableTd>
                             <Badge color={badgeColor(vehicle.minDays)} variant="light">
-                              {vehicle.minDays < 0 ? 'Expired' : `${vehicle.minDays} days`}
+                              {vehicle.minDays < 0 ? 'Vencido' : `${vehicle.minDays} dias`}
                             </Badge>
                           </TableTd>
                         </TableTr>

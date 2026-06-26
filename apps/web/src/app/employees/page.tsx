@@ -27,6 +27,7 @@ import {
   IconBriefcase2,
   IconCar,
   IconEye,
+  IconFileDescription,
   IconMail,
   IconPhone,
   IconPlus,
@@ -35,6 +36,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import StatCard from '@/components/dashboard/StatCard';
 import { api, apiBlob, ApiError } from '@/lib/api';
 
@@ -301,6 +303,7 @@ export default function EmployeesPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [detailsEmployee, setDetailsEmployee] = useState<Employee | null>(null);
+  const [documentsEmployee, setDocumentsEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState<EmployeeForm>(emptyForm);
 
@@ -572,6 +575,13 @@ export default function EmployeesPage() {
                         >
                           Ver detalle
                         </Button>
+                        <Button
+                          variant="light"
+                          leftSection={<IconFileDescription size={16} />}
+                          onClick={() => setDocumentsEmployee(employee)}
+                        >
+                          Documentos
+                        </Button>
                         <ActionIcon
                           color="red"
                           variant="light"
@@ -689,6 +699,14 @@ export default function EmployeesPage() {
                             <IconEye size={16} />
                           </ActionIcon>
                           <ActionIcon
+                            color="blue"
+                            variant="light"
+                            aria-label={`Documentos de ${getEmployeeFullName(employee)}`}
+                            onClick={() => setDocumentsEmployee(employee)}
+                          >
+                            <IconFileDescription size={16} />
+                          </ActionIcon>
+                          <ActionIcon
                             color="red"
                             variant="light"
                             aria-label="Eliminar empleado"
@@ -750,6 +768,22 @@ export default function EmployeesPage() {
               setDetailsEmployee(null);
               deleteEmployee(employee);
             }}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!documentsEmployee}
+        onClose={() => setDocumentsEmployee(null)}
+        title={documentsEmployee ? `Documentos de ${getEmployeeFullName(documentsEmployee)}` : 'Documentos'}
+        centered
+        size="xl"
+      >
+        {documentsEmployee ? (
+          <FileAttachmentsPanel
+            entityType="EMPLOYEE"
+            entityId={documentsEmployee.id}
+            title="Documentos del empleado"
           />
         ) : null}
       </Modal>
