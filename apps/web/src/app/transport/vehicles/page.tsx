@@ -32,6 +32,7 @@ import {
   IconUserCheck,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import StatCard from '@/components/dashboard/StatCard';
 import { api } from '@/lib/api';
 
@@ -226,6 +227,7 @@ export default function VehiclesPage() {
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<VehicleForm | null>(null);
   const [detailsVehicle, setDetailsVehicle] = useState<Vehicle | null>(null);
+  const [documentsVehicle, setDocumentsVehicle] = useState<Vehicle | null>(null);
   const [saving, setSaving] = useState(false);
 
   const brandOptions = useMemo(
@@ -448,13 +450,22 @@ export default function VehiclesPage() {
                         </div>
                       </SimpleGrid>
 
-                      <Button
-                        variant="light"
-                        leftSection={<IconEye size={16} />}
-                        onClick={() => setDetailsVehicle(vehicle)}
-                      >
-                        Ver detalle
-                      </Button>
+                      <Group grow>
+                        <Button
+                          variant="light"
+                          leftSection={<IconEye size={16} />}
+                          onClick={() => setDetailsVehicle(vehicle)}
+                        >
+                          Ver detalle
+                        </Button>
+                        <Button
+                          variant="light"
+                          leftSection={<IconFileDescription size={16} />}
+                          onClick={() => setDocumentsVehicle(vehicle)}
+                        >
+                          Documentos
+                        </Button>
+                      </Group>
                     </Stack>
                   </Paper>
                 );
@@ -536,6 +547,14 @@ export default function VehiclesPage() {
                           >
                             <IconEye size={16} />
                           </ActionIcon>
+                          <ActionIcon
+                            color="blue"
+                            variant="light"
+                            aria-label={`Documentos de ${vehicle.plate}`}
+                            onClick={() => setDocumentsVehicle(vehicle)}
+                          >
+                            <IconFileDescription size={16} />
+                          </ActionIcon>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
@@ -570,6 +589,22 @@ export default function VehiclesPage() {
               setDetailsVehicle(null);
               startEdit(vehicle);
             }}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!documentsVehicle}
+        onClose={() => setDocumentsVehicle(null)}
+        title={documentsVehicle ? `Documentos de ${documentsVehicle.plate}` : 'Documentos'}
+        size="xl"
+        centered
+      >
+        {documentsVehicle ? (
+          <FileAttachmentsPanel
+            entityType="VEHICLE"
+            entityId={documentsVehicle.id}
+            title="Documentos del vehiculo"
           />
         ) : null}
       </Modal>

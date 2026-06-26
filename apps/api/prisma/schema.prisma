@@ -463,15 +463,30 @@ model EmployeeVehicle {
 }
 
 model FileObject {
-  id         String   @id @default(uuid())
-  documentId String
-  fileType   String // SIGNATURE | PHOTO
-  storageKey String
-  mimeType   String?
-  createdAt  DateTime @default(now())
-  createdBy  String
+  id              String    @id @default(uuid())
+  documentId      String?
+  entityType      String?
+  entityId        String?
+  fileType        String // SIGNATURE | PHOTO | business document category
+  category        String?
+  displayName     String?
+  originalName    String?
+  storageKey      String
+  objectKey       String?
+  storageProvider String    @default("R2")
+  mimeType        String?
+  sizeBytes       Int?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  createdBy       String
 
-  document    Document @relation(fields: [documentId], references: [id])
-  skuImages   Sku[]    @relation("SkuImage")
-  assetImages Asset[]  @relation("AssetImage")
+  document    Document? @relation(fields: [documentId], references: [id])
+  skuImages   Sku[]     @relation("SkuImage")
+  assetImages Asset[]   @relation("AssetImage")
+
+  @@index([documentId])
+  @@index([entityType, entityId])
+  @@index([fileType])
+  @@index([category])
+  @@index([expiresAt])
 }

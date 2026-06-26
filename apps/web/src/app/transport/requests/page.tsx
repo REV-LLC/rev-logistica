@@ -22,7 +22,6 @@ import {
   Tabs,
   Text,
   TextInput,
-  ThemeIcon,
   Title,
   NumberInput,
   NativeSelect,
@@ -30,11 +29,9 @@ import {
   Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconChecklist, IconFilePlus, IconFileText, IconRoute2 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import { ownerColorById } from '@/lib/owner-color';
 import InventoryItemPickerModal, {
   type InventoryItemPickerBulkItem,
@@ -284,7 +281,6 @@ function parseNotes(notes: string | null) {
     vehicleId: map.get('vehículo') ?? '',
     driverId: map.get('conductor') ?? '',
     dispatcherId: map.get('despachador') ?? '',
-    cutOffDate: map.get('fecha corte') ?? '',
   };
 }
 
@@ -408,7 +404,6 @@ export default function SolicitudesIpadPage() {
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
-  const [cutOffDate, setCutOffDate] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
@@ -445,6 +440,7 @@ export default function SolicitudesIpadPage() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
   const [requests, setRequests] = useState<RequestDocument[]>([]);
+  const [documentsRequest, setDocumentsRequest] = useState<RequestDocument | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
@@ -755,7 +751,7 @@ export default function SolicitudesIpadPage() {
       if (err instanceof Error) {
         setRequestsError(err.message);
       } else {
-        setRequestsError('Error processing request');
+        setRequestsError('Error procesando la solicitud');
       }
       return;
     }
@@ -766,7 +762,7 @@ export default function SolicitudesIpadPage() {
     );
     if (hasAssetUnavailableError) {
       setRequestsError(
-        'Cannot approve: the equipment is not available in the source warehouse. Check if it is on site or select/load the correct equipment before approving.',
+        'No se puede aprobar: el equipo no esta disponible en la bodega de origen. Revisa si esta en obra o selecciona/carga el equipo correcto antes de aprobar.',
       );
       return;
     }
@@ -782,13 +778,13 @@ export default function SolicitudesIpadPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'the alternate warehouse';
+      const warehouseLabel = ownerName ?? 'la bodega alterna';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `First adjust "${warehouseLabel}" warehouse before making movements.${missingItemsBlock}`,
+        `Primero ajusta la bodega "${warehouseLabel}" antes de hacer movimientos.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);
@@ -966,12 +962,6 @@ export default function SolicitudesIpadPage() {
     }
   }, [currentUserId, dispatcherId, employees, isDriverRole]);
 
-  useEffect(() => {
-    if (isDriverRole && cutOffDate) {
-      setCutOffDate('');
-    }
-  }, [cutOffDate, isDriverRole]);
-
   const loadInventory = async (openSelector = true) => {
     setLoadingInventory(true);
     setError(null);
@@ -980,7 +970,7 @@ export default function SolicitudesIpadPage() {
         if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
         if (selectedOwner?.type === 'ALLY') {
-          throw new Error('For alternate warehouse, use free tag capture.');
+          throw new Error('Para bodega alterna, usa captura libre de tags.');
         }
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/warehouse/${sourceOwnerWarehouseId}`,
@@ -1080,7 +1070,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setRequestsError(err.message);
       } else {
-        setRequestsError('Error loading requests');
+        setRequestsError('Error cargando solicitudes');
       }
     } finally {
       setRequestsLoading(false);
@@ -1271,7 +1261,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setCreateSerialError(err.message);
       } else {
-        setCreateSerialError('Error creating equipment.');
+        setCreateSerialError('Error creando equipo.');
       }
     } finally {
       setCreateSerialSaving(false);
@@ -1316,14 +1306,6 @@ export default function SolicitudesIpadPage() {
 
     try {
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
-      if (doc.type === 'RETURN') {
-        const missingCutoff = doc.items.some((item) => !item.billingCutoffDate);
-        if (missingCutoff) {
-          setRequestsError('Before approving the return, define the cutoff date per item.');
-          router.push(`/inventory/ledger/document/${documentId}`);
-          return;
-        }
-      }
       const unresolved = doc.items
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => isResolvePendingItem(item));
@@ -1343,7 +1325,7 @@ export default function SolicitudesIpadPage() {
         return;
       }
 
-      if (!window.confirm('Approve this request and execute the inventory movement?')) return;
+      if (!window.confirm('¿Aprobar esta solicitud y ejecutar el movimiento de inventario?')) return;
       await approveWithDecision(documentId);
     } catch (err) {
       handleApprovalError(err);
@@ -1352,7 +1334,7 @@ export default function SolicitudesIpadPage() {
 
   const addBulkItem = (item: InventoryBulk) => {
     if (item.quantity < 0) {
-      setError('This item has a negative inventory alert. Adjust stock before using it in a document.');
+      setError('Este item tiene alerta de inventario negativo. Ajusta stock antes de usarlo en un documento.');
       return false;
     }
     const bulkKey = buildBulkKey(item);
@@ -1396,7 +1378,7 @@ export default function SolicitudesIpadPage() {
       return !resolveAssetByIndex[index];
     });
     if (serialMissingAsset.length > 0) {
-      setRequestsError('Missing selected or created equipment for one or more serial tags.');
+      setRequestsError('Falta seleccionar o crear equipo para uno o mas tags seriales.');
       return;
     }
 
@@ -1510,7 +1492,7 @@ export default function SolicitudesIpadPage() {
       if (isAlternateSerial) {
         const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : 0;
         if (!internal || internal <= 0) {
-          setError('Enter the equipment internal number');
+          setError('Ingresa el numero interno del equipo');
           return;
         }
         const serialLabel = `${tag} #${internal}`;
@@ -1561,7 +1543,7 @@ export default function SolicitudesIpadPage() {
       return;
     }
 
-    setError('Manual capture only applies to alternate warehouse.');
+    setError('La captura manual solo aplica a bodega alterna.');
   };
 
   const resolveFreeItemToSku = (index: number, skuId: string | null) => {
@@ -1600,7 +1582,6 @@ export default function SolicitudesIpadPage() {
     setConsecutive('');
     setCustomerId(null);
     setDocDate(getTodayDateInput());
-    setCutOffDate('');
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
@@ -1631,7 +1612,6 @@ export default function SolicitudesIpadPage() {
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
       setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
-      setCutOffDate(parsed.cutOffDate ?? '');
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
@@ -1697,7 +1677,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error loading request for editing');
+        setError('Error cargando la solicitud para editar');
       }
     }
   };
@@ -1708,7 +1688,7 @@ export default function SolicitudesIpadPage() {
     setError(null);
     try {
       if (!docDate || !customerId) {
-        throw new Error('Complete the required fields.');
+        throw new Error('Completa los campos requeridos.');
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
@@ -1718,13 +1698,13 @@ export default function SolicitudesIpadPage() {
           (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
         )
       ) {
-        throw new Error('Some items have negative inventory alerts. Adjust stock before creating the document.');
+        throw new Error('Algunos items tienen alertas de inventario negativo. Ajusta stock antes de crear el documento.');
       }
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
       if (!editingRequestId && !receivedSignature) {
-        throw new Error('Capture the customer signature before sending.');
+        throw new Error('Captura la firma del cliente antes de enviar.');
       }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
@@ -1734,13 +1714,13 @@ export default function SolicitudesIpadPage() {
         throw new Error('Selecciona la bodega de despacho.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
-        throw new Error('Your user is not linked to a driver employee.');
+        throw new Error('Tu usuario no esta vinculado a un empleado conductor.');
       }
       const damagedWithoutDescription = selectedItems.find(
         (item) => item.isDamaged && !item.damageDescription?.trim(),
       );
       if (docType === 'RETURN' && damagedWithoutDescription) {
-        throw new Error(`Describe the damage for ${damagedWithoutDescription.name}.`);
+        throw new Error(`Describe el daño de ${damagedWithoutDescription.name}.`);
       }
 
       const documentPayload = {
@@ -1751,7 +1731,6 @@ export default function SolicitudesIpadPage() {
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
           `Fecha documento: ${docDate}`,
-          docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
           deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
           deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
@@ -1820,7 +1799,7 @@ export default function SolicitudesIpadPage() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error sending request.');
+        setError('Error enviando la solicitud.');
       }
     } finally {
       setSubmitting(false);
@@ -1885,8 +1864,8 @@ export default function SolicitudesIpadPage() {
         />
         {item.isDamaged ? (
           <Textarea
-            label="Damage description"
-            placeholder="Describe the damage reported when receiving the equipment"
+            label="Descripcion del daño"
+            placeholder="Describe el daño reportado al recibir el equipo"
             value={item.damageDescription ?? ''}
             onChange={(event) =>
               updateSelected(index, {
@@ -1915,58 +1894,23 @@ export default function SolicitudesIpadPage() {
       : selectedWorksite.worksite.name
     : 'Sin obra';
 
-  const requestMetrics = {
-    drafts: requests.length,
-    selected: selectedItems.length,
-    activeDoc: editingRequestId ? 'Editando' : 'Nuevo',
-    tab: activeTab === 'list' ? 'Borradores' : 'Generacion',
-  };
-
   return (
     <main>
       <Container size="xl" py="xl">
         <Stack gap="lg">
-          <PageHeaderCard
-            title="Solicitudes de documentos"
-            description="Manage dispatch and return drafts, build items, and control operational submission."
-            icon={<IconFileText size={20} />}
-            iconColor="blue"
-            accentColor="rgba(14,165,233,0.12)"
-          >
-            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-              <StatCard
-                label="Drafts"
-                value={String(requestMetrics.drafts)}
-                hint="Solicitudes cargadas en lista"
-                color="blue"
-                icon={<IconChecklist size={20} />}
-              />
-              <StatCard
-                label="Items"
-                value={String(requestMetrics.selected)}
-                hint="Seleccionados en el documento actual"
-                color="teal"
-                icon={<IconRoute2 size={20} />}
-              />
-              <StatCard
-                label="Modo"
-                value={requestMetrics.activeDoc}
-                hint="Estado del flujo actual"
-                color="grape"
-                icon={<IconFilePlus size={20} />}
-              />
-              <StatCard
-                label="Vista"
-                value={requestMetrics.tab}
-                hint="Tab activo actualmente"
-                color="cyan"
-                icon={<IconFileText size={20} />}
-              />
-            </SimpleGrid>
-          </PageHeaderCard>
-
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
-            <Tabs value={activeTab} onChange={handleActiveTabChange}>
+            <Group justify="space-between" align="flex-start" mb="lg" className="mobile-stack">
+              <div>
+                <Title order={2}>Solicitudes de documentos</Title>
+                <Text c="dimmed" size="sm">
+                  Revisa borradores, genera documentos y controla aprobaciones sin salir del flujo operativo.
+                </Text>
+              </div>
+              <Badge color="yellow" variant="light" size="lg">
+                {requests.length} pendiente{requests.length === 1 ? '' : 's'}
+              </Badge>
+            </Group>
+            <Tabs value={activeTab} onChange={handleActiveTabChange} variant="pills">
             <Tabs.List grow={isMobile}>
               <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes de documentos'}</Tabs.Tab>
               <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
@@ -2027,16 +1971,25 @@ export default function SolicitudesIpadPage() {
                         <Text size="sm">
                           <strong>Fecha:</strong> {formatDateTime(row.createdAt)}
                         </Text>
-                        {canDecide ? (
-                          <Group gap="xs" wrap="wrap" mt={4}>
-                            <Button
-                              component={Link}
-                              href={`/inventory/ledger/document/${row.id}`}
-                              variant="light"
-                              size="xs"
-                            >
-                              Ver
-                            </Button>
+                        <Group gap="xs" wrap="wrap" mt={4}>
+                          <Button
+                            component={Link}
+                            href={`/inventory/ledger/document/${row.id}`}
+                            variant="light"
+                            size="xs"
+                          >
+                            Ver
+                          </Button>
+                          <Button
+                            variant="light"
+                            color="blue"
+                            size="xs"
+                            onClick={() => setDocumentsRequest(row)}
+                          >
+                            Documentos
+                          </Button>
+                          {canDecide ? (
+                            <>
                             <Button
                               variant="light"
                               color="blue"
@@ -2062,8 +2015,9 @@ export default function SolicitudesIpadPage() {
                             >
                               ✕
                             </Button>
-                          </Group>
-                        ) : null}
+                            </>
+                          ) : null}
+                        </Group>
                       </Stack>
                     </Paper>
                   ))}
@@ -2110,16 +2064,24 @@ export default function SolicitudesIpadPage() {
                         </Table.Td>
                         <Table.Td style={{ whiteSpace: 'nowrap' }}>
                           <Group gap="xs" wrap="nowrap">
+                            <Button
+                              component={Link}
+                              href={`/inventory/ledger/document/${row.id}`}
+                              variant="light"
+                              size="xs"
+                            >
+                              Ver
+                            </Button>
+                            <Button
+                              variant="light"
+                              color="blue"
+                              size="xs"
+                              onClick={() => setDocumentsRequest(row)}
+                            >
+                              Docs
+                            </Button>
                             {canDecide ? (
                               <>
-                                <Button
-                                  component={Link}
-                                  href={`/inventory/ledger/document/${row.id}`}
-                                  variant="light"
-                                  size="xs"
-                                >
-                                  Ver
-                                </Button>
                                 <Button
                                   variant="light"
                                   color="blue"
@@ -2164,20 +2126,10 @@ export default function SolicitudesIpadPage() {
             </Tabs.Panel>
 
             <Tabs.Panel value="generate" pt="md">
-              <Paper
-                withBorder
-                radius="lg"
-                p={{ base: 'sm', md: 'md' }}
-                mb="lg"
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(239,246,255,0.78) 100%)',
-                }}
-              >
-                <Stack gap="sm">
-                  <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+              <Stack gap="sm" mb="lg">
+                  <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
                     <div>
-                      <Group gap="xs" mb={4}>
+                      <Group gap="xs" mb={6}>
                         <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
                           {formatDocType(docType)}
                         </Badge>
@@ -2189,8 +2141,7 @@ export default function SolicitudesIpadPage() {
                         Generar documento
                       </Text>
                       <Text size="sm" c="dimmed">
-                        {selectedCustomer?.name ?? 'Sin cliente'} · {selectedWorksiteLabel} · {selectedItems.length} item
-                        {selectedItems.length === 1 ? '' : 's'} · {receivedSignature ? 'Firma lista' : 'Firma pendiente'}
+                        Completa informacion, items y firma antes de enviar.
                       </Text>
                     </div>
                     {editingRequestId ? (
@@ -2207,8 +2158,7 @@ export default function SolicitudesIpadPage() {
                       <Tabs.Tab value="sign">3. Firma</Tabs.Tab>
                     </Tabs.List>
                   </Tabs>
-                </Stack>
-              </Paper>
+              </Stack>
               {generateStep === 'info' ? (
                 <>
               {renderGenerateError()}
@@ -2298,14 +2248,6 @@ export default function SolicitudesIpadPage() {
               required
               error={generateFieldErrors.docDate}
             />
-            {docType === 'RETURN' && !isDriverRole && (
-              <TextInput
-                label="Fecha de corte (opcional)"
-                type="date"
-                value={cutOffDate}
-                onChange={(event) => setCutOffDate(event.target.value)}
-              />
-            )}
                     </SimpleGrid>
                   </Stack>
                 </Paper>
@@ -2931,7 +2873,7 @@ export default function SolicitudesIpadPage() {
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
             {adjustWarningMessage ??
-              'First adjust warehouse stock before making movements.'}
+              'Primero ajusta el stock de bodega antes de hacer movimientos.'}
           </Text>
           <Group justify="flex-end">
             <Button
@@ -3036,7 +2978,7 @@ export default function SolicitudesIpadPage() {
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            The tag requests #{expectedInternal}, but it does not exist in that warehouse.
+                            El tag solicita #{expectedInternal}, pero no existe en esa bodega.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
@@ -3089,6 +3031,22 @@ export default function SolicitudesIpadPage() {
         }
         onItemAddedNotice={setItemsAddedNotice}
       />
+
+      <Modal
+        opened={!!documentsRequest}
+        onClose={() => setDocumentsRequest(null)}
+        title={documentsRequest ? `Documentos ${documentsRequest.consecutive ?? ''}` : 'Documentos'}
+        centered
+        size="xl"
+      >
+        {documentsRequest ? (
+          <FileAttachmentsPanel
+            entityType="DOCUMENT"
+            entityId={documentsRequest.id}
+            title="Documentos y evidencias de la solicitud"
+          />
+        ) : null}
+      </Modal>
 
       <Modal
         opened={createSerialOpen}
