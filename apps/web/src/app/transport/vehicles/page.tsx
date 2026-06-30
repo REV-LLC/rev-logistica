@@ -52,6 +52,7 @@ type Vehicle = {
   plate: string;
   brand?: string | null;
   model?: string | null;
+  year?: number | null;
   type?: string | null;
   capacity?: string | null;
   soatVigencia?: string | null;
@@ -67,6 +68,7 @@ type VehicleForm = {
   plate: string;
   brand: string;
   model: string;
+  year: string;
   type: string;
   capacity: string;
   soatVigencia: string;
@@ -77,6 +79,7 @@ const formFromVehicle = (vehicle: Vehicle): VehicleForm => ({
   plate: vehicle.plate ?? '',
   brand: vehicle.brand ?? '',
   model: vehicle.model ?? '',
+  year: vehicle.year ? String(vehicle.year) : '',
   type: vehicle.type ?? '',
   capacity: vehicle.capacity ?? '',
   soatVigencia: toDateInput(vehicle.soatVigencia),
@@ -87,6 +90,7 @@ const emptyForm: VehicleForm = {
   plate: '',
   brand: '',
   model: '',
+  year: '',
   type: '',
   capacity: '',
   soatVigencia: '',
@@ -119,6 +123,10 @@ function formatCapacity(value?: string | null) {
   return `${displayValue} ${normalized === 1 ? 'tonelada' : 'toneladas'}`;
 }
 
+function formatVehicleIdentity(vehicle: Pick<Vehicle, 'brand' | 'model' | 'year'>) {
+  return [vehicle.brand, vehicle.model, vehicle.year ? String(vehicle.year) : null].filter(Boolean).join(' · ');
+}
+
 function toPatchValue(value: string) {
   return value.trim() === '' ? undefined : value.trim();
 }
@@ -135,9 +143,9 @@ function daysUntil(value?: string | null) {
 
 function getDocumentStatus(days: number | null) {
   if (days === null) return { label: 'Sin fecha', color: 'gray' };
-  if (days < 0) return { label: 'Expired', color: 'red' };
-  if (days <= 30) return { label: `${days} days`, color: 'orange' };
-  return { label: `${days} days`, color: 'green' };
+  if (days < 0) return { label: 'Vencido', color: 'red' };
+  if (days <= 30) return { label: `${days} dias`, color: 'orange' };
+  return { label: `${days} dias`, color: 'green' };
 }
 
 function VehicleDetails({
@@ -158,7 +166,7 @@ function VehicleDetails({
             {vehicle.plate}
           </Text>
           <Text size="sm" c="dimmed">
-            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
           </Text>
         </div>
         <Badge color="blue" variant="light">
@@ -172,6 +180,7 @@ function VehicleDetails({
             Configuracion
           </Text>
           <Stack gap={6} mt={8}>
+            <Text size="sm">Año: {vehicle.year ?? '-'}</Text>
             <Text size="sm">Peso (Toneladas): {formatCapacity(vehicle.capacity)}</Text>
             <Text size="sm">
               Conductores: {vehicle.drivers.length ? vehicle.drivers.map((driver) => driver.name).join(', ') : '-'}
@@ -181,7 +190,7 @@ function VehicleDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Documentation
+            Documentacion
           </Text>
           <Stack gap={8} mt={8}>
             <Group justify="space-between">
@@ -194,7 +203,7 @@ function VehicleDetails({
               Vence: {formatDisplayDate(vehicle.soatVigencia)}
             </Text>
             <Group justify="space-between">
-              <Text size="sm">Technical inspection</Text>
+              <Text size="sm">Tecnomecanica</Text>
               <Badge color={technoStatus.color} variant="light">
                 {technoStatus.label}
               </Badge>
@@ -312,6 +321,11 @@ export default function VehiclesPage() {
       setFormError('La placa es obligatoria');
       return;
     }
+    const parsedYear = form.year.trim() ? Number(form.year.trim()) : undefined;
+    if (parsedYear !== undefined && (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100)) {
+      setFormError('El año del vehículo debe estar entre 1900 y 2100');
+      return;
+    }
     setSaving(true);
     setFormError(null);
     setSuccess(null);
@@ -320,6 +334,7 @@ export default function VehiclesPage() {
         plate: form.plate.trim().toUpperCase(),
         brand: toPatchValue(form.brand)?.toUpperCase(),
         model: toPatchValue(form.model)?.toUpperCase(),
+        year: parsedYear,
         type: toPatchValue(form.type)?.toUpperCase(),
         capacity: toPatchValue(form.capacity)?.toUpperCase(),
         soatVigencia: toPatchValue(form.soatVigencia),
@@ -339,7 +354,7 @@ export default function VehiclesPage() {
       }
 
       await loadVehicles();
-      setSuccess('Vehicle saved.');
+      setSuccess('Vehiculo guardado.');
       closeEdit();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'No se pudo guardar');
@@ -353,7 +368,7 @@ export default function VehiclesPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Vehiculos"
-          description="Manage fleet, documentation, and operational availability from one view."
+          description="Administra flota, documentacion y disponibilidad operativa desde una sola vista."
           icon={<IconTruck size={20} />}
           iconColor="orange"
           accentColor="rgba(249,115,22,0.12)"
@@ -367,7 +382,7 @@ export default function VehiclesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Registered vehicles"
+              hint="Vehiculos registrados"
               color="orange"
               icon={<IconTruck size={20} />}
             />
@@ -379,16 +394,16 @@ export default function VehiclesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="Upcoming SOAT"
+              label="SOAT proximo"
               value={String(metrics.soatSoon)}
-              hint="Expires in 30 days or less"
+              hint="Vence en 30 dias o menos"
               color="red"
               icon={<IconFileDescription size={20} />}
             />
             <StatCard
-              label="Upcoming inspection"
+              label="Tecnomecanica proxima"
               value={String(metrics.technoSoon)}
-              hint="Expires in 30 days or less"
+              hint="Vence en 30 dias o menos"
               color="grape"
               icon={<IconCalendarDue size={20} />}
             />
@@ -427,7 +442,7 @@ export default function VehiclesPage() {
                         <div>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
                           </Text>
                         </div>
                         <Badge color={soatStatus.color} variant="light">
@@ -438,9 +453,9 @@ export default function VehiclesPage() {
                       <SimpleGrid cols={2} spacing="sm">
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Tipo
+                            Año
                           </Text>
-                          <Text size="sm">{vehicle.type ?? '-'}</Text>
+                          <Text size="sm">{vehicle.year ?? '-'}</Text>
                         </div>
                         <div>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -490,9 +505,9 @@ export default function VehiclesPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Vehiculo</Table.Th>
-                  <Table.Th>Tipo / capacidad</Table.Th>
+                  <Table.Th>Tipo / año / peso</Table.Th>
                   <Table.Th>Conductores</Table.Th>
-                  <Table.Th>Documentation</Table.Th>
+                  <Table.Th>Documentacion</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
@@ -506,13 +521,16 @@ export default function VehiclesPage() {
                         <Stack gap={2}>
                           <Text fw={700}>{vehicle.plate}</Text>
                           <Text size="sm" c="dimmed">
-                            {[vehicle.brand, vehicle.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
                           <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
+                          <Text size="xs" c="dimmed">
+                            Año: {vehicle.year ?? '-'}
+                          </Text>
                           <Text size="xs" c="dimmed">
                             Peso (Toneladas): {formatCapacity(vehicle.capacity)}
                           </Text>
@@ -581,7 +599,7 @@ export default function VehiclesPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Vehicle details" size="lg">
+      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehiculo" size="lg">
         {detailsVehicle ? (
           <VehicleDetails
             vehicle={detailsVehicle}
@@ -627,7 +645,7 @@ export default function VehiclesPage() {
                     <div>
                       <Text fw={700}>{editing.plate}</Text>
                       <Text size="sm" c="dimmed">
-                        {[editing.brand, editing.model].filter(Boolean).join(' · ') || 'Sin marca o modelo'}
+                        {formatVehicleIdentity(editing) || 'Sin marca, modelo o año'}
                       </Text>
                     </div>
                     <Badge color="orange" variant="light">
@@ -646,15 +664,15 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Vehicle record</Text>
+                    <Text fw={700}>Ficha del vehiculo</Text>
                     <Text size="sm" c="dimmed">
-                      Basic data to identify the vehicle within the fleet.
+                      Datos basicos para identificar el vehiculo dentro de la flota.
                     </Text>
                   </div>
 
-                  <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+                  <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="sm">
                     <TextInput
-                      label="Plate"
+                      label="Placa"
                       name="plate"
                       autoComplete="off"
                       value={form.plate}
@@ -678,6 +696,17 @@ export default function VehiclesPage() {
                       data={modelOptions}
                       onChange={(value) => setForm({ ...form, model: value })}
                       placeholder="Escribe para sugerir"
+                    />
+                    <TextInput
+                      label="Año"
+                      name="year"
+                      autoComplete="off"
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={form.year}
+                      onChange={(event) => setForm({ ...form, year: event.currentTarget.value })}
+                      placeholder="Ej. 2024"
                     />
                   </SimpleGrid>
 
@@ -707,7 +736,7 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Documentation</Text>
+                    <Text fw={700}>Documentacion</Text>
                     <Text size="sm" c="dimmed">
                       Registra fechas de vencimiento para control preventivo de la flota.
                     </Text>
@@ -723,7 +752,7 @@ export default function VehiclesPage() {
                       onChange={(event) => setForm({ ...form, soatVigencia: event.currentTarget.value })}
                     />
                     <TextInput
-                      label="Inspection expires"
+                      label="Tecnomecanica vence"
                       name="tecnomecanicaVigencia"
                       autoComplete="off"
                       type="date"

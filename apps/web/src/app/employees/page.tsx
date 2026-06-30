@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
-  Avatar,
   Badge,
   Button,
   Container,
   Group,
+  Menu,
   Modal,
   MultiSelect,
   Paper,
@@ -20,15 +20,16 @@ import {
   Text,
   TextInput,
   ThemeIcon,
-  Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
   IconBriefcase2,
   IconCar,
+  IconDotsVertical,
   IconEye,
   IconFileDescription,
   IconMail,
+  IconPencil,
   IconPhone,
   IconPlus,
   IconTrash,
@@ -36,9 +37,11 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import EmployeeAvatar from '@/components/EmployeeAvatar';
+import EmployeeViewMenu, { usePreferredEmployeeView } from '@/components/EmployeeViewMenu';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import StatCard from '@/components/dashboard/StatCard';
-import { api, apiBlob, ApiError } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 
 type VehicleOption = {
   id: string;
@@ -161,37 +164,15 @@ function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
   return `${employee.name} ${employee.lastName}`.trim();
 }
 
-function getEmployeeInitials(employee: Pick<Employee, 'name' | 'lastName'>) {
-  const parts = getEmployeeFullName(employee).split(/\s+/).filter(Boolean);
-  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
-}
-
-function EmployeeAvatar({ employee, size = 40 }: { employee: Employee; size?: number }) {
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    setPhotoUrl(null);
-
-    apiBlob(`/employees/${employee.id}/photo`, { redirectOnAuthError: false })
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPhotoUrl(objectUrl);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [employee.id]);
-
+function EmployeeStatusBadge({ active }: { active: boolean }) {
   return (
-    <Avatar src={photoUrl} radius="xl" size={size} color="blue" alt={getEmployeeFullName(employee)}>
-      {getEmployeeInitials(employee)}
-    </Avatar>
+    <Badge
+      color={active ? 'green' : 'gray'}
+      variant="light"
+      style={{ minWidth: 76, flexShrink: 0, textAlign: 'center' }}
+    >
+      {active ? 'Activo' : 'Inactivo'}
+    </Badge>
   );
 }
 
@@ -218,9 +199,7 @@ function EmployeeDetails({
             </Text>
           </div>
         </Group>
-        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-          {employee.active ? 'Activo' : 'Inactivo'}
-        </Badge>
+        <EmployeeStatusBadge active={employee.active} />
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
@@ -294,6 +273,8 @@ function EmployeeDetails({
 }
 
 export default function EmployeesPage() {
+  usePreferredEmployeeView('list');
+
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
@@ -483,9 +464,12 @@ export default function EmployeesPage() {
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
           aside={
-            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              Nuevo empleado
-            </Button>
+            <Group gap="xs">
+              <EmployeeViewMenu currentView="list" />
+              <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+                Nuevo empleado
+              </Button>
+            </Group>
           }
         >
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
@@ -534,18 +518,13 @@ export default function EmployeesPage() {
                   <Paper key={employee.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
-                        <Group align="flex-start" gap="sm" wrap="nowrap">
-                          <EmployeeAvatar employee={employee} size={42} />
-                          <div>
-                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
-                            <Text size="sm" c="dimmed">
-                              {roleLabelByValue[employee.role] ?? employee.role}
-                            </Text>
-                          </div>
-                        </Group>
-                        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
+                        <div>
+                          <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                          <Text size="sm" c="dimmed">
+                            {roleLabelByValue[employee.role] ?? employee.role}
+                          </Text>
+                        </div>
+                        <EmployeeStatusBadge active={employee.active} />
                       </Group>
 
                       <SimpleGrid cols={2} spacing="sm">
@@ -567,30 +546,47 @@ export default function EmployeesPage() {
                         {getVehicleSummary(employee.vehicles)}
                       </Text>
 
-                      <Group grow>
+                      <Group gap="xs" wrap="nowrap">
                         <Button
-                          variant="light"
-                          leftSection={<IconEye size={16} />}
-                          onClick={() => setDetailsEmployee(employee)}
-                        >
-                          Ver detalle
-                        </Button>
-                        <Button
+                          style={{ flex: '1 1 auto' }}
                           variant="light"
                           leftSection={<IconFileDescription size={16} />}
                           onClick={() => setDocumentsEmployee(employee)}
                         >
                           Documentos
                         </Button>
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size={36}
-                          aria-label="Eliminar empleado"
-                          onClick={() => deleteEmployee(employee)}
-                        >
-                          <IconTrash size={18} />
-                        </ActionIcon>
+                        <Menu position="bottom-end" withinPortal>
+                          <Menu.Target>
+                            <ActionIcon
+                              variant="light"
+                              size={36}
+                              aria-label={`Acciones de ${getEmployeeFullName(employee)}`}
+                            >
+                              <IconDotsVertical size={18} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              leftSection={<IconEye size={16} />}
+                              onClick={() => setDetailsEmployee(employee)}
+                            >
+                              Ver detalle
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<IconPencil size={16} />}
+                              onClick={() => openEdit(employee)}
+                            >
+                              Editar
+                            </Menu.Item>
+                            <Menu.Item
+                              color="red"
+                              leftSection={<IconTrash size={16} />}
+                              onClick={() => deleteEmployee(employee)}
+                            >
+                              Eliminar
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
                       </Group>
                     </Stack>
                   </Paper>
@@ -636,15 +632,12 @@ export default function EmployeesPage() {
                   employees.map((employee) => (
                     <Table.Tr key={employee.id}>
                       <Table.Td>
-                        <Group gap="sm" wrap="nowrap">
-                          <EmployeeAvatar employee={employee} size={36} />
-                          <Stack gap={2}>
-                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
-                            <Text size="sm" c="dimmed">
-                              {roleLabelByValue[employee.role] ?? employee.role}
-                            </Text>
-                          </Stack>
-                        </Group>
+                        <Stack gap={2}>
+                          <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                          <Text size="sm" c="dimmed">
+                            {roleLabelByValue[employee.role] ?? employee.role}
+                          </Text>
+                        </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
@@ -681,23 +674,10 @@ export default function EmployeesPage() {
                         </Text>
                       </Table.Td>
                       <Table.Td>
-                        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-                          {employee.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
+                        <EmployeeStatusBadge active={employee.active} />
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button size="xs" variant="light" onClick={() => openEdit(employee)}>
-                            Editar
-                          </Button>
-                          <ActionIcon
-                            color="gray"
-                            variant="light"
-                            aria-label={`Ver detalle de ${getEmployeeFullName(employee)}`}
-                            onClick={() => setDetailsEmployee(employee)}
-                          >
-                            <IconEye size={16} />
-                          </ActionIcon>
                           <ActionIcon
                             color="blue"
                             variant="light"
@@ -706,14 +686,37 @@ export default function EmployeesPage() {
                           >
                             <IconFileDescription size={16} />
                           </ActionIcon>
-                          <ActionIcon
-                            color="red"
-                            variant="light"
-                            aria-label="Eliminar empleado"
-                            onClick={() => deleteEmployee(employee)}
-                          >
-                            <IconTrash size={16} />
-                          </ActionIcon>
+                          <Menu position="bottom-end" withinPortal>
+                            <Menu.Target>
+                              <ActionIcon
+                                variant="light"
+                                aria-label={`Acciones de ${getEmployeeFullName(employee)}`}
+                              >
+                                <IconDotsVertical size={16} />
+                              </ActionIcon>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Item
+                                leftSection={<IconEye size={16} />}
+                                onClick={() => setDetailsEmployee(employee)}
+                              >
+                                Ver detalle
+                              </Menu.Item>
+                              <Menu.Item
+                                leftSection={<IconPencil size={16} />}
+                                onClick={() => openEdit(employee)}
+                              >
+                                Editar
+                              </Menu.Item>
+                              <Menu.Item
+                                color="red"
+                                leftSection={<IconTrash size={16} />}
+                                onClick={() => deleteEmployee(employee)}
+                              >
+                                Eliminar
+                              </Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
@@ -813,9 +816,7 @@ export default function EmployeesPage() {
                     {roleLabelByValue[editingEmployee.role] ?? editingEmployee.role}
                   </Text>
                 </div>
-                <Badge color={form.active ? 'green' : 'gray'} variant="light">
-                  {form.active ? 'Activo' : 'Inactivo'}
-                </Badge>
+                <EmployeeStatusBadge active={form.active} />
               </Group>
             </Paper>
           ) : null}

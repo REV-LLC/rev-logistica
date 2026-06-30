@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -25,11 +24,10 @@ import { useMediaQuery } from '@mantine/hooks';
 import {
   IconBuilding,
   IconBuildingEstate,
-  IconEye,
   IconExternalLink,
+  IconEye,
   IconMapPin,
   IconPlus,
-  IconRoute2,
   IconUserCheck,
   IconUsersGroup,
 } from '@tabler/icons-react';
@@ -161,9 +159,6 @@ function WorksiteDetails({
           </Text>
         </div>
         <Stack gap="xs" align="flex-end">
-          <Badge color={row.active ? 'green' : 'gray'} variant="light">
-            Relacion {row.active ? 'activa' : 'inactiva'}
-          </Badge>
           <Badge color={row.worksite.active ? 'green' : 'gray'} variant="light">
             Obra {row.worksite.active ? 'activa' : 'inactiva'}
           </Badge>
@@ -182,7 +177,7 @@ function WorksiteDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Address
+            Direccion
           </Text>
           <Text size="sm" mt={8}>
             {row.worksite.address ?? '-'}
@@ -311,15 +306,11 @@ export default function WorksitesPage() {
   }, []);
 
   const metrics = useMemo(() => {
-    const activeRelations = worksites.filter((row) => row.active).length;
     const activeWorksites = worksites.filter((row) => row.worksite.active).length;
-    const withAddress = worksites.filter((row) => row.worksite.address?.trim()).length;
     const uniqueCustomers = new Set(worksites.map((row) => row.customer.id)).size;
     return {
       total: worksites.length,
-      activeRelations,
       activeWorksites,
-      withAddress,
       uniqueCustomers,
     };
   }, [worksites]);
@@ -371,7 +362,7 @@ export default function WorksitesPage() {
     setAddressValidationError(null);
 
     if (!address) {
-      setAddressValidationError('Enter an address to review it with Maps.');
+      setAddressValidationError('Ingresa una direccion para revisarla con Maps.');
       return;
     }
 
@@ -459,7 +450,7 @@ export default function WorksitesPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Obras"
-          description="Manage work fronts, associated customers, and operational status from one view."
+          description="Gestiona frentes de trabajo, clientes asociados y estado operativo desde una sola vista."
           icon={<IconBuildingEstate size={20} />}
           iconColor="blue"
           accentColor="rgba(59,130,246,0.12)"
@@ -469,7 +460,7 @@ export default function WorksitesPage() {
             </Button>
           }
         >
-          <SimpleGrid cols={{ base: 1, sm: 2, xl: 5 }} spacing="md">
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             <StatCard
               label="Total"
               value={String(metrics.total)}
@@ -478,25 +469,11 @@ export default function WorksitesPage() {
               icon={<IconBuildingEstate size={20} />}
             />
             <StatCard
-              label="Relaciones activas"
-              value={String(metrics.activeRelations)}
-              hint="Cliente-obra en operacion"
-              color="green"
-              icon={<IconRoute2 size={20} />}
-            />
-            <StatCard
               label="Obras activas"
               value={String(metrics.activeWorksites)}
               hint="Estado propio de la obra"
               color="teal"
               icon={<IconBuilding size={20} />}
-            />
-            <StatCard
-              label="Con direccion"
-              value={String(metrics.withAddress)}
-              hint="Ubicacion cargada"
-              color="grape"
-              icon={<IconMapPin size={20} />}
             />
             <StatCard
               label="Clientes"
@@ -540,24 +517,14 @@ export default function WorksitesPage() {
                           </Text>
                           <Text size="sm">{row.alias ?? '-'}</Text>
                         </div>
-                        <div>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Relationship
-                          </Text>
-                          <Text size="sm">{row.active ? 'Activo' : 'Inactivo'}</Text>
-                        </div>
                       </SimpleGrid>
 
                       <Text size="sm" c="dimmed">
                         {row.worksite.address ?? 'Sin direccion registrada'}
                       </Text>
 
-                      <Button
-                        variant="light"
-                        leftSection={<IconEye size={16} />}
-                        onClick={() => setDetailsRow(row)}
-                      >
-                        View details
+                      <Button variant="light" component={Link} href={`/transport/worksites/${row.id}`}>
+                        Ver obra
                       </Button>
                     </Stack>
                   </Paper>
@@ -592,7 +559,7 @@ export default function WorksitesPage() {
                   <Table.Th>Obra</Table.Th>
                   <Table.Th>Cliente</Table.Th>
                   <Table.Th>Alias</Table.Th>
-                  <Table.Th>Address</Table.Th>
+                  <Table.Th>Direccion</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -635,34 +602,29 @@ export default function WorksitesPage() {
                       </Table.Td>
                       <Table.Td>
                         <Stack gap="xs">
-                          <Badge variant="light" color={row.active ? 'green' : 'gray'} style={{ width: 'fit-content' }}>
-                            Relationship: {row.active ? 'Activo' : 'Inactivo'}
-                          </Badge>
                           <Badge
                             variant="light"
                             color={row.worksite.active ? 'green' : 'gray'}
-                            style={{ width: 'fit-content' }}
+                            style={{ minWidth: 74, justifyContent: 'center' }}
                           >
-                            Worksite: {row.worksite.active ? 'Activo' : 'Inactivo'}
+                            {row.worksite.active ? 'Activo' : 'Inactivo'}
                           </Badge>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button size="xs" variant="default" component={Link} href={`/transport/worksites/${row.id}`}>
-                            Abierto
+                          <Button
+                            size="xs"
+                            variant="default"
+                            component={Link}
+                            href={`/transport/worksites/${row.id}`}
+                            rightSection={<IconEye size={14} />}
+                          >
+                            Ver
                           </Button>
                           <Button size="xs" variant="light" onClick={() => openEdit(row)}>
                             Editar
                           </Button>
-                          <ActionIcon
-                            color="gray"
-                            variant="light"
-                            aria-label={`View details for ${row.worksite.name}`}
-                            onClick={() => setDetailsRow(row)}
-                          >
-                            <IconEye size={16} />
-                          </ActionIcon>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
@@ -677,7 +639,7 @@ export default function WorksitesPage() {
                         </ThemeIcon>
                         <Text fw={700}>No hay obras para mostrar</Text>
                         <Text size="sm" c="dimmed">
-                          Register a new worksite.
+                          Registra una obra nueva.
                         </Text>
                       </Stack>
                     </Table.Td>
@@ -982,9 +944,9 @@ export default function WorksitesPage() {
             <Paper withBorder radius="lg" p="md">
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>Operational status</Text>
+                  <Text fw={700}>Estado operativo</Text>
                   <Text size="sm" c="dimmed">
-                    Control the customer-worksite relationship and the worksite active status separately.
+                    Controla si la obra sigue disponible para operaciones.
                   </Text>
                 </div>
 

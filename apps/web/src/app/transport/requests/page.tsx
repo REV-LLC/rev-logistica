@@ -29,6 +29,7 @@ import {
   Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { IconCamera, IconTrash } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
@@ -92,6 +93,16 @@ type SelectedItem = {
   isDamaged?: boolean;
   damageDescription?: string;
 };
+
+type EvidencePhotoDraft = {
+  id: string;
+  file: File;
+  previewUrl: string;
+};
+
+const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_EVIDENCE_PHOTO_COUNT = 12;
+const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
 type PrincipalCatalogEntry = {
   key: string;
@@ -353,6 +364,7 @@ function writeJsonCache(key: string, value: unknown) {
 }
 
 type SolicitudesTab = 'list' | 'generate';
+type RequestsPageMode = 'requests' | 'generate';
 type GenerateStep = 'info' | 'items' | 'sign';
 
 function normalizeSolicitudesTab(value: string | null): SolicitudesTab {
@@ -379,8 +391,13 @@ function readFlowStateFromUrl() {
 function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (tab === 'generate') {
-    url.searchParams.set('tab', 'generate');
+  const isGenerateRoute = url.pathname.startsWith('/transport/generate');
+  if (tab === 'generate' || isGenerateRoute) {
+    if (isGenerateRoute) {
+      url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', 'generate');
+    }
     url.searchParams.set('step', step);
   } else {
     url.searchParams.delete('tab');
@@ -393,11 +410,13 @@ function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
   }
 }
 
-export default function SolicitudesIpadPage() {
+export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: RequestsPageMode }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isTabletOrMobile = useMediaQuery('(max-width: 1024px)');
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<SolicitudesTab>('list');
+  const fixedTab: SolicitudesTab = mode === 'generate' ? 'generate' : 'list';
+  const isGeneratePage = fixedTab === 'generate';
+  const [activeTab, setActiveTab] = useState<SolicitudesTab>(fixedTab);
   const [generateStep, setGenerateStep] = useState<GenerateStep>('info');
   const [flowUrlReady, setFlowUrlReady] = useState(false);
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
@@ -466,8 +485,11 @@ export default function SolicitudesIpadPage() {
   const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
+  const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
+  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const userSession = useMemo(() => getCurrentUserSession(), []);
@@ -616,8 +638,8 @@ export default function SolicitudesIpadPage() {
     const applyUrlState = () => {
       const { tab, step } = readFlowStateFromUrl();
       skipNextFlowUrlSyncRef.current = true;
-      setActiveTab(tab);
-      setGenerateStep(step);
+      setActiveTab(fixedTab);
+      setGenerateStep(isGeneratePage ? step : tab === 'generate' ? step : 'info');
     };
 
     applyUrlState();
@@ -626,7 +648,7 @@ export default function SolicitudesIpadPage() {
     return () => {
       window.removeEventListener('popstate', applyUrlState);
     };
-  }, []);
+  }, [fixedTab, isGeneratePage]);
 
   useEffect(() => {
     if (!flowUrlReady) return;
@@ -634,8 +656,8 @@ export default function SolicitudesIpadPage() {
       skipNextFlowUrlSyncRef.current = false;
       return;
     }
-    pushFlowStateToUrl(activeTab, generateStep);
-  }, [activeTab, flowUrlReady, generateStep]);
+    pushFlowStateToUrl(fixedTab, generateStep);
+  }, [fixedTab, flowUrlReady, generateStep]);
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -745,6 +767,85 @@ export default function SolicitudesIpadPage() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [signatureModalOpen, signatureDraft, receivedSignature]);
+
+  useEffect(() => {
+    evidencePhotosRef.current = evidencePhotos;
+  }, [evidencePhotos]);
+
+  useEffect(() => {
+    return () => {
+      evidencePhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    };
+  }, []);
+
+  const addEvidencePhotos = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setError(null);
+    const nextPhotos: EvidencePhotoDraft[] = [];
+    Array.from(fileList).forEach((file) => {
+      if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
+        setError('Las evidencias deben ser fotos PNG, WEBP o JPEG.');
+        return;
+      }
+      if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
+        setError('Cada foto de evidencia debe pesar maximo 10 MB.');
+        return;
+      }
+      nextPhotos.push({
+        id: `${file.name}-${file.lastModified}-${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    });
+    if (!nextPhotos.length) return;
+
+    const availableSlots = MAX_EVIDENCE_PHOTO_COUNT - evidencePhotos.length;
+    if (availableSlots <= 0) {
+      nextPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      setError(`Puedes adjuntar maximo ${MAX_EVIDENCE_PHOTO_COUNT} fotos por solicitud.`);
+      return;
+    }
+
+    const accepted = nextPhotos.slice(0, availableSlots);
+    nextPhotos.slice(availableSlots).forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    if (accepted.length < nextPhotos.length) {
+      setError(`Solo se agregaron ${accepted.length} fotos. El maximo es ${MAX_EVIDENCE_PHOTO_COUNT}.`);
+    }
+    setEvidencePhotos((prev) => [...prev, ...accepted]);
+    if (evidenceInputRef.current) {
+      evidenceInputRef.current.value = '';
+    }
+  };
+
+  const removeEvidencePhoto = (photoId: string) => {
+    setEvidencePhotos((prev) => {
+      const photo = prev.find((entry) => entry.id === photoId);
+      if (photo) URL.revokeObjectURL(photo.previewUrl);
+      return prev.filter((entry) => entry.id !== photoId);
+    });
+  };
+
+  const clearEvidencePhotos = () => {
+    setEvidencePhotos((prev) => {
+      prev.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      return [];
+    });
+    if (evidenceInputRef.current) {
+      evidenceInputRef.current.value = '';
+    }
+  };
+
+  const uploadEvidencePhotos = async (documentId: string) => {
+    if (!evidencePhotos.length) return;
+    const formData = new FormData();
+    evidencePhotos.forEach((photo) => {
+      formData.append('photos', photo.file);
+    });
+    await api(`/files/documents/${documentId}/evidence`, {
+      method: 'POST',
+      body: formData,
+    });
+  };
 
   const handleApprovalError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
@@ -1599,9 +1700,15 @@ export default function SolicitudesIpadPage() {
     setGenerateFieldErrors({});
     setGenerateStep('info');
     setReceivedSignature(null);
+    clearEvidencePhotos();
   };
 
   const editRequest = async (documentId: string) => {
+    if (mode === 'requests') {
+      router.push(`/transport/generate?edit=${documentId}`);
+      return;
+    }
+
     setError(null);
     setSubmitResult(null);
     try {
@@ -1669,6 +1776,7 @@ export default function SolicitudesIpadPage() {
       );
       const savedSignature = doc.files?.find((file) => file.fileType === 'SIGNATURE_RECEIVED')?.storageKey ?? null;
       setReceivedSignature(savedSignature);
+      clearEvidencePhotos();
       setActiveTab('generate');
       setGenerateStep('info');
     } catch (err) {
@@ -1681,6 +1789,13 @@ export default function SolicitudesIpadPage() {
       }
     }
   };
+
+  useEffect(() => {
+    if (mode !== 'generate' || typeof window === 'undefined') return;
+    const editId = new URLSearchParams(window.location.search).get('edit');
+    if (!editId || editingRequestId === editId) return;
+    void editRequest(editId);
+  }, [editingRequestId, mode]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -1786,12 +1901,31 @@ export default function SolicitudesIpadPage() {
       const successMessage = editingRequestId
         ? `Request updated (${created.id}).`
         : `Request sent as draft (${created.id}).`;
+      try {
+        await uploadEvidencePhotos(created.id);
+        if (!editingRequestId) {
+          await api(`/documents/${created.id}/customer-email/draft`, {
+            method: 'POST',
+          });
+        }
+      } catch (uploadError) {
+        const message =
+          uploadError instanceof ApiError
+            ? `${uploadError.status}: ${uploadError.message}`
+            : uploadError instanceof Error
+              ? uploadError.message
+              : 'No se pudieron subir las evidencias.';
+        throw new Error(`La solicitud se guardo (${created.id}), pero fallaron las fotos: ${message}`);
+      }
       resetGenerateForm();
       setSubmitResult(successMessage);
       setItemsModalOpen(false);
       setWorksites([]);
-      setActiveTab('list');
+      setActiveTab(fixedTab);
       await loadRequests();
+      if (mode === 'generate') {
+        router.push('/transport/requests');
+      }
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -1844,10 +1978,6 @@ export default function SolicitudesIpadPage() {
     setGenerateStep('info');
   };
 
-  const handleActiveTabChange = (value: string | null) => {
-    setActiveTab(normalizeSolicitudesTab(value));
-  };
-
   const renderDamageFields = (item: SelectedItem, index: number) => {
     if (docType !== 'RETURN') return null;
     return (
@@ -1893,6 +2023,10 @@ export default function SolicitudesIpadPage() {
       ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
       : selectedWorksite.worksite.name
     : 'Sin obra';
+  const pageTitle = isGeneratePage ? 'Generar documento' : 'Solicitudes de documentos';
+  const pageDescription = isGeneratePage
+    ? 'Completa informacion, items y firma para crear una solicitud de documento.'
+    : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
 
   return (
     <main>
@@ -1901,20 +2035,22 @@ export default function SolicitudesIpadPage() {
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Group justify="space-between" align="flex-start" mb="lg" className="mobile-stack">
               <div>
-                <Title order={2}>Solicitudes de documentos</Title>
+                <Title order={2}>{pageTitle}</Title>
                 <Text c="dimmed" size="sm">
-                  Revisa borradores, genera documentos y controla aprobaciones sin salir del flujo operativo.
+                  {pageDescription}
                 </Text>
               </div>
-              <Badge color="yellow" variant="light" size="lg">
-                {requests.length} pendiente{requests.length === 1 ? '' : 's'}
-              </Badge>
+              {isGeneratePage ? (
+                <Badge color="teal" variant="light" size="lg">
+                  Flujo guiado
+                </Badge>
+              ) : (
+                <Badge color="yellow" variant="light" size="lg">
+                  {requests.length} pendiente{requests.length === 1 ? '' : 's'}
+                </Badge>
+              )}
             </Group>
-            <Tabs value={activeTab} onChange={handleActiveTabChange} variant="pills">
-            <Tabs.List grow={isMobile}>
-              <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes de documentos'}</Tabs.Tab>
-              <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
-            </Tabs.List>
+            <Tabs value={activeTab} variant="pills">
 
             <Tabs.Panel value="list" pt="md">
               <Group justify="space-between" mb="sm">
@@ -2801,6 +2937,82 @@ export default function SolicitudesIpadPage() {
             ) : null}
           </Stack>
 
+          <Paper withBorder radius="lg" p="md" mt="md">
+            <Stack gap="sm">
+              <Group justify="space-between" align="center" className="mobile-stack">
+                <div>
+                  <Text fw={700}>Evidencias fotograficas</Text>
+                  <Text size="sm" c="dimmed">
+                    Toma fotos desde la tablet o adjunta imagenes antes de enviar.
+                  </Text>
+                </div>
+                <Group gap="xs">
+                  <Button
+                    type="button"
+                    variant="light"
+                    leftSection={<IconCamera size={16} />}
+                    onClick={() => evidenceInputRef.current?.click()}
+                  >
+                    Tomar / adjuntar
+                  </Button>
+                  {evidencePhotos.length ? (
+                    <Button type="button" variant="subtle" color="red" onClick={clearEvidencePhotos}>
+                      Limpiar
+                    </Button>
+                  ) : null}
+                </Group>
+              </Group>
+              <input
+                ref={evidenceInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                capture="environment"
+                multiple
+                onChange={(event) => addEvidencePhotos(event.currentTarget.files)}
+                style={{ display: 'none' }}
+              />
+              {evidencePhotos.length ? (
+                <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm">
+                  {evidencePhotos.map((photo) => (
+                    <Paper key={photo.id} withBorder radius="md" p={6}>
+                      <div style={{ position: 'relative' }}>
+                        <img
+                          src={photo.previewUrl}
+                          alt="Vista previa de evidencia"
+                          style={{
+                            width: '100%',
+                            aspectRatio: '4 / 3',
+                            objectFit: 'cover',
+                            borderRadius: 6,
+                            display: 'block',
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="xs"
+                          color="red"
+                          variant="filled"
+                          leftSection={<IconTrash size={12} />}
+                          onClick={() => removeEvidencePhoto(photo.id)}
+                          style={{ position: 'absolute', top: 6, right: 6 }}
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                      <Text size="xs" c="dimmed" mt={4} truncate>
+                        {photo.file.name}
+                      </Text>
+                    </Paper>
+                  ))}
+                </SimpleGrid>
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Sin fotos adjuntas.
+                </Text>
+              )}
+            </Stack>
+          </Paper>
+
           {submitResult && (
             <Text c="green" mt="sm">
               {submitResult}
@@ -3132,4 +3344,8 @@ export default function SolicitudesIpadPage() {
       </Modal>
     </main>
   );
+}
+
+export default function SolicitudesIpadPage() {
+  return <TransportRequestsWorkspace mode="requests" />;
 }

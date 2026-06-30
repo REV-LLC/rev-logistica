@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class UpdateVehicleDto {
   @IsOptional()
@@ -12,6 +12,12 @@ export class UpdateVehicleDto {
   @IsOptional()
   @IsString()
   model?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(2100)
+  year?: number;
 
   @IsOptional()
   @IsString()

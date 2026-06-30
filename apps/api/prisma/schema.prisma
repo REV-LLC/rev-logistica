@@ -309,6 +309,10 @@ model Document {
   voidedAt   DateTime?
 
   createdAt DateTime @default(now())
+  officeModifiedAt       DateTime?
+  officeModifiedBy       String?
+  customerDraftEmailedAt DateTime?
+  customerFinalEmailedAt DateTime?
 
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
@@ -439,6 +443,7 @@ model Vehicle {
   plate                 String    @unique
   brand                 String?
   model                 String?
+  year                  Int?
   type                  String?
   capacity              String?
   soatVigencia          DateTime?
