@@ -143,9 +143,9 @@ function daysUntil(value?: string | null) {
 
 function getDocumentStatus(days: number | null) {
   if (days === null) return { label: 'Sin fecha', color: 'gray' };
-  if (days < 0) return { label: 'Expired', color: 'red' };
-  if (days <= 30) return { label: `${days} days`, color: 'orange' };
-  return { label: `${days} days`, color: 'green' };
+  if (days < 0) return { label: 'Vencido', color: 'red' };
+  if (days <= 30) return { label: `${days} dias`, color: 'orange' };
+  return { label: `${days} dias`, color: 'green' };
 }
 
 function VehicleDetails({
@@ -190,7 +190,7 @@ function VehicleDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Documentation
+            Documentacion
           </Text>
           <Stack gap={8} mt={8}>
             <Group justify="space-between">
@@ -203,7 +203,7 @@ function VehicleDetails({
               Vence: {formatDisplayDate(vehicle.soatVigencia)}
             </Text>
             <Group justify="space-between">
-              <Text size="sm">Technical inspection</Text>
+              <Text size="sm">Tecnomecanica</Text>
               <Badge color={technoStatus.color} variant="light">
                 {technoStatus.label}
               </Badge>
@@ -354,7 +354,7 @@ export default function VehiclesPage() {
       }
 
       await loadVehicles();
-      setSuccess('Vehicle saved.');
+      setSuccess('Vehiculo guardado.');
       closeEdit();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'No se pudo guardar');
@@ -368,7 +368,7 @@ export default function VehiclesPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Vehiculos"
-          description="Manage fleet, documentation, and operational availability from one view."
+          description="Administra flota, documentacion y disponibilidad operativa desde una sola vista."
           icon={<IconTruck size={20} />}
           iconColor="orange"
           accentColor="rgba(249,115,22,0.12)"
@@ -382,7 +382,7 @@ export default function VehiclesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Registered vehicles"
+              hint="Vehiculos registrados"
               color="orange"
               icon={<IconTruck size={20} />}
             />
@@ -394,16 +394,16 @@ export default function VehiclesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="Upcoming SOAT"
+              label="SOAT proximo"
               value={String(metrics.soatSoon)}
-              hint="Expires in 30 days or less"
+              hint="Vence en 30 dias o menos"
               color="red"
               icon={<IconFileDescription size={20} />}
             />
             <StatCard
-              label="Upcoming inspection"
+              label="Tecnomecanica proxima"
               value={String(metrics.technoSoon)}
-              hint="Expires in 30 days or less"
+              hint="Vence en 30 dias o menos"
               color="grape"
               icon={<IconCalendarDue size={20} />}
             />
@@ -507,7 +507,7 @@ export default function VehiclesPage() {
                   <Table.Th>Vehiculo</Table.Th>
                   <Table.Th>Tipo / año / peso</Table.Th>
                   <Table.Th>Conductores</Table.Th>
-                  <Table.Th>Documentation</Table.Th>
+                  <Table.Th>Documentacion</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
@@ -599,7 +599,7 @@ export default function VehiclesPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Vehicle details" size="lg">
+      <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehiculo" size="lg">
         {detailsVehicle ? (
           <VehicleDetails
             vehicle={detailsVehicle}
@@ -664,15 +664,15 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Vehicle record</Text>
+                    <Text fw={700}>Ficha del vehiculo</Text>
                     <Text size="sm" c="dimmed">
-                      Basic data to identify the vehicle within the fleet.
+                      Datos basicos para identificar el vehiculo dentro de la flota.
                     </Text>
                   </div>
 
                   <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="sm">
                     <TextInput
-                      label="Plate"
+                      label="Placa"
                       name="plate"
                       autoComplete="off"
                       value={form.plate}
@@ -736,7 +736,7 @@ export default function VehiclesPage() {
               <Paper withBorder radius="lg" p="md">
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>Documentation</Text>
+                    <Text fw={700}>Documentacion</Text>
                     <Text size="sm" c="dimmed">
                       Registra fechas de vencimiento para control preventivo de la flota.
                     </Text>
@@ -752,7 +752,7 @@ export default function VehiclesPage() {
                       onChange={(event) => setForm({ ...form, soatVigencia: event.currentTarget.value })}
                     />
                     <TextInput
-                      label="Inspection expires"
+                      label="Tecnomecanica vence"
                       name="tecnomecanicaVigencia"
                       autoComplete="off"
                       type="date"
