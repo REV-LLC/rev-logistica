@@ -25,7 +25,7 @@ export type UploadedBusinessFile = {
   size: number;
 };
 
-export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER';
+export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
@@ -37,6 +37,7 @@ const ENTITY_TYPES = new Set<FileEntityType>([
   'EMPLOYEE',
   'VEHICLE',
   'CUSTOMER',
+  'ASSET',
 ]);
 
 const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
@@ -71,6 +72,13 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'CAMARA_COMERCIO',
     'REPRESENTANTE_LEGAL',
     'CONTRATO',
+    'CERTIFICADO',
+    'OTRO',
+  ]),
+  ASSET: new Set([
+    'PHOTO',
+    'FICHA_TECNICA',
+    'MANUAL',
     'CERTIFICADO',
     'OTRO',
   ]),
@@ -433,6 +441,15 @@ export class FilesService {
         select: { id: true },
       });
       if (!found) throw new NotFoundException('Customer not found');
+      return;
+    }
+
+    if (entityType === 'ASSET') {
+      const found = await this.prisma.asset.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
+      if (!found) throw new NotFoundException('Asset not found');
       return;
     }
 

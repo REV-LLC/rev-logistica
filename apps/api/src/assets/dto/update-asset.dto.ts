@@ -34,6 +34,10 @@ export class UpdateAssetDto {
   weight?: number;
 
   @IsOptional()
+  @IsUUID()
+  imageFileObjectId?: string;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }

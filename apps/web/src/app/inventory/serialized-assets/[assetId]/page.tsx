@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Container,
+  FileButton,
   Group,
   NumberInput,
   Paper,
@@ -15,9 +17,20 @@ import {
   Switch,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconArrowLeft, IconMapPin, IconPencil } from '@tabler/icons-react';
+import {
+  IconArrowLeft,
+  IconBarcode,
+  IconBuildingWarehouse,
+  IconCheck,
+  IconEngine,
+  IconMapPin,
+  IconPencil,
+  IconUpload,
+  IconX,
+} from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -31,6 +44,8 @@ type AssetResponse = {
   fuel: string | null;
   warehouseOwnerId: string;
   warehouseCurrentId: string | null;
+  imageFileObjectId?: string | null;
+  imageUrl?: string | null;
   active: boolean;
   sku?: { id: string; name: string | null; imageUrl?: string | null } | null;
   assetFamily?: { id: string; name: string | null } | null;
@@ -63,7 +78,7 @@ type AssetLedgerResponse = {
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electric' },
+  { value: 'ELECTRICO', label: 'Electrico' },
 ];
 
 export default function EditSerializedAssetPage() {
@@ -82,7 +97,9 @@ export default function EditSerializedAssetPage() {
   const [model, setModel] = useState('');
   const [year, setYear] = useState<number | ''>('');
   const [fuel, setFuel] = useState('');
-  const [skuImageUrl, setSkuImageUrl] = useState('');
+  const [assetImageUrl, setAssetImageUrl] = useState('');
+  const [assetImageFileObjectId, setAssetImageFileObjectId] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -119,7 +136,7 @@ export default function EditSerializedAssetPage() {
             // ignore location lookup errors
           }
         }
-        let resolvedImageUrl = assetData.sku?.imageUrl ?? '';
+        let resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
         if (!resolvedImageUrl && assetData.warehouseOwnerId) {
           try {
             const warehouseInventory = await api<WarehouseInventoryResponse>(
@@ -139,7 +156,8 @@ export default function EditSerializedAssetPage() {
         setModel(assetData.model ?? '');
         setYear(assetData.year ?? '');
         setFuel(assetData.fuel ?? '');
-        setSkuImageUrl(resolvedImageUrl);
+        setAssetImageUrl(resolvedImageUrl);
+        setAssetImageFileObjectId(assetData.imageFileObjectId ?? null);
         setWarehouseCurrentId(assetData.warehouseCurrentId);
         setWorksiteLocationName(resolvedWorksiteLocation);
         setActive(assetData.active);
@@ -199,38 +217,57 @@ export default function EditSerializedAssetPage() {
     }
     return { color: 'red' as const, label: currentName };
   }, [asset, warehouseCurrentId, warehouses, worksiteLocationName]);
+  const detailCards = useMemo(
+    () => [
+      {
+        label: 'Serial / motor',
+        value: asset?.serialOrEngine || '-',
+        icon: <IconEngine size={18} />,
+      },
+      {
+        label: 'Codigo publico',
+        value: asset?.publicCode || '-',
+        icon: <IconBarcode size={18} />,
+      },
+      {
+        label: 'Bodega dueña',
+        value: asset?.warehouseOwner?.name ?? '-',
+        icon: <IconBuildingWarehouse size={18} />,
+      },
+      {
+        label: 'Ubicacion actual',
+        value: warehouseCurrentId ? warehouseCurrentName : worksiteLocationName ?? 'En obra',
+        icon: <IconMapPin size={18} />,
+      },
+    ],
+    [asset, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
+  );
 
   const handleSave = async () => {
-    if (!assetId || !warehouseCurrentId) {
-      setError('Current warehouse is required');
+    if (!assetId || !asset) {
+      setError('No se encontro el equipo para actualizar.');
       return;
     }
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      await Promise.all([
-        api(`/assets/${assetId}`, {
-          method: 'PATCH',
-          json: {
-            brand: brand.trim() || null,
-            model: model.trim() || null,
-            year: year === '' ? null : year,
-            fuel: fuel || null,
-            warehouseCurrentId,
-            active,
-          },
-        }),
-        asset?.sku?.id
-          ? api(`/skus/${asset.sku.id}`, {
-              method: 'PATCH',
-              json: {
-                imageUrl: skuImageUrl.trim() || undefined,
-              },
-            })
-          : Promise.resolve(null),
-      ]);
-      setSuccess('Equipment updated');
+      const payload = {
+        brand: brand.trim() || null,
+        model: model.trim() || null,
+        year: year === '' ? null : year,
+        fuel: fuel || null,
+        warehouseCurrentId: warehouseCurrentId ?? undefined,
+        imageFileObjectId: assetImageFileObjectId ?? undefined,
+        active,
+      };
+      const updatedAsset = await api<AssetResponse>(`/assets/${assetId}`, {
+        method: 'PATCH',
+        json: payload,
+      });
+      setAsset((current) => (current ? { ...current, ...updatedAsset } : updatedAsset));
+      setSuccess('Equipo actualizado.');
+      setEditing(false);
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -245,103 +282,330 @@ export default function EditSerializedAssetPage() {
     }
   };
 
+  const handleImageUpload = async (file: File | null) => {
+    if (!file || !assetId) return;
+    setImageUploading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+        throw new Error('Solo se permiten imagenes PNG, JPG o WEBP.');
+      }
+      const formData = new FormData();
+      formData.append('files', file);
+      formData.append('category', 'PHOTO');
+      formData.append('displayName', 'Imagen principal');
+
+      const upload = await api<{
+        files: Array<{ id: string; storageKey: string; mimeType?: string | null }>;
+      }>(`/files/entities/ASSET/${assetId}`, {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadedImage = upload.files.find((item) => item.mimeType?.startsWith('image/')) ?? upload.files[0];
+      if (!uploadedImage) {
+        throw new Error('No se recibio la imagen cargada.');
+      }
+      const updatedAsset = await api<AssetResponse>(`/assets/${assetId}`, {
+        method: 'PATCH',
+        json: { imageFileObjectId: uploadedImage.id },
+      });
+      setAsset((current) =>
+        current
+          ? { ...current, ...updatedAsset, imageFileObjectId: uploadedImage.id, imageUrl: uploadedImage.storageKey }
+          : { ...updatedAsset, imageFileObjectId: uploadedImage.id, imageUrl: uploadedImage.storageKey },
+      );
+      setAssetImageFileObjectId(uploadedImage.id);
+      setAssetImageUrl(uploadedImage.storageKey);
+      setSuccess('Imagen cargada.');
+      router.refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error cargando imagen');
+      }
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   return (
-    <Container size="md" py="xl">
-      <ActionIcon variant="light" size="lg" mb="sm" aria-label="Volver" onClick={() => router.back()}>
-        <IconArrowLeft size={18} />
-      </ActionIcon>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
-        <Group justify="space-between" align="flex-start" mb="md" className="mobile-stack">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flex: 1 }}>
-            <div>
-              <Title order={2}>Ficha del equipo</Title>
-              <Text c="dimmed" size="sm">
-                Informacion y estado del equipo serializado.
-              </Text>
-            </div>
-
-            <Badge
-              variant="light"
-              color={locationBadge.color}
-              radius="xl"
-              leftSection={<IconMapPin size={14} />}
-            >
-              Ubicacion: {locationBadge.label}
-            </Badge>
-          </div>
-          {asset ? (
-            <ActionIcon
-              variant={editing ? 'filled' : 'light'}
-              color={editing ? 'blue' : 'gray'}
-              aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
-              onClick={() => setEditing((prev) => !prev)}
-            >
-              <IconPencil size={16} />
-            </ActionIcon>
-          ) : null}
-        </Group>
-
-        {loading ? (
-          <Text c="dimmed">Cargando...</Text>
-        ) : null}
-
-        {error ? (
-          <Text c="red" mb="sm">
-            {error}
-          </Text>
-        ) : null}
-
-        {success ? (
-          <Text c="green" mb="sm">
-            {success}
-          </Text>
-        ) : null}
-
+    <Container size="lg" py="xl">
+      <Group mb="md" justify="space-between" align="center">
+        <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.back()}>
+          Volver
+        </Button>
         {asset ? (
-          <Stack gap="md">
-            <Paper withBorder radius="md" p={0} style={{ overflow: 'hidden' }}>
-              <div
+          <ActionIcon
+            variant={editing ? 'filled' : 'light'}
+            color={editing ? 'blue' : 'gray'}
+            size="lg"
+            aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
+            onClick={() => {
+              setSuccess(null);
+              setError(null);
+              setEditing((prev) => !prev);
+            }}
+          >
+            <IconPencil size={18} />
+          </ActionIcon>
+        ) : null}
+      </Group>
+
+      {loading ? (
+        <Paper withBorder radius="xl" p="xl">
+          <Text c="dimmed">Cargando equipo...</Text>
+        </Paper>
+      ) : null}
+
+      {error ? (
+        <Alert color="red" variant="light" mb="md">
+          {error}
+        </Alert>
+      ) : null}
+
+      {success ? (
+        <Alert color="green" variant="light" mb="md">
+          {success}
+        </Alert>
+      ) : null}
+
+      {asset ? (
+        <Stack gap="lg">
+          <Paper
+            withBorder
+            shadow="sm"
+            radius="xl"
+            p={{ base: 'md', md: 'xl' }}
+            style={{
+              overflow: 'hidden',
+              background:
+                'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 55%, rgba(236,253,245,0.65) 100%)',
+            }}
+          >
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl" verticalSpacing="xl">
+              <Paper
+                radius="xl"
+                p="lg"
                 style={{
-                  height: 240,
+                  minHeight: 320,
                   background: '#fff',
+                  border: '1px solid var(--mantine-color-gray-2)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderBottom: '1px solid var(--mantine-color-gray-3)',
                 }}
               >
-                {skuImageUrl?.trim() ? (
+                {assetImageUrl?.trim() ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={skuImageUrl}
+                    src={assetImageUrl}
                     alt={autoDescription}
-                    style={{ width: '30%', height: '100%', objectFit: 'contain', background: '#fff' }}
+                    style={{
+                      width: '100%',
+                      maxWidth: 360,
+                      height: 260,
+                      objectFit: 'contain',
+                      background: '#fff',
+                    }}
                   />
                 ) : (
-                  <Text c="dimmed">Sin imagen</Text>
+                  <Stack align="center" gap="xs">
+                    <ThemeIcon color="gray" variant="light" size={56} radius="xl">
+                      <IconEngine size={28} />
+                    </ThemeIcon>
+                    <Text c="dimmed">Sin imagen</Text>
+                  </Stack>
                 )}
+              </Paper>
+
+              <Stack gap="md" justify="space-between">
+                <div>
+                  <Group gap="xs" mb="sm" wrap="wrap">
+                    <Badge color={active ? 'green' : 'gray'} variant="light" radius="xl">
+                      {active ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    <Badge color={locationBadge.color} variant="light" radius="xl" leftSection={<IconMapPin size={14} />}>
+                      {locationBadge.label}
+                    </Badge>
+                  </Group>
+                  <Title order={2}>{autoDescription}</Title>
+                  <Text c="dimmed" mt={6}>
+                    Ficha operativa del equipo serializado.
+                  </Text>
+                </div>
 
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                <Text size="sm"><strong>Descripcion:</strong> {autoDescription}</Text>
-                <Text size="sm"><strong>Serial/Motor:</strong> {asset.serialOrEngine || '-'}</Text>
-                <Text size="sm"><strong>Dueño:</strong> {asset.warehouseOwner?.name ?? '-'}</Text>
-                <Text size="sm"><strong>Codigo publico:</strong> {asset.publicCode ?? '-'}</Text>
-                <Text size="sm"><strong>Modelo:</strong> {model || '-'}</Text>
-                <Text size="sm"><strong>Año:</strong> {year === '' ? '-' : String(year)}</Text>
-                <Text size="sm"><strong>Combustible:</strong> {fuelLabel}</Text>
-              </SimpleGrid>
-              
+                  {detailCards.map((item) => (
+                    <Paper key={item.label} withBorder radius="lg" p="md" bg="white">
+                      <Group gap="sm" align="flex-start" wrap="nowrap">
+                        <ThemeIcon color="blue" variant="light" radius="xl" size={34}>
+                          {item.icon}
+                        </ThemeIcon>
+                        <div style={{ minWidth: 0 }}>
+                          <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                            {item.label}
+                          </Text>
+                          <Text size="sm" fw={700} style={{ overflowWrap: 'anywhere' }}>
+                            {item.value}
+                          </Text>
+                        </div>
+                      </Group>
+                    </Paper>
+                  ))}
+                </SimpleGrid>
+              </Stack>
+            </SimpleGrid>
+          </Paper>
+
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Group justify="space-between" align="center" mb="md">
+              <div>
+                <Text fw={800}>Datos del equipo</Text>
+                <Text size="sm" c="dimmed">
+                  Informacion tecnica y comercial visible para operacion.
+                </Text>
               </div>
-              <Group justify="space-between" px="md" py="sm">
-                <Text fw={700}>{autoDescription}</Text>
-                <Badge color={active ? 'green' : 'gray'} variant="light">
-                  {active ? 'Activo' : 'Inactivo'}
+              {editing ? (
+                <Badge color="blue" variant="light">
+                  Editando
                 </Badge>
-              </Group>
-            </Paper>
-          </Stack>
-        ) : null}
-      </Paper>
+              ) : null}
+            </Group>
+
+            {editing ? (
+              <Stack gap="md">
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                  <TextInput label="Marca" value={brand} onChange={(event) => setBrand(event.currentTarget.value)} />
+                  <TextInput label="Modelo" value={model} onChange={(event) => setModel(event.currentTarget.value)} />
+                  <NumberInput
+                    label="Año"
+                    value={year}
+                    min={1900}
+                    max={new Date().getFullYear() + 1}
+                    onChange={(value) => setYear(typeof value === 'number' ? value : '')}
+                  />
+                  <Select
+                    label="Combustible"
+                    value={fuel || null}
+                    onChange={(value) => setFuel(value ?? '')}
+                    data={FUEL_OPTIONS}
+                    clearable
+                  />
+                  <Select
+                    label="Ubicacion en bodega"
+                    value={warehouseCurrentId}
+                    onChange={setWarehouseCurrentId}
+                    data={warehouseOptions}
+                    placeholder={worksiteLocationName ?? 'Equipo en obra'}
+                    clearable
+                  />
+                </SimpleGrid>
+                <Paper withBorder radius="lg" p="md" bg="gray.0">
+                  <Group justify="space-between" align="center" gap="md">
+                    <div>
+                      <Text fw={800}>Imagen del equipo</Text>
+                      <Text size="sm" c="dimmed">
+                        PNG, JPG o WEBP.
+                      </Text>
+                    </div>
+                    <FileButton onChange={handleImageUpload} accept="image/png,image/jpeg,image/webp">
+                      {(props) => (
+                        <Button {...props} leftSection={<IconUpload size={16} />} loading={imageUploading}>
+                          Subir imagen
+                        </Button>
+                      )}
+                    </FileButton>
+                  </Group>
+                </Paper>
+                <Switch
+                  label="Equipo activo"
+                  checked={active}
+                  onChange={(event) => setActive(event.currentTarget.checked)}
+                />
+                <Group justify="flex-end">
+                  <Button
+                    variant="default"
+                    leftSection={<IconX size={16} />}
+                    onClick={() => {
+                      setBrand(asset.brand ?? '');
+                      setModel(asset.model ?? '');
+                      setYear(asset.year ?? '');
+                      setFuel(asset.fuel ?? '');
+                      setAssetImageFileObjectId(asset.imageFileObjectId ?? null);
+                      setAssetImageUrl(asset.imageUrl ?? asset.sku?.imageUrl ?? '');
+                      setWarehouseCurrentId(asset.warehouseCurrentId);
+                      setActive(asset.active);
+                      setEditing(false);
+                      setError(null);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button leftSection={<IconCheck size={16} />} onClick={handleSave} loading={saving}>
+                    Guardar cambios
+                  </Button>
+                </Group>
+              </Stack>
+            ) : (
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Marca
+                  </Text>
+                  <Text fw={700}>{brand || '-'}</Text>
+                </Paper>
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Modelo
+                  </Text>
+                  <Text fw={700}>{model || '-'}</Text>
+                </Paper>
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Año
+                  </Text>
+                  <Text fw={700}>{year === '' ? '-' : String(year)}</Text>
+                </Paper>
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Combustible
+                  </Text>
+                  <Text fw={700}>{fuelLabel}</Text>
+                </Paper>
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Familia
+                  </Text>
+                  <Text fw={700}>{asset.assetFamily?.name ?? '-'}</Text>
+                </Paper>
+                <Paper withBorder radius="lg" p="md">
+                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                    Estado
+                  </Text>
+                  <Text fw={700}>{active ? 'Activo' : 'Inactivo'}</Text>
+                </Paper>
+              </SimpleGrid>
+            )}
+          </Paper>
+
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Text fw={800} mb={4}>
+              Movimiento reciente
+            </Text>
+            <Text size="sm" c="dimmed">
+              {worksiteLocationName
+                ? `Ultima ubicacion en obra: ${worksiteLocationName}.`
+                : warehouseCurrentId
+                  ? `Actualmente en ${warehouseCurrentName}.`
+                  : 'Sin movimiento reciente disponible.'}
+            </Text>
+          </Paper>
+        </Stack>
+      ) : null}
     </Container>
   );
 }

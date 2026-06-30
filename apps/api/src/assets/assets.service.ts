@@ -59,6 +59,8 @@ export class AssetsService {
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
+        imageFileObjectId: true,
+        imageFileObject: { select: { storageKey: true } },
         active: true,
         createdAt: true,
         sku: {
@@ -86,6 +88,7 @@ export class AssetsService {
 
     return items.map((item) => ({
       ...item,
+      imageUrl: item.imageFileObject?.storageKey ?? null,
       sku: item.sku
         ? {
             id: item.sku.id,
@@ -127,12 +130,15 @@ export class AssetsService {
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
+        imageFileObjectId: true,
+        imageFileObject: { select: { storageKey: true } },
         active: true,
         createdAt: true,
         sku: {
           select: {
             id: true,
             name: true,
+            imageUrl: true,
             assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         },
@@ -157,10 +163,12 @@ export class AssetsService {
 
     return {
       ...item,
+      imageUrl: item.imageFileObject?.storageKey ?? null,
       sku: item.sku
         ? {
             id: item.sku.id,
             name: item.sku.name,
+            imageUrl: item.sku.imageUrl,
             controlType: item.sku.assetFamily?.controlType ?? null,
           }
         : item.sku,
@@ -302,6 +310,7 @@ export class AssetsService {
       fuel?: string;
       warehouseCurrentId?: string;
       weight?: number;
+      imageFileObjectId?: string;
       active?: boolean;
     },
   ) {
@@ -324,6 +333,21 @@ export class AssetsService {
       }
     }
 
+    if (payload.imageFileObjectId) {
+      const imageFile = await this.prisma.fileObject.findFirst({
+        where: {
+          id: payload.imageFileObjectId,
+          entityType: 'ASSET',
+          entityId: assetId,
+          mimeType: { startsWith: 'image/' },
+        },
+        select: { id: true },
+      });
+      if (!imageFile) {
+        throw new BadRequestException('Asset image file not found');
+      }
+    }
+
     return this.prisma.asset.update({
       where: { id: assetId },
       data: {
@@ -334,6 +358,7 @@ export class AssetsService {
         fuel: payload.fuel ?? undefined,
         warehouseCurrentId: payload.warehouseCurrentId ?? undefined,
         weight: payload.weight ?? undefined,
+        imageFileObjectId: payload.imageFileObjectId ?? undefined,
         active: payload.active,
       },
     });
