@@ -8,17 +8,24 @@ import {
   Patch,
   Post,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeesService } from './employees.service';
+import type { EmployeePhotoFile } from './employees.service';
+
+const MAX_PROFILE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,6 +55,20 @@ export class EmployeesController {
       response.setHeader('ETag', photo.etag);
     }
     photo.body.pipe(response);
+  }
+
+  @Post(':employeeId/photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PROFILE_PHOTO_SIZE_BYTES },
+    }),
+  )
+  uploadEmployeePhoto(
+    @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
+    @UploadedFile() file?: EmployeePhotoFile,
+  ) {
+    return this.employeesService.uploadEmployeePhoto(employeeId, file);
   }
 
   @Post()

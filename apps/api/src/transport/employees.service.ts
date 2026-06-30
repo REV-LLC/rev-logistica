@@ -1,4 +1,4 @@
-import { GetObjectCommand, NoSuchKey, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   BadRequestException,
   Injectable,
@@ -9,6 +9,16 @@ import { EmployeeRole, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import type { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
+
+export type EmployeePhotoFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
+
+const MAX_PROFILE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_PROFILE_PHOTO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
 @Injectable()
 export class EmployeesService {
@@ -265,38 +275,65 @@ export class EmployeesService {
 
     const config = this.getR2Config();
     const s3 = this.createR2Client(config);
-    const key = `employees/${employeeId}/profile.webp`;
+    const keys = [`employees/${employeeId}/profile`, `employees/${employeeId}/profile.webp`];
 
-    try {
-      const object = await s3.send(
-        new GetObjectCommand({
-          Bucket: config.bucket,
-          Key: key,
-        }),
-      );
+    for (const key of keys) {
+      try {
+        const object = await s3.send(
+          new GetObjectCommand({
+            Bucket: config.bucket,
+            Key: key,
+          }),
+        );
 
-      if (!object.Body) {
-        throw new NotFoundException('Employee photo not found');
+        if (!object.Body) {
+          throw new NotFoundException('Employee photo not found');
+        }
+
+        return {
+          body: object.Body as Readable,
+          contentType: object.ContentType ?? 'image/webp',
+          contentLength: object.ContentLength,
+          etag: object.ETag,
+        };
+      } catch (error) {
+        if (this.isMissingR2Object(error)) {
+          continue;
+        }
+        throw error;
       }
-
-      return {
-        body: object.Body as Readable,
-        contentType: object.ContentType ?? 'image/webp',
-        contentLength: object.ContentLength,
-        etag: object.ETag,
-      };
-    } catch (error) {
-      if (
-        error instanceof NoSuchKey ||
-        (typeof error === 'object' &&
-          error !== null &&
-          'name' in error &&
-          ['NoSuchKey', 'NotFound'].includes(String(error.name)))
-      ) {
-        throw new NotFoundException('Employee photo not found');
-      }
-      throw error;
     }
+
+    throw new NotFoundException('Employee photo not found');
+  }
+
+  async uploadEmployeePhoto(employeeId: string, file?: EmployeePhotoFile) {
+    if (!file) {
+      throw new BadRequestException('Profile photo file is required');
+    }
+    this.validateProfilePhotoFile(file);
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const config = this.getR2Config();
+    const key = `employees/${employeeId}/profile`;
+
+    await this.createR2Client(config).send(
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }),
+    );
+
+    return { uploaded: true };
   }
 
   private async assertVehiclesExist(vehicleIds: string[]) {
@@ -339,6 +376,49 @@ export class EmployeesService {
       secretAccessKey,
       bucket,
     };
+  }
+
+  private validateProfilePhotoFile(file: EmployeePhotoFile) {
+    if (file.size > MAX_PROFILE_PHOTO_SIZE_BYTES) {
+      throw new BadRequestException('Profile photo must be 2 MB or smaller');
+    }
+    if (!ALLOWED_PROFILE_PHOTO_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Profile photo must be PNG, WEBP, or JPEG');
+    }
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Profile photo file is empty');
+    }
+    if (!this.hasExpectedImageSignature(file.buffer, file.mimetype)) {
+      throw new BadRequestException('Profile photo content does not match the declared image type');
+    }
+  }
+
+  private hasExpectedImageSignature(buffer: Buffer, mimetype: string) {
+    if (mimetype === 'image/png') {
+      return buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (mimetype === 'image/jpeg') {
+      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    }
+    if (mimetype === 'image/webp') {
+      return (
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+      );
+    }
+    return false;
+  }
+
+  private isMissingR2Object(error: unknown) {
+    return (
+      error instanceof NoSuchKey ||
+      (typeof error === 'object' &&
+        error !== null &&
+        'name' in error &&
+        ['NoSuchKey', 'NotFound'].includes(String(error.name)))
+    );
   }
 
   private rethrowConstraint(error: unknown): never {
