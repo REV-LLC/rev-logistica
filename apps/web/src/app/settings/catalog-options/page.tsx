@@ -56,6 +56,11 @@ const GROUPS = [
     title: 'Convencional con medida',
     description: 'Piezas convencionales que deben pedir medida.',
   },
+  {
+    key: 'SERIAL_ASSET_BRANDS',
+    title: 'Marcas equipos seriales',
+    description: 'Marcas disponibles al crear equipos unicos.',
+  },
 ] as const;
 
 const normalizeLines = (value: string) =>

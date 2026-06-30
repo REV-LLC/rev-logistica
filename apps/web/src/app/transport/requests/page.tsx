@@ -265,7 +265,7 @@ function requestTypeColor(type: string) {
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electric' },
+  { value: 'ELECTRICO', label: 'Electrico' },
 ];
 
 function normalizeQuantityInput(value: string | number, fallback = 1) {
