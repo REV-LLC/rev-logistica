@@ -364,6 +364,7 @@ function writeJsonCache(key: string, value: unknown) {
 }
 
 type SolicitudesTab = 'list' | 'generate';
+type RequestsPageMode = 'requests' | 'generate';
 type GenerateStep = 'info' | 'items' | 'sign';
 
 function normalizeSolicitudesTab(value: string | null): SolicitudesTab {
@@ -390,8 +391,13 @@ function readFlowStateFromUrl() {
 function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (tab === 'generate') {
-    url.searchParams.set('tab', 'generate');
+  const isGenerateRoute = url.pathname.startsWith('/transport/generate');
+  if (tab === 'generate' || isGenerateRoute) {
+    if (isGenerateRoute) {
+      url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', 'generate');
+    }
     url.searchParams.set('step', step);
   } else {
     url.searchParams.delete('tab');
@@ -404,11 +410,13 @@ function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
   }
 }
 
-export default function SolicitudesIpadPage() {
+export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: RequestsPageMode }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isTabletOrMobile = useMediaQuery('(max-width: 1024px)');
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<SolicitudesTab>('list');
+  const fixedTab: SolicitudesTab = mode === 'generate' ? 'generate' : 'list';
+  const isGeneratePage = fixedTab === 'generate';
+  const [activeTab, setActiveTab] = useState<SolicitudesTab>(fixedTab);
   const [generateStep, setGenerateStep] = useState<GenerateStep>('info');
   const [flowUrlReady, setFlowUrlReady] = useState(false);
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
@@ -630,8 +638,8 @@ export default function SolicitudesIpadPage() {
     const applyUrlState = () => {
       const { tab, step } = readFlowStateFromUrl();
       skipNextFlowUrlSyncRef.current = true;
-      setActiveTab(tab);
-      setGenerateStep(step);
+      setActiveTab(fixedTab);
+      setGenerateStep(isGeneratePage ? step : tab === 'generate' ? step : 'info');
     };
 
     applyUrlState();
@@ -640,7 +648,7 @@ export default function SolicitudesIpadPage() {
     return () => {
       window.removeEventListener('popstate', applyUrlState);
     };
-  }, []);
+  }, [fixedTab, isGeneratePage]);
 
   useEffect(() => {
     if (!flowUrlReady) return;
@@ -648,8 +656,8 @@ export default function SolicitudesIpadPage() {
       skipNextFlowUrlSyncRef.current = false;
       return;
     }
-    pushFlowStateToUrl(activeTab, generateStep);
-  }, [activeTab, flowUrlReady, generateStep]);
+    pushFlowStateToUrl(fixedTab, generateStep);
+  }, [fixedTab, flowUrlReady, generateStep]);
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -1696,6 +1704,11 @@ export default function SolicitudesIpadPage() {
   };
 
   const editRequest = async (documentId: string) => {
+    if (mode === 'requests') {
+      router.push(`/transport/generate?edit=${documentId}`);
+      return;
+    }
+
     setError(null);
     setSubmitResult(null);
     try {
@@ -1776,6 +1789,13 @@ export default function SolicitudesIpadPage() {
       }
     }
   };
+
+  useEffect(() => {
+    if (mode !== 'generate' || typeof window === 'undefined') return;
+    const editId = new URLSearchParams(window.location.search).get('edit');
+    if (!editId || editingRequestId === editId) return;
+    void editRequest(editId);
+  }, [editingRequestId, mode]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -1883,6 +1903,11 @@ export default function SolicitudesIpadPage() {
         : `Request sent as draft (${created.id}).`;
       try {
         await uploadEvidencePhotos(created.id);
+        if (!editingRequestId) {
+          await api(`/documents/${created.id}/customer-email/draft`, {
+            method: 'POST',
+          });
+        }
       } catch (uploadError) {
         const message =
           uploadError instanceof ApiError
@@ -1896,8 +1921,11 @@ export default function SolicitudesIpadPage() {
       setSubmitResult(successMessage);
       setItemsModalOpen(false);
       setWorksites([]);
-      setActiveTab('list');
+      setActiveTab(fixedTab);
       await loadRequests();
+      if (mode === 'generate') {
+        router.push('/transport/requests');
+      }
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -1950,10 +1978,6 @@ export default function SolicitudesIpadPage() {
     setGenerateStep('info');
   };
 
-  const handleActiveTabChange = (value: string | null) => {
-    setActiveTab(normalizeSolicitudesTab(value));
-  };
-
   const renderDamageFields = (item: SelectedItem, index: number) => {
     if (docType !== 'RETURN') return null;
     return (
@@ -1999,6 +2023,10 @@ export default function SolicitudesIpadPage() {
       ? `${selectedWorksite.alias} · ${selectedWorksite.worksite.name}`
       : selectedWorksite.worksite.name
     : 'Sin obra';
+  const pageTitle = isGeneratePage ? 'Generar documento' : 'Solicitudes de documentos';
+  const pageDescription = isGeneratePage
+    ? 'Completa informacion, items y firma para crear una solicitud de documento.'
+    : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
 
   return (
     <main>
@@ -2007,20 +2035,22 @@ export default function SolicitudesIpadPage() {
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Group justify="space-between" align="flex-start" mb="lg" className="mobile-stack">
               <div>
-                <Title order={2}>Solicitudes de documentos</Title>
+                <Title order={2}>{pageTitle}</Title>
                 <Text c="dimmed" size="sm">
-                  Revisa borradores, genera documentos y controla aprobaciones sin salir del flujo operativo.
+                  {pageDescription}
                 </Text>
               </div>
-              <Badge color="yellow" variant="light" size="lg">
-                {requests.length} pendiente{requests.length === 1 ? '' : 's'}
-              </Badge>
+              {isGeneratePage ? (
+                <Badge color="teal" variant="light" size="lg">
+                  Flujo guiado
+                </Badge>
+              ) : (
+                <Badge color="yellow" variant="light" size="lg">
+                  {requests.length} pendiente{requests.length === 1 ? '' : 's'}
+                </Badge>
+              )}
             </Group>
-            <Tabs value={activeTab} onChange={handleActiveTabChange} variant="pills">
-            <Tabs.List grow={isMobile}>
-              <Tabs.Tab value="list">{isMobile ? 'Solicitudes' : 'Solicitudes de documentos'}</Tabs.Tab>
-              <Tabs.Tab value="generate">{isMobile ? 'Generar' : 'Generar documento'}</Tabs.Tab>
-            </Tabs.List>
+            <Tabs value={activeTab} variant="pills">
 
             <Tabs.Panel value="list" pt="md">
               <Group justify="space-between" mb="sm">
@@ -3314,4 +3344,8 @@ export default function SolicitudesIpadPage() {
       </Modal>
     </main>
   );
+}
+
+export default function SolicitudesIpadPage() {
+  return <TransportRequestsWorkspace mode="requests" />;
 }

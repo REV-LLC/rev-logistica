@@ -8,6 +8,7 @@ export default function TransportLayout({ children }: { children: React.ReactNod
     <AuthGuard
       routeRoleRules={[
         { prefix: '/transport/requests', roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+        { prefix: '/transport/generate', roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
         { prefix: '/transport/cost', roles: ['ADMIN', 'OFFICE'] },
         { prefix: '/transport/vehicles', roles: ['ADMIN', 'OFFICE'] },
         { prefix: '/transport/worksites', roles: ['ADMIN', 'OFFICE'] },

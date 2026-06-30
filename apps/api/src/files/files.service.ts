@@ -1,14 +1,21 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { DocumentType, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
+import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type UploadedBusinessFile = {
@@ -25,13 +32,48 @@ const MAX_FILES_PER_UPLOAD = 12;
 const STORAGE_PROVIDER = 'R2';
 const EVIDENCE_FILE_TYPE = 'PHOTO_EVIDENCE';
 
-const ENTITY_TYPES = new Set<FileEntityType>(['DOCUMENT', 'EMPLOYEE', 'VEHICLE', 'CUSTOMER']);
+const ENTITY_TYPES = new Set<FileEntityType>([
+  'DOCUMENT',
+  'EMPLOYEE',
+  'VEHICLE',
+  'CUSTOMER',
+]);
 
 const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
-  DOCUMENT: new Set(['PHOTO_EVIDENCE', 'SIGNATURE_RECEIVED', 'DOCUMENTO', 'FIRMA', 'OTRO']),
-  EMPLOYEE: new Set(['HOJA_VIDA', 'CEDULA', 'ARL', 'EPS', 'CURSO_ALTURAS', 'CONTRATO', 'CERTIFICADO', 'OTRO']),
-  VEHICLE: new Set(['TARJETA_PROPIEDAD', 'SOAT', 'SEGURO', 'TECNOMECANICA', 'CONTRATO', 'MANTENIMIENTO', 'OTRO']),
-  CUSTOMER: new Set(['RUT', 'CAMARA_COMERCIO', 'REPRESENTANTE_LEGAL', 'CONTRATO', 'CERTIFICADO', 'OTRO']),
+  DOCUMENT: new Set([
+    'PHOTO_EVIDENCE',
+    'SIGNATURE_RECEIVED',
+    'DOCUMENTO',
+    'FIRMA',
+    'OTRO',
+  ]),
+  EMPLOYEE: new Set([
+    'HOJA_VIDA',
+    'CEDULA',
+    'ARL',
+    'EPS',
+    'CURSO_ALTURAS',
+    'CONTRATO',
+    'CERTIFICADO',
+    'OTRO',
+  ]),
+  VEHICLE: new Set([
+    'TARJETA_PROPIEDAD',
+    'SOAT',
+    'SEGURO',
+    'TECNOMECANICA',
+    'CONTRATO',
+    'MANTENIMIENTO',
+    'OTRO',
+  ]),
+  CUSTOMER: new Set([
+    'RUT',
+    'CAMARA_COMERCIO',
+    'REPRESENTANTE_LEGAL',
+    'CONTRATO',
+    'CERTIFICADO',
+    'OTRO',
+  ]),
 };
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -53,7 +95,8 @@ const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',
   'application/pdf': 'pdf',
   'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'docx',
   'application/vnd.ms-excel': 'xls',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
   'text/plain': 'txt',
@@ -62,7 +105,12 @@ const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
 
 @Injectable()
 export class FilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(FilesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly documentEmails: DocumentCustomerEmailsService,
+  ) {}
 
   getCategories(entityType: string) {
     const normalized = this.normalizeEntityType(entityType);
@@ -72,7 +120,11 @@ export class FilesService {
     }));
   }
 
-  async listEntityFiles(entityTypeInput: string, entityId: string, user: { id: string; role: Role }) {
+  async listEntityFiles(
+    entityTypeInput: string,
+    entityId: string,
+    user: { id: string; role: Role },
+  ) {
     const entityType = this.normalizeEntityType(entityTypeInput);
     await this.assertEntityAccess(entityType, entityId, user, 'read');
     return this.prisma.fileObject.findMany({
@@ -100,7 +152,9 @@ export class FilesService {
       throw new BadRequestException('At least one file is required');
     }
     if (files.length > MAX_FILES_PER_UPLOAD) {
-      throw new BadRequestException(`Maximum ${MAX_FILES_PER_UPLOAD} files per upload`);
+      throw new BadRequestException(
+        `Maximum ${MAX_FILES_PER_UPLOAD} files per upload`,
+      );
     }
 
     const category = this.normalizeCategory(entityType, payload.category);
@@ -128,7 +182,9 @@ export class FilesService {
       createdBy: string;
     }> = [];
     for (const file of files) {
-      const extension = EXTENSION_BY_MIME_TYPE[file.mimetype] ?? this.inferExtension(file.originalname);
+      const extension =
+        EXTENSION_BY_MIME_TYPE[file.mimetype] ??
+        this.inferExtension(file.originalname);
       const objectKey = `${entityType.toLowerCase()}/${entityId}/${category.toLowerCase()}/${randomUUID()}.${extension}`;
       await s3.send(
         new PutObjectCommand({
@@ -171,18 +227,29 @@ export class FilesService {
     return { files: uploaded };
   }
 
-  uploadDocumentEvidence(
+  async uploadDocumentEvidence(
     documentId: string,
     files: UploadedBusinessFile[] | undefined,
     user: { id: string; role: Role },
   ) {
-    return this.uploadEntityFiles(
+    const result = await this.uploadEntityFiles(
       'DOCUMENT',
       documentId,
       files,
       { category: EVIDENCE_FILE_TYPE },
       user,
     );
+
+    try {
+      await this.documentEmails.sendDraftIfNeeded(documentId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Draft customer email failed after evidence upload: ${message}`,
+      );
+    }
+
+    return result;
   }
 
   async getFileDownload(fileId: string, user: { id: string; role: Role }) {
@@ -202,7 +269,9 @@ export class FilesService {
     });
     if (!file) throw new NotFoundException('File not found');
     if (!file.entityType || !file.entityId) {
-      throw new BadRequestException('File is not linked to a downloadable entity');
+      throw new BadRequestException(
+        'File is not linked to a downloadable entity',
+      );
     }
     await this.assertEntityAccess(file.entityType, file.entityId, user, 'read');
     if (!file.objectKey) {
@@ -222,10 +291,14 @@ export class FilesService {
 
     return {
       body: response.Body as Readable,
-      contentType: response.ContentType ?? file.mimeType ?? 'application/octet-stream',
+      contentType:
+        response.ContentType ?? file.mimeType ?? 'application/octet-stream',
       contentLength: response.ContentLength,
       etag: response.ETag,
-      fileName: file.displayName?.trim() || file.originalName?.trim() || `${file.id}.bin`,
+      fileName:
+        file.displayName?.trim() ||
+        file.originalName?.trim() ||
+        `${file.id}.bin`,
     };
   }
 
@@ -243,7 +316,12 @@ export class FilesService {
     if (!file.entityType || !file.entityId) {
       throw new BadRequestException('File is not linked to a removable entity');
     }
-    await this.assertEntityAccess(file.entityType, file.entityId, user, 'write');
+    await this.assertEntityAccess(
+      file.entityType,
+      file.entityId,
+      user,
+      'write',
+    );
 
     if (file.objectKey) {
       const config = this.getR2Config();
@@ -303,7 +381,9 @@ export class FilesService {
   ) {
     if (mode === 'write' && user.role === Role.DRIVER) {
       if (entityType !== 'DOCUMENT') {
-        throw new ForbiddenException('Drivers can only upload document evidence');
+        throw new ForbiddenException(
+          'Drivers can only upload document evidence',
+        );
       }
     }
 
@@ -313,29 +393,45 @@ export class FilesService {
         select: { id: true, type: true, createdBy: true },
       });
       if (!document) throw new NotFoundException('Document not found');
-      if (document.type !== DocumentType.REMISSION && document.type !== DocumentType.RETURN) {
-        throw new BadRequestException('Files are only available for remissions and returns');
+      if (
+        document.type !== DocumentType.REMISSION &&
+        document.type !== DocumentType.RETURN
+      ) {
+        throw new BadRequestException(
+          'Files are only available for remissions and returns',
+        );
       }
       if (user.role === Role.DRIVER && document.createdBy !== user.id) {
-        throw new ForbiddenException('Drivers can only access their own document files');
+        throw new ForbiddenException(
+          'Drivers can only access their own document files',
+        );
       }
       return;
     }
 
     if (entityType === 'EMPLOYEE') {
-      const found = await this.prisma.employee.findUnique({ where: { id: entityId }, select: { id: true } });
+      const found = await this.prisma.employee.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
       if (!found) throw new NotFoundException('Employee not found');
       return;
     }
 
     if (entityType === 'VEHICLE') {
-      const found = await this.prisma.vehicle.findUnique({ where: { id: entityId }, select: { id: true } });
+      const found = await this.prisma.vehicle.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
       if (!found) throw new NotFoundException('Vehicle not found');
       return;
     }
 
     if (entityType === 'CUSTOMER') {
-      const found = await this.prisma.customer.findUnique({ where: { id: entityId }, select: { id: true } });
+      const found = await this.prisma.customer.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
       if (!found) throw new NotFoundException('Customer not found');
       return;
     }
@@ -354,7 +450,9 @@ export class FilesService {
       throw new BadRequestException('File type is not allowed');
     }
     if (!this.hasExpectedSignature(file.buffer, file.mimetype)) {
-      throw new BadRequestException('File content does not match the declared type');
+      throw new BadRequestException(
+        'File content does not match the declared type',
+      );
     }
   }
 
@@ -379,8 +477,13 @@ export class FilesService {
     if (mimetype.includes('openxmlformats-officedocument')) {
       return buffer.subarray(0, 2).toString('ascii') === 'PK';
     }
-    if (mimetype === 'application/msword' || mimetype === 'application/vnd.ms-excel') {
-      return buffer.subarray(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]));
+    if (
+      mimetype === 'application/msword' ||
+      mimetype === 'application/vnd.ms-excel'
+    ) {
+      return buffer
+        .subarray(0, 4)
+        .equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]));
     }
     return mimetype === 'text/plain' || mimetype === 'text/csv';
   }
@@ -404,7 +507,10 @@ export class FilesService {
   }
 
   private inferExtension(fileName: string) {
-    const match = fileName.trim().toLowerCase().match(/\.([a-z0-9]{1,8})$/);
+    const match = fileName
+      .trim()
+      .toLowerCase()
+      .match(/\.([a-z0-9]{1,8})$/);
     return match?.[1] ?? 'bin';
   }
 
@@ -430,7 +536,13 @@ export class FilesService {
     const bucket = process.env.R2_BUCKET;
     const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.replace(/\/+$/, '');
 
-    if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !publicBaseUrl) {
+    if (
+      !accountId ||
+      !accessKeyId ||
+      !secretAccessKey ||
+      !bucket ||
+      !publicBaseUrl
+    ) {
       throw new InternalServerErrorException('R2 storage is not configured');
     }
 

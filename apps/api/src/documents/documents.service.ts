@@ -1,5 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DocumentItemBillingStatus, DocumentStatus, DocumentType, Prisma, Role } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  DocumentItemBillingStatus,
+  DocumentStatus,
+  DocumentType,
+  Prisma,
+  Role,
+} from '@prisma/client';
+import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 
@@ -17,6 +28,7 @@ export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryService: InventoryService,
+    private readonly documentEmails: DocumentCustomerEmailsService,
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -25,7 +37,10 @@ export class DocumentsService {
     return null;
   }
 
-  private normalizeRequestedConsecutive(type: DocumentType, requested?: string) {
+  private normalizeRequestedConsecutive(
+    type: DocumentType,
+    requested?: string,
+  ) {
     const prefix = this.getConsecutivePrefix(type);
     const raw = requested?.trim() ?? '';
     if (!raw) return null;
@@ -39,7 +54,10 @@ export class DocumentsService {
   }
 
   private parseConsecutiveSuffix(value: string, prefix: string) {
-    const match = value.trim().toUpperCase().match(new RegExp(`^${prefix}(\\d+)$`));
+    const match = value
+      .trim()
+      .toUpperCase()
+      .match(new RegExp(`^${prefix}(\\d+)$`));
     if (!match) return null;
     return Number(match[1]);
   }
@@ -167,46 +185,49 @@ export class DocumentsService {
     }));
   }
 
-  private async splitRemissionDraftDocument(
-    document: {
+  private async splitRemissionDraftDocument(document: {
+    id: string;
+    type: DocumentType;
+    status: DocumentStatus;
+    consecutive: string | null;
+    warehouseId: string | null;
+    customerWorksiteId: string | null;
+    createdBy: string;
+    docDate: Date;
+    notes: string | null;
+    officeModifiedAt?: Date | null;
+    officeModifiedBy?: string | null;
+    items: Array<{
       id: string;
-      type: DocumentType;
-      status: DocumentStatus;
-      consecutive: string | null;
-      warehouseId: string | null;
-      customerWorksiteId: string | null;
-      createdBy: string;
-      docDate: Date;
-      notes: string | null;
-      items: Array<{
-        id: string;
-        skuId: string | null;
-        assetId: string | null;
-        quantity: Prisma.Decimal | null;
-        requestedTag: string | null;
-        condition: string | null;
-        conditionNote: string | null;
-        damageCostEstimate: Prisma.Decimal | null;
-        billingCutoffDate: Date | null;
-        returnedAt: Date | null;
-        billingStatus: DocumentItemBillingStatus;
-        billingNote: string | null;
-        billingUpdatedAt: Date | null;
-        billingUpdatedBy: string | null;
-      }>;
-      files: Array<{
-        fileType: string;
-        storageKey: string;
-        mimeType: string | null;
-        objectKey?: string | null;
-        originalName?: string | null;
-        displayName?: string | null;
-        sizeBytes?: number | null;
-        expiresAt?: Date | null;
-      }>;
-    },
-  ) {
-    const chunks = this.chunkItems(document.items, REMISSION_ITEMS_PER_DOCUMENT);
+      skuId: string | null;
+      assetId: string | null;
+      quantity: Prisma.Decimal | null;
+      requestedTag: string | null;
+      condition: string | null;
+      conditionNote: string | null;
+      damageCostEstimate: Prisma.Decimal | null;
+      billingCutoffDate: Date | null;
+      returnedAt: Date | null;
+      billingStatus: DocumentItemBillingStatus;
+      billingNote: string | null;
+      billingUpdatedAt: Date | null;
+      billingUpdatedBy: string | null;
+    }>;
+    files: Array<{
+      fileType: string;
+      storageKey: string;
+      mimeType: string | null;
+      objectKey?: string | null;
+      originalName?: string | null;
+      displayName?: string | null;
+      sizeBytes?: number | null;
+      expiresAt?: Date | null;
+    }>;
+  }) {
+    const chunks = this.chunkItems(
+      document.items,
+      REMISSION_ITEMS_PER_DOCUMENT,
+    );
     if (chunks.length <= 1) return [document.id];
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -222,7 +243,10 @@ export class DocumentsService {
           });
 
           for (const chunk of chunks.slice(1)) {
-            const consecutive = await this.resolveConsecutive(document.type, tx);
+            const consecutive = await this.resolveConsecutive(
+              document.type,
+              tx,
+            );
             const created = await tx.document.create({
               data: {
                 type: document.type,
@@ -233,6 +257,8 @@ export class DocumentsService {
                 createdBy: document.createdBy,
                 docDate: document.docDate,
                 notes: document.notes,
+                officeModifiedAt: document.officeModifiedAt ?? null,
+                officeModifiedBy: document.officeModifiedBy ?? null,
               },
               select: { id: true },
             });
@@ -274,7 +300,9 @@ export class DocumentsService {
       }
     }
 
-    throw new BadRequestException('No se pudo dividir la remisión con consecutivos únicos');
+    throw new BadRequestException(
+      'No se pudo dividir la remisión con consecutivos únicos',
+    );
   }
 
   private async approveLoadedRequestDocument(
@@ -314,7 +342,9 @@ export class DocumentsService {
         );
       } else {
         if (!document.warehouseId) {
-          throw new BadRequestException('La remisión no tiene bodega de ubicación');
+          throw new BadRequestException(
+            'La remisión no tiene bodega de ubicación',
+          );
         }
         await this.inventoryService.moveOut(
           {
@@ -405,7 +435,9 @@ export class DocumentsService {
   private parseDocumentDateFromNotes(notes?: string | null) {
     if (!notes) return undefined;
     const parts = notes.split('|').map((value) => value.trim());
-    const entry = parts.find((part) => part.toLowerCase().startsWith('fecha documento:'));
+    const entry = parts.find((part) =>
+      part.toLowerCase().startsWith('fecha documento:'),
+    );
     if (!entry) return undefined;
     const [, ...rest] = entry.split(':');
     const rawDate = rest.join(':').trim();
@@ -452,12 +484,17 @@ export class DocumentsService {
     createdBy: string;
   }) {
     const type = payload.type as DocumentType;
-    const status = (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
+    const status =
+      (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const consecutive = await this.resolveConsecutive(type, tx, payload.number);
+          const consecutive = await this.resolveConsecutive(
+            type,
+            tx,
+            payload.number,
+          );
           return tx.document.create({
             data: {
               type,
@@ -506,8 +543,13 @@ export class DocumentsService {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const consecutive = await this.resolveConsecutive(type, tx, payload.number);
-          const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
+          const consecutive = await this.resolveConsecutive(
+            type,
+            tx,
+            payload.number,
+          );
+          const documentDate =
+            this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
           const defaultBillingCutoffDate =
             type === DocumentType.RETURN ? documentDate : null;
           const document = await tx.document.create({
@@ -534,7 +576,10 @@ export class DocumentsService {
                 condition: item.ownerWarehouseId ?? null,
                 conditionNote: item.conditionNote?.trim() || null,
                 billingCutoffDate: defaultBillingCutoffDate,
-                billingStatus: this.getBillingStatus(defaultBillingCutoffDate, null),
+                billingStatus: this.getBillingStatus(
+                  defaultBillingCutoffDate,
+                  null,
+                ),
               })),
             });
           }
@@ -581,6 +626,7 @@ export class DocumentsService {
         conditionNote?: string;
       }>;
     },
+    userId: string,
   ) {
     const existing = await this.prisma.document.findUnique({
       where: { id: documentId },
@@ -598,12 +644,20 @@ export class DocumentsService {
     });
     if (!existing) throw new NotFoundException('Document not found');
     if (existing.status !== DocumentStatus.DRAFT) {
-      throw new BadRequestException('Solo se puede editar un documento en estado DRAFT');
+      throw new BadRequestException(
+        'Solo se puede editar un documento en estado DRAFT',
+      );
     }
 
-    const nextType = (payload.type as DocumentType | undefined) ?? existing.type;
-    if (nextType !== DocumentType.REMISSION && nextType !== DocumentType.RETURN) {
-      throw new BadRequestException('Solo se permiten solicitudes de remisión o devolución');
+    const nextType =
+      (payload.type as DocumentType | undefined) ?? existing.type;
+    if (
+      nextType !== DocumentType.REMISSION &&
+      nextType !== DocumentType.RETURN
+    ) {
+      throw new BadRequestException(
+        'Solo se permiten solicitudes de remisión o devolución',
+      );
     }
 
     try {
@@ -612,8 +666,12 @@ export class DocumentsService {
           payload.number !== undefined
             ? await this.resolveConsecutive(nextType, tx, payload.number)
             : existing.consecutive;
-        const nextNotes = payload.notes !== undefined ? payload.notes ?? null : existing.notes;
-        const nextDocDate = this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
+        const nextNotes =
+          payload.notes !== undefined
+            ? (payload.notes ?? null)
+            : existing.notes;
+        const nextDocDate =
+          this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
         const defaultBillingCutoffDate =
           nextType === DocumentType.RETURN ? nextDocDate : null;
         const updated = await tx.document.update({
@@ -631,6 +689,8 @@ export class DocumentsService {
                 : existing.customerWorksiteId,
             docDate: nextDocDate,
             notes: nextNotes,
+            officeModifiedAt: new Date(),
+            officeModifiedBy: userId,
           },
           select: { id: true },
         });
@@ -650,7 +710,10 @@ export class DocumentsService {
               condition: item.ownerWarehouseId ?? null,
               conditionNote: item.conditionNote?.trim() || null,
               billingCutoffDate: defaultBillingCutoffDate,
-              billingStatus: this.getBillingStatus(defaultBillingCutoffDate, null),
+              billingStatus: this.getBillingStatus(
+                defaultBillingCutoffDate,
+                null,
+              ),
             })),
           });
         }
@@ -682,8 +745,14 @@ export class DocumentsService {
     },
     userId: string,
   ) {
-    const cutoffInput = this.parseBillingDate(payload.billingCutoffDate, 'billingCutoffDate');
-    const returnedInput = this.parseBillingDate(payload.returnedAt, 'returnedAt');
+    const cutoffInput = this.parseBillingDate(
+      payload.billingCutoffDate,
+      'billingCutoffDate',
+    );
+    const returnedInput = this.parseBillingDate(
+      payload.returnedAt,
+      'returnedAt',
+    );
     if (
       cutoffInput !== undefined &&
       returnedInput !== undefined &&
@@ -691,7 +760,9 @@ export class DocumentsService {
       returnedInput &&
       cutoffInput.getTime() > returnedInput.getTime()
     ) {
-      throw new BadRequestException('billingCutoffDate no puede ser posterior a returnedAt');
+      throw new BadRequestException(
+        'billingCutoffDate no puede ser posterior a returnedAt',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -706,7 +777,9 @@ export class DocumentsService {
       });
       if (!document) throw new NotFoundException('Document not found');
       if (document.type !== DocumentType.RETURN) {
-        throw new BadRequestException('Solo aplica para documentos de devolución');
+        throw new BadRequestException(
+          'Solo aplica para documentos de devolución',
+        );
       }
 
       const item = await tx.documentItem.findFirst({
@@ -719,19 +792,33 @@ export class DocumentsService {
         throw new NotFoundException('Document item not found');
       }
 
-      const nextCutoff = cutoffInput !== undefined ? cutoffInput : item.billingCutoffDate;
-      const nextReturned = returnedInput !== undefined ? returnedInput : item.returnedAt;
-      if (nextCutoff && nextReturned && nextCutoff.getTime() > nextReturned.getTime()) {
-        throw new BadRequestException('billingCutoffDate no puede ser posterior a returnedAt');
+      const nextCutoff =
+        cutoffInput !== undefined ? cutoffInput : item.billingCutoffDate;
+      const nextReturned =
+        returnedInput !== undefined ? returnedInput : item.returnedAt;
+      if (
+        nextCutoff &&
+        nextReturned &&
+        nextCutoff.getTime() > nextReturned.getTime()
+      ) {
+        throw new BadRequestException(
+          'billingCutoffDate no puede ser posterior a returnedAt',
+        );
       }
 
-      const note = payload.note !== undefined ? payload.note?.trim() || null : item.billingNote;
+      const note =
+        payload.note !== undefined
+          ? payload.note?.trim() || null
+          : item.billingNote;
       const updated = await tx.documentItem.update({
         where: { id: item.id },
         data: {
           billingCutoffDate: nextCutoff ?? null,
           returnedAt: nextReturned ?? null,
-          billingStatus: this.getBillingStatus(nextCutoff ?? null, nextReturned ?? null),
+          billingStatus: this.getBillingStatus(
+            nextCutoff ?? null,
+            nextReturned ?? null,
+          ),
           billingNote: note,
           billingUpdatedAt: new Date(),
           billingUpdatedBy: userId,
@@ -782,7 +869,11 @@ export class DocumentsService {
       },
     });
 
-    const creatorIds = [...new Set(documents.map((document) => document.createdBy).filter(Boolean))];
+    const creatorIds = [
+      ...new Set(
+        documents.map((document) => document.createdBy).filter(Boolean),
+      ),
+    ];
     const creators = creatorIds.length
       ? await this.prisma.user.findMany({
           where: { id: { in: creatorIds } },
@@ -793,7 +884,9 @@ export class DocumentsService {
           },
         })
       : [];
-    const creatorById = new Map(creators.map((creator) => [creator.id, creator]));
+    const creatorById = new Map(
+      creators.map((creator) => [creator.id, creator]),
+    );
 
     return documents.map((document) => ({
       ...document,
@@ -803,7 +896,9 @@ export class DocumentsService {
         return {
           id: creator.id,
           email: creator.email,
-          name: creator.employee ? `${creator.employee.name} ${creator.employee.lastName}`.trim() : creator.email,
+          name: creator.employee
+            ? `${creator.employee.name} ${creator.employee.lastName}`.trim()
+            : creator.email,
         };
       })(),
     }));
@@ -812,7 +907,9 @@ export class DocumentsService {
   private parseDeliveryMode(notes?: string | null): 'WAREHOUSE' | 'ON_SITE' {
     if (!notes) return 'WAREHOUSE';
     const parts = notes.split('|').map((value) => value.trim());
-    const entry = parts.find((part) => part.toLowerCase().startsWith('entrega:'));
+    const entry = parts.find((part) =>
+      part.toLowerCase().startsWith('entrega:'),
+    );
     if (!entry) return 'WAREHOUSE';
     const [, modeRaw = ''] = entry.split(':');
     const mode = modeRaw.trim().toUpperCase();
@@ -829,10 +926,18 @@ export class DocumentsService {
     }>,
   ) {
     if (!items.length) {
-      throw new BadRequestException('El documento no tiene items para ejecutar');
+      throw new BadRequestException(
+        'El documento no tiene items para ejecutar',
+      );
     }
 
-    const skuIds = [...new Set(items.map((item) => item.skuId).filter((value): value is string => Boolean(value)))];
+    const skuIds = [
+      ...new Set(
+        items
+          .map((item) => item.skuId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
     const skuControlTypeById = new Map<string, string>();
     if (skuIds.length) {
       const skus = await this.prisma.sku.findMany({
@@ -847,91 +952,103 @@ export class DocumentsService {
       });
     }
 
-    return Promise.all(items.map(async (item, index) => {
-      const ownerWarehouseId = item.condition?.trim();
-      if (!ownerWarehouseId) {
-        throw new BadRequestException(
-          `Item ${index + 1} sin bodega dueña (ownerWarehouseId)`,
-        );
-      }
-      if (item.skuId && item.assetId) {
-        throw new BadRequestException(`Item ${index + 1} inválido: no puede tener sku y asset`);
-      }
-      if (!item.skuId && !item.assetId) {
-        if (item.requestedTag?.trim()) {
+    return Promise.all(
+      items.map(async (item, index) => {
+        const ownerWarehouseId = item.condition?.trim();
+        if (!ownerWarehouseId) {
           throw new BadRequestException(
-            `Item ${index + 1} (${item.requestedTag}) sin resolver: mapéalo a SKU o equipo antes de aprobar`,
+            `Item ${index + 1} sin bodega dueña (ownerWarehouseId)`,
           );
         }
-        throw new BadRequestException(`Item ${index + 1} inválido: falta sku/asset`);
-      }
-      if (item.skuId) {
-        const controlType = skuControlTypeById.get(item.skuId) ?? 'BULK';
-        if (controlType === 'SERIAL') {
-          const internalFromTag = (() => {
-            const tag = item.requestedTag?.trim() ?? '';
-            const match = tag.match(/#\s*(\d+)/);
-            if (!match) return null;
-            const parsed = Number(match[1]);
-            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-          })();
-
-          const assets = await this.prisma.asset.findMany({
-            where: {
-              skuId: item.skuId,
-              warehouseOwnerId: ownerWarehouseId,
-              warehouseCurrentId: ownerWarehouseId,
-              active: true,
-            },
-            select: {
-              id: true,
-              internalNumber: true,
-              serialOrEngine: true,
-            },
-            orderBy: { internalNumber: 'asc' },
-          });
-
-          if (!assets.length) {
+        if (item.skuId && item.assetId) {
+          throw new BadRequestException(
+            `Item ${index + 1} inválido: no puede tener sku y asset`,
+          );
+        }
+        if (!item.skuId && !item.assetId) {
+          if (item.requestedTag?.trim()) {
             throw new BadRequestException(
-              `Item ${index + 1} (${item.requestedTag ?? 'serial'}) sin equipo disponible en bodega`,
+              `Item ${index + 1} (${item.requestedTag}) sin resolver: mapéalo a SKU o equipo antes de aprobar`,
             );
           }
+          throw new BadRequestException(
+            `Item ${index + 1} inválido: falta sku/asset`,
+          );
+        }
+        if (item.skuId) {
+          const controlType = skuControlTypeById.get(item.skuId) ?? 'BULK';
+          if (controlType === 'SERIAL') {
+            const internalFromTag = (() => {
+              const tag = item.requestedTag?.trim() ?? '';
+              const match = tag.match(/#\s*(\d+)/);
+              if (!match) return null;
+              const parsed = Number(match[1]);
+              return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+            })();
 
-          const availableNumbers = assets.map((asset) => `#${asset.internalNumber}`).join(', ');
-          if (internalFromTag == null) {
-            throw new BadRequestException(
-              `Item ${index + 1} (${item.requestedTag ?? 'serial'}) debe incluir número interno (#). Disponibles: ${availableNumbers}`,
+            const assets = await this.prisma.asset.findMany({
+              where: {
+                skuId: item.skuId,
+                warehouseOwnerId: ownerWarehouseId,
+                warehouseCurrentId: ownerWarehouseId,
+                active: true,
+              },
+              select: {
+                id: true,
+                internalNumber: true,
+                serialOrEngine: true,
+              },
+              orderBy: { internalNumber: 'asc' },
+            });
+
+            if (!assets.length) {
+              throw new BadRequestException(
+                `Item ${index + 1} (${item.requestedTag ?? 'serial'}) sin equipo disponible en bodega`,
+              );
+            }
+
+            const availableNumbers = assets
+              .map((asset) => `#${asset.internalNumber}`)
+              .join(', ');
+            if (internalFromTag == null) {
+              throw new BadRequestException(
+                `Item ${index + 1} (${item.requestedTag ?? 'serial'}) debe incluir número interno (#). Disponibles: ${availableNumbers}`,
+              );
+            }
+
+            const resolvedAsset = assets.find(
+              (asset) => asset.internalNumber === internalFromTag,
             );
+            if (!resolvedAsset) {
+              throw new BadRequestException(
+                `Item ${index + 1} pidió #${internalFromTag}, pero no existe en esa bodega. Disponibles: ${availableNumbers}`,
+              );
+            }
+
+            return {
+              assetId: resolvedAsset.id,
+              ownerWarehouseId,
+            };
           }
 
-          const resolvedAsset = assets.find((asset) => asset.internalNumber === internalFromTag);
-          if (!resolvedAsset) {
+          const quantity = Number(item.quantity ?? 0);
+          if (!Number.isFinite(quantity) || quantity <= 0) {
             throw new BadRequestException(
-              `Item ${index + 1} pidió #${internalFromTag}, pero no existe en esa bodega. Disponibles: ${availableNumbers}`,
+              `Item ${index + 1} inválido: cantidad debe ser > 0`,
             );
           }
-
           return {
-            assetId: resolvedAsset.id,
+            skuId: item.skuId,
+            quantity,
             ownerWarehouseId,
           };
         }
-
-        const quantity = Number(item.quantity ?? 0);
-        if (!Number.isFinite(quantity) || quantity <= 0) {
-          throw new BadRequestException(`Item ${index + 1} inválido: cantidad debe ser > 0`);
-        }
         return {
-          skuId: item.skuId,
-          quantity,
+          assetId: item.assetId as string,
           ownerWarehouseId,
         };
-      }
-      return {
-        assetId: item.assetId as string,
-        ownerWarehouseId,
-      };
-    }));
+      }),
+    );
   }
 
   async approveRequestDocument(documentId: string, userId: string) {
@@ -967,10 +1084,17 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
     if (document.status !== DocumentStatus.DRAFT) {
-      throw new BadRequestException('Solo se puede aprobar un documento en estado DRAFT');
+      throw new BadRequestException(
+        'Solo se puede aprobar un documento en estado DRAFT',
+      );
     }
-    if (document.type !== DocumentType.REMISSION && document.type !== DocumentType.RETURN) {
-      throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
+    if (
+      document.type !== DocumentType.REMISSION &&
+      document.type !== DocumentType.RETURN
+    ) {
+      throw new BadRequestException(
+        'Solo se pueden aprobar remisiones o devoluciones',
+      );
     }
 
     if (
@@ -996,16 +1120,20 @@ export class DocumentsService {
         confirmedDocuments.push(
           await this.approveLoadedRequestDocument(splitDocument, userId),
         );
+        await this.documentEmails.sendFinalIfNeeded(splitDocumentId);
       }
       return {
         id: confirmedDocuments[0]?.id ?? document.id,
         status: DocumentStatus.CONFIRMED,
         splitDocumentIds: confirmedDocuments.map((entry) => entry.id),
-        splitConsecutives: confirmedDocuments.map((entry) => entry.consecutive).filter(Boolean),
+        splitConsecutives: confirmedDocuments
+          .map((entry) => entry.consecutive)
+          .filter(Boolean),
       };
     }
 
     const confirmed = await this.approveLoadedRequestDocument(document, userId);
+    await this.documentEmails.sendFinalIfNeeded(confirmed.id);
     return {
       id: confirmed.id,
       status: confirmed.status,
@@ -1014,18 +1142,27 @@ export class DocumentsService {
     };
   }
 
-  async rejectRequestDocument(documentId: string, userId: string, reason?: string) {
+  async rejectRequestDocument(
+    documentId: string,
+    userId: string,
+    reason?: string,
+  ) {
     const existing = await this.prisma.document.findUnique({
       where: { id: documentId },
       select: { id: true, status: true, consecutive: true },
     });
     if (!existing) throw new NotFoundException('Document not found');
     if (existing.status !== DocumentStatus.DRAFT) {
-      throw new BadRequestException('Solo se puede rechazar un documento en estado DRAFT');
+      throw new BadRequestException(
+        'Solo se puede rechazar un documento en estado DRAFT',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const rejectedConsecutive = await this.buildRejectedConsecutive(tx, existing.consecutive);
+      const rejectedConsecutive = await this.buildRejectedConsecutive(
+        tx,
+        existing.consecutive,
+      );
       const updated = await tx.document.update({
         where: { id: documentId },
         data: {
@@ -1166,5 +1303,9 @@ export class DocumentsService {
           : null,
       })),
     };
+  }
+
+  sendDraftCustomerEmail(documentId: string) {
+    return this.documentEmails.sendDraftIfNeeded(documentId);
   }
 }

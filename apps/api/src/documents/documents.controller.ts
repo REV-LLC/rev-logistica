@@ -69,11 +69,14 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     const type =
-      payload.type === DocumentType.REMISSION || payload.type === DocumentType.RETURN
+      payload.type === DocumentType.REMISSION ||
+      payload.type === DocumentType.RETURN
         ? payload.type
         : null;
     if (!type) {
-      throw new BadRequestException('Solo se permiten solicitudes de remisión o devolución');
+      throw new BadRequestException(
+        'Solo se permiten solicitudes de remisión o devolución',
+      );
     }
     return this.documentsService.createRequestDocument({
       ...payload,
@@ -94,11 +97,22 @@ export class DocumentsController {
       }),
     )
     payload: UpdateDocumentRequestDto,
+    @Req() request: Request & { user: JwtPayload },
   ) {
-    if (payload.type && payload.type !== DocumentType.REMISSION && payload.type !== DocumentType.RETURN) {
-      throw new BadRequestException('Solo se permiten solicitudes de remisión o devolución');
+    if (
+      payload.type &&
+      payload.type !== DocumentType.REMISSION &&
+      payload.type !== DocumentType.RETURN
+    ) {
+      throw new BadRequestException(
+        'Solo se permiten solicitudes de remisión o devolución',
+      );
     }
-    return this.documentsService.updateRequestDocument(documentId, payload);
+    return this.documentsService.updateRequestDocument(
+      documentId,
+      payload,
+      request.user.sub,
+    );
   }
 
   @Patch(':documentId/items/:itemId/billing')
@@ -153,7 +167,9 @@ export class DocumentsController {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       const message = error instanceof Error ? error.message : 'unknown error';
-      throw new InternalServerErrorException(`List documents failed: ${message}`);
+      throw new InternalServerErrorException(
+        `List documents failed: ${message}`,
+      );
     }
   }
 
@@ -172,9 +188,24 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     if (payload.action === 'APPROVE') {
-      return this.documentsService.approveRequestDocument(documentId, request.user.sub);
+      return this.documentsService.approveRequestDocument(
+        documentId,
+        request.user.sub,
+      );
     }
-    return this.documentsService.rejectRequestDocument(documentId, request.user.sub, payload.reason);
+    return this.documentsService.rejectRequestDocument(
+      documentId,
+      request.user.sub,
+      payload.reason,
+    );
+  }
+
+  @Post(':documentId/customer-email/draft')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  sendDraftCustomerEmail(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+  ) {
+    return this.documentsService.sendDraftCustomerEmail(documentId);
   }
 
   @Get(':documentId')
