@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Container,
+  FileButton,
   Group,
   Paper,
   Select,
@@ -17,6 +18,7 @@ import {
   Switch,
 } from '@mantine/core';
 import {
+  IconUpload,
   IconTruck,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
@@ -75,10 +77,29 @@ type CreateSerializedResponse = {
   };
 };
 
+type CatalogOption = {
+  groupKey: string;
+  value: string;
+  label: string;
+  active: boolean;
+};
+
 const FUEL_OPTIONS = [
-  { value: 'GASOLINA', label: 'Gasoline' },
+  { value: 'GASOLINA', label: 'Gasolina' },
   { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electric' },
+  { value: 'ELECTRICO', label: 'Electrico' },
+];
+const BASE_BRAND_OPTIONS = [
+  'BOBCAT',
+  'BOSCH',
+  'CATERPILLAR',
+  'DEWALT',
+  'GENIE',
+  'HILTI',
+  'HONDA',
+  'JLG',
+  'MAKITA',
+  'WACKER NEUSON',
 ];
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
@@ -88,6 +109,7 @@ export default function CreateSerializedAssetPage() {
   const [families, setFamilies] = useState<AssetFamily[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [units, setUnits] = useState<string[]>([]);
+  const [catalogBrandOptions, setCatalogBrandOptions] = useState<CatalogOption[]>([]);
   const [skus, setSkus] = useState<Sku[]>([]);
   const [loadingSkus, setLoadingSkus] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -117,7 +139,7 @@ export default function CreateSerializedAssetPage() {
   >('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
-  const [imageFileObjectId, setImageFileObjectId] = useState('');
+  const [assetImageFile, setAssetImageFile] = useState<File | null>(null);
   const [active, setActive] = useState(true);
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
@@ -146,15 +168,17 @@ export default function CreateSerializedAssetPage() {
       setLoading(true);
       setError(null);
       try {
-        const [familyData, warehouseData, unitData] = await Promise.all([
+        const [familyData, warehouseData, unitData, catalogBrandData] = await Promise.all([
           api<AssetFamily[]>('/asset-families?controlType=SERIAL'),
           api<Warehouse[]>('/warehouses'),
           api<string[]>('/skus/units'),
+          api<CatalogOption[]>('/catalog/options?groupKey=SERIAL_ASSET_BRANDS').catch(() => []),
         ]);
         if (!mounted) return;
         setFamilies(familyData);
         setWarehouses(warehouseData);
         setUnits(unitData);
+        setCatalogBrandOptions(catalogBrandData.filter((option) => option.active));
         const assetsData = await api<Asset[]>('/assets?take=500');
         if (!mounted) return;
         setAssets(assetsData);
@@ -219,6 +243,27 @@ export default function CreateSerializedAssetPage() {
   }));
   const unitOptions = units.map((unit) => ({ value: unit, label: unit }));
   const skuOptions = skus.map((sku) => ({ value: sku.id, label: sku.name }));
+  const brandOptions = useMemo(
+    () => {
+      const normalizedByValue = new Map<string, { value: string; label: string }>();
+      const addBrand = (rawValue: string | null | undefined, rawLabel?: string | null) => {
+        const value = rawValue?.trim().toUpperCase();
+        if (!value) return;
+        normalizedByValue.set(value, {
+          value,
+          label: rawLabel?.trim().toUpperCase() || value,
+        });
+      };
+      catalogBrandOptions.forEach((option) => addBrand(option.value, option.label));
+      BASE_BRAND_OPTIONS.forEach((brand) => addBrand(brand));
+      const existingBrands = assets
+        .map((asset) => asset.brand?.trim().toUpperCase() ?? '')
+        .filter((brand) => brand.length > 0);
+      existingBrands.forEach((brand) => addBrand(brand));
+      return [...normalizedByValue.values()].sort((a, b) => a.label.localeCompare(b.label));
+    },
+    [assets, catalogBrandOptions],
+  );
   const skuById = useMemo(() => {
     const map = new Map<string, Sku>();
     skus.forEach((sku) => map.set(sku.id, sku));
@@ -305,7 +350,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
-    setImageFileObjectId('');
+    setAssetImageFile(null);
     setActive(true);
     setOwnerWarehouseId(null);
     setWarehouseCurrentId(null);
@@ -332,7 +377,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
-    setImageFileObjectId('');
+    setAssetImageFile(null);
     setActive(true);
     setManualInternalNumber('');
     setFamilyLocked(false);
@@ -400,7 +445,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
-    setImageFileObjectId('');
+    setAssetImageFile(null);
     setActive(true);
     setManualInternalNumber('');
   };
@@ -522,7 +567,6 @@ export default function CreateSerializedAssetPage() {
           model: skuModel.trim() || undefined,
           year: skuYear === '' ? undefined : skuYear,
           fuel: skuFuel || undefined,
-          imageFileObjectId: imageFileObjectId.trim() || undefined,
           active,
           internalNumber:
             isAlternateOwnerWarehouse && manualInternalNumber !== ''
@@ -540,6 +584,27 @@ export default function CreateSerializedAssetPage() {
           json: payload,
         },
       );
+
+      if (assetImageFile) {
+        const formData = new FormData();
+        formData.append('files', assetImageFile);
+        formData.append('category', 'PHOTO');
+        formData.append('displayName', 'Imagen principal');
+
+        const upload = await api<{
+          files: Array<{ id: string; storageKey: string; mimeType?: string | null }>;
+        }>(`/files/entities/ASSET/${response.asset.id}`, {
+          method: 'POST',
+          body: formData,
+        });
+        const uploadedImage = upload.files.find((item) => item.mimeType?.startsWith('image/')) ?? upload.files[0];
+        if (uploadedImage) {
+          await api(`/assets/${response.asset.id}`, {
+            method: 'PATCH',
+            json: { imageFileObjectId: uploadedImage.id },
+          });
+        }
+      }
 
       const resolvedFamilyName =
         familyMode === 'existing'
@@ -921,12 +986,15 @@ export default function CreateSerializedAssetPage() {
                   )}
 
                   <Group grow className="mobile-stack">
-                    <TextInput
+                    <Select
                       label="Marca"
                       name="skuBrand"
-                      autoComplete="off"
                       value={skuBrand}
-                      onChange={(event) => setSkuBrand(event.currentTarget.value)}
+                      data={brandOptions}
+                      onChange={(value) => setSkuBrand(value ?? '')}
+                      placeholder="Selecciona marca"
+                      searchable
+                      clearable
                     />
                     <TextInput
                       label="Modelo"
@@ -1092,15 +1160,26 @@ export default function CreateSerializedAssetPage() {
                     placeholder="Ej: A3NV16797"
                     required
                   />
-                  <TextInput
-                    label="Imagen (ID interno, opcional)"
-                    name="imageFileObjectId"
-                    autoComplete="off"
-                    value={imageFileObjectId}
-                    onChange={(event) =>
-                      setImageFileObjectId(event.currentTarget.value)
-                    }
-                  />
+                  <Paper withBorder radius="md" p="sm" bg="gray.0">
+                    <Group justify="space-between" align="center" gap="md">
+                      <div>
+                        <Text fw={700}>Imagen</Text>
+                        <Text size="sm" c="dimmed">
+                          {assetImageFile ? assetImageFile.name : 'PNG, JPG o WEBP.'}
+                        </Text>
+                      </div>
+                      <FileButton
+                        onChange={setAssetImageFile}
+                        accept="image/png,image/jpeg,image/webp"
+                      >
+                        {(props) => (
+                          <Button {...props} variant="light" leftSection={<IconUpload size={16} />}>
+                            Seleccionar archivo
+                          </Button>
+                        )}
+                      </FileButton>
+                    </Group>
+                  </Paper>
                   {isAlternateOwnerWarehouse ? (
                     <NumberInput
                       ref={manualInternalNumberRef}
