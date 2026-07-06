@@ -33,6 +33,7 @@ import {
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type AssetResponse = {
   id: string;
@@ -187,9 +188,15 @@ export default function EditSerializedAssetPage() {
   );
 
   const autoDescription = useMemo(() => {
-    const parts = [asset?.sku?.name, brand.trim(), model.trim()].filter(Boolean);
-    return parts.length ? parts.join(' ') : '-';
-  }, [asset?.sku?.name, brand, model]);
+    if (!asset) return '-';
+    return getSerialDisplayName({
+      assetId: asset.id,
+      skuName: asset.sku?.name,
+      brand,
+      model,
+      serialOrEngine: asset.serialOrEngine,
+    });
+  }, [asset, brand, model]);
   const fuelLabel = useMemo(
     () => ((FUEL_OPTIONS.find((option) => option.value === fuel)?.label ?? fuel) || '-'),
     [fuel],

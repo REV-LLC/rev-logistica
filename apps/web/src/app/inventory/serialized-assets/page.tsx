@@ -47,6 +47,7 @@ type Sku = {
   replacementValue?: number | null;
   chargeType?: 'DAY' | 'HOUR' | null;
   minimumChargeHours?: number | null;
+  size?: string | null;
 };
 
 type Asset = {
@@ -89,6 +90,13 @@ const FUEL_OPTIONS = [
   { value: 'DIESEL', label: 'Diesel' },
   { value: 'ELECTRICO', label: 'Electrico' },
 ];
+const SIZE_OPTIONS = [
+  { value: 'EXTRA PEQUEÑO', label: 'Extra pequeño' },
+  { value: 'PEQUEÑO', label: 'Pequeño' },
+  { value: 'MEDIANO', label: 'Mediano' },
+  { value: 'GRANDE', label: 'Grande' },
+  { value: 'EXTRA GRANDE', label: 'Extra grande' },
+];
 const BASE_BRAND_OPTIONS = [
   'BOBCAT',
   'BOSCH',
@@ -103,6 +111,18 @@ const BASE_BRAND_OPTIONS = [
 ];
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const stripReferenceParts = (reference: string, parts: Array<string | number | null | undefined>) => {
+  let cleaned = reference.trim();
+  parts.forEach((part) => {
+    const value = String(part ?? '').trim();
+    if (!value) return;
+    cleaned = cleaned.replace(new RegExp(`(^|\\s)${escapeRegExp(value)}(?=\\s|$)`, 'gi'), ' ');
+  });
+  return cleaned.replace(/\s+/g, ' ').trim();
+};
 
 export default function CreateSerializedAssetPage() {
   const router = useRouter();
@@ -128,6 +148,7 @@ export default function CreateSerializedAssetPage() {
   const [skuModel, setSkuModel] = useState('');
   const [skuYear, setSkuYear] = useState<number | ''>('');
   const [skuFuel, setSkuFuel] = useState('');
+  const [skuSize, setSkuSize] = useState('');
   const [skuUnit, setSkuUnit] = useState('');
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | ''>('');
   const [skuPrice, setSkuPrice] = useState<number | ''>('');
@@ -342,6 +363,7 @@ export default function CreateSerializedAssetPage() {
     setSkuModel('');
     setSkuYear('');
     setSkuFuel('');
+    setSkuSize('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -369,6 +391,7 @@ export default function CreateSerializedAssetPage() {
     setSkuModel('');
     setSkuYear('');
     setSkuFuel('');
+    setSkuSize('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -437,6 +460,7 @@ export default function CreateSerializedAssetPage() {
     setSkuModel('');
     setSkuYear('');
     setSkuFuel('');
+    setSkuSize('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -560,6 +584,7 @@ export default function CreateSerializedAssetPage() {
             skuChargeType === 'HOUR' && skuMinimumChargeHours !== ''
               ? skuMinimumChargeHours
               : undefined,
+          size: skuSize || undefined,
         },
         asset: {
           serialOrEngine: serialOrEngine.trim(),
@@ -908,7 +933,6 @@ export default function CreateSerializedAssetPage() {
                       setSkuSuggestionId(value);
                       const selectedSku = value ? skuById.get(value) : undefined;
                       if (!selectedSku) return;
-                      setSkuName(selectedSku.name ?? '');
                       setSkuUnitWeight(
                         typeof selectedSku.unitWeight === 'number'
                           ? selectedSku.unitWeight
@@ -947,11 +971,14 @@ export default function CreateSerializedAssetPage() {
                           asset.year != null ||
                           asset.fuel?.trim(),
                       );
-                      if (!sampleAsset) return;
-                      setSkuBrand(sampleAsset.brand?.trim() ?? '');
-                      setSkuModel(sampleAsset.model?.trim() ?? '');
-                      setSkuYear(sampleAsset.year ?? '');
-                      setSkuFuel(sampleAsset.fuel?.trim() ?? '');
+                      const copiedBrand = sampleAsset?.brand?.trim() ?? '';
+                      const copiedModel = sampleAsset?.model?.trim() ?? '';
+                      setSkuBrand(copiedBrand);
+                      setSkuModel(copiedModel);
+                      setSkuYear(sampleAsset?.year ?? '');
+                      setSkuFuel(sampleAsset?.fuel?.trim() ?? '');
+                      setSkuSize(selectedSku.size?.trim() ?? '');
+                      setSkuName(stripReferenceParts(selectedSku.name ?? '', [copiedBrand, copiedModel]));
                     }}
                     placeholder={
                       loadingSkus
@@ -1023,6 +1050,14 @@ export default function CreateSerializedAssetPage() {
                       data={FUEL_OPTIONS}
                       value={skuFuel}
                       onChange={(value) => setSkuFuel(value ?? '')}
+                      clearable
+                    />
+                    <Select
+                      label="Tamaño"
+                      name="skuSize"
+                      data={SIZE_OPTIONS}
+                      value={skuSize}
+                      onChange={(value) => setSkuSize(value ?? '')}
                       clearable
                     />
                   </Group>
@@ -1261,6 +1296,11 @@ export default function CreateSerializedAssetPage() {
                     {isAlternateOwnerWarehouse ? (
                       <Badge color="grape" variant="light">
                         Bodega alterna
+                      </Badge>
+                    ) : null}
+                    {skuSize ? (
+                      <Badge color="teal" variant="light">
+                        {skuSize}
                       </Badge>
                     ) : null}
                   </Group>

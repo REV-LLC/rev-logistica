@@ -42,6 +42,7 @@ export class SkusService {
         replacementValue: true,
         chargeType: true,
         minimumChargeHours: true,
+        size: true,
         areaM2: true,
         unitWeight: true,
         active: true,
@@ -77,6 +78,7 @@ export class SkusService {
     replacementValue?: number;
     chargeType?: ChargeType;
     minimumChargeHours?: number;
+    size?: string;
     areaM2?: number;
     unitWeight?: number;
     active?: boolean;
@@ -102,6 +104,7 @@ export class SkusService {
           replacementValue: payload.replacementValue ?? null,
           chargeType: chargeConfig.chargeType,
           minimumChargeHours: chargeConfig.minimumChargeHours,
+          size: this.resolveSkuSize(payload.size),
           areaM2: payload.areaM2 ?? null,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
@@ -116,6 +119,7 @@ export class SkusService {
           replacementValue: true,
           chargeType: true,
           minimumChargeHours: true,
+          size: true,
           areaM2: true,
           unitWeight: true,
           active: true,
@@ -151,6 +155,7 @@ export class SkusService {
       replacementValue?: number;
       chargeType?: ChargeType;
       minimumChargeHours?: number;
+      size?: string;
       areaM2?: number;
       unitWeight?: number;
       active?: boolean;
@@ -194,6 +199,7 @@ export class SkusService {
           replacementValue: payload.replacementValue ?? undefined,
           chargeType: chargeConfig.chargeType,
           minimumChargeHours: chargeConfig.minimumChargeHours,
+          size: payload.size === undefined ? undefined : this.resolveSkuSize(payload.size),
           areaM2: payload.areaM2 ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
@@ -208,6 +214,7 @@ export class SkusService {
           replacementValue: true,
           chargeType: true,
           minimumChargeHours: true,
+          size: true,
           areaM2: true,
           unitWeight: true,
           active: true,
@@ -269,6 +276,23 @@ export class SkusService {
       chargeType: resolvedChargeType,
       minimumChargeHours: null,
     };
+  }
+
+  private resolveSkuSize(size?: string) {
+    const normalized = size?.trim().toUpperCase();
+    if (!normalized) return null;
+
+    const validSizes = new Set([
+      'EXTRA PEQUEÑO',
+      'PEQUEÑO',
+      'MEDIANO',
+      'GRANDE',
+      'EXTRA GRANDE',
+    ]);
+    if (!validSizes.has(normalized)) {
+      throw new BadRequestException('Tamaño de SKU invalido');
+    }
+    return normalized;
   }
 
   private resolveUpdateChargeConfig(

@@ -185,6 +185,7 @@ model Sku {
   replacementValue   Decimal?
   chargeType         ChargeType @default(DAY)
   minimumChargeHours Decimal?
+  size               String?
   areaM2             Decimal?
   unitWeight         Decimal?
   active             Boolean    @default(true)

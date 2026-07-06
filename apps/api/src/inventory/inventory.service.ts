@@ -1471,6 +1471,7 @@ export class InventoryService {
             replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
+            size: true,
             areaM2: true,
             unitWeight: true,
             active: true,
@@ -1518,6 +1519,7 @@ export class InventoryService {
           replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
+          size: sku?.size ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           active: sku?.active ?? null,
@@ -1547,6 +1549,7 @@ export class InventoryService {
           skuName: sku?.name ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
+          size: sku?.size ?? null,
           imageUrl: sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
@@ -1751,6 +1754,7 @@ export class InventoryService {
             replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
+            size: true,
             areaM2: true,
             unitWeight: true,
             assetFamily: { select: { code: true, name: true, controlType: true } },
@@ -1794,6 +1798,7 @@ export class InventoryService {
           replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
+          size: sku?.size ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           storageLocation: { warehouseId: null },
@@ -1822,6 +1827,7 @@ export class InventoryService {
           skuName: sku?.name ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
+          size: sku?.size ?? null,
           imageUrl: sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
@@ -2070,6 +2076,7 @@ export class InventoryService {
             replacementValue: true,
             chargeType: true,
             minimumChargeHours: true,
+            size: true,
             areaM2: true,
             unitWeight: true,
           },
@@ -2110,6 +2117,7 @@ export class InventoryService {
           replacementValue: sku?.replacementValue ?? null,
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
+          size: sku?.size ?? null,
           areaM2: sku?.areaM2 ?? null,
           unitWeight: sku?.unitWeight ?? null,
           initialQuantity,
@@ -2282,6 +2290,7 @@ export class InventoryService {
       replacementValue?: number;
       chargeType?: ChargeType;
       minimumChargeHours?: number;
+      size?: string;
       areaM2?: number;
     },
     assetFamilyId: string,
@@ -2326,6 +2335,7 @@ export class InventoryService {
         replacementValue: input.replacementValue ?? null,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
+        size: this.resolveSkuSize(input.size),
         areaM2: input.areaM2 ?? null,
         unitWeight: input.unitWeight ?? null,
         active: true,
@@ -2336,6 +2346,7 @@ export class InventoryService {
         replacementValue: input.replacementValue ?? undefined,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
+        size: this.resolveSkuSize(input.size) ?? undefined,
         areaM2: input.areaM2 ?? undefined,
         unitWeight: input.unitWeight ?? undefined,
         active: true,
@@ -2359,6 +2370,23 @@ export class InventoryService {
       chargeType: resolvedChargeType,
       minimumChargeHours: null,
     };
+  }
+
+  private resolveSkuSize(size?: string) {
+    const normalized = size?.trim().toUpperCase();
+    if (!normalized) return null;
+
+    const validSizes = new Set([
+      'EXTRA PEQUEÑO',
+      'PEQUEÑO',
+      'MEDIANO',
+      'GRANDE',
+      'EXTRA GRANDE',
+    ]);
+    if (!validSizes.has(normalized)) {
+      throw new BadRequestException('Tamaño de SKU invalido');
+    }
+    return normalized;
   }
 
   private parseMonthStart(month: string) {
