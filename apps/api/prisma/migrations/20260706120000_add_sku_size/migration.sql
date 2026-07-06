@@ -1,0 +1,1 @@
+ALTER TABLE "Sku" ADD COLUMN "size" TEXT;

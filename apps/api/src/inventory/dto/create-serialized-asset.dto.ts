@@ -48,6 +48,10 @@ export class SerializedSkuInput {
   @IsOptional()
   @IsNumber()
   minimumChargeHours?: number;
+
+  @IsOptional()
+  @IsString()
+  size?: string;
 }
 
 export class SerializedAssetInput {

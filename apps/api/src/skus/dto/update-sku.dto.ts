@@ -46,6 +46,10 @@ export class UpdateSkuDto {
   minimumChargeHours?: number;
 
   @IsOptional()
+  @IsString()
+  size?: string;
+
+  @IsOptional()
   @IsNumber()
   areaM2?: number;
 

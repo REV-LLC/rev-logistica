@@ -122,7 +122,7 @@ const roleOptions = [
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'MANAGER', label: 'Gerente' },
   { value: 'OPERATIONS_MANAGER', label: 'Jefe operaciones' },
-  { value: 'MECHANIC', label: 'Mecanico' },
+  { value: 'MECHANIC', label: 'Mecánico' },
   { value: 'WAREHOUSE_KEEPER', label: 'Bodeguero' },
   { value: 'OTHER', label: 'Otro' },
 ];
@@ -134,7 +134,7 @@ const roleLabelByValue: Record<RoleValue, string> = {
   OFFICE: 'Oficina',
   MANAGER: 'Gerente',
   OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecanico',
+  MECHANIC: 'Mecánico',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
 };
@@ -152,7 +152,7 @@ const appRoleLabelByValue: Record<AppRoleValue, string> = {
 };
 
 function getVehicleSummary(vehicles: VehicleOption[]) {
-  if (!vehicles.length) return 'Sin vehiculos asignados';
+  if (!vehicles.length) return 'Sin vehículos asignados';
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 
@@ -221,7 +221,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identification
+            Identificación
           </Text>
           <Text size="sm" mt={8}>
             {employee.documentId ?? '-'}
@@ -246,7 +246,7 @@ function EmployeeDetails({
 
         <Paper withBorder radius="md" p="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Vehiculos asignados
+            Vehículos asignados
           </Text>
           <Text size="sm" mt={8}>
             {getVehicleSummary(employee.vehicles)}
@@ -371,11 +371,11 @@ export default function EmployeesPage() {
       return;
     }
     if (form.loginEnabled && !form.loginEmail.trim()) {
-      setError('Access email is required');
+      setError('El correo de acceso es obligatorio');
       return;
     }
     if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
-      setError('Access password is required');
+      setError('La contraseña de acceso es obligatoria');
       return;
     }
 
@@ -459,7 +459,7 @@ export default function EmployeesPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Empleados"
-          description="Manage staff, access, and vehicle assignments from one view."
+          description="Administra empleados, accesos y asignaciones de vehículos desde una sola vista."
           icon={<IconUsers size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
@@ -476,7 +476,7 @@ export default function EmployeesPage() {
             <StatCard
               label="Total"
               value={String(metrics.total)}
-              hint="Registered employees"
+              hint="Empleados registrados"
               color="blue"
               icon={<IconUsers size={20} />}
             />
@@ -488,14 +488,14 @@ export default function EmployeesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="With access"
+              label="Con acceso"
               value={String(metrics.withAccess)}
               hint="Usuarios con login habilitado"
               color="violet"
               icon={<IconBriefcase2 size={20} />}
             />
             <StatCard
-              label="With vehicle"
+              label="Con vehículo"
               value={String(metrics.assignedVehicle)}
               hint="Asignaciones vigentes"
               color="teal"
@@ -622,7 +622,7 @@ export default function EmployeesPage() {
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Documento</Table.Th>
                   <Table.Th>Acceso</Table.Th>
-                  <Table.Th>Vehiculos</Table.Th>
+                  <Table.Th>Vehículos</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -826,7 +826,7 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Perfil del empleado</Text>
                 <Text size="sm" c="dimmed">
-                  Basic data to identify the collaborator in the system.
+                  Datos básicos para identificar al colaborador en el sistema.
                 </Text>
               </div>
 
@@ -865,8 +865,8 @@ export default function EmployeesPage() {
                   required
                 />
                 <TextInput
-                  label="Phone"
-                  placeholder="Contact number"
+                  label="Teléfono"
+                  placeholder="Número de contacto"
                   value={form.phone}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -887,7 +887,7 @@ export default function EmployeesPage() {
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   label="Documento"
-                  placeholder="Document or identification"
+                  placeholder="Documento o identificación"
                   value={form.documentId}
                   onChange={(event) => {
                     const value = toUppercaseInput(event.currentTarget.value);
@@ -909,15 +909,15 @@ export default function EmployeesPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Operational assignment</Text>
+                <Text fw={700}>Asignación operativa</Text>
                 <Text size="sm" c="dimmed">
-                  Link the vehicles currently assigned to this employee.
+                  Vincula los vehículos asignados actualmente a este empleado.
                 </Text>
               </div>
 
               <MultiSelect
-                label="Vehiculos asignados"
-                placeholder="Selecciona uno o mas vehiculos"
+                label="Vehículos asignados"
+                placeholder="Selecciona uno o más vehículos"
                 value={form.vehicleIds}
                 onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
                 data={vehicles.map((vehicle) => ({
@@ -937,7 +937,7 @@ export default function EmployeesPage() {
               <div>
                 <Text fw={700}>Acceso a la app</Text>
                 <Text size="sm" c="dimmed">
-                  Control whether the employee can enter the system and with which operational role.
+                  Controla si el empleado puede ingresar al sistema y con qué rol operativo.
                 </Text>
               </div>
 
@@ -953,7 +953,7 @@ export default function EmployeesPage() {
                 <Stack gap="md">
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     <TextInput
-                      label="Access email"
+                      label="Correo de acceso"
                       placeholder="usuario@empresa.com"
                       value={form.loginEmail}
                       onChange={(event) => {
@@ -977,7 +977,7 @@ export default function EmployeesPage() {
                     <TextInput
                       label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
                       placeholder={
-                        editingEmployee ? 'Leave empty to keep the current one' : 'Initial password'
+                        editingEmployee ? 'Déjala vacía para mantener la actual' : 'Contraseña inicial'
                       }
                       type="password"
                       value={form.loginPassword}
@@ -999,7 +999,7 @@ export default function EmployeesPage() {
               ) : (
                 <Paper radius="md" p="sm" bg="gray.0">
                   <Text size="sm" c="dimmed">
-                    This employee will lose system access. Their operational data will remain available.
+                    Este empleado perderá el acceso al sistema. Sus datos operativos seguirán disponibles.
                   </Text>
                 </Paper>
               )}

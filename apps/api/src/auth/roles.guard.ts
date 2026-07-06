@@ -30,6 +30,10 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Missing user context');
     }
 
+    if (user.role === Role.ADMIN) {
+      return true;
+    }
+
     if (!requiredRoles.includes(user.role)) {
       throw new ForbiddenException('Insufficient role');
     }
