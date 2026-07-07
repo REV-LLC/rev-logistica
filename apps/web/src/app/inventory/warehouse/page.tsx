@@ -83,6 +83,7 @@ export default function WarehouseInventoryPage() {
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingSerialAssetId, setDeletingSerialAssetId] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [reauthEmail, setReauthEmail] = useState('');
@@ -600,6 +601,28 @@ export default function WarehouseInventoryPage() {
     }
   };
 
+  const deleteSerialAsset = async (item: InventoryResponse['serial'][number]) => {
+    const label = item.serialOrEngine ?? item.description ?? 'este equipo';
+    if (!window.confirm(`Eliminar activo ${label}?`)) return;
+
+    setDeletingSerialAssetId(item.assetId);
+    setError(null);
+    try {
+      await api(`/assets/${item.assetId}`, { method: 'DELETE' });
+      await handleFetch(data?.warehouseId ?? warehouseId);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('No se pudo eliminar el activo.');
+      }
+    } finally {
+      setDeletingSerialAssetId(null);
+    }
+  };
+
   const filteredBulk = data
     ? data.bulk.filter((item) => {
         if (!adjustSearch.trim()) return true;
@@ -889,6 +912,8 @@ export default function WarehouseInventoryPage() {
                   serial={data.serial}
                   onAdjust={openAdjust}
                   onAddStock={openAddStock}
+                  onDeleteSerialAsset={deleteSerialAsset}
+                  deletingSerialAssetId={deletingSerialAssetId}
                 />
               </Stack>
             </Paper>

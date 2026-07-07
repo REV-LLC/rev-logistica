@@ -1,7 +1,19 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Badge, Button, Card, Group, Paper, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import {
+  Accordion,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
@@ -57,15 +69,19 @@ export default function InventoryDisplay({
   serial,
   onAdjust,
   onAddStock,
+  onDeleteSerialAsset,
+  deletingSerialAssetId,
   viewFilter = 'ALL',
   bulkOwnerStackMode = false,
   isWorksiteView = false,
-  serialSectionTitle = 'UNIQUE EQUIPMENT',
+  serialSectionTitle = 'EQUIPOS UNICOS',
 }: {
   bulk: BulkItem[];
   serial: SerialItem[];
   onAdjust?: () => void;
   onAddStock?: () => void;
+  onDeleteSerialAsset?: (item: SerialItem) => void;
+  deletingSerialAssetId?: string | null;
   viewFilter?: 'ALL' | 'BULK' | 'SERIAL';
   bulkOwnerStackMode?: boolean;
   isWorksiteView?: boolean;
@@ -218,6 +234,36 @@ export default function InventoryDisplay({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [bulk, bulkOwnerStackMode, groupedBulk]);
 
+  const serialFamilyGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        items: SerialItem[];
+      }
+    >();
+
+    serial.forEach((item) => {
+      const familyName = item.assetFamily?.name?.trim() || 'Sin familia';
+      const familyId = item.assetFamily?.id || familyName;
+      const current = map.get(familyId);
+
+      if (!current) {
+        map.set(familyId, {
+          id: familyId,
+          name: familyName,
+          items: [item],
+        });
+        return;
+      }
+
+      current.items = [...current.items, item];
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [serial]);
+
   return (
     <Stack gap="lg">
       {showBulkSection && (
@@ -246,7 +292,7 @@ export default function InventoryDisplay({
                     <div>
                       <Text fw={800}>{group.name}</Text>
                       <Text size="sm" c="dimmed">
-                        {group.itemCount} reference{group.itemCount === 1 ? '' : 's'}
+                        {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
                       </Text>
                     </div>
                     {quantityBadge(group.totalQuantity, 'orange')}
@@ -451,19 +497,37 @@ export default function InventoryDisplay({
           <Title order={3} mb="sm">
             {serialSectionTitle}
           </Title>
-          <Card withBorder>
-            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-              {serial.map((item) => (
-                <SerialAssetCard
-                  key={item.assetId}
-                  item={item}
-                  href={`/inventory/serialized-assets/${item.assetId}`}
-                  isWorksiteView={isWorksiteView}
-                  display={{ showOwnerChip: isWorksiteView }}
-                />
-              ))}
-            </SimpleGrid>
-          </Card>
+          <Accordion variant="separated" radius="md">
+            {serialFamilyGroups.map((group) => (
+              <Accordion.Item key={group.id} value={group.id}>
+                <Accordion.Control>
+                  <Group justify="space-between" align="center" wrap="nowrap" pr="sm">
+                    <Text fw={800}>{group.name}</Text>
+                    <Badge color="green" variant="light" style={{ flexShrink: 0 }}>
+                      {group.items.length} activo{group.items.length === 1 ? '' : 's'}
+                    </Badge>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+                    {group.items.map((item) => (
+                      <SerialAssetCard
+                        key={item.assetId}
+                        item={item}
+                        href={`/inventory/serialized-assets/${item.assetId}`}
+                        isWorksiteView={isWorksiteView}
+                        display={{ showOwnerChip: isWorksiteView }}
+                        deleteLoading={deletingSerialAssetId === item.assetId}
+                        onDelete={
+                          onDeleteSerialAsset ? () => onDeleteSerialAsset(item) : undefined
+                        }
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Accordion.Panel>
+              </Accordion.Item>
+            ))}
+          </Accordion>
         </section>
       )}
     </Stack>
