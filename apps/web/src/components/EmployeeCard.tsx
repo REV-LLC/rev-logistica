@@ -52,7 +52,7 @@ const roleLabelByValue: Record<EmployeeCardRole, string> = {
   OFFICE: 'Oficina',
   MANAGER: 'Gerente',
   OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecanico',
+  MECHANIC: 'Mecánico',
   WAREHOUSE_KEEPER: 'Bodeguero',
   OTHER: 'Otro',
 };
@@ -64,7 +64,7 @@ export function getEmployeeCardFullName(employee: Pick<EmployeeCardRecord, 'name
 }
 
 function getVehicleSummary(vehicles: EmployeeCardVehicle[]) {
-  if (!vehicles.length) return 'Sin vehiculos';
+  if (!vehicles.length) return 'Sin vehículos';
   return vehicles.map((entry) => entry.plate).join(', ');
 }
 

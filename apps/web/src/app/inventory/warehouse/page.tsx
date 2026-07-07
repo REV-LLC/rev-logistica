@@ -27,6 +27,12 @@ import {
 } from '@mantine/core';
 import { IconEdit, IconPhoto, IconPlus, IconUpload } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
+import OwnerCreateModal, {
+  buildOwnerNitOrId,
+  emptyOwnerCreateForm,
+  validateOwnerCreateForm,
+  type OwnerCreateForm,
+} from '@/components/OwnerCreateModal';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -97,10 +103,7 @@ export default function WarehouseInventoryPage() {
   const [ownerLogoUploadingId, setOwnerLogoUploadingId] = useState<string | null>(null);
   const [ownerLogoError, setOwnerLogoError] = useState<string | null>(null);
   const [ownerCreateOpen, setOwnerCreateOpen] = useState(false);
-  const [ownerCreateName, setOwnerCreateName] = useState('');
-  const [ownerCreateNitOrId, setOwnerCreateNitOrId] = useState('');
-  const [ownerCreatePhone, setOwnerCreatePhone] = useState('');
-  const [ownerCreateEmail, setOwnerCreateEmail] = useState('');
+  const [ownerCreateForm, setOwnerCreateForm] = useState<OwnerCreateForm>(emptyOwnerCreateForm);
   const [ownerCreateLoading, setOwnerCreateLoading] = useState(false);
   const [ownerCreateError, setOwnerCreateError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -317,17 +320,15 @@ export default function WarehouseInventoryPage() {
   };
 
   const openCreateOwner = () => {
-    setOwnerCreateName('');
-    setOwnerCreateNitOrId('');
-    setOwnerCreatePhone('');
-    setOwnerCreateEmail('');
+    setOwnerCreateForm(emptyOwnerCreateForm);
     setOwnerCreateError(null);
     setOwnerCreateOpen(true);
   };
 
   const handleCreateOwner = async () => {
-    if (!ownerCreateName.trim()) {
-      setOwnerCreateError('El nombre del dueño es requerido.');
+    const validationError = validateOwnerCreateForm(ownerCreateForm);
+    if (validationError) {
+      setOwnerCreateError(validationError);
       return;
     }
 
@@ -337,10 +338,10 @@ export default function WarehouseInventoryPage() {
       const owner = await api<Owner>('/owners', {
         method: 'POST',
         json: {
-          name: ownerCreateName.trim(),
-          nitOrId: ownerCreateNitOrId.trim() || undefined,
-          phone: ownerCreatePhone.trim() || undefined,
-          email: ownerCreateEmail.trim() || undefined,
+          name: ownerCreateForm.name.trim(),
+          nitOrId: buildOwnerNitOrId(ownerCreateForm) || undefined,
+          phone: ownerCreateForm.phone.trim() || undefined,
+          email: ownerCreateForm.email.trim() || undefined,
           active: true,
         },
       });
@@ -354,6 +355,7 @@ export default function WarehouseInventoryPage() {
         setEditOwnerCompanyId(owner.id);
       }
       setOwnerCreateOpen(false);
+      setOwnerCreateForm(emptyOwnerCreateForm);
     } catch (err) {
       if (err instanceof ApiError) {
         setOwnerCreateError(`Error ${err.status}: ${err.message}`);
@@ -1123,59 +1125,15 @@ export default function WarehouseInventoryPage() {
         </Stack>
       </Modal>
 
-      <Modal
+      <OwnerCreateModal
         opened={ownerCreateOpen}
+        form={ownerCreateForm}
+        loading={ownerCreateLoading}
+        error={ownerCreateError}
         onClose={() => setOwnerCreateOpen(false)}
-        title="Crear dueño"
-        size="md"
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Crea la empresa dueña y quedara seleccionada automaticamente para la bodega.
-          </Text>
-          <TextInput
-            label="Nombre"
-            placeholder="Ejemplo: VEREAL SA"
-            value={ownerCreateName}
-            onChange={(event) => setOwnerCreateName(event.target.value)}
-            required
-          />
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <TextInput
-              label="NIT / ID"
-              placeholder="Opcional"
-              value={ownerCreateNitOrId}
-              onChange={(event) => setOwnerCreateNitOrId(event.target.value)}
-            />
-            <TextInput
-              label="Telefono"
-              placeholder="Opcional"
-              value={ownerCreatePhone}
-              onChange={(event) => setOwnerCreatePhone(event.target.value)}
-            />
-          </SimpleGrid>
-          <TextInput
-            label="Email"
-            placeholder="Opcional"
-            type="email"
-            value={ownerCreateEmail}
-            onChange={(event) => setOwnerCreateEmail(event.target.value)}
-          />
-          {ownerCreateError ? (
-            <Alert color="red" variant="light" title="No se pudo crear el dueño">
-              {ownerCreateError}
-            </Alert>
-          ) : null}
-          <Group justify="space-between" className="mobile-actions">
-            <Button variant="default" onClick={() => setOwnerCreateOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreateOwner} loading={ownerCreateLoading}>
-              Crear dueño
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        onCreate={handleCreateOwner}
+        onChange={setOwnerCreateForm}
+      />
 
       <Modal
         opened={editOpen}

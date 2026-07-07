@@ -10,15 +10,11 @@ import {
   Group,
   Menu,
   Modal,
-  MultiSelect,
   Paper,
-  Select,
   SimpleGrid,
   Stack,
-  Switch,
   Table,
   Text,
-  TextInput,
   ThemeIcon,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
@@ -38,18 +34,20 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import EmployeeAvatar from '@/components/EmployeeAvatar';
+import EmployeeFormModal, {
+  appRoleLabelByValue,
+  emptyEmployeeForm,
+  roleLabelByValue,
+  toUppercaseInput,
+  type AppRoleValue,
+  type EmployeeForm,
+  type RoleValue,
+  type VehicleOption,
+} from '@/components/EmployeeFormModal';
 import EmployeeViewMenu, { usePreferredEmployeeView } from '@/components/EmployeeViewMenu';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
-
-type VehicleOption = {
-  id: string;
-  plate: string;
-  brand?: string | null;
-  model?: string | null;
-  active?: boolean;
-};
 
 type Employee = {
   id: string;
@@ -70,94 +68,10 @@ type Employee = {
   } | null;
 };
 
-type RoleValue =
-  | 'DRIVER'
-  | 'HEAVY_MACHINERY_OPERATOR'
-  | 'MACHINIST'
-  | 'OFFICE'
-  | 'MANAGER'
-  | 'OPERATIONS_MANAGER'
-  | 'MECHANIC'
-  | 'WAREHOUSE_KEEPER'
-  | 'OTHER';
-
-type EmployeeForm = {
-  name: string;
-  lastName: string;
-  role: RoleValue;
-  phone: string;
-  email: string;
-  documentId: string;
-  active: boolean;
-  vehicleIds: string[];
-  loginEnabled: boolean;
-  loginEmail: string;
-  loginPassword: string;
-  loginRole: AppRoleValue;
-  loginActive: boolean;
-};
-
-type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER';
-
-const emptyForm: EmployeeForm = {
-  name: '',
-  lastName: '',
-  role: 'DRIVER',
-  phone: '',
-  email: '',
-  documentId: '',
-  active: true,
-  vehicleIds: [],
-  loginEnabled: false,
-  loginEmail: '',
-  loginPassword: '',
-  loginRole: 'DRIVER',
-  loginActive: true,
-};
-
-const roleOptions = [
-  { value: 'DRIVER', label: 'Conductor' },
-  { value: 'HEAVY_MACHINERY_OPERATOR', label: 'Operario maquinaria amarilla' },
-  { value: 'MACHINIST', label: 'Machinero' },
-  { value: 'OFFICE', label: 'Oficina' },
-  { value: 'MANAGER', label: 'Gerente' },
-  { value: 'OPERATIONS_MANAGER', label: 'Jefe operaciones' },
-  { value: 'MECHANIC', label: 'Mecánico' },
-  { value: 'WAREHOUSE_KEEPER', label: 'Bodeguero' },
-  { value: 'OTHER', label: 'Otro' },
-];
-
-const roleLabelByValue: Record<RoleValue, string> = {
-  DRIVER: 'Conductor',
-  HEAVY_MACHINERY_OPERATOR: 'Operario maquinaria amarilla',
-  MACHINIST: 'Machinero',
-  OFFICE: 'Oficina',
-  MANAGER: 'Gerente',
-  OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecánico',
-  WAREHOUSE_KEEPER: 'Bodeguero',
-  OTHER: 'Otro',
-};
-
-const appRoleOptions = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'OFFICE', label: 'Oficina' },
-  { value: 'DRIVER', label: 'Conductor' },
-];
-
-const appRoleLabelByValue: Record<AppRoleValue, string> = {
-  ADMIN: 'Admin',
-  OFFICE: 'Oficina',
-  DRIVER: 'Conductor',
-};
 
 function getVehicleSummary(vehicles: VehicleOption[]) {
   if (!vehicles.length) return 'Sin vehículos asignados';
   return vehicles.map((entry) => entry.plate).join(', ');
-}
-
-function toUppercaseInput(value?: string | null) {
-  return (value ?? '').toUpperCase();
 }
 
 function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
@@ -286,7 +200,7 @@ export default function EmployeesPage() {
   const [detailsEmployee, setDetailsEmployee] = useState<Employee | null>(null);
   const [documentsEmployee, setDocumentsEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [form, setForm] = useState<EmployeeForm>(emptyForm);
+  const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
 
   const loadData = async () => {
     setLoading(true);
@@ -329,7 +243,7 @@ export default function EmployeesPage() {
 
   const openCreate = () => {
     setEditingEmployee(null);
-    setForm(emptyForm);
+    setForm(emptyEmployeeForm);
     setModalOpen(true);
   };
 
@@ -356,7 +270,7 @@ export default function EmployeesPage() {
   const closeFormModal = () => {
     setModalOpen(false);
     setEditingEmployee(null);
-    setForm(emptyForm);
+    setForm(emptyEmployeeForm);
   };
 
   const saveEmployee = async () => {
@@ -791,231 +705,18 @@ export default function EmployeesPage() {
         ) : null}
       </Modal>
 
-      <Modal
+      <EmployeeFormModal
         opened={modalOpen}
+        mode={editingEmployee ? 'edit' : 'create'}
+        form={form}
+        vehicles={vehicles}
+        saving={saving}
+        error={modalOpen ? error : null}
+        editingEmployee={editingEmployee}
         onClose={closeFormModal}
-        title={editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}
-        centered
-        size="lg"
-      >
-        <Stack gap="lg">
-          {editingEmployee ? (
-            <Paper
-              withBorder
-              radius="lg"
-              p="md"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(248,250,252,0.96) 0%, rgba(239,246,255,0.96) 100%)',
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <div>
-                  <Text fw={700}>{getEmployeeFullName(editingEmployee)}</Text>
-                  <Text size="sm" c="dimmed">
-                    {roleLabelByValue[editingEmployee.role] ?? editingEmployee.role}
-                  </Text>
-                </div>
-                <EmployeeStatusBadge active={form.active} />
-              </Group>
-            </Paper>
-          ) : null}
-
-          <Paper withBorder radius="lg" p="md">
-            <Stack gap="md">
-              <div>
-                <Text fw={700}>Perfil del empleado</Text>
-                <Text size="sm" c="dimmed">
-                  Datos básicos para identificar al colaborador en el sistema.
-                </Text>
-              </div>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <TextInput
-                  label="Nombres"
-                  placeholder="Nombres"
-                  value={form.name}
-                  onChange={(event) => {
-                    const value = toUppercaseInput(event.currentTarget.value);
-                    setForm((prev) => ({ ...prev, name: value }));
-                  }}
-                  required
-                />
-                <TextInput
-                  label="Apellidos"
-                  placeholder="Apellidos"
-                  value={form.lastName}
-                  onChange={(event) => {
-                    const value = toUppercaseInput(event.currentTarget.value);
-                    setForm((prev) => ({ ...prev, lastName: value }));
-                  }}
-                  required
-                />
-              </SimpleGrid>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <Select
-                  label="Rol"
-                  value={form.role}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, role: (value as RoleValue) ?? 'DRIVER' }))
-                  }
-                  data={roleOptions}
-                  allowDeselect={false}
-                  required
-                />
-                <TextInput
-                  label="Teléfono"
-                  placeholder="Número de contacto"
-                  value={form.phone}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setForm((prev) => ({ ...prev, phone: value }));
-                  }}
-                />
-                <TextInput
-                  label="Correo"
-                  placeholder="Correo de contacto"
-                  value={form.email}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setForm((prev) => ({ ...prev, email: value }));
-                  }}
-                />
-              </SimpleGrid>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <TextInput
-                  label="Documento"
-                  placeholder="Documento o identificación"
-                  value={form.documentId}
-                  onChange={(event) => {
-                    const value = toUppercaseInput(event.currentTarget.value);
-                    setForm((prev) => ({ ...prev, documentId: value }));
-                  }}
-                />
-                <Switch
-                  mt="xl"
-                  checked={form.active}
-                  label="Empleado activo"
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, active: event.currentTarget.checked }))
-                  }
-                />
-              </SimpleGrid>
-            </Stack>
-          </Paper>
-
-          <Paper withBorder radius="lg" p="md">
-            <Stack gap="md">
-              <div>
-                <Text fw={700}>Asignación operativa</Text>
-                <Text size="sm" c="dimmed">
-                  Vincula los vehículos asignados actualmente a este empleado.
-                </Text>
-              </div>
-
-              <MultiSelect
-                label="Vehículos asignados"
-                placeholder="Selecciona uno o más vehículos"
-                value={form.vehicleIds}
-                onChange={(value) => setForm((prev) => ({ ...prev, vehicleIds: value }))}
-                data={vehicles.map((vehicle) => ({
-                  value: vehicle.id,
-                  label: `${vehicle.plate}${vehicle.brand ? ` · ${vehicle.brand}` : ''}${
-                    vehicle.model ? ` ${vehicle.model}` : ''
-                  }`,
-                }))}
-                searchable
-                nothingFoundMessage="Sin resultados"
-              />
-            </Stack>
-          </Paper>
-
-          <Paper withBorder radius="lg" p="md">
-            <Stack gap="md">
-              <div>
-                <Text fw={700}>Acceso a la app</Text>
-                <Text size="sm" c="dimmed">
-                  Controla si el empleado puede ingresar al sistema y con qué rol operativo.
-                </Text>
-              </div>
-
-              <Switch
-                checked={form.loginEnabled}
-                label="Crear o mantener acceso para este empleado"
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, loginEnabled: event.currentTarget.checked }))
-                }
-              />
-
-              {form.loginEnabled ? (
-                <Stack gap="md">
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                    <TextInput
-                      label="Correo de acceso"
-                      placeholder="usuario@empresa.com"
-                      value={form.loginEmail}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setForm((prev) => ({ ...prev, loginEmail: value }));
-                      }}
-                      required
-                    />
-                    <Select
-                      label="Rol en la app"
-                      value={form.loginRole}
-                      onChange={(value) =>
-                        setForm((prev) => ({ ...prev, loginRole: (value as AppRoleValue) ?? 'DRIVER' }))
-                      }
-                      data={appRoleOptions}
-                      allowDeselect={false}
-                    />
-                  </SimpleGrid>
-
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                    <TextInput
-                      label={editingEmployee ? 'Nueva contraseña (opcional)' : 'Contraseña'}
-                      placeholder={
-                        editingEmployee ? 'Déjala vacía para mantener la actual' : 'Contraseña inicial'
-                      }
-                      type="password"
-                      value={form.loginPassword}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setForm((prev) => ({ ...prev, loginPassword: value }));
-                      }}
-                    />
-                    <Switch
-                      mt="xl"
-                      checked={form.loginActive}
-                      label="Usuario activo"
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, loginActive: event.currentTarget.checked }))
-                      }
-                    />
-                  </SimpleGrid>
-                </Stack>
-              ) : (
-                <Paper radius="md" p="sm" bg="gray.0">
-                  <Text size="sm" c="dimmed">
-                    Este empleado perderá el acceso al sistema. Sus datos operativos seguirán disponibles.
-                  </Text>
-                </Paper>
-              )}
-            </Stack>
-          </Paper>
-
-          <Group justify="flex-end" className="mobile-actions">
-            <Button variant="default" onClick={closeFormModal}>
-              Cancelar
-            </Button>
-            <Button loading={saving} onClick={saveEmployee}>
-              {editingEmployee ? 'Guardar cambios' : 'Crear empleado'}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        onSave={saveEmployee}
+        onChange={setForm}
+      />
     </Container>
   );
 }
