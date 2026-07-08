@@ -28,6 +28,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import ChargeTypeSelect from '@/components/ChargeTypeSelect';
+import UppercaseTextInput from '@/components/UppercaseTextInput';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 
@@ -1714,11 +1715,11 @@ export default function AddBulkStockPage() {
                                   Usa el nombre corto que operaciones usa para identificarlo.
                                 </Text>
                               </div>
-                              <TextInput
+                              <UppercaseTextInput
                                 label="Nombre o referencia"
                                 value={formaletaAccessoryName}
-                                onChange={(event) => {
-                                  setFormaletaAccessoryName(toUpperInput(event.currentTarget.value));
+                                onChange={(value) => {
+                                  setFormaletaAccessoryName(value);
                                   setIsItemConfigured(false);
                                 }}
                                 placeholder="Ejemplo: CUÑA, RIOSTRA"
@@ -2030,11 +2031,11 @@ export default function AddBulkStockPage() {
                               </Paper>
                             </>
                           ) : (
-                            <TextInput
+                            <UppercaseTextInput
                               label="Referencia"
                               value={genericSkuName}
-                              onChange={(event) => {
-                                setGenericSkuName(toUpperInput(event.currentTarget.value));
+                              onChange={(value) => {
+                                setGenericSkuName(value);
                                 setIsItemConfigured(false);
                               }}
                               placeholder="Ej: VERTICAL 3.00M"

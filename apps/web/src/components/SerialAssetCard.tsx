@@ -1,7 +1,8 @@
 'use client';
 
-import { Badge, Box, Button, Card, Group, Stack, Text } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Card, Group, Menu, Stack, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { IconDotsVertical, IconPencil, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { getSerialDisplayName } from '@/lib/serial-assets';
@@ -64,7 +65,11 @@ export default function SerialAssetCard({
   isWorksiteView = false,
   display,
   actionLabel,
+  actionColor,
+  actionLoading = false,
   onAction,
+  onDelete,
+  deleteLoading = false,
 }: {
   item: SerialAssetCardItem;
   href?: string;
@@ -74,13 +79,18 @@ export default function SerialAssetCard({
     ownerChipLabel?: string;
   };
   actionLabel?: string;
+  actionColor?: string;
+  actionLoading?: boolean;
   onAction?: () => void;
+  onDelete?: () => void;
+  deleteLoading?: boolean;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
   const isMobile = useMediaQuery('(max-width: 48em)');
   const description = getSerialDisplayName(item);
   const shouldShowOwnerChip = display?.showOwnerChip ?? isWorksiteView;
   const ownerChipLabel = display?.ownerChipLabel ?? item.ownerWarehouseName;
+  const showMenu = Boolean(href || onDelete);
   const title = href ? (
     <Text
       component={Link}
@@ -154,9 +164,46 @@ export default function SerialAssetCard({
             <Group gap={6} wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
               {title}
             </Group>
-            <Badge color={getStatusColor(item.status)} variant="light" style={{ flexShrink: 0 }}>
-              {getStatusLabel(item.status, isWorksiteView)}
-            </Badge>
+            <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+              <Badge color={getStatusColor(item.status)} variant="light">
+                {getStatusLabel(item.status, isWorksiteView)}
+              </Badge>
+              {showMenu ? (
+                <Menu shadow="md" width={160} position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <ActionIcon
+                      aria-label="Acciones del activo"
+                      variant="subtle"
+                      color="gray"
+                      size="sm"
+                    >
+                      <IconDotsVertical size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {href ? (
+                      <Menu.Item
+                        component={Link}
+                        href={href}
+                        leftSection={<IconPencil size={16} />}
+                      >
+                        Editar
+                      </Menu.Item>
+                    ) : null}
+                    {onDelete ? (
+                      <Menu.Item
+                        color="red"
+                        disabled={deleteLoading}
+                        leftSection={<IconTrash size={16} />}
+                        onClick={onDelete}
+                      >
+                        {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+                      </Menu.Item>
+                    ) : null}
+                  </Menu.Dropdown>
+                </Menu>
+              ) : null}
+            </Group>
           </Group>
           <Text size="sm" c="dimmed">
             #{item.internalNumber ?? '-'}
@@ -177,7 +224,13 @@ export default function SerialAssetCard({
         </Stack>
 
         {onAction ? (
-          <Button size="xs" fullWidth={isMobile} onClick={onAction}>
+          <Button
+            size="xs"
+            fullWidth={isMobile}
+            color={actionColor}
+            loading={actionLoading}
+            onClick={onAction}
+          >
             {actionLabel ?? 'Agregar'}
           </Button>
         ) : null}

@@ -15,7 +15,6 @@ import {
   TextInput,
   NumberInput,
   SimpleGrid,
-  Switch,
 } from '@mantine/core';
 import {
   IconUpload,
@@ -23,6 +22,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import ChargeTypeSelect from '@/components/ChargeTypeSelect';
+import UppercaseTextInput, { uppercaseInputValue } from '@/components/UppercaseTextInput';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -37,6 +37,8 @@ type Warehouse = {
   name: string;
   type?: 'OWN' | 'ALLY' | string;
 };
+
+type AssetWorkflowStep = 'template' | 'commercial' | 'asset' | 'review';
 
 type Sku = {
   id: string;
@@ -173,10 +175,10 @@ export default function CreateSerializedAssetPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [warehouseLocked, setWarehouseLocked] = useState(false);
   const [familyLocked, setFamilyLocked] = useState(false);
+  const [assetWorkflowStep, setAssetWorkflowStep] = useState<AssetWorkflowStep>('template');
 
   const familySelectRef = useRef<HTMLInputElement>(null);
   const familyNameRef = useRef<HTMLInputElement>(null);
-  const skuNameRef = useRef<HTMLInputElement>(null);
   const serialOrEngineRef = useRef<HTMLInputElement>(null);
   const ownerWarehouseRef = useRef<HTMLInputElement>(null);
   const warehouseCurrentRef = useRef<HTMLInputElement>(null);
@@ -320,11 +322,11 @@ export default function CreateSerializedAssetPage() {
     [warehouseCurrentId, warehouses],
   );
   const resolvedSkuName = useMemo(() => {
-    const manualName = skuName.trim();
-    if (manualName) return manualName;
-
     const brandModelName = [skuBrand.trim(), skuModel.trim()].filter(Boolean).join(' ').trim();
     if (brandModelName) return brandModelName;
+
+    const templateName = skuName.trim();
+    if (templateName) return templateName;
 
     return (selectedFamily?.name ?? familyName.trim()).trim();
   }, [familyName, selectedFamily?.name, skuBrand, skuModel, skuName]);
@@ -345,13 +347,10 @@ export default function CreateSerializedAssetPage() {
   const isWarehouseStepActive = !warehouseLocked;
   const isFamilyStepActive = warehouseLocked && !familyLocked;
   const canEditAssetDetails = warehouseLocked && familyLocked;
-  const isTemplateStepActive = canEditAssetDetails && !hasTemplateData;
-  const isCommercialStepActive =
-    canEditAssetDetails && hasTemplateData && !hasCommercialData;
-  const isAssetStepActive =
-    canEditAssetDetails && hasTemplateData && hasCommercialData && !hasAssetData;
-  const isReviewStepActive =
-    canEditAssetDetails && hasTemplateData && hasCommercialData && hasAssetData;
+  const isTemplateStepActive = canEditAssetDetails && assetWorkflowStep === 'template';
+  const isCommercialStepActive = canEditAssetDetails && assetWorkflowStep === 'commercial';
+  const isAssetStepActive = canEditAssetDetails && assetWorkflowStep === 'asset';
+  const isReviewStepActive = canEditAssetDetails && assetWorkflowStep === 'review';
   const resetForm = () => {
     setFamilyMode('existing');
     setFamilyId(null);
@@ -379,6 +378,7 @@ export default function CreateSerializedAssetPage() {
     setManualInternalNumber('');
     setWarehouseLocked(false);
     setFamilyLocked(false);
+    setAssetWorkflowStep('template');
   };
 
   const clearFamilyAndAssetInputs = () => {
@@ -404,6 +404,7 @@ export default function CreateSerializedAssetPage() {
     setActive(true);
     setManualInternalNumber('');
     setFamilyLocked(false);
+    setAssetWorkflowStep('template');
   };
 
   const handleOwnerWarehouseChange = (value: string | null) => {
@@ -450,6 +451,7 @@ export default function CreateSerializedAssetPage() {
       return;
     }
     setFamilyLocked(true);
+    setAssetWorkflowStep('template');
   };
 
   const unlockFamilySelection = () => {
@@ -472,6 +474,7 @@ export default function CreateSerializedAssetPage() {
     setAssetImageFile(null);
     setActive(true);
     setManualInternalNumber('');
+    setAssetWorkflowStep('template');
   };
 
   const setValidationError = (
@@ -480,6 +483,44 @@ export default function CreateSerializedAssetPage() {
   ) => {
     setError(message);
     window.requestAnimationFrame(() => fieldRef?.current?.focus());
+  };
+
+  const goToCommercialStep = () => {
+    setError(null);
+    if (!resolvedSkuName) {
+      setValidationError('Ingresa marca/modelo o confirma una familia.');
+      return;
+    }
+    if (!skuUnit) {
+      setValidationError('Selecciona la unidad de medida.');
+      return;
+    }
+    setAssetWorkflowStep('commercial');
+  };
+
+  const goToAssetStep = () => {
+    setError(null);
+    if (!hasCommercialData) {
+      setValidationError('Completa precio, subalquiler, reposición y regla de cobro.');
+      return;
+    }
+    setAssetWorkflowStep('asset');
+  };
+
+  const goToReviewStep = () => {
+    setError(null);
+    if (!serialOrEngine.trim()) {
+      setValidationError('El serial o motor es requerido.', serialOrEngineRef);
+      return;
+    }
+    if (
+      isAlternateOwnerWarehouse &&
+      (manualInternalNumber === '' || Number(manualInternalNumber) <= 0)
+    ) {
+      setValidationError('Ingresa el número interno de la bodega alterna.', manualInternalNumberRef);
+      return;
+    }
+    setAssetWorkflowStep('review');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -497,6 +538,11 @@ export default function CreateSerializedAssetPage() {
       return;
     }
 
+    if (assetWorkflowStep !== 'review') {
+      setValidationError('Avanza hasta la revisión antes de guardar el activo.');
+      return;
+    }
+
     if (familyMode === 'existing' && !familyId) {
       setValidationError(
         'Select an equipment family.',
@@ -511,10 +557,7 @@ export default function CreateSerializedAssetPage() {
     }
 
     if (!resolvedSkuName) {
-      setValidationError(
-        'Ingresa marca/modelo o confirma una familia.',
-        skuNameRef,
-      );
+      setValidationError('Ingresa marca/modelo o confirma una familia.');
       return;
     }
 
@@ -568,8 +611,8 @@ export default function CreateSerializedAssetPage() {
           familyMode === 'existing'
             ? { id: familyId }
             : {
-                name: familyName.trim(),
-                code: familyCode.trim() || undefined,
+                name: uppercaseInputValue(familyName.trim()),
+                code: familyCode.trim() ? uppercaseInputValue(familyCode.trim()) : undefined,
               },
         sku: {
           name: resolvedSkuName || undefined,
@@ -854,27 +897,23 @@ export default function CreateSerializedAssetPage() {
                     />
                   ) : (
                     <Group grow className="mobile-stack">
-                      <TextInput
+                      <UppercaseTextInput
                         ref={familyNameRef}
                         label="Nombre de familia"
                         name="familyName"
                         autoComplete="off"
                         value={familyName}
-                        onChange={(event) =>
-                          setFamilyName(event.currentTarget.value)
-                        }
+                        onChange={setFamilyName}
                         placeholder="Ejemplo: Minicargadores"
                         disabled={familyLocked}
                         required
                       />
-                      <TextInput
+                      <UppercaseTextInput
                         label="Codigo interno"
                         name="familyCode"
                         autoComplete="off"
                         value={familyCode}
-                        onChange={(event) =>
-                          setFamilyCode(event.currentTarget.value)
-                        }
+                        onChange={setFamilyCode}
                         placeholder="Ejemplo: MCG"
                         disabled={familyLocked}
                       />
@@ -991,26 +1030,14 @@ export default function CreateSerializedAssetPage() {
                     disabled={familyMode === 'new' || loadingSkus || !familyId}
                   />
 
-                  {familyMode === 'existing' ? (
-                    <TextInput
-                      ref={skuNameRef}
-                      label="Referencia"
-                      name="skuName"
-                      autoComplete="off"
-                      value={skuName}
-                      onChange={(event) => setSkuName(event.currentTarget.value)}
-                      placeholder="Ejemplo: Minicargador S650"
-                    />
-                  ) : (
-                    <Paper radius="md" p="sm" bg="gray.0">
-                      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                        Referencia
-                      </Text>
-                      <Text size="sm" mt={4}>
-                        {resolvedSkuName || 'Se genera con marca y modelo'}
-                      </Text>
-                    </Paper>
-                  )}
+                  <Paper radius="md" p="sm" bg="gray.0">
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                      Referencia
+                    </Text>
+                    <Text size="sm" mt={4}>
+                      {resolvedSkuName || 'Se genera con marca y modelo'}
+                    </Text>
+                  </Paper>
 
                   <Group grow className="mobile-stack">
                     <Select
@@ -1084,6 +1111,12 @@ export default function CreateSerializedAssetPage() {
                       min={0}
                       step={0.1}
                     />
+                  </Group>
+
+                  <Group justify="flex-end" className="mobile-actions">
+                    <Button type="button" onClick={goToCommercialStep}>
+                      Siguiente
+                    </Button>
                   </Group>
                 </Stack>
               </Paper>
@@ -1166,6 +1199,12 @@ export default function CreateSerializedAssetPage() {
                       />
                     ) : null}
                   </SimpleGrid>
+
+                  <Group justify="flex-end" className="mobile-actions">
+                    <Button type="button" onClick={goToAssetStep}>
+                      Siguiente
+                    </Button>
+                  </Group>
                 </Stack>
               </Paper>
 
@@ -1231,12 +1270,11 @@ export default function CreateSerializedAssetPage() {
                       required
                     />
                   ) : null}
-                  <Switch
-                    label="Activo"
-                    name="active"
-                    checked={active}
-                    onChange={(event) => setActive(event.currentTarget.checked)}
-                  />
+                  <Group justify="flex-end" className="mobile-actions">
+                    <Button type="button" onClick={goToReviewStep}>
+                      Siguiente
+                    </Button>
+                  </Group>
                 </Stack>
               </Paper>
 
@@ -1280,30 +1318,6 @@ export default function CreateSerializedAssetPage() {
                       </Text>
                     </Paper>
                   </SimpleGrid>
-                  <Group gap="xs">
-                    <Badge color={active ? 'green' : 'gray'} variant="light">
-                      {active ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                    {skuChargeType === 'HOUR' ? (
-                      <Badge color="orange" variant="light">
-                        Cobro por hora
-                      </Badge>
-                    ) : (
-                      <Badge color="blue" variant="light">
-                        Cobro diario
-                      </Badge>
-                    )}
-                    {isAlternateOwnerWarehouse ? (
-                      <Badge color="grape" variant="light">
-                        Bodega alterna
-                      </Badge>
-                    ) : null}
-                    {skuSize ? (
-                      <Badge color="teal" variant="light">
-                        {skuSize}
-                      </Badge>
-                    ) : null}
-                  </Group>
                 </Stack>
               </Paper>
               </>
@@ -1317,7 +1331,7 @@ export default function CreateSerializedAssetPage() {
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" loading={saving}>
+                <Button type="submit" loading={saving} disabled={assetWorkflowStep !== 'review'}>
                   Guardar activo
                 </Button>
               </Group>
