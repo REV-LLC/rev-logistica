@@ -60,11 +60,9 @@ const appVersion =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  typedRoutes: false,
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
-  },
-  experimental: {
-    typedRoutes: false
   },
   async redirects() {
     return [
