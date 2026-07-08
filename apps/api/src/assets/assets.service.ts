@@ -367,14 +367,29 @@ export class AssetsService {
   async deleteAsset(assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true },
+      select: {
+        id: true,
+        documentItems: { select: { id: true }, take: 1 },
+        taskAssets: { select: { id: true }, take: 1 },
+      },
     });
 
     if (!asset) {
       throw new NotFoundException('Asset not found');
     }
 
-    return this.prisma.asset.delete({ where: { id: assetId } });
+    if (asset.documentItems.length > 0) {
+      throw new BadRequestException('No se puede eliminar un activo usado en documentos');
+    }
+
+    if (asset.taskAssets.length > 0) {
+      throw new BadRequestException('No se puede eliminar un activo asociado a tareas');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.stockLedger.deleteMany({ where: { assetId } });
+      return tx.asset.delete({ where: { id: assetId } });
+    });
   }
 
   async getAssetLocation(assetId: string) {

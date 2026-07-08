@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Alert,
   Button,
@@ -26,8 +25,12 @@ import EmployeeCard, {
   getEmployeeCardFullName,
   type EmployeeCardRecord,
 } from '@/components/EmployeeCard';
+import EmployeeFormModal, {
+  emptyEmployeeForm,
+  type EmployeeForm,
+  type VehicleOption,
+} from '@/components/EmployeeFormModal';
 import EmployeeViewMenu, {
-  setPreferredEmployeeView,
   usePreferredEmployeeView,
 } from '@/components/EmployeeViewMenu';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
@@ -68,10 +71,13 @@ function fileLabel(file: EmployeeAttachedFile) {
 export default function EmployeeCardsPage() {
   usePreferredEmployeeView('cards');
 
-  const router = useRouter();
   const [employees, setEmployees] = useState<EmployeeCardRecord[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
   const [downloadingIdentityEmployeeId, setDownloadingIdentityEmployeeId] = useState<string | null>(null);
 
@@ -79,8 +85,12 @@ export default function EmployeeCardsPage() {
     setLoading(true);
     setError(null);
     try {
-      const employeesData = await api<EmployeeCardRecord[]>('/employees', { method: 'GET' });
+      const [employeesData, vehiclesData] = await Promise.all([
+        api<EmployeeCardRecord[]>('/employees', { method: 'GET' }),
+        api<VehicleOption[]>('/vehicles', { method: 'GET' }),
+      ]);
       setEmployees(employeesData);
+      setVehicles(vehiclesData);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -113,8 +123,68 @@ export default function EmployeeCardsPage() {
   const sortedEmployees = useMemo(() => [...employees].sort(compareEmployeeCards), [employees]);
 
   const openCreate = () => {
-    setPreferredEmployeeView('list');
-    router.push('/employees');
+    setError(null);
+    setForm(emptyEmployeeForm);
+    setModalOpen(true);
+  };
+
+  const closeFormModal = () => {
+    setModalOpen(false);
+    setForm(emptyEmployeeForm);
+  };
+
+  const saveEmployee = async () => {
+    setError(null);
+
+    if (!form.name.trim()) {
+      setError('El nombre es obligatorio');
+      return;
+    }
+    if (!form.lastName.trim()) {
+      setError('El apellido es obligatorio');
+      return;
+    }
+    if (form.loginEnabled && !form.loginEmail.trim()) {
+      setError('El correo de acceso es obligatorio');
+      return;
+    }
+    if (form.loginEnabled && !form.loginPassword.trim()) {
+      setError('La contraseña de acceso es obligatoria');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api('/employees', {
+        method: 'POST',
+        json: {
+          name: form.name.trim().toUpperCase(),
+          lastName: form.lastName.trim().toUpperCase(),
+          role: form.role,
+          phone: form.phone.trim() || undefined,
+          email: form.email.trim() || undefined,
+          documentId: form.documentId.trim().toUpperCase() || undefined,
+          vehicleIds: form.vehicleIds,
+          loginEmail: form.loginEnabled ? form.loginEmail.trim().toLowerCase() || undefined : undefined,
+          loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
+          loginRole: form.loginEnabled ? form.loginRole : undefined,
+          loginActive: form.loginEnabled ? form.loginActive : undefined,
+        },
+      });
+
+      closeFormModal();
+      await loadData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error guardando empleado');
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openDocuments = (employee: EmployeeCardRecord) => {
@@ -196,7 +266,7 @@ export default function EmployeeCardsPage() {
               icon={<IconBriefcase2 size={20} />}
             />
             <StatCard
-              label="Con vehiculo"
+              label="Con vehículo"
               value={String(metrics.assignedVehicle)}
               hint="Asignaciones vigentes"
               color="teal"
@@ -267,6 +337,18 @@ export default function EmployeeCardsPage() {
           />
         ) : null}
       </Modal>
+
+      <EmployeeFormModal
+        opened={modalOpen}
+        mode="create"
+        form={form}
+        vehicles={vehicles}
+        saving={saving}
+        error={modalOpen ? error : null}
+        onClose={closeFormModal}
+        onSave={saveEmployee}
+        onChange={setForm}
+      />
     </Container>
   );
 }
