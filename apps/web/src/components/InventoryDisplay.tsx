@@ -12,7 +12,6 @@ import {
   Stack,
   Table,
   Text,
-  Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconAlertTriangle } from '@tabler/icons-react';
@@ -21,6 +20,12 @@ import { ownerColorById } from '@/lib/owner-color';
 
 const BULK_TABLE_MIN_WIDTH = 860;
 const bulkTableColumns = ['42%', '18%', '26%', '14%'];
+const tableTextStyle = { fontSize: '0.8125rem', lineHeight: 1.35 };
+const tableHeaderStyle = {
+  ...tableTextStyle,
+  fontWeight: 700,
+  color: 'var(--mantine-color-gray-7)',
+};
 
 type BulkItem = {
   skuId: string;
@@ -269,7 +274,9 @@ export default function InventoryDisplay({
       {showBulkSection && (
         <section>
           <Group justify="space-between" align="center" mb="sm">
-            <Title order={3}>STOCK MASIVO</Title>
+            <Text fw={800} size="md" tt="uppercase">
+              Stock masivo
+            </Text>
             <Group gap="xs">
               {onAddStock ? (
                 <Button color="green" size="xs" onClick={onAddStock}>
@@ -290,8 +297,10 @@ export default function InventoryDisplay({
                 <Stack gap="sm">
                   <Group justify="space-between" align="center" wrap="wrap">
                     <div>
-                      <Text fw={800}>{group.name}</Text>
-                      <Text size="sm" c="dimmed">
+                      <Text fw={750} size="sm">
+                        {group.name}
+                      </Text>
+                      <Text size="xs" c="dimmed">
                         {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
                       </Text>
                     </div>
@@ -312,25 +321,27 @@ export default function InventoryDisplay({
                         </colgroup>
                         <Table.Thead>
                           <Table.Tr>
-                            <Table.Th>Nombre</Table.Th>
-                            <Table.Th>Cobro</Table.Th>
-                            <Table.Th>Bodega dueña</Table.Th>
-                            <Table.Th style={{ textAlign: 'right' }}>Cantidad</Table.Th>
+                            <Table.Th style={tableHeaderStyle}>Nombre</Table.Th>
+                            <Table.Th style={tableHeaderStyle}>Cobro</Table.Th>
+                            <Table.Th style={tableHeaderStyle}>Bodega dueña</Table.Th>
+                            <Table.Th style={{ ...tableHeaderStyle, textAlign: 'right' }}>
+                              Cantidad
+                            </Table.Th>
                           </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
                           {group.items.map((item) =>
                             'owners' in item ? (
                               <Table.Tr key={item.skuId}>
-                                <Table.Td>
-                                  <Text truncate title={item.name}>
+                                <Table.Td style={tableTextStyle}>
+                                  <Text size="xs" truncate title={item.name}>
                                     {item.name}
                                   </Text>
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={tableTextStyle}>
                                   {formatCharge(item.chargeType, item.minimumChargeHours)}
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={tableTextStyle}>
                                   <Group gap={6} wrap="wrap">
                                     {item.visibleOwners.map((owner) => (
                                       <Badge
@@ -348,7 +359,7 @@ export default function InventoryDisplay({
                                     ) : null}
                                   </Group>
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={tableTextStyle}>
                                   <Group gap={6} justify="flex-end" wrap="wrap">
                                     {item.visibleOwners.map((owner) => (
                                       <Badge
@@ -378,20 +389,20 @@ export default function InventoryDisplay({
                               </Table.Tr>
                             ) : (
                               <Table.Tr key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}>
-                                <Table.Td>
-                                  <Text truncate title={item.name ?? item.skuName ?? '-'}>
+                                <Table.Td style={tableTextStyle}>
+                                  <Text size="xs" truncate title={item.name ?? item.skuName ?? '-'}>
                                     {item.name ?? item.skuName ?? '-'}
                                   </Text>
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={tableTextStyle}>
                                   {formatCharge(item.chargeType, item.minimumChargeHours)}
                                 </Table.Td>
-                                <Table.Td>
-                                  <Text truncate title={item.ownerWarehouseName ?? '-'}>
+                                <Table.Td style={tableTextStyle}>
+                                  <Text size="xs" truncate title={item.ownerWarehouseName ?? '-'}>
                                     {item.ownerWarehouseName ?? '-'}
                                   </Text>
                                 </Table.Td>
-                                <Table.Td style={{ textAlign: 'right' }}>
+                                <Table.Td style={{ ...tableTextStyle, textAlign: 'right' }}>
                                   {isNegativeQuantity(item.quantity) ? (
                                     <Group gap={6} justify="flex-end" wrap="nowrap">
                                       <IconAlertTriangle
@@ -399,7 +410,7 @@ export default function InventoryDisplay({
                                         stroke={2.5}
                                         color="var(--mantine-color-red-7)"
                                       />
-                                      <Text c="red" fw={700}>
+                                      <Text size="xs" c="red" fw={700}>
                                         {item.quantity}
                                       </Text>
                                     </Group>
@@ -418,7 +429,9 @@ export default function InventoryDisplay({
                       {group.items.map((item) =>
                         'owners' in item ? (
                           <Card key={item.skuId} withBorder padding="sm" radius="md">
-                            <Text fw={700}>{item.name}</Text>
+                            <Text fw={700} size="sm">
+                              {item.name}
+                            </Text>
                             <Text size="xs" c="dimmed">
                               Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                             </Text>
@@ -458,11 +471,13 @@ export default function InventoryDisplay({
                             padding="sm"
                             radius="md"
                           >
-                            <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
+                            <Text fw={700} size="sm">
+                              {item.name ?? item.skuName ?? 'SKU'}
+                            </Text>
                             <Text size="xs" c="dimmed">
                               Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
                             </Text>
-                            <Text mt="xs">
+                            <Text mt="xs" size="sm">
                               <strong>Cantidad:</strong>{' '}
                               {isNegativeQuantity(item.quantity) ? (
                                 <Text span c="red" fw={700}>
@@ -494,15 +509,17 @@ export default function InventoryDisplay({
 
       {showSerialSection && (
         <section>
-          <Title order={3} mb="sm">
+          <Text fw={800} size="md" tt="uppercase" mb="sm">
             {serialSectionTitle}
-          </Title>
+          </Text>
           <Accordion variant="separated" radius="md">
             {serialFamilyGroups.map((group) => (
               <Accordion.Item key={group.id} value={group.id}>
                 <Accordion.Control>
                   <Group justify="space-between" align="center" wrap="nowrap" pr="sm">
-                    <Text fw={800}>{group.name}</Text>
+                    <Text fw={750} size="sm">
+                      {group.name}
+                    </Text>
                     <Badge color="green" variant="light" style={{ flexShrink: 0 }}>
                       {group.items.length} activo{group.items.length === 1 ? '' : 's'}
                     </Badge>

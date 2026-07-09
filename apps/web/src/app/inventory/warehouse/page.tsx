@@ -24,6 +24,7 @@ import {
   Text,
   TextInput,
   ThemeIcon,
+  Title,
 } from '@mantine/core';
 import { IconEdit, IconPhoto, IconPlus, IconUpload } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
@@ -902,7 +903,9 @@ export default function WarehouseInventoryPage() {
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>Resultado de inventario</Text>
+                  <Title order={3} size="h4">
+                    Resultado de inventario
+                  </Title>
                   <Text size="sm" c="dimmed">
                     Stock masivo y equipos unicos de la bodega seleccionada.
                   </Text>
