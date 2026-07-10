@@ -1566,7 +1566,7 @@ export class InventoryService {
           quantity: row.quantity,
         };
       })
-      .sort((a, b) => (a.serialOrEngine ?? '').localeCompare(b.serialOrEngine ?? ''));
+      .sort((a, b) => this.compareSerialInventoryRows(a, b));
 
     if (serial.some((row) => row.quantity !== 1)) {
       console.warn('Inventory serial quantity != 1 detected', {
@@ -1846,7 +1846,7 @@ export class InventoryService {
           quantity: row.quantity,
         };
       })
-      .sort((a, b) => (a.serialOrEngine ?? '').localeCompare(b.serialOrEngine ?? ''));
+      .sort((a, b) => this.compareSerialInventoryRows(a, b));
 
     if (serial.some((row) => row.quantity !== 1)) {
       console.warn('Inventory serial quantity != 1 detected', {
@@ -2391,6 +2391,23 @@ export class InventoryService {
       throw new BadRequestException('Tamaño de SKU invalido');
     }
     return normalized;
+  }
+
+  private compareSerialInventoryRows(
+    a: { internalNumber?: number | null; serialOrEngine?: string | null },
+    b: { internalNumber?: number | null; serialOrEngine?: string | null },
+  ) {
+    const aNumber = a.internalNumber;
+    const bNumber = b.internalNumber;
+    if (aNumber != null && bNumber != null && aNumber !== bNumber) {
+      return aNumber - bNumber;
+    }
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return (a.serialOrEngine ?? '').localeCompare(b.serialOrEngine ?? '', 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
   }
 
   private parseMonthStart(month: string) {

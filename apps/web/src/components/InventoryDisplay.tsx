@@ -54,7 +54,7 @@ type SerialItem = {
   chargeType?: 'DAY' | 'HOUR' | string | null;
   minimumChargeHours?: number | string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
-  internalNumber?: string | null;
+  internalNumber?: string | number | null;
   assetFamily?: {
     id?: string | null;
     code?: string | null;
@@ -123,6 +123,22 @@ export default function InventoryDisplay({
       {quantity}
     </Badge>
   );
+  const compareSerialItems = (a: SerialItem, b: SerialItem) => {
+    const aNumber = a.internalNumber == null ? null : Number(a.internalNumber);
+    const bNumber = b.internalNumber == null ? null : Number(b.internalNumber);
+    const hasANumber = aNumber != null && Number.isFinite(aNumber);
+    const hasBNumber = bNumber != null && Number.isFinite(bNumber);
+
+    if (hasANumber && hasBNumber && aNumber !== bNumber) {
+      return aNumber - bNumber;
+    }
+    if (hasANumber && !hasBNumber) return -1;
+    if (!hasANumber && hasBNumber) return 1;
+    return (a.serialOrEngine ?? '').localeCompare(b.serialOrEngine ?? '', 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  };
 
   const groupedBulk = useMemo(() => {
     if (!bulkOwnerStackMode) return null;
@@ -261,7 +277,12 @@ export default function InventoryDisplay({
       current.items = [...current.items, item];
     });
 
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return Array.from(map.values())
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort(compareSerialItems),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }, [serial]);
 
   return (

@@ -12,7 +12,6 @@ import {
   Select,
   Stack,
   Text,
-  TextInput,
   NumberInput,
   SimpleGrid,
 } from '@mantine/core';
@@ -43,17 +42,19 @@ type AssetWorkflowStep = 'template' | 'commercial' | 'asset' | 'review';
 type Sku = {
   id: string;
   name: string;
-  unitWeight?: number | null;
-  price?: number | null;
-  subrentalPrice?: number | null;
-  replacementValue?: number | null;
+  unitWeight?: number | string | null;
+  price?: number | string | null;
+  subrentalPrice?: number | string | null;
+  replacementValue?: number | string | null;
   chargeType?: 'DAY' | 'HOUR' | null;
-  minimumChargeHours?: number | null;
+  minimumChargeHours?: number | string | null;
   size?: string | null;
 };
 
 type Asset = {
   id: string;
+  imageFileObjectId?: string | null;
+  imageUrl?: string | null;
   brand?: string | null;
   model?: string | null;
   year?: number | null;
@@ -88,16 +89,16 @@ type CatalogOption = {
 };
 
 const FUEL_OPTIONS = [
-  { value: 'GASOLINA', label: 'Gasolina' },
-  { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electrico' },
+  { value: 'GASOLINA', label: 'GASOLINA' },
+  { value: 'DIESEL', label: 'DIESEL' },
+  { value: 'ELECTRICO', label: 'ELECTRICO' },
 ];
 const SIZE_OPTIONS = [
-  { value: 'EXTRA PEQUEÑO', label: 'Extra pequeño' },
-  { value: 'PEQUEÑO', label: 'Pequeño' },
-  { value: 'MEDIANO', label: 'Mediano' },
-  { value: 'GRANDE', label: 'Grande' },
-  { value: 'EXTRA GRANDE', label: 'Extra grande' },
+  { value: 'EXTRA PEQUEÑO', label: 'EXTRA PEQUEÑO' },
+  { value: 'PEQUEÑO', label: 'PEQUEÑO' },
+  { value: 'MEDIANO', label: 'MEDIANO' },
+  { value: 'GRANDE', label: 'GRANDE' },
+  { value: 'EXTRA GRANDE', label: 'EXTRA GRANDE' },
 ];
 const BASE_BRAND_OPTIONS = [
   'BOBCAT',
@@ -124,6 +125,36 @@ const stripReferenceParts = (reference: string, parts: Array<string | number | n
     cleaned = cleaned.replace(new RegExp(`(^|\\s)${escapeRegExp(value)}(?=\\s|$)`, 'gi'), ' ');
   });
   return cleaned.replace(/\s+/g, ' ').trim();
+};
+
+const toNumberInputValue = (value: number | string | null | undefined) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : '';
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : '';
+  }
+  return '';
+};
+
+const inferBrandModelFromSkuName = (
+  skuName: string,
+  options: Array<{ value: string; label: string }>,
+) => {
+  const normalizedName = uppercaseInputValue(skuName.trim()).replace(/\s+/g, ' ');
+  const brand = [...options]
+    .sort((a, b) => b.value.length - a.value.length)
+    .find((option) => normalizedName === option.value || normalizedName.startsWith(`${option.value} `));
+
+  if (!brand) {
+    return { brand: '', model: normalizedName };
+  }
+
+  return {
+    brand: brand.value,
+    model: normalizedName.slice(brand.value.length).trim(),
+  };
 };
 
 export default function CreateSerializedAssetPage() {
@@ -163,6 +194,8 @@ export default function CreateSerializedAssetPage() {
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
   const [assetImageFile, setAssetImageFile] = useState<File | null>(null);
+  const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
+  const [copiedImageLabel, setCopiedImageLabel] = useState('');
   const [active, setActive] = useState(true);
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
@@ -176,6 +209,9 @@ export default function CreateSerializedAssetPage() {
   const [warehouseLocked, setWarehouseLocked] = useState(false);
   const [familyLocked, setFamilyLocked] = useState(false);
   const [assetWorkflowStep, setAssetWorkflowStep] = useState<AssetWorkflowStep>('template');
+  const [templateAttempted, setTemplateAttempted] = useState(false);
+  const [commercialAttempted, setCommercialAttempted] = useState(false);
+  const [assetAttempted, setAssetAttempted] = useState(false);
 
   const familySelectRef = useRef<HTMLInputElement>(null);
   const familyNameRef = useRef<HTMLInputElement>(null);
@@ -372,6 +408,8 @@ export default function CreateSerializedAssetPage() {
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
     setAssetImageFile(null);
+    setCopiedImageFileObjectId(null);
+    setCopiedImageLabel('');
     setActive(true);
     setOwnerWarehouseId(null);
     setWarehouseCurrentId(null);
@@ -379,6 +417,9 @@ export default function CreateSerializedAssetPage() {
     setWarehouseLocked(false);
     setFamilyLocked(false);
     setAssetWorkflowStep('template');
+    setTemplateAttempted(false);
+    setCommercialAttempted(false);
+    setAssetAttempted(false);
   };
 
   const clearFamilyAndAssetInputs = () => {
@@ -401,10 +442,15 @@ export default function CreateSerializedAssetPage() {
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
     setAssetImageFile(null);
+    setCopiedImageFileObjectId(null);
+    setCopiedImageLabel('');
     setActive(true);
     setManualInternalNumber('');
     setFamilyLocked(false);
     setAssetWorkflowStep('template');
+    setTemplateAttempted(false);
+    setCommercialAttempted(false);
+    setAssetAttempted(false);
   };
 
   const handleOwnerWarehouseChange = (value: string | null) => {
@@ -472,9 +518,14 @@ export default function CreateSerializedAssetPage() {
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
     setAssetImageFile(null);
+    setCopiedImageFileObjectId(null);
+    setCopiedImageLabel('');
     setActive(true);
     setManualInternalNumber('');
     setAssetWorkflowStep('template');
+    setTemplateAttempted(false);
+    setCommercialAttempted(false);
+    setAssetAttempted(false);
   };
 
   const setValidationError = (
@@ -487,6 +538,7 @@ export default function CreateSerializedAssetPage() {
 
   const goToCommercialStep = () => {
     setError(null);
+    setTemplateAttempted(true);
     if (!resolvedSkuName) {
       setValidationError('Ingresa marca/modelo o confirma una familia.');
       return;
@@ -495,20 +547,24 @@ export default function CreateSerializedAssetPage() {
       setValidationError('Selecciona la unidad de medida.');
       return;
     }
+    setTemplateAttempted(false);
     setAssetWorkflowStep('commercial');
   };
 
   const goToAssetStep = () => {
     setError(null);
+    setCommercialAttempted(true);
     if (!hasCommercialData) {
       setValidationError('Completa precio, subalquiler, reposición y regla de cobro.');
       return;
     }
+    setCommercialAttempted(false);
     setAssetWorkflowStep('asset');
   };
 
   const goToReviewStep = () => {
     setError(null);
+    setAssetAttempted(true);
     if (!serialOrEngine.trim()) {
       setValidationError('El serial o motor es requerido.', serialOrEngineRef);
       return;
@@ -520,6 +576,7 @@ export default function CreateSerializedAssetPage() {
       setValidationError('Ingresa el número interno de la bodega alterna.', manualInternalNumberRef);
       return;
     }
+    setAssetAttempted(false);
     setAssetWorkflowStep('review');
   };
 
@@ -635,6 +692,7 @@ export default function CreateSerializedAssetPage() {
           model: skuModel.trim() || undefined,
           year: skuYear === '' ? undefined : skuYear,
           fuel: skuFuel || undefined,
+          imageFileObjectId: assetImageFile ? undefined : copiedImageFileObjectId || undefined,
           active,
           internalNumber:
             isAlternateOwnerWarehouse && manualInternalNumber !== ''
@@ -971,34 +1029,22 @@ export default function CreateSerializedAssetPage() {
                     onChange={(value) => {
                       setSkuSuggestionId(value);
                       const selectedSku = value ? skuById.get(value) : undefined;
-                      if (!selectedSku) return;
-                      setSkuUnitWeight(
-                        typeof selectedSku.unitWeight === 'number'
-                          ? selectedSku.unitWeight
-                          : '',
-                      );
-                      setSkuPrice(
-                        typeof selectedSku.price === 'number'
-                          ? selectedSku.price
-                          : '',
-                      );
-                      setSkuSubrentalPrice(
-                        typeof selectedSku.subrentalPrice === 'number'
-                          ? selectedSku.subrentalPrice
-                          : '',
-                      );
-                      setSkuReplacementValue(
-                        typeof selectedSku.replacementValue === 'number'
-                          ? selectedSku.replacementValue
-                          : '',
-                      );
+                      if (!selectedSku) {
+                        setCopiedImageFileObjectId(null);
+                        setCopiedImageLabel('');
+                        return;
+                      }
+                      setSkuUnitWeight(toNumberInputValue(selectedSku.unitWeight));
+                      setSkuUnit((current) => current || units[0] || '');
+                      setSkuPrice(toNumberInputValue(selectedSku.price));
+                      setSkuSubrentalPrice(toNumberInputValue(selectedSku.subrentalPrice));
+                      setSkuReplacementValue(toNumberInputValue(selectedSku.replacementValue));
                       setSkuChargeType(
                         selectedSku.chargeType === 'HOUR' ? 'HOUR' : 'DAY',
                       );
                       setSkuMinimumChargeHours(
-                        selectedSku.chargeType === 'HOUR' &&
-                          typeof selectedSku.minimumChargeHours === 'number'
-                          ? selectedSku.minimumChargeHours
+                        selectedSku.chargeType === 'HOUR'
+                          ? toNumberInputValue(selectedSku.minimumChargeHours)
                           : '',
                       );
                       const sampleAsset = (
@@ -1008,15 +1054,20 @@ export default function CreateSerializedAssetPage() {
                           asset.brand?.trim() ||
                           asset.model?.trim() ||
                           asset.year != null ||
-                          asset.fuel?.trim(),
+                          asset.fuel?.trim() ||
+                          asset.imageFileObjectId,
                       );
-                      const copiedBrand = sampleAsset?.brand?.trim() ?? '';
-                      const copiedModel = sampleAsset?.model?.trim() ?? '';
+                      const inferred = inferBrandModelFromSkuName(selectedSku.name ?? '', brandOptions);
+                      const copiedBrand = uppercaseInputValue(sampleAsset?.brand?.trim() || inferred.brand);
+                      const copiedModel = uppercaseInputValue(sampleAsset?.model?.trim() || inferred.model);
                       setSkuBrand(copiedBrand);
                       setSkuModel(copiedModel);
                       setSkuYear(sampleAsset?.year ?? '');
-                      setSkuFuel(sampleAsset?.fuel?.trim() ?? '');
-                      setSkuSize(selectedSku.size?.trim() ?? '');
+                      setSkuFuel(uppercaseInputValue(sampleAsset?.fuel?.trim() ?? ''));
+                      setSkuSize(uppercaseInputValue(selectedSku.size?.trim() ?? ''));
+                      setCopiedImageFileObjectId(sampleAsset?.imageFileObjectId ?? null);
+                      setCopiedImageLabel(sampleAsset?.imageFileObjectId ? 'Imagen copiada de la plantilla' : '');
+                      setAssetImageFile(null);
                       setSkuName(stripReferenceParts(selectedSku.name ?? '', [copiedBrand, copiedModel]));
                     }}
                     placeholder={
@@ -1050,12 +1101,12 @@ export default function CreateSerializedAssetPage() {
                       searchable
                       clearable
                     />
-                    <TextInput
+                    <UppercaseTextInput
                       label="Modelo"
                       name="skuModel"
                       autoComplete="off"
                       value={skuModel}
-                      onChange={(event) => setSkuModel(event.currentTarget.value)}
+                      onChange={setSkuModel}
                     />
                   </Group>
 
@@ -1076,7 +1127,7 @@ export default function CreateSerializedAssetPage() {
                       name="skuFuel"
                       data={FUEL_OPTIONS}
                       value={skuFuel}
-                      onChange={(value) => setSkuFuel(value ?? '')}
+                      onChange={(value) => setSkuFuel(uppercaseInputValue(value ?? ''))}
                       clearable
                     />
                     <Select
@@ -1084,7 +1135,7 @@ export default function CreateSerializedAssetPage() {
                       name="skuSize"
                       data={SIZE_OPTIONS}
                       value={skuSize}
-                      onChange={(value) => setSkuSize(value ?? '')}
+                      onChange={(value) => setSkuSize(uppercaseInputValue(value ?? ''))}
                       clearable
                     />
                   </Group>
@@ -1098,6 +1149,7 @@ export default function CreateSerializedAssetPage() {
                       onChange={(value) => setSkuUnit(value ?? '')}
                       searchable
                       nothingFoundMessage="No hay unidades"
+                      error={templateAttempted && !skuUnit ? 'Requerido' : null}
                       required
                     />
                     <NumberInput
@@ -1148,6 +1200,8 @@ export default function CreateSerializedAssetPage() {
                       step={1000}
                       prefix="$ "
                       thousandSeparator=","
+                      error={commercialAttempted && skuPrice === '' ? 'Requerido' : null}
+                      required
                     />
                     <NumberInput
                       label="Precio sub alquiler"
@@ -1161,6 +1215,8 @@ export default function CreateSerializedAssetPage() {
                       step={1000}
                       prefix="$ "
                       thousandSeparator=","
+                      error={commercialAttempted && skuSubrentalPrice === '' ? 'Requerido' : null}
+                      required
                     />
                     <NumberInput
                       label="Valor reposicion"
@@ -1174,6 +1230,8 @@ export default function CreateSerializedAssetPage() {
                       step={1000}
                       prefix="$ "
                       thousandSeparator=","
+                      error={commercialAttempted && skuReplacementValue === '' ? 'Requerido' : null}
+                      required
                     />
                     <ChargeTypeSelect
                       label="Tipo de cobro"
@@ -1196,6 +1254,8 @@ export default function CreateSerializedAssetPage() {
                         min={0.5}
                         step={0.5}
                         suffix=" horas"
+                        error={commercialAttempted && skuMinimumChargeHours === '' ? 'Requerido' : null}
+                        required
                       />
                     ) : null}
                   </SimpleGrid>
@@ -1222,16 +1282,15 @@ export default function CreateSerializedAssetPage() {
                     </Text>
                   </div>
 
-                  <TextInput
+                  <UppercaseTextInput
                     ref={serialOrEngineRef}
                     label="Serial o motor"
                     name="serialOrEngine"
                     autoComplete="off"
                     value={serialOrEngine}
-                    onChange={(event) =>
-                      setSerialOrEngine(event.currentTarget.value)
-                    }
+                    onChange={setSerialOrEngine}
                     placeholder="Ej: A3NV16797"
+                    error={assetAttempted && !serialOrEngine.trim() ? 'Requerido' : null}
                     required
                   />
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
@@ -1239,7 +1298,7 @@ export default function CreateSerializedAssetPage() {
                       <div>
                         <Text fw={700}>Imagen</Text>
                         <Text size="sm" c="dimmed">
-                          {assetImageFile ? assetImageFile.name : 'PNG, JPG o WEBP.'}
+                          {assetImageFile ? assetImageFile.name : copiedImageLabel || 'PNG, JPG o WEBP.'}
                         </Text>
                       </div>
                       <FileButton
