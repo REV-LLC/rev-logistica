@@ -3,27 +3,27 @@ import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validat
 export class UpdateAssetDto {
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsString()
-  brand?: string;
+  brand?: string | null;
 
   @IsOptional()
   @IsString()
-  model?: string;
+  model?: string | null;
 
   @IsOptional()
   @IsNumber()
-  year?: number;
+  year?: number | null;
 
   @IsOptional()
   @IsString()
-  fuel?: string;
+  fuel?: string | null;
 
   @IsOptional()
   @IsUUID()
-  warehouseCurrentId?: string;
+  warehouseCurrentId?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -31,11 +31,11 @@ export class UpdateAssetDto {
 
   @IsOptional()
   @IsNumber()
-  weight?: number;
+  weight?: number | null;
 
   @IsOptional()
   @IsUUID()
-  imageFileObjectId?: string;
+  imageFileObjectId?: string | null;
 
   @IsOptional()
   @IsBoolean()
