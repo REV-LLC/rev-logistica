@@ -2,6 +2,7 @@ import '@mantine/core/styles.css';
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import Providers from '@/components/Providers';
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata: Metadata = {
   title: 'Rev Logistica Backoffice',

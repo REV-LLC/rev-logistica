@@ -59,13 +59,6 @@ type Warehouse = {
   name: string;
 };
 
-type WarehouseInventoryResponse = {
-  serial?: Array<{
-    assetId: string;
-    imageUrl?: string | null;
-  }>;
-};
-
 type AssetLedgerResponse = {
   items: Array<{
     movementType?: string | null;
@@ -137,19 +130,7 @@ export default function EditSerializedAssetPage() {
             // ignore location lookup errors
           }
         }
-        let resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
-        if (!resolvedImageUrl && assetData.warehouseOwnerId) {
-          try {
-            const warehouseInventory = await api<WarehouseInventoryResponse>(
-              `/inventory/warehouse/${assetData.warehouseOwnerId}`,
-              { method: 'GET' },
-            );
-            const serialRow = warehouseInventory.serial?.find((row) => row.assetId === assetData.id);
-            resolvedImageUrl = serialRow?.imageUrl ?? '';
-          } catch {
-            // ignore fallback errors
-          }
-        }
+        const resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
         if (!mounted) return;
         setAsset(assetData);
         setWarehouses(warehouseData);
@@ -264,8 +245,8 @@ export default function EditSerializedAssetPage() {
         model: model.trim() || null,
         year: year === '' ? null : year,
         fuel: fuel || null,
-        warehouseCurrentId: warehouseCurrentId ?? undefined,
-        imageFileObjectId: assetImageFileObjectId ?? undefined,
+        warehouseCurrentId,
+        imageFileObjectId: assetImageFileObjectId,
         active,
       };
       const updatedAsset = await api<AssetResponse>(`/assets/${assetId}`, {
