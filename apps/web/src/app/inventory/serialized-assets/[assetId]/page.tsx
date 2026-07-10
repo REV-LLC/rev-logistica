@@ -48,7 +48,19 @@ type AssetResponse = {
   imageFileObjectId?: string | null;
   imageUrl?: string | null;
   active: boolean;
-  sku?: { id: string; name: string | null; imageUrl?: string | null } | null;
+  sku?: {
+    id: string;
+    name: string | null;
+    imageUrl?: string | null;
+    price?: number | string | null;
+    subrentalPrice?: number | string | null;
+    replacementValue?: number | string | null;
+    chargeType?: 'DAY' | 'HOUR' | string | null;
+    minimumChargeHours?: number | string | null;
+    size?: string | null;
+    areaM2?: number | string | null;
+    unitWeight?: number | string | null;
+  } | null;
   assetFamily?: { id: string; name: string | null } | null;
   warehouseOwner?: { id: string; name: string | null } | null;
   warehouseCurrent?: { id: string; name: string | null } | null;
@@ -70,10 +82,56 @@ type AssetLedgerResponse = {
 };
 
 const FUEL_OPTIONS = [
-  { value: 'GASOLINA', label: 'Gasolina' },
-  { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electrico' },
+  { value: 'GASOLINA', label: 'GASOLINA' },
+  { value: 'DIESEL', label: 'DIESEL' },
+  { value: 'ELECTRICO', label: 'ELECTRICO' },
 ];
+const EMPTY_VALUE = 'N/A';
+const rowDivider = '1px solid rgba(15, 23, 42, 0.08)';
+
+const displayValue = (value: string | number | null | undefined) => {
+  if (value == null) return EMPTY_VALUE;
+  const normalized = String(value).trim();
+  return normalized || EMPTY_VALUE;
+};
+
+const toNumber = (value: number | string | null | undefined) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const formatCurrency = (value: number | string | null | undefined) => {
+  const parsed = toNumber(value);
+  if (parsed == null) return EMPTY_VALUE;
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(parsed);
+};
+
+const formatDecimal = (value: number | string | null | undefined, suffix = '') => {
+  const parsed = toNumber(value);
+  if (parsed == null) return EMPTY_VALUE;
+  return `${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 }).format(parsed)}${suffix}`;
+};
+
+const formatCharge = (
+  chargeType?: string | null,
+  minimumChargeHours?: number | string | null,
+) => {
+  const normalized = chargeType?.toUpperCase();
+  if (normalized === 'HOUR') {
+    const minimum = formatDecimal(minimumChargeHours, ' H');
+    return minimum === EMPTY_VALUE ? 'HORA' : `HORA (MIN ${minimum})`;
+  }
+  if (normalized === 'DAY') return 'DIA';
+  return EMPTY_VALUE;
+};
 
 export default function EditSerializedAssetPage() {
   const params = useParams<{ assetId: string }>();
@@ -169,7 +227,7 @@ export default function EditSerializedAssetPage() {
   );
 
   const autoDescription = useMemo(() => {
-    if (!asset) return '-';
+    if (!asset) return EMPTY_VALUE;
     return getSerialDisplayName({
       assetId: asset.id,
       skuName: asset.sku?.name,
@@ -179,16 +237,16 @@ export default function EditSerializedAssetPage() {
     });
   }, [asset, brand, model]);
   const fuelLabel = useMemo(
-    () => ((FUEL_OPTIONS.find((option) => option.value === fuel)?.label ?? fuel) || '-'),
+    () => displayValue(FUEL_OPTIONS.find((option) => option.value === fuel)?.label ?? fuel),
     [fuel],
   );
   const warehouseCurrentName = useMemo(
-    () => warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name ?? '-',
+    () => displayValue(warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name),
     [warehouses, warehouseCurrentId],
   );
   const locationBadge = useMemo(() => {
     if (!asset) {
-      return { color: 'gray' as const, label: '-' };
+      return { color: 'gray' as const, label: EMPTY_VALUE };
     }
     if (!warehouseCurrentId) {
       return {
@@ -209,17 +267,17 @@ export default function EditSerializedAssetPage() {
     () => [
       {
         label: 'Serial / motor',
-        value: asset?.serialOrEngine || '-',
+        value: displayValue(asset?.serialOrEngine),
         icon: <IconEngine size={18} />,
       },
       {
         label: 'Codigo publico',
-        value: asset?.publicCode || '-',
+        value: displayValue(asset?.publicCode),
         icon: <IconBarcode size={18} />,
       },
       {
         label: 'Bodega dueña',
-        value: asset?.warehouseOwner?.name ?? '-',
+        value: displayValue(asset?.warehouseOwner?.name),
         icon: <IconBuildingWarehouse size={18} />,
       },
       {
@@ -229,6 +287,43 @@ export default function EditSerializedAssetPage() {
       },
     ],
     [asset, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
+  );
+  const readOnlySections = useMemo(
+    () => [
+      {
+        title: 'Identificacion',
+        fields: [
+          { label: 'Referencia / plantilla', value: displayValue(asset?.sku?.name) },
+          { label: 'Familia', value: displayValue(asset?.assetFamily?.name) },
+          { label: 'Estado', value: active ? 'Activo' : 'Inactivo' },
+        ],
+      },
+      {
+        title: 'Datos tecnicos',
+        fields: [
+          { label: 'Marca', value: displayValue(brand) },
+          { label: 'Modelo', value: displayValue(model) },
+          { label: 'Año', value: year === '' ? EMPTY_VALUE : String(year) },
+          { label: 'Combustible', value: fuelLabel },
+          { label: 'Tamaño', value: displayValue(asset?.sku?.size) },
+          { label: 'Area', value: formatDecimal(asset?.sku?.areaM2, ' M²') },
+          { label: 'Peso unitario', value: formatDecimal(asset?.sku?.unitWeight, ' KG') },
+        ],
+      },
+      {
+        title: 'Valores comerciales',
+        fields: [
+          { label: 'Precio', value: formatCurrency(asset?.sku?.price) },
+          { label: 'Precio sub alquiler', value: formatCurrency(asset?.sku?.subrentalPrice) },
+          { label: 'Valor reposicion', value: formatCurrency(asset?.sku?.replacementValue) },
+          {
+            label: 'Tipo de cobro',
+            value: formatCharge(asset?.sku?.chargeType, asset?.sku?.minimumChargeHours),
+          },
+        ],
+      },
+    ],
+    [active, asset, brand, fuelLabel, model, year],
   );
 
   const handleSave = async () => {
@@ -321,7 +416,7 @@ export default function EditSerializedAssetPage() {
   };
 
   return (
-    <Container size="lg" py="xl">
+    <Container size="xl" py="xl">
       <Group mb="md" justify="space-between" align="center">
         <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.back()}>
           Volver
@@ -421,39 +516,45 @@ export default function EditSerializedAssetPage() {
                     </Badge>
                   </Group>
                   <Title order={2}>{autoDescription}</Title>
-                  <Text c="dimmed" mt={6}>
+                  <Text c="gray.7" mt={6}>
                     Ficha operativa del equipo serializado.
                   </Text>
                 </div>
 
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                  {detailCards.map((item) => (
-                    <Paper key={item.label} withBorder radius="lg" p="md" bg="white">
-                      <Group gap="sm" align="flex-start" wrap="nowrap">
-                        <ThemeIcon color="blue" variant="light" radius="xl" size={34}>
+                <Paper radius="lg" p="md" bg="white">
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    {detailCards.map((item) => (
+                      <Group key={item.label} gap="sm" align="flex-start" wrap="nowrap">
+                        <ThemeIcon color="blue" variant="light" radius="xl" size={30}>
                           {item.icon}
                         </ThemeIcon>
                         <div style={{ minWidth: 0 }}>
-                          <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                          <Text size="xs" c="dark" fw={700}>
                             {item.label}
                           </Text>
-                          <Text size="sm" fw={700} style={{ overflowWrap: 'anywhere' }}>
+                          <Text
+                            size="sm"
+                            c="gray.8"
+                            fw={500}
+                            lineClamp={2}
+                            style={{ overflowWrap: 'anywhere' }}
+                          >
                             {item.value}
                           </Text>
                         </div>
                       </Group>
-                    </Paper>
-                  ))}
-                </SimpleGrid>
+                    ))}
+                  </SimpleGrid>
+                </Paper>
               </Stack>
             </SimpleGrid>
           </Paper>
 
-          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
             <Group justify="space-between" align="center" mb="md">
               <div>
                 <Text fw={800}>Datos del equipo</Text>
-                <Text size="sm" c="dimmed">
+                <Text size="sm" c="gray.7">
                   Informacion tecnica y comercial visible para operacion.
                 </Text>
               </div>
@@ -539,44 +640,49 @@ export default function EditSerializedAssetPage() {
                 </Group>
               </Stack>
             ) : (
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Marca
-                  </Text>
-                  <Text fw={700}>{brand || '-'}</Text>
-                </Paper>
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Modelo
-                  </Text>
-                  <Text fw={700}>{model || '-'}</Text>
-                </Paper>
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Año
-                  </Text>
-                  <Text fw={700}>{year === '' ? '-' : String(year)}</Text>
-                </Paper>
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Combustible
-                  </Text>
-                  <Text fw={700}>{fuelLabel}</Text>
-                </Paper>
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Familia
-                  </Text>
-                  <Text fw={700}>{asset.assetFamily?.name ?? '-'}</Text>
-                </Paper>
-                <Paper withBorder radius="lg" p="md">
-                  <Text size="xs" c="dimmed" fw={800} tt="uppercase">
-                    Estado
-                  </Text>
-                  <Text fw={700}>{active ? 'Activo' : 'Inactivo'}</Text>
-                </Paper>
-              </SimpleGrid>
+              <Stack gap="lg">
+                {readOnlySections.map((section) => (
+                  <Stack key={section.title} gap="xs">
+                    <Text
+                      fw={800}
+                      size="sm"
+                      pb={6}
+                      style={{ borderBottom: rowDivider }}
+                    >
+                      {section.title}
+                    </Text>
+                    <Stack gap={0}>
+                      {section.fields.map((field) => (
+                        <SimpleGrid
+                          key={`${section.title}-${field.label}`}
+                          cols={{ base: 1, sm: 2 }}
+                          spacing={{ base: 2, sm: 'xl' }}
+                          py={11}
+                          style={{
+                            borderBottom: rowDivider,
+                            minHeight: 44,
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text size="sm" c="dark" fw={600}>
+                            {field.label}
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="gray.8"
+                            fw={500}
+                            lineClamp={2}
+                            ta={{ base: 'left', sm: 'right' }}
+                            style={{ overflowWrap: 'anywhere' }}
+                          >
+                            {field.value}
+                          </Text>
+                        </SimpleGrid>
+                      ))}
+                    </Stack>
+                  </Stack>
+                ))}
+              </Stack>
             )}
           </Paper>
 

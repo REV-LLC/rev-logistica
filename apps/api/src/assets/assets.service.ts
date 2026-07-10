@@ -68,6 +68,14 @@ export class AssetsService {
             id: true,
             name: true,
             imageUrl: true,
+            price: true,
+            subrentalPrice: true,
+            replacementValue: true,
+            chargeType: true,
+            minimumChargeHours: true,
+            size: true,
+            areaM2: true,
+            unitWeight: true,
             assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         },
@@ -94,6 +102,14 @@ export class AssetsService {
             id: item.sku.id,
             name: item.sku.name,
             imageUrl: item.sku.imageUrl,
+            price: item.sku.price,
+            subrentalPrice: item.sku.subrentalPrice,
+            replacementValue: item.sku.replacementValue,
+            chargeType: item.sku.chargeType,
+            minimumChargeHours: item.sku.minimumChargeHours,
+            size: item.sku.size,
+            areaM2: item.sku.areaM2,
+            unitWeight: item.sku.unitWeight,
             controlType: item.sku.assetFamily?.controlType ?? null,
           }
         : item.sku,
@@ -164,6 +180,14 @@ export class AssetsService {
     return {
       ...item,
       imageUrl: item.imageFileObject?.storageKey ?? null,
+      assetFamily: item.sku?.assetFamily
+        ? {
+            id: item.sku.assetFamily.id,
+            code: item.sku.assetFamily.code,
+            name: item.sku.assetFamily.name,
+            controlType: item.sku.assetFamily.controlType,
+          }
+        : null,
       sku: item.sku
         ? {
             id: item.sku.id,
