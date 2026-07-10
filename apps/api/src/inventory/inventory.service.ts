@@ -1444,6 +1444,7 @@ export class InventoryService {
             skuId: true,
             warehouseOwnerId: true,
             imageFileObjectId: true,
+            imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
           },
@@ -1536,6 +1537,7 @@ export class InventoryService {
         const sku = asset ? skusById.get(asset.skuId) : undefined;
         const assetImageFileObjectId = asset?.imageFileObjectId ?? null;
         const skuImageFileObjectId = sku?.imageFileObjectId ?? null;
+        const assetImageUrl = asset?.imageFileObject?.storageKey ?? null;
 
         return {
           assetId: row.assetId,
@@ -1550,7 +1552,7 @@ export class InventoryService {
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
           size: sku?.size ?? null,
-          imageUrl: sku?.imageUrl ?? null,
+          imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
@@ -1728,6 +1730,7 @@ export class InventoryService {
             skuId: true,
             warehouseOwnerId: true,
             imageFileObjectId: true,
+            imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
           },
@@ -1814,6 +1817,7 @@ export class InventoryService {
         const sku = asset ? skusById.get(asset.skuId) : undefined;
         const assetImageFileObjectId = asset?.imageFileObjectId ?? null;
         const skuImageFileObjectId = sku?.imageFileObjectId ?? null;
+        const assetImageUrl = asset?.imageFileObject?.storageKey ?? null;
 
         return {
           assetId: row.assetId,
@@ -1828,7 +1832,7 @@ export class InventoryService {
           chargeType: sku?.chargeType ?? null,
           minimumChargeHours: sku?.minimumChargeHours ?? null,
           size: sku?.size ?? null,
-          imageUrl: sku?.imageUrl ?? null,
+          imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),

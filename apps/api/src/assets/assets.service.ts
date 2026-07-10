@@ -303,14 +303,14 @@ export class AssetsService {
   async updateAsset(
     assetId: string,
     payload: {
-      description?: string;
-      brand?: string;
-      model?: string;
-      year?: number;
-      fuel?: string;
-      warehouseCurrentId?: string;
-      weight?: number;
-      imageFileObjectId?: string;
+      description?: string | null;
+      brand?: string | null;
+      model?: string | null;
+      year?: number | null;
+      fuel?: string | null;
+      warehouseCurrentId?: string | null;
+      weight?: number | null;
+      imageFileObjectId?: string | null;
       active?: boolean;
     },
   ) {
@@ -323,7 +323,7 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
-    if (payload.warehouseCurrentId) {
+    if (payload.warehouseCurrentId != null) {
       const warehouse = await this.prisma.warehouse.findUnique({
         where: { id: payload.warehouseCurrentId },
         select: { id: true },
@@ -333,7 +333,7 @@ export class AssetsService {
       }
     }
 
-    if (payload.imageFileObjectId) {
+    if (payload.imageFileObjectId != null) {
       const imageFile = await this.prisma.fileObject.findFirst({
         where: {
           id: payload.imageFileObjectId,
@@ -348,20 +348,28 @@ export class AssetsService {
       }
     }
 
-    return this.prisma.asset.update({
+    await this.prisma.asset.update({
       where: { id: assetId },
       data: {
-        description: payload.description ?? undefined,
-        brand: payload.brand ?? undefined,
-        model: payload.model ?? undefined,
-        year: payload.year ?? undefined,
-        fuel: payload.fuel ?? undefined,
-        warehouseCurrentId: payload.warehouseCurrentId ?? undefined,
-        weight: payload.weight ?? undefined,
-        imageFileObjectId: payload.imageFileObjectId ?? undefined,
+        description: Object.prototype.hasOwnProperty.call(payload, 'description')
+          ? payload.description
+          : undefined,
+        brand: Object.prototype.hasOwnProperty.call(payload, 'brand') ? payload.brand : undefined,
+        model: Object.prototype.hasOwnProperty.call(payload, 'model') ? payload.model : undefined,
+        year: Object.prototype.hasOwnProperty.call(payload, 'year') ? payload.year : undefined,
+        fuel: Object.prototype.hasOwnProperty.call(payload, 'fuel') ? payload.fuel : undefined,
+        warehouseCurrentId: Object.prototype.hasOwnProperty.call(payload, 'warehouseCurrentId')
+          ? payload.warehouseCurrentId
+          : undefined,
+        weight: Object.prototype.hasOwnProperty.call(payload, 'weight') ? payload.weight : undefined,
+        imageFileObjectId: Object.prototype.hasOwnProperty.call(payload, 'imageFileObjectId')
+          ? payload.imageFileObjectId
+          : undefined,
         active: payload.active,
       },
     });
+
+    return this.getAssetById(assetId);
   }
 
   async deleteAsset(assetId: string) {

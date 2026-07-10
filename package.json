@@ -15,5 +15,8 @@
     "js-yaml": "4.2.0",
     "multer": "2.2.0",
     "postcss": "8.5.15"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }

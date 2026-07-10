@@ -48,6 +48,7 @@ interface InventoryResponse {
     assetId: string;
     serialOrEngine: string | null;
     description: string | null;
+    imageUrl?: string | null;
     imageFileObjectId: string | null;
     quantity: number;
   }[];
