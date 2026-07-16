@@ -78,6 +78,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
   ASSET: new Set([
     'PHOTO',
     'FICHA_TECNICA',
+    'MANTENIMIENTO',
     'MANUAL',
     'CERTIFICADO',
     'OTRO',
