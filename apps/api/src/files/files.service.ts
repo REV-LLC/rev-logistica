@@ -27,7 +27,7 @@ export type UploadedBusinessFile = {
 
 export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
 
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
 const STORAGE_PROVIDER = 'R2';
 const EVIDENCE_FILE_TYPE = 'PHOTO_EVIDENCE';
@@ -462,7 +462,7 @@ export class FilesService {
       throw new BadRequestException('File is empty');
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException('Files must be 25 MB or smaller');
+      throw new BadRequestException('Files must be 100 MB or smaller');
     }
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       throw new BadRequestException('File type is not allowed');
