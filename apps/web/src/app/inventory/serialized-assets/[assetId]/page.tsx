@@ -15,6 +15,7 @@ import {
   SimpleGrid,
   Stack,
   Switch,
+  Tabs,
   Text,
   TextInput,
   ThemeIcon,
@@ -26,6 +27,8 @@ import {
   IconBuildingWarehouse,
   IconCheck,
   IconEngine,
+  IconFileText,
+  IconInfoCircle,
   IconMapPin,
   IconPencil,
   IconUpload,
@@ -33,6 +36,7 @@ import {
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type AssetResponse = {
@@ -550,7 +554,19 @@ export default function EditSerializedAssetPage() {
             </SimpleGrid>
           </Paper>
 
-          <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
+          <Tabs defaultValue="details" keepMounted={false}>
+            <Tabs.List mb="lg">
+              <Tabs.Tab value="details" leftSection={<IconInfoCircle size={17} />}>
+                Informacion
+              </Tabs.Tab>
+              <Tabs.Tab value="documents" leftSection={<IconFileText size={17} />}>
+                Documentos
+              </Tabs.Tab>
+            </Tabs.List>
+
+            <Tabs.Panel value="details">
+              <Stack gap="lg">
+                <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
             <Group justify="space-between" align="center" mb="md">
               <div>
                 <Text fw={800}>Datos del equipo</Text>
@@ -684,20 +700,29 @@ export default function EditSerializedAssetPage() {
                 ))}
               </Stack>
             )}
-          </Paper>
+                </Paper>
 
-          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-            <Text fw={800} mb={4}>
-              Movimiento reciente
-            </Text>
-            <Text size="sm" c="dimmed">
-              {worksiteLocationName
-                ? `Ultima ubicacion en obra: ${worksiteLocationName}.`
-                : warehouseCurrentId
-                  ? `Actualmente en ${warehouseCurrentName}.`
-                  : 'Sin movimiento reciente disponible.'}
-            </Text>
-          </Paper>
+                <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+                  <Text fw={800} mb={4}>
+                    Movimiento reciente
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {worksiteLocationName
+                      ? `Ultima ubicacion en obra: ${worksiteLocationName}.`
+                      : warehouseCurrentId
+                        ? `Actualmente en ${warehouseCurrentName}.`
+                        : 'Sin movimiento reciente disponible.'}
+                  </Text>
+                </Paper>
+              </Stack>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="documents">
+              <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
+                <FileAttachmentsPanel entityType="ASSET" entityId={asset.id} title="Documentos del equipo" />
+              </Paper>
+            </Tabs.Panel>
+          </Tabs>
         </Stack>
       ) : null}
     </Container>
