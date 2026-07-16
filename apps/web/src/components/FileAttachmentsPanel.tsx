@@ -22,7 +22,7 @@ import {
 import { IconDownload, IconFile, IconPaperclip, IconTrash, IconUpload } from '@tabler/icons-react';
 import { api, apiBlob, ApiError } from '@/lib/api';
 
-export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER';
+export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
 
 type FileCategory = {
   value: string;
@@ -333,7 +333,7 @@ export default function FileAttachmentsPanel({
             <Text fw={700}>{loading ? 'Cargando archivos...' : 'No hay documentos adjuntos'}</Text>
             {!loading ? (
               <Text size="sm" c="dimmed" ta="center">
-                Usa el bloque de subida para asociar RUT, contratos, certificados u otros soportes.
+                Usa el bloque de subida para asociar fotos, manuales, fichas, certificados u otros soportes.
               </Text>
             ) : null}
           </Stack>
