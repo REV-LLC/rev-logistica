@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Badge,
   Button,
   Container,
@@ -1040,14 +1041,13 @@ export default function CreateSerializedAssetPage() {
                   </Paper>
 
                   <Group grow className="mobile-stack">
-                    <Select
+                    <Autocomplete
                       label="Marca"
                       name="skuBrand"
                       value={skuBrand}
                       data={brandOptions}
-                      onChange={(value) => setSkuBrand(value ?? '')}
-                      placeholder="Selecciona marca"
-                      searchable
+                      onChange={(value) => setSkuBrand(uppercaseInputValue(value))}
+                      placeholder="Selecciona o escribe una marca"
                       clearable
                     />
                     <TextInput
