@@ -256,7 +256,7 @@ export default function FileAttachmentsPanel({
             <Text size="sm" c="dimmed">
               {selectedFiles.length
                 ? selectedFiles.map((file) => file.name).join(', ')
-                : 'PDF, imagenes, Word, Excel, TXT o CSV. Maximo 25 MB por archivo.'}
+                : 'PDF, imagenes, Word, Excel, TXT o CSV. Maximo 100 MB por archivo.'}
             </Text>
             <Button
               leftSection={<IconUpload size={16} />}

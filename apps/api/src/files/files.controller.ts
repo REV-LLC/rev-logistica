@@ -21,7 +21,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { FilesService, UploadedBusinessFile } from './files.service';
 
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
 
 interface JwtPayload {
