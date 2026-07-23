@@ -194,6 +194,7 @@ export default function CreateSerializedAssetPage() {
   >('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
+  const [hourMeter, setHourMeter] = useState<number | ''>(0);
   const [assetImageFile, setAssetImageFile] = useState<File | null>(null);
   const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
   const [copiedImageLabel, setCopiedImageLabel] = useState('');
@@ -408,6 +409,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setHourMeter(0);
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -442,6 +444,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setHourMeter(0);
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -518,6 +521,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setHourMeter(0);
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -695,6 +699,7 @@ export default function CreateSerializedAssetPage() {
           fuel: skuFuel || undefined,
           imageFileObjectId: assetImageFile ? undefined : copiedImageFileObjectId || undefined,
           active,
+          hourMeter: hourMeter === '' ? undefined : hourMeter,
           internalNumber:
             isAlternateOwnerWarehouse && manualInternalNumber !== ''
               ? manualInternalNumber
@@ -1293,6 +1298,17 @@ export default function CreateSerializedAssetPage() {
                     error={assetAttempted && !serialOrEngine.trim() ? 'Requerido' : null}
                     required
                   />
+                  <NumberInput
+                    label="Horómetro actual"
+                    name="hourMeter"
+                    value={hourMeter}
+                    onChange={(value) => setHourMeter(typeof value === 'number' ? value : '')}
+                    min={0}
+                    step={0.1}
+                    decimalScale={2}
+                    suffix=" horas"
+                    description="Lectura acumulada con la que ingresa el equipo."
+                  />
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" gap="md">
                       <div>
@@ -1374,6 +1390,9 @@ export default function CreateSerializedAssetPage() {
                       </Text>
                       <Text size="sm" c="dimmed">
                         Ubicacion: {selectedCurrentWarehouse?.name ?? '-'}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        Horómetro: {hourMeter === '' ? 'Sin lectura' : `${hourMeter} horas`}
                       </Text>
                     </Paper>
                   </SimpleGrid>

@@ -1,5 +1,13 @@
 const TOKEN_KEY = 'revlogistica.token';
 const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
+const LOCAL_BYPASS_PAYLOAD =
+  'eyJzdWIiOiJsb2NhbC1hdXRoLWJ5cGFzcyIsImVtYWlsIjoidXNlcjFAZHVtbXkubG9jYWwiLCJyb2xlIjoiQURNSU4ifQ';
+const LOCAL_BYPASS_TOKEN = `local.${LOCAL_BYPASS_PAYLOAD}.bypass`;
+
+export function isLocalAuthBypassEnabled() {
+  return process.env.NODE_ENV !== 'production'
+    && process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true';
+}
 
 export type JwtPayload = {
   sub?: string;
@@ -23,6 +31,7 @@ function parseJwtPayload(token: string): JwtPayload | null {
 }
 
 export function getToken() {
+  if (isLocalAuthBypassEnabled()) return LOCAL_BYPASS_TOKEN;
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(TOKEN_KEY);
 }

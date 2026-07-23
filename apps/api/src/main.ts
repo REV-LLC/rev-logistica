@@ -69,6 +69,10 @@ async function bootstrap() {
   });
   app.use(json({ limit: '25mb' }));
   app.use(urlencoded({ extended: true, limit: '25mb' }));
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  const localAuthBypass =
+    process.env.NODE_ENV !== 'production'
+    && process.env.AUTH_BYPASS_LOCAL?.trim().toLowerCase() === 'true';
+  const host = process.env.HOST?.trim() || (localAuthBypass ? '127.0.0.1' : '0.0.0.0');
+  await app.listen(process.env.PORT ?? 3000, host);
 }
 bootstrap();

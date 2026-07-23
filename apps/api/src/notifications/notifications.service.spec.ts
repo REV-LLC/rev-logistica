@@ -1,0 +1,90 @@
+import { NOTIFICATION_ENTITY, NOTIFICATION_EVENT } from './notification.constants';
+import { NotificationsService } from './notifications.service';
+
+describe('NotificationsService', () => {
+  it('automatically creates the mandatory SOAT and technical inspection topics', async () => {
+    const upsert = jest.fn()
+      .mockResolvedValueOnce({ id: 'soat-topic' })
+      .mockResolvedValueOnce({ id: 'tech-topic' });
+    const prisma = { notificationTopic: { upsert } };
+    const service = new NotificationsService(prisma as any, {} as any);
+
+    const topics = await service.ensureVehicleTopics('vehicle-1');
+
+    expect(topics).toHaveLength(2);
+    expect(upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { entityType_entityId_eventType: {
+        entityType: NOTIFICATION_ENTITY.VEHICLE,
+        entityId: 'vehicle-1',
+        eventType: NOTIFICATION_EVENT.SOAT_EXPIRY,
+      } },
+    }));
+    expect(upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { entityType_entityId_eventType: expect.objectContaining({
+        eventType: NOTIFICATION_EVENT.TECH_INSPECTION_EXPIRY,
+      }) },
+    }));
+  });
+
+  it('returns only the authenticated user topics and calculates an overdue vehicle document', async () => {
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const topic = {
+      id: 'topic-1', entityType: 'VEHICLE', entityId: 'vehicle-1', eventType: 'SOAT_EXPIRY',
+      recipients: [{
+        userId: 'user-1', emailEnabled: true, smsEnabled: false,
+        user: { email: 'ana@example.com', employee: { name: 'Ana', lastName: 'Ruiz', phone: null } },
+      }],
+    };
+    const topicFindMany = jest.fn().mockResolvedValue([topic]);
+    const prisma = {
+      notificationTopic: { findMany: topicFindMany },
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ id: 'vehicle-1', plate: 'ABC123', active: true, soatVigencia: yesterday }]) },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new NotificationsService(prisma as any, {} as any);
+
+    const reminders = await service.listReminders('user-1');
+
+    expect(topicFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ recipients: { some: { userId: 'user-1', user: { active: true } } } }),
+    }));
+    expect(reminders[0]).toMatchObject({
+      topicId: 'topic-1', title: 'SOAT de ABC123', status: 'OVERDUE', unit: 'DAYS',
+      entity: { id: 'vehicle-1', type: 'VEHICLE', label: 'ABC123' },
+    });
+  });
+
+  it('uses the same personal inbox for vehicle maintenance by hours', async () => {
+    const topic = {
+      id: 'topic-maintenance', entityType: 'MAINTENANCE_ITEM', entityId: 'item-1', eventType: 'MAINTENANCE_DUE',
+      recipients: [{
+        userId: 'user-1', emailEnabled: true, smsEnabled: true,
+        user: { email: 'ana@example.com', employee: { name: 'Ana', lastName: 'Ruiz', phone: '+573001234567' } },
+      }],
+    };
+    const item = {
+      id: 'item-1', planId: 'plan-1', name: 'CAMBIO DE ACEITE', instructions: 'CAMBIAR FILTRO',
+      intervalHours: 100, warningHours: 10, baselineHours: 0,
+      completions: [{ completedAtHours: 150 }],
+      plan: {
+        name: 'MOTOR', asset: null,
+        vehicle: { id: 'vehicle-1', plate: 'ABC123', hourReadings: [{ hours: 255 }] },
+      },
+    };
+    const prisma = {
+      notificationTopic: { findMany: jest.fn().mockResolvedValue([topic]) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([]) },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([item]) },
+    };
+    const service = new NotificationsService(prisma as any, {} as any);
+
+    const reminders = await service.listReminders('user-1');
+
+    expect(reminders[0]).toMatchObject({
+      topicId: 'topic-maintenance', status: 'OVERDUE', unit: 'HOURS',
+      currentHours: 255, dueHours: 250, remainingHours: -5,
+      entity: { id: 'vehicle-1', type: 'VEHICLE', label: 'ABC123' },
+    });
+  });
+});

@@ -9,9 +9,10 @@ import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
 import { VehiclesController } from './vehicles.controller';
 import { VehiclesService } from './vehicles.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, NotificationsModule],
   controllers: [EmployeesController, VehiclesController, TransportCostController, LocationsController],
   providers: [EmployeesService, VehiclesService, TransportCostService, LocationsService],
 })

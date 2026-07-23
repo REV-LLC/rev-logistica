@@ -22,6 +22,8 @@ import { OwnersModule } from './owners/owners.module';
 import { BillingModule } from './billing/billing.module';
 import { BackupsModule } from './backups/backups.module';
 import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.midd
     OwnersModule,
     BillingModule,
     BackupsModule,
+    MaintenanceModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

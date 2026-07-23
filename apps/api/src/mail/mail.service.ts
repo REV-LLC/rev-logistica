@@ -52,7 +52,7 @@ export class MailService {
     if (!config || !from) {
       if (!this.missingConfigLogged) {
         this.logger.warn(
-          'SMTP_HOST and MAIL_FROM are required to send customer emails',
+          'SMTP_HOST and MAIL_FROM are required to send emails',
         );
         this.missingConfigLogged = true;
       }

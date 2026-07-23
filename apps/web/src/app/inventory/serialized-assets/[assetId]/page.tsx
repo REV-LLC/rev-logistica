@@ -29,6 +29,7 @@ import {
   IconEngine,
   IconFileText,
   IconInfoCircle,
+  IconGauge,
   IconMapPin,
   IconPencil,
   IconUpload,
@@ -52,6 +53,7 @@ type AssetResponse = {
   imageFileObjectId?: string | null;
   imageUrl?: string | null;
   active: boolean;
+  currentHourMeter: number;
   sku?: {
     id: string;
     name: string | null;
@@ -158,6 +160,7 @@ export default function EditSerializedAssetPage() {
   const [imageUploading, setImageUploading] = useState(false);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(null);
   const [active, setActive] = useState(true);
+  const [hourMeter, setHourMeter] = useState<number | ''>('');
   const [editing, setEditing] = useState(false);
   const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
 
@@ -205,6 +208,7 @@ export default function EditSerializedAssetPage() {
         setWarehouseCurrentId(assetData.warehouseCurrentId);
         setWorksiteLocationName(resolvedWorksiteLocation);
         setActive(assetData.active);
+        setHourMeter(assetData.currentHourMeter ?? 0);
       } catch (err) {
         if (!mounted) return;
         if (err instanceof ApiError) {
@@ -280,6 +284,11 @@ export default function EditSerializedAssetPage() {
         icon: <IconBarcode size={18} />,
       },
       {
+        label: 'Horómetro',
+        value: formatDecimal(hourMeter, ' H'),
+        icon: <IconGauge size={18} />,
+      },
+      {
         label: 'Bodega dueña',
         value: displayValue(asset?.warehouseOwner?.name),
         icon: <IconBuildingWarehouse size={18} />,
@@ -290,7 +299,7 @@ export default function EditSerializedAssetPage() {
         icon: <IconMapPin size={18} />,
       },
     ],
-    [asset, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
+    [asset, hourMeter, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
   );
   const readOnlySections = useMemo(
     () => [
@@ -309,6 +318,7 @@ export default function EditSerializedAssetPage() {
           { label: 'Modelo', value: displayValue(model) },
           { label: 'Año', value: year === '' ? EMPTY_VALUE : String(year) },
           { label: 'Combustible', value: fuelLabel },
+          { label: 'Horómetro actual', value: formatDecimal(hourMeter, ' H') },
           { label: 'Tamaño', value: displayValue(asset?.sku?.size) },
           { label: 'Area', value: formatDecimal(asset?.sku?.areaM2, ' M²') },
           { label: 'Peso unitario', value: formatDecimal(asset?.sku?.unitWeight, ' KG') },
@@ -327,7 +337,7 @@ export default function EditSerializedAssetPage() {
         ],
       },
     ],
-    [active, asset, brand, fuelLabel, model, year],
+    [active, asset, brand, fuelLabel, hourMeter, model, year],
   );
 
   const handleSave = async () => {
@@ -347,12 +357,14 @@ export default function EditSerializedAssetPage() {
         warehouseCurrentId,
         imageFileObjectId: assetImageFileObjectId,
         active,
+        hourMeter: hourMeter === '' ? undefined : hourMeter,
       };
       const updatedAsset = await api<AssetResponse>(`/assets/${assetId}`, {
         method: 'PATCH',
         json: payload,
       });
       setAsset((current) => (current ? { ...current, ...updatedAsset } : updatedAsset));
+      setHourMeter(updatedAsset.currentHourMeter ?? hourMeter);
       setSuccess('Equipo actualizado.');
       setEditing(false);
       router.refresh();
@@ -600,6 +612,16 @@ export default function EditSerializedAssetPage() {
                     data={FUEL_OPTIONS}
                     clearable
                   />
+                  <NumberInput
+                    label="Horómetro actual"
+                    value={hourMeter}
+                    onChange={(value) => setHourMeter(typeof value === 'number' ? value : '')}
+                    min={asset.currentHourMeter ?? 0}
+                    step={0.1}
+                    decimalScale={2}
+                    suffix=" horas"
+                    description={`Última lectura: ${formatDecimal(asset.currentHourMeter, ' H')}`}
+                  />
                   <Select
                     label="Ubicacion en bodega"
                     value={warehouseCurrentId}
@@ -644,6 +666,7 @@ export default function EditSerializedAssetPage() {
                       setAssetImageUrl(asset.imageUrl ?? asset.sku?.imageUrl ?? '');
                       setWarehouseCurrentId(asset.warehouseCurrentId);
                       setActive(asset.active);
+                      setHourMeter(asset.currentHourMeter ?? 0);
                       setEditing(false);
                       setError(null);
                     }}

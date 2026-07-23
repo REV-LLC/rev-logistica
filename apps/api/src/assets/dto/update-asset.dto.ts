@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class UpdateAssetDto {
   @IsOptional()
@@ -40,4 +40,9 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  hourMeter?: number;
 }
