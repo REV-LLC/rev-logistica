@@ -4,7 +4,7 @@ import { ActionIcon, Badge, Box, Button, Card, Group, Menu, Stack, Text } from '
 import { useMediaQuery } from '@mantine/hooks';
 import { IconDotsVertical, IconPencil, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import { ownerColorById } from '@/lib/owner-color';
 
@@ -23,6 +23,7 @@ export type SerialAssetCardItem = {
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   internalNumber?: string | number | null;
   imageFileObjectId?: string | null;
+  registrationNumber?: string | null;
 };
 
 function getStatusColor(status?: string | null) {
@@ -70,6 +71,10 @@ export default function SerialAssetCard({
   onAction,
   onDelete,
   deleteLoading = false,
+  onOpen,
+  statusBadge,
+  additionalDetails = [],
+  footer,
 }: {
   item: SerialAssetCardItem;
   href?: string;
@@ -77,6 +82,8 @@ export default function SerialAssetCard({
   display?: {
     showOwnerChip?: boolean;
     ownerChipLabel?: string;
+    showSerial?: boolean;
+    showCharge?: boolean;
   };
   actionLabel?: string;
   actionColor?: string;
@@ -84,11 +91,17 @@ export default function SerialAssetCard({
   onAction?: () => void;
   onDelete?: () => void;
   deleteLoading?: boolean;
+  onOpen?: () => void;
+  statusBadge?: { label: string; color: string };
+  additionalDetails?: Array<{ label: string; value: ReactNode }>;
+  footer?: ReactNode;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
   const isMobile = useMediaQuery('(max-width: 48em)');
   const description = getSerialDisplayName(item);
   const shouldShowOwnerChip = display?.showOwnerChip ?? isWorksiteView;
+  const shouldShowSerial = display?.showSerial ?? true;
+  const shouldShowCharge = display?.showCharge ?? true;
   const ownerChipLabel = display?.ownerChipLabel ?? item.ownerWarehouseName;
   const showMenu = Boolean(href || onDelete);
   const title = href ? (
@@ -112,6 +125,15 @@ export default function SerialAssetCard({
       withBorder
       padding="sm"
       radius="md"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (onOpen && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
       style={{
         display: 'flex',
         flexDirection: isMobile ? 'row' : 'column',
@@ -120,6 +142,7 @@ export default function SerialAssetCard({
         height: '100%',
         aspectRatio: isMobile ? 'auto' : '1 / 1',
         gap: isMobile ? '0.75rem' : 0,
+        cursor: onOpen ? 'pointer' : undefined,
       }}
     >
       <Box
@@ -165,8 +188,8 @@ export default function SerialAssetCard({
               {title}
             </Group>
             <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-              <Badge color={getStatusColor(item.status)} variant="light">
-                {getStatusLabel(item.status, isWorksiteView)}
+              <Badge color={statusBadge?.color ?? getStatusColor(item.status)} variant="light">
+                {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
               </Badge>
               {showMenu ? (
                 <Menu shadow="md" width={160} position="bottom-end" withinPortal>
@@ -205,9 +228,6 @@ export default function SerialAssetCard({
               ) : null}
             </Group>
           </Group>
-          <Text size="sm" c="dimmed">
-            #{item.internalNumber ?? '-'}
-          </Text>
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
               <Badge color={ownerColorById(item.ownerWarehouseId)} variant="light">
@@ -215,12 +235,21 @@ export default function SerialAssetCard({
               </Badge>
             </Group>
           ) : null}
-          <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-            {item.serialOrEngine ?? '-'}
-          </Text>
-          <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-            Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-          </Text>
+          {shouldShowSerial ? (
+            <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
+              {item.serialOrEngine ?? '-'}
+            </Text>
+          ) : null}
+          {shouldShowCharge ? (
+            <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
+              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
+            </Text>
+          ) : null}
+          {additionalDetails.map((detail) => (
+            <Text key={detail.label} size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
+              {detail.label}: {detail.value}
+            </Text>
+          ))}
         </Stack>
 
         {onAction ? (
@@ -234,6 +263,7 @@ export default function SerialAssetCard({
             {actionLabel ?? 'Agregar'}
           </Button>
         ) : null}
+        {footer}
       </Stack>
     </Card>
   );

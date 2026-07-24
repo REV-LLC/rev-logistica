@@ -49,6 +49,7 @@ export class AssetsService {
         id: true,
         publicCode: true,
         serialOrEngine: true,
+        registrationNumber: true,
         description: true,
         brand: true,
         model: true,
@@ -136,6 +137,7 @@ export class AssetsService {
         id: true,
         publicCode: true,
         serialOrEngine: true,
+        registrationNumber: true,
         description: true,
         brand: true,
         model: true,
@@ -220,6 +222,7 @@ export class AssetsService {
     warehouseOwnerId: string;
     warehouseCurrentId?: string;
     serialOrEngine?: string;
+    registrationNumber?: string;
     description?: string;
     brand?: string;
     model?: string;
@@ -305,6 +308,7 @@ export class AssetsService {
             ),
             internalNumber,
             serialOrEngine,
+            registrationNumber: payload.registrationNumber?.trim().toUpperCase() || null,
             description: payload.description ?? null,
             brand: payload.brand ?? null,
             model: payload.model ?? null,
@@ -344,6 +348,7 @@ export class AssetsService {
     assetId: string,
     payload: {
       description?: string | null;
+      registrationNumber?: string | null;
       brand?: string | null;
       model?: string | null;
       year?: number | null;
@@ -388,11 +393,15 @@ export class AssetsService {
       }
     }
 
-    await this.prisma.asset.update({
-      where: { id: assetId },
-      data: {
+    try {
+      await this.prisma.asset.update({
+        where: { id: assetId },
+        data: {
         description: Object.prototype.hasOwnProperty.call(payload, 'description')
           ? payload.description
+          : undefined,
+        registrationNumber: Object.prototype.hasOwnProperty.call(payload, 'registrationNumber')
+          ? payload.registrationNumber?.trim().toUpperCase() || null
           : undefined,
         brand: Object.prototype.hasOwnProperty.call(payload, 'brand') ? payload.brand : undefined,
         model: Object.prototype.hasOwnProperty.call(payload, 'model') ? payload.model : undefined,
@@ -405,9 +414,15 @@ export class AssetsService {
         imageFileObjectId: Object.prototype.hasOwnProperty.call(payload, 'imageFileObjectId')
           ? payload.imageFileObjectId
           : undefined,
-        active: payload.active,
-      },
-    });
+          active: payload.active,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('El numero de registro ya esta asignado a otro activo');
+      }
+      throw error;
+    }
 
     return this.getAssetById(assetId);
   }

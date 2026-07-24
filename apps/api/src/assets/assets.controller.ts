@@ -78,7 +78,7 @@ export class AssetsController {
   }
 
   @Patch(':assetId')
-  @Roles(Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE)
   updateAsset(
     @Param('assetId', new ParseUUIDPipe()) assetId: string,
     @Body(

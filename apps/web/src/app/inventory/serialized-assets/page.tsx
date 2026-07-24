@@ -203,6 +203,7 @@ export default function CreateSerializedAssetPage() {
   const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<number | string>('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [assetImageFile, setAssetImageFile] = useState<File | null>(null);
   const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
   const [copiedImageLabel, setCopiedImageLabel] = useState('');
@@ -417,6 +418,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -451,6 +453,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -701,6 +704,7 @@ export default function CreateSerializedAssetPage() {
         },
         asset: {
           serialOrEngine: serialOrEngine.trim(),
+          registrationNumber: registrationNumber.trim() || undefined,
           brand: skuBrand.trim() || undefined,
           model: skuModel.trim() || undefined,
           year: skuYear === '' ? undefined : skuYear,
@@ -1306,6 +1310,15 @@ export default function CreateSerializedAssetPage() {
                     placeholder="Ej: A3NV16797"
                     error={assetAttempted && !serialOrEngine.trim() ? 'Requerido' : null}
                     required
+                  />
+                  <UppercaseTextInput
+                    label="Numero de registro"
+                    name="registrationNumber"
+                    autoComplete="off"
+                    value={registrationNumber}
+                    onChange={setRegistrationNumber}
+                    placeholder="Solo si requiere guia de movilidad"
+                    description="Los activos con este campo aparecen en Guias de movilidad."
                   />
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" gap="md">

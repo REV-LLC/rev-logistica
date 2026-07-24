@@ -1,6 +1,13 @@
 const TOKEN_KEY = 'revlogistica.token';
 const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
 
+export function isLocalAuthBypassEnabled() {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS === 'true'
+  );
+}
+
 export type JwtPayload = {
   sub?: string;
   email?: string;
@@ -66,6 +73,7 @@ export function getTokenPayload() {
 export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
 
 export function getCurrentUserRole(): AppRole | null {
+  if (isLocalAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
   if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
@@ -73,5 +81,8 @@ export function getCurrentUserRole(): AppRole | null {
 }
 
 export function getCurrentUserSession(): JwtPayload | null {
+  if (isLocalAuthBypassEnabled()) {
+    return { email: 'local-review@revlogistica.test', role: 'ADMIN' };
+  }
   return getTokenPayload();
 }
