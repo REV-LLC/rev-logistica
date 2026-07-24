@@ -1,4 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -24,12 +29,15 @@ import { BackupsModule } from './backups/backups.module';
 import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
 
 @Module({
   imports: [
     CacheModule.register({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         name: 'default',
@@ -56,6 +64,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     BackupsModule,
     MaintenanceModule,
     NotificationsModule,
+    MobilityGuidesModule,
   ],
   controllers: [AppController],
   providers: [

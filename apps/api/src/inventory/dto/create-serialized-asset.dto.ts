@@ -1,4 +1,15 @@
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChargeType } from '@prisma/client';
 
@@ -57,6 +68,11 @@ export class SerializedSkuInput {
 export class SerializedAssetInput {
   @IsString()
   serialOrEngine: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  registrationNumber?: string;
 
   @IsOptional()
   @IsString()

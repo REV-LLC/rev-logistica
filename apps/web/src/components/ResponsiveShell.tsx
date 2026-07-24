@@ -10,6 +10,7 @@ import Nav from '@/components/Nav';
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = [
   { prefix: '/transport/requests', title: 'Solicitudes', subtitle: 'Operacion diaria' },
   { prefix: '/transport/generate', title: 'Generar documentos', subtitle: 'Nuevo documento' },
+  { prefix: '/mobility-guides', title: 'Guias de movilidad', subtitle: 'Documentos por activo' },
   { prefix: '/transport/cost', title: 'Transporte', subtitle: 'Costos y despacho' },
   { prefix: '/transport/vehicles', title: 'Vehiculos', subtitle: 'Flota y documentos' },
   { prefix: '/transport/worksites', title: 'Obras', subtitle: 'Frentes activos' },

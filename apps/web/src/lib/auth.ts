@@ -5,8 +5,13 @@ const LOCAL_BYPASS_PAYLOAD =
 const LOCAL_BYPASS_TOKEN = `local.${LOCAL_BYPASS_PAYLOAD}.bypass`;
 
 export function isLocalAuthBypassEnabled() {
-  return process.env.NODE_ENV !== 'production'
-    && process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true';
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (
+      process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true' ||
+      process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS === 'true'
+    )
+  );
 }
 
 export type JwtPayload = {
@@ -75,6 +80,7 @@ export function getTokenPayload() {
 export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
 
 export function getCurrentUserRole(): AppRole | null {
+  if (isLocalAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
   if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
@@ -82,5 +88,8 @@ export function getCurrentUserRole(): AppRole | null {
 }
 
 export function getCurrentUserSession(): JwtPayload | null {
+  if (isLocalAuthBypassEnabled()) {
+    return { email: 'user1@dummy.local', role: 'ADMIN' };
+  }
   return getTokenPayload();
 }

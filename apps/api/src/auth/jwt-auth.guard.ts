@@ -6,7 +6,6 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private bypassUser?: { sub: string; email: string; role: string };
-
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,

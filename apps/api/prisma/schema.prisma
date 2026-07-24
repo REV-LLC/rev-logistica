@@ -109,16 +109,17 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  documentsCreated Document[]    @relation("CreatedBy")
-  ledgerCreated    StockLedger[] @relation("LedgerCreatedBy")
-  tasksCreated     Task[]        @relation("TaskCreatedBy")
-  tasksAssigned    Task[]        @relation("TaskAssignedTo")
-  employee         Employee?
-  notificationRecipients NotificationRecipient[]
-  maintenanceReadings    AssetHourReading[]       @relation("MaintenanceReadingRecordedBy")
+  documentsCreated           Document[]                 @relation("CreatedBy")
+  ledgerCreated              StockLedger[]              @relation("LedgerCreatedBy")
+  tasksCreated               Task[]                     @relation("TaskCreatedBy")
+  tasksAssigned              Task[]                     @relation("TaskAssignedTo")
+  mobilityGuidesCreated      MobilityGuide[]            @relation("MobilityGuideCreatedBy")
+  employee                   Employee?
+  notificationRecipients     NotificationRecipient[]
+  maintenanceReadings        AssetHourReading[]         @relation("MaintenanceReadingRecordedBy")
   vehicleMaintenanceReadings VehicleHourReading[] @relation("VehicleMaintenanceReadingRecordedBy")
-  maintenanceCompletions MaintenanceCompletion[]  @relation("MaintenanceCompletedBy")
-  notificationDeliveries NotificationDelivery[]
+  maintenanceCompletions     MaintenanceCompletion[]    @relation("MaintenanceCompletedBy")
+  notificationDeliveries    NotificationDelivery[]
 }
 
 model Customer {
@@ -236,6 +237,7 @@ model Asset {
   skuId              String
   publicCode         String   @unique
   serialOrEngine     String   @unique
+  registrationNumber String?  @unique
   description        String?
   brand              String?
   model              String?
@@ -255,13 +257,34 @@ model Asset {
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
 
-  documentItems DocumentItem[]
-  ledger        StockLedger[]
-  taskAssets    TaskAsset[]
-  hourReadings  AssetHourReading[]
+  documentItems    DocumentItem[]
+  ledger           StockLedger[]
+  taskAssets       TaskAsset[]
+  mobilityGuides   MobilityGuide[]
+  hourReadings     AssetHourReading[]
   maintenancePlans MaintenancePlan[]
 
   @@index([skuId])
+  @@index([registrationNumber])
+}
+
+model MobilityGuide {
+  id              String   @id @default(uuid())
+  assetId         String
+  fileObjectId    String   @unique
+  name            String
+  issuedAt        DateTime
+  expiresAt       DateTime
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  asset      Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("MobilityGuideCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([assetId, issuedAt])
+  @@index([issuedAt])
+  @@index([expiresAt])
 }
 
 model AssetHourReading {
@@ -450,7 +473,7 @@ model Document {
   voidedBy   String?
   voidedAt   DateTime?
 
-  createdAt DateTime @default(now())
+  createdAt              DateTime  @default(now())
   officeModifiedAt       DateTime?
   officeModifiedBy       String?
   customerDraftEmailedAt DateTime?
@@ -645,9 +668,10 @@ model FileObject {
   createdAt       DateTime  @default(now())
   createdBy       String
 
-  document    Document? @relation(fields: [documentId], references: [id])
-  skuImages   Sku[]     @relation("SkuImage")
-  assetImages Asset[]   @relation("AssetImage")
+  document      Document?      @relation(fields: [documentId], references: [id])
+  skuImages     Sku[]          @relation("SkuImage")
+  assetImages   Asset[]        @relation("AssetImage")
+  mobilityGuide MobilityGuide?
 
   @@index([documentId])
   @@index([entityType, entityId])

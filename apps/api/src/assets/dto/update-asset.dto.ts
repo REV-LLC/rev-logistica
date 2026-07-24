@@ -1,6 +1,19 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class UpdateAssetDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  registrationNumber?: string | null;
+
   @IsOptional()
   @IsString()
   description?: string | null;
