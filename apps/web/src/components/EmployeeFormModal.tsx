@@ -49,7 +49,7 @@ export type RoleValue =
   | 'WAREHOUSE_KEEPER'
   | 'OTHER';
 
-export type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER';
+export type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
 export type EmployeeForm = {
   name: string;
@@ -92,6 +92,7 @@ export const emptyEmployeeForm: EmployeeForm = {
 
 export const roleOptions = [
   { value: 'DRIVER', label: 'Conductor' },
+  { value: 'OPERATOR', label: 'Operador de horómetro' },
   { value: 'HEAVY_MACHINERY_OPERATOR', label: 'Operario maquinaria amarilla' },
   { value: 'MACHINIST', label: 'Machinero' },
   { value: 'OFFICE', label: 'Oficina' },
@@ -124,6 +125,7 @@ export const appRoleLabelByValue: Record<AppRoleValue, string> = {
   ADMIN: 'Admin',
   OFFICE: 'Oficina',
   DRIVER: 'Conductor',
+  OPERATOR: 'Operador de horómetro',
 };
 
 export function toUppercaseInput(value?: string | null) {

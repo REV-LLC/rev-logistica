@@ -411,6 +411,20 @@ export class FilesService {
     user: { id: string; role: Role },
     mode: 'read' | 'write',
   ) {
+    if (user.role === Role.OPERATOR) {
+      if (entityType !== 'ASSET') {
+        throw new ForbiddenException('Operators can only access asset evidence');
+      }
+      const ownAsset = await this.prisma.asset.findFirst({
+        where: { id: entityId, warehouseOwner: { type: 'OWN' } },
+        select: { id: true },
+      });
+      if (!ownAsset) {
+        throw new ForbiddenException('Operators can only access assets from own warehouses');
+      }
+      return;
+    }
+
     if (mode === 'write' && user.role === Role.DRIVER) {
       if (entityType !== 'DOCUMENT') {
         throw new ForbiddenException(

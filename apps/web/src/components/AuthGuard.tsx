@@ -86,7 +86,13 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
             <Text c="dimmed" size="sm">
               Request access or sign in with an authorized role.
             </Text>
-            <Button mt="sm" variant="light" onClick={() => router.replace('/transport/requests')}>
+            <Button
+              mt="sm"
+              variant="light"
+              onClick={() => router.replace(
+                getCurrentUserRole() === 'OPERATOR' ? '/inventory/hour-meter' : '/transport/requests',
+              )}
+            >
               Go home
             </Button>
           </Stack>

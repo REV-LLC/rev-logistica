@@ -21,9 +21,15 @@ const validation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: t
 
 @Controller('maintenance')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
 export class MaintenanceController {
   constructor(private readonly maintenance: MaintenanceService) {}
+
+  @Get('operator/assets')
+  @Roles(Role.OFFICE, Role.OPERATOR)
+  listOperatorAssets() {
+    return this.maintenance.listOwnWarehouseAssets();
+  }
 
   @Post('plans')
   @Roles(Role.ADMIN, Role.OFFICE)
@@ -77,13 +83,13 @@ export class MaintenanceController {
   }
 
   @Post('assets/:assetId/hours')
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.OPERATOR)
   recordHours(
     @Param('assetId', new ParseUUIDPipe()) assetId: string,
     @Body(validation) payload: RecordAssetHoursDto,
     @Req() request: Request & { user: JwtPayload },
   ) {
-    return this.maintenance.recordAssetHours(assetId, payload, request.user.sub);
+    return this.maintenance.recordAssetHours(assetId, payload, request.user.sub, request.user.role);
   }
 
   @Get('vehicles/:vehicleId')

@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Role, WarehouseType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -16,6 +16,32 @@ export class MaintenanceService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  async listOwnWarehouseAssets() {
+    const assets = await this.prisma.asset.findMany({
+      where: {
+        active: true,
+        warehouseOwner: { type: WarehouseType.OWN },
+      },
+      orderBy: [{ warehouseOwner: { name: 'asc' } }, { publicCode: 'asc' }],
+      select: {
+        id: true,
+        publicCode: true,
+        serialOrEngine: true,
+        brand: true,
+        model: true,
+        hourMeter: true,
+        warehouseOwner: { select: { id: true, name: true, type: true } },
+        warehouseCurrent: { select: { id: true, name: true } },
+        sku: { select: { name: true } },
+      },
+    });
+
+    return assets.map((asset) => ({
+      ...asset,
+      currentHourMeter: Number(asset.hourMeter),
+    }));
+  }
 
   async createPlan(payload: CreateMaintenancePlanDto) {
     this.assertSingleSubject(payload.assetId, payload.vehicleId);
@@ -122,7 +148,19 @@ export class MaintenanceService {
     return this.getSubjectMaintenance('vehicleId', vehicleId);
   }
 
-  recordAssetHours(assetId: string, payload: RecordAssetHoursDto, userId: string) {
+  async recordAssetHours(
+    assetId: string,
+    payload: RecordAssetHoursDto,
+    userId: string,
+    role: Role,
+  ) {
+    if (role === Role.OPERATOR) {
+      await this.assertOwnWarehouseAsset(assetId);
+    }
+    if (!payload.evidenceFileObjectId) {
+      throw new BadRequestException('Photographic evidence is required');
+    }
+    await this.assertHourEvidence(assetId, payload.evidenceFileObjectId, userId);
     return this.recordHours('asset', assetId, payload, userId);
   }
 
@@ -204,10 +242,21 @@ export class MaintenanceService {
         hours: payload.hours, recordedAt: payload.recordedAt ? new Date(payload.recordedAt) : new Date(),
         note: payload.note?.trim() || null, recordedByUserId: userId,
       };
-      if (payload.hours === latestHours) return { hours: latestHours, unchanged: true };
+      if (payload.hours === latestHours) {
+        if (subject === 'asset') {
+          throw new BadRequestException('New hours must be greater than current hours');
+        }
+        return { hours: latestHours, unchanged: true };
+      }
       if (subject === 'asset') {
         await tx.asset.update({ where: { id }, data: { hourMeter: payload.hours } });
-        return tx.assetHourReading.create({ data: { ...data, assetId: id } });
+        return tx.assetHourReading.create({
+          data: {
+            ...data,
+            assetId: id,
+            evidenceFileObjectId: payload.evidenceFileObjectId,
+          },
+        });
       }
       return tx.vehicleHourReading.create({ data: { ...data, vehicleId: id } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -232,6 +281,34 @@ export class MaintenanceService {
 
   private async assertAsset(id: string) {
     if (!await this.prisma.asset.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('Asset not found');
+  }
+
+  private async assertOwnWarehouseAsset(id: string) {
+    const asset = await this.prisma.asset.findUnique({
+      where: { id },
+      select: { id: true, warehouseOwner: { select: { type: true } } },
+    });
+    if (!asset) throw new NotFoundException('Asset not found');
+    if (asset.warehouseOwner.type !== WarehouseType.OWN) {
+      throw new ForbiddenException('Operators can only update assets from own warehouses');
+    }
+  }
+
+  private async assertHourEvidence(assetId: string, fileObjectId: string, userId: string) {
+    const evidence = await this.prisma.fileObject.findFirst({
+      where: {
+        id: fileObjectId,
+        entityType: 'ASSET',
+        entityId: assetId,
+        category: 'MANTENIMIENTO',
+        createdBy: userId,
+        mimeType: { startsWith: 'image/' },
+      },
+      select: { id: true },
+    });
+    if (!evidence) {
+      throw new BadRequestException('Valid photographic evidence is required');
+    }
   }
 
   private async assertVehicle(id: string) {

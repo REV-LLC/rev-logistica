@@ -21,10 +21,12 @@ import {
   IconInfoCircle,
   IconMapPin,
   IconPencil,
+  IconTool,
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import AssetDetailsPanel from '@/components/serialized-assets/AssetDetailsPanel';
 import AssetMovementSummary from '@/components/serialized-assets/AssetMovementSummary';
@@ -488,6 +490,9 @@ export default function EditSerializedAssetPage() {
               <Tabs.Tab value="documents" leftSection={<IconFileText size={17} />}>
                 Documentos
               </Tabs.Tab>
+              <Tabs.Tab value="maintenance" leftSection={<IconTool size={17} />}>
+                Mantenimiento
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="details">
@@ -533,6 +538,12 @@ export default function EditSerializedAssetPage() {
               <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
                 <FileAttachmentsPanel entityType="ASSET" entityId={asset.id} title="Documentos del equipo" />
               </Paper>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="maintenance">
+              <MaintenancePanel
+                subject={{ type: 'ASSET', id: asset.id, label: asset.publicCode }}
+              />
             </Tabs.Panel>
           </Tabs>
         </Stack>

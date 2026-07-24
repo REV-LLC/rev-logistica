@@ -4,7 +4,10 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
-import { consumeSessionExpiredNotice, getToken, isLocalAuthBypassEnabled, isTokenExpired, setToken } from '@/lib/auth';
+import { consumeSessionExpiredNotice, getCurrentUserRole, getToken, isLocalAuthBypassEnabled, isTokenExpired, setToken } from '@/lib/auth';
+
+const defaultDestination = () =>
+  getCurrentUserRole() === 'OPERATOR' ? '/inventory/hour-meter' : '/inventory/warehouse';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -20,13 +23,13 @@ function LoginPageContent() {
     setIsMounted(true);
 
     if (isLocalAuthBypassEnabled()) {
-      router.replace(searchParams.get('next') || '/inventory/warehouse');
+      router.replace(searchParams.get('next') || defaultDestination());
       return;
     }
 
     const token = getToken();
     if (token && !isTokenExpired(token)) {
-      router.replace('/inventory/warehouse');
+      router.replace(defaultDestination());
       return;
     }
 
@@ -59,7 +62,7 @@ function LoginPageContent() {
       }
       setToken(data.accessToken);
       const next = searchParams.get('next');
-      router.replace(next || '/inventory/warehouse');
+      router.replace(next || defaultDestination());
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`Error ${err.status}: ${err.message}`);

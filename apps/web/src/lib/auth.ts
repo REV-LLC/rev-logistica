@@ -77,13 +77,13 @@ export function getTokenPayload() {
   return parseJwtPayload(token);
 }
 
-export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
+export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
 export function getCurrentUserRole(): AppRole | null {
   if (isLocalAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
-  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
+  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR') return role;
   return null;
 }
 

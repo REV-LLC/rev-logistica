@@ -23,6 +23,7 @@ import {
   IconSettings,
   IconTag,
   IconTools,
+  IconGauge,
   IconTruck,
   IconUsers,
   IconUser,
@@ -56,6 +57,7 @@ const sections: NavSection[] = [
   {
     title: 'Inventario',
     links: [
+      { href: '/inventory/hour-meter', label: 'Actualizar horómetro', icon: IconGauge, roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
       { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
       { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
       {
@@ -140,7 +142,15 @@ export default function Nav({ onNavigate }: NavProps) {
     .filter((link, index, list): link is NavLinkItem => Boolean(link) && list.findIndex((item) => item?.href === link?.href) === index)
     .slice(0, 3);
   const roleColor =
-    currentRole === 'ADMIN' ? 'red' : currentRole === 'OFFICE' ? 'blue' : currentRole === 'DRIVER' ? 'teal' : 'gray';
+    currentRole === 'ADMIN'
+      ? 'red'
+      : currentRole === 'OFFICE'
+        ? 'blue'
+        : currentRole === 'DRIVER'
+          ? 'teal'
+          : currentRole === 'OPERATOR'
+            ? 'orange'
+            : 'gray';
 
   const handleLogout = () => {
     clearToken();

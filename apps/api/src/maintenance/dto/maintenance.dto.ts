@@ -139,6 +139,10 @@ export class RecordAssetHoursDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsUUID()
+  evidenceFileObjectId?: string;
 }
 
 export class CompleteMaintenanceDto {
