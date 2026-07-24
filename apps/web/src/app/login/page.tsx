@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
-import { consumeSessionExpiredNotice, getToken, isTokenExpired, setToken } from '@/lib/auth';
+import { consumeSessionExpiredNotice, getToken, isLocalAuthBypassEnabled, isTokenExpired, setToken } from '@/lib/auth';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -14,8 +14,16 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showExpiredNotice, setShowExpiredNotice] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+
+    if (isLocalAuthBypassEnabled()) {
+      router.replace(searchParams.get('next') || '/inventory/warehouse');
+      return;
+    }
+
     const token = getToken();
     if (token && !isTokenExpired(token)) {
       router.replace('/inventory/warehouse');
@@ -64,6 +72,10 @@ function LoginPageContent() {
       setLoading(false);
     }
   };
+
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <main>

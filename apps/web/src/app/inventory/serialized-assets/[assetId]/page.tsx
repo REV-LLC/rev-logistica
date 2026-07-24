@@ -35,6 +35,7 @@ type AssetResponse = {
   id: string;
   publicCode: string;
   serialOrEngine: string;
+  registrationNumber: string | null;
   brand: string | null;
   model: string | null;
   year: number | null;
@@ -140,6 +141,7 @@ export default function EditSerializedAssetPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
 
   const [brand, setBrand] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState<number | ''>('');
   const [fuel, setFuel] = useState('');
@@ -187,6 +189,7 @@ export default function EditSerializedAssetPage() {
         setAsset(assetData);
         setWarehouses(warehouseData);
         setBrand(assetData.brand ?? '');
+        setRegistrationNumber(assetData.registrationNumber ?? '');
         setModel(assetData.model ?? '');
         setYear(assetData.year ?? '');
         setFuel(assetData.fuel ?? '');
@@ -290,6 +293,7 @@ export default function EditSerializedAssetPage() {
           { label: 'Referencia / plantilla', value: displayValue(asset?.sku?.name) },
           { label: 'Familia', value: displayValue(asset?.assetFamily?.name) },
           { label: 'Estado', value: active ? 'Activo' : 'Inactivo' },
+          { label: 'Numero de registro', value: displayValue(registrationNumber) },
         ],
       },
       {
@@ -317,7 +321,7 @@ export default function EditSerializedAssetPage() {
         ],
       },
     ],
-    [active, asset, brand, fuelLabel, model, year],
+    [active, asset, brand, fuelLabel, model, registrationNumber, year],
   );
 
   const handleSave = async () => {
@@ -331,6 +335,7 @@ export default function EditSerializedAssetPage() {
     try {
       const payload = {
         brand: brand.trim() || null,
+        registrationNumber: registrationNumber.trim() || null,
         model: model.trim() || null,
         year: year === '' ? null : year,
         fuel: fuel || null,
@@ -412,6 +417,7 @@ export default function EditSerializedAssetPage() {
   const handleCancelEdit = () => {
     if (!asset) return;
     setBrand(asset.brand ?? '');
+    setRegistrationNumber(asset.registrationNumber ?? '');
     setModel(asset.model ?? '');
     setYear(asset.year ?? '');
     setFuel(asset.fuel ?? '');
@@ -494,12 +500,14 @@ export default function EditSerializedAssetPage() {
                     fuelOptions={FUEL_OPTIONS}
                     imageUploading={imageUploading}
                     model={model}
+                    registrationNumber={registrationNumber}
                     onActiveChange={setActive}
                     onBrandChange={setBrand}
                     onCancel={handleCancelEdit}
                     onFuelChange={setFuel}
                     onImageUpload={handleImageUpload}
                     onModelChange={setModel}
+                    onRegistrationNumberChange={setRegistrationNumber}
                     onSave={handleSave}
                     onWarehouseChange={setWarehouseCurrentId}
                     onYearChange={setYear}

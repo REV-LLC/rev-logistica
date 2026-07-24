@@ -374,6 +374,7 @@ export class InventoryService {
           ),
           internalNumber,
           serialOrEngine,
+          registrationNumber: payload.asset.registrationNumber?.trim().toUpperCase() || null,
           description: payload.asset.description ?? null,
           brand: payload.asset.brand ?? null,
           model: payload.asset.model ?? null,

@@ -13,6 +13,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconCheck, IconUpload, IconX } from '@tabler/icons-react';
+import UppercaseTextInput from '@/components/UppercaseTextInput';
 
 type Option = { value: string; label: string };
 
@@ -23,12 +24,14 @@ type SerializedAssetEditFormProps = {
   fuelOptions: Option[];
   imageUploading: boolean;
   model: string;
+  registrationNumber?: string;
   onActiveChange: (value: boolean) => void;
   onBrandChange: (value: string) => void;
   onCancel: () => void;
   onFuelChange: (value: string) => void;
   onImageUpload: (file: File | null) => void;
   onModelChange: (value: string) => void;
+  onRegistrationNumberChange?: (value: string) => void;
   onSave: () => void;
   onWarehouseChange: (value: string | null) => void;
   onYearChange: (value: number | '') => void;
@@ -46,12 +49,14 @@ export default function SerializedAssetEditForm({
   fuelOptions,
   imageUploading,
   model,
+  registrationNumber = '',
   onActiveChange,
   onBrandChange,
   onCancel,
   onFuelChange,
   onImageUpload,
   onModelChange,
+  onRegistrationNumberChange = () => undefined,
   onSave,
   onWarehouseChange,
   onYearChange,
@@ -77,6 +82,12 @@ export default function SerializedAssetEditForm({
 
       <Stack gap="md">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <UppercaseTextInput
+            label="Numero de registro"
+            description="Si lo asignas, el activo requerira guia de movilidad."
+            value={registrationNumber}
+            onChange={onRegistrationNumberChange}
+          />
           <TextInput label="Marca" value={brand} onChange={(event) => onBrandChange(event.currentTarget.value)} />
           <TextInput label="Modelo" value={model} onChange={(event) => onModelChange(event.currentTarget.value)} />
           <NumberInput
