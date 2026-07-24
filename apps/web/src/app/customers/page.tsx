@@ -78,6 +78,11 @@ const emptyForm: CustomerForm = {
   initialWorksiteActive: true,
 };
 
+const breakableTextStyle = {
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+} as const;
+
 function CustomerDetails({
   customer,
   onEdit,
@@ -151,7 +156,7 @@ function CustomerDetails({
 }
 
 export default function CustomersPage() {
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const useCardLayout = useMediaQuery('(max-width: 1100px)');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -400,19 +405,21 @@ export default function CustomersPage() {
               onChange={(event) => setSearch(event.currentTarget.value)}
               placeholder="Buscar cliente, NIT, telefono o correo"
               leftSection={<IconSearch size={16} />}
-              w={isMobile ? '100%' : 360}
+              w={useCardLayout ? '100%' : 360}
             />
           </Group>
-          {isMobile ? (
+          {useCardLayout ? (
             <Stack gap="sm">
               {!loading &&
                 filteredCustomers.map((customer) => (
                   <Paper key={customer.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{customer.name}</Text>
-                          <Text size="sm" c="dimmed">
+                        <div style={{ minWidth: 0 }}>
+                          <Text fw={700} style={breakableTextStyle}>
+                            {customer.name}
+                          </Text>
+                          <Text size="sm" c="dimmed" style={breakableTextStyle}>
                             {customer.nitOrId ?? 'Sin documento'}
                           </Text>
                         </div>
@@ -421,26 +428,32 @@ export default function CustomersPage() {
                         </Badge>
                       </Group>
 
-                      <SimpleGrid cols={2} spacing="sm">
-                        <div>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                        <div style={{ minWidth: 0 }}>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Telefono
                           </Text>
-                          <Text size="sm">{customer.phone ?? '-'}</Text>
+                          <Text size="sm" style={breakableTextStyle}>
+                            {customer.phone ?? '-'}
+                          </Text>
                         </div>
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Correo documentos
                           </Text>
-                          <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
+                          <Text size="sm" style={breakableTextStyle}>
+                            {customer.documentsEmail ?? '-'}
+                          </Text>
                         </div>
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Correo
                           </Text>
-                          <Text size="sm">{customer.email ?? '-'}</Text>
+                          <Text size="sm" style={breakableTextStyle}>
+                            {customer.email ?? '-'}
+                          </Text>
                         </div>
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Estado
                           </Text>
@@ -492,7 +505,19 @@ export default function CustomersPage() {
               ) : null}
             </Stack>
           ) : (
-            <Table highlightOnHover verticalSpacing="md">
+            <Table
+              highlightOnHover
+              verticalSpacing="md"
+              style={{ tableLayout: 'fixed', width: '100%' }}
+            >
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '16%' }} />
+              </colgroup>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Cliente</Table.Th>
@@ -509,23 +534,29 @@ export default function CustomersPage() {
                     <Table.Tr key={customer.id}>
                       <Table.Td>
                         <Stack gap={2}>
-                          <Text fw={700}>{customer.name}</Text>
+                          <Text fw={700} style={breakableTextStyle}>
+                            {customer.name}
+                          </Text>
                           <Text size="sm" c="dimmed">
                             Cliente registrado
                           </Text>
                         </Stack>
                       </Table.Td>
-                      <Table.Td>{customer.nitOrId ?? '-'}</Table.Td>
+                      <Table.Td style={breakableTextStyle}>{customer.nitOrId ?? '-'}</Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
-                          <Text size="sm">{customer.phone ?? 'Sin telefono'}</Text>
-                          <Text size="xs" c="dimmed">
+                          <Text size="sm" style={breakableTextStyle}>
+                            {customer.phone ?? 'Sin telefono'}
+                          </Text>
+                          <Text size="xs" c="dimmed" style={breakableTextStyle}>
                             {customer.email ?? 'Sin correo'}
                           </Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td>
-                        <Text size="sm">{customer.documentsEmail ?? '-'}</Text>
+                        <Text size="sm" style={breakableTextStyle}>
+                          {customer.documentsEmail ?? '-'}
+                        </Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge color={customer.active ? 'green' : 'gray'} variant="light">
@@ -533,7 +564,7 @@ export default function CustomersPage() {
                         </Badge>
                       </Table.Td>
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                        <Group gap="xs" justify="flex-end" wrap="wrap">
                           <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
                             Editar
                           </Button>
