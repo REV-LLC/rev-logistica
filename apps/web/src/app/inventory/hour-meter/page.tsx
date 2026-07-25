@@ -23,6 +23,7 @@ type OperatorAsset = {
   id: string;
   publicCode: string;
   serialOrEngine: string;
+  description?: string | null;
   brand?: string | null;
   model?: string | null;
   currentHourMeter: number;
@@ -35,6 +36,7 @@ const searchValue = (asset: OperatorAsset) =>
   [
     asset.publicCode,
     asset.serialOrEngine,
+    asset.description,
     asset.brand,
     asset.model,
     asset.sku?.name,
@@ -43,6 +45,12 @@ const searchValue = (asset: OperatorAsset) =>
     .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase('es');
+
+const assetDisplayName = (asset: OperatorAsset) =>
+  asset.description?.trim() ||
+  asset.sku?.name?.trim() ||
+  [asset.brand, asset.model].filter(Boolean).join(' ') ||
+  'Equipo serializado';
 
 export default function HourMeterPage() {
   const [assets, setAssets] = useState<OperatorAsset[]>([]);
@@ -74,7 +82,11 @@ export default function HourMeterPage() {
   }, [assets, search]);
 
   const selectedSubject: MaintenanceSubject | null = selected
-    ? { type: 'ASSET', id: selected.id, label: selected.publicCode }
+    ? {
+        type: 'ASSET',
+        id: selected.id,
+        label: `${assetDisplayName(selected)} · ${selected.publicCode}`,
+      }
     : null;
 
   return (
@@ -122,10 +134,8 @@ export default function HourMeterPage() {
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start" wrap="nowrap">
                     <div>
-                      <Text fw={900}>{asset.publicCode}</Text>
-                      <Text size="sm" c="dimmed">
-                        {asset.sku?.name || [asset.brand, asset.model].filter(Boolean).join(' ') || 'Equipo serializado'}
-                      </Text>
+                      <Text fw={900}>{assetDisplayName(asset)}</Text>
+                      <Text size="sm" c="dimmed">{asset.publicCode}</Text>
                     </div>
                     <Badge color="blue" variant="light">{asset.currentHourMeter} h</Badge>
                   </Group>
@@ -162,7 +172,7 @@ export default function HourMeterPage() {
           onClose={() => setSelected(null)}
           onSaved={async () => {
             await load();
-            setSuccess(`Horómetro de ${selected.publicCode} actualizado correctamente.`);
+            setSuccess(`Horómetro de ${assetDisplayName(selected)} actualizado correctamente.`);
           }}
         />
       ) : null}

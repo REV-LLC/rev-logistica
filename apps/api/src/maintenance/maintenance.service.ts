@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Role, WarehouseType } from '@prisma/client';
+import { ChargeType, Prisma, Role, WarehouseType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -22,12 +22,14 @@ export class MaintenanceService {
       where: {
         active: true,
         warehouseOwner: { type: WarehouseType.OWN },
+        sku: { chargeType: ChargeType.HOUR },
       },
       orderBy: [{ warehouseOwner: { name: 'asc' } }, { publicCode: 'asc' }],
       select: {
         id: true,
         publicCode: true,
         serialOrEngine: true,
+        description: true,
         brand: true,
         model: true,
         hourMeter: true,
@@ -154,9 +156,7 @@ export class MaintenanceService {
     userId: string,
     role: Role,
   ) {
-    if (role === Role.OPERATOR) {
-      await this.assertOwnWarehouseAsset(assetId);
-    }
+    await this.assertHourlyAsset(assetId, role === Role.OPERATOR);
     if (!payload.evidenceFileObjectId) {
       throw new BadRequestException('Photographic evidence is required');
     }
@@ -283,13 +283,20 @@ export class MaintenanceService {
     if (!await this.prisma.asset.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('Asset not found');
   }
 
-  private async assertOwnWarehouseAsset(id: string) {
+  private async assertHourlyAsset(id: string, requireOwnWarehouse: boolean) {
     const asset = await this.prisma.asset.findUnique({
       where: { id },
-      select: { id: true, warehouseOwner: { select: { type: true } } },
+      select: {
+        id: true,
+        sku: { select: { chargeType: true } },
+        warehouseOwner: { select: { type: true } },
+      },
     });
     if (!asset) throw new NotFoundException('Asset not found');
-    if (asset.warehouseOwner.type !== WarehouseType.OWN) {
+    if (asset.sku.chargeType !== ChargeType.HOUR) {
+      throw new BadRequestException('Hour readings only apply to hourly assets');
+    }
+    if (requireOwnWarehouse && asset.warehouseOwner.type !== WarehouseType.OWN) {
       throw new ForbiddenException('Operators can only update assets from own warehouses');
     }
   }
