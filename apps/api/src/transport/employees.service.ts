@@ -69,6 +69,7 @@ export class EmployeesService {
     email?: string;
     documentId?: string;
     vehicleIds?: string[];
+    loginIdentifier?: string;
     loginEmail?: string;
     loginPassword?: string;
     loginRole?: Role;
@@ -82,14 +83,14 @@ export class EmployeesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         let createdUserId: string | null = null;
-        const normalizedLoginEmail = payload.loginEmail?.trim().toLowerCase();
+        const normalizedLoginIdentifier = (payload.loginIdentifier ?? payload.loginEmail)?.trim().toLowerCase();
         const wantsLogin = Boolean(
-          normalizedLoginEmail || payload.loginPassword || payload.loginRole || payload.loginActive !== undefined,
+          normalizedLoginIdentifier || payload.loginPassword || payload.loginRole || payload.loginActive !== undefined,
         );
 
         if (wantsLogin) {
-          if (!normalizedLoginEmail) {
-            throw new BadRequestException('El email de acceso es obligatorio');
+          if (!normalizedLoginIdentifier) {
+            throw new BadRequestException('El usuario o correo de acceso es obligatorio');
           }
           if (!payload.loginPassword?.trim()) {
             throw new BadRequestException('La contraseña de acceso es obligatoria');
@@ -98,7 +99,7 @@ export class EmployeesService {
           const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
           const user = await tx.user.create({
             data: {
-              email: normalizedLoginEmail,
+              email: normalizedLoginIdentifier,
               passwordHash,
               role: userRole,
               active: payload.loginActive ?? true,
@@ -148,6 +149,7 @@ export class EmployeesService {
       active?: boolean;
       vehicleIds?: string[];
       loginEnabled?: boolean;
+      loginIdentifier?: string;
       loginEmail?: string;
       loginPassword?: string;
       loginRole?: Role;
@@ -171,10 +173,10 @@ export class EmployeesService {
       return await this.prisma.$transaction(async (tx) => {
         const nextEmployeeRole = (payload.role as EmployeeRole | undefined) ?? employee.role;
 
-        const normalizedLoginEmail = payload.loginEmail?.trim().toLowerCase();
+        const normalizedLoginIdentifier = (payload.loginIdentifier ?? payload.loginEmail)?.trim().toLowerCase();
         const wantsLogin =
           payload.loginEnabled === true ||
-          normalizedLoginEmail !== undefined ||
+          normalizedLoginIdentifier !== undefined ||
           payload.loginPassword !== undefined ||
           payload.loginRole !== undefined ||
           payload.loginActive !== undefined;
@@ -187,7 +189,7 @@ export class EmployeesService {
         } else if (wantsLogin) {
           if (employee.userId) {
             const data: Prisma.UserUpdateInput = {};
-            if (normalizedLoginEmail) data.email = normalizedLoginEmail;
+            if (normalizedLoginIdentifier) data.email = normalizedLoginIdentifier;
             if (payload.loginRole) data.role = payload.loginRole;
             if (payload.loginActive !== undefined) data.active = payload.loginActive;
             if (payload.loginPassword?.trim()) {
@@ -200,8 +202,8 @@ export class EmployeesService {
               });
             }
           } else {
-            if (!normalizedLoginEmail) {
-              throw new BadRequestException('El email de acceso es obligatorio');
+            if (!normalizedLoginIdentifier) {
+              throw new BadRequestException('El usuario o correo de acceso es obligatorio');
             }
             if (!payload.loginPassword?.trim()) {
               throw new BadRequestException('La contraseña de acceso es obligatoria');
@@ -210,7 +212,7 @@ export class EmployeesService {
             const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
             const user = await tx.user.create({
               data: {
-                email: normalizedLoginEmail,
+                email: normalizedLoginIdentifier,
                 passwordHash,
                 role: userRole,
                 active: payload.loginActive ?? true,
@@ -346,6 +348,9 @@ export class EmployeesService {
 
   private mapEmployeeRoleToUserRole(role: EmployeeRole): Role {
     if (role === 'DRIVER') return Role.DRIVER;
+    if (role === 'HEAVY_MACHINERY_OPERATOR' || role === 'MACHINIST' || role === 'MECHANIC') {
+      return Role.OPERATOR;
+    }
     return Role.OFFICE;
   }
 

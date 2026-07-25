@@ -1,4 +1,6 @@
 export class LoginDto {
-  email: string;
+  identifier?: string;
+  // Compatibilidad temporal con clientes que aún envían `email`.
+  email?: string;
   password: string;
 }

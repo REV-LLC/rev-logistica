@@ -12,7 +12,7 @@ const defaultDestination = () =>
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +55,7 @@ function LoginPageContent() {
       const data = await api<{ accessToken: string }>('/auth/login', {
         method: 'POST',
         auth: false,
-        json: { email, password }
+        json: { identifier, password }
       });
       if (!data?.accessToken) {
         throw new Error('Invalid server response.');
@@ -95,7 +95,7 @@ function LoginPageContent() {
             Sign in
           </Title>
           <Text c="dimmed" mb="md">
-            Access with your email and password.
+            Ingresa con tu usuario o correo y contraseña.
           </Text>
           <Stack gap="sm" component="form" onSubmit={handleSubmit}>
             {showExpiredNotice && (
@@ -104,11 +104,10 @@ function LoginPageContent() {
               </Text>
             )}
             <TextInput
-              label="Correo"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="user@company.com"
+              label="Usuario o correo"
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
+              placeholder="Cédula o usuario@empresa.com"
               required
             />
             <PasswordInput

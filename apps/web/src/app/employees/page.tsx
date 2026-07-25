@@ -259,9 +259,15 @@ export default function EmployeesPage() {
       active: employee.active,
       vehicleIds: employee.vehicles.map((entry) => entry.id),
       loginEnabled: Boolean(employee.user),
-      loginEmail: employee.user?.email ?? '',
+      loginIdentifier: employee.user?.email ?? '',
       loginPassword: '',
-      loginRole: employee.user?.role ?? (employee.role === 'DRIVER' ? 'DRIVER' : 'OFFICE'),
+      loginRole:
+        employee.user?.role ??
+        (['HEAVY_MACHINERY_OPERATOR', 'MACHINIST', 'MECHANIC'].includes(employee.role)
+          ? 'OPERATOR'
+          : employee.role === 'DRIVER'
+            ? 'DRIVER'
+            : 'OFFICE'),
       loginActive: employee.user?.active ?? true,
     });
     setModalOpen(true);
@@ -284,8 +290,8 @@ export default function EmployeesPage() {
       setError('El apellido es obligatorio');
       return;
     }
-    if (form.loginEnabled && !form.loginEmail.trim()) {
-      setError('El correo de acceso es obligatorio');
+    if (form.loginEnabled && !form.loginIdentifier.trim()) {
+      setError('El usuario o correo de acceso es obligatorio');
       return;
     }
     if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
@@ -305,7 +311,7 @@ export default function EmployeesPage() {
         active: form.active,
         vehicleIds: form.vehicleIds,
         loginEnabled: form.loginEnabled,
-        loginEmail: form.loginEnabled ? form.loginEmail.trim().toLowerCase() || undefined : undefined,
+        loginIdentifier: form.loginEnabled ? form.loginIdentifier.trim().toLowerCase() || undefined : undefined,
         loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
         loginRole: form.loginEnabled ? form.loginRole : undefined,
         loginActive: form.loginEnabled ? form.loginActive : undefined,
@@ -327,7 +333,7 @@ export default function EmployeesPage() {
             email: payload.email,
             documentId: payload.documentId,
             vehicleIds: payload.vehicleIds,
-            loginEmail: payload.loginEmail,
+            loginIdentifier: payload.loginIdentifier,
             loginPassword: payload.loginPassword,
             loginRole: payload.loginRole,
             loginActive: payload.loginActive,
