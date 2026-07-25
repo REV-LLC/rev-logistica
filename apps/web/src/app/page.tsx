@@ -322,7 +322,7 @@ export default function HomePage() {
           };
 
   return (
-    <AuthGuard allowedRoles={['ADMIN', 'OFFICE', 'DRIVER']}>
+    <AuthGuard allowedRoles={['ADMIN', 'OFFICE']}>
       <ResponsiveShell>
         <Container size="xl" py="xl">
           <Stack gap="lg">

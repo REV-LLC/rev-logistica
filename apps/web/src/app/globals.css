@@ -80,14 +80,13 @@ body {
 .inventory-picker-mobile-modal-body {
   background: #ffffff;
   height: 100dvh;
-  padding: clamp(0.75rem, 3.5vw, 1.125rem);
+  padding: 0;
 }
 
 .inventory-picker-mobile-shell {
   animation: inventory-picker-mobile-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
   background: #ffffff;
   border: 0;
-  border-radius: 0.75rem;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -102,12 +101,25 @@ body {
 
 .inventory-picker-mobile-header {
   align-items: center;
+  border-bottom: 1px solid #e3e7ec;
   display: grid;
   flex: 0 0 auto;
   gap: 0.5rem;
   grid-template-columns: 3rem minmax(0, 1fr) 3rem;
-  min-height: clamp(5rem, 13dvh, 6.25rem);
+  min-height: clamp(4.5rem, 11dvh, 5.25rem);
   padding: 0 clamp(0.875rem, 5vw, 1.5rem);
+}
+
+.inventory-picker-mobile-title {
+  color: #202124;
+  font-size: clamp(1.125rem, 5vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventory-picker-mobile-header .mantine-ActionIcon-root {
@@ -125,27 +137,30 @@ body {
   transform: scale(0.94);
 }
 
-.inventory-picker-mobile-search-input input {
+.inventory-picker-mobile-search {
   animation: inventory-picker-mobile-search-in 180ms ease-out both;
-  border: 0;
-  border-bottom: 1px solid #d9dee5;
-  border-radius: 0;
+  border-bottom: 1px solid #e3e7ec;
+  flex: 0 0 auto;
+  padding: 0.625rem clamp(1rem, 5vw, 1.5rem);
+}
+
+.inventory-picker-mobile-search-input input {
+  background: #f3f5f7;
+  border-color: transparent;
+  border-radius: 0.625rem;
   font-size: 0.95rem;
-  padding-inline: 0.25rem;
+  padding-inline: 0.875rem;
 }
 
 .inventory-picker-mobile-list {
   flex: 1 1 auto;
   min-height: 0;
   overscroll-behavior: contain;
-  position: relative;
 }
 
 .inventory-picker-mobile-list .mantine-ScrollArea-viewport {
   -ms-overflow-style: none;
-  padding-bottom: calc(4rem + clamp(2.5rem, 8dvh, 4rem));
   scrollbar-width: none;
-  scroll-padding-bottom: calc(4rem + clamp(2.5rem, 8dvh, 4rem));
   touch-action: pan-y;
 }
 
@@ -158,7 +173,7 @@ body {
 .inventory-picker-mobile-family {
   animation: inventory-picker-mobile-family-in 260ms ease-out both;
   border-bottom: 1px solid #e1e5ea;
-  padding: 0 clamp(0.75rem, 3.5vw, 1.25rem);
+  padding: clamp(0.75rem, 2dvh, 1rem) 0 0;
 }
 
 .inventory-picker-mobile-family:nth-child(2) {
@@ -175,50 +190,46 @@ body {
 
 .inventory-picker-mobile-family-heading {
   align-items: center;
-  border-bottom: 1px solid #e1e5ea;
-  color: #42526a;
+  color: #5b6470;
   display: flex;
   justify-content: space-between;
-  min-height: clamp(2.5rem, 5.5dvh, 2.875rem);
-  padding: 0 clamp(0.25rem, 1.5vw, 0.5rem);
+  min-height: clamp(2.25rem, 5dvh, 2.75rem);
+  padding: 0 clamp(1rem, 5vw, 1.5rem) 0.5rem;
 }
 
 .inventory-picker-mobile-family-heading h3,
 .inventory-picker-mobile-family-heading span {
-  font-size: clamp(0.75rem, 3.4vw, 0.875rem);
+  font-size: clamp(0.875rem, 3.8vw, 1rem);
   font-weight: 700;
   line-height: 1.2;
   margin: 0;
 }
 
-.inventory-picker-mobile-family-heading h3 {
-  text-transform: uppercase;
-}
-
 .inventory-picker-mobile-family-heading span {
-  color: #8c97a5;
+  color: #8b949f;
 }
 
 .inventory-picker-mobile-row {
   align-items: center;
-  border-bottom: 1px solid #dce1e7;
+  border-bottom: 0;
   color: #202124;
   display: grid;
-  gap: clamp(0.75rem, 4vw, 1.25rem);
-  grid-template-columns: 2rem minmax(0, 1fr);
-  min-height: clamp(4rem, 8dvh, 4.5rem);
-  padding: clamp(0.625rem, 1.5dvh, 0.875rem) clamp(0.25rem, 1.5vw, 0.5rem);
+  gap: clamp(0.75rem, 3.5vw, 1rem);
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  min-height: clamp(4.5rem, 9dvh, 5rem);
+  padding:
+    clamp(0.75rem, 1.75dvh, 1rem)
+    clamp(1rem, 5vw, 1.5rem);
   text-align: left;
-  transition: background-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
   width: 100%;
 }
 
-.inventory-picker-mobile-row:last-child {
-  border-bottom: 0;
-}
-
 .inventory-picker-mobile-row.is-selected {
-  background: #eef8ff;
+  background: var(--mantine-color-blue-8);
+  color: #ffffff;
 }
 
 .inventory-picker-mobile-row.is-disabled {
@@ -227,23 +238,23 @@ body {
 
 .inventory-picker-mobile-check {
   align-items: center;
-  border: 2px solid #d6dde5;
-  border-radius: 0.375rem;
+  border: 2px solid #a7afb9;
+  border-radius: 0.3rem;
   color: #ffffff;
   display: flex;
-  height: 1.75rem;
+  height: 1.5rem;
   justify-content: center;
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
     transform 140ms ease;
-  width: 1.75rem;
+  width: 1.5rem;
 }
 
 .inventory-picker-mobile-row.is-selected .inventory-picker-mobile-check {
-  background: var(--mantine-color-blue-6);
-  border-color: var(--mantine-color-blue-6);
-  transform: scale(1.06);
+  background: #a9d3ff;
+  border-color: #a9d3ff;
+  color: var(--mantine-color-blue-9);
 }
 
 .inventory-picker-mobile-row-copy {
@@ -261,7 +272,7 @@ body {
 
 .inventory-picker-mobile-row-meta,
 .inventory-picker-mobile-row-status {
-  color: #99a2ae;
+  color: #737d89;
   font-size: clamp(0.75rem, 3.4vw, 0.875rem);
   line-height: 1.35;
   margin-top: 0.125rem;
@@ -271,37 +282,43 @@ body {
   color: #6b7280;
 }
 
+.inventory-picker-mobile-row.is-selected .inventory-picker-mobile-row-name,
+.inventory-picker-mobile-row.is-selected .inventory-picker-mobile-row-meta,
+.inventory-picker-mobile-row.is-selected .inventory-picker-mobile-row-status {
+  color: #ffffff;
+}
+
+.inventory-picker-mobile-row.is-selected .inventory-picker-mobile-row-meta,
+.inventory-picker-mobile-row.is-selected .inventory-picker-mobile-row-status {
+  opacity: 0.82;
+}
+
 .inventory-picker-mobile-empty {
   padding: 2.5rem 1.25rem;
   text-align: center;
 }
 
+.inventory-picker-mobile-footer {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e3e7ec;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: clamp(5rem, 12dvh, 6rem);
+  padding: 0.875rem clamp(1rem, 5vw, 1.5rem);
+}
+
+.inventory-picker-mobile-selection-count {
+  color: #39414b;
+  font-size: clamp(0.875rem, 3.8vw, 1rem);
+  font-weight: 600;
+}
+
 .inventory-picker-mobile-confirm {
-  animation: inventory-picker-mobile-confirm-in 300ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  bottom: clamp(1.25rem, 4dvh, 2rem);
-  box-shadow: none;
-  position: absolute;
-  right: clamp(1.25rem, 5vw, 2rem);
-  will-change: transform;
-  z-index: 3;
-}
-
-.inventory-picker-mobile-confirm.mantine-ActionIcon-root {
-  background: #2dcc5b;
-  height: 4rem;
-  transition:
-    background-color 150ms ease,
-    transform 150ms ease;
-  width: 4rem !important;
-}
-
-.inventory-picker-mobile-confirm.mantine-ActionIcon-root:hover {
-  background: #25b950;
-  transform: scale(1.05);
-}
-
-.inventory-picker-mobile-confirm.mantine-ActionIcon-root:active {
-  transform: scale(0.94);
+  flex: 0 0 auto;
+  min-width: clamp(6.5rem, 30vw, 8rem);
 }
 
 .inventory-picker-mobile-list .mantine-ScrollArea-scrollbar {
@@ -344,30 +361,16 @@ body {
   }
 }
 
-@keyframes inventory-picker-mobile-confirm-in {
-  from {
-    opacity: 0;
-    transform: scale(0.72);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .inventory-picker-mobile-shell,
   .inventory-picker-mobile-search-input input,
-  .inventory-picker-mobile-family,
-  .inventory-picker-mobile-confirm {
+  .inventory-picker-mobile-family {
     animation: none;
   }
 
   .inventory-picker-mobile-header .mantine-ActionIcon-root,
   .inventory-picker-mobile-row,
-  .inventory-picker-mobile-check,
-  .inventory-picker-mobile-confirm.mantine-ActionIcon-root {
+  .inventory-picker-mobile-check {
     transition: none;
   }
 }
@@ -1290,4 +1293,23 @@ a {
   .quotation-print-only {
     display: table-cell;
   }
+}
+.hour-meter-asset-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--mantine-radius-lg);
+  background: var(--mantine-color-gray-0);
+}
+
+.hour-meter-asset-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.hour-meter-asset-image--empty {
+  color: var(--mantine-color-gray-5);
+  border: 1px dashed var(--mantine-color-gray-3);
 }

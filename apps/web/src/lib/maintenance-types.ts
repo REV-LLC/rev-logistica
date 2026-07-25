@@ -43,6 +43,13 @@ export type MaintenanceReading = {
   note?: string | null;
   evidenceFileObjectId?: string | null;
   recordedByUserId: string;
+  recordedBy?: {
+    email: string;
+    employee?: {
+      name?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
   createdAt: string;
 };
 
