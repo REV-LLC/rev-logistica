@@ -144,8 +144,8 @@ export default function EmployeeCardsPage() {
       setError('El apellido es obligatorio');
       return;
     }
-    if (form.loginEnabled && !form.loginEmail.trim()) {
-      setError('El correo de acceso es obligatorio');
+    if (form.loginEnabled && !form.loginIdentifier.trim()) {
+      setError('El usuario o correo de acceso es obligatorio');
       return;
     }
     if (form.loginEnabled && !form.loginPassword.trim()) {
@@ -165,7 +165,7 @@ export default function EmployeeCardsPage() {
           email: form.email.trim() || undefined,
           documentId: form.documentId.trim().toUpperCase() || undefined,
           vehicleIds: form.vehicleIds,
-          loginEmail: form.loginEnabled ? form.loginEmail.trim().toLowerCase() || undefined : undefined,
+          loginIdentifier: form.loginEnabled ? form.loginIdentifier.trim().toLowerCase() || undefined : undefined,
           loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
           loginRole: form.loginEnabled ? form.loginRole : undefined,
           loginActive: form.loginEnabled ? form.loginActive : undefined,

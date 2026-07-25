@@ -40,7 +40,11 @@ export class UpdateEmployeeDto {
   loginEnabled?: boolean;
 
   @IsOptional()
-  @IsEmail()
+  @IsString()
+  loginIdentifier?: string;
+
+  @IsOptional()
+  @IsString()
   loginEmail?: string;
 
   @IsOptional()

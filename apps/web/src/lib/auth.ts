@@ -16,6 +16,7 @@ export function isLocalAuthBypassEnabled() {
 
 export type JwtPayload = {
   sub?: string;
+  identifier?: string;
   email?: string;
   exp?: number;
   role?: AppRole;

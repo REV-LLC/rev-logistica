@@ -29,7 +29,11 @@ export class CreateEmployeeDto {
   vehicleIds?: string[];
 
   @IsOptional()
-  @IsEmail()
+  @IsString()
+  loginIdentifier?: string;
+
+  @IsOptional()
+  @IsString()
   loginEmail?: string;
 
   @IsOptional()

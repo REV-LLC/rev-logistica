@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 interface JwtPayload {
   sub: string;
+  identifier: string;
   email: string;
   role: Role;
 }
@@ -17,10 +18,10 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(email: string, password: string) {
-    const normalizedEmail = email.trim().toLowerCase();
+  async login(identifier: string, password: string) {
+    const normalizedIdentifier = identifier.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+      where: { email: normalizedIdentifier },
       include: {
         employee: {
           select: { name: true, lastName: true },
@@ -36,6 +37,7 @@ export class AuthService {
 
     const payload: JwtPayload = {
       sub: user.id,
+      identifier: user.email,
       email: user.email,
       role: user.role,
     };
@@ -65,6 +67,7 @@ export class AuthService {
     return {
       id: user.id,
       name: employeeName ?? user.email,
+      identifier: user.email,
       email: user.email,
       role: user.role,
     };

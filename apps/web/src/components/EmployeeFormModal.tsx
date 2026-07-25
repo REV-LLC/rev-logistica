@@ -61,7 +61,7 @@ export type EmployeeForm = {
   active: boolean;
   vehicleIds: string[];
   loginEnabled: boolean;
-  loginEmail: string;
+  loginIdentifier: string;
   loginPassword: string;
   loginRole: AppRoleValue;
   loginActive: boolean;
@@ -84,7 +84,7 @@ export const emptyEmployeeForm: EmployeeForm = {
   active: true,
   vehicleIds: [],
   loginEnabled: false,
-  loginEmail: '',
+  loginIdentifier: '',
   loginPassword: '',
   loginRole: 'DRIVER',
   loginActive: true,
@@ -119,6 +119,7 @@ export const appRoleOptions = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'DRIVER', label: 'Conductor' },
+  { value: 'OPERATOR', label: 'Operario' },
 ];
 
 export const appRoleLabelByValue: Record<AppRoleValue, string> = {
@@ -303,9 +304,22 @@ export default function EmployeeFormModal({
             <Select
               label="Rol"
               value={form.role}
-              onChange={(value) =>
-                onChange((previous) => ({ ...previous, role: (value as RoleValue) ?? 'DRIVER' }))
-              }
+              onChange={(value) => {
+                const nextRole = (value as RoleValue) ?? 'DRIVER';
+                const isOperator = ['HEAVY_MACHINERY_OPERATOR', 'MACHINIST', 'MECHANIC'].includes(nextRole);
+                onChange((previous) => ({
+                  ...previous,
+                  role: nextRole,
+                  ...(!isEditing && isOperator
+                    ? {
+                        loginEnabled: true,
+                        loginIdentifier: previous.loginIdentifier || previous.documentId,
+                        loginPassword: previous.loginPassword || previous.phone,
+                        loginRole: 'OPERATOR' as AppRoleValue,
+                      }
+                    : {}),
+                }));
+              }}
               data={roleOptions}
               allowDeselect={false}
               required
@@ -316,7 +330,13 @@ export default function EmployeeFormModal({
               value={form.documentId}
               onChange={(event) => {
                 const value = toUppercaseInput(event.currentTarget.value);
-                onChange((previous) => ({ ...previous, documentId: value }));
+                onChange((previous) => ({
+                  ...previous,
+                  documentId: value,
+                  ...(!isEditing && previous.loginRole === 'OPERATOR'
+                    ? { loginIdentifier: value }
+                    : {}),
+                }));
               }}
             />
           </SimpleGrid>
@@ -329,7 +349,13 @@ export default function EmployeeFormModal({
               value={form.phone}
               onChange={(event) => {
                 const value = event.currentTarget.value;
-                onChange((previous) => ({ ...previous, phone: value }));
+                onChange((previous) => ({
+                  ...previous,
+                  phone: value,
+                  ...(!isEditing && previous.loginRole === 'OPERATOR'
+                    ? { loginPassword: value }
+                    : {}),
+                }));
               }}
             />
             <TextInput
@@ -394,12 +420,12 @@ export default function EmployeeFormModal({
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <TextInput
                   leftSection={<IconMail size={16} />}
-                  label="Correo de acceso"
-                  placeholder="usuario@empresa.com"
-                  value={form.loginEmail}
+                  label="Usuario o correo de acceso"
+                  placeholder="Cédula o usuario@empresa.com"
+                  value={form.loginIdentifier}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
-                    onChange((previous) => ({ ...previous, loginEmail: value }));
+                    onChange((previous) => ({ ...previous, loginIdentifier: value }));
                   }}
                   required
                 />
