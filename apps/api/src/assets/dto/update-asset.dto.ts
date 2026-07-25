@@ -1,6 +1,19 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class UpdateAssetDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  registrationNumber?: string | null;
+
   @IsOptional()
   @IsString()
   description?: string | null;
@@ -40,4 +53,9 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  hourMeter?: number;
 }

@@ -1,4 +1,6 @@
-import { IsArray, IsDateString, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsDateString, IsInt, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
+import { NotificationRecipientDto } from '../../notifications/dto/notification.dto';
 
 export class CreateVehicleDto {
   @IsString()
@@ -38,4 +40,10 @@ export class CreateVehicleDto {
   @IsArray()
   @IsUUID('4', { each: true })
   driverIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => NotificationRecipientDto)
+  notificationRecipients?: NotificationRecipientDto[];
 }

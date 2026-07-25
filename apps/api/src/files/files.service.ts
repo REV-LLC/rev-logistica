@@ -25,7 +25,12 @@ export type UploadedBusinessFile = {
   size: number;
 };
 
-export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
+export type FileEntityType =
+  | 'DOCUMENT'
+  | 'EMPLOYEE'
+  | 'VEHICLE'
+  | 'CUSTOMER'
+  | 'ASSET';
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
@@ -56,6 +61,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'CURSO_ALTURAS',
     'CONTRATO',
     'CERTIFICADO',
+    'GUIA_MOVILIDAD',
     'OTRO',
   ]),
   VEHICLE: new Set([
@@ -346,6 +352,23 @@ export class FilesService {
     return { ok: true };
   }
 
+  async deleteFileForRetention(fileId: string) {
+    const file = await this.prisma.fileObject.findUnique({
+      where: { id: fileId },
+      select: { id: true, objectKey: true },
+    });
+    if (!file) return { ok: true };
+
+    if (file.objectKey) {
+      const config = this.getR2Config();
+      await this.createR2Client(config).send(
+        new DeleteObjectCommand({ Bucket: config.bucket, Key: file.objectKey }),
+      );
+    }
+    await this.prisma.fileObject.delete({ where: { id: file.id } });
+    return { ok: true };
+  }
+
   private readonly fileSelect = {
     id: true,
     documentId: true,
@@ -388,6 +411,20 @@ export class FilesService {
     user: { id: string; role: Role },
     mode: 'read' | 'write',
   ) {
+    if (user.role === Role.OPERATOR) {
+      if (entityType !== 'ASSET') {
+        throw new ForbiddenException('Operators can only access asset evidence');
+      }
+      const ownAsset = await this.prisma.asset.findFirst({
+        where: { id: entityId, warehouseOwner: { type: 'OWN' } },
+        select: { id: true },
+      });
+      if (!ownAsset) {
+        throw new ForbiddenException('Operators can only access assets from own warehouses');
+      }
+      return;
+    }
+
     if (mode === 'write' && user.role === Role.DRIVER) {
       if (entityType !== 'DOCUMENT') {
         throw new ForbiddenException(

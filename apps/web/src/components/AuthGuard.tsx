@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button, Center, Loader, Stack, Text } from '@mantine/core';
-import { AppRole, clearToken, getCurrentUserRole, getToken, isTokenExpired, markSessionExpiredNotice } from '@/lib/auth';
+import { AppRole, clearToken, getCurrentUserRole, getToken, isLocalAuthBypassEnabled, isTokenExpired, markSessionExpiredNotice } from '@/lib/auth';
 
 type RouteRoleRule = {
   prefix: string;
@@ -32,6 +32,10 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
 
   useEffect(() => {
     setForbidden(false);
+    if (isLocalAuthBypassEnabled()) {
+      setReady(true);
+      return;
+    }
     const token = getToken();
     const expired = isTokenExpired(token);
     if (!token || expired) {
@@ -82,7 +86,13 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
             <Text c="dimmed" size="sm">
               Request access or sign in with an authorized role.
             </Text>
-            <Button mt="sm" variant="light" onClick={() => router.replace('/transport/requests')}>
+            <Button
+              mt="sm"
+              variant="light"
+              onClick={() => router.replace(
+                getCurrentUserRole() === 'OPERATOR' ? '/inventory/hour-meter' : '/transport/requests',
+              )}
+            >
               Go home
             </Button>
           </Stack>

@@ -23,18 +23,29 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import {
   IconCalendarDue,
+  IconBell,
   IconCar,
   IconEye,
   IconFileDescription,
   IconPlus,
   IconSteeringWheel,
+  IconTool,
   IconTruck,
   IconUserCheck,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
+import EntityNotificationManager from '@/components/notifications/EntityNotificationManager';
+import NotificationRecipientsEditor from '@/components/notifications/NotificationRecipientsEditor';
 import StatCard from '@/components/dashboard/StatCard';
 import { api } from '@/lib/api';
+import {
+  recipientsFromTopic,
+  type AppUserOption,
+  type NotificationRecipientInput,
+  type NotificationTopic,
+} from '@/lib/maintenance-types';
 
 const VEHICLE_TYPE_OPTIONS = ['CAMION/CAMIONETA', 'AUTOMOVIL', 'MOTO', 'GRUA'];
 const CAPACITY_OPTIONS = Array.from({ length: 91 }, (_, index) => {
@@ -151,9 +162,13 @@ function getDocumentStatus(days: number | null) {
 function VehicleDetails({
   vehicle,
   onEdit,
+  onMaintenance,
+  onAlerts,
 }: {
   vehicle: Vehicle;
   onEdit?: (vehicle: Vehicle) => void;
+  onMaintenance?: (vehicle: Vehicle) => void;
+  onAlerts?: (vehicle: Vehicle) => void;
 }) {
   const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
   const technoStatus = getDocumentStatus(daysUntil(vehicle.tecnomecanicaVigencia));
@@ -215,13 +230,32 @@ function VehicleDetails({
         </Paper>
       </SimpleGrid>
 
-      {onEdit ? (
-        <Group className="mobile-actions">
-          <Button variant="light" onClick={() => onEdit(vehicle)}>
+      <Group className="mobile-actions">
+        {onMaintenance ? (
+          <Button
+            variant="light"
+            leftSection={<IconTool size={16} />}
+            onClick={() => onMaintenance(vehicle)}
+          >
+            Mantenimiento
+          </Button>
+        ) : null}
+        {onAlerts ? (
+          <Button
+            variant="light"
+            color="orange"
+            leftSection={<IconBell size={16} />}
+            onClick={() => onAlerts(vehicle)}
+          >
+            Alertas
+          </Button>
+        ) : null}
+        {onEdit ? (
+          <Button variant="default" onClick={() => onEdit(vehicle)}>
             Editar
           </Button>
-        </Group>
-      ) : null}
+        ) : null}
+      </Group>
     </Stack>
   );
 }
@@ -237,6 +271,11 @@ export default function VehiclesPage() {
   const [form, setForm] = useState<VehicleForm | null>(null);
   const [detailsVehicle, setDetailsVehicle] = useState<Vehicle | null>(null);
   const [documentsVehicle, setDocumentsVehicle] = useState<Vehicle | null>(null);
+  const [maintenanceVehicle, setMaintenanceVehicle] = useState<Vehicle | null>(null);
+  const [alertsVehicle, setAlertsVehicle] = useState<Vehicle | null>(null);
+  const [users, setUsers] = useState<AppUserOption[]>([]);
+  const [formRecipients, setFormRecipients] = useState<NotificationRecipientInput[]>([]);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const brandOptions = useMemo(
@@ -259,8 +298,12 @@ export default function VehiclesPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<Vehicle[]>('/vehicles');
-      setVehicles(data);
+      const [vehicleData, userData] = await Promise.all([
+        api<Vehicle[]>('/vehicles'),
+        api<AppUserOption[]>('/users?active=true'),
+      ]);
+      setVehicles(vehicleData);
+      setUsers(userData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar vehiculos');
     } finally {
@@ -295,6 +338,7 @@ export default function VehiclesPage() {
     setFormError(null);
     setSuccess(null);
     setForm(emptyForm);
+    setFormRecipients([]);
   };
 
   const startEdit = (vehicle: Vehicle) => {
@@ -302,12 +346,24 @@ export default function VehiclesPage() {
     setFormError(null);
     setSuccess(null);
     setForm(formFromVehicle(vehicle));
+    setFormRecipients([]);
+    setLoadingRecipients(true);
+    void api<NotificationTopic[]>(`/notifications/entities/VEHICLE/${vehicle.id}/topics`)
+      .then((topics) => {
+        const soatTopic = topics.find((topic) => topic.eventType === 'SOAT_EXPIRY') ?? topics[0];
+        setFormRecipients(recipientsFromTopic(soatTopic));
+      })
+      .catch((err) => {
+        setFormError(err instanceof Error ? err.message : 'No se pudieron cargar los destinatarios');
+      })
+      .finally(() => setLoadingRecipients(false));
   };
 
   const closeEdit = () => {
     setEditing(null);
     setFormError(null);
     setForm(null);
+    setFormRecipients([]);
   };
 
   const handleSaveSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -339,6 +395,7 @@ export default function VehiclesPage() {
         capacity: toPatchValue(form.capacity)?.toUpperCase(),
         soatVigencia: toPatchValue(form.soatVigencia),
         tecnomecanicaVigencia: toPatchValue(form.tecnomecanicaVigencia),
+        notificationRecipients: formRecipients,
       };
 
       if (editing) {
@@ -603,6 +660,14 @@ export default function VehiclesPage() {
         {detailsVehicle ? (
           <VehicleDetails
             vehicle={detailsVehicle}
+            onMaintenance={(vehicle) => {
+              setDetailsVehicle(null);
+              setMaintenanceVehicle(vehicle);
+            }}
+            onAlerts={(vehicle) => {
+              setDetailsVehicle(null);
+              setAlertsVehicle(vehicle);
+            }}
             onEdit={(vehicle) => {
               setDetailsVehicle(null);
               startEdit(vehicle);
@@ -623,6 +688,40 @@ export default function VehiclesPage() {
             entityType="VEHICLE"
             entityId={documentsVehicle.id}
             title="Documentos del vehiculo"
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!maintenanceVehicle}
+        onClose={() => setMaintenanceVehicle(null)}
+        title={maintenanceVehicle ? `Mantenimiento de ${maintenanceVehicle.plate}` : 'Mantenimiento'}
+        size="95%"
+        centered
+      >
+        {maintenanceVehicle ? (
+          <MaintenancePanel
+            subject={{
+              type: 'VEHICLE',
+              id: maintenanceVehicle.id,
+              label: maintenanceVehicle.plate,
+            }}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!alertsVehicle}
+        onClose={() => setAlertsVehicle(null)}
+        title={alertsVehicle ? `Alertas de ${alertsVehicle.plate}` : 'Alertas'}
+        size="xl"
+        centered
+      >
+        {alertsVehicle ? (
+          <EntityNotificationManager
+            entityType="VEHICLE"
+            entityId={alertsVehicle.id}
+            entityLabel={alertsVehicle.plate}
           />
         ) : null}
       </Modal>
@@ -762,6 +861,27 @@ export default function VehiclesPage() {
                       }
                     />
                   </SimpleGrid>
+                </Stack>
+              </Paper>
+
+              <Paper withBorder radius="lg" p="md">
+                <Stack gap="md">
+                  <div>
+                    <Text fw={700}>Destinatarios de alertas</Text>
+                    <Text size="sm" c="dimmed">
+                      El SOAT y la tecnomecánica se crean automáticamente. Aquí defines quién recibe ambas alertas.
+                    </Text>
+                  </div>
+                  {loadingRecipients ? (
+                    <Text size="sm" c="dimmed">Cargando destinatarios...</Text>
+                  ) : (
+                    <NotificationRecipientsEditor
+                      users={users}
+                      value={formRecipients}
+                      onChange={setFormRecipients}
+                      label="Destinatarios comunes"
+                    />
+                  )}
                 </Stack>
               </Paper>
 

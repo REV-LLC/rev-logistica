@@ -11,6 +11,7 @@ enum Role {
   ADMIN
   OFFICE
   DRIVER
+  OPERATOR
 }
 
 enum WarehouseType {
@@ -89,6 +90,18 @@ enum TaskPriority {
   HIGH
 }
 
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -97,11 +110,17 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  documentsCreated Document[]    @relation("CreatedBy")
-  ledgerCreated    StockLedger[] @relation("LedgerCreatedBy")
-  tasksCreated     Task[]        @relation("TaskCreatedBy")
-  tasksAssigned    Task[]        @relation("TaskAssignedTo")
-  employee         Employee?
+  documentsCreated           Document[]              @relation("CreatedBy")
+  ledgerCreated              StockLedger[]           @relation("LedgerCreatedBy")
+  tasksCreated               Task[]                  @relation("TaskCreatedBy")
+  tasksAssigned              Task[]                  @relation("TaskAssignedTo")
+  mobilityGuidesCreated      MobilityGuide[]         @relation("MobilityGuideCreatedBy")
+  employee                   Employee?
+  notificationRecipients     NotificationRecipient[]
+  maintenanceReadings        AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
+  vehicleMaintenanceReadings VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
+  maintenanceCompletions     MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
+  notificationDeliveries     NotificationDelivery[]
 }
 
 model Customer {
@@ -219,6 +238,7 @@ model Asset {
   skuId              String
   publicCode         String   @unique
   serialOrEngine     String   @unique
+  registrationNumber String?  @unique
   description        String?
   brand              String?
   model              String?
@@ -227,6 +247,7 @@ model Asset {
   imageFileObjectId  String?
   internalNumber     Int
   weight             Decimal?
+  hourMeter          Decimal  @default(0) @db.Decimal(12, 2)
   warehouseOwnerId   String
   warehouseCurrentId String?
   active             Boolean  @default(true)
@@ -237,11 +258,157 @@ model Asset {
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
 
-  documentItems DocumentItem[]
-  ledger        StockLedger[]
-  taskAssets    TaskAsset[]
+  documentItems    DocumentItem[]
+  ledger           StockLedger[]
+  taskAssets       TaskAsset[]
+  mobilityGuides   MobilityGuide[]
+  hourReadings     AssetHourReading[]
+  maintenancePlans MaintenancePlan[]
 
   @@index([skuId])
+  @@index([registrationNumber])
+}
+
+model MobilityGuide {
+  id              String   @id @default(uuid())
+  assetId         String
+  fileObjectId    String   @unique
+  name            String
+  issuedAt        DateTime
+  expiresAt       DateTime
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  asset      Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("MobilityGuideCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([assetId, issuedAt])
+  @@index([issuedAt])
+  @@index([expiresAt])
+}
+
+model AssetHourReading {
+  id                   String   @id @default(uuid())
+  assetId              String
+  hours                Decimal  @db.Decimal(12, 2)
+  recordedAt           DateTime @default(now())
+  note                 String?
+  evidenceFileObjectId String?
+  recordedByUserId     String
+  createdAt            DateTime @default(now())
+
+  asset      Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  recordedBy User  @relation("MaintenanceReadingRecordedBy", fields: [recordedByUserId], references: [id])
+
+  @@index([assetId, hours(sort: Desc)])
+  @@index([recordedByUserId])
+  @@index([evidenceFileObjectId])
+}
+
+model MaintenancePlan {
+  id        String   @id @default(uuid())
+  assetId   String?
+  vehicleId String?
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asset   Asset?            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vehicle Vehicle?          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  items   MaintenanceItem[]
+
+  @@index([assetId, active])
+  @@index([vehicleId, active])
+}
+
+model MaintenanceItem {
+  id            String   @id @default(uuid())
+  planId        String
+  name          String
+  instructions  String?
+  intervalHours Decimal  @db.Decimal(12, 2)
+  warningHours  Decimal  @default(10) @db.Decimal(12, 2)
+  baselineHours Decimal  @default(0) @db.Decimal(12, 2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  plan        MaintenancePlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  completions MaintenanceCompletion[]
+
+  @@index([planId, active])
+}
+
+model NotificationTopic {
+  id              String    @id @default(uuid())
+  entityType      String
+  entityId        String
+  eventType       String
+  active          Boolean   @default(true)
+  titleTemplate   String?
+  messageTemplate String?
+  dueAt           DateTime?
+  warningDays     Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  recipients NotificationRecipient[]
+  deliveries NotificationDelivery[]
+
+  @@unique([entityType, entityId, eventType])
+  @@index([entityType, entityId, active])
+  @@index([active, dueAt])
+}
+
+model NotificationRecipient {
+  id           String  @id @default(uuid())
+  topicId      String
+  userId       String
+  emailEnabled Boolean @default(true)
+  smsEnabled   Boolean @default(false)
+
+  topic NotificationTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, userId])
+  @@index([userId, topicId])
+}
+
+model MaintenanceCompletion {
+  id                String   @id @default(uuid())
+  itemId            String
+  completedAtHours  Decimal  @db.Decimal(12, 2)
+  completedAt       DateTime @default(now())
+  notes             String?
+  completedByUserId String
+  createdAt         DateTime @default(now())
+
+  item        MaintenanceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  completedBy User            @relation("MaintenanceCompletedBy", fields: [completedByUserId], references: [id])
+
+  @@index([itemId, completedAtHours(sort: Desc)])
+  @@index([completedByUserId])
+}
+
+model NotificationDelivery {
+  id            String                     @id @default(uuid())
+  topicId       String
+  userId        String
+  occurrenceKey String
+  channel       NotificationChannel
+  status        NotificationDeliveryStatus @default(PENDING)
+  sentAt        DateTime?
+  error         String?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  topic NotificationTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, userId, occurrenceKey, channel])
+  @@index([userId, status])
 }
 
 model Task {
@@ -309,7 +476,7 @@ model Document {
   voidedBy   String?
   voidedAt   DateTime?
 
-  createdAt DateTime @default(now())
+  createdAt              DateTime  @default(now())
   officeModifiedAt       DateTime?
   officeModifiedBy       String?
   customerDraftEmailedAt DateTime?
@@ -452,7 +619,25 @@ model Vehicle {
   active                Boolean   @default(true)
   createdAt             DateTime  @default(now())
 
-  drivers EmployeeVehicle[]
+  drivers          EmployeeVehicle[]
+  maintenancePlans MaintenancePlan[]
+  hourReadings     VehicleHourReading[]
+}
+
+model VehicleHourReading {
+  id               String   @id @default(uuid())
+  vehicleId        String
+  hours            Decimal  @db.Decimal(12, 2)
+  recordedAt       DateTime @default(now())
+  note             String?
+  recordedByUserId String
+  createdAt        DateTime @default(now())
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation("VehicleMaintenanceReadingRecordedBy", fields: [recordedByUserId], references: [id])
+
+  @@index([vehicleId, hours(sort: Desc)])
+  @@index([recordedByUserId])
 }
 
 model EmployeeVehicle {
@@ -486,9 +671,10 @@ model FileObject {
   createdAt       DateTime  @default(now())
   createdBy       String
 
-  document    Document? @relation(fields: [documentId], references: [id])
-  skuImages   Sku[]     @relation("SkuImage")
-  assetImages Asset[]   @relation("AssetImage")
+  document      Document?      @relation(fields: [documentId], references: [id])
+  skuImages     Sku[]          @relation("SkuImage")
+  assetImages   Asset[]        @relation("AssetImage")
+  mobilityGuide MobilityGuide?
 
   @@index([documentId])
   @@index([entityType, entityId])

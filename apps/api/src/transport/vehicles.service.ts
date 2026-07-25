@@ -1,9 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationRecipientDto } from '../notifications/dto/notification.dto';
+import { NOTIFICATION_ENTITY } from '../notifications/notification.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class VehiclesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private toDateOrNull(value?: string | null) {
     if (!value) return null;
@@ -60,6 +66,7 @@ export class VehiclesService {
     soatVigencia?: string;
     tecnomecanicaVigencia?: string;
     driverIds?: string[];
+    notificationRecipients?: NotificationRecipientDto[];
   }) {
     const driverIds = payload.driverIds ?? [];
     if (driverIds.length) {
@@ -89,6 +96,8 @@ export class VehiclesService {
         });
       }
 
+      await this.notifications.ensureVehicleTopics(created.id, payload.notificationRecipients, tx);
+
       return created;
     });
   }
@@ -106,6 +115,7 @@ export class VehiclesService {
       tecnomecanicaVigencia?: string;
       active?: boolean;
       driverIds?: string[];
+      notificationRecipients?: NotificationRecipientDto[];
     },
   ) {
     const vehicle = await this.prisma.vehicle.findUnique({
@@ -131,8 +141,9 @@ export class VehiclesService {
           year: payload.year,
           type: payload.type,
           capacity: payload.capacity,
-          soatVigencia: this.toDateOrNull(payload.soatVigencia),
-          tecnomecanicaVigencia: this.toDateOrNull(payload.tecnomecanicaVigencia),
+          soatVigencia: payload.soatVigencia === undefined ? undefined : this.toDateOrNull(payload.soatVigencia),
+          tecnomecanicaVigencia: payload.tecnomecanicaVigencia === undefined
+            ? undefined : this.toDateOrNull(payload.tecnomecanicaVigencia),
           active: payload.active,
         },
       });
@@ -149,13 +160,22 @@ export class VehiclesService {
         }
       }
 
+      await this.notifications.ensureVehicleTopics(vehicleId, payload.notificationRecipients, tx);
+
       return updated;
     });
   }
 
   async deleteVehicle(vehicleId: string) {
     return this.prisma.$transaction(async (tx) => {
+      const maintenanceItems = await tx.maintenanceItem.findMany({
+        where: { plan: { vehicleId } }, select: { id: true },
+      });
+      await tx.notificationTopic.deleteMany({
+        where: { entityType: 'MAINTENANCE_ITEM', entityId: { in: maintenanceItems.map((item) => item.id) } },
+      });
       await tx.employeeVehicle.deleteMany({ where: { vehicleId } });
+      await tx.notificationTopic.deleteMany({ where: { entityType: NOTIFICATION_ENTITY.VEHICLE, entityId: vehicleId } });
       await tx.vehicle.delete({ where: { id: vehicleId } });
       return { deleted: true };
     });

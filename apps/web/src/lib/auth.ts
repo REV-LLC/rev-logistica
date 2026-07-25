@@ -1,5 +1,18 @@
 const TOKEN_KEY = 'revlogistica.token';
 const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
+const LOCAL_BYPASS_PAYLOAD =
+  'eyJzdWIiOiJsb2NhbC1hdXRoLWJ5cGFzcyIsImVtYWlsIjoidXNlcjFAZHVtbXkubG9jYWwiLCJyb2xlIjoiQURNSU4ifQ';
+const LOCAL_BYPASS_TOKEN = `local.${LOCAL_BYPASS_PAYLOAD}.bypass`;
+
+export function isLocalAuthBypassEnabled() {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (
+      process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true' ||
+      process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS === 'true'
+    )
+  );
+}
 
 export type JwtPayload = {
   sub?: string;
@@ -23,6 +36,7 @@ function parseJwtPayload(token: string): JwtPayload | null {
 }
 
 export function getToken() {
+  if (isLocalAuthBypassEnabled()) return LOCAL_BYPASS_TOKEN;
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -63,15 +77,19 @@ export function getTokenPayload() {
   return parseJwtPayload(token);
 }
 
-export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
+export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
 export function getCurrentUserRole(): AppRole | null {
+  if (isLocalAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
-  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER') return role;
+  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR') return role;
   return null;
 }
 
 export function getCurrentUserSession(): JwtPayload | null {
+  if (isLocalAuthBypassEnabled()) {
+    return { email: 'user1@dummy.local', role: 'ADMIN' };
+  }
   return getTokenPayload();
 }

@@ -57,6 +57,18 @@ type RequestDocument = {
   status?: string | null;
 };
 
+type NotificationReminder = {
+  topicId: string;
+  eventType: string;
+  title: string;
+  message: string;
+  status: 'UPCOMING' | 'DUE' | 'OVERDUE';
+  unit: 'HOURS' | 'DAYS';
+  remainingHours?: number;
+  remainingDays?: number;
+  entity: { id: string; type: 'ASSET' | 'VEHICLE'; label: string };
+};
+
 type PendingVehicle = {
   id: string;
   plate: string;
@@ -185,6 +197,7 @@ export default function HomePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [requests, setRequests] = useState<RequestDocument[]>([]);
+  const [notifications, setNotifications] = useState<NotificationReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -199,16 +212,18 @@ export default function HomePage() {
       setError(null);
 
       try {
-        const [vehiclesData, tasksData, requestsData] = await Promise.all([
+        const [vehiclesData, tasksData, requestsData, remindersData] = await Promise.all([
           api<Vehicle[]>('/vehicles'),
           api<Task[]>('/tasks'),
           api<RequestDocument[]>('/documents?status=DRAFT&take=200'),
+          api<NotificationReminder[]>('/notifications/reminders/me'),
         ]);
 
         if (!mounted) return;
         setVehicles(vehiclesData);
         setTasks(tasksData);
         setRequests(requestsData);
+        setNotifications(remindersData);
       } catch (err) {
         if (!mounted) return;
         setError(err instanceof Error ? err.message : 'No se pudo cargar el panel');
@@ -225,11 +240,18 @@ export default function HomePage() {
   }, []);
 
   const pendingVehicles = useMemo<PendingVehicle[]>(() => {
+    const assignedEvents = new Map<string, Set<string>>();
+    notifications.filter((notification) => notification.entity.type === 'VEHICLE').forEach((notification) => {
+      const events = assignedEvents.get(notification.entity.id) ?? new Set<string>();
+      events.add(notification.eventType);
+      assignedEvents.set(notification.entity.id, events);
+    });
     return vehicles
-      .filter((vehicle) => vehicle.active !== false)
+      .filter((vehicle) => vehicle.active !== false && assignedEvents.has(vehicle.id))
       .map((vehicle) => {
-        const soatDate = parseDate(vehicle.soatVigencia);
-        const technoDate = parseDate(vehicle.tecnomecanicaVigencia);
+        const events = assignedEvents.get(vehicle.id)!;
+        const soatDate = events.has('SOAT_EXPIRY') ? parseDate(vehicle.soatVigencia) : null;
+        const technoDate = events.has('TECH_INSPECTION_EXPIRY') ? parseDate(vehicle.tecnomecanicaVigencia) : null;
         const soatDays = soatDate ? daysUntil(soatDate) : null;
         const technoDays = technoDate ? daysUntil(technoDate) : null;
         const dayValues = [soatDays, technoDays].filter((value): value is number => value !== null);
@@ -247,25 +269,35 @@ export default function HomePage() {
       })
       .filter((vehicle): vehicle is PendingVehicle => vehicle !== null)
       .sort((a, b) => a.minDays - b.minDays);
-  }, [vehicles]);
+  }, [notifications, vehicles]);
 
   const dashboardMetrics = useMemo(() => {
     const criticalVehicles = pendingVehicles.filter((vehicle) => vehicle.minDays <= 7).length;
     const pendingRequests = requests.length;
     const openTasks = tasks.filter((task) => task.status === 'OPEN').length;
     const doingTasks = tasks.filter((task) => task.status === 'DOING').length;
+    const dueNotifications = notifications.filter((reminder) => reminder.status === 'DUE').length;
+    const overdueNotifications = notifications.filter((reminder) => reminder.status === 'OVERDUE').length;
 
     return {
       criticalVehicles,
       pendingRequests,
       openTasks,
       doingTasks,
+      dueNotifications,
+      overdueNotifications,
     };
-  }, [pendingVehicles, requests, tasks]);
+  }, [notifications, pendingVehicles, requests, tasks]);
 
   const topVehicles = pendingVehicles.slice(0, 8);
   const dashboardStatus =
-    dashboardMetrics.criticalVehicles > 0
+    dashboardMetrics.overdueNotifications > 0
+      ? {
+          title: 'Mantenimientos vencidos',
+          description: `${dashboardMetrics.overdueNotifications} alertas asignadas ya están vencidas.`,
+          color: 'red',
+        }
+      : dashboardMetrics.criticalVehicles > 0
       ? {
           title: 'Atencion inmediata',
           description: `${dashboardMetrics.criticalVehicles} vencimientos criticos de flota requieren revision hoy.`,
@@ -290,7 +322,7 @@ export default function HomePage() {
           };
 
   return (
-    <AuthGuard allowedRoles={['ADMIN', 'OFFICE']}>
+    <AuthGuard allowedRoles={['ADMIN', 'OFFICE', 'DRIVER']}>
       <ResponsiveShell>
         <Container size="xl" py="xl">
           <Stack gap="lg">
@@ -456,6 +488,44 @@ export default function HomePage() {
               </Paper>
 
             </SimpleGrid>
+
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" wrap="wrap">
+                  <div>
+                    <Text fw={700}>Mis notificaciones</Text>
+                    <Text size="sm" c="dimmed">Solo se muestran alertas asignadas al usuario de esta sesión.</Text>
+                  </div>
+                  <Badge color={dashboardMetrics.overdueNotifications > 0 ? 'red' : 'yellow'} variant="light">
+                    {dashboardMetrics.overdueNotifications + dashboardMetrics.dueNotifications} requieren atención
+                  </Badge>
+                </Group>
+                {notifications.length === 0 ? (
+                  <Text size="sm" c="dimmed">No tienes alertas asignadas.</Text>
+                ) : (
+                  <Stack gap="xs">
+                    {notifications.map((reminder) => (
+                      <Paper key={reminder.topicId} withBorder radius="md" p="sm">
+                        <Group justify="space-between" align="flex-start" wrap="wrap">
+                          <div>
+                            <Text fw={700}>{reminder.title}</Text>
+                            <Text size="sm" c="dimmed">{reminder.message}</Text>
+                          </div>
+                          <Badge
+                            color={reminder.status === 'OVERDUE' ? 'red' : reminder.status === 'DUE' ? 'yellow' : 'gray'}
+                            variant="light"
+                          >
+                            {reminder.status === 'OVERDUE'
+                              ? `Vencido por ${Math.abs(reminder.unit === 'HOURS' ? reminder.remainingHours ?? 0 : reminder.remainingDays ?? 0)} ${reminder.unit === 'HOURS' ? 'h' : 'días'}`
+                              : `${reminder.unit === 'HOURS' ? reminder.remainingHours : reminder.remainingDays} ${reminder.unit === 'HOURS' ? 'h' : 'días'} restantes`}
+                          </Badge>
+                        </Group>
+                      </Paper>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            </Paper>
 
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Stack gap="md">

@@ -1,4 +1,15 @@
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChargeType } from '@prisma/client';
 
@@ -60,6 +71,11 @@ export class SerializedAssetInput {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
+  registrationNumber?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()
@@ -89,6 +105,11 @@ export class SerializedAssetInput {
   @IsOptional()
   @IsInt()
   internalNumber?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  hourMeter?: number;
 }
 
 export class CreateSerializedAssetDto {

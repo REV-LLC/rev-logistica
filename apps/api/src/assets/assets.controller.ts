@@ -78,7 +78,7 @@ export class AssetsController {
   }
 
   @Patch(':assetId')
-  @Roles(Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE)
   updateAsset(
     @Param('assetId', new ParseUUIDPipe()) assetId: string,
     @Body(
@@ -89,8 +89,9 @@ export class AssetsController {
       }),
     )
     payload: UpdateAssetDto,
+    @Req() request: Request & { user: JwtPayload },
   ) {
-    return this.assetsService.updateAsset(assetId, payload);
+    return this.assetsService.updateAsset(assetId, payload, request.user.sub);
   }
 
   @Get(':assetId')

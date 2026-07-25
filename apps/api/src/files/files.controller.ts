@@ -36,13 +36,13 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Get('categories/:entityType')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   getCategories(@Param('entityType') entityType: string) {
     return this.filesService.getCategories(entityType);
   }
 
   @Get('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   listEntityFiles(
     @Param('entityType') entityType: string,
     @Param('entityId', new ParseUUIDPipe()) entityId: string,
@@ -55,7 +55,7 @@ export class FilesController {
   }
 
   @Post('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   @UseInterceptors(
     FilesInterceptor('files', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),
@@ -76,7 +76,7 @@ export class FilesController {
   }
 
   @Post('documents/:documentId/evidence')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   @UseInterceptors(
     FilesInterceptor('photos', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),

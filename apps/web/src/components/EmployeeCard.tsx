@@ -14,7 +14,7 @@ export type EmployeeCardVehicle = {
   active?: boolean;
 };
 
-export type EmployeeCardAppRole = 'ADMIN' | 'OFFICE' | 'DRIVER';
+export type EmployeeCardAppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
 export type EmployeeCardRole =
   | 'DRIVER'

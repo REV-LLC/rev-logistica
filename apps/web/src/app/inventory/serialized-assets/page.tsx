@@ -139,6 +139,17 @@ const toNumberInputValue = (value: number | string | null | undefined) => {
   return '';
 };
 
+const DECIMAL_SEPARATOR = '.';
+const ALLOWED_DECIMAL_SEPARATORS = ['.', ','];
+
+const toOptionalNumber = (value: number | string) => {
+  if (value === '') return undefined;
+
+  const normalizedValue = typeof value === 'string' ? value.replace(',', '.') : value;
+  const parsed = Number(normalizedValue);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const inferBrandModelFromSkuName = (
   skuName: string,
   options: Array<{ value: string; label: string }>,
@@ -184,16 +195,15 @@ export default function CreateSerializedAssetPage() {
   const [skuFuel, setSkuFuel] = useState('');
   const [skuSize, setSkuSize] = useState('');
   const [skuUnit, setSkuUnit] = useState('');
-  const [skuUnitWeight, setSkuUnitWeight] = useState<number | ''>('');
+  const [skuUnitWeight, setSkuUnitWeight] = useState<number | string>('');
   const [skuPrice, setSkuPrice] = useState<number | ''>('');
   const [skuSubrentalPrice, setSkuSubrentalPrice] = useState<number | ''>('');
   const [skuReplacementValue, setSkuReplacementValue] = useState<number | ''>('');
   const [skuChargeType, setSkuChargeType] = useState<'DAY' | 'HOUR'>('DAY');
-  const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<
-    number | ''
-  >('');
+  const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<number | string>('');
 
   const [serialOrEngine, setSerialOrEngine] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [assetImageFile, setAssetImageFile] = useState<File | null>(null);
   const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
   const [copiedImageLabel, setCopiedImageLabel] = useState('');
@@ -408,6 +418,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -442,6 +453,7 @@ export default function CreateSerializedAssetPage() {
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
     setSerialOrEngine('');
+    setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
@@ -586,6 +598,9 @@ export default function CreateSerializedAssetPage() {
     setError(null);
     setSuccess(null);
 
+    const parsedSkuUnitWeight = toOptionalNumber(skuUnitWeight);
+    const parsedMinimumChargeHours = toOptionalNumber(skuMinimumChargeHours);
+
     if (!warehouseLocked) {
       setValidationError('Confirm the warehouse before saving.', ownerWarehouseRef);
       return;
@@ -642,7 +657,7 @@ export default function CreateSerializedAssetPage() {
 
     if (
       skuChargeType === 'HOUR' &&
-      (skuMinimumChargeHours === '' || skuMinimumChargeHours <= 0)
+      (parsedMinimumChargeHours === undefined || parsedMinimumChargeHours <= 0)
     ) {
       setValidationError(
         'Enter the minimum hourly charge.',
@@ -674,7 +689,7 @@ export default function CreateSerializedAssetPage() {
               },
         sku: {
           name: resolvedSkuName || undefined,
-          unitWeight: skuUnitWeight === '' ? undefined : skuUnitWeight,
+          unitWeight: parsedSkuUnitWeight,
           price: skuPrice === '' ? undefined : skuPrice,
           subrentalPrice:
             skuSubrentalPrice === '' ? undefined : skuSubrentalPrice,
@@ -682,13 +697,14 @@ export default function CreateSerializedAssetPage() {
             skuReplacementValue === '' ? undefined : skuReplacementValue,
           chargeType: skuChargeType,
           minimumChargeHours:
-            skuChargeType === 'HOUR' && skuMinimumChargeHours !== ''
-              ? skuMinimumChargeHours
+            skuChargeType === 'HOUR'
+              ? parsedMinimumChargeHours
               : undefined,
           size: skuSize || undefined,
         },
         asset: {
           serialOrEngine: serialOrEngine.trim(),
+          registrationNumber: registrationNumber.trim() || undefined,
           brand: skuBrand.trim() || undefined,
           model: skuModel.trim() || undefined,
           year: skuYear === '' ? undefined : skuYear,
@@ -1121,6 +1137,7 @@ export default function CreateSerializedAssetPage() {
                       }
                       min={1900}
                       max={2100}
+                      allowDecimal={false}
                     />
                     <Select
                       label="Combustible"
@@ -1157,11 +1174,11 @@ export default function CreateSerializedAssetPage() {
                       name="skuUnitWeight"
                       autoComplete="off"
                       value={skuUnitWeight}
-                      onChange={(value) =>
-                        setSkuUnitWeight(typeof value === 'number' ? value : '')
-                      }
+                      onChange={setSkuUnitWeight}
                       min={0}
                       step={0.1}
+                      decimalSeparator={DECIMAL_SEPARATOR}
+                      allowedDecimalSeparators={ALLOWED_DECIMAL_SEPARATORS}
                     />
                   </Group>
 
@@ -1198,6 +1215,7 @@ export default function CreateSerializedAssetPage() {
                       }
                       min={0}
                       step={1000}
+                      allowDecimal={false}
                       prefix="$ "
                       thousandSeparator=","
                       error={commercialAttempted && skuPrice === '' ? 'Requerido' : null}
@@ -1213,6 +1231,7 @@ export default function CreateSerializedAssetPage() {
                       }
                       min={0}
                       step={1000}
+                      allowDecimal={false}
                       prefix="$ "
                       thousandSeparator=","
                       error={commercialAttempted && skuSubrentalPrice === '' ? 'Requerido' : null}
@@ -1228,6 +1247,7 @@ export default function CreateSerializedAssetPage() {
                       }
                       min={0}
                       step={1000}
+                      allowDecimal={false}
                       prefix="$ "
                       thousandSeparator=","
                       error={commercialAttempted && skuReplacementValue === '' ? 'Requerido' : null}
@@ -1246,13 +1266,11 @@ export default function CreateSerializedAssetPage() {
                         name="skuMinimumChargeHours"
                         autoComplete="off"
                         value={skuMinimumChargeHours}
-                        onChange={(value) =>
-                          setSkuMinimumChargeHours(
-                            typeof value === 'number' ? value : '',
-                          )
-                        }
+                        onChange={setSkuMinimumChargeHours}
                         min={0.5}
                         step={0.5}
+                        decimalSeparator={DECIMAL_SEPARATOR}
+                        allowedDecimalSeparators={ALLOWED_DECIMAL_SEPARATORS}
                         suffix=" horas"
                         error={commercialAttempted && skuMinimumChargeHours === '' ? 'Requerido' : null}
                         required
@@ -1293,6 +1311,15 @@ export default function CreateSerializedAssetPage() {
                     error={assetAttempted && !serialOrEngine.trim() ? 'Requerido' : null}
                     required
                   />
+                  <UppercaseTextInput
+                    label="Numero de registro"
+                    name="registrationNumber"
+                    autoComplete="off"
+                    value={registrationNumber}
+                    onChange={setRegistrationNumber}
+                    placeholder="Solo si requiere guia de movilidad"
+                    description="Los activos con este campo aparecen en Guias de movilidad."
+                  />
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" gap="md">
                       <div>
@@ -1326,6 +1353,7 @@ export default function CreateSerializedAssetPage() {
                         )
                       }
                       min={1}
+                      allowDecimal={false}
                       required
                     />
                   ) : null}

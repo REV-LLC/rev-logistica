@@ -374,12 +374,14 @@ export class InventoryService {
           ),
           internalNumber,
           serialOrEngine,
+          registrationNumber: payload.asset.registrationNumber?.trim().toUpperCase() || null,
           description: payload.asset.description ?? null,
           brand: payload.asset.brand ?? null,
           model: payload.asset.model ?? null,
           year: payload.asset.year ?? null,
           fuel: payload.asset.fuel ?? null,
           imageFileObjectId: payload.asset.imageFileObjectId ?? null,
+          hourMeter: payload.asset.hourMeter ?? 0,
           warehouseOwnerId: payload.ownerWarehouseId,
           warehouseCurrentId: payload.warehouseCurrentId,
           active: payload.asset.active ?? true,
@@ -406,6 +408,17 @@ export class InventoryService {
         },
         select: { id: true, movementType: true, quantity: true },
       });
+
+      if (payload.asset.hourMeter !== undefined) {
+        await tx.assetHourReading.create({
+          data: {
+            assetId: asset.id,
+            hours: payload.asset.hourMeter,
+            note: 'LECTURA INICIAL',
+            recordedByUserId: userId,
+          },
+        });
+      }
 
         return { asset, ledger };
       });

@@ -49,6 +49,7 @@ export class AssetsService {
         id: true,
         publicCode: true,
         serialOrEngine: true,
+        registrationNumber: true,
         description: true,
         brand: true,
         model: true,
@@ -59,6 +60,7 @@ export class AssetsService {
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
+        hourMeter: true,
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
@@ -96,6 +98,8 @@ export class AssetsService {
 
     return items.map((item) => ({
       ...item,
+      hourMeter: Number(item.hourMeter),
+      currentHourMeter: Number(item.hourMeter),
       imageUrl: item.imageFileObject?.storageKey ?? null,
       sku: item.sku
         ? {
@@ -136,6 +140,7 @@ export class AssetsService {
         id: true,
         publicCode: true,
         serialOrEngine: true,
+        registrationNumber: true,
         description: true,
         brand: true,
         model: true,
@@ -146,6 +151,7 @@ export class AssetsService {
         warehouseOwnerId: true,
         warehouseCurrentId: true,
         weight: true,
+        hourMeter: true,
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
@@ -187,6 +193,8 @@ export class AssetsService {
 
     return {
       ...item,
+      hourMeter: Number(item.hourMeter),
+      currentHourMeter: Number(item.hourMeter),
       imageUrl: item.imageFileObject?.storageKey ?? null,
       assetFamily: item.sku?.assetFamily
         ? {
@@ -220,6 +228,7 @@ export class AssetsService {
     warehouseOwnerId: string;
     warehouseCurrentId?: string;
     serialOrEngine?: string;
+    registrationNumber?: string;
     description?: string;
     brand?: string;
     model?: string;
@@ -227,6 +236,7 @@ export class AssetsService {
     fuel?: string;
     weight?: number;
     active?: boolean;
+    hourMeter?: number;
   }, userId: string) {
     const sku = await this.prisma.sku.findUnique({
       where: { id: payload.skuId },
@@ -305,6 +315,7 @@ export class AssetsService {
             ),
             internalNumber,
             serialOrEngine,
+            registrationNumber: payload.registrationNumber?.trim().toUpperCase() || null,
             description: payload.description ?? null,
             brand: payload.brand ?? null,
             model: payload.model ?? null,
@@ -313,6 +324,7 @@ export class AssetsService {
             warehouseOwnerId: payload.warehouseOwnerId,
             warehouseCurrentId,
             weight: payload.weight ?? null,
+            hourMeter: payload.hourMeter ?? 0,
             active: payload.active ?? true,
           },
         });
@@ -330,6 +342,17 @@ export class AssetsService {
           },
         });
 
+        if (payload.hourMeter !== undefined) {
+          await tx.assetHourReading.create({
+            data: {
+              assetId: createdAsset.id,
+              hours: payload.hourMeter,
+              note: 'LECTURA INICIAL',
+              recordedByUserId: userId,
+            },
+          });
+        }
+
         return createdAsset;
       });
     } catch (error) {
@@ -344,6 +367,7 @@ export class AssetsService {
     assetId: string,
     payload: {
       description?: string | null;
+      registrationNumber?: string | null;
       brand?: string | null;
       model?: string | null;
       year?: number | null;
@@ -352,7 +376,9 @@ export class AssetsService {
       weight?: number | null;
       imageFileObjectId?: string | null;
       active?: boolean;
+      hourMeter?: number;
     },
+    userId: string,
   ) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
@@ -388,26 +414,61 @@ export class AssetsService {
       }
     }
 
-    await this.prisma.asset.update({
-      where: { id: assetId },
-      data: {
-        description: Object.prototype.hasOwnProperty.call(payload, 'description')
-          ? payload.description
-          : undefined,
-        brand: Object.prototype.hasOwnProperty.call(payload, 'brand') ? payload.brand : undefined,
-        model: Object.prototype.hasOwnProperty.call(payload, 'model') ? payload.model : undefined,
-        year: Object.prototype.hasOwnProperty.call(payload, 'year') ? payload.year : undefined,
-        fuel: Object.prototype.hasOwnProperty.call(payload, 'fuel') ? payload.fuel : undefined,
-        warehouseCurrentId: Object.prototype.hasOwnProperty.call(payload, 'warehouseCurrentId')
-          ? payload.warehouseCurrentId
-          : undefined,
-        weight: Object.prototype.hasOwnProperty.call(payload, 'weight') ? payload.weight : undefined,
-        imageFileObjectId: Object.prototype.hasOwnProperty.call(payload, 'imageFileObjectId')
-          ? payload.imageFileObjectId
-          : undefined,
-        active: payload.active,
-      },
-    });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (payload.hourMeter !== undefined) {
+          const current = await tx.asset.findUniqueOrThrow({
+            where: { id: assetId },
+            select: { hourMeter: true },
+          });
+          if (payload.hourMeter < Number(current.hourMeter)) {
+            throw new BadRequestException(
+              `El horómetro no puede disminuir de ${current.hourMeter.toString()} horas`,
+            );
+          }
+          if (payload.hourMeter > Number(current.hourMeter)) {
+            await tx.assetHourReading.create({
+              data: {
+                assetId,
+                hours: payload.hourMeter,
+                note: 'ACTUALIZACIÓN DESDE FICHA DEL ACTIVO',
+                recordedByUserId: userId,
+              },
+            });
+          }
+        }
+
+        await tx.asset.update({
+          where: { id: assetId },
+          data: {
+            description: Object.prototype.hasOwnProperty.call(payload, 'description')
+              ? payload.description
+              : undefined,
+            registrationNumber: Object.prototype.hasOwnProperty.call(payload, 'registrationNumber')
+              ? payload.registrationNumber?.trim().toUpperCase() || null
+              : undefined,
+            brand: Object.prototype.hasOwnProperty.call(payload, 'brand') ? payload.brand : undefined,
+            model: Object.prototype.hasOwnProperty.call(payload, 'model') ? payload.model : undefined,
+            year: Object.prototype.hasOwnProperty.call(payload, 'year') ? payload.year : undefined,
+            fuel: Object.prototype.hasOwnProperty.call(payload, 'fuel') ? payload.fuel : undefined,
+            warehouseCurrentId: Object.prototype.hasOwnProperty.call(payload, 'warehouseCurrentId')
+              ? payload.warehouseCurrentId
+              : undefined,
+            weight: Object.prototype.hasOwnProperty.call(payload, 'weight') ? payload.weight : undefined,
+            imageFileObjectId: Object.prototype.hasOwnProperty.call(payload, 'imageFileObjectId')
+              ? payload.imageFileObjectId
+              : undefined,
+            hourMeter: payload.hourMeter,
+            active: payload.active,
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('El numero de registro ya esta asignado a otro activo');
+      }
+      throw error;
+    }
 
     return this.getAssetById(assetId);
   }
@@ -435,6 +496,12 @@ export class AssetsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const maintenanceItems = await tx.maintenanceItem.findMany({
+        where: { plan: { assetId } }, select: { id: true },
+      });
+      await tx.notificationTopic.deleteMany({
+        where: { entityType: 'MAINTENANCE_ITEM', entityId: { in: maintenanceItems.map((item) => item.id) } },
+      });
       await tx.stockLedger.deleteMany({ where: { assetId } });
       return tx.asset.delete({ where: { id: assetId } });
     });

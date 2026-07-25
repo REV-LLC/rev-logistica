@@ -16,12 +16,14 @@ import {
   IconDatabaseExport,
   IconFileDollar,
   IconFilePlus,
+  IconFileCertificate,
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
   IconSettings,
   IconTag,
   IconTools,
+  IconGauge,
   IconTruck,
   IconUsers,
   IconUser,
@@ -46,6 +48,7 @@ const sections: NavSection[] = [
     links: [
       { href: '/transport/requests', label: 'Solicitudes de documentos', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
       { href: '/transport/generate', label: 'Generar documentos', icon: IconFilePlus, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+      { href: '/mobility-guides', label: 'Guias de movilidad', icon: IconFileCertificate, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
       { href: '/transport/vehicles', label: 'Vehiculos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
       { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
       { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
@@ -54,6 +57,7 @@ const sections: NavSection[] = [
   {
     title: 'Inventario',
     links: [
+      { href: '/inventory/hour-meter', label: 'Actualizar horómetro', icon: IconGauge, roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
       { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
       { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
       {
@@ -138,7 +142,15 @@ export default function Nav({ onNavigate }: NavProps) {
     .filter((link, index, list): link is NavLinkItem => Boolean(link) && list.findIndex((item) => item?.href === link?.href) === index)
     .slice(0, 3);
   const roleColor =
-    currentRole === 'ADMIN' ? 'red' : currentRole === 'OFFICE' ? 'blue' : currentRole === 'DRIVER' ? 'teal' : 'gray';
+    currentRole === 'ADMIN'
+      ? 'red'
+      : currentRole === 'OFFICE'
+        ? 'blue'
+        : currentRole === 'DRIVER'
+          ? 'teal'
+          : currentRole === 'OPERATOR'
+            ? 'orange'
+            : 'gray';
 
   const handleLogout = () => {
     clearToken();

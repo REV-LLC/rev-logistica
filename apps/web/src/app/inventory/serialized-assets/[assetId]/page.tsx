@@ -4,45 +4,40 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Container,
-  FileButton,
   Group,
-  NumberInput,
   Paper,
-  Select,
-  SimpleGrid,
   Stack,
-  Switch,
   Tabs,
   Text,
-  TextInput,
-  ThemeIcon,
-  Title,
 } from '@mantine/core';
 import {
   IconArrowLeft,
   IconBarcode,
   IconBuildingWarehouse,
-  IconCheck,
   IconEngine,
   IconFileText,
   IconInfoCircle,
   IconMapPin,
   IconPencil,
-  IconUpload,
-  IconX,
+  IconTool,
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import AssetDetailsPanel from '@/components/serialized-assets/AssetDetailsPanel';
+import AssetMovementSummary from '@/components/serialized-assets/AssetMovementSummary';
+import SerializedAssetEditForm from '@/components/serialized-assets/SerializedAssetEditForm';
+import SerializedAssetHero from '@/components/serialized-assets/SerializedAssetHero';
 
 type AssetResponse = {
   id: string;
   publicCode: string;
   serialOrEngine: string;
+  registrationNumber: string | null;
   brand: string | null;
   model: string | null;
   year: number | null;
@@ -91,8 +86,6 @@ const FUEL_OPTIONS = [
   { value: 'ELECTRICO', label: 'ELECTRICO' },
 ];
 const EMPTY_VALUE = 'N/A';
-const rowDivider = '1px solid rgba(15, 23, 42, 0.08)';
-
 const displayValue = (value: string | number | null | undefined) => {
   if (value == null) return EMPTY_VALUE;
   const normalized = String(value).trim();
@@ -150,6 +143,7 @@ export default function EditSerializedAssetPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
 
   const [brand, setBrand] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState<number | ''>('');
   const [fuel, setFuel] = useState('');
@@ -197,6 +191,7 @@ export default function EditSerializedAssetPage() {
         setAsset(assetData);
         setWarehouses(warehouseData);
         setBrand(assetData.brand ?? '');
+        setRegistrationNumber(assetData.registrationNumber ?? '');
         setModel(assetData.model ?? '');
         setYear(assetData.year ?? '');
         setFuel(assetData.fuel ?? '');
@@ -300,6 +295,7 @@ export default function EditSerializedAssetPage() {
           { label: 'Referencia / plantilla', value: displayValue(asset?.sku?.name) },
           { label: 'Familia', value: displayValue(asset?.assetFamily?.name) },
           { label: 'Estado', value: active ? 'Activo' : 'Inactivo' },
+          { label: 'Numero de registro', value: displayValue(registrationNumber) },
         ],
       },
       {
@@ -327,7 +323,7 @@ export default function EditSerializedAssetPage() {
         ],
       },
     ],
-    [active, asset, brand, fuelLabel, model, year],
+    [active, asset, brand, fuelLabel, model, registrationNumber, year],
   );
 
   const handleSave = async () => {
@@ -341,6 +337,7 @@ export default function EditSerializedAssetPage() {
     try {
       const payload = {
         brand: brand.trim() || null,
+        registrationNumber: registrationNumber.trim() || null,
         model: model.trim() || null,
         year: year === '' ? null : year,
         fuel: fuel || null,
@@ -419,6 +416,21 @@ export default function EditSerializedAssetPage() {
     }
   };
 
+  const handleCancelEdit = () => {
+    if (!asset) return;
+    setBrand(asset.brand ?? '');
+    setRegistrationNumber(asset.registrationNumber ?? '');
+    setModel(asset.model ?? '');
+    setYear(asset.year ?? '');
+    setFuel(asset.fuel ?? '');
+    setAssetImageFileObjectId(asset.imageFileObjectId ?? null);
+    setAssetImageUrl(asset.imageUrl ?? asset.sku?.imageUrl ?? '');
+    setWarehouseCurrentId(asset.warehouseCurrentId);
+    setActive(asset.active);
+    setEditing(false);
+    setError(null);
+  };
+
   return (
     <Container size="xl" py="xl">
       <Group mb="md" justify="space-between" align="center">
@@ -462,97 +474,13 @@ export default function EditSerializedAssetPage() {
 
       {asset ? (
         <Stack gap="lg">
-          <Paper
-            withBorder
-            shadow="sm"
-            radius="xl"
-            p={{ base: 'md', md: 'xl' }}
-            style={{
-              overflow: 'hidden',
-              background:
-                'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 55%, rgba(236,253,245,0.65) 100%)',
-            }}
-          >
-            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl" verticalSpacing="xl">
-              <Paper
-                radius="xl"
-                p="lg"
-                style={{
-                  minHeight: 320,
-                  background: '#fff',
-                  border: '1px solid var(--mantine-color-gray-2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {assetImageUrl?.trim() ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={assetImageUrl}
-                    alt={autoDescription}
-                    style={{
-                      width: '100%',
-                      maxWidth: 360,
-                      height: 260,
-                      objectFit: 'contain',
-                      background: '#fff',
-                    }}
-                  />
-                ) : (
-                  <Stack align="center" gap="xs">
-                    <ThemeIcon color="gray" variant="light" size={56} radius="xl">
-                      <IconEngine size={28} />
-                    </ThemeIcon>
-                    <Text c="dimmed">Sin imagen</Text>
-                  </Stack>
-                )}
-              </Paper>
-
-              <Stack gap="md" justify="space-between">
-                <div>
-                  <Group gap="xs" mb="sm" wrap="wrap">
-                    <Badge color={active ? 'green' : 'gray'} variant="light" radius="xl">
-                      {active ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                    <Badge color={locationBadge.color} variant="light" radius="xl" leftSection={<IconMapPin size={14} />}>
-                      {locationBadge.label}
-                    </Badge>
-                  </Group>
-                  <Title order={2}>{autoDescription}</Title>
-                  <Text c="gray.7" mt={6}>
-                    Ficha operativa del equipo serializado.
-                  </Text>
-                </div>
-
-                <Paper radius="lg" p="md" bg="white">
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                    {detailCards.map((item) => (
-                      <Group key={item.label} gap="sm" align="flex-start" wrap="nowrap">
-                        <ThemeIcon color="blue" variant="light" radius="xl" size={30}>
-                          {item.icon}
-                        </ThemeIcon>
-                        <div style={{ minWidth: 0 }}>
-                          <Text size="xs" c="dark" fw={700}>
-                            {item.label}
-                          </Text>
-                          <Text
-                            size="sm"
-                            c="gray.8"
-                            fw={500}
-                            lineClamp={2}
-                            style={{ overflowWrap: 'anywhere' }}
-                          >
-                            {item.value}
-                          </Text>
-                        </div>
-                      </Group>
-                    ))}
-                  </SimpleGrid>
-                </Paper>
-              </Stack>
-            </SimpleGrid>
-          </Paper>
+          <SerializedAssetHero
+            active={active}
+            description={autoDescription}
+            facts={detailCards}
+            imageUrl={assetImageUrl}
+            location={locationBadge}
+          />
 
           <Tabs defaultValue="details" keepMounted={false}>
             <Tabs.List mb="lg">
@@ -562,158 +490,47 @@ export default function EditSerializedAssetPage() {
               <Tabs.Tab value="documents" leftSection={<IconFileText size={17} />}>
                 Documentos
               </Tabs.Tab>
+              <Tabs.Tab value="maintenance" leftSection={<IconTool size={17} />}>
+                Mantenimiento
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="details">
               <Stack gap="lg">
-                <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
-            <Group justify="space-between" align="center" mb="md">
-              <div>
-                <Text fw={800}>Datos del equipo</Text>
-                <Text size="sm" c="gray.7">
-                  Informacion tecnica y comercial visible para operacion.
-                </Text>
-              </div>
-              {editing ? (
-                <Badge color="blue" variant="light">
-                  Editando
-                </Badge>
-              ) : null}
-            </Group>
+                {editing ? (
+                  <SerializedAssetEditForm
+                    active={active}
+                    brand={brand}
+                    fuel={fuel}
+                    fuelOptions={FUEL_OPTIONS}
+                    imageUploading={imageUploading}
+                    model={model}
+                    registrationNumber={registrationNumber}
+                    onActiveChange={setActive}
+                    onBrandChange={setBrand}
+                    onCancel={handleCancelEdit}
+                    onFuelChange={setFuel}
+                    onImageUpload={handleImageUpload}
+                    onModelChange={setModel}
+                    onRegistrationNumberChange={setRegistrationNumber}
+                    onSave={handleSave}
+                    onWarehouseChange={setWarehouseCurrentId}
+                    onYearChange={setYear}
+                    saving={saving}
+                    warehouseCurrentId={warehouseCurrentId}
+                    warehouseOptions={warehouseOptions}
+                    worksiteLocationName={worksiteLocationName}
+                    year={year}
+                  />
+                ) : (
+                  <AssetDetailsPanel sections={readOnlySections} />
+                )}
 
-            {editing ? (
-              <Stack gap="md">
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                  <TextInput label="Marca" value={brand} onChange={(event) => setBrand(event.currentTarget.value)} />
-                  <TextInput label="Modelo" value={model} onChange={(event) => setModel(event.currentTarget.value)} />
-                  <NumberInput
-                    label="Año"
-                    value={year}
-                    min={1900}
-                    max={new Date().getFullYear() + 1}
-                    onChange={(value) => setYear(typeof value === 'number' ? value : '')}
-                  />
-                  <Select
-                    label="Combustible"
-                    value={fuel || null}
-                    onChange={(value) => setFuel(value ?? '')}
-                    data={FUEL_OPTIONS}
-                    clearable
-                  />
-                  <Select
-                    label="Ubicacion en bodega"
-                    value={warehouseCurrentId}
-                    onChange={setWarehouseCurrentId}
-                    data={warehouseOptions}
-                    placeholder={worksiteLocationName ?? 'Equipo en obra'}
-                    clearable
-                  />
-                </SimpleGrid>
-                <Paper withBorder radius="lg" p="md" bg="gray.0">
-                  <Group justify="space-between" align="center" gap="md">
-                    <div>
-                      <Text fw={800}>Imagen del equipo</Text>
-                      <Text size="sm" c="dimmed">
-                        PNG, JPG o WEBP.
-                      </Text>
-                    </div>
-                    <FileButton onChange={handleImageUpload} accept="image/png,image/jpeg,image/webp">
-                      {(props) => (
-                        <Button {...props} leftSection={<IconUpload size={16} />} loading={imageUploading}>
-                          Subir imagen
-                        </Button>
-                      )}
-                    </FileButton>
-                  </Group>
-                </Paper>
-                <Switch
-                  label="Equipo activo"
-                  checked={active}
-                  onChange={(event) => setActive(event.currentTarget.checked)}
+                <AssetMovementSummary
+                  warehouseCurrentId={warehouseCurrentId}
+                  warehouseCurrentName={warehouseCurrentName}
+                  worksiteLocationName={worksiteLocationName}
                 />
-                <Group justify="flex-end">
-                  <Button
-                    variant="default"
-                    leftSection={<IconX size={16} />}
-                    onClick={() => {
-                      setBrand(asset.brand ?? '');
-                      setModel(asset.model ?? '');
-                      setYear(asset.year ?? '');
-                      setFuel(asset.fuel ?? '');
-                      setAssetImageFileObjectId(asset.imageFileObjectId ?? null);
-                      setAssetImageUrl(asset.imageUrl ?? asset.sku?.imageUrl ?? '');
-                      setWarehouseCurrentId(asset.warehouseCurrentId);
-                      setActive(asset.active);
-                      setEditing(false);
-                      setError(null);
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button leftSection={<IconCheck size={16} />} onClick={handleSave} loading={saving}>
-                    Guardar cambios
-                  </Button>
-                </Group>
-              </Stack>
-            ) : (
-              <Stack gap="lg">
-                {readOnlySections.map((section) => (
-                  <Stack key={section.title} gap="xs">
-                    <Text
-                      fw={800}
-                      size="sm"
-                      pb={6}
-                      style={{ borderBottom: rowDivider }}
-                    >
-                      {section.title}
-                    </Text>
-                    <Stack gap={0}>
-                      {section.fields.map((field) => (
-                        <SimpleGrid
-                          key={`${section.title}-${field.label}`}
-                          cols={{ base: 1, sm: 2 }}
-                          spacing={{ base: 2, sm: 'xl' }}
-                          py={11}
-                          style={{
-                            borderBottom: rowDivider,
-                            minHeight: 44,
-                            alignItems: 'center',
-                          }}
-                        >
-                          <Text size="sm" c="dark" fw={600}>
-                            {field.label}
-                          </Text>
-                          <Text
-                            size="sm"
-                            c="gray.8"
-                            fw={500}
-                            lineClamp={2}
-                            ta={{ base: 'left', sm: 'right' }}
-                            style={{ overflowWrap: 'anywhere' }}
-                          >
-                            {field.value}
-                          </Text>
-                        </SimpleGrid>
-                      ))}
-                    </Stack>
-                  </Stack>
-                ))}
-              </Stack>
-            )}
-                </Paper>
-
-                <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-                  <Text fw={800} mb={4}>
-                    Movimiento reciente
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {worksiteLocationName
-                      ? `Ultima ubicacion en obra: ${worksiteLocationName}.`
-                      : warehouseCurrentId
-                        ? `Actualmente en ${warehouseCurrentName}.`
-                        : 'Sin movimiento reciente disponible.'}
-                  </Text>
-                </Paper>
               </Stack>
             </Tabs.Panel>
 
@@ -721,6 +538,12 @@ export default function EditSerializedAssetPage() {
               <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
                 <FileAttachmentsPanel entityType="ASSET" entityId={asset.id} title="Documentos del equipo" />
               </Paper>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="maintenance">
+              <MaintenancePanel
+                subject={{ type: 'ASSET', id: asset.id, label: asset.publicCode }}
+              />
             </Tabs.Panel>
           </Tabs>
         </Stack>

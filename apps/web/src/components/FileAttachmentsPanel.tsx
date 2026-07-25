@@ -9,6 +9,7 @@ import {
   Divider,
   FileInput,
   Group,
+  Modal,
   Paper,
   Select,
   SimpleGrid,
@@ -19,7 +20,7 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconDownload, IconFile, IconPaperclip, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDownload, IconEye, IconFile, IconPaperclip, IconTrash, IconUpload } from '@tabler/icons-react';
 import { api, apiBlob, ApiError } from '@/lib/api';
 
 export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
@@ -81,6 +82,11 @@ function fileLabel(file: AttachedFile) {
   return file.displayName?.trim() || file.originalName?.trim() || file.fileType;
 }
 
+function canPreview(file: AttachedFile) {
+  if (file.mimeType === 'application/pdf' || file.mimeType?.startsWith('image/')) return true;
+  return file.originalName?.toLowerCase().endsWith('.pdf') ?? false;
+}
+
 export default function FileAttachmentsPanel({
   entityType,
   entityId,
@@ -99,6 +105,15 @@ export default function FileAttachmentsPanel({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ file: AttachedFile; url: string } | null>(null);
+
+  useEffect(() => {
+    const previewUrl = preview?.url;
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [preview?.url]);
 
   const categoryLabelByValue = useMemo(
     () => new Map(categories.map((entry) => [entry.value, entry.label])),
@@ -166,6 +181,19 @@ export default function FileAttachmentsPanel({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudo descargar el archivo');
+    }
+  };
+
+  const openPreview = async (file: AttachedFile) => {
+    setPreviewLoadingId(file.id);
+    setError(null);
+    try {
+      const blob = await apiBlob(`/files/${file.id}/download`, { redirectOnAuthError: false });
+      setPreview({ file, url: URL.createObjectURL(blob) });
+    } catch (err) {
+      setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudo visualizar el archivo');
+    } finally {
+      setPreviewLoadingId(null);
     }
   };
 
@@ -312,6 +340,17 @@ export default function FileAttachmentsPanel({
                 <Table.Td>{formatBytes(file.sizeBytes)}</Table.Td>
                 <Table.Td>
                   <Group gap="xs" justify="flex-end" wrap="nowrap">
+                    {canPreview(file) ? (
+                      <ActionIcon
+                        variant="light"
+                        color="teal"
+                        aria-label={`Ver ${fileLabel(file)}`}
+                        loading={previewLoadingId === file.id}
+                        onClick={() => openPreview(file)}
+                      >
+                        <IconEye size={16} />
+                      </ActionIcon>
+                    ) : null}
                     <ActionIcon variant="light" aria-label="Descargar archivo" onClick={() => download(file)}>
                       <IconDownload size={16} />
                     </ActionIcon>
@@ -339,6 +378,29 @@ export default function FileAttachmentsPanel({
           </Stack>
         </Paper>
       )}
+
+      <Modal
+        opened={!!preview}
+        onClose={() => setPreview(null)}
+        title={preview ? fileLabel(preview.file) : 'Vista previa'}
+        size="90%"
+        centered
+      >
+        {preview?.file.mimeType?.startsWith('image/') ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.url}
+            alt={fileLabel(preview.file)}
+            style={{ display: 'block', maxWidth: '100%', maxHeight: '75vh', margin: '0 auto', objectFit: 'contain' }}
+          />
+        ) : preview ? (
+          <iframe
+            src={preview.url}
+            title={`Vista previa de ${fileLabel(preview.file)}`}
+            style={{ display: 'block', width: '100%', height: '75vh', border: 0 }}
+          />
+        ) : null}
+      </Modal>
     </Stack>
   );
 }
