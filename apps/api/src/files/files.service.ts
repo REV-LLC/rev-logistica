@@ -416,7 +416,11 @@ export class FilesService {
         throw new ForbiddenException('Operators can only access asset evidence');
       }
       const ownAsset = await this.prisma.asset.findFirst({
-        where: { id: entityId, warehouseOwner: { type: 'OWN' } },
+        where: {
+          id: entityId,
+          warehouseOwner: { type: 'OWN' },
+          sku: { chargeType: 'HOUR' },
+        },
         select: { id: true },
       });
       if (!ownAsset) {
