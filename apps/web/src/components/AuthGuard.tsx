@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button, Center, Loader, Stack, Text } from '@mantine/core';
-import { AppRole, clearToken, getCurrentUserRole, getToken, isLocalAuthBypassEnabled, isTokenExpired, markSessionExpiredNotice } from '@/lib/auth';
+import {
+  AppRole,
+  clearToken,
+  getCurrentUserRole,
+  getDefaultRouteForRole,
+  getToken,
+  isLocalAuthBypassEnabled,
+  isTokenExpired,
+  markSessionExpiredNotice,
+} from '@/lib/auth';
 
 type RouteRoleRule = {
   prefix: string;
@@ -44,7 +53,10 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
         markSessionExpiredNotice();
       }
       const params = new URLSearchParams();
-      if (pathname) params.set('next', pathname);
+      if (pathname) {
+        const currentQuery = window.location.search.slice(1);
+        params.set('next', currentQuery ? `${pathname}?${currentQuery}` : pathname);
+      }
       if (expired) params.set('reason', 'expired');
       const query = params.toString();
       router.replace(query ? `/login?${query}` : '/login');
@@ -54,6 +66,11 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
     const routeRoles = resolveAllowedRoles(pathname, routeRoleRules);
     const effectiveRoles = routeRoles ?? allowedRoles ?? null;
     if (effectiveRoles && (!role || !effectiveRoles.includes(role))) {
+      const destination = getDefaultRouteForRole(role);
+      if (pathname !== destination) {
+        router.replace(destination);
+        return;
+      }
       setForbidden(true);
       setReady(true);
       return;
@@ -89,9 +106,7 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
             <Button
               mt="sm"
               variant="light"
-              onClick={() => router.replace(
-                getCurrentUserRole() === 'OPERATOR' ? '/inventory/hour-meter' : '/transport/requests',
-              )}
+              onClick={() => router.replace(getDefaultRouteForRole(getCurrentUserRole()))}
             >
               Go home
             </Button>

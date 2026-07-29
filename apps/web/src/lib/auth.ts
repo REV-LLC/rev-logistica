@@ -80,6 +80,41 @@ export function getTokenPayload() {
 
 export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
+const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
+  ADMIN: '/',
+  OFFICE: '/',
+  DRIVER: '/transport/generate',
+  OPERATOR: '/inventory/hour-meter',
+};
+
+const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
+  DRIVER: ['/transport/generate', '/transport/requests', '/mobility-guides'],
+  OPERATOR: ['/inventory/hour-meter'],
+};
+
+function isPathWithinPrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+export function getDefaultRouteForRole(role: AppRole | null) {
+  return role ? DEFAULT_ROUTE_BY_ROLE[role] : '/login';
+}
+
+export function getPostLoginDestination(requestedPath: string | null, role: AppRole | null) {
+  const fallback = getDefaultRouteForRole(role);
+  if (!requestedPath || !requestedPath.startsWith('/') || requestedPath.startsWith('//')) {
+    return fallback;
+  }
+
+  const pathname = requestedPath.split('?')[0].split('#')[0];
+  const limitedPrefixes = role ? LIMITED_ROLE_ROUTE_PREFIXES[role] : undefined;
+  if (limitedPrefixes && !limitedPrefixes.some((prefix) => isPathWithinPrefix(pathname, prefix))) {
+    return fallback;
+  }
+
+  return requestedPath;
+}
+
 export function getCurrentUserRole(): AppRole | null {
   if (isLocalAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();

@@ -33,15 +33,17 @@ export class MaintenanceService {
         brand: true,
         model: true,
         hourMeter: true,
+        imageFileObject: { select: { storageKey: true } },
         warehouseOwner: { select: { id: true, name: true, type: true } },
         warehouseCurrent: { select: { id: true, name: true } },
-        sku: { select: { name: true } },
+        sku: { select: { name: true, imageUrl: true } },
       },
     });
 
     return assets.map((asset) => ({
       ...asset,
       currentHourMeter: Number(asset.hourMeter),
+      imageUrl: asset.imageFileObject?.storageKey ?? asset.sku.imageUrl ?? null,
     }));
   }
 
@@ -201,8 +203,32 @@ export class MaintenanceService {
     if (subjectField === 'assetId') await this.assertAsset(subjectId);
     else await this.assertVehicle(subjectId);
     const readings = subjectField === 'assetId'
-      ? await this.prisma.assetHourReading.findMany({ where: { assetId: subjectId }, orderBy: { recordedAt: 'desc' }, take: 100 })
-      : await this.prisma.vehicleHourReading.findMany({ where: { vehicleId: subjectId }, orderBy: { recordedAt: 'desc' }, take: 100 });
+      ? await this.prisma.assetHourReading.findMany({
+        where: { assetId: subjectId },
+        orderBy: { recordedAt: 'desc' },
+        take: 100,
+        include: {
+          recordedBy: {
+            select: {
+              email: true,
+              employee: { select: { name: true, lastName: true } },
+            },
+          },
+        },
+      })
+      : await this.prisma.vehicleHourReading.findMany({
+        where: { vehicleId: subjectId },
+        orderBy: { recordedAt: 'desc' },
+        take: 100,
+        include: {
+          recordedBy: {
+            select: {
+              email: true,
+              employee: { select: { name: true, lastName: true } },
+            },
+          },
+        },
+      });
     const currentHours = subjectField === 'assetId'
       ? Number((await this.prisma.asset.findUniqueOrThrow({ where: { id: subjectId }, select: { hourMeter: true } })).hourMeter)
       : readings.length

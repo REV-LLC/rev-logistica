@@ -36,6 +36,7 @@ const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
 const STORAGE_PROVIDER = 'R2';
 const EVIDENCE_FILE_TYPE = 'PHOTO_EVIDENCE';
+const HOUR_METER_EVIDENCE_CATEGORY = 'EVIDENCIA_HOROMETRO';
 
 const ENTITY_TYPES = new Set<FileEntityType>([
   'DOCUMENT',
@@ -88,6 +89,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'MANUAL',
     'CERTIFICADO',
     'OTRO',
+    HOUR_METER_EVIDENCE_CATEGORY,
   ]),
 };
 
@@ -129,10 +131,12 @@ export class FilesService {
 
   getCategories(entityType: string) {
     const normalized = this.normalizeEntityType(entityType);
-    return [...CATEGORIES_BY_ENTITY[normalized]].map((value) => ({
-      value,
-      label: this.formatCategoryLabel(value),
-    }));
+    return [...CATEGORIES_BY_ENTITY[normalized]]
+      .filter((value) => value !== HOUR_METER_EVIDENCE_CATEGORY)
+      .map((value) => ({
+        value,
+        label: this.formatCategoryLabel(value),
+      }));
   }
 
   async listEntityFiles(
@@ -142,8 +146,29 @@ export class FilesService {
   ) {
     const entityType = this.normalizeEntityType(entityTypeInput);
     await this.assertEntityAccess(entityType, entityId, user, 'read');
+    const hourEvidenceIds =
+      entityType === 'ASSET'
+        ? (
+            await this.prisma.assetHourReading.findMany({
+              where: {
+                assetId: entityId,
+                evidenceFileObjectId: { not: null },
+              },
+              select: { evidenceFileObjectId: true },
+            })
+          ).flatMap((reading) =>
+            reading.evidenceFileObjectId
+              ? [reading.evidenceFileObjectId]
+              : [],
+          )
+        : [];
+
     return this.prisma.fileObject.findMany({
-      where: { entityType, entityId },
+      where: {
+        entityType,
+        entityId,
+        id: hourEvidenceIds.length ? { notIn: hourEvidenceIds } : undefined,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: this.fileSelect,
     });

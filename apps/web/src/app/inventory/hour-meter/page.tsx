@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
+  Box,
   Button,
+  Center,
   Container,
   Group,
   Paper,
@@ -14,7 +16,7 @@ import {
   TextInput,
   ThemeIcon,
 } from '@mantine/core';
-import { IconBuildingWarehouse, IconGauge, IconSearch } from '@tabler/icons-react';
+import { IconGauge, IconPhotoOff, IconSearch } from '@tabler/icons-react';
 import RecordHoursModal from '@/components/maintenance/RecordHoursModal';
 import { api } from '@/lib/api';
 import { apiErrorMessage, type MaintenanceSubject } from '@/lib/maintenance-types';
@@ -26,6 +28,7 @@ type OperatorAsset = {
   description?: string | null;
   brand?: string | null;
   model?: string | null;
+  imageUrl?: string | null;
   currentHourMeter: number;
   warehouseOwner: { id: string; name: string; type: 'OWN' };
   warehouseCurrent?: { id: string; name: string } | null;
@@ -51,6 +54,28 @@ const assetDisplayName = (asset: OperatorAsset) =>
   asset.sku?.name?.trim() ||
   [asset.brand, asset.model].filter(Boolean).join(' ') ||
   'Equipo serializado';
+
+function OperatorAssetImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [broken, setBroken] = useState(false);
+
+  if (!src || broken) {
+    return (
+      <Center className="hour-meter-asset-image hour-meter-asset-image--empty">
+        <Stack align="center" gap={4}>
+          <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
+          <Text size="xs" c="dimmed">Sin foto</Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  return (
+    <Box className="hour-meter-asset-image">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} onError={() => setBroken(true)} />
+    </Box>
+  );
+}
 
 export default function HourMeterPage() {
   const [assets, setAssets] = useState<OperatorAsset[]>([]);
@@ -132,6 +157,11 @@ export default function HourMeterPage() {
             {visibleAssets.map((asset) => (
               <Paper key={asset.id} withBorder radius="xl" p="lg">
                 <Stack gap="md">
+                  <OperatorAssetImage
+                    key={asset.imageUrl ?? 'no-image'}
+                    src={asset.imageUrl}
+                    alt={`Foto de ${assetDisplayName(asset)}`}
+                  />
                   <Group justify="space-between" align="flex-start" wrap="nowrap">
                     <div>
                       <Text fw={900}>{assetDisplayName(asset)}</Text>
@@ -142,10 +172,6 @@ export default function HourMeterPage() {
                   <Stack gap={4}>
                     <Text size="xs" c="dimmed">Serial / motor</Text>
                     <Text size="sm" fw={600}>{asset.serialOrEngine}</Text>
-                    <Group gap={6} wrap="nowrap">
-                      <IconBuildingWarehouse size={15} />
-                      <Text size="sm">{asset.warehouseOwner.name}</Text>
-                    </Group>
                   </Stack>
                   <Button leftSection={<IconGauge size={17} />} onClick={() => setSelected(asset)}>
                     Registrar nueva lectura
