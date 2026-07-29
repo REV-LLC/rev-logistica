@@ -978,6 +978,7 @@ export default function WarehouseInventoryPage() {
                   onDeleteSerialAsset={deleteSerialAsset}
                   deletingSerialAssetId={deletingSerialAssetId}
                   viewFilter={isOwnInventory ? inventoryView : 'ALL'}
+                  compactSerialCards={isOwnInventory && inventoryView === 'SERIAL'}
                 />
               </Stack>
             </Paper>

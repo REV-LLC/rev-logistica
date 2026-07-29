@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Button,
   Container,
   Group,
@@ -22,6 +23,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import EmployeeCard, {
+  employeeCardRoleLabelByValue,
   getEmployeeCardFullName,
   type EmployeeCardRecord,
 } from '@/components/EmployeeCard';
@@ -34,6 +36,8 @@ import EmployeeViewMenu, {
   usePreferredEmployeeView,
 } from '@/components/EmployeeViewMenu';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import EmployeePhotoControl from '@/components/EmployeePhotoControl';
+import EmployeePhotoModal from '@/components/EmployeePhotoModal';
 import StatCard from '@/components/dashboard/StatCard';
 import { api, apiBlob, ApiError } from '@/lib/api';
 
@@ -68,6 +72,65 @@ function fileLabel(file: EmployeeAttachedFile) {
   return file.displayName?.trim() || file.originalName?.trim() || file.fileType;
 }
 
+function EmployeeCardDetails({
+  employee,
+  onPhotoPreview,
+}: {
+  employee: EmployeeCardRecord;
+  onPhotoPreview: (employee: EmployeeCardRecord) => void;
+}) {
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Group gap="md" align="flex-start" wrap="nowrap">
+          <EmployeePhotoControl
+            employee={employee}
+            size={76}
+            editable
+            onPreview={() => onPhotoPreview(employee)}
+          />
+          <div>
+            <Text fw={800} size="lg">{getEmployeeCardFullName(employee)}</Text>
+            <Text size="sm" c="dimmed">
+              {employeeCardRoleLabelByValue[employee.role] ?? employee.role}
+            </Text>
+            <Text size="xs" c="dimmed">{employee.documentId ?? 'Sin documento'}</Text>
+          </div>
+        </Group>
+        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
+          {employee.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Teléfono</Text>
+          <Text size="sm" mt={6}>{employee.phone ?? '-'}</Text>
+        </Paper>
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Correo</Text>
+          <Text size="sm" mt={6}>{employee.email ?? '-'}</Text>
+        </Paper>
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Acceso a la app</Text>
+          <Text size="sm" mt={6}>{employee.user?.email ?? 'Sin acceso creado'}</Text>
+          {employee.user ? (
+            <Text size="xs" c="dimmed">{employee.user.role} · {employee.user.active ? 'Activo' : 'Inactivo'}</Text>
+          ) : null}
+        </Paper>
+        <Paper withBorder radius="md" p="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Vehículos</Text>
+          <Text size="sm" mt={6}>
+            {employee.vehicles.length
+              ? employee.vehicles.map((vehicle) => vehicle.plate).join(', ')
+              : 'Sin vehículos asignados'}
+          </Text>
+        </Paper>
+      </SimpleGrid>
+    </Stack>
+  );
+}
+
 export default function EmployeeCardsPage() {
   usePreferredEmployeeView('cards');
 
@@ -79,6 +142,8 @@ export default function EmployeeCardsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
+  const [detailsEmployee, setDetailsEmployee] = useState<EmployeeCardRecord | null>(null);
+  const [photoEmployee, setPhotoEmployee] = useState<EmployeeCardRecord | null>(null);
   const [downloadingIdentityEmployeeId, setDownloadingIdentityEmployeeId] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -311,12 +376,31 @@ export default function EmployeeCardsPage() {
                 employee={employee}
                 onDocuments={openDocuments}
                 onIdentityCard={downloadIdentityCard}
+                onDetails={setDetailsEmployee}
+                onPhotoPreview={setPhotoEmployee}
                 identityCardLoading={downloadingIdentityEmployeeId === employee.id}
               />
             ))}
           </SimpleGrid>
         ) : null}
       </Stack>
+
+      <Modal
+        opened={Boolean(detailsEmployee)}
+        onClose={() => setDetailsEmployee(null)}
+        title="Información del empleado"
+        centered
+        size="lg"
+      >
+        {detailsEmployee ? (
+          <EmployeeCardDetails
+            employee={detailsEmployee}
+            onPhotoPreview={setPhotoEmployee}
+          />
+        ) : null}
+      </Modal>
+
+      <EmployeePhotoModal employee={photoEmployee} onClose={() => setPhotoEmployee(null)} />
 
       <Modal
         opened={!!documentsEmployee}

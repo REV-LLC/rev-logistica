@@ -35,6 +35,7 @@ import { getCurrentUserRole } from '@/lib/auth';
 type Warehouse = {
   id: string;
   name: string;
+  type: 'OWN' | 'ALLY';
 };
 
 type CatalogOption = {
@@ -393,10 +394,16 @@ export default function AddBulkStockPage() {
     if (!warehouses.length) return;
     const ownerFromQuery = searchParams.get('ownerWarehouseId');
     const warehouseFromQuery = searchParams.get('warehouseId');
+    const requestedWarehouseId =
+      [ownerFromQuery, warehouseFromQuery].find(
+        (candidate) =>
+          candidate && warehouses.some((warehouse) => warehouse.id === candidate),
+      ) ?? null;
     const shouldOpenOperationStep =
       searchParams.get('flow') === 'bulk' || searchParams.get('step') === 'operation';
-    if (ownerFromQuery && warehouses.some((warehouse) => warehouse.id === ownerFromQuery)) {
-      setOwnerWarehouseId(ownerFromQuery);
+
+    if (requestedWarehouseId) {
+      setOwnerWarehouseId(requestedWarehouseId);
       if (shouldOpenOperationStep) {
         setFlowChoice('bulk');
         setWarehouseLocked(true);
@@ -404,13 +411,10 @@ export default function AddBulkStockPage() {
       }
       return;
     }
-    if (warehouseFromQuery && warehouses.some((warehouse) => warehouse.id === warehouseFromQuery)) {
-      setOwnerWarehouseId(warehouseFromQuery);
-      if (shouldOpenOperationStep) {
-        setFlowChoice('bulk');
-        setWarehouseLocked(true);
-        setModeLocked(false);
-      }
+
+    const ownWarehouse = warehouses.find((warehouse) => warehouse.type === 'OWN');
+    if (ownWarehouse) {
+      setOwnerWarehouseId((current) => current ?? ownWarehouse.id);
     }
   }, [searchParams, warehouses]);
 
@@ -470,10 +474,30 @@ export default function AddBulkStockPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [itemType]);
 
-  const warehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
-  }));
+  const preferredOwnerWarehouseId = useMemo(() => {
+    const requestedWarehouseId =
+      [searchParams.get('ownerWarehouseId'), searchParams.get('warehouseId')].find(
+        (candidate) =>
+          candidate && warehouses.some((warehouse) => warehouse.id === candidate),
+      ) ?? null;
+    if (requestedWarehouseId) {
+      return requestedWarehouseId;
+    }
+    return warehouses.find((warehouse) => warehouse.type === 'OWN')?.id ?? null;
+  }, [searchParams, warehouses]);
+  const warehouseOptions = useMemo(
+    () =>
+      [...warehouses]
+        .sort((a, b) => {
+          if (a.type === b.type) return a.name.localeCompare(b.name, 'es');
+          return a.type === 'OWN' ? -1 : 1;
+        })
+        .map((warehouse) => ({
+          value: warehouse.id,
+          label: warehouse.name,
+        })),
+    [warehouses],
+  );
   const existingItemOptions = existingItems.map((item) => ({
     value: item.skuId,
     label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
@@ -800,7 +824,7 @@ export default function AddBulkStockPage() {
     setGenericMinimumChargeHours('');
     setGenericWeightUnit(defaultWeightUnit);
 
-    setOwnerWarehouseId(null);
+    setOwnerWarehouseId(preferredOwnerWarehouseId);
     setQuantity('');
   };
 

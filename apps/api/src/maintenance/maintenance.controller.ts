@@ -26,7 +26,7 @@ export class MaintenanceController {
   constructor(private readonly maintenance: MaintenanceService) {}
 
   @Get('operator/assets')
-  @Roles(Role.OFFICE, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.OPERATOR)
   listOperatorAssets() {
     return this.maintenance.listOwnWarehouseAssets();
   }
@@ -77,9 +77,12 @@ export class MaintenanceController {
   }
 
   @Get('assets/:assetId')
-  @Roles(Role.ADMIN, Role.OFFICE)
-  getAssetMaintenance(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
-    return this.maintenance.getAssetMaintenance(assetId);
+  @Roles(Role.ADMIN, Role.OFFICE, Role.OPERATOR)
+  getAssetMaintenance(
+    @Param('assetId', new ParseUUIDPipe()) assetId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.maintenance.getAssetMaintenance(assetId, request.user.role);
   }
 
   @Post('assets/:assetId/hours')

@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
+import type { LedgerItem } from '@/components/LedgerTable';
+import LedgerDocumentTable, {
+  groupLedgerItemsByDocument,
+} from '@/components/LedgerDocumentTable';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
@@ -164,6 +167,7 @@ export default function LedgerPage() {
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
   const activeFiltersCount = Object.values(filters).filter(Boolean).length;
+  const documentGroups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
 
   const clearFilters = () => {
     setFilters({
@@ -225,8 +229,9 @@ export default function LedgerPage() {
                   <div>
                     <Text fw={700}>Resultados</Text>
                     <Text size="sm" c="dimmed">
-                      {items.length} movimiento{items.length === 1 ? '' : 's'} cargado
-                      {items.length === 1 ? '' : 's'}.
+                      {documentGroups.length} documento
+                      {documentGroups.length === 1 ? '' : 's'} con {items.length} movimiento
+                      {items.length === 1 ? '' : 's'} cargado{items.length === 1 ? '' : 's'}.
                     </Text>
                   </div>
                   {hasActiveFilters ? (
@@ -236,7 +241,7 @@ export default function LedgerPage() {
                     </Text>
                   ) : null}
                 </Group>
-                <LedgerTable items={items} />
+                <LedgerDocumentTable groups={documentGroups} />
                 <Group>
                   <Button
                     variant="light"
