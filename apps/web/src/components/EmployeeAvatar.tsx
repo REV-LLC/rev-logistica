@@ -19,15 +19,7 @@ function getEmployeeInitials(employee: Pick<EmployeeAvatarRecord, 'name' | 'last
   return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
 }
 
-export default function EmployeeAvatar({
-  employee,
-  size = 40,
-  version = 0,
-}: {
-  employee: EmployeeAvatarRecord;
-  size?: number;
-  version?: number;
-}) {
+export function useEmployeePhotoUrl(employeeId: string, version = 0) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,7 +27,7 @@ export default function EmployeeAvatar({
     let cancelled = false;
     setPhotoUrl(null);
 
-    apiBlob(`/employees/${employee.id}/photo?v=${version}`, { redirectOnAuthError: false })
+    apiBlob(`/employees/${employeeId}/photo?v=${version}`, { redirectOnAuthError: false })
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -47,7 +39,21 @@ export default function EmployeeAvatar({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [employee.id, version]);
+  }, [employeeId, version]);
+
+  return photoUrl;
+}
+
+export default function EmployeeAvatar({
+  employee,
+  size = 40,
+  version = 0,
+}: {
+  employee: EmployeeAvatarRecord;
+  size?: number;
+  version?: number;
+}) {
+  const photoUrl = useEmployeePhotoUrl(employee.id, version);
 
   return (
     <Avatar src={photoUrl} radius="xl" size={size} color="blue" alt={getEmployeeFullName(employee)}>

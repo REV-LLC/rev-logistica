@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   ActionIcon,
   Alert,
@@ -11,6 +12,7 @@ import {
   Group,
   Modal,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -44,6 +46,18 @@ type Customer = {
   documentsEmail: string | null;
   active: boolean;
   createdAt: string;
+};
+
+type CustomerWorksite = {
+  id: string;
+  alias: string | null;
+  active: boolean;
+  worksite: {
+    id: string;
+    name: string;
+    address: string | null;
+    active: boolean;
+  };
 };
 
 type CustomerForm = {
@@ -85,9 +99,15 @@ const breakableTextStyle = {
 
 function CustomerDetails({
   customer,
+  worksites,
+  worksitesLoading,
+  worksitesError,
   onEdit,
 }: {
   customer: Customer;
+  worksites: CustomerWorksite[];
+  worksitesLoading: boolean;
+  worksitesError: string | null;
   onEdit?: (customer: Customer) => void;
 }) {
   return (
@@ -144,6 +164,60 @@ function CustomerDetails({
         </Paper>
       </SimpleGrid>
 
+      <Stack gap="sm">
+        <Group justify="space-between">
+          <div>
+            <Text fw={800}>Obras vinculadas</Text>
+            <Text size="sm" c="dimmed">
+              Frentes de trabajo asociados a este cliente
+            </Text>
+          </div>
+          <Badge color="blue" variant="light">
+            {worksites.length}
+          </Badge>
+        </Group>
+
+        {worksitesLoading ? (
+          <Paper radius="md" p="md" bg="gray.0">
+            <Text size="sm" c="dimmed" ta="center">Cargando obras...</Text>
+          </Paper>
+        ) : null}
+
+        {worksitesError ? <Alert color="red">{worksitesError}</Alert> : null}
+
+        {!worksitesLoading && !worksitesError && worksites.length === 0 ? (
+          <Paper radius="md" p="md" bg="gray.0">
+            <Text size="sm" c="dimmed" ta="center">Este cliente no tiene obras vinculadas.</Text>
+          </Paper>
+        ) : null}
+
+        {!worksitesLoading && worksites.length ? (
+          <Stack gap="xs">
+            {worksites.map((entry) => (
+              <Paper key={entry.id} withBorder radius="md" p="sm">
+                <Group justify="space-between" align="center" gap="sm" wrap="nowrap">
+                  <div style={{ minWidth: 0 }}>
+                    <Text fw={700} size="sm">{entry.worksite.name}</Text>
+                    <Text size="xs" c="dimmed" lineClamp={2}>
+                      {entry.alias ?? 'Sin alias'} · {entry.worksite.address ?? 'Sin dirección'}
+                    </Text>
+                  </div>
+                  <Button
+                    component={Link}
+                    href={`/transport/worksites/${entry.id}`}
+                    size="xs"
+                    variant="default"
+                    style={{ flexShrink: 0 }}
+                  >
+                    Abrir
+                  </Button>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        ) : null}
+      </Stack>
+
       {onEdit ? (
         <Group className="mobile-actions">
           <Button variant="light" onClick={() => onEdit(customer)}>
@@ -164,6 +238,9 @@ export default function CustomersPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
+  const [detailWorksites, setDetailWorksites] = useState<CustomerWorksite[]>([]);
+  const [detailWorksitesLoading, setDetailWorksitesLoading] = useState(false);
+  const [detailWorksitesError, setDetailWorksitesError] = useState<string | null>(null);
   const [documentsCustomer, setDocumentsCustomer] = useState<Customer | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
@@ -172,6 +249,7 @@ export default function CustomersPage() {
   const [rutParseMessage, setRutParseMessage] = useState<string | null>(null);
   const [rutParseStatus, setRutParseStatus] = useState<'success' | 'error' | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -231,6 +309,27 @@ export default function CustomersPage() {
       initialWorksiteActive: true,
     });
     setModalOpen(true);
+  };
+
+  const openDetails = async (customer: Customer) => {
+    setDetailsCustomer(customer);
+    setDetailWorksites([]);
+    setDetailWorksitesError(null);
+    setDetailWorksitesLoading(true);
+
+    try {
+      setDetailWorksites(
+        await api<CustomerWorksite[]>(`/customers/${customer.id}/worksites`, { method: 'GET' }),
+      );
+    } catch (detailError) {
+      setDetailWorksitesError(
+        detailError instanceof ApiError
+          ? `${detailError.status}: ${detailError.message}`
+          : 'No se pudieron cargar las obras del cliente.',
+      );
+    } finally {
+      setDetailWorksitesLoading(false);
+    }
   };
 
   const closeFormModal = () => {
@@ -347,19 +446,24 @@ export default function CustomersPage() {
 
   const filteredCustomers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return customers;
-    return customers.filter((customer) =>
-      [
-        customer.name,
-        customer.nitOrId,
-        customer.phone,
-        customer.email,
-        customer.documentsEmail,
-      ]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(term)),
-    );
-  }, [customers, search]);
+    return customers.filter((customer) => {
+      const matchesSearch =
+        !term ||
+        [
+          customer.name,
+          customer.nitOrId,
+          customer.phone,
+          customer.email,
+          customer.documentsEmail,
+        ]
+          .filter(Boolean)
+          .some((value) => value!.toLowerCase().includes(term));
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === 'active' ? customer.active : !customer.active);
+      return matchesSearch && matchesStatus;
+    });
+  }, [customers, search, statusFilter]);
 
   return (
     <Container size="xl" py="xl">
@@ -400,13 +504,27 @@ export default function CustomersPage() {
                 {filteredCustomers.length} de {metrics.total} clientes visibles
               </Text>
             </div>
-            <TextInput
-              value={search}
-              onChange={(event) => setSearch(event.currentTarget.value)}
-              placeholder="Buscar cliente, NIT, telefono o correo"
-              leftSection={<IconSearch size={16} />}
-              w={useCardLayout ? '100%' : 360}
-            />
+            <Group gap="sm" w={useCardLayout ? '100%' : 'auto'} wrap="wrap">
+              <TextInput
+                value={search}
+                onChange={(event) => setSearch(event.currentTarget.value)}
+                placeholder="Buscar cliente, NIT, telefono o correo"
+                leftSection={<IconSearch size={16} />}
+                style={{ flex: '1 1 300px' }}
+              />
+              <Select
+                aria-label="Filtrar clientes por estado"
+                placeholder="Todos los estados"
+                clearable
+                value={statusFilter}
+                onChange={setStatusFilter}
+                data={[
+                  { value: 'active', label: 'Activos' },
+                  { value: 'inactive', label: 'Inactivos' },
+                ]}
+                w={170}
+              />
+            </Group>
           </Group>
           {useCardLayout ? (
             <Stack gap="sm">
@@ -465,7 +583,7 @@ export default function CustomersPage() {
                         <Button
                           variant="light"
                           leftSection={<IconEye size={16} />}
-                          onClick={() => setDetailsCustomer(customer)}
+                          onClick={() => void openDetails(customer)}
                         >
                           Ver detalle
                         </Button>
@@ -572,7 +690,7 @@ export default function CustomersPage() {
                             color="gray"
                             variant="light"
                             aria-label={`Ver detalle de ${customer.name}`}
-                            onClick={() => setDetailsCustomer(customer)}
+                            onClick={() => void openDetails(customer)}
                           >
                             <IconEye size={16} />
                           </ActionIcon>
@@ -624,7 +742,11 @@ export default function CustomersPage() {
 
       <Modal
         opened={!!detailsCustomer}
-        onClose={() => setDetailsCustomer(null)}
+        onClose={() => {
+          setDetailsCustomer(null);
+          setDetailWorksites([]);
+          setDetailWorksitesError(null);
+        }}
         title="Detalle de cliente"
         centered
         size="lg"
@@ -632,6 +754,9 @@ export default function CustomersPage() {
         {detailsCustomer ? (
           <CustomerDetails
             customer={detailsCustomer}
+            worksites={detailWorksites}
+            worksitesLoading={detailWorksitesLoading}
+            worksitesError={detailWorksitesError}
             onEdit={(customer) => {
               setDetailsCustomer(null);
               openEdit(customer);

@@ -28,8 +28,10 @@ import {
   IconEye,
   IconMapPin,
   IconPlus,
+  IconSearch,
   IconUserCheck,
   IconUsersGroup,
+  IconX,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
@@ -222,6 +224,9 @@ export default function WorksitesPage() {
   const [cities, setCities] = useState<CityOption[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [locationsError, setLocationsError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [customerFilter, setCustomerFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -314,6 +319,36 @@ export default function WorksitesPage() {
       uniqueCustomers,
     };
   }, [worksites]);
+
+  const filteredWorksites = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('es');
+    return worksites.filter((row) => {
+      const matchesSearch =
+        !term ||
+        [
+          row.worksite.name,
+          row.alias,
+          row.customer.name,
+          row.worksite.address,
+        ]
+          .filter(Boolean)
+          .some((value) => value!.toLocaleLowerCase('es').includes(term));
+      const matchesCustomer = !customerFilter || row.customer.id === customerFilter;
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === 'active' ? row.worksite.active : !row.worksite.active);
+
+      return matchesSearch && matchesCustomer && matchesStatus;
+    });
+  }, [customerFilter, search, statusFilter, worksites]);
+
+  const hasActiveFilters = Boolean(search.trim() || customerFilter || statusFilter);
+
+  const clearFilters = () => {
+    setSearch('');
+    setCustomerFilter(null);
+    setStatusFilter(null);
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -492,10 +527,63 @@ export default function WorksitesPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+          <Group justify="space-between" align="flex-end" gap="md" mb="lg" wrap="wrap">
+            <div>
+              <Text fw={800}>Directorio de obras</Text>
+              <Text size="sm" c="dimmed">
+                {filteredWorksites.length} de {worksites.length} obras visibles
+              </Text>
+            </div>
+            <Group gap="sm" align="flex-end" wrap="wrap" style={{ flex: '1 1 620px', justifyContent: 'flex-end' }}>
+              <TextInput
+                aria-label="Buscar obras"
+                placeholder="Buscar obra, cliente, alias o dirección"
+                value={search}
+                onChange={(event) => setSearch(event.currentTarget.value)}
+                leftSection={<IconSearch size={16} />}
+                w="100%"
+                flex={{ base: '1 1 100%', sm: '1 1 280px' }}
+              />
+              <Select
+                aria-label="Filtrar obras por cliente"
+                placeholder="Todos los clientes"
+                searchable
+                clearable
+                value={customerFilter}
+                onChange={setCustomerFilter}
+                data={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+                w="100%"
+                flex={{ base: '1 1 100%', sm: '1 1 210px' }}
+              />
+              <Select
+                aria-label="Filtrar obras por estado"
+                placeholder="Todos los estados"
+                clearable
+                value={statusFilter}
+                onChange={setStatusFilter}
+                data={[
+                  { value: 'active', label: 'Activas' },
+                  { value: 'inactive', label: 'Inactivas' },
+                ]}
+                w="100%"
+                flex={{ base: '1 1 100%', sm: '0 0 150px' }}
+              />
+              {hasActiveFilters ? (
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  leftSection={<IconX size={15} />}
+                  onClick={clearFilters}
+                >
+                  Limpiar
+                </Button>
+              ) : null}
+            </Group>
+          </Group>
           {isMobile ? (
             <Stack gap="sm">
               {!loading &&
-                worksites.map((row) => (
+                filteredWorksites.map((row) => (
                   <Paper key={row.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
@@ -523,22 +611,27 @@ export default function WorksitesPage() {
                         {row.worksite.address ?? 'Sin direccion registrada'}
                       </Text>
 
-                      <Button variant="light" component={Link} href={`/transport/worksites/${row.id}`}>
-                        Ver obra
-                      </Button>
+                      <Group grow>
+                        <Button variant="light" onClick={() => setDetailsRow(row)}>
+                          Ver detalle
+                        </Button>
+                        <Button variant="default" component={Link} href={`/transport/worksites/${row.id}`}>
+                          Abrir obra
+                        </Button>
+                      </Group>
                     </Stack>
                   </Paper>
                 ))}
 
-              {!loading && worksites.length === 0 ? (
+              {!loading && filteredWorksites.length === 0 ? (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Stack align="center" gap="xs">
                     <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                       <IconBuildingEstate size={20} />
                     </ThemeIcon>
-                    <Text fw={700}>No hay obras registradas</Text>
+                    <Text fw={700}>{worksites.length ? 'No hay resultados' : 'No hay obras registradas'}</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Crea una obra para empezar.
+                      {worksites.length ? 'Ajusta o limpia los filtros para ver más obras.' : 'Crea una obra para empezar.'}
                     </Text>
                   </Stack>
                 </Paper>
@@ -566,17 +659,11 @@ export default function WorksitesPage() {
               </Table.Thead>
               <Table.Tbody>
                 {!loading &&
-                  worksites.map((row) => (
+                  filteredWorksites.map((row) => (
                     <Table.Tr key={row.id}>
                       <Table.Td>
                         <Stack gap={2}>
-                          <Text
-                            component={Link}
-                            href={`/transport/worksites/${row.id}`}
-                            c="blue.7"
-                            style={{ textDecoration: 'underline' }}
-                            fw={700}
-                          >
+                          <Text fw={700}>
                             {row.worksite.name}
                           </Text>
                           <Text size="sm" c="dimmed">
@@ -585,14 +672,7 @@ export default function WorksitesPage() {
                         </Stack>
                       </Table.Td>
                       <Table.Td>
-                        <Text
-                          component={Link}
-                          href={`/customers?customerId=${row.customer.id}`}
-                          c="blue.7"
-                          style={{ textDecoration: 'underline' }}
-                        >
-                          {row.customer.name}
-                        </Text>
+                        <Text>{row.customer.name}</Text>
                       </Table.Td>
                       <Table.Td>{row.alias ?? '-'}</Table.Td>
                       <Table.Td>
@@ -615,12 +695,19 @@ export default function WorksitesPage() {
                         <Group gap="xs" justify="flex-end" wrap="nowrap">
                           <Button
                             size="xs"
+                            variant="light"
+                            onClick={() => setDetailsRow(row)}
+                            rightSection={<IconEye size={14} />}
+                          >
+                            Detalle
+                          </Button>
+                          <Button
+                            size="xs"
                             variant="default"
                             component={Link}
                             href={`/transport/worksites/${row.id}`}
-                            rightSection={<IconEye size={14} />}
                           >
-                            Ver
+                            Abrir
                           </Button>
                           <Button size="xs" variant="light" onClick={() => openEdit(row)}>
                             Editar
@@ -630,16 +717,16 @@ export default function WorksitesPage() {
                     </Table.Tr>
                   ))}
 
-                {!loading && worksites.length === 0 && (
+                {!loading && filteredWorksites.length === 0 && (
                   <Table.Tr>
                     <Table.Td colSpan={6}>
                       <Stack align="center" gap="xs" py="lg">
                         <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                           <IconBuildingEstate size={20} />
                         </ThemeIcon>
-                        <Text fw={700}>No hay obras para mostrar</Text>
+                        <Text fw={700}>{worksites.length ? 'No hay resultados' : 'No hay obras para mostrar'}</Text>
                         <Text size="sm" c="dimmed">
-                          Registra una obra nueva.
+                          {worksites.length ? 'Ajusta o limpia los filtros.' : 'Registra una obra nueva.'}
                         </Text>
                       </Stack>
                     </Table.Td>

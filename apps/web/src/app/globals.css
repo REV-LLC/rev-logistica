@@ -1313,3 +1313,19 @@ a {
   color: var(--mantine-color-gray-5);
   border: 1px dashed var(--mantine-color-gray-3);
 }
+
+.employee-photo-preview {
+  display: block;
+  width: min(100%, 32rem);
+  max-height: min(66dvh, 34rem);
+  min-height: 18rem;
+  object-fit: contain;
+  overflow: hidden;
+  border-radius: var(--mantine-radius-lg);
+  background: var(--mantine-color-gray-0);
+  border: 1px solid var(--mantine-color-gray-2);
+}
+
+.employee-photo-preview--empty {
+  border-style: dashed;
+}

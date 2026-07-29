@@ -33,7 +33,6 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import EmployeeAvatar from '@/components/EmployeeAvatar';
 import EmployeeFormModal, {
   appRoleLabelByValue,
   emptyEmployeeForm,
@@ -44,6 +43,8 @@ import EmployeeFormModal, {
   type RoleValue,
   type VehicleOption,
 } from '@/components/EmployeeFormModal';
+import EmployeePhotoControl from '@/components/EmployeePhotoControl';
+import EmployeePhotoModal from '@/components/EmployeePhotoModal';
 import EmployeeViewMenu, { usePreferredEmployeeView } from '@/components/EmployeeViewMenu';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import StatCard from '@/components/dashboard/StatCard';
@@ -94,16 +95,23 @@ function EmployeeDetails({
   employee,
   onEdit,
   onDelete,
+  onPhotoPreview,
 }: {
   employee: Employee;
   onEdit?: (employee: Employee) => void;
   onDelete?: (employee: Employee) => void;
+  onPhotoPreview?: (employee: Employee) => void;
 }) {
   return (
     <Stack gap="md">
       <Group justify="space-between" align="flex-start">
         <Group align="flex-start" gap="sm" wrap="nowrap">
-          <EmployeeAvatar employee={employee} size={44} />
+          <EmployeePhotoControl
+            employee={employee}
+            size={52}
+            editable
+            onPreview={() => onPhotoPreview?.(employee)}
+          />
           <div>
             <Text fw={700} size="lg">
               {getEmployeeFullName(employee)}
@@ -198,6 +206,7 @@ export default function EmployeesPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [detailsEmployee, setDetailsEmployee] = useState<Employee | null>(null);
+  const [photoEmployee, setPhotoEmployee] = useState<Employee | null>(null);
   const [documentsEmployee, setDocumentsEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
@@ -438,12 +447,20 @@ export default function EmployeesPage() {
                   <Paper key={employee.id} withBorder radius="lg" p="md">
                     <Stack gap="md">
                       <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{getEmployeeFullName(employee)}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </div>
+                        <Group gap="sm" align="flex-start" wrap="nowrap">
+                          <EmployeePhotoControl
+                            employee={employee}
+                            size={52}
+                            editable
+                            onPreview={() => setPhotoEmployee(employee)}
+                          />
+                          <div>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </div>
+                        </Group>
                         <EmployeeStatusBadge active={employee.active} />
                       </Group>
 
@@ -552,12 +569,20 @@ export default function EmployeesPage() {
                   employees.map((employee) => (
                     <Table.Tr key={employee.id}>
                       <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700}>{getEmployeeFullName(employee)}</Text>
-                          <Text size="sm" c="dimmed">
-                            {roleLabelByValue[employee.role] ?? employee.role}
-                          </Text>
-                        </Stack>
+                        <Group gap="sm" wrap="nowrap">
+                          <EmployeePhotoControl
+                            employee={employee}
+                            size={44}
+                            editable
+                            onPreview={() => setPhotoEmployee(employee)}
+                          />
+                          <Stack gap={2}>
+                            <Text fw={700}>{getEmployeeFullName(employee)}</Text>
+                            <Text size="sm" c="dimmed">
+                              {roleLabelByValue[employee.role] ?? employee.role}
+                            </Text>
+                          </Stack>
+                        </Group>
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
@@ -691,9 +716,12 @@ export default function EmployeesPage() {
               setDetailsEmployee(null);
               deleteEmployee(employee);
             }}
+            onPhotoPreview={setPhotoEmployee}
           />
         ) : null}
       </Modal>
+
+      <EmployeePhotoModal employee={photoEmployee} onClose={() => setPhotoEmployee(null)} />
 
       <Modal
         opened={!!documentsEmployee}

@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import {
-  Accordion,
   Badge,
   Button,
   Card,
@@ -75,6 +74,7 @@ export default function InventoryDisplay({
   bulkOwnerStackMode = false,
   isWorksiteView = false,
   serialSectionTitle = 'EQUIPOS UNICOS',
+  compactSerialCards = false,
 }: {
   bulk: BulkItem[];
   serial: SerialItem[];
@@ -86,6 +86,7 @@ export default function InventoryDisplay({
   bulkOwnerStackMode?: boolean;
   isWorksiteView?: boolean;
   serialSectionTitle?: string;
+  compactSerialCards?: boolean;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -518,24 +519,33 @@ export default function InventoryDisplay({
           <Title order={3} mb="sm">
             {serialSectionTitle}
           </Title>
-          <Accordion variant="separated" radius="md">
+          <Stack gap="md">
             {serialFamilyGroups.map((group) => (
-              <Accordion.Item key={group.id} value={group.id}>
-                <Accordion.Control>
-                  <Group justify="space-between" align="center" wrap="nowrap" pr="sm">
+              <Paper
+                key={group.id}
+                withBorder
+                radius="md"
+                p={{ base: 'sm', sm: 'md' }}
+                style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 420px' }}
+              >
+                <Stack gap="sm">
+                  <Group justify="space-between" align="center" wrap="nowrap">
                     <Text fw={800}>{group.name}</Text>
                     <Badge color="green" variant="light" style={{ flexShrink: 0 }}>
                       {group.items.length} activo{group.items.length === 1 ? '' : 's'}
                     </Badge>
                   </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+
+                  <SimpleGrid
+                    cols={{ base: 1, sm: 2, md: 3, xl: compactSerialCards ? 4 : 3 }}
+                    spacing="sm"
+                  >
                     {group.items.map((item) => (
                       <SerialAssetCard
                         key={item.assetId}
                         item={item}
                         href={`/inventory/serialized-assets/${item.assetId}`}
+                        compact={compactSerialCards}
                         isWorksiteView={isWorksiteView}
                         display={{ showOwnerChip: isWorksiteView }}
                         deleteLoading={deletingSerialAssetId === item.assetId}
@@ -545,10 +555,10 @@ export default function InventoryDisplay({
                       />
                     ))}
                   </SimpleGrid>
-                </Accordion.Panel>
-              </Accordion.Item>
+                </Stack>
+              </Paper>
             ))}
-          </Accordion>
+          </Stack>
         </section>
       )}
     </Stack>

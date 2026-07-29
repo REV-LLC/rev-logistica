@@ -33,7 +33,11 @@ export type LedgerItem = {
     customer?: { id: string; name: string } | null;
     worksite?: { id: string; name: string } | null;
   } | null;
-  creator?: { id: string; email: string; employee?: { name: string } | null } | null;
+  creator?: {
+    id: string;
+    email: string;
+    employee?: { name: string; lastName?: string | null } | null;
+  } | null;
 };
 
 function formatDate(value: string) {
