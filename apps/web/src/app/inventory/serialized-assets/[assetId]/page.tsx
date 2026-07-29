@@ -36,7 +36,7 @@ import SerializedAssetHero from '@/components/serialized-assets/SerializedAssetH
 type AssetResponse = {
   id: string;
   publicCode: string;
-  serialOrEngine: string;
+  serialOrEngine: string | null;
   registrationNumber: string | null;
   brand: string | null;
   model: string | null;
