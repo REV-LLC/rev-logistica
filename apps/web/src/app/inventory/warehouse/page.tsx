@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ActionIcon,
   Alert,
@@ -80,6 +80,15 @@ const OWNER_LOGO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg'])
 
 export default function WarehouseInventoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inventoryScope = searchParams.get('scope') === 'own' ? 'own' : 'allied';
+  const inventoryView =
+    searchParams.get('view') === 'bulk'
+      ? 'BULK'
+      : searchParams.get('view') === 'serial'
+        ? 'SERIAL'
+        : 'ALL';
+  const isOwnInventory = inventoryScope === 'own';
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -169,7 +178,10 @@ export default function WarehouseInventoryPage() {
     { value: 'false', label: 'Inactiva' },
   ];
 
-  const handleFetch = async (targetWarehouseId?: string | null) => {
+  const handleFetch = async (
+    targetWarehouseId?: string | null,
+    knownWarehouses: Warehouse[] = warehouses,
+  ) => {
     const warehouseToFetch = targetWarehouseId ?? warehouseId;
     if (!warehouseToFetch) return;
     setLoading(true);
@@ -184,7 +196,8 @@ export default function WarehouseInventoryPage() {
       setData(response);
       if (response.bulk.length === 0 && response.serial.length === 0) {
         const selectedWarehouseName =
-          warehouses.find((warehouse) => warehouse.id === warehouseToFetch)?.name ?? 'esta bodega';
+          knownWarehouses.find((warehouse) => warehouse.id === warehouseToFetch)?.name ??
+          'esta bodega';
         setEmptyInventoryWarehouseName(selectedWarehouseName);
         setEmptyInventoryOpen(true);
       }
@@ -218,7 +231,23 @@ export default function WarehouseInventoryPage() {
     setWarehousesError(null);
     try {
       const response = await api<Warehouse[]>('/warehouses', { method: 'GET' });
-      setWarehouses(response);
+      const visibleWarehouses = response.filter((warehouse) =>
+        isOwnInventory ? warehouse.type === 'OWN' : warehouse.type === 'ALLY',
+      );
+      setWarehouses(visibleWarehouses);
+
+      if (isOwnInventory) {
+        const ownWarehouse =
+          visibleWarehouses.find((warehouse) => warehouse.active) ?? visibleWarehouses[0] ?? null;
+        setWarehouseId(ownWarehouse?.id ?? null);
+        setData(null);
+        if (ownWarehouse) {
+          await handleFetch(ownWarehouse.id, visibleWarehouses);
+        }
+      } else {
+        setWarehouseId(null);
+        setData(null);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setWarehousesError(`${err.status}: ${err.message}`);
@@ -289,9 +318,9 @@ export default function WarehouseInventoryPage() {
   };
 
   useEffect(() => {
-    loadWarehouses();
+    void loadWarehouses();
     loadOwners();
-  }, []);
+  }, [inventoryScope]);
 
   useEffect(() => {
     const handleBulkStockMessage = (event: MessageEvent) => {
@@ -759,22 +788,23 @@ export default function WarehouseInventoryPage() {
             </Alert>
           ) : null}
 
-          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-            <Stack gap="md">
-              <Group justify="space-between" align="flex-start" wrap="wrap">
-                <div>
-                  <Text fw={700}>Inventario por bodega</Text>
-                  <Text size="sm" c="dimmed">
-                    Haz clic en una bodega para cargar su inventario.
-                  </Text>
-                </div>
-                <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
-                  Crear bodega
-                </Button>
-              </Group>
+          {!isOwnInventory ? (
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" wrap="wrap">
+                  <div>
+                    <Text fw={700}>Bodegas de proveedores</Text>
+                    <Text size="sm" c="dimmed">
+                      Haz clic en una bodega aliada para cargar su inventario.
+                    </Text>
+                  </div>
+                  <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
+                    Crear bodega
+                  </Button>
+                </Group>
 
-              <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
-                {warehouseCards.map((warehouse) => (
+                <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
+                  {warehouseCards.map((warehouse) => (
                   <Paper
                     key={warehouse.id}
                     withBorder
@@ -893,11 +923,39 @@ export default function WarehouseInventoryPage() {
                       </Group>
                     </Stack>
                   </Paper>
-                ))}
-              </SimpleGrid>
+                  ))}
+                </SimpleGrid>
 
-            </Stack>
-          </Paper>
+                {!warehousesLoading && warehouseCards.length === 0 ? (
+                  <Text c="dimmed" size="sm">
+                    No hay bodegas de proveedores registradas.
+                  </Text>
+                ) : null}
+              </Stack>
+            </Paper>
+          ) : (
+            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+              <Group justify="space-between" align="center" wrap="wrap">
+                <div>
+                  <Text fw={700}>
+                    {inventoryView === 'BULK' ? 'Inventario bulk' : 'Assets propios'}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {warehouses[0]
+                      ? `${warehouses[0].name} está cargada automáticamente.`
+                      : warehousesLoading
+                        ? 'Buscando la bodega propia...'
+                        : 'No hay una bodega propia configurada.'}
+                  </Text>
+                </div>
+                {warehouses[0] ? (
+                  <Badge color="orange" variant="light">
+                    Bodega propia
+                  </Badge>
+                ) : null}
+              </Group>
+            </Paper>
+          )}
 
           {data ? (
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
@@ -905,7 +963,11 @@ export default function WarehouseInventoryPage() {
                 <div>
                   <Text fw={700}>Resultado de inventario</Text>
                   <Text size="sm" c="dimmed">
-                    Stock masivo y equipos unicos de la bodega seleccionada.
+                    {isOwnInventory
+                      ? inventoryView === 'BULK'
+                        ? 'Stock masivo disponible en nuestra bodega.'
+                        : 'Equipos únicos disponibles en nuestra bodega.'
+                      : 'Stock masivo y equipos únicos de la bodega seleccionada.'}
                   </Text>
                 </div>
                 <InventoryDisplay
@@ -915,6 +977,7 @@ export default function WarehouseInventoryPage() {
                   onAddStock={openAddStock}
                   onDeleteSerialAsset={deleteSerialAsset}
                   deletingSerialAssetId={deletingSerialAssetId}
+                  viewFilter={isOwnInventory ? inventoryView : 'ALL'}
                 />
               </Stack>
             </Paper>

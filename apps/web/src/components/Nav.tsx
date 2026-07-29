@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Badge, Box, Button, Collapse, Divider, Group, NavLink, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
 import { AppRole, clearToken, getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
@@ -35,6 +35,8 @@ type NavLinkItem = {
   icon: typeof IconClipboardList;
   roles: AppRole[];
   activePrefixes?: string[];
+  exact?: boolean;
+  children?: NavLinkItem[];
 };
 
 type NavSection = {
@@ -55,10 +57,38 @@ const sections: NavSection[] = [
     ],
   },
   {
-    title: 'Inventario',
+    title: 'Stock',
     links: [
       { href: '/inventory/hour-meter', label: 'Actualizar horómetro', icon: IconGauge, roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
-      { href: '/inventory/warehouse', label: 'Bodegas', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'] },
+      {
+        href: '/inventory/warehouse?scope=own',
+        label: 'Inventario',
+        icon: IconBox,
+        roles: ['ADMIN', 'OFFICE'],
+        children: [
+          {
+            href: '/inventory/warehouse?scope=own&view=serial',
+            label: 'Assets',
+            icon: IconTools,
+            roles: ['ADMIN', 'OFFICE'],
+            exact: true,
+          },
+          {
+            href: '/inventory/warehouse?scope=own&view=bulk',
+            label: 'Bulk',
+            icon: IconBox,
+            roles: ['ADMIN', 'OFFICE'],
+            exact: true,
+          },
+        ],
+      },
+      {
+        href: '/inventory/warehouse',
+        label: 'Bodegas',
+        icon: IconBuildingWarehouse,
+        roles: ['ADMIN', 'OFFICE'],
+        exact: true,
+      },
       { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
       {
         href: '/inventory/bulk-adjustments',
@@ -104,10 +134,12 @@ type NavProps = {
 
 export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const currentRole = getCurrentUserRole();
   const currentSession = getCurrentUserSession();
   const [openedSections, setOpenedSections] = useState<Record<string, boolean>>({});
+  const [openedLinks, setOpenedLinks] = useState<Record<string, boolean>>({});
   const canShowLink = (link: NavLinkItem) => {
     if (isProduction && prodDisabledRoutes.includes(link.href)) {
       return false;
@@ -116,8 +148,19 @@ export default function Nav({ onNavigate }: NavProps) {
     return currentRole ? link.roles.includes(currentRole) : true;
   };
   const isLinkActive = (link: NavLinkItem) => {
+    if (link.children?.some(isLinkActive)) {
+      return true;
+    }
+
+    const currentHref = searchParams.size > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
+    if (link.exact) {
+      return currentHref === link.href;
+    }
+
     const prefixes = link.activePrefixes ?? [link.href];
-    return prefixes.some((prefix) => pathname?.startsWith(prefix));
+    return prefixes.some((prefix) =>
+      prefix.includes('?') ? currentHref.startsWith(prefix) : pathname?.startsWith(prefix),
+    );
   };
   const visibleSections = sections
     .map((section) => ({
@@ -161,6 +204,87 @@ export default function Nav({ onNavigate }: NavProps) {
   const renderNavItem = (link: NavLinkItem) => {
     const Icon = link.icon;
     const isActive = isLinkActive(link);
+    const hasChildren = Boolean(link.children?.length);
+    const isExpanded = openedLinks[link.href] ?? isActive;
+
+    if (hasChildren) {
+      return (
+        <Stack key={link.href} gap={0}>
+          <NavLink
+            component="button"
+            label={link.label}
+            active={isActive}
+            styles={{
+              root: {
+                borderRadius: 14,
+                borderLeft: '3px solid transparent',
+                background: 'transparent',
+                paddingLeft: 'calc(var(--mantine-spacing-sm) - 3px)',
+                paddingRight: '8px',
+                paddingTop: '6px',
+                paddingBottom: '6px',
+                boxShadow: 'none',
+                transition: 'background 160ms ease',
+              },
+              body: {
+                minHeight: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+              },
+              label: {
+                color: isActive ? '#8a5a00' : 'var(--mantine-color-gray-8)',
+                fontWeight: isActive ? 750 : 560,
+                lineHeight: 1.2,
+                fontSize: '0.8rem',
+              },
+              section: {
+                display: 'flex',
+                alignItems: 'center',
+              },
+            }}
+            leftSection={
+              <Box
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 11,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  color: isActive ? '#b87500' : 'var(--mantine-color-gray-6)',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(217,154,24,0.24) 0%, rgba(255,229,153,0.9) 100%)'
+                    : 'rgba(148,163,184,0.10)',
+                  boxShadow: isActive ? '0 10px 22px rgba(217,154,24,0.28)' : 'none',
+                  border: isActive ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
+                }}
+              >
+                <Icon size={18} stroke={1.9} />
+              </Box>
+            }
+            rightSection={
+              <IconChevronDown
+                size={14}
+                stroke={2}
+                style={{
+                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 160ms ease',
+                }}
+              />
+            }
+            onClick={() =>
+              setOpenedLinks((current) => ({ ...current, [link.href]: !isExpanded }))
+            }
+          />
+          <Collapse in={isExpanded}>
+            <Stack gap={0} pl={18}>
+              {link.children?.map(renderNavItem)}
+            </Stack>
+          </Collapse>
+        </Stack>
+      );
+    }
 
     return (
       <NavLink

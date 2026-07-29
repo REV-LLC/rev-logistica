@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { AppShell, Burger, Group, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
@@ -27,7 +27,17 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> = 
   { prefix: '/data', title: 'Datos', subtitle: 'Backups y exportaciones' },
 ];
 
-function getHeaderCopy(pathname: string | null) {
+function getHeaderCopy(
+  pathname: string | null,
+  inventoryScope: string | null,
+  inventoryView: string | null,
+) {
+  if (pathname?.startsWith('/inventory/warehouse') && inventoryScope === 'own') {
+    return inventoryView === 'bulk'
+      ? { title: 'Inventario bulk', subtitle: 'Bodega propia' }
+      : { title: 'Assets', subtitle: 'Bodega propia' };
+  }
+
   return routeTitles.find((item) => pathname?.startsWith(item.prefix)) ?? { title: 'Rev Logistica', subtitle: 'Panel operativo' };
 }
 
@@ -41,7 +51,12 @@ export default function ResponsiveShell({
   const [opened, { toggle, close }] = useDisclosure(false);
   const [isEmbedded, setIsEmbedded] = useState(false);
   const pathname = usePathname();
-  const headerCopy = getHeaderCopy(pathname);
+  const searchParams = useSearchParams();
+  const headerCopy = getHeaderCopy(
+    pathname,
+    searchParams.get('scope'),
+    searchParams.get('view'),
+  );
 
   useEffect(() => {
     setIsEmbedded(new URLSearchParams(window.location.search).get('embed') === '1');

@@ -271,18 +271,9 @@ export default function InventoryItemPickerModal({
               <IconChevronLeft size={34} stroke={2.6} aria-hidden="true" />
             </ActionIcon>
 
-            {mobileSearchOpen ? (
-              <TextInput
-                autoFocus
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                placeholder="Buscar items"
-                aria-label="Buscar items"
-                className="inventory-picker-mobile-search-input"
-              />
-            ) : (
-              <span aria-hidden="true" />
-            )}
+            <Text component="h2" className="inventory-picker-mobile-title">
+              {title}
+            </Text>
 
             <ActionIcon
               variant="transparent"
@@ -297,6 +288,19 @@ export default function InventoryItemPickerModal({
               <IconSearch size={30} stroke={2.4} aria-hidden="true" />
             </ActionIcon>
           </header>
+
+          {mobileSearchOpen ? (
+            <div className="inventory-picker-mobile-search">
+              <TextInput
+                autoFocus
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                placeholder="Buscar por nombre, familia o tipo"
+                aria-label="Buscar items"
+                className="inventory-picker-mobile-search-input"
+              />
+            </div>
+          ) : null}
 
           <ScrollArea className="inventory-picker-mobile-list" type="auto" offsetScrollbars>
             {hasItems && filteredGroups.length ? (
@@ -369,21 +373,18 @@ export default function InventoryItemPickerModal({
             )}
           </ScrollArea>
 
-          <ActionIcon
-            className="inventory-picker-mobile-confirm"
-            color="green"
-            variant="filled"
-            size={64}
-            radius="xl"
-            onClick={selectedCount > 0 ? confirmSelection : onClose}
-            aria-label={
-              selectedCount > 0
-                ? `Agregar ${selectedCount} item${selectedCount === 1 ? '' : 's'}`
-                : 'Confirmar sin agregar items'
-            }
-          >
-            <IconCheck size={36} stroke={2.4} aria-hidden="true" />
-          </ActionIcon>
+          <footer className="inventory-picker-mobile-footer">
+            <Text className="inventory-picker-mobile-selection-count" aria-live="polite">
+              {selectedCount} {selectedCount === 1 ? 'item seleccionado' : 'items seleccionados'}
+            </Text>
+            <Button
+              onClick={confirmSelection}
+              disabled={selectedCount === 0}
+              className="inventory-picker-mobile-confirm"
+            >
+              Agregar
+            </Button>
+          </footer>
         </div>
       </Modal>
     );

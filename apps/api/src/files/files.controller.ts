@@ -95,7 +95,7 @@ export class FilesController {
   }
 
   @Get(':fileId/download')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   async downloadFile(
     @Param('fileId', new ParseUUIDPipe()) fileId: string,
     @Req() request: Request & { user: JwtPayload },

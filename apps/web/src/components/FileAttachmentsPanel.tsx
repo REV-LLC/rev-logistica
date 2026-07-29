@@ -7,28 +7,23 @@ import {
   Badge,
   Button,
   Divider,
-  FileInput,
   Group,
   Modal,
   Paper,
-  Select,
-  SimpleGrid,
   Stack,
   Table,
   Text,
-  TextInput,
   ThemeIcon,
   Title,
 } from '@mantine/core';
 import { IconDownload, IconEye, IconFile, IconPaperclip, IconTrash, IconUpload } from '@tabler/icons-react';
 import { api, apiBlob, ApiError } from '@/lib/api';
+import FileUploadModal, {
+  type FileCategoryOption,
+  type FileEntityType,
+} from '@/components/FileUploadModal';
 
-export type FileEntityType = 'DOCUMENT' | 'EMPLOYEE' | 'VEHICLE' | 'CUSTOMER' | 'ASSET';
-
-type FileCategory = {
-  value: string;
-  label: string;
-};
+export type { FileEntityType } from '@/components/FileUploadModal';
 
 type AttachedFile = {
   id: string;
@@ -43,19 +38,6 @@ type AttachedFile = {
   expiresAt: string | null;
   createdAt: string;
 };
-
-const ACCEPTED_FILE_TYPES = [
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain',
-  'text/csv',
-].join(',');
 
 function formatBytes(value?: number | null) {
   if (!value) return '-';
@@ -87,6 +69,53 @@ function canPreview(file: AttachedFile) {
   return file.originalName?.toLowerCase().endsWith('.pdf') ?? false;
 }
 
+type FileActionsProps = {
+  file: AttachedFile;
+  previewLoadingId: string | null;
+  onPreview: (file: AttachedFile) => void;
+  onDownload: (file: AttachedFile) => void;
+  onRemove: (file: AttachedFile) => void;
+};
+
+function FileActions({
+  file,
+  previewLoadingId,
+  onPreview,
+  onDownload,
+  onRemove,
+}: FileActionsProps) {
+  return (
+    <Group gap="xs" justify="flex-end" wrap="nowrap">
+      {canPreview(file) ? (
+        <ActionIcon
+          variant="light"
+          color="teal"
+          aria-label={`Ver ${fileLabel(file)}`}
+          loading={previewLoadingId === file.id}
+          onClick={() => onPreview(file)}
+        >
+          <IconEye size={16} />
+        </ActionIcon>
+      ) : null}
+      <ActionIcon
+        variant="light"
+        aria-label={`Descargar ${fileLabel(file)}`}
+        onClick={() => onDownload(file)}
+      >
+        <IconDownload size={16} />
+      </ActionIcon>
+      <ActionIcon
+        color="red"
+        variant="light"
+        aria-label={`Eliminar ${fileLabel(file)}`}
+        onClick={() => onRemove(file)}
+      >
+        <IconTrash size={16} />
+      </ActionIcon>
+    </Group>
+  );
+}
+
 export default function FileAttachmentsPanel({
   entityType,
   entityId,
@@ -97,14 +126,10 @@ export default function FileAttachmentsPanel({
   title?: string;
 }) {
   const [files, setFiles] = useState<AttachedFile[]>([]);
-  const [categories, setCategories] = useState<FileCategory[]>([]);
-  const [category, setCategory] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [expiresAt, setExpiresAt] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [categories, setCategories] = useState<FileCategoryOption[]>([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadOpened, setUploadOpened] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ file: AttachedFile; url: string } | null>(null);
 
@@ -125,11 +150,10 @@ export default function FileAttachmentsPanel({
     setError(null);
     try {
       const [categoryData, fileData] = await Promise.all([
-        api<FileCategory[]>(`/files/categories/${entityType}`),
+        api<FileCategoryOption[]>(`/files/categories/${entityType}`),
         api<AttachedFile[]>(`/files/entities/${entityType}/${entityId}`),
       ]);
       setCategories(categoryData);
-      setCategory((current) => current ?? categoryData[0]?.value ?? null);
       setFiles(fileData);
     } catch (err) {
       setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudieron cargar los archivos');
@@ -141,31 +165,6 @@ export default function FileAttachmentsPanel({
   useEffect(() => {
     void loadFiles();
   }, [entityType, entityId]);
-
-  const upload = async () => {
-    if (!selectedFiles.length || !category) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const formData = new FormData();
-      selectedFiles.forEach((file) => formData.append('files', file));
-      formData.append('category', category);
-      if (displayName.trim()) formData.append('displayName', displayName.trim());
-      if (expiresAt) formData.append('expiresAt', expiresAt);
-      await api(`/files/entities/${entityType}/${entityId}`, {
-        method: 'POST',
-        body: formData,
-      });
-      setSelectedFiles([]);
-      setDisplayName('');
-      setExpiresAt('');
-      await loadFiles();
-    } catch (err) {
-      setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudo subir el archivo');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const download = async (file: AttachedFile) => {
     setError(null);
@@ -217,9 +216,19 @@ export default function FileAttachmentsPanel({
             Sube, consulta y descarga documentos asociados a este registro.
           </Text>
         </div>
-        <Badge color="blue" variant="light" leftSection={<IconPaperclip size={14} />}>
-          {files.length} archivo{files.length === 1 ? '' : 's'}
-        </Badge>
+        <Group gap="xs" wrap="wrap">
+          <Badge color="blue" variant="light" leftSection={<IconPaperclip size={14} />}>
+            {files.length} archivo{files.length === 1 ? '' : 's'}
+          </Badge>
+          <Button
+            size="xs"
+            leftSection={<IconUpload size={15} />}
+            onClick={() => setUploadOpened(true)}
+            disabled={loading || !categories.length}
+          >
+            Subir archivo
+          </Button>
+        </Group>
       </Group>
 
       {error ? (
@@ -228,141 +237,97 @@ export default function FileAttachmentsPanel({
         </Alert>
       ) : null}
 
-      <Paper
-        withBorder
-        radius="lg"
-        p="md"
-        style={{
-          background: 'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(239,246,255,0.72) 100%)',
-        }}
-      >
-        <Stack gap="md">
-          <Group justify="space-between" align="flex-start" gap="sm" wrap="wrap">
-            <div>
-              <Text fw={800}>Subir documentos</Text>
-              <Text size="sm" c="dimmed">
-                Agrega uno o varios archivos y clasificalos antes de guardarlos.
-              </Text>
-            </div>
-            <ThemeIcon color="blue" variant="light" size={36} radius="xl">
-              <IconUpload size={18} />
-            </ThemeIcon>
-          </Group>
-
-          <FileInput
-            label="Archivos"
-            placeholder="Arrastra o selecciona archivos"
-            accept={ACCEPTED_FILE_TYPES}
-            multiple
-            value={selectedFiles}
-            onChange={setSelectedFiles}
-            leftSection={<IconPaperclip size={16} />}
-            clearable
-          />
-
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-            <Select
-              label="Categoria"
-              data={categories}
-              value={category}
-              onChange={setCategory}
-              disabled={loading || saving}
-            />
-            <TextInput
-              label="Nombre visible (opcional)"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.currentTarget.value)}
-            />
-            <TextInput
-              label="Vence (opcional)"
-              type="date"
-              value={expiresAt}
-              onChange={(event) => setExpiresAt(event.currentTarget.value)}
-            />
-          </SimpleGrid>
-          <Group justify="space-between" align="center" gap="sm" wrap="wrap">
-            <Text size="sm" c="dimmed">
-              {selectedFiles.length
-                ? selectedFiles.map((file) => file.name).join(', ')
-                : 'PDF, imagenes, Word, Excel, TXT o CSV. Maximo 100 MB por archivo.'}
-            </Text>
-            <Button
-              leftSection={<IconUpload size={16} />}
-              onClick={upload}
-              loading={saving}
-              disabled={!selectedFiles.length || !category}
-            >
-              Subir documento{selectedFiles.length === 1 ? '' : 's'}
-            </Button>
-          </Group>
-        </Stack>
-      </Paper>
-
       <Divider />
 
       {files.length ? (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Archivo</Table.Th>
-              <Table.Th>Categoria</Table.Th>
-              <Table.Th>Vence</Table.Th>
-                <Table.Th>Tamaño</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+        <>
+          <Table striped highlightOnHover visibleFrom="sm" style={{ tableLayout: 'fixed', width: '100%' }}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w="34%">Archivo</Table.Th>
+                <Table.Th w="20%">Categoria</Table.Th>
+                <Table.Th w="16%">Vence</Table.Th>
+                <Table.Th w="12%">Tamaño</Table.Th>
+                <Table.Th w={120} />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {files.map((file) => (
+                <Table.Tr key={file.id}>
+                  <Table.Td>
+                    <Group gap="sm" wrap="nowrap" align="flex-start">
+                      <IconFile size={18} style={{ flex: '0 0 auto' }} />
+                      <div style={{ minWidth: 0 }}>
+                        <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
+                          {fileLabel(file)}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {formatDate(file.createdAt)}
+                        </Text>
+                      </div>
+                    </Group>
+                  </Table.Td>
+                  <Table.Td style={{ overflowWrap: 'anywhere' }}>
+                    {categoryLabelByValue.get(file.category ?? file.fileType) ?? file.category ?? file.fileType}
+                  </Table.Td>
+                  <Table.Td>
+                    {file.expiresAt ? (
+                      <Badge color={isExpired(file.expiresAt) ? 'red' : 'blue'} variant="light">
+                        {formatDate(file.expiresAt)}
+                      </Badge>
+                    ) : (
+                      '-'
+                    )}
+                  </Table.Td>
+                  <Table.Td>{formatBytes(file.sizeBytes)}</Table.Td>
+                  <Table.Td>
+                    <FileActions
+                      file={file}
+                      previewLoadingId={previewLoadingId}
+                      onPreview={openPreview}
+                      onDownload={download}
+                      onRemove={remove}
+                    />
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+
+          <Stack hiddenFrom="sm" gap="xs">
             {files.map((file) => (
-              <Table.Tr key={file.id}>
-                <Table.Td>
-                  <Group gap="sm" wrap="nowrap">
-                    <IconFile size={18} />
-                    <div>
-                      <Text size="sm" fw={600}>
+              <Paper key={file.id} withBorder radius="md" p="sm">
+                <Stack gap="xs">
+                  <Group gap="sm" wrap="nowrap" align="flex-start">
+                    <IconFile size={18} style={{ flex: '0 0 auto', marginTop: 2 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <Text size="sm" fw={700} style={{ overflowWrap: 'anywhere' }}>
                         {fileLabel(file)}
                       </Text>
                       <Text size="xs" c="dimmed">
-                        {formatDate(file.createdAt)}
+                        {formatDate(file.createdAt)} · {formatBytes(file.sizeBytes)}
                       </Text>
                     </div>
                   </Group>
-                </Table.Td>
-                <Table.Td>{categoryLabelByValue.get(file.category ?? file.fileType) ?? file.category ?? file.fileType}</Table.Td>
-                <Table.Td>
-                  {file.expiresAt ? (
-                    <Badge color={isExpired(file.expiresAt) ? 'red' : 'blue'} variant="light">
-                      {formatDate(file.expiresAt)}
-                    </Badge>
-                  ) : (
-                    '-'
-                  )}
-                </Table.Td>
-                <Table.Td>{formatBytes(file.sizeBytes)}</Table.Td>
-                <Table.Td>
-                  <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    {canPreview(file) ? (
-                      <ActionIcon
-                        variant="light"
-                        color="teal"
-                        aria-label={`Ver ${fileLabel(file)}`}
-                        loading={previewLoadingId === file.id}
-                        onClick={() => openPreview(file)}
-                      >
-                        <IconEye size={16} />
-                      </ActionIcon>
-                    ) : null}
-                    <ActionIcon variant="light" aria-label="Descargar archivo" onClick={() => download(file)}>
-                      <IconDownload size={16} />
-                    </ActionIcon>
-                    <ActionIcon color="red" variant="light" aria-label="Eliminar archivo" onClick={() => remove(file)}>
-                      <IconTrash size={16} />
-                    </ActionIcon>
+
+                  <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                    <Text size="xs" c="dimmed" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                      {categoryLabelByValue.get(file.category ?? file.fileType) ?? file.category ?? file.fileType}
+                      {file.expiresAt ? ` · Vence ${formatDate(file.expiresAt)}` : ''}
+                    </Text>
+                    <FileActions
+                      file={file}
+                      previewLoadingId={previewLoadingId}
+                      onPreview={openPreview}
+                      onDownload={download}
+                      onRemove={remove}
+                    />
                   </Group>
-                </Table.Td>
-              </Table.Tr>
+                </Stack>
+              </Paper>
             ))}
-          </Table.Tbody>
-        </Table>
+          </Stack>
+        </>
       ) : (
         <Paper withBorder radius="lg" p="xl" bg="gray.0">
           <Stack align="center" gap="xs">
@@ -401,6 +366,15 @@ export default function FileAttachmentsPanel({
           />
         ) : null}
       </Modal>
+
+      <FileUploadModal
+        opened={uploadOpened}
+        entityType={entityType}
+        entityId={entityId}
+        categories={categories}
+        onClose={() => setUploadOpened(false)}
+        onUploaded={loadFiles}
+      />
     </Stack>
   );
 }

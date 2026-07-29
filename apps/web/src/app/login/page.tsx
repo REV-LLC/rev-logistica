@@ -4,10 +4,15 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
-import { consumeSessionExpiredNotice, getCurrentUserRole, getToken, isLocalAuthBypassEnabled, isTokenExpired, setToken } from '@/lib/auth';
-
-const defaultDestination = () =>
-  getCurrentUserRole() === 'OPERATOR' ? '/inventory/hour-meter' : '/inventory/warehouse';
+import {
+  consumeSessionExpiredNotice,
+  getCurrentUserRole,
+  getPostLoginDestination,
+  getToken,
+  isLocalAuthBypassEnabled,
+  isTokenExpired,
+  setToken,
+} from '@/lib/auth';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -23,13 +28,13 @@ function LoginPageContent() {
     setIsMounted(true);
 
     if (isLocalAuthBypassEnabled()) {
-      router.replace(searchParams.get('next') || defaultDestination());
+      router.replace(getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()));
       return;
     }
 
     const token = getToken();
     if (token && !isTokenExpired(token)) {
-      router.replace(defaultDestination());
+      router.replace(getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()));
       return;
     }
 
@@ -61,8 +66,9 @@ function LoginPageContent() {
         throw new Error('Invalid server response.');
       }
       setToken(data.accessToken);
-      const next = searchParams.get('next');
-      router.replace(next || defaultDestination());
+      router.replace(
+        getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()),
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`Error ${err.status}: ${err.message}`);

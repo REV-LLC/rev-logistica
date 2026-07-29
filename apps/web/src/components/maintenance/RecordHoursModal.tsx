@@ -63,7 +63,7 @@ export default function RecordHoursModal({
         }
         const formData = new FormData();
         formData.append('files', evidence);
-        formData.append('category', 'MANTENIMIENTO');
+        formData.append('category', 'EVIDENCIA_HOROMETRO');
         formData.append('displayName', `Evidencia horómetro ${hours} h`);
         const upload = await api<{ files: Array<{ id: string }> }>(
           `/files/entities/ASSET/${subject.id}`,
