@@ -144,7 +144,10 @@ export class MaintenanceService {
     return { archived: true };
   }
 
-  getAssetMaintenance(assetId: string) {
+  async getAssetMaintenance(assetId: string, role?: Role) {
+    if (role === Role.OPERATOR) {
+      await this.assertHourlyAsset(assetId, true);
+    }
     return this.getSubjectMaintenance('assetId', assetId);
   }
 

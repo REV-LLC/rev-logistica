@@ -46,23 +46,38 @@ type NavSection = {
 
 const sections: NavSection[] = [
   {
-    title: 'Operacion',
+    title: 'Operación',
     links: [
-      { href: '/transport/requests', label: 'Solicitudes de documentos', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
-      { href: '/transport/generate', label: 'Generar documentos', icon: IconFilePlus, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
-      { href: '/mobility-guides', label: 'Guias de movilidad', icon: IconFileCertificate, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
-      { href: '/transport/vehicles', label: 'Vehiculos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
+      {
+        href: '/transport/requests',
+        label: 'Documentos',
+        icon: IconClipboardList,
+        roles: ['ADMIN', 'OFFICE', 'DRIVER'],
+        children: [
+          { href: '/transport/requests', label: 'Solicitudes', icon: IconClipboardList, roles: ['ADMIN', 'OFFICE', 'DRIVER'], exact: true },
+          { href: '/transport/generate', label: 'Generar documento', icon: IconFilePlus, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+          { href: '/mobility-guides', label: 'Guías de movilidad', icon: IconFileCertificate, roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+        ],
+      },
+      {
+        href: '/transport/vehicles',
+        label: 'Logística',
+        icon: IconTruck,
+        roles: ['ADMIN', 'OFFICE'],
+        children: [
+          { href: '/transport/vehicles', label: 'Vehículos', icon: IconTruck, roles: ['ADMIN', 'OFFICE'] },
+          { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
+          { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
+        ],
+      },
     ],
   },
   {
-    title: 'Stock',
+    title: 'Inventario',
     links: [
-      { href: '/inventory/hour-meter', label: 'Actualizar horómetro', icon: IconGauge, roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
       {
         href: '/inventory/warehouse?scope=own',
-        label: 'Inventario',
+        label: 'Inventario propio',
         icon: IconBox,
         roles: ['ADMIN', 'OFFICE'],
         children: [
@@ -84,41 +99,68 @@ const sections: NavSection[] = [
       },
       {
         href: '/inventory/warehouse',
-        label: 'Bodegas',
+        label: 'Bodegas y stock',
         icon: IconBuildingWarehouse,
         roles: ['ADMIN', 'OFFICE'],
-        exact: true,
+        children: [
+          { href: '/inventory/warehouse', label: 'Bodegas proveedoras', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'], exact: true },
+          { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
+          {
+            href: '/inventory/bulk-adjustments',
+            label: 'Agregar inventario',
+            icon: IconBox,
+            roles: ['ADMIN', 'OFFICE'],
+            activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
+          },
+        ],
       },
-      { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
       {
-        href: '/inventory/bulk-adjustments',
-        label: 'Agregar inventario',
-        icon: IconBox,
-        roles: ['ADMIN', 'OFFICE'],
-        activePrefixes: ['/inventory/bulk-adjustments', '/inventory/serialized-assets'],
+        href: '/inventory/hour-meter',
+        label: 'Mantenimiento',
+        icon: IconGauge,
+        roles: ['ADMIN', 'OFFICE', 'OPERATOR'],
+        children: [
+          { href: '/inventory/hour-meter', label: 'Registrar horómetro', icon: IconGauge, roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
+        ],
       },
     ],
   },
   {
-    title: 'Administracion',
+    title: 'Administración',
     links: [
-      { href: '/billing/pre-invoice', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/billing/price-list', label: 'Lista de precios', icon: IconTag, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
-      { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+      {
+        href: '/customers',
+        label: 'Comercial',
+        icon: IconUsers,
+        roles: ['ADMIN', 'OFFICE'],
+        children: [
+          { href: '/customers', label: 'Clientes', icon: IconUsers, roles: ['ADMIN', 'OFFICE'] },
+          { href: '/billing/pre-invoice', label: 'Prefactura', icon: IconReceipt, roles: ['ADMIN', 'OFFICE'] },
+          { href: '/billing/price-list', label: 'Lista de precios', icon: IconTag, roles: ['ADMIN', 'OFFICE'] },
+        ],
+      },
+      {
+        href: '/employees',
+        label: 'Equipo',
+        icon: IconUser,
+        roles: ['ADMIN', 'OFFICE'],
+        children: [
+          { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+        ],
+      },
     ],
   },
   {
-    title: 'Ajustes',
+    title: 'Configuración',
     links: [
-      { href: '/settings/catalog-options', label: 'Catalogo items', icon: IconSettings, roles: ['ADMIN'] },
+      { href: '/settings/catalog-options', label: 'Catálogo de ítems', icon: IconSettings, roles: ['ADMIN'] },
     ],
   },
 ];
 
 const toolLinks: NavLinkItem[] = [
-  { href: '/tools/quotation', label: 'Cotizacion', icon: IconFileDollar, roles: ['ADMIN', 'OFFICE'] },
-  { href: '/transport/cost', label: 'Transporte', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
+  { href: '/tools/quotation', label: 'Cotización', icon: IconFileDollar, roles: ['ADMIN', 'OFFICE'] },
+  { href: '/transport/cost', label: 'Costo de transporte', icon: IconMap2, roles: ['ADMIN', 'OFFICE'] },
   { href: '/inventory/scaffold-modulations', label: 'Modulaciones', icon: IconRulerMeasure, roles: ['ADMIN', 'OFFICE'] },
   { href: '/data', label: 'Datos', icon: IconDatabaseExport, roles: ['ADMIN'] },
 ];
@@ -127,6 +169,7 @@ const prodDisabledRoutes = ['/transport/cost', '/billing/pre-invoice'];
 const isProduction = process.env.NODE_ENV === 'production';
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION;
 const mostUsedLinks = ['/transport/requests', '/inventory/warehouse', '/inventory/ledger'];
+const defaultExpandedSections = new Set(['Operación', 'Inventario', 'Administración']);
 
 type NavProps = {
   onNavigate?: () => void;
@@ -147,6 +190,18 @@ export default function Nav({ onNavigate }: NavProps) {
 
     return currentRole ? link.roles.includes(currentRole) : true;
   };
+  const getVisibleLink = (link: NavLinkItem): NavLinkItem | null => {
+    if (!canShowLink(link)) return null;
+    if (!link.children) return link;
+
+    const children = link.children
+      .map(getVisibleLink)
+      .filter((child): child is NavLinkItem => Boolean(child));
+
+    return children.length ? { ...link, children } : null;
+  };
+  const flattenLinks = (links: NavLinkItem[]): NavLinkItem[] =>
+    links.flatMap((link) => [link, ...(link.children ? flattenLinks(link.children) : [])]);
   const isLinkActive = (link: NavLinkItem) => {
     if (link.children?.some(isLinkActive)) {
       return true;
@@ -165,11 +220,13 @@ export default function Nav({ onNavigate }: NavProps) {
   const visibleSections = sections
     .map((section) => ({
       ...section,
-      links: section.links.filter(canShowLink),
+      links: section.links
+        .map(getVisibleLink)
+        .filter((link): link is NavLinkItem => Boolean(link)),
     }))
     .filter((section) => section.links.length > 0);
-  const visibleMainSections = visibleSections.filter((section) => section.title !== 'Ajustes');
-  const visibleSettingsSection = visibleSections.find((section) => section.title === 'Ajustes');
+  const visibleMainSections = visibleSections.filter((section) => section.title !== 'Configuración');
+  const visibleSettingsSection = visibleSections.find((section) => section.title === 'Configuración');
   const visibleToolLinks = toolLinks.filter(canShowLink);
   const visibleToolSection: NavSection | null = visibleToolLinks.length
     ? { title: 'Herramientas', links: visibleToolLinks }
@@ -179,9 +236,9 @@ export default function Nav({ onNavigate }: NavProps) {
     ...(visibleToolSection ? [visibleToolSection] : []),
     ...(visibleSettingsSection ? [visibleSettingsSection] : []),
   ];
-  const allVisibleLinks = orderedSections.flatMap((section) => section.links);
+  const allVisibleLinks = flattenLinks(orderedSections.flatMap((section) => section.links));
   const quickLinks = mostUsedLinks
-    .map((href) => allVisibleLinks.find((link) => link.href === href))
+    .map((href) => allVisibleLinks.find((link) => link.href === href && !link.children))
     .filter((link, index, list): link is NavLinkItem => Boolean(link) && list.findIndex((item) => item?.href === link?.href) === index)
     .slice(0, 3);
   const roleColor =
@@ -201,7 +258,7 @@ export default function Nav({ onNavigate }: NavProps) {
     router.replace('/login');
   };
 
-  const renderNavItem = (link: NavLinkItem) => {
+  const renderNavItem = (link: NavLinkItem, depth = 0) => {
     const Icon = link.icon;
     const isActive = isLinkActive(link);
     const hasChildren = Boolean(link.children?.length);
@@ -219,7 +276,7 @@ export default function Nav({ onNavigate }: NavProps) {
                 borderRadius: 14,
                 borderLeft: '3px solid transparent',
                 background: 'transparent',
-                paddingLeft: 'calc(var(--mantine-spacing-sm) - 3px)',
+                paddingLeft: depth ? '8px' : 'calc(var(--mantine-spacing-sm) - 3px)',
                 paddingRight: '8px',
                 paddingTop: '6px',
                 paddingBottom: '6px',
@@ -235,7 +292,7 @@ export default function Nav({ onNavigate }: NavProps) {
                 color: isActive ? '#8a5a00' : 'var(--mantine-color-gray-8)',
                 fontWeight: isActive ? 750 : 560,
                 lineHeight: 1.2,
-                fontSize: '0.8rem',
+                fontSize: depth ? '0.76rem' : '0.8rem',
               },
               section: {
                 display: 'flex',
@@ -245,9 +302,9 @@ export default function Nav({ onNavigate }: NavProps) {
             leftSection={
               <Box
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 11,
+                  width: depth ? 24 : 28,
+                  height: depth ? 24 : 28,
+                  borderRadius: depth ? 9 : 11,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -260,7 +317,7 @@ export default function Nav({ onNavigate }: NavProps) {
                   border: isActive ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
                 }}
               >
-                <Icon size={18} stroke={1.9} />
+                <Icon size={depth ? 15 : 18} stroke={1.9} />
               </Box>
             }
             rightSection={
@@ -278,9 +335,11 @@ export default function Nav({ onNavigate }: NavProps) {
             }
           />
           <Collapse in={isExpanded}>
-            <Stack gap={0} pl={18}>
-              {link.children?.map(renderNavItem)}
-            </Stack>
+            <Box ml={22} pl={8} style={{ borderLeft: '1px solid var(--mantine-color-gray-3)' }}>
+              <Stack gap={1} py={2}>
+                {link.children?.map((child) => renderNavItem(child, depth + 1))}
+              </Stack>
+            </Box>
           </Collapse>
         </Stack>
       );
@@ -298,7 +357,7 @@ export default function Nav({ onNavigate }: NavProps) {
             borderRadius: 14,
             borderLeft: '3px solid transparent',
             background: 'transparent',
-            paddingLeft: 'calc(var(--mantine-spacing-sm) - 3px)',
+            paddingLeft: depth ? '8px' : 'calc(var(--mantine-spacing-sm) - 3px)',
             paddingRight: '8px',
             paddingTop: '6px',
             paddingBottom: '6px',
@@ -314,7 +373,7 @@ export default function Nav({ onNavigate }: NavProps) {
             color: isActive ? '#8a5a00' : 'var(--mantine-color-gray-8)',
             fontWeight: isActive ? 750 : 560,
             lineHeight: 1.2,
-            fontSize: '0.8rem',
+            fontSize: depth ? '0.76rem' : '0.8rem',
           },
           section: {
             display: 'flex',
@@ -324,9 +383,9 @@ export default function Nav({ onNavigate }: NavProps) {
         leftSection={
           <Box
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 11,
+              width: depth ? 24 : 28,
+              height: depth ? 24 : 28,
+              borderRadius: depth ? 9 : 11,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -339,7 +398,7 @@ export default function Nav({ onNavigate }: NavProps) {
               border: isActive ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
             }}
           >
-            <Icon size={18} stroke={1.9} />
+            <Icon size={depth ? 15 : 18} stroke={1.9} />
           </Box>
         }
         onClick={onNavigate}
@@ -349,7 +408,9 @@ export default function Nav({ onNavigate }: NavProps) {
 
   const renderSection = (section: NavSection) => {
     const isActive = section.links.some(isLinkActive);
-    const isExpanded = openedSections[section.title] ?? isActive;
+    const isExpanded =
+      openedSections[section.title] ??
+      (isActive || defaultExpandedSections.has(section.title));
 
     return (
       <Stack key={section.title} gap={2}>
