@@ -18,7 +18,8 @@ export class NotificationsController {
 
   @Get('reminders/me')
   myReminders(@Req() request: Request & { user: JwtPayload }) {
-    return this.notifications.listReminders(request.user.sub);
+    const hasGlobalInbox = request.user.role === Role.ADMIN || request.user.role === Role.OFFICE;
+    return this.notifications.listReminders(hasGlobalInbox ? undefined : request.user.sub);
   }
 
   @Get('reminders')

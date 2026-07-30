@@ -10,6 +10,8 @@ import {
   UpdateMaintenanceItemDto,
 } from './dto/maintenance.dto';
 
+type MaintenanceScheduleType = 'HOURS' | 'CALENDAR_DAYS';
+
 @Injectable()
 export class MaintenanceService {
   constructor(
@@ -49,8 +51,7 @@ export class MaintenanceService {
 
   async createPlan(payload: CreateMaintenancePlanDto) {
     this.assertSingleSubject(payload.assetId, payload.vehicleId);
-    if (payload.assetId) await this.assertAsset(payload.assetId);
-    if (payload.vehicleId) await this.assertVehicle(payload.vehicleId);
+    const scheduleType = await this.subjectScheduleType(payload.assetId, payload.vehicleId);
 
     return this.prisma.$transaction(async (tx) => {
       const plan = await tx.maintenancePlan.create({
@@ -63,9 +64,7 @@ export class MaintenanceService {
             create: payload.items.map((item) => ({
               name: item.name.trim(),
               instructions: item.instructions?.trim() || null,
-              intervalHours: item.intervalHours,
-              warningHours: item.warningHours ?? 10,
-              baselineHours: item.baselineHours ?? 0,
+              ...this.createScheduleData(item, scheduleType),
               active: item.active ?? true,
             })),
           },
@@ -80,16 +79,14 @@ export class MaintenanceService {
   }
 
   async addItem(planId: string, payload: CreateMaintenanceItemDto) {
-    await this.assertPlan(planId);
+    const scheduleType = await this.planScheduleType(planId);
     return this.prisma.$transaction(async (tx) => {
       const item = await tx.maintenanceItem.create({
         data: {
           planId,
           name: payload.name.trim(),
           instructions: payload.instructions?.trim() || null,
-          intervalHours: payload.intervalHours,
-          warningHours: payload.warningHours ?? 10,
-          baselineHours: payload.baselineHours ?? 0,
+          ...this.createScheduleData(payload, scheduleType),
           active: payload.active ?? true,
         },
       });
@@ -99,16 +96,14 @@ export class MaintenanceService {
   }
 
   async updateItem(itemId: string, payload: UpdateMaintenanceItemDto) {
-    await this.assertItem(itemId);
+    const scheduleType = await this.itemScheduleType(itemId);
     return this.prisma.$transaction(async (tx) => {
       const item = await tx.maintenanceItem.update({
         where: { id: itemId },
         data: {
           name: payload.name?.trim(),
           instructions: payload.instructions === undefined ? undefined : payload.instructions.trim() || null,
-          intervalHours: payload.intervalHours,
-          warningHours: payload.warningHours,
-          baselineHours: payload.baselineHours,
+          ...this.updateScheduleData(payload, scheduleType),
           active: payload.active,
         },
       });
@@ -148,11 +143,12 @@ export class MaintenanceService {
     if (role === Role.OPERATOR) {
       await this.assertHourlyAsset(assetId, true);
     }
-    return this.getSubjectMaintenance('assetId', assetId);
+    const scheduleType = await this.assetScheduleType(assetId);
+    return this.getSubjectMaintenance('assetId', assetId, scheduleType);
   }
 
   getVehicleMaintenance(vehicleId: string) {
-    return this.getSubjectMaintenance('vehicleId', vehicleId);
+    return this.getSubjectMaintenance('vehicleId', vehicleId, 'HOURS');
   }
 
   async recordAssetHours(
@@ -175,9 +171,41 @@ export class MaintenanceService {
 
   async completeItem(itemId: string, payload: CompleteMaintenanceDto, userId: string) {
     const item = await this.prisma.maintenanceItem.findUnique({
-      where: { id: itemId }, include: { plan: { select: { assetId: true, vehicleId: true } } },
+      where: { id: itemId },
+      include: {
+        plan: {
+          select: {
+            assetId: true,
+            vehicleId: true,
+            asset: { select: { sku: { select: { chargeType: true } } } },
+          },
+        },
+      },
     });
     if (!item) throw new NotFoundException('Maintenance item not found');
+    const scheduleType: MaintenanceScheduleType = item.plan.asset?.sku.chargeType === ChargeType.DAY
+      ? 'CALENDAR_DAYS'
+      : 'HOURS';
+    const completedAt = payload.completedAt ? new Date(payload.completedAt) : new Date();
+    const latestCompletion = await this.prisma.maintenanceCompletion.findFirst({
+      where: { itemId }, orderBy: { completedAt: 'desc' },
+    });
+
+    if (scheduleType === 'CALENDAR_DAYS') {
+      if (latestCompletion && completedAt < latestCompletion.completedAt) {
+        throw new BadRequestException('Completion date cannot be earlier than the previous completion');
+      }
+      return this.prisma.maintenanceCompletion.create({
+        data: {
+          itemId,
+          completedAtHours: null,
+          completedAt,
+          notes: payload.notes?.trim() || null,
+          completedByUserId: userId,
+        },
+      });
+    }
+
     const currentHours = item.plan.assetId
       ? Number((await this.prisma.asset.findUniqueOrThrow({
           where: { id: item.plan.assetId }, select: { hourMeter: true },
@@ -185,27 +213,33 @@ export class MaintenanceService {
       : Number((await this.prisma.vehicleHourReading.findFirst({
           where: { vehicleId: item.plan.vehicleId! }, orderBy: { hours: 'desc' },
         }))?.hours ?? 0);
-    const latestCompletion = await this.prisma.maintenanceCompletion.findFirst({
-      where: { itemId }, orderBy: { completedAtHours: 'desc' },
-    });
     const completedAtHours = payload.completedAtHours ?? currentHours;
     if (completedAtHours > currentHours) throw new BadRequestException('Completion hours cannot exceed current hours');
-    if (latestCompletion && completedAtHours < Number(latestCompletion.completedAtHours)) {
+    if (
+      latestCompletion?.completedAtHours != null
+      && completedAtHours < Number(latestCompletion.completedAtHours)
+    ) {
       throw new BadRequestException('Completion hours cannot be lower than the previous completion');
     }
     return this.prisma.maintenanceCompletion.create({
       data: {
         itemId, completedAtHours,
-        completedAt: payload.completedAt ? new Date(payload.completedAt) : new Date(),
+        completedAt,
         notes: payload.notes?.trim() || null, completedByUserId: userId,
       },
     });
   }
 
-  private async getSubjectMaintenance(subjectField: 'assetId' | 'vehicleId', subjectId: string) {
+  private async getSubjectMaintenance(
+    subjectField: 'assetId' | 'vehicleId',
+    subjectId: string,
+    scheduleType: MaintenanceScheduleType,
+  ) {
     if (subjectField === 'assetId') await this.assertAsset(subjectId);
     else await this.assertVehicle(subjectId);
-    const readings = subjectField === 'assetId'
+    const readings = scheduleType === 'CALENDAR_DAYS'
+      ? []
+      : subjectField === 'assetId'
       ? await this.prisma.assetHourReading.findMany({
         where: { assetId: subjectId },
         orderBy: { recordedAt: 'desc' },
@@ -232,7 +266,9 @@ export class MaintenanceService {
           },
         },
       });
-    const currentHours = subjectField === 'assetId'
+    const currentHours = scheduleType === 'CALENDAR_DAYS'
+      ? null
+      : subjectField === 'assetId'
       ? Number((await this.prisma.asset.findUniqueOrThrow({ where: { id: subjectId }, select: { hourMeter: true } })).hourMeter)
       : readings.length
         ? Number(readings.reduce((max, reading) => Number(reading.hours) > Number(max.hours) ? reading : max).hours)
@@ -246,6 +282,7 @@ export class MaintenanceService {
     });
     const topicByItem = new Map(topics.map((topic) => [topic.entityId, topic]));
     return {
+      scheduleType,
       currentHours,
       readings,
       plans: plans.map((plan) => ({
@@ -310,6 +347,96 @@ export class MaintenanceService {
 
   private async assertAsset(id: string) {
     if (!await this.prisma.asset.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('Asset not found');
+  }
+
+  private async assetScheduleType(assetId: string): Promise<MaintenanceScheduleType> {
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      select: { sku: { select: { chargeType: true } } },
+    });
+    if (!asset) throw new NotFoundException('Asset not found');
+    return asset.sku.chargeType === ChargeType.HOUR ? 'HOURS' : 'CALENDAR_DAYS';
+  }
+
+  private async subjectScheduleType(assetId?: string, vehicleId?: string): Promise<MaintenanceScheduleType> {
+    if (assetId) return this.assetScheduleType(assetId);
+    await this.assertVehicle(vehicleId!);
+    return 'HOURS';
+  }
+
+  private async planScheduleType(planId: string): Promise<MaintenanceScheduleType> {
+    const plan = await this.prisma.maintenancePlan.findUnique({
+      where: { id: planId },
+      select: {
+        vehicleId: true,
+        asset: { select: { sku: { select: { chargeType: true } } } },
+      },
+    });
+    if (!plan) throw new NotFoundException('Maintenance plan not found');
+    return plan.asset?.sku.chargeType === ChargeType.DAY ? 'CALENDAR_DAYS' : 'HOURS';
+  }
+
+  private async itemScheduleType(itemId: string): Promise<MaintenanceScheduleType> {
+    const item = await this.prisma.maintenanceItem.findUnique({
+      where: { id: itemId },
+      select: {
+        plan: {
+          select: {
+            asset: { select: { sku: { select: { chargeType: true } } } },
+          },
+        },
+      },
+    });
+    if (!item) throw new NotFoundException('Maintenance item not found');
+    return item.plan.asset?.sku.chargeType === ChargeType.DAY ? 'CALENDAR_DAYS' : 'HOURS';
+  }
+
+  private createScheduleData(payload: CreateMaintenanceItemDto, scheduleType: MaintenanceScheduleType) {
+    if (scheduleType === 'CALENDAR_DAYS') {
+      if (payload.intervalDays == null) {
+        throw new BadRequestException('intervalDays is required for calendar-day maintenance');
+      }
+      return {
+        intervalHours: null,
+        warningHours: null,
+        baselineHours: null,
+        intervalDays: payload.intervalDays,
+        warningDays: payload.warningDays ?? 7,
+        baselineDate: payload.baselineDate ? new Date(payload.baselineDate) : new Date(),
+      };
+    }
+    if (payload.intervalHours == null) {
+      throw new BadRequestException('intervalHours is required for hour-meter maintenance');
+    }
+    return {
+      intervalHours: payload.intervalHours,
+      warningHours: payload.warningHours ?? 10,
+      baselineHours: payload.baselineHours ?? 0,
+      intervalDays: null,
+      warningDays: null,
+      baselineDate: null,
+    };
+  }
+
+  private updateScheduleData(payload: UpdateMaintenanceItemDto, scheduleType: MaintenanceScheduleType) {
+    if (scheduleType === 'CALENDAR_DAYS') {
+      return {
+        intervalDays: payload.intervalDays,
+        warningDays: payload.warningDays,
+        baselineDate: payload.baselineDate === undefined ? undefined : new Date(payload.baselineDate),
+        intervalHours: null,
+        warningHours: null,
+        baselineHours: null,
+      };
+    }
+    return {
+      intervalHours: payload.intervalHours,
+      warningHours: payload.warningHours,
+      baselineHours: payload.baselineHours,
+      intervalDays: null,
+      warningDays: null,
+      baselineDate: null,
+    };
   }
 
   private async assertHourlyAsset(id: string, requireOwnWarehouse: boolean) {

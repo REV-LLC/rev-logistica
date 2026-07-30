@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Alert,
   Badge,
@@ -81,6 +82,10 @@ const emptyForm: WorksiteForm = {
   active: true,
   worksiteActive: true,
 };
+
+function getInitialStatusFilter(value: string | null) {
+  return value === 'active' || value === 'inactive' ? value : null;
+}
 
 type DepartmentOption = {
   value: string;
@@ -206,6 +211,7 @@ function WorksiteDetails({
 }
 
 export default function WorksitesPage() {
+  const searchParams = useSearchParams();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [worksites, setWorksites] = useState<WorksiteRow[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -224,9 +230,43 @@ export default function WorksitesPage() {
   const [cities, setCities] = useState<CityOption[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [locationsError, setLocationsError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [customerFilter, setCustomerFilter] = useState<string | null>(
+    () => searchParams.get('customerId'),
+  );
+  const [statusFilter, setStatusFilter] = useState<string | null>(
+    () => getInitialStatusFilter(searchParams.get('status')),
+  );
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(window.location.search);
+
+    if (search.trim()) {
+      nextParams.set('q', search);
+    } else {
+      nextParams.delete('q');
+    }
+
+    if (customerFilter) {
+      nextParams.set('customerId', customerFilter);
+    } else {
+      nextParams.delete('customerId');
+    }
+
+    if (statusFilter) {
+      nextParams.set('status', statusFilter);
+    } else {
+      nextParams.delete('status');
+    }
+
+    const query = nextParams.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  }, [customerFilter, search, statusFilter]);
 
   const loadData = async () => {
     setLoading(true);

@@ -1,49 +1,32 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Menu } from '@mantine/core';
 import { IconCheck, IconChevronDown, IconLayoutGrid, IconList } from '@tabler/icons-react';
 
 export type EmployeeViewMode = 'list' | 'cards';
 
-const EMPLOYEE_VIEW_STORAGE_KEY = 'rev-logistica:employees:view';
-
 const employeeViewPath: Record<EmployeeViewMode, string> = {
-  list: '/employees',
+  list: '/employees?view=list',
   cards: '/employees/empleado-card',
 };
 
-function isEmployeeViewMode(value: string | null): value is EmployeeViewMode {
-  return value === 'list' || value === 'cards';
-}
-
-export function setPreferredEmployeeView(view: EmployeeViewMode) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(EMPLOYEE_VIEW_STORAGE_KEY, view);
-}
-
 export function usePreferredEmployeeView(currentView: EmployeeViewMode) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const preferredView = window.localStorage.getItem(EMPLOYEE_VIEW_STORAGE_KEY);
-    if (isEmployeeViewMode(preferredView) && preferredView !== currentView) {
-      router.replace(employeeViewPath[preferredView]);
-      return;
+    if (currentView === 'list' && searchParams.get('view') !== 'list') {
+      router.replace(employeeViewPath.cards);
     }
-
-    if (!preferredView) {
-      setPreferredEmployeeView(currentView);
-    }
-  }, [currentView, router]);
+  }, [currentView, router, searchParams]);
 }
 
 export default function EmployeeViewMenu({ currentView }: { currentView: EmployeeViewMode }) {
   const router = useRouter();
 
   const selectView = (view: EmployeeViewMode) => {
-    setPreferredEmployeeView(view);
     if (view !== currentView) {
       router.push(employeeViewPath[view]);
     }

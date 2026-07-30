@@ -17,6 +17,7 @@ import {
 import {
   IconBriefcase2,
   IconCar,
+  IconPencil,
   IconPlus,
   IconUserCheck,
   IconUsers,
@@ -28,7 +29,9 @@ import EmployeeCard, {
   type EmployeeCardRecord,
 } from '@/components/EmployeeCard';
 import EmployeeFormModal, {
+  appRoleLabelByValue,
   emptyEmployeeForm,
+  toUppercaseInput,
   type EmployeeForm,
   type VehicleOption,
 } from '@/components/EmployeeFormModal';
@@ -74,9 +77,11 @@ function fileLabel(file: EmployeeAttachedFile) {
 
 function EmployeeCardDetails({
   employee,
+  onEdit,
   onPhotoPreview,
 }: {
   employee: EmployeeCardRecord;
+  onEdit: (employee: EmployeeCardRecord) => void;
   onPhotoPreview: (employee: EmployeeCardRecord) => void;
 }) {
   return (
@@ -115,7 +120,9 @@ function EmployeeCardDetails({
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Acceso a la app</Text>
           <Text size="sm" mt={6}>{employee.user?.email ?? 'Sin acceso creado'}</Text>
           {employee.user ? (
-            <Text size="xs" c="dimmed">{employee.user.role} · {employee.user.active ? 'Activo' : 'Inactivo'}</Text>
+            <Text size="xs" c="dimmed">
+              {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
+            </Text>
           ) : null}
         </Paper>
         <Paper withBorder radius="md" p="sm">
@@ -127,6 +134,16 @@ function EmployeeCardDetails({
           </Text>
         </Paper>
       </SimpleGrid>
+
+      <Group justify="flex-end">
+        <Button
+          variant="light"
+          leftSection={<IconPencil size={16} />}
+          onClick={() => onEdit(employee)}
+        >
+          Editar empleado
+        </Button>
+      </Group>
     </Stack>
   );
 }
@@ -140,6 +157,7 @@ export default function EmployeeCardsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeCardRecord | null>(null);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
   const [detailsEmployee, setDetailsEmployee] = useState<EmployeeCardRecord | null>(null);
@@ -189,12 +207,41 @@ export default function EmployeeCardsPage() {
 
   const openCreate = () => {
     setError(null);
+    setEditingEmployee(null);
     setForm(emptyEmployeeForm);
+    setModalOpen(true);
+  };
+
+  const openEdit = (employee: EmployeeCardRecord) => {
+    setError(null);
+    setEditingEmployee(employee);
+    setForm({
+      name: toUppercaseInput(employee.name),
+      lastName: toUppercaseInput(employee.lastName),
+      role: employee.role,
+      phone: employee.phone ?? '',
+      email: employee.email ?? '',
+      documentId: toUppercaseInput(employee.documentId),
+      active: employee.active,
+      vehicleIds: employee.vehicles.map((vehicle) => vehicle.id),
+      loginEnabled: Boolean(employee.user),
+      loginIdentifier: employee.user?.email ?? '',
+      loginPassword: '',
+      loginRole:
+        employee.user?.role ??
+        (['HEAVY_MACHINERY_OPERATOR', 'MACHINIST', 'MECHANIC'].includes(employee.role)
+          ? 'OPERATOR'
+          : employee.role === 'DRIVER'
+            ? 'DRIVER'
+            : 'OFFICE'),
+      loginActive: employee.user?.active ?? true,
+    });
     setModalOpen(true);
   };
 
   const closeFormModal = () => {
     setModalOpen(false);
+    setEditingEmployee(null);
     setForm(emptyEmployeeForm);
   };
 
@@ -213,29 +260,54 @@ export default function EmployeeCardsPage() {
       setError('El usuario o correo de acceso es obligatorio');
       return;
     }
-    if (form.loginEnabled && !form.loginPassword.trim()) {
+    if (form.loginEnabled && !editingEmployee?.user && !form.loginPassword.trim()) {
       setError('La contraseña de acceso es obligatoria');
       return;
     }
 
     setSaving(true);
     try {
-      await api('/employees', {
-        method: 'POST',
-        json: {
-          name: form.name.trim().toUpperCase(),
-          lastName: form.lastName.trim().toUpperCase(),
-          role: form.role,
-          phone: form.phone.trim() || undefined,
-          email: form.email.trim() || undefined,
-          documentId: form.documentId.trim().toUpperCase() || undefined,
-          vehicleIds: form.vehicleIds,
-          loginIdentifier: form.loginEnabled ? form.loginIdentifier.trim().toLowerCase() || undefined : undefined,
-          loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
-          loginRole: form.loginEnabled ? form.loginRole : undefined,
-          loginActive: form.loginEnabled ? form.loginActive : undefined,
-        },
-      });
+      const payload = {
+        name: form.name.trim().toUpperCase(),
+        lastName: form.lastName.trim().toUpperCase(),
+        role: form.role,
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        documentId: form.documentId.trim().toUpperCase() || undefined,
+        active: form.active,
+        vehicleIds: form.vehicleIds,
+        loginEnabled: form.loginEnabled,
+        loginIdentifier: form.loginEnabled
+          ? form.loginIdentifier.trim().toLowerCase() || undefined
+          : undefined,
+        loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
+        loginRole: form.loginEnabled ? form.loginRole : undefined,
+        loginActive: form.loginEnabled ? form.loginActive : undefined,
+      };
+
+      if (editingEmployee) {
+        await api(`/employees/${editingEmployee.id}`, {
+          method: 'PATCH',
+          json: payload,
+        });
+      } else {
+        await api('/employees', {
+          method: 'POST',
+          json: {
+            name: payload.name,
+            lastName: payload.lastName,
+            role: payload.role,
+            phone: payload.phone,
+            email: payload.email,
+            documentId: payload.documentId,
+            vehicleIds: payload.vehicleIds,
+            loginIdentifier: payload.loginIdentifier,
+            loginPassword: payload.loginPassword,
+            loginRole: payload.loginRole,
+            loginActive: payload.loginActive,
+          },
+        });
+      }
 
       closeFormModal();
       await loadData();
@@ -295,7 +367,7 @@ export default function EmployeeCardsPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Empleados"
-          description="Boceto de empleados en tarjetas con foto de perfil."
+          description="Administra empleados, accesos y asignaciones de vehículos desde sus tarjetas."
           icon={<IconUsers size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.14)"
@@ -362,7 +434,7 @@ export default function EmployeeCardsPage() {
               </ThemeIcon>
               <Text fw={700}>No hay empleados registrados</Text>
               <Text size="sm" c="dimmed" ta="center">
-                Crea un nuevo empleado desde la vista de tabla.
+                Crea un nuevo empleado para empezar.
               </Text>
             </Stack>
           </Paper>
@@ -377,6 +449,7 @@ export default function EmployeeCardsPage() {
                 onDocuments={openDocuments}
                 onIdentityCard={downloadIdentityCard}
                 onDetails={setDetailsEmployee}
+                onEdit={openEdit}
                 onPhotoPreview={setPhotoEmployee}
                 identityCardLoading={downloadingIdentityEmployeeId === employee.id}
               />
@@ -395,6 +468,10 @@ export default function EmployeeCardsPage() {
         {detailsEmployee ? (
           <EmployeeCardDetails
             employee={detailsEmployee}
+            onEdit={(employee) => {
+              setDetailsEmployee(null);
+              openEdit(employee);
+            }}
             onPhotoPreview={setPhotoEmployee}
           />
         ) : null}
@@ -424,11 +501,12 @@ export default function EmployeeCardsPage() {
 
       <EmployeeFormModal
         opened={modalOpen}
-        mode="create"
+        mode={editingEmployee ? 'edit' : 'create'}
         form={form}
         vehicles={vehicles}
         saving={saving}
         error={modalOpen ? error : null}
+        editingEmployee={editingEmployee}
         onClose={closeFormModal}
         onSave={saveEmployee}
         onChange={setForm}

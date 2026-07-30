@@ -1,7 +1,15 @@
 'use client';
 
 import { ActionIcon, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { IconCar, IconEye, IconFileDescription, IconIdBadge2, IconMail, IconPhone } from '@tabler/icons-react';
+import {
+  IconCar,
+  IconEye,
+  IconFileDescription,
+  IconIdBadge2,
+  IconMail,
+  IconPencil,
+  IconPhone,
+} from '@tabler/icons-react';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 
 export type EmployeeCardVehicle = {
@@ -83,6 +91,7 @@ export default function EmployeeCard({
   onDocuments,
   onIdentityCard,
   onDetails,
+  onEdit,
   onPhotoPreview,
   identityCardLoading = false,
 }: {
@@ -90,6 +99,7 @@ export default function EmployeeCard({
   onDocuments: (employee: EmployeeCardRecord) => void;
   onIdentityCard: (employee: EmployeeCardRecord) => void;
   onDetails: (employee: EmployeeCardRecord) => void;
+  onEdit: (employee: EmployeeCardRecord) => void;
   onPhotoPreview: (employee: EmployeeCardRecord) => void;
   identityCardLoading?: boolean;
 }) {
@@ -169,6 +179,15 @@ export default function EmployeeCard({
               <IconFileDescription style={iconSize14Style} />
             </ActionIcon>
           </Tooltip>
+          <ActionIcon
+            color="blue"
+            variant="light"
+            title="Editar empleado"
+            aria-label={`Editar ${getEmployeeCardFullName(employee)}`}
+            onClick={() => onEdit(employee)}
+          >
+            <IconPencil style={iconSize14Style} />
+          </ActionIcon>
           <Tooltip label="Ver información completa">
             <ActionIcon
               color="blue"
