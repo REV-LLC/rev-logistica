@@ -11,6 +11,10 @@ import {
   SkuControlType,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import {
+  normalizeMeasurementLabel,
+  normalizeSkuReference,
+} from '../src/inventory/catalog-reference-normalization';
 import { loadJsonFile } from './load-json-file';
 
 type JsonRecord = Record<string, any>;
@@ -20,6 +24,7 @@ type CatalogDescriptor = {
   skuName: string;
   controlType: SkuControlType;
   candidateSkuId?: string | null;
+  candidateSkuNames: string[];
   size?: string | null;
   lengthMeters?: number | null;
   closedLengthMeters?: number | null;
@@ -127,11 +132,13 @@ function descriptorFrom(
     override.family ??
     mapping.normalizedFamily ??
     mapping.finalSkuName;
-  const skuName =
+  const rawSkuName =
     override.finalSkuName ?? override.skuName ?? mapping.finalSkuName;
-  if (!family || !skuName) {
+  if (!family || !rawSkuName) {
     throw new Error(`Mapeo ${mapping.articleCode} sin familia o SKU final.`);
   }
+  const rawSize = override.normalizedSize ?? mapping.normalizedSize ?? null;
+  const skuName = normalizeSkuReference(rawSkuName, rawSize);
   const overrideChangesSku =
     (override.finalSkuName || override.skuName) &&
     normalize(override.finalSkuName ?? override.skuName) !==
@@ -148,7 +155,22 @@ function descriptorFrom(
     candidateSkuId:
       override.candidateSkuId ??
       (overrideChangesSku ? null : (mapping.candidateSkuId ?? null)),
-    size: override.normalizedSize ?? mapping.normalizedSize ?? null,
+    candidateSkuNames: [
+      rawSkuName,
+      ...(override.legacySkuNames ?? []),
+      ...(mapping.legacySkuNames ?? []),
+    ].filter(
+      (name, index, names) =>
+        name &&
+        name.toLocaleUpperCase('es-CO') !==
+          skuName.toLocaleUpperCase('es-CO') &&
+        names.findIndex(
+          (candidate) =>
+            candidate?.toLocaleUpperCase('es-CO') ===
+            name.toLocaleUpperCase('es-CO'),
+        ) === index,
+    ),
+    size: normalizeMeasurementLabel(rawSize),
     lengthMeters:
       override.normalizedLengthMeters ?? mapping.normalizedLengthMeters ?? null,
     closedLengthMeters:
@@ -168,10 +190,38 @@ function descriptorFrom(
 
 function catalogDescriptors(mappings: JsonRecord[]) {
   const descriptors = new Map<string, CatalogDescriptor>();
-  const add = (descriptor: CatalogDescriptor) =>
-    descriptors.set(descriptorKey(descriptor), descriptor);
+  const add = (descriptor: CatalogDescriptor) => {
+    const key = descriptorKey(descriptor);
+    const current = descriptors.get(key);
+    descriptors.set(
+      key,
+      current
+        ? {
+            ...descriptor,
+            candidateSkuNames: [
+              ...new Set([
+                ...current.candidateSkuNames,
+                ...descriptor.candidateSkuNames,
+              ]),
+            ],
+          }
+        : descriptor,
+    );
+  };
+  const mappingPriority = (mapping: JsonRecord) =>
+    mapping.appearsInWarehouse
+      ? 3
+      : mapping.appearsOnSite
+        ? 2
+        : mapping.appearsInSupplierInventory
+          ? 1
+          : 0;
 
-  for (const mapping of mappings.filter(isImportable)) {
+  // Supplier-only references are considered first. When an equivalent
+  // reference exists in our inventory, its descriptor and existing SKU win.
+  for (const mapping of mappings
+    .filter(isImportable)
+    .sort((a, b) => mappingPriority(a) - mappingPriority(b))) {
     const physicalTargets = mapping.physicalAssetTargets ?? [];
     const resolvedAssets = mapping.resolvedAssets ?? [];
     if (!physicalTargets.length && !resolvedAssets.length) {
@@ -189,12 +239,14 @@ function catalogDescriptors(mappings: JsonRecord[]) {
   }
 
   for (const addition of assetRules.manualInventoryAdditions as JsonRecord[]) {
+    const size = normalizeMeasurementLabel(addition.size ?? null);
     add({
       family: addition.family,
       subfamily: addition.subfamily ?? null,
-      skuName: addition.skuName,
+      skuName: normalizeSkuReference(addition.skuName, size),
       controlType: SkuControlType.SERIAL,
-      size: addition.size ?? null,
+      candidateSkuNames: [],
+      size,
       lengthMeters: addition.lengthMeters ?? null,
     });
   }
@@ -507,6 +559,18 @@ async function main() {
               },
               select: { id: true },
             });
+          }
+          if (!sku) {
+            for (const candidateName of descriptor.candidateSkuNames) {
+              sku = await tx.sku.findFirst({
+                where: {
+                  assetFamilyId: family.id,
+                  name: { equals: candidateName, mode: 'insensitive' },
+                },
+                select: { id: true },
+              });
+              if (sku) break;
+            }
           }
           const data = {
             name: descriptor.skuName,
