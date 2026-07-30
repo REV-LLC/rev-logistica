@@ -98,12 +98,12 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: '/inventory/warehouse',
+        href: '/inventory/warehouse?scope=allied',
         label: 'Bodegas y stock',
         icon: IconBuildingWarehouse,
         roles: ['ADMIN', 'OFFICE'],
         children: [
-          { href: '/inventory/warehouse', label: 'Bodegas proveedoras', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'], exact: true },
+          { href: '/inventory/warehouse?scope=allied', label: 'Bodegas proveedoras', icon: IconBuildingWarehouse, roles: ['ADMIN', 'OFFICE'], exact: true },
           { href: '/inventory/ledger', label: 'Movimientos', icon: IconArrowsShuffle, roles: ['ADMIN', 'OFFICE'] },
           {
             href: '/inventory/bulk-adjustments',
@@ -173,7 +173,7 @@ const toolLinks: NavLinkItem[] = [
 const prodDisabledRoutes = ['/transport/cost', '/billing/pre-invoice'];
 const isProduction = process.env.NODE_ENV === 'production';
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION;
-const mostUsedLinks = ['/transport/requests', '/inventory/warehouse', '/inventory/ledger'];
+const mostUsedLinks = ['/transport/requests', '/inventory/warehouse?scope=allied', '/inventory/ledger'];
 const defaultExpandedSections = new Set(['Operación', 'Inventario', 'Administración']);
 
 type NavProps = {
