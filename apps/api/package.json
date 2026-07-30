@@ -13,6 +13,7 @@
     "import:warehouses": "ts-node scripts/import-warehouses.ts",
     "import:worksites": "ts-node scripts/import-worksites.ts",
     "cleanup:legal-names": "ts-node scripts/cleanup-legal-names.ts",
+    "consolidate:provider-gatos": "ts-node scripts/consolidate-provider-gatos.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
