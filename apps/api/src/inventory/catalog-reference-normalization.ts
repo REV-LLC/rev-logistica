@@ -5,11 +5,7 @@ const MEASURE_WITH_UNIT =
 const INLINE_MEASURE_WITH_UNIT = /(\d+(?:[.,]\d+)?)\s*(CM|MTS?|METROS?|M)\b/gi;
 
 function formatDecimal(value: number) {
-  return value
-    .toFixed(2)
-    .replace(/0+$/, '')
-    .replace(/\.$/, '')
-    .replace('.', ',');
+  return value.toFixed(2);
 }
 
 function formatMeterValue(rawValue: string, rawUnit: string) {

@@ -194,8 +194,7 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'GANCHO DE SEGURIDAD',
 ];
 
-const formatMeasure = (value: number) =>
-  value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+const formatMeasure = (value: number) => value.toFixed(2);
 const formatMeterMeasure = (value: string) => {
   const parsed = Number(value.trim().replace(/M(?:T|TS)?$/i, '').replace(',', '.'));
   return Number.isFinite(parsed) ? `${formatMeasure(parsed)} M` : value.trim().toUpperCase();
