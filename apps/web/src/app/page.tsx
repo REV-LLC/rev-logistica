@@ -203,6 +203,7 @@ export default function HomePage() {
 
   const currentRole = getCurrentUserRole();
   const session = getCurrentUserSession();
+  const hasGlobalAlerts = currentRole === 'ADMIN' || currentRole === 'OFFICE';
 
   useEffect(() => {
     let mounted = true;
@@ -493,15 +494,21 @@ export default function HomePage() {
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" wrap="wrap">
                   <div>
-                    <Text fw={700}>Mis notificaciones</Text>
-                    <Text size="sm" c="dimmed">Solo se muestran alertas asignadas al usuario de esta sesión.</Text>
+                    <Text fw={700}>{hasGlobalAlerts ? 'Alertas generales' : 'Mis notificaciones'}</Text>
+                    <Text size="sm" c="dimmed">
+                      {hasGlobalAlerts
+                        ? 'Incluye todas las alertas operativas, aunque no tengan un usuario asignado.'
+                        : 'Solo se muestran alertas asignadas al usuario de esta sesión.'}
+                    </Text>
                   </div>
                   <Badge color={dashboardMetrics.overdueNotifications > 0 ? 'red' : 'yellow'} variant="light">
                     {dashboardMetrics.overdueNotifications + dashboardMetrics.dueNotifications} requieren atención
                   </Badge>
                 </Group>
                 {notifications.length === 0 ? (
-                  <Text size="sm" c="dimmed">No tienes alertas asignadas.</Text>
+                  <Text size="sm" c="dimmed">
+                    {hasGlobalAlerts ? 'No hay alertas operativas.' : 'No tienes alertas asignadas.'}
+                  </Text>
                 ) : (
                   <Stack gap="xs">
                     {notifications.map((reminder) => (

@@ -55,6 +55,43 @@ describe('NotificationsService', () => {
     });
   });
 
+  it('returns unassigned topics in the global inbox', async () => {
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const topicFindMany = jest.fn().mockResolvedValue([{
+      id: 'topic-global',
+      entityType: 'VEHICLE',
+      entityId: 'vehicle-global',
+      eventType: 'SOAT_EXPIRY',
+      recipients: [],
+    }]);
+    const prisma = {
+      notificationTopic: { findMany: topicFindMany },
+      vehicle: {
+        findMany: jest.fn().mockResolvedValue([{
+          id: 'vehicle-global',
+          plate: 'GLOBAL1',
+          active: true,
+          soatVigencia: tomorrow,
+        }]),
+      },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new NotificationsService(prisma as any, {} as any);
+
+    const reminders = await service.listReminders();
+
+    expect(topicFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { active: true },
+    }));
+    expect(reminders[0]).toMatchObject({
+      topicId: 'topic-global',
+      unit: 'DAYS',
+      entity: { id: 'vehicle-global', type: 'VEHICLE', label: 'GLOBAL1' },
+      recipients: [],
+    });
+  });
+
   it('uses the same personal inbox for vehicle maintenance by hours', async () => {
     const topic = {
       id: 'topic-maintenance', entityType: 'MAINTENANCE_ITEM', entityId: 'item-1', eventType: 'MAINTENANCE_DUE',
@@ -85,6 +122,50 @@ describe('NotificationsService', () => {
       topicId: 'topic-maintenance', status: 'OVERDUE', unit: 'HOURS',
       currentHours: 255, dueHours: 250, remainingHours: -5,
       entity: { id: 'vehicle-1', type: 'VEHICLE', label: 'ABC123' },
+    });
+  });
+
+  it('calculates daily asset maintenance from calendar dates', async () => {
+    const baselineDate = new Date();
+    baselineDate.setUTCHours(0, 0, 0, 0);
+    baselineDate.setUTCDate(baselineDate.getUTCDate() - 25);
+    const topic = {
+      id: 'topic-calendar', entityType: 'MAINTENANCE_ITEM', entityId: 'item-day', eventType: 'MAINTENANCE_DUE',
+      recipients: [{
+        userId: 'user-1', emailEnabled: true, smsEnabled: false,
+        user: { email: 'ana@example.com', employee: { name: 'Ana', lastName: 'Ruiz', phone: null } },
+      }],
+    };
+    const item = {
+      id: 'item-day', planId: 'plan-day', name: 'INSPECCIÓN GENERAL', instructions: null,
+      intervalHours: null, warningHours: null, baselineHours: null,
+      intervalDays: 30, warningDays: 7, baselineDate, createdAt: baselineDate,
+      completions: [],
+      plan: {
+        name: 'CALENDARIO', vehicle: null,
+        asset: {
+          id: 'asset-1', publicCode: 'EQ-001', hourMeter: 0,
+          serialOrEngine: 'SERIE-1', description: 'Equipo diario',
+          sku: { chargeType: 'DAY' },
+        },
+      },
+    };
+    const prisma = {
+      notificationTopic: { findMany: jest.fn().mockResolvedValue([topic]) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([]) },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([item]) },
+    };
+    const service = new NotificationsService(prisma as any, {} as any);
+
+    const reminders = await service.listReminders('user-1');
+
+    expect(reminders[0]).toMatchObject({
+      topicId: 'topic-calendar',
+      status: 'DUE',
+      unit: 'DAYS',
+      intervalDays: 30,
+      remainingDays: 5,
+      entity: { id: 'asset-1', type: 'ASSET', label: 'EQ-001' },
     });
   });
 });

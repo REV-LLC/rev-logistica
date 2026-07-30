@@ -1371,6 +1371,16 @@ export class InventoryService {
       },
       _sum: { quantity: true },
     });
+    const bulkWorksiteRows = await this.prisma.stockLedger.groupBy({
+      by: ['skuId', 'ownerWarehouseId', 'customerWorksiteId', 'movementType'],
+      where: {
+        ownerWarehouseId: warehouseId,
+        customerWorksiteId: { not: null },
+        movementType: { in: [MovementType.ON_SITE, MovementType.IN] },
+        skuId: { not: null },
+      },
+      _sum: { quantity: true },
+    });
 
     const serialRows = await this.prisma.stockLedger.groupBy({
       by: ['assetId'],
@@ -1418,6 +1428,75 @@ export class InventoryService {
       bulkBySkuAndOwner.set(key, { skuId, ownerWarehouseId, quantity: -quantity });
     });
     const bulkBase = Array.from(bulkBySkuAndOwner.values());
+
+    const worksiteQuantityBySkuAndOwner = new Map<string, Map<string, number>>();
+    bulkWorksiteRows.forEach((row) => {
+      if (!row.skuId || !row.customerWorksiteId) return;
+      const skuId = row.skuId.toLowerCase();
+      const ownerWarehouseId = (row.ownerWarehouseId ?? warehouseId).toLowerCase();
+      const key = `${skuId}::${ownerWarehouseId}`;
+      const locations = worksiteQuantityBySkuAndOwner.get(key) ?? new Map<string, number>();
+      const signedQuantity = Number(row._sum.quantity ?? 0)
+        * (row.movementType === MovementType.ON_SITE ? 1 : -1);
+      locations.set(
+        row.customerWorksiteId,
+        (locations.get(row.customerWorksiteId) ?? 0) + signedQuantity,
+      );
+      worksiteQuantityBySkuAndOwner.set(key, locations);
+    });
+
+    const customerWorksiteIds = [
+      ...new Set(
+        bulkWorksiteRows
+          .map((row) => row.customerWorksiteId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const customerWorksites = customerWorksiteIds.length
+      ? await this.prisma.customerWorksite.findMany({
+          where: { id: { in: customerWorksiteIds } },
+          select: {
+            id: true,
+            alias: true,
+            customer: { select: { id: true, name: true } },
+            worksite: { select: { id: true, name: true } },
+          },
+        })
+      : [];
+    const customerWorksiteById = new Map(
+      customerWorksites.map((customerWorksite) => [customerWorksite.id, customerWorksite]),
+    );
+    const worksiteLocationsBySkuAndOwner = new Map<
+      string,
+      Array<{
+        customerWorksiteId: string;
+        worksiteId: string | null;
+        worksiteName: string;
+        customerId: string | null;
+        customerName: string | null;
+        quantity: number;
+      }>
+    >();
+    worksiteQuantityBySkuAndOwner.forEach((locations, key) => {
+      const normalizedLocations = [...locations.entries()]
+        .filter(([, quantity]) => quantity > 0)
+        .map(([customerWorksiteId, quantity]) => {
+          const customerWorksite = customerWorksiteById.get(customerWorksiteId);
+          return {
+            customerWorksiteId,
+            worksiteId: customerWorksite?.worksite.id ?? null,
+            worksiteName:
+              customerWorksite?.alias?.trim()
+              || customerWorksite?.worksite.name
+              || 'Obra sin nombre',
+            customerId: customerWorksite?.customer.id ?? null,
+            customerName: customerWorksite?.customer.name ?? null,
+            quantity,
+          };
+        })
+        .sort((a, b) => a.worksiteName.localeCompare(b.worksiteName, 'es'));
+      worksiteLocationsBySkuAndOwner.set(key, normalizedLocations);
+    });
 
     const serialByAsset = new Map<string, number>();
     serialRows.forEach((row) => {
@@ -1525,6 +1604,8 @@ export class InventoryService {
       .filter((row) => skusById.get(row.skuId)?.active !== false)
       .map((row) => {
         const sku = skusById.get(row.skuId);
+        const worksiteLocations =
+          worksiteLocationsBySkuAndOwner.get(`${row.skuId}::${row.ownerWarehouseId}`) ?? [];
 
         return {
           skuId: row.skuId,
@@ -1548,7 +1629,12 @@ export class InventoryService {
           active: sku?.active ?? null,
           createdAt: sku?.createdAt ?? null,
           storageLocation: { warehouseId },
-          quantity: row.quantity,
+          quantity: Math.max(0, row.quantity),
+          worksiteQuantity: worksiteLocations.reduce(
+            (total, location) => total + location.quantity,
+            0,
+          ),
+          worksiteLocations,
         };
       })
       .sort((a, b) => (a.skuName ?? '').localeCompare(b.skuName ?? ''));
