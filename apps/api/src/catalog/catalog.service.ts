@@ -4,6 +4,7 @@ import { UpdateCatalogOptionsDto } from './dto/update-catalog-options.dto';
 
 export const CATALOG_GROUPS = [
   'BULK_FORMWORK_LINES',
+  'BULK_FORMWORK_WIDTHS',
   'BULK_FORMWORK_HEIGHTS',
   'BULK_CERTIFIED_SCAFFOLD_PARTS',
   'BULK_CERTIFIED_SCAFFOLD_MEASURES',

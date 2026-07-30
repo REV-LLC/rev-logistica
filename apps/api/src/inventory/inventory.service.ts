@@ -273,7 +273,18 @@ export class InventoryService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
-        const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+        const assetSubfamily = await this.resolveAssetSubfamily(
+          payload.subfamily,
+          assetFamily.id,
+          tx,
+          payload.sku.id,
+        );
+        const sku = await this.resolveSku(
+          payload.sku,
+          assetFamily.id,
+          tx,
+          assetSubfamily.id,
+        );
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
@@ -292,9 +303,6 @@ export class InventoryService {
       }
 
       const serialOrEngine = payload.asset.serialOrEngine?.trim();
-      if (!serialOrEngine) {
-        throw new BadRequestException('serialOrEngine is required');
-      }
 
       const requestedInternalNumber =
         payload.asset.internalNumber != null ? Number(payload.asset.internalNumber) : null;
@@ -308,7 +316,7 @@ export class InventoryService {
         const existingAsset = await tx.asset.findFirst({
           where: {
             warehouseOwnerId: payload.ownerWarehouseId,
-            sku: { assetFamilyId: assetFamily.id },
+            sku: { assetSubfamilyId: assetSubfamily.id },
             internalNumber: requestedInternalNumber,
           },
           select: { id: true },
@@ -319,9 +327,9 @@ export class InventoryService {
 
         const counter = await tx.assetInternalCounter.findUnique({
           where: {
-            ownerWarehouseId_assetFamilyId: {
+            ownerWarehouseId_assetSubfamilyId: {
               ownerWarehouseId: payload.ownerWarehouseId,
-              assetFamilyId: assetFamily.id,
+              assetSubfamilyId: assetSubfamily.id,
             },
           },
           select: { id: true, nextNumber: true },
@@ -331,7 +339,7 @@ export class InventoryService {
           await tx.assetInternalCounter.create({
             data: {
               ownerWarehouseId: payload.ownerWarehouseId,
-              assetFamilyId: assetFamily.id,
+              assetSubfamilyId: assetSubfamily.id,
               nextNumber: requestedInternalNumber + 1,
             },
           });
@@ -346,14 +354,14 @@ export class InventoryService {
       } else {
         const counter = await tx.assetInternalCounter.upsert({
           where: {
-            ownerWarehouseId_assetFamilyId: {
+            ownerWarehouseId_assetSubfamilyId: {
               ownerWarehouseId: payload.ownerWarehouseId,
-              assetFamilyId: assetFamily.id,
+              assetSubfamilyId: assetSubfamily.id,
             },
           },
           create: {
             ownerWarehouseId: payload.ownerWarehouseId,
-            assetFamilyId: assetFamily.id,
+            assetSubfamilyId: assetSubfamily.id,
             nextNumber: 2,
           },
           update: {
@@ -369,11 +377,12 @@ export class InventoryService {
           skuId: sku.id,
           publicCode: this.buildAssetPublicCode(
             assetFamily.code,
+            assetSubfamily.code,
             payload.ownerWarehouseId,
             internalNumber,
           ),
           internalNumber,
-          serialOrEngine,
+          serialOrEngine: serialOrEngine || null,
           registrationNumber: payload.asset.registrationNumber?.trim().toUpperCase() || null,
           description: payload.asset.description ?? null,
           brand: payload.asset.brand ?? null,
@@ -2274,16 +2283,80 @@ export class InventoryService {
     return String(value).padStart(4, '0');
   }
 
-  private buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
-    return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
+  private buildAssetPublicCode(
+    assetFamilyCode: string,
+    assetSubfamilyCode: string,
+    ownerWarehouseId: string,
+    internalNumber: number,
+  ) {
+    return `${assetFamilyCode}-${assetSubfamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
   }
 
   private buildAssetFamilyCode(value: string) {
     return value
       .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .toUpperCase()
       .replace(/[^A-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
+  }
+
+  private async resolveAssetSubfamily(
+    input: { id?: string; code?: string; name?: string } | undefined,
+    assetFamilyId: string,
+    tx: Prisma.TransactionClient,
+    skuId?: string,
+  ) {
+    if (!input && skuId) {
+      const sku = await tx.sku.findUnique({
+        where: { id: skuId },
+        select: {
+          assetFamilyId: true,
+          assetSubfamily: {
+            select: { id: true, code: true, active: true },
+          },
+        },
+      });
+      if (sku?.assetFamilyId === assetFamilyId && sku.assetSubfamily) {
+        if (!sku.assetSubfamily.active) {
+          throw new BadRequestException('Asset subfamily is archived');
+        }
+        return sku.assetSubfamily;
+      }
+    }
+
+    if (input?.id) {
+      const existing = await tx.assetSubfamily.findUnique({
+        where: { id: input.id },
+        select: { id: true, assetFamilyId: true, code: true, active: true },
+      });
+      if (!existing || existing.assetFamilyId !== assetFamilyId) {
+        throw new BadRequestException('Asset subfamily does not belong to the asset family');
+      }
+      if (!existing.active) {
+        throw new BadRequestException('Asset subfamily is archived');
+      }
+      return existing;
+    }
+
+    const name = input?.name?.trim().toUpperCase() || 'ESTÁNDAR';
+    const code = this.buildAssetFamilyCode(input?.code ?? name);
+    const existing = await tx.assetSubfamily.findUnique({
+      where: { assetFamilyId_code: { assetFamilyId, code } },
+      select: { id: true, assetFamilyId: true, code: true, active: true },
+    });
+    if (existing) {
+      if (!existing.active) {
+        throw new BadRequestException('Asset subfamily is archived');
+      }
+      return existing;
+    }
+
+    return tx.assetSubfamily.create({
+      data: { assetFamilyId, code, name },
+      select: { id: true, assetFamilyId: true, code: true, active: true },
+    });
   }
 
   private async resolveAssetFamily(
@@ -2394,21 +2467,28 @@ export class InventoryService {
       chargeType?: ChargeType;
       minimumChargeHours?: number;
       size?: string;
+      lengthMeters?: number;
+      closedLengthMeters?: number;
+      extendedLengthMeters?: number;
       areaM2?: number;
     },
     assetFamilyId: string,
     tx: Prisma.TransactionClient,
+    assetSubfamilyId?: string | null,
   ) {
     if (input.id) {
       const existing = await tx.sku.findUnique({
         where: { id: input.id },
-        select: { id: true, assetFamilyId: true, active: true },
+        select: { id: true, assetFamilyId: true, assetSubfamilyId: true, active: true },
       });
       if (!existing) {
         throw new NotFoundException('Sku not found');
       }
       if (existing.assetFamilyId !== assetFamilyId) {
         throw new BadRequestException('Sku does not belong to the asset family');
+      }
+      if (assetSubfamilyId && existing.assetSubfamilyId !== assetSubfamilyId) {
+        throw new BadRequestException('Sku does not belong to the asset subfamily');
       }
       if (!existing.active) {
         throw new BadRequestException('Sku is archived');
@@ -2433,23 +2513,31 @@ export class InventoryService {
       create: {
         name,
         assetFamilyId,
+        assetSubfamilyId: assetSubfamilyId ?? null,
         price: input.price ?? null,
         subrentalPrice: input.subrentalPrice ?? null,
         replacementValue: input.replacementValue ?? null,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
         size: this.resolveSkuSize(input.size),
+        lengthMeters: input.lengthMeters ?? null,
+        closedLengthMeters: input.closedLengthMeters ?? null,
+        extendedLengthMeters: input.extendedLengthMeters ?? null,
         areaM2: input.areaM2 ?? null,
         unitWeight: input.unitWeight ?? null,
         active: true,
       },
       update: {
+        assetSubfamilyId: assetSubfamilyId ?? undefined,
         price: input.price ?? undefined,
         subrentalPrice: input.subrentalPrice ?? undefined,
         replacementValue: input.replacementValue ?? undefined,
         chargeType: chargeConfig.chargeType,
         minimumChargeHours: chargeConfig.minimumChargeHours,
         size: this.resolveSkuSize(input.size) ?? undefined,
+        lengthMeters: input.lengthMeters ?? undefined,
+        closedLengthMeters: input.closedLengthMeters ?? undefined,
+        extendedLengthMeters: input.extendedLengthMeters ?? undefined,
         areaM2: input.areaM2 ?? undefined,
         unitWeight: input.unitWeight ?? undefined,
         active: true,
@@ -2578,7 +2666,9 @@ export class InventoryService {
       select: {
         id: true,
         assetFamilyId: true,
+        assetSubfamilyId: true,
         assetFamily: { select: { controlType: true, code: true } },
+        assetSubfamily: { select: { code: true, active: true } },
       },
     });
     const skuById = new Map(skus.map((sku) => [sku.id, sku]));
@@ -2591,8 +2681,11 @@ export class InventoryService {
       if (sku.assetFamily.controlType !== 'SERIAL') {
         throw new BadRequestException(`Sku ${item.skuId} is not SERIAL`);
       }
-      if (!sku.assetFamilyId) {
-        throw new BadRequestException(`Sku ${item.skuId} has no assetFamilyId`);
+      if (!sku.assetSubfamilyId || !sku.assetSubfamily) {
+        throw new BadRequestException(`Sku ${item.skuId} has no asset subfamily`);
+      }
+      if (!sku.assetSubfamily.active) {
+        throw new BadRequestException(`Sku ${item.skuId} has an archived asset subfamily`);
       }
     }
 
@@ -2608,14 +2701,14 @@ export class InventoryService {
             const sku = skuById.get(item.skuId)!;
             const counter = await tx.assetInternalCounter.upsert({
               where: {
-                ownerWarehouseId_assetFamilyId: {
+                ownerWarehouseId_assetSubfamilyId: {
                   ownerWarehouseId: supplierWarehouse.id,
-                  assetFamilyId: sku.assetFamilyId!,
+                  assetSubfamilyId: sku.assetSubfamilyId!,
                 },
               },
               create: {
                 ownerWarehouseId: supplierWarehouse.id,
-                assetFamilyId: sku.assetFamilyId!,
+                assetSubfamilyId: sku.assetSubfamilyId!,
                 nextNumber: 2,
               },
               update: {
@@ -2631,6 +2724,7 @@ export class InventoryService {
                 skuId: item.skuId,
                 publicCode: this.buildAssetPublicCode(
                   sku.assetFamily.code,
+                  sku.assetSubfamily!.code,
                   supplierWarehouse.id,
                   internalNumber,
                 ),
