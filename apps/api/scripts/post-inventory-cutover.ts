@@ -690,9 +690,7 @@ async function main() {
               internalNumber: explicitNumbers[index] ?? null,
               candidateAssetId:
                 target.candidateAssetId ??
-                (targetChangesSku
-                  ? null
-                  : (mapping.candidateAssetId ?? null)),
+                (targetChangesSku ? null : (mapping.candidateAssetId ?? null)),
               candidateSkuId:
                 target.candidateSkuId ??
                 (targetChangesSku ? null : (mapping.candidateSkuId ?? null)),
@@ -1130,23 +1128,30 @@ async function main() {
             customerWorksiteId: true,
             movementType: true,
             quantity: true,
+            createdAt: true,
           },
         });
         const currentPositions = new Map<string, Position>();
+        const currentPositionFirstMovementAt = new Map<string, Date>();
         const addCurrentPosition = (
           position: Omit<Position, 'quantity'>,
           quantity: number,
+          createdAt: Date,
         ) => {
           const key = positionKey(position);
           const current = currentPositions.get(key);
           if (current) current.quantity += quantity;
           else currentPositions.set(key, { ...position, quantity });
+          const firstMovementAt = currentPositionFirstMovementAt.get(key);
+          if (!firstMovementAt || createdAt < firstMovementAt) {
+            currentPositionFirstMovementAt.set(key, createdAt);
+          }
         };
         for (const row of currentRows) {
           const quantity = Number(row.quantity);
 
-          // Mirror the inventory queries: every row with a warehouse contributes
-          // to that warehouse, regardless of the originating worksite.
+          // Mirror the inventory queries: rows received in a warehouse add stock
+          // and every ON_SITE row subtracts stock from the owner's warehouse.
           if (row.warehouseId) {
             addCurrentPosition(
               {
@@ -1157,6 +1162,20 @@ async function main() {
                 customerWorksiteId: null,
               },
               quantity,
+              row.createdAt,
+            );
+          }
+          if (row.movementType === MovementType.ON_SITE) {
+            addCurrentPosition(
+              {
+                skuId: row.skuId,
+                assetId: row.assetId,
+                ownerWarehouseId: row.ownerWarehouseId,
+                warehouseId: row.ownerWarehouseId,
+                customerWorksiteId: null,
+              },
+              -quantity,
+              row.createdAt,
             );
           }
 
@@ -1174,12 +1193,10 @@ async function main() {
                 customerWorksiteId: row.customerWorksiteId,
               },
               quantity,
+              row.createdAt,
             );
           }
-          if (
-            row.customerWorksiteId &&
-            row.movementType === MovementType.IN
-          ) {
+          if (row.customerWorksiteId && row.movementType === MovementType.IN) {
             addCurrentPosition(
               {
                 skuId: row.skuId,
@@ -1189,6 +1206,7 @@ async function main() {
                 customerWorksiteId: row.customerWorksiteId,
               },
               -quantity,
+              row.createdAt,
             );
           }
         }
@@ -1197,13 +1215,58 @@ async function main() {
           ...desiredPositions.keys(),
           ...currentPositions.keys(),
         ]);
-        let ledgerCreated = 0;
+        const postingPositions = new Map<string, Omit<Position, 'quantity'>>();
+        const postingDeltas = new Map<string, number>();
         for (const key of allPositionKeys) {
           const desired = desiredPositions.get(key);
           const current = currentPositions.get(key);
-          const delta = (desired?.quantity ?? 0) - (current?.quantity ?? 0);
-          if (Math.abs(delta) < 0.000001) continue;
           const position = desired ?? current!;
+          postingPositions.set(key, position);
+          postingDeltas.set(
+            key,
+            (desired?.quantity ?? 0) - (current?.quantity ?? 0),
+          );
+        }
+
+        // An ON_SITE posting changes two balances at once: it adds to the site
+        // and subtracts from the owner's warehouse. Include that second effect
+        // when calculating the warehouse adjustment so both ending balances
+        // match the snapshot.
+        for (const [key, delta] of [...postingDeltas]) {
+          const position = postingPositions.get(key)!;
+          if (!position.customerWorksiteId || Math.abs(delta) < 0.000001) {
+            continue;
+          }
+          const warehousePosition = {
+            skuId: position.skuId,
+            assetId: position.assetId,
+            ownerWarehouseId: position.ownerWarehouseId,
+            warehouseId: position.ownerWarehouseId,
+            customerWorksiteId: null,
+          };
+          const warehouseKey = positionKey(warehousePosition);
+          postingPositions.set(warehouseKey, warehousePosition);
+          postingDeltas.set(
+            warehouseKey,
+            (postingDeltas.get(warehouseKey) ?? 0) + delta,
+          );
+        }
+
+        let ledgerCreated = 0;
+        for (const [key, delta] of postingDeltas) {
+          if (Math.abs(delta) < 0.000001) continue;
+          const position = postingPositions.get(key)!;
+          const firstMovementAt = currentPositionFirstMovementAt.get(key);
+          const historicalMovementAt =
+            firstMovementAt && firstMovementAt.getTime() < cutoverDate.getTime()
+              ? firstMovementAt
+              : null;
+          const ledgerCreatedAt =
+            delta > 0 && !position.customerWorksiteId
+              ? new Date((historicalMovementAt ?? cutoverDate).getTime() - 2)
+              : delta > 0 && position.customerWorksiteId && historicalMovementAt
+                ? new Date(historicalMovementAt.getTime() - 1)
+                : cutoverDate;
           await tx.stockLedger.create({
             data: {
               skuId: position.skuId,
@@ -1217,7 +1280,7 @@ async function main() {
               quantity: new Prisma.Decimal(delta),
               refDocumentId: document.id,
               refDocumentType: document.type,
-              createdAt: cutoverDate,
+              createdAt: ledgerCreatedAt,
               createdBy: admin.id,
             },
           });
