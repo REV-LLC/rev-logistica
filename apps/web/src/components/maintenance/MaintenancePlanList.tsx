@@ -20,6 +20,7 @@ import type {
   AppUserOption,
   MaintenanceItem,
   MaintenancePlan,
+  MaintenanceScheduleType,
   NotificationReminder,
 } from '@/lib/maintenance-types';
 
@@ -28,6 +29,7 @@ type Props = {
   users: AppUserOption[];
   reminderByItemId: Map<string, NotificationReminder>;
   canManage: boolean;
+  scheduleType: MaintenanceScheduleType;
   onAddItem: (plan: MaintenancePlan) => void;
   onEditItem: (item: MaintenanceItem) => void;
   onCompleteItem: (item: MaintenanceItem) => void;
@@ -46,6 +48,7 @@ export default function MaintenancePlanList({
   users,
   reminderByItemId,
   canManage,
+  scheduleType,
   onAddItem,
   onEditItem,
   onCompleteItem,
@@ -61,7 +64,9 @@ export default function MaintenancePlanList({
         <Stack align="center" gap={4}>
           <Text fw={700}>Sin planes de mantenimiento</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Crea el primer plan para comenzar a controlar revisiones por horas.
+            {scheduleType === 'HOURS'
+              ? 'Crea el primer plan para comenzar a controlar revisiones por horas.'
+              : 'Crea el primer plan para programar revisiones por días calendario.'}
           </Text>
         </Stack>
       </Paper>
@@ -124,22 +129,46 @@ export default function MaintenancePlanList({
                                 : `${Math.abs(reminder.remainingHours)} h vencidas`}
                             </Badge>
                           ) : null}
+                          {reminder?.remainingDays !== undefined ? (
+                            <Badge color="blue" variant="outline">
+                              {reminder.remainingDays >= 0
+                                ? `${reminder.remainingDays} días restantes`
+                                : `${Math.abs(reminder.remainingDays)} días vencidos`}
+                            </Badge>
+                          ) : null}
                         </Group>
                       </Group>
 
                       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                         <div>
                           <Text size="xs" c="dimmed">Intervalo</Text>
-                          <Text size="sm" fw={700}>{Number(item.intervalHours)} h</Text>
+                          <Text size="sm" fw={700}>
+                            {scheduleType === 'HOURS'
+                              ? `${Number(item.intervalHours)} h`
+                              : `${Number(item.intervalDays)} días calendario`}
+                          </Text>
                         </div>
                         <div>
                           <Text size="xs" c="dimmed">Aviso preventivo</Text>
-                          <Text size="sm" fw={700}>{Number(item.warningHours)} h antes</Text>
+                          <Text size="sm" fw={700}>
+                            {scheduleType === 'HOURS'
+                              ? `${Number(item.warningHours)} h antes`
+                              : `${Number(item.warningDays)} días antes`}
+                          </Text>
                         </div>
                         <div>
                           <Text size="xs" c="dimmed">Próximo vencimiento</Text>
                           <Text size="sm" fw={700}>
-                            {reminder?.dueHours !== undefined ? `${reminder.dueHours} h` : 'Calculando'}
+                            {reminder?.dueHours !== undefined
+                              ? `${reminder.dueHours} h`
+                              : reminder?.dueAt
+                                ? new Intl.DateTimeFormat('es-CO', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  timeZone: 'UTC',
+                                }).format(new Date(reminder.dueAt))
+                                : 'Calculando'}
                           </Text>
                         </div>
                       </SimpleGrid>

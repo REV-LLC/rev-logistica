@@ -3,12 +3,17 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, NumberInput, Stack, Text, TextInput } from '@mantine/core';
 import { api } from '@/lib/api';
-import { apiErrorMessage, type MaintenanceItem } from '@/lib/maintenance-types';
+import {
+  apiErrorMessage,
+  type MaintenanceItem,
+  type MaintenanceScheduleType,
+} from '@/lib/maintenance-types';
 
 type Props = {
   opened: boolean;
   item: MaintenanceItem | null;
   currentHours: number;
+  scheduleType: MaintenanceScheduleType;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 };
@@ -23,6 +28,7 @@ export default function CompleteMaintenanceModal({
   opened,
   item,
   currentHours,
+  scheduleType,
   onClose,
   onSaved,
 }: Props) {
@@ -42,7 +48,7 @@ export default function CompleteMaintenanceModal({
 
   const save = async () => {
     if (!item) return;
-    if (hours !== '' && hours > currentHours) {
+    if (scheduleType === 'HOURS' && hours !== '' && hours > currentHours) {
       setError(`Las horas realizadas no pueden superar ${currentHours}.`);
       return;
     }
@@ -52,7 +58,7 @@ export default function CompleteMaintenanceModal({
       await api(`/maintenance/items/${item.id}/completions`, {
         method: 'POST',
         json: {
-          completedAtHours: hours === '' ? undefined : hours,
+          ...(scheduleType === 'HOURS' && hours !== '' ? { completedAtHours: hours } : {}),
           completedAt: completedAt ? new Date(completedAt).toISOString() : undefined,
           notes: notes.trim() || undefined,
         },
@@ -75,18 +81,22 @@ export default function CompleteMaintenanceModal({
     >
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Si omites la lectura, se utilizará el horómetro actual de {currentHours} h.
+          {scheduleType === 'HOURS'
+            ? `Si omites la lectura, se utilizará el horómetro actual de ${currentHours} h.`
+            : 'La próxima revisión se calculará en días calendario desde esta fecha.'}
         </Text>
         {error ? <Alert color="red" role="alert">{error}</Alert> : null}
-        <NumberInput
-          label="Horas de ejecución"
-          value={hours}
-          onChange={(value) => setHours(typeof value === 'number' ? value : '')}
-          min={0}
-          max={currentHours}
-          decimalScale={2}
-          suffix=" h"
-        />
+        {scheduleType === 'HOURS' ? (
+          <NumberInput
+            label="Horas de ejecución"
+            value={hours}
+            onChange={(value) => setHours(typeof value === 'number' ? value : '')}
+            min={0}
+            max={currentHours}
+            decimalScale={2}
+            suffix=" h"
+          />
+        ) : null}
         <TextInput
           label="Fecha"
           type="datetime-local"

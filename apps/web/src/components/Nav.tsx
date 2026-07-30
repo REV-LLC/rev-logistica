@@ -145,7 +145,12 @@ const sections: NavSection[] = [
         icon: IconUser,
         roles: ['ADMIN', 'OFFICE'],
         children: [
-          { href: '/employees', label: 'Empleados', icon: IconUser, roles: ['ADMIN', 'OFFICE'] },
+          {
+            href: '/employees/empleado-card',
+            label: 'Empleados',
+            icon: IconUser,
+            roles: ['ADMIN', 'OFFICE'],
+          },
         ],
       },
     ],
@@ -174,6 +179,36 @@ const defaultExpandedSections = new Set(['Operación', 'Inventario', 'Administra
 type NavProps = {
   onNavigate?: () => void;
 };
+
+function NavItemIcon({
+  icon: Icon,
+  active,
+}: {
+  icon: NavLinkItem['icon'];
+  active: boolean;
+}) {
+  return (
+    <Box
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 9,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        color: active ? '#b87500' : 'var(--mantine-color-gray-6)',
+        background: active
+          ? 'linear-gradient(135deg, rgba(217,154,24,0.24) 0%, rgba(255,229,153,0.9) 100%)'
+          : 'rgba(148,163,184,0.10)',
+        boxShadow: active ? '0 8px 18px rgba(217,154,24,0.22)' : 'none',
+        border: active ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
+      }}
+    >
+      <Icon size={15} stroke={1.9} aria-hidden="true" />
+    </Box>
+  );
+}
 
 export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
@@ -300,25 +335,7 @@ export default function Nav({ onNavigate }: NavProps) {
               },
             }}
             leftSection={
-              <Box
-                style={{
-                  width: depth ? 24 : 28,
-                  height: depth ? 24 : 28,
-                  borderRadius: depth ? 9 : 11,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  color: isActive ? '#b87500' : 'var(--mantine-color-gray-6)',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(217,154,24,0.24) 0%, rgba(255,229,153,0.9) 100%)'
-                    : 'rgba(148,163,184,0.10)',
-                  boxShadow: isActive ? '0 10px 22px rgba(217,154,24,0.28)' : 'none',
-                  border: isActive ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
-                }}
-              >
-                <Icon size={depth ? 15 : 18} stroke={1.9} />
-              </Box>
+              <NavItemIcon icon={Icon} active={isActive} />
             }
             rightSection={
               <IconChevronDown
@@ -381,25 +398,7 @@ export default function Nav({ onNavigate }: NavProps) {
           },
         }}
         leftSection={
-          <Box
-            style={{
-              width: depth ? 24 : 28,
-              height: depth ? 24 : 28,
-              borderRadius: depth ? 9 : 11,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              color: isActive ? '#b87500' : 'var(--mantine-color-gray-6)',
-              background: isActive
-                ? 'linear-gradient(135deg, rgba(217,154,24,0.24) 0%, rgba(255,229,153,0.9) 100%)'
-                : 'rgba(148,163,184,0.10)',
-              boxShadow: isActive ? '0 10px 22px rgba(217,154,24,0.28)' : 'none',
-              border: isActive ? '1px solid rgba(217,154,24,0.32)' : '1px solid transparent',
-            }}
-          >
-            <Icon size={depth ? 15 : 18} stroke={1.9} />
-          </Box>
+          <NavItemIcon icon={Icon} active={isActive} />
         }
         onClick={onNavigate}
       />

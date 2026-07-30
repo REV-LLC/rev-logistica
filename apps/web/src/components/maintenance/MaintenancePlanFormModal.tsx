@@ -22,6 +22,7 @@ import {
   emptyMaintenanceItemInput,
   type AppUserOption,
   type MaintenanceItemInput,
+  type MaintenanceScheduleType,
   type MaintenanceSubject,
 } from '@/lib/maintenance-types';
 
@@ -29,15 +30,22 @@ type Props = {
   opened: boolean;
   subject: MaintenanceSubject;
   users: AppUserOption[];
+  scheduleType: MaintenanceScheduleType;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 };
 
-function validateItem(item: MaintenanceItemInput) {
+function validateItem(item: MaintenanceItemInput, scheduleType: MaintenanceScheduleType) {
   if (!item.name.trim()) return 'Escribe el nombre de la revisión.';
-  if (item.intervalHours === '' || item.intervalHours <= 0) return 'El intervalo debe ser mayor que cero.';
-  if (item.warningHours !== '' && item.warningHours < 0) return 'Las horas de aviso no pueden ser negativas.';
-  if (item.baselineHours !== '' && item.baselineHours < 0) return 'La línea base no puede ser negativa.';
+  if (scheduleType === 'HOURS') {
+    if (item.intervalHours === '' || item.intervalHours <= 0) return 'El intervalo debe ser mayor que cero.';
+    if (item.warningHours !== '' && item.warningHours < 0) return 'Las horas de aviso no pueden ser negativas.';
+    if (item.baselineHours !== '' && item.baselineHours < 0) return 'La línea base no puede ser negativa.';
+  } else {
+    if (item.intervalDays === '' || item.intervalDays <= 0) return 'El intervalo debe ser mayor que cero.';
+    if (item.warningDays !== '' && item.warningDays < 0) return 'Los días de aviso no pueden ser negativos.';
+    if (!item.baselineDate) return 'Selecciona la fecha base del primer ciclo.';
+  }
   if (!item.recipients.length) return 'Selecciona al menos un destinatario.';
   return null;
 }
@@ -45,11 +53,12 @@ export default function MaintenancePlanFormModal({
   opened,
   subject,
   users,
+  scheduleType,
   onClose,
   onSaved,
 }: Props) {
   const [name, setName] = useState('');
-  const [items, setItems] = useState<MaintenanceItemInput[]>([emptyMaintenanceItemInput()]);
+  const [items, setItems] = useState<MaintenanceItemInput[]>([emptyMaintenanceItemInput(scheduleType)]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itemErrors, setItemErrors] = useState<Array<string | null>>([]);
@@ -57,17 +66,17 @@ export default function MaintenancePlanFormModal({
   useEffect(() => {
     if (!opened) return;
     setName('');
-    setItems([emptyMaintenanceItemInput()]);
+    setItems([emptyMaintenanceItemInput(scheduleType)]);
     setError(null);
     setItemErrors([]);
-  }, [opened]);
+  }, [opened, scheduleType]);
 
   const save = async () => {
     if (!name.trim()) {
       setError('Escribe el nombre del plan.');
       return;
     }
-    const validationErrors = items.map(validateItem);
+    const validationErrors = items.map((item) => validateItem(item, scheduleType));
     setItemErrors(validationErrors);
     if (validationErrors.some(Boolean)) {
       setError('Revisa las revisiones antes de guardar.');
@@ -86,9 +95,15 @@ export default function MaintenancePlanFormModal({
           items: items.map((item) => ({
             name: item.name.trim(),
             instructions: item.instructions.trim() || undefined,
-            intervalHours: item.intervalHours,
-            warningHours: item.warningHours === '' ? 0 : item.warningHours,
-            baselineHours: item.baselineHours === '' ? 0 : item.baselineHours,
+            ...(scheduleType === 'HOURS' ? {
+              intervalHours: item.intervalHours,
+              warningHours: item.warningHours === '' ? 0 : item.warningHours,
+              baselineHours: item.baselineHours === '' ? 0 : item.baselineHours,
+            } : {
+              intervalDays: item.intervalDays,
+              warningDays: item.warningDays === '' ? 0 : item.warningDays,
+              baselineDate: new Date(`${item.baselineDate}T00:00:00`).toISOString(),
+            }),
             active: item.active,
             recipients: item.recipients,
           })),
@@ -129,7 +144,7 @@ export default function MaintenancePlanFormModal({
           <Button
             variant="light"
             leftSection={<IconPlus size={16} />}
-            onClick={() => setItems((current) => [...current, emptyMaintenanceItemInput()])}
+            onClick={() => setItems((current) => [...current, emptyMaintenanceItemInput(scheduleType)])}
           >
             Agregar revisión
           </Button>
@@ -150,6 +165,7 @@ export default function MaintenancePlanFormModal({
                   <MaintenanceItemFields
                     value={item}
                     users={users}
+                    scheduleType={scheduleType}
                     onChange={(next) => setItems((current) => (
                       current.map((candidate, candidateIndex) => candidateIndex === index ? next : candidate)
                     ))}
