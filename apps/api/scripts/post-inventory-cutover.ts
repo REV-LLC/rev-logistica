@@ -32,6 +32,7 @@ type DesiredAsset = {
   currentWarehouseId: string | null;
   customerWorksiteId: string | null;
   internalNumber: number | null;
+  candidateAssetId: string | null;
   candidateSkuId: string | null;
   brand: string | null;
   model: string | null;
@@ -687,6 +688,11 @@ async function main() {
                   : null,
               customerWorksiteId,
               internalNumber: explicitNumbers[index] ?? null,
+              candidateAssetId:
+                target.candidateAssetId ??
+                (targetChangesSku
+                  ? null
+                  : (mapping.candidateAssetId ?? null)),
               candidateSkuId:
                 target.candidateSkuId ??
                 (targetChangesSku ? null : (mapping.candidateSkuId ?? null)),
@@ -830,7 +836,18 @@ async function main() {
         }
 
         const existingAssets = await tx.asset.findMany({
-          include: { sku: { select: { assetSubfamilyId: true } } },
+          include: {
+            sku: { select: { assetSubfamilyId: true } },
+            _count: {
+              select: {
+                hourReadings: true,
+                maintenancePlans: true,
+                taskAssets: true,
+                documentItems: true,
+                mobilityGuides: true,
+              },
+            },
+          },
         });
         const usedAssetIds = new Set<string>();
         const maxNumberByOwnerSubfamily = new Map<string, number>();
@@ -862,19 +879,70 @@ async function main() {
               `SKU SERIAL sin subfamilia: ${target.descriptor.skuName}`,
             );
           }
-          let existing =
-            target.candidateSkuId && target.internalNumber != null
-              ? existingAssets.find(
-                  (asset) =>
-                    !usedAssetIds.has(asset.id) &&
-                    asset.skuId === target.candidateSkuId &&
-                    asset.warehouseOwnerId === target.ownerWarehouseId,
-                )
-              : undefined;
+          const canReclassify = (asset: (typeof existingAssets)[number]) =>
+            !asset.imageFileObjectId &&
+            asset._count.hourReadings === 0 &&
+            asset._count.maintenancePlans === 0 &&
+            asset._count.taskAssets === 0 &&
+            asset._count.documentItems === 0 &&
+            asset._count.mobilityGuides === 0;
+          let existing = target.candidateAssetId
+            ? existingAssets.find(
+                (asset) =>
+                  !usedAssetIds.has(asset.id) &&
+                  asset.id === target.candidateAssetId &&
+                  asset.warehouseOwnerId === target.ownerWarehouseId,
+              )
+            : undefined;
+          if (
+            !existing &&
+            target.candidateSkuId &&
+            target.internalNumber != null
+          ) {
+            existing = existingAssets.find(
+              (asset) =>
+                !usedAssetIds.has(asset.id) &&
+                asset.skuId === target.candidateSkuId &&
+                asset.warehouseOwnerId === target.ownerWarehouseId &&
+                asset.internalNumber === target.internalNumber,
+            );
+          }
+          if (
+            !existing &&
+            target.candidateSkuId &&
+            target.internalNumber == null
+          ) {
+            existing = existingAssets.find(
+              (asset) =>
+                !usedAssetIds.has(asset.id) &&
+                asset.skuId === target.candidateSkuId &&
+                asset.warehouseOwnerId === target.ownerWarehouseId,
+            );
+          }
           if (!existing && target.internalNumber != null) {
             existing = existingAssets.find(
               (asset) =>
                 !usedAssetIds.has(asset.id) &&
+                asset.skuId === sku.id &&
+                asset.warehouseOwnerId === target.ownerWarehouseId &&
+                asset.internalNumber === target.internalNumber,
+            );
+          }
+          if (!existing) {
+            const sourceHash = shortHash(target.source);
+            existing = existingAssets.find(
+              (asset) =>
+                !usedAssetIds.has(asset.id) &&
+                asset.warehouseOwnerId === target.ownerWarehouseId &&
+                asset.publicCode.startsWith('CUT-20260729-') &&
+                asset.publicCode.endsWith(`-${sourceHash}`),
+            );
+          }
+          if (!existing && target.internalNumber != null) {
+            existing = existingAssets.find(
+              (asset) =>
+                !usedAssetIds.has(asset.id) &&
+                canReclassify(asset) &&
                 asset.warehouseOwnerId === target.ownerWarehouseId &&
                 asset.sku.assetSubfamilyId === sku.assetSubfamilyId &&
                 asset.internalNumber === target.internalNumber,
@@ -883,6 +951,7 @@ async function main() {
           const counterKey = `${target.ownerWarehouseId}|${sku.assetSubfamilyId}`;
           const internalNumber =
             target.internalNumber ??
+            existing?.internalNumber ??
             (maxNumberByOwnerSubfamily.get(counterKey) ?? 0) + 1;
           maxNumberByOwnerSubfamily.set(
             counterKey,
@@ -1059,23 +1128,69 @@ async function main() {
             ownerWarehouseId: true,
             warehouseId: true,
             customerWorksiteId: true,
+            movementType: true,
             quantity: true,
           },
         });
         const currentPositions = new Map<string, Position>();
-        for (const row of currentRows) {
-          const position = {
-            skuId: row.skuId,
-            assetId: row.assetId,
-            ownerWarehouseId: row.ownerWarehouseId,
-            warehouseId: row.warehouseId,
-            customerWorksiteId: row.customerWorksiteId,
-            quantity: Number(row.quantity),
-          };
+        const addCurrentPosition = (
+          position: Omit<Position, 'quantity'>,
+          quantity: number,
+        ) => {
           const key = positionKey(position);
           const current = currentPositions.get(key);
-          if (current) current.quantity += position.quantity;
-          else currentPositions.set(key, position);
+          if (current) current.quantity += quantity;
+          else currentPositions.set(key, { ...position, quantity });
+        };
+        for (const row of currentRows) {
+          const quantity = Number(row.quantity);
+
+          // Mirror the inventory queries: every row with a warehouse contributes
+          // to that warehouse, regardless of the originating worksite.
+          if (row.warehouseId) {
+            addCurrentPosition(
+              {
+                skuId: row.skuId,
+                assetId: row.assetId,
+                ownerWarehouseId: row.ownerWarehouseId,
+                warehouseId: row.warehouseId,
+                customerWorksiteId: null,
+              },
+              quantity,
+            );
+          }
+
+          // On-site stock is the sum of rows without a warehouse minus returns
+          // (IN rows). Historical returns can carry both warehouse and worksite,
+          // so treating raw ledger coordinates as positions would subtract them
+          // again after the snapshot cutover.
+          if (row.customerWorksiteId && !row.warehouseId) {
+            addCurrentPosition(
+              {
+                skuId: row.skuId,
+                assetId: row.assetId,
+                ownerWarehouseId: row.ownerWarehouseId,
+                warehouseId: null,
+                customerWorksiteId: row.customerWorksiteId,
+              },
+              quantity,
+            );
+          }
+          if (
+            row.customerWorksiteId &&
+            row.movementType === MovementType.IN
+          ) {
+            addCurrentPosition(
+              {
+                skuId: row.skuId,
+                assetId: row.assetId,
+                ownerWarehouseId: row.ownerWarehouseId,
+                warehouseId: null,
+                customerWorksiteId: row.customerWorksiteId,
+              },
+              -quantity,
+            );
+          }
         }
 
         const allPositionKeys = new Set([
