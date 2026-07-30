@@ -11,7 +11,23 @@ export class UpdateWorksiteDto {
 
   @IsOptional()
   @IsString()
+  externalCode?: string;
+
+  @IsOptional()
+  @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  alternatePhone?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
 
   @IsOptional()
   @IsString()

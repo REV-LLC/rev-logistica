@@ -1,11 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomerRutPdfParserService } from './customer-rut-pdf-parser.service';
-import type { CustomerRutPdfUpload, ParsedCustomerRutData } from './customer-rut-pdf-parser.service';
+import type {
+  CustomerRutPdfUpload,
+  ParsedCustomerRutData,
+} from './customer-rut-pdf-parser.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateWorksiteDto } from './dto/create-worksite.dto';
 import { UpdateWorksiteDto } from './dto/update-worksite.dto';
+import { normalizeLegalName } from './normalize-legal-name';
 
 @Injectable()
 export class CustomersService {
@@ -28,7 +36,9 @@ export class CustomersService {
     return customer;
   }
 
-  async parseRutPdf(file?: CustomerRutPdfUpload): Promise<ParsedCustomerRutData> {
+  async parseRutPdf(
+    file?: CustomerRutPdfUpload,
+  ): Promise<ParsedCustomerRutData> {
     return this.rutPdfParser.parse(file);
   }
 
@@ -36,11 +46,17 @@ export class CustomersService {
     return this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.create({
         data: {
-          name: payload.name,
+          name: normalizeLegalName(payload.name),
+          identityDocumentType: payload.identityDocumentType ?? null,
           nitOrId: payload.nitOrId ?? null,
           phone: payload.phone ?? null,
           email: this.normalizeOptionalEmail(payload.email),
           documentsEmail: this.normalizeOptionalEmail(payload.documentsEmail),
+          billingAddress: this.normalizeOptionalString(payload.billingAddress),
+          billingPhone: this.normalizeOptionalString(payload.billingPhone),
+          billingAlternatePhone: this.normalizeOptionalString(
+            payload.billingAlternatePhone,
+          ),
           active: payload.active ?? true,
         },
       });
@@ -73,14 +89,32 @@ export class CustomersService {
     return this.prisma.customer.update({
       where: { id },
       data: {
-        name: payload.name,
+        name:
+          payload.name !== undefined
+            ? normalizeLegalName(payload.name)
+            : undefined,
+        identityDocumentType: payload.identityDocumentType,
         nitOrId: payload.nitOrId,
         phone: payload.phone,
         email:
-          payload.email !== undefined ? this.normalizeOptionalEmail(payload.email) : undefined,
+          payload.email !== undefined
+            ? this.normalizeOptionalEmail(payload.email)
+            : undefined,
         documentsEmail:
           payload.documentsEmail !== undefined
             ? this.normalizeOptionalEmail(payload.documentsEmail)
+            : undefined,
+        billingAddress:
+          payload.billingAddress !== undefined
+            ? this.normalizeOptionalString(payload.billingAddress)
+            : undefined,
+        billingPhone:
+          payload.billingPhone !== undefined
+            ? this.normalizeOptionalString(payload.billingPhone)
+            : undefined,
+        billingAlternatePhone:
+          payload.billingAlternatePhone !== undefined
+            ? this.normalizeOptionalString(payload.billingAlternatePhone)
             : undefined,
         active: payload.active,
       },
@@ -101,8 +135,12 @@ export class CustomersService {
         worksite: {
           select: {
             id: true,
+            externalCode: true,
             name: true,
             address: true,
+            phone: true,
+            alternatePhone: true,
+            email: true,
             active: true,
             createdAt: true,
           },
@@ -119,7 +157,9 @@ export class CustomersService {
     });
 
     if (worksitesCount > 0) {
-      throw new BadRequestException('No se puede eliminar un cliente con obras asociadas');
+      throw new BadRequestException(
+        'No se puede eliminar un cliente con obras asociadas',
+      );
     }
 
     return this.prisma.customer.delete({
@@ -145,8 +185,12 @@ export class CustomersService {
         worksite: {
           select: {
             id: true,
+            externalCode: true,
             name: true,
             address: true,
+            phone: true,
+            alternatePhone: true,
+            email: true,
             active: true,
             createdAt: true,
           },
@@ -162,7 +206,11 @@ export class CustomersService {
       const worksite = await tx.worksite.create({
         data: {
           name: payload.name,
+          externalCode: payload.externalCode ?? null,
           address: payload.address ?? null,
+          phone: payload.phone ?? null,
+          alternatePhone: payload.alternatePhone ?? null,
+          email: this.normalizeOptionalEmail(payload.email),
           active: payload.active ?? true,
         },
       });
@@ -189,8 +237,12 @@ export class CustomersService {
           worksite: {
             select: {
               id: true,
+              externalCode: true,
               name: true,
               address: true,
+              phone: true,
+              alternatePhone: true,
+              email: true,
               active: true,
               createdAt: true,
             },
@@ -225,14 +277,25 @@ export class CustomersService {
 
       if (
         payload.name !== undefined ||
+        payload.externalCode !== undefined ||
         payload.address !== undefined ||
+        payload.phone !== undefined ||
+        payload.alternatePhone !== undefined ||
+        payload.email !== undefined ||
         payload.worksiteActive !== undefined
       ) {
         await tx.worksite.update({
           where: { id: relation.worksiteId },
           data: {
             name: payload.name ?? undefined,
+            externalCode: payload.externalCode ?? undefined,
             address: payload.address ?? undefined,
+            phone: payload.phone ?? undefined,
+            alternatePhone: payload.alternatePhone ?? undefined,
+            email:
+              payload.email !== undefined
+                ? this.normalizeOptionalEmail(payload.email)
+                : undefined,
             active: payload.worksiteActive ?? undefined,
           },
         });
@@ -251,8 +314,12 @@ export class CustomersService {
           worksite: {
             select: {
               id: true,
+              externalCode: true,
               name: true,
               address: true,
+              phone: true,
+              alternatePhone: true,
+              email: true,
               active: true,
               createdAt: true,
             },
@@ -293,5 +360,10 @@ export class CustomersService {
   private normalizeOptionalEmail(value?: string) {
     const email = value?.trim().toLowerCase();
     return email || null;
+  }
+
+  private normalizeOptionalString(value?: string) {
+    const normalized = value?.trim();
+    return normalized || null;
   }
 }

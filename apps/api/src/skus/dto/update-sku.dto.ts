@@ -22,6 +22,10 @@ export class UpdateSkuDto {
   assetFamilyId?: string;
 
   @IsOptional()
+  @IsUUID()
+  assetSubfamilyId?: string;
+
+  @IsOptional()
   @IsNumber()
   unitWeight?: number;
 
@@ -48,6 +52,18 @@ export class UpdateSkuDto {
   @IsOptional()
   @IsString()
   size?: string;
+
+  @IsOptional()
+  @IsNumber()
+  lengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  closedLengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  extendedLengthMeters?: number;
 
   @IsOptional()
   @IsNumber()

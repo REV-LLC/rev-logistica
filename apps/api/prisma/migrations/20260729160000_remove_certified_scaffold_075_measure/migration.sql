@@ -1,0 +1,3 @@
+DELETE FROM "CatalogOption"
+WHERE "groupKey" = 'BULK_CERTIFIED_SCAFFOLD_MEASURES'
+  AND "value" = '0.75M';
