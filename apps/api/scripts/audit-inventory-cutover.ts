@@ -188,6 +188,37 @@ async function main() {
     FROM "Sku";
   `);
 
+  const measurementFormatAudit = await prisma.$queryRawUnsafe(`
+    WITH fields AS (
+      SELECT id, 'name' AS field, name AS value
+      FROM "Sku"
+
+      UNION ALL
+
+      SELECT id, 'size', size
+      FROM "Sku"
+      WHERE size IS NOT NULL
+    ),
+    meter_tokens AS (
+      SELECT
+        fields.id,
+        fields.field,
+        matches[1] AS numeric_value
+      FROM fields
+      CROSS JOIN LATERAL regexp_matches(
+        fields.value,
+        '([0-9]+([.,][0-9]+)?)[[:space:]]+M([^[:alpha:]]|$)',
+        'g'
+      ) AS matches
+    )
+    SELECT
+      COUNT(*)::int AS meter_tokens,
+      COUNT(*) FILTER (
+        WHERE numeric_value !~ '^[0-9]+[.][0-9]{2}$'
+      )::int AS invalid_meter_tokens
+    FROM meter_tokens;
+  `);
+
   const angleReferences = await prisma.$queryRawUnsafe(`
     SELECT
       s.id,
@@ -288,6 +319,7 @@ async function main() {
       inventoryAudit,
       ownershipAudit,
       catalogAudit,
+      measurementFormatAudit,
       angleReferences,
       verealAngles,
       caseAsset,
