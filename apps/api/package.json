@@ -14,6 +14,7 @@
     "import:worksites": "ts-node scripts/import-worksites.ts",
     "cleanup:legal-names": "ts-node scripts/cleanup-legal-names.ts",
     "consolidate:provider-gatos": "ts-node scripts/consolidate-provider-gatos.ts",
+    "correct:conventional-scaffold-naves": "ts-node scripts/correct-conventional-scaffold-naves.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

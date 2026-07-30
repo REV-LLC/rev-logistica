@@ -15,6 +15,7 @@ import {
   normalizeMeasurementLabel,
   normalizeSkuReference,
 } from '../src/inventory/catalog-reference-normalization';
+import { legacyInventoryQuantityMultiplier } from '../src/inventory/legacy-inventory-quantity';
 import { loadJsonFile } from './load-json-file';
 
 type JsonRecord = Record<string, any>;
@@ -653,7 +654,11 @@ async function main() {
               ? ownerWarehouseId
               : null,
             entry.customerWorksiteId,
-            Number(entry.finalBalance),
+            Number(entry.finalBalance) *
+              legacyInventoryQuantityMultiplier(
+                entry.articleCode,
+                mapping.quantityMultiplier,
+              ),
           );
         }
 
