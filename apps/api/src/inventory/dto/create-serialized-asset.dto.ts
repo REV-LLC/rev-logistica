@@ -63,11 +63,41 @@ export class SerializedSkuInput {
   @IsOptional()
   @IsString()
   size?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  lengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  closedLengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  extendedLengthMeters?: number;
+}
+
+export class SerializedAssetSubfamilyInput {
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
 }
 
 export class SerializedAssetInput {
+  @IsOptional()
   @IsString()
-  serialOrEngine: string;
+  serialOrEngine?: string;
 
   @IsOptional()
   @IsString()
@@ -120,6 +150,11 @@ export class CreateSerializedAssetDto {
   @ValidateNested()
   @Type(() => SerializedSkuInput)
   sku: SerializedSkuInput;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SerializedAssetSubfamilyInput)
+  subfamily?: SerializedAssetSubfamilyInput;
 
   @ValidateNested()
   @Type(() => SerializedAssetInput)

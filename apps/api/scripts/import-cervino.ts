@@ -77,37 +77,61 @@ function normalizeFamilyCode(value: string) {
   return value.trim().toUpperCase();
 }
 
-function buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
-  return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${String(internalNumber).padStart(4, '0')}`;
+function buildAssetPublicCode(
+  assetFamilyCode: string,
+  assetSubfamilyCode: string,
+  ownerWarehouseId: string,
+  internalNumber: number,
+) {
+  return `${assetFamilyCode}-${assetSubfamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${String(internalNumber).padStart(4, '0')}`;
+}
+
+async function ensureStandardSubfamily(tx: Prisma.TransactionClient, assetFamilyId: string) {
+  return tx.assetSubfamily.upsert({
+    where: {
+      assetFamilyId_code: {
+        assetFamilyId,
+        code: 'ESTANDAR',
+      },
+    },
+    create: {
+      assetFamilyId,
+      code: 'ESTANDAR',
+      name: 'ESTÁNDAR',
+    },
+    update: { active: true },
+    select: { id: true, code: true },
+  });
 }
 
 async function createAssetWithInternalNumber(
   tx: Prisma.TransactionClient,
   data: Omit<Prisma.AssetUncheckedCreateInput, 'internalNumber' | 'publicCode'> & {
-    assetFamilyId: string;
+    assetSubfamilyId: string;
   },
   maxRetries = 3,
 ) {
+  const { assetSubfamilyId, ...assetData } = data;
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     try {
-      const assetFamily = await tx.assetFamily.findUnique({
-        where: { id: data.assetFamilyId },
-        select: { code: true },
+      const assetSubfamily = await tx.assetSubfamily.findUnique({
+        where: { id: assetSubfamilyId },
+        select: { code: true, assetFamily: { select: { code: true } } },
       });
-      if (!assetFamily) {
-        throw new Error(`AssetFamily not found for id ${data.assetFamilyId}`);
+      if (!assetSubfamily) {
+        throw new Error(`AssetSubfamily not found for id ${assetSubfamilyId}`);
       }
 
       const counter = await tx.assetInternalCounter.upsert({
         where: {
-          ownerWarehouseId_assetFamilyId: {
+          ownerWarehouseId_assetSubfamilyId: {
             ownerWarehouseId: data.warehouseOwnerId,
-            assetFamilyId: data.assetFamilyId,
+            assetSubfamilyId,
           },
         },
         create: {
           ownerWarehouseId: data.warehouseOwnerId,
-          assetFamilyId: data.assetFamilyId,
+          assetSubfamilyId,
           nextNumber: 2,
         },
         update: {
@@ -119,9 +143,10 @@ async function createAssetWithInternalNumber(
       const nextNumber = counter.nextNumber - 1;
       return await tx.asset.create({
         data: {
-          ...data,
+          ...assetData,
           publicCode: buildAssetPublicCode(
-            assetFamily.code,
+            assetSubfamily.assetFamily.code,
+            assetSubfamily.code,
             data.warehouseOwnerId,
             nextNumber,
           ),
@@ -340,6 +365,7 @@ async function main() {
     });
     const assetFamilyByCode = new Map(existingFamilies.map((family) => [family.code, family]));
     const skuFamilyById = new Map<string, string>();
+    const skuSubfamilyById = new Map<string, string>();
 
     for (const sku of input.skus) {
       const name = sku.name?.trim();
@@ -374,7 +400,7 @@ async function main() {
 
       const existing = await tx.sku.findFirst({
         where: { name: { equals: name, mode: 'insensitive' } },
-        select: { id: true, assetFamilyId: true },
+        select: { id: true, assetFamilyId: true, assetSubfamilyId: true },
       });
 
       if (existing) {
@@ -403,6 +429,19 @@ async function main() {
         } else {
           skuFamilyById.set(existing.id, existing.assetFamilyId);
         }
+        if (controlType === SkuControlType.SERIAL) {
+          const subfamily =
+            existing.assetSubfamilyId == null
+              ? await ensureStandardSubfamily(tx, existing.assetFamilyId)
+              : { id: existing.assetSubfamilyId };
+          if (!existing.assetSubfamilyId) {
+            await tx.sku.update({
+              where: { id: existing.id },
+              data: { assetSubfamilyId: subfamily.id },
+            });
+          }
+          skuSubfamilyById.set(existing.id, subfamily.id);
+        }
 
         skuByName.set(nameKey, existing.id);
         skuNameById.set(existing.id, name);
@@ -430,10 +469,15 @@ async function main() {
         continue;
       }
 
+      const standardSubfamily =
+        controlType === SkuControlType.SERIAL
+          ? await ensureStandardSubfamily(tx, family.id)
+          : null;
       const created = await tx.sku.create({
         data: {
           name,
           assetFamilyId: family.id,
+          assetSubfamilyId: standardSubfamily?.id ?? null,
           active: true,
         },
         select: { id: true },
@@ -441,6 +485,9 @@ async function main() {
 
       skuByName.set(nameKey, created.id);
       skuFamilyById.set(created.id, family.id);
+      if (standardSubfamily) {
+        skuSubfamilyById.set(created.id, standardSubfamily.id);
+      }
       skuNameById.set(created.id, name);
       if (sku.externalCode) {
         skuByExternalCode.set(String(sku.externalCode), created.id);
@@ -507,12 +554,21 @@ async function main() {
         });
         continue;
       }
+      const assetSubfamilyId = skuSubfamilyById.get(skuId);
+      if (!assetSubfamilyId) {
+        summary.errors.push({
+          area: 'asset',
+          message: 'Asset subfamily missing for serialized SKU',
+          context: { serialOrEngine: serial, skuId, assetFamilyId },
+        });
+        continue;
+      }
 
       const created = await createAssetWithInternalNumber(tx, {
         serialOrEngine: serial,
         description,
         skuId,
-        assetFamilyId,
+        assetSubfamilyId,
         warehouseOwnerId: warehouseId,
         warehouseCurrentId: warehouseId,
         active: true,

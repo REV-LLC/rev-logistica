@@ -123,7 +123,28 @@ type BulkPayload = {
   quantity: number;
 };
 
-const DEFAULT_FORMALETA_Y_OPTIONS = ['0.30', '0.60', '1.20', '2.40', '3.00'] as const;
+const DEFAULT_FORMALETA_X_OPTIONS = [
+  '0.10',
+  '0.15',
+  '0.20',
+  '0.25',
+  '0.30',
+  '0.35',
+  '0.40',
+  '0.45',
+  '0.50',
+  '0.60',
+] as const;
+const DEFAULT_FORMALETA_Y_OPTIONS = [
+  '0.30',
+  '0.35',
+  '0.50',
+  '0.60',
+  '0.80',
+  '1.20',
+  '2.40',
+  '3.00',
+] as const;
 const DEFAULT_CERTIFIED_SCAFFOLD_PARTS = [
   'VERTICALES',
   'HORIZONTALES',
@@ -133,6 +154,10 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS = [
   'PLATAFORMA',
   'ESCALERA PELDAÑO',
   'ESCALERA TIPO GATO',
+  'PASAMANOS PARA ESCALERA',
+  'PASAMANOS HORIZONTAL',
+  'TORNILLO PARA PLATINA EN U',
+  'GANCHO DE SEGURIDAD',
   'DIAGONALES',
   'RODA PIE',
 ] as const;
@@ -164,6 +189,9 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'TORNILLOS NIVELADORES',
   'ESCALERA PELDAÑO',
   'ESCALERA TIPO GATO',
+  'PASAMANOS PARA ESCALERA',
+  'TORNILLO PARA PLATINA EN U',
+  'GANCHO DE SEGURIDAD',
 ];
 
 const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
@@ -276,7 +304,7 @@ export default function AddBulkStockPage() {
   const [isItemConfigured, setIsItemConfigured] = useState(false);
   const [confirmAttempted, setConfirmAttempted] = useState(false);
 
-  const [formaletaX, setFormaletaX] = useState<string>('0,10');
+  const [formaletaX, setFormaletaX] = useState<string>(DEFAULT_FORMALETA_X_OPTIONS[0]);
   const [formaletaY, setFormaletaY] = useState<string>(DEFAULT_FORMALETA_Y_OPTIONS[0]);
   const [formaletaLine, setFormaletaLine] = useState<FormaletaLine>('FORMALETA');
   const [formaletaIsAccessory, setFormaletaIsAccessory] = useState(false);
@@ -522,6 +550,7 @@ export default function AddBulkStockPage() {
     'FORMALETA',
     'FORMALETA_SARDINEL',
   ]);
+  const formaletaXOptions = catalogGroupOptions('BULK_FORMWORK_WIDTHS', DEFAULT_FORMALETA_X_OPTIONS);
   const formaletaYOptions = catalogGroupOptions('BULK_FORMWORK_HEIGHTS', DEFAULT_FORMALETA_Y_OPTIONS);
   const certifiedScaffoldPartOptions = catalogGroupOptions(
     'BULK_CERTIFIED_SCAFFOLD_PARTS',
@@ -758,7 +787,7 @@ export default function AddBulkStockPage() {
 
     const defaultWeightUnit = (weightUnits[0] as WeightUnit | undefined) ?? '';
     if (type === 'FORMALETA') {
-      setFormaletaX('0,10');
+      setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
       setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
       setFormaletaLine('FORMALETA');
       setFormaletaIsAccessory(false);
@@ -798,7 +827,7 @@ export default function AddBulkStockPage() {
     setIsItemConfigured(false);
     setConfirmAttempted(false);
 
-    setFormaletaX('0,10');
+    setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
     setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
     setFormaletaLine('FORMALETA');
     setFormaletaIsAccessory(false);
@@ -1049,8 +1078,8 @@ export default function AddBulkStockPage() {
       }
       const xValue = parseLocaleDecimal(formaletaX);
       const yValue = Number(formaletaY);
-      if (!Number.isFinite(xValue) || xValue <= 0) {
-        setError('Enter a valid X measurement for formwork');
+      if (!formaletaXOptions.some((option) => Number(option.value) === xValue)) {
+        setError('The X formwork measurement is invalid');
         return;
       }
       if (!formaletaYOptions.some((option) => Number(option.value) === yValue)) {
@@ -1771,16 +1800,21 @@ export default function AddBulkStockPage() {
                                   }}
                                   required
                                 />
-                                <TextInput
+                                <Select
                                   label="Ancho X (m)"
+                                  data={formaletaXOptions.map((option) => ({
+                                    value: option.value,
+                                    label: formatMeasure(Number(option.value)),
+                                  }))}
                                   value={formaletaX}
-                                  onChange={(event) => {
-                                    setFormaletaX(sanitizeDecimalInput(event.currentTarget.value));
+                                  onChange={(value) => {
+                                    setFormaletaX(
+                                      value
+                                        ?? formaletaXOptions[0]?.value
+                                        ?? DEFAULT_FORMALETA_X_OPTIONS[0],
+                                    );
                                     setIsItemConfigured(false);
                                   }}
-                                  onBlur={() => setFormaletaX((value) => finalizeDecimalInput(value))}
-                                  inputMode="decimal"
-                                  placeholder="0,10"
                                   required
                                 />
                                 <Select

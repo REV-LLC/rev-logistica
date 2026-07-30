@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CustomerIdentityDocumentType } from '@prisma/client';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class CustomerInitialWorksiteDto {
   @IsString()
@@ -23,6 +24,10 @@ export class CreateCustomerDto {
   name: string;
 
   @IsOptional()
+  @IsEnum(CustomerIdentityDocumentType)
+  identityDocumentType?: CustomerIdentityDocumentType;
+
+  @IsOptional()
   @IsString()
   nitOrId?: string;
 
@@ -37,6 +42,18 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsEmail()
   documentsEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  billingAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  billingPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  billingAlternatePhone?: string;
 
   @IsOptional()
   @IsBoolean()

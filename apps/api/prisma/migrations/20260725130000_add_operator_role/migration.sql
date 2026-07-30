@@ -1,0 +1,3 @@
+-- Role.OPERATOR was already added by
+-- 20260724110000_add_operator_hour_evidence. Keep this ordered migration as a
+-- no-op so every environment shares the same migration history.
