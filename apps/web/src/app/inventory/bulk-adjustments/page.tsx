@@ -194,7 +194,12 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'GANCHO DE SEGURIDAD',
 ];
 
-const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
+const formatMeasure = (value: number) =>
+  value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+const formatMeterMeasure = (value: string) => {
+  const parsed = Number(value.trim().replace(/M(?:T|TS)?$/i, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? `${formatMeasure(parsed)} M` : value.trim().toUpperCase();
+};
 const sanitizeDecimalInput = (value: string) => {
   let nextValue = '';
   let hasSeparator = false;
@@ -229,7 +234,7 @@ const toUpperInput = (value: string) => value.toLocaleUpperCase('es-CO');
 
 const buildFormaletaSkuName = (line: FormaletaLine, xMeasure: number, yMeasure: number) => {
   const prefix = line === 'FORMALETA_SARDINEL' ? 'FORMALETA SARDINEL' : 'FORMALETA';
-  return `${prefix} (${formatMeasure(xMeasure)})M x (${formatMeasure(yMeasure)})M`;
+  return `${prefix} (${formatMeasure(xMeasure)} M X ${formatMeasure(yMeasure)} M)`;
 };
 
 const normalizeWeightToKg = (value: number, unit: string) =>
@@ -563,11 +568,11 @@ export default function AddBulkStockPage() {
   const conventionalScaffoldMeasureOptions = catalogGroupOptions(
     'BULK_CONVENTIONAL_SCAFFOLD_MEASURES',
     DEFAULT_CONVENTIONAL_SCAFFOLD_MEASURES,
-  );
+  ).map((option) => ({ ...option, label: formatMeterMeasure(option.value) }));
   const certifiedScaffoldMeasureOptions = catalogGroupOptions(
     'BULK_CERTIFIED_SCAFFOLD_MEASURES',
     DEFAULT_CERTIFIED_SCAFFOLD_MEASURES,
-  );
+  ).map((option) => ({ ...option, label: formatMeterMeasure(option.value) }));
   const certifiedScaffoldPartsWithoutMeasure = new Set(
     catalogGroupValues('BULK_CERTIFIED_SCAFFOLD_WITHOUT_MEASURE', DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE),
   );
@@ -667,9 +672,9 @@ export default function AddBulkStockPage() {
     }
     const resolvedGenericSkuName =
       certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
-        ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+        ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
-          ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+          ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : genericSkuName.trim();
 
     return {
