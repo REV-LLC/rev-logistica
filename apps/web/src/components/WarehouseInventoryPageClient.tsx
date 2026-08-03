@@ -11,12 +11,14 @@ import {
   Box,
   Button,
   Container,
+  Drawer,
   FileButton,
   Group,
   Modal,
   NumberInput,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -30,8 +32,10 @@ import {
   IconBuildingWarehouse,
   IconChevronRight,
   IconEdit,
+  IconFilter,
   IconPhoto,
   IconPlus,
+  IconSearch,
   IconUpload,
 } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
@@ -41,6 +45,8 @@ import OwnerCreateModal, {
   validateOwnerCreateForm,
   type OwnerCreateForm,
 } from '@/components/OwnerCreateModal';
+import TableRowActions from '@/components/TableRowActions';
+import classes from '@/components/WarehouseInventoryPageClient.module.css';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -91,6 +97,8 @@ type Owner = {
   logoUrl?: string | null;
   logoKey?: string | null;
 };
+
+type WarehouseStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 const MAX_OWNER_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
 const OWNER_LOGO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
@@ -185,6 +193,11 @@ export default function WarehouseInventoryPageClient({
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
   const [warehousesError, setWarehousesError] = useState<string | null>(null);
+  const [warehouseSearch, setWarehouseSearch] = useState('');
+  const [warehouseStatusFilter, setWarehouseStatusFilter] =
+    useState<WarehouseStatusFilter>('ALL');
+  const [warehouseOwnerFilter, setWarehouseOwnerFilter] = useState<string | null>(null);
+  const [warehouseFiltersOpen, setWarehouseFiltersOpen] = useState(false);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [ownersLoading, setOwnersLoading] = useState(false);
   const [ownersError, setOwnersError] = useState<string | null>(null);
@@ -293,11 +306,6 @@ export default function WarehouseInventoryPageClient({
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleWarehouseCardClick = async (targetWarehouseId: string) => {
-    setWarehouseId(targetWarehouseId);
-    await handleFetch(targetWarehouseId);
   };
 
   const openWarehouseDetail = (targetWarehouseId: string) => {
@@ -778,6 +786,42 @@ export default function WarehouseInventoryPageClient({
       }),
     [ownerById, warehouses, warehouseId],
   );
+  const warehouseOwnerFilterOptions = useMemo(() => {
+    const uniqueOwners = new Map<string, string>();
+    warehouseCards.forEach((warehouse) => {
+      if (warehouse.ownerCompanyId) {
+        uniqueOwners.set(warehouse.ownerCompanyId, warehouse.ownerName);
+      }
+    });
+
+    return Array.from(uniqueOwners.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+  }, [warehouseCards]);
+  const filteredWarehouseCards = useMemo(() => {
+    const query = warehouseSearch.trim().toLocaleLowerCase('es');
+
+    return warehouseCards.filter((warehouse) => {
+      const matchesSearch =
+        query.length === 0 ||
+        warehouse.name.toLocaleLowerCase('es').includes(query) ||
+        warehouse.ownerName.toLocaleLowerCase('es').includes(query);
+      const matchesStatus =
+        warehouseStatusFilter === 'ALL' ||
+        (warehouseStatusFilter === 'ACTIVE' && warehouse.active) ||
+        (warehouseStatusFilter === 'INACTIVE' && !warehouse.active);
+      const matchesOwner =
+        !warehouseOwnerFilter || warehouse.ownerCompanyId === warehouseOwnerFilter;
+
+      return matchesSearch && matchesStatus && matchesOwner;
+    });
+  }, [warehouseCards, warehouseOwnerFilter, warehouseSearch, warehouseStatusFilter]);
+  const activeWarehouseFilterCount =
+    Number(warehouseStatusFilter !== 'ALL') + Number(Boolean(warehouseOwnerFilter));
+  const clearWarehouseFilters = () => {
+    setWarehouseStatusFilter('ALL');
+    setWarehouseOwnerFilter(null);
+  };
   const selectedWarehouse =
     warehouseCards.find((warehouse) => warehouse.id === warehouseId) ?? null;
 
@@ -943,48 +987,172 @@ export default function WarehouseInventoryPageClient({
               )}
             </Paper>
           ) : !isOwnInventory ? (
-            <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-              <Stack gap="md">
-                <Group justify="space-between" align="flex-start" wrap="wrap">
+            <section className={classes.providerDirectory}>
+              <Stack gap="xl">
+                <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
                   <div>
-                    <Text fw={700}>Bodegas de proveedores</Text>
-                    <Text size="sm" c="dimmed" hiddenFrom="sm">
-                      Selecciona un proveedor para abrir su inventario.
+                    <Text component="h1" className="ui-text-title" m={0}>
+                      Bodegas de proveedores
                     </Text>
-                    <Text size="sm" c="dimmed" visibleFrom="sm">
-                      Haz clic en una bodega aliada para cargar su inventario.
+                    <Text className="ui-text-body" mt={6}>
+                      Consulta y administra el inventario de tus proveedores.
                     </Text>
                   </div>
-                  <Button onClick={openCreate} leftSection={<IconPlus size={16} />}>
+                  <Button
+                    onClick={openCreate}
+                    leftSection={<IconPlus size={17} />}
+                    className={classes.createButton}
+                  >
                     Crear bodega
                   </Button>
                 </Group>
 
-                <Box hiddenFrom="sm">
-                  <Stack gap={0}>
-                    {warehouseCards.map((warehouse, index) => (
-                      <Group
-                        key={warehouse.id}
-                        justify="space-between"
-                        align="center"
-                        wrap="nowrap"
-                        py="sm"
-                        style={{
-                          borderBottom:
-                            index === warehouseCards.length - 1
-                              ? undefined
-                              : '1px solid rgba(15, 23, 42, 0.08)',
-                        }}
-                      >
-                        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                <div className={classes.desktopFilters}>
+                  <TextInput
+                    aria-label="Buscar proveedor o bodega"
+                    placeholder="Buscar proveedor o bodega"
+                    leftSection={<IconSearch size={18} />}
+                    value={warehouseSearch}
+                    onChange={(event) => setWarehouseSearch(event.currentTarget.value)}
+                    className={classes.searchInput}
+                  />
+                  <div>
+                    <Text className="ui-text-label" mb={6}>
+                      Estado
+                    </Text>
+                    <SegmentedControl
+                      value={warehouseStatusFilter}
+                      onChange={(value) =>
+                        setWarehouseStatusFilter(value as WarehouseStatusFilter)
+                      }
+                      data={[
+                        { value: 'ALL', label: 'Todas' },
+                        { value: 'ACTIVE', label: 'Activas' },
+                        { value: 'INACTIVE', label: 'Inactivas' },
+                      ]}
+                    />
+                  </div>
+                  <Select
+                    label="Proveedor"
+                    placeholder="Todos"
+                    clearable
+                    searchable
+                    data={warehouseOwnerFilterOptions}
+                    value={warehouseOwnerFilter}
+                    onChange={setWarehouseOwnerFilter}
+                  />
+                </div>
+
+                <div className={classes.mobileFilters}>
+                  <TextInput
+                    aria-label="Buscar proveedor o bodega"
+                    placeholder="Buscar proveedor o bodega"
+                    leftSection={<IconSearch size={18} />}
+                    value={warehouseSearch}
+                    onChange={(event) => setWarehouseSearch(event.currentTarget.value)}
+                    className={classes.mobileSearchInput}
+                  />
+                  <Button
+                    variant="default"
+                    leftSection={<IconFilter size={17} />}
+                    onClick={() => setWarehouseFiltersOpen(true)}
+                    aria-label={
+                      activeWarehouseFilterCount > 0
+                        ? `Filtros, ${activeWarehouseFilterCount} activos`
+                        : 'Filtros'
+                    }
+                  >
+                    Filtros{activeWarehouseFilterCount > 0 ? ` · ${activeWarehouseFilterCount}` : ''}
+                  </Button>
+                </div>
+
+                <Text size="sm" c="dimmed" fw={500}>
+                  {warehousesLoading
+                    ? 'Cargando bodegas...'
+                    : `${filteredWarehouseCards.length} ${
+                        filteredWarehouseCards.length === 1 ? 'bodega' : 'bodegas'
+                      }`}
+                </Text>
+
+                <Paper withBorder radius="md" p={0} className={classes.tableSurface}>
+                  <Table visibleFrom="sm" verticalSpacing="md" horizontalSpacing="lg">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Bodega</Table.Th>
+                        <Table.Th>Proveedor</Table.Th>
+                        <Table.Th>Estado</Table.Th>
+                        <Table.Th ta="right">Acciones</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {filteredWarehouseCards.map((warehouse) => (
+                        <Table.Tr key={warehouse.id} className={classes.tableRow}>
+                          <Table.Td>
+                            <Group gap="sm" wrap="nowrap">
+                              <WarehouseIdentityMark
+                                logoUrl={warehouse.ownerLogoUrl}
+                                name={warehouse.ownerName}
+                                initials={warehouse.initials}
+                                size={44}
+                              />
+                              <Text fw={700} c="var(--ui-color-title)" lineClamp={2}>
+                                {warehouse.name}
+                              </Text>
+                            </Group>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="sm" c="var(--ui-color-body)" lineClamp={2}>
+                              {warehouse.ownerName}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Badge
+                              color={warehouse.active ? 'green' : 'red'}
+                              variant="light"
+                              size="md"
+                            >
+                              {warehouse.active ? 'Activa' : 'Inactiva'}
+                            </Badge>
+                          </Table.Td>
+                          <Table.Td>
+                            <Group justify="flex-end" gap="sm" wrap="nowrap">
+                              <TableRowActions
+                                actions={[
+                                  {
+                                    key: 'edit',
+                                    label: `Editar ${warehouse.name}`,
+                                    icon: <IconEdit size={16} />,
+                                    onClick: () => openEdit(warehouse),
+                                  },
+                                ]}
+                              />
+                              <Button
+                                variant="subtle"
+                                size="compact-sm"
+                                rightSection={<IconChevronRight size={15} />}
+                                onClick={() => openWarehouseDetail(warehouse.id)}
+                              >
+                                Ver inventario
+                              </Button>
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+
+                  <Box hiddenFrom="sm" className={classes.mobileList}>
+                    {filteredWarehouseCards.map((warehouse) => (
+                      <div key={warehouse.id} className={classes.mobileRow}>
+                        <Group gap="sm" wrap="nowrap" className={classes.mobileIdentity}>
                           <WarehouseIdentityMark
                             logoUrl={warehouse.ownerLogoUrl}
                             name={warehouse.ownerName}
                             initials={warehouse.initials}
-                            size={44}
+                            size={42}
                           />
-                          <div style={{ minWidth: 0 }}>
-                            <Text fw={700} size="sm" truncate>
+                          <div className={classes.mobileRowCopy}>
+                            <Text fw={700} size="sm" c="var(--ui-color-title)" truncate>
                               {warehouse.name}
                             </Text>
                             <Text size="xs" c="dimmed" truncate>
@@ -992,137 +1160,53 @@ export default function WarehouseInventoryPageClient({
                             </Text>
                             <Text
                               size="xs"
-                              c={warehouse.active ? 'green.7' : 'dimmed'}
                               fw={600}
-                              mt={2}
+                              c={warehouse.active ? 'green.7' : 'red.7'}
                             >
-                              {warehouse.active ? 'Activo' : 'Inactivo'}
+                              {warehouse.active ? 'Activa' : 'Inactiva'}
                             </Text>
                           </div>
                         </Group>
-                        <Group gap={6} wrap="nowrap">
+                        <Group gap={4} wrap="nowrap">
                           <ActionIcon
                             variant="subtle"
                             color="gray"
-                            radius="xl"
                             aria-label={`Editar ${warehouse.name}`}
                             onClick={() => openEdit(warehouse)}
                           >
-                            <IconEdit size={15} />
+                            <IconEdit size={17} />
                           </ActionIcon>
-                          <Button
-                            size="xs"
-                            variant="light"
-                            rightSection={<IconChevronRight size={14} />}
-                            aria-label={`Ver proveedor ${warehouse.name}`}
-                            onClick={() => openWarehouseDetail(warehouse.id)}
-                          >
-                            Ver
-                          </Button>
-                        </Group>
-                      </Group>
-                    ))}
-                  </Stack>
-                </Box>
-
-                <SimpleGrid visibleFrom="sm" cols={{ sm: 2, xl: 3 }} spacing="lg">
-                  {warehouseCards.map((warehouse) => (
-                  <Paper
-                    key={warehouse.id}
-                    withBorder
-                    radius="xl"
-                    p={0}
-                    style={{
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      borderColor: warehouse.isSelected
-                        ? 'var(--mantine-color-orange-5)'
-                        : 'rgba(15, 23, 42, 0.08)',
-                      boxShadow: warehouse.isSelected
-                        ? '0 0 0 1px var(--mantine-color-orange-3)'
-                        : undefined,
-                    }}
-                    onClick={() => handleWarehouseCardClick(warehouse.id)}
-                  >
-                    <Box
-                      style={{
-                        minHeight: 152,
-                        background:
-                          warehouse.type === 'OWN'
-                            ? 'linear-gradient(135deg, rgba(249,115,22,0.18) 0%, rgba(255,255,255,0.95) 100%)'
-                            : 'linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(255,255,255,0.95) 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
-                      }}
-                    >
-                      <Stack align="center" gap={6}>
-                        <WarehouseIdentityMark
-                          logoUrl={warehouse.ownerLogoUrl}
-                          name={warehouse.ownerName}
-                          initials={warehouse.initials}
-                          size={78}
-                        />
-                        <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                          {warehouse.type === 'OWN' ? 'Bodega propia' : 'Bodega aliada'}
-                        </Text>
-                      </Stack>
-                    </Box>
-
-                    <Stack gap="sm" p="md">
-                      <Group justify="space-between" align="flex-start" wrap="nowrap">
-                        <div>
-                          <Text fw={700}>{warehouse.name}</Text>
-                          <Text size="sm" c="dimmed" mt={4}>
-                            {warehouse.ownerName}
-                          </Text>
-                        </div>
-                        <Group gap="xs" align="flex-start" wrap="nowrap">
-                          <Badge color={warehouse.active ? 'green' : 'gray'} variant="light">
-                            {warehouse.active ? 'Activo' : 'Inactivo'}
-                          </Badge>
                           <ActionIcon
                             variant="subtle"
-                            color="gray"
-                            radius="xl"
-                            aria-label={`Editar ${warehouse.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openEdit(warehouse);
-                            }}
+                            color="blue"
+                            aria-label={`Ver inventario de ${warehouse.name}`}
+                            onClick={() => openWarehouseDetail(warehouse.id)}
                           >
-                            <IconEdit size={16} />
+                            <IconChevronRight size={18} />
                           </ActionIcon>
                         </Group>
-                      </Group>
+                      </div>
+                    ))}
+                  </Box>
 
-                      <Group justify="space-between" align="center" wrap="nowrap">
-                        <Badge color={warehouse.type === 'OWN' ? 'orange' : 'blue'} variant="light">
-                          {warehouse.type === 'OWN' ? 'Propia' : 'Aliada'}
-                        </Badge>
-                        {warehouse.isSelected ? (
-                          <Badge color="orange" variant="filled">
-                            Cargada
-                          </Badge>
-                        ) : (
-                          <Text size="sm" c="dimmed">
-                            Clic para cargar
-                          </Text>
-                        )}
-                      </Group>
+                  {!warehousesLoading && filteredWarehouseCards.length === 0 ? (
+                    <Stack align="center" gap={4} py={48} px="md">
+                      <Text fw={700} c="var(--ui-color-title)">
+                        No encontramos bodegas
+                      </Text>
+                      <Text size="sm" c="dimmed" ta="center">
+                        Ajusta la búsqueda o limpia los filtros para ver más resultados.
+                      </Text>
+                      {activeWarehouseFilterCount > 0 ? (
+                        <Button variant="subtle" size="compact-sm" onClick={clearWarehouseFilters}>
+                          Limpiar filtros
+                        </Button>
+                      ) : null}
                     </Stack>
-                  </Paper>
-                  ))}
-                </SimpleGrid>
-
-                {!warehousesLoading && warehouseCards.length === 0 ? (
-                  <Text c="dimmed" size="sm">
-                    No hay bodegas de proveedores registradas.
-                  </Text>
-                ) : null}
+                  ) : null}
+                </Paper>
               </Stack>
-            </Paper>
+            </section>
           ) : (
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Group justify="space-between" align="center" wrap="wrap">
@@ -1176,6 +1260,45 @@ export default function WarehouseInventoryPageClient({
           ) : null}
         </Stack>
       </Container>
+
+      <Drawer
+        opened={warehouseFiltersOpen}
+        onClose={() => setWarehouseFiltersOpen(false)}
+        title="Filtrar bodegas"
+        position="bottom"
+        size="auto"
+        hiddenFrom="sm"
+      >
+        <Stack gap="lg" pb="md">
+          <Select
+            label="Estado"
+            data={[
+              { value: 'ALL', label: 'Todas' },
+              { value: 'ACTIVE', label: 'Activas' },
+              { value: 'INACTIVE', label: 'Inactivas' },
+            ]}
+            value={warehouseStatusFilter}
+            onChange={(value) =>
+              setWarehouseStatusFilter((value as WarehouseStatusFilter | null) ?? 'ALL')
+            }
+          />
+          <Select
+            label="Proveedor"
+            placeholder="Todos"
+            clearable
+            searchable
+            data={warehouseOwnerFilterOptions}
+            value={warehouseOwnerFilter}
+            onChange={setWarehouseOwnerFilter}
+          />
+          <Group grow>
+            <Button variant="default" onClick={clearWarehouseFilters}>
+              Limpiar
+            </Button>
+            <Button onClick={() => setWarehouseFiltersOpen(false)}>Ver resultados</Button>
+          </Group>
+        </Stack>
+      </Drawer>
 
       <Modal
         opened={adjustOpen}

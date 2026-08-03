@@ -1,0 +1,128 @@
+.providerDirectory {
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: clamp(1rem, 1.4vw, 1.5rem);
+}
+
+.createButton {
+  min-height: 2.625rem;
+}
+
+.desktopFilters {
+  align-items: end;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(17rem, 1fr) auto minmax(13rem, 16rem);
+}
+
+.searchInput input,
+.mobileSearchInput input {
+  font-size: 0.9375rem;
+  min-height: 2.625rem;
+}
+
+.mobileFilters {
+  display: none;
+}
+
+.tableSurface {
+  border-color: #dfe4eb;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.tableSurface thead {
+  background: #f8fafc;
+}
+
+.tableSurface th {
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.tableSurface td {
+  border-color: #e7ebf0;
+}
+
+.tableRow {
+  transition: background-color 140ms ease;
+}
+
+.tableRow:hover {
+  background: #f8fbff;
+}
+
+.mobileList {
+  background: #ffffff;
+}
+
+.mobileRow {
+  align-items: center;
+  border-bottom: 1px solid #e7ebf0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 4.75rem;
+  padding: 0.75rem;
+  transition: background-color 140ms ease;
+}
+
+.mobileRow:last-child {
+  border-bottom: 0;
+}
+
+.mobileRow:active {
+  background: #f5f8fc;
+}
+
+.mobileIdentity,
+.mobileRowCopy {
+  min-width: 0;
+}
+
+.mobileIdentity {
+  flex: 1;
+}
+
+@media (max-width: 47.99em) {
+  .providerDirectory {
+    border-radius: 0;
+    margin: -0.5rem;
+    padding: 1rem 0.75rem 1.5rem;
+  }
+
+  .createButton {
+    width: 100%;
+  }
+
+  .desktopFilters {
+    display: none;
+  }
+
+  .mobileFilters {
+    align-items: stretch;
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mobileSearchInput input {
+    font-size: 0.875rem;
+  }
+
+  .tableSurface {
+    border-left: 0;
+    border-radius: 0;
+    border-right: 0;
+    margin-inline: -0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tableRow,
+  .mobileRow {
+    transition: none;
+  }
+}
