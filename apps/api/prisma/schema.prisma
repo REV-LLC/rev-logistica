@@ -104,6 +104,9 @@ enum NotificationChannel {
 enum NotificationDeliveryStatus {
   PENDING
   SENDING
+  ACCEPTED
+  DELIVERED
+  READ
   SENT
   FAILED
 }
@@ -490,7 +493,10 @@ model NotificationDelivery {
   occurrenceKey String
   channel       NotificationChannel
   status        NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?                 @unique
   sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
   error         String?
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
@@ -592,7 +598,10 @@ model DocumentMessageDelivery {
   channel    NotificationChannel
   phone      String
   status     NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?              @unique
   sentAt     DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
   error      String?
   createdAt  DateTime                   @default(now())
   updatedAt  DateTime                   @updatedAt
