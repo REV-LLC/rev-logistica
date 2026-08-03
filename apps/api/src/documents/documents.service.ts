@@ -1346,6 +1346,12 @@ export class DocumentsService {
         consecutive: true,
         docDate: true,
         notes: true,
+        creator: {
+          select: {
+            email: true,
+            employee: { select: { name: true, lastName: true } },
+          },
+        },
         customerWorksite: {
           select: {
             alias: true,
@@ -1388,7 +1394,46 @@ export class DocumentsService {
       },
     });
     if (!document) throw new NotFoundException('Documento compartido no encontrado');
-    return document;
+    const responsibleIds = this.parseDocumentResponsibleIds(document.notes);
+    const employeeIds = [
+      responsibleIds.driverId,
+      responsibleIds.dispatcherId,
+    ].filter((id): id is string => Boolean(id));
+    const employees = employeeIds.length
+      ? await this.prisma.employee.findMany({
+          where: { id: { in: employeeIds } },
+          select: { id: true, name: true, lastName: true },
+        })
+      : [];
+    const employeeNameById = new Map(
+      employees.map((employee) => [
+        employee.id,
+        `${employee.name} ${employee.lastName}`.trim(),
+      ]),
+    );
+    const driverName = responsibleIds.driverId
+      ? (employeeNameById.get(responsibleIds.driverId) ?? null)
+      : null;
+    const dispatcherName = responsibleIds.dispatcherId
+      ? (employeeNameById.get(responsibleIds.dispatcherId) ?? null)
+      : null;
+    const preparedBy = document.creator.employee
+      ? `${document.creator.employee.name} ${document.creator.employee.lastName}`.trim()
+      : document.creator.email;
+    const isOnSite = this.parseDeliveryMode(document.notes) === 'ON_SITE';
+    return {
+      ...document,
+      creator: undefined,
+      responsibles: {
+        preparedBy,
+        transportedBy: isOnSite
+          ? (driverName ?? 'Sin conductor asignado')
+          : 'No aplica · retiro en bodega',
+        deliveredBy: isOnSite
+          ? (driverName ?? 'Sin conductor asignado')
+          : (dispatcherName ?? 'Sin despachador asignado'),
+      },
+    };
   }
 
   async getSharedDocumentPdf(shareToken: string) {
@@ -1413,5 +1458,22 @@ export class DocumentsService {
     } catch {
       // Document creation must remain successful if an external provider is unavailable.
     }
+  }
+
+  private parseDocumentResponsibleIds(notes?: string | null) {
+    const values = new Map<string, string>();
+    notes
+      ?.split('|')
+      .map((value) => value.trim())
+      .forEach((entry) => {
+        const [key, ...rest] = entry.split(':');
+        if (key && rest.length) {
+          values.set(key.trim().toLowerCase(), rest.join(':').trim());
+        }
+      });
+    return {
+      driverId: values.get('conductor') || null,
+      dispatcherId: values.get('despachador') || null,
+    };
   }
 }

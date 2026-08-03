@@ -8,6 +8,11 @@ describe('DocumentPdfService', () => {
     consecutive: 'RM000001',
     docDate: new Date('2026-08-03T12:00:00.000Z'),
     notes: 'Entregar en portería.',
+    responsibles: {
+      preparedBy: 'Ana Administradora',
+      transportedBy: 'Carlos Conductor',
+      deliveredBy: 'Carlos Conductor',
+    },
     customerWorksite: {
       alias: 'Obra Centro',
       customer: { name: 'Cliente Ejemplo' },
