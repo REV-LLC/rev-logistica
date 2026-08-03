@@ -605,7 +605,6 @@ export class DocumentsService {
 
           return document;
         });
-        await this.safeSendDraftMessages(document.id);
         return document;
       } catch (error) {
         if (
