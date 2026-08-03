@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { ActionIcon, Box, FileButton, Tooltip } from '@mantine/core';
 import { IconCamera, IconZoomIn } from '@tabler/icons-react';
-import EmployeeAvatar from '@/components/EmployeeAvatar';
+import EmployeeAvatar, {
+  invalidateEmployeePhoto,
+} from '@/components/EmployeeAvatar';
 import { api, ApiError } from '@/lib/api';
 
 type EmployeePhotoRecord = {
@@ -27,7 +29,6 @@ export default function EmployeePhotoControl({
   editable?: boolean;
   onPreview?: (employee: EmployeePhotoRecord) => void;
 }) {
-  const [version, setVersion] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +45,7 @@ export default function EmployeePhotoControl({
         method: 'POST',
         body: formData,
       });
-      setVersion((current) => current + 1);
+      invalidateEmployeePhoto(employee.id);
     } catch (uploadError) {
       setError(
         uploadError instanceof ApiError
@@ -57,12 +58,17 @@ export default function EmployeePhotoControl({
   };
 
   return (
-    <Tooltip label={error ?? (onPreview ? 'Ampliar foto' : 'Foto del empleado')} color={error ? 'red' : undefined}>
+    <Tooltip
+      label={error ?? (onPreview ? 'Ampliar foto' : 'Foto del empleado')}
+      color={error ? 'red' : undefined}
+    >
       <Box pos="relative" w={size} h={size} style={{ flexShrink: 0 }}>
         <Box
           component={onPreview ? 'button' : 'div'}
           type={onPreview ? 'button' : undefined}
-          aria-label={onPreview ? `Ampliar foto de ${employeeName(employee)}` : undefined}
+          aria-label={
+            onPreview ? `Ampliar foto de ${employeeName(employee)}` : undefined
+          }
           onClick={onPreview ? () => onPreview(employee) : undefined}
           style={{
             appearance: 'none',
@@ -73,11 +79,14 @@ export default function EmployeePhotoControl({
             padding: 0,
           }}
         >
-          <EmployeeAvatar employee={employee} size={size} version={version} />
+          <EmployeeAvatar employee={employee} size={size} />
         </Box>
 
         {editable ? (
-          <FileButton onChange={uploadPhoto} accept="image/png,image/jpeg,image/webp">
+          <FileButton
+            onChange={uploadPhoto}
+            accept="image/png,image/jpeg,image/webp"
+          >
             {(props) => (
               <ActionIcon
                 {...props}
@@ -100,7 +109,12 @@ export default function EmployeePhotoControl({
             radius="xl"
             size="xs"
             variant="filled"
-            style={{ position: 'absolute', bottom: -1, right: -1, pointerEvents: 'none' }}
+            style={{
+              position: 'absolute',
+              bottom: -1,
+              right: -1,
+              pointerEvents: 'none',
+            }}
           >
             <IconZoomIn size={12} />
           </ActionIcon>
