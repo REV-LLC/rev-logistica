@@ -26,8 +26,8 @@ import {
   IconBuilding,
   IconBuildingEstate,
   IconExternalLink,
-  IconEye,
   IconMapPin,
+  IconPencil,
   IconPlus,
   IconSearch,
   IconUserCheck,
@@ -36,6 +36,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
+import TableRowActions from '@/components/TableRowActions';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -147,69 +148,6 @@ function getGoogleMapsPreviewUrl(addressValidation: AddressValidationResponse) {
   return `https://www.google.com/maps?${params.toString()}`;
 }
 
-function WorksiteDetails({
-  row,
-  onEdit,
-}: {
-  row: WorksiteRow;
-  onEdit?: (row: WorksiteRow) => void;
-}) {
-  return (
-    <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <div>
-          <Text fw={700} size="lg">
-            {row.worksite.name}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {row.alias ?? 'Sin alias'}
-          </Text>
-        </div>
-        <Stack gap="xs" align="flex-end">
-          <Badge color={row.worksite.active ? 'green' : 'gray'} variant="light">
-            Obra {row.worksite.active ? 'activa' : 'inactiva'}
-          </Badge>
-        </Stack>
-      </Group>
-
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Cliente
-          </Text>
-          <Text size="sm" mt={8}>
-            {row.customer.name}
-          </Text>
-        </Paper>
-
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Direccion
-          </Text>
-          <Text size="sm" mt={8}>
-            {row.worksite.address ?? '-'}
-          </Text>
-        </Paper>
-      </SimpleGrid>
-
-      <Group className="mobile-actions">
-        <Button
-          variant="default"
-          component={Link}
-          href={`/transport/worksites/${row.id}`}
-        >
-          Abrir obra
-        </Button>
-        {onEdit ? (
-          <Button variant="light" onClick={() => onEdit(row)}>
-            Editar
-          </Button>
-        ) : null}
-      </Group>
-    </Stack>
-  );
-}
-
 export default function WorksitesPage() {
   const searchParams = useSearchParams();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -221,7 +159,6 @@ export default function WorksitesPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorksiteRow | null>(null);
-  const [detailsRow, setDetailsRow] = useState<WorksiteRow | null>(null);
   const [form, setForm] = useState<WorksiteForm>(emptyForm);
   const [addressValidation, setAddressValidation] = useState<AddressValidationResponse | null>(null);
   const [addressValidationError, setAddressValidationError] = useState<string | null>(null);
@@ -652,9 +589,6 @@ export default function WorksitesPage() {
                       </Text>
 
                       <Group grow>
-                        <Button variant="light" onClick={() => setDetailsRow(row)}>
-                          Ver detalle
-                        </Button>
                         <Button variant="default" component={Link} href={`/transport/worksites/${row.id}`}>
                           Abrir obra
                         </Button>
@@ -694,7 +628,7 @@ export default function WorksitesPage() {
                   <Table.Th>Alias</Table.Th>
                   <Table.Th>Direccion</Table.Th>
                   <Table.Th>Estado</Table.Th>
-                  <Table.Th />
+                  <Table.Th ta="right">Acciones</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -732,27 +666,23 @@ export default function WorksitesPage() {
                         </Stack>
                       </Table.Td>
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button
-                            size="xs"
-                            variant="light"
-                            onClick={() => setDetailsRow(row)}
-                            rightSection={<IconEye size={14} />}
-                          >
-                            Detalle
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="default"
-                            component={Link}
-                            href={`/transport/worksites/${row.id}`}
-                          >
-                            Abrir
-                          </Button>
-                          <Button size="xs" variant="light" onClick={() => openEdit(row)}>
-                            Editar
-                          </Button>
-                        </Group>
+                        <TableRowActions
+                          actions={[
+                            {
+                              key: 'open',
+                              label: `Abrir ${row.worksite.name}`,
+                              icon: <IconExternalLink size={16} />,
+                              color: 'blue',
+                              href: `/transport/worksites/${row.id}`,
+                            },
+                            {
+                              key: 'edit',
+                              label: `Editar ${row.worksite.name}`,
+                              icon: <IconPencil size={16} />,
+                              onClick: () => openEdit(row),
+                            },
+                          ]}
+                        />
                       </Table.Td>
                     </Table.Tr>
                   ))}
@@ -787,18 +717,6 @@ export default function WorksitesPage() {
           )}
         </Paper>
       </Stack>
-
-      <Modal opened={!!detailsRow} onClose={() => setDetailsRow(null)} title="Detalle de obra" centered size="lg">
-        {detailsRow ? (
-          <WorksiteDetails
-            row={detailsRow}
-            onEdit={(row) => {
-              setDetailsRow(null);
-              openEdit(row);
-            }}
-          />
-        ) : null}
-      </Modal>
 
       <Modal
         opened={modalOpen}

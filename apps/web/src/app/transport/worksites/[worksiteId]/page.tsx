@@ -30,6 +30,7 @@ import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
+import WorksiteBalancePdfButton from '@/components/worksites/WorksiteBalancePdfButton';
 
 type WorksiteOption = {
   id: string;
@@ -175,11 +176,21 @@ export default function ObraDetailPage() {
             <Group gap="xs" wrap="wrap">
               {worksite ? (
                 <Button variant="default" component={Link} href={`/customers?customerId=${worksite.customer.id}`}>
-                  View customer
+                  Ver cliente
                 </Button>
               ) : null}
+              {worksite && inventory ? (
+                <WorksiteBalancePdfButton
+                  customerName={worksite.customer.name}
+                  worksiteName={worksite.worksite.name}
+                  worksiteAlias={worksite.alias}
+                  address={worksite.worksite.address}
+                  bulk={inventory.bulk}
+                  serial={inventory.serial}
+                />
+              ) : null}
               <Button variant="light" component={Link} href={`/inventory/ledger?customerWorksiteId=${worksiteId ?? ''}`}>
-                View full ledger
+                Ver movimientos completos
               </Button>
             </Group>
           </Group>
@@ -351,7 +362,7 @@ export default function ObraDetailPage() {
                 </Badge>
               </Group>
               {ledgerItems.length > 0 ? (
-                <LedgerTable items={ledgerItems} />
+                <LedgerTable items={ledgerItems} showItemIdentifiers={false} />
               ) : (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text fw={700}>No hay movimientos recientes para esta obra.</Text>

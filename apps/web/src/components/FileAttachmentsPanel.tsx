@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -22,6 +21,7 @@ import FileUploadModal, {
   type FileCategoryOption,
   type FileEntityType,
 } from '@/components/FileUploadModal';
+import TableRowActions from '@/components/TableRowActions';
 
 export type { FileEntityType } from '@/components/FileUploadModal';
 
@@ -85,34 +85,34 @@ function FileActions({
   onRemove,
 }: FileActionsProps) {
   return (
-    <Group gap="xs" justify="flex-end" wrap="nowrap">
-      {canPreview(file) ? (
-        <ActionIcon
-          variant="light"
-          color="teal"
-          aria-label={`Ver ${fileLabel(file)}`}
-          loading={previewLoadingId === file.id}
-          onClick={() => onPreview(file)}
-        >
-          <IconEye size={16} />
-        </ActionIcon>
-      ) : null}
-      <ActionIcon
-        variant="light"
-        aria-label={`Descargar ${fileLabel(file)}`}
-        onClick={() => onDownload(file)}
-      >
-        <IconDownload size={16} />
-      </ActionIcon>
-      <ActionIcon
-        color="red"
-        variant="light"
-        aria-label={`Eliminar ${fileLabel(file)}`}
-        onClick={() => onRemove(file)}
-      >
-        <IconTrash size={16} />
-      </ActionIcon>
-    </Group>
+    <TableRowActions
+      actions={[
+        ...(canPreview(file)
+          ? [{
+              key: 'view',
+              label: `Ver ${fileLabel(file)}`,
+              icon: <IconEye size={16} />,
+              color: 'blue',
+              loading: previewLoadingId === file.id,
+              onClick: () => onPreview(file),
+            }]
+          : []),
+        {
+          key: 'download',
+          label: `Descargar ${fileLabel(file)}`,
+          icon: <IconDownload size={16} />,
+          color: 'violet',
+          onClick: () => onDownload(file),
+        },
+        {
+          key: 'delete',
+          label: `Eliminar ${fileLabel(file)}`,
+          icon: <IconTrash size={16} />,
+          color: 'red',
+          onClick: () => onRemove(file),
+        },
+      ]}
+    />
   );
 }
 
@@ -248,7 +248,7 @@ export default function FileAttachmentsPanel({
                 <Table.Th w="20%">Categoria</Table.Th>
                 <Table.Th w="16%">Vence</Table.Th>
                 <Table.Th w="12%">Tamaño</Table.Th>
-                <Table.Th w={120} />
+                <Table.Th w={120} ta="right">Acciones</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

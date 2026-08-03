@@ -47,7 +47,7 @@ export class EmployeesController {
   ) {
     const photo = await this.employeesService.getEmployeePhoto(employeeId);
     response.setHeader('Content-Type', photo.contentType);
-    response.setHeader('Cache-Control', 'private, max-age=300');
+    response.setHeader('Cache-Control', 'private, max-age=14400');
     if (photo.contentLength !== undefined) {
       response.setHeader('Content-Length', String(photo.contentLength));
     }

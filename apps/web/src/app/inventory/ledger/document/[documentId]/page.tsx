@@ -15,6 +15,7 @@ import {
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
   NumberInput,
 } from '@mantine/core';
@@ -24,7 +25,8 @@ import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
-import { IconArrowLeft, IconCalendar } from '@tabler/icons-react';
+import { IconArrowLeft, IconBrandWhatsapp, IconCalendar } from '@tabler/icons-react';
+import TableRowActions from '@/components/TableRowActions';
 
 const PRINT_LINES_PER_PAGE = 20;
 
@@ -36,6 +38,7 @@ type DocumentDetail = {
   createdAt: string;
   docDate: string;
   notes: string | null;
+  recipientPhone?: string | null;
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
     id: string;
@@ -44,6 +47,14 @@ type DocumentDetail = {
     worksite?: { id: string; name: string; address: string | null } | null;
   } | null;
   creator?: { id: string; email: string; name: string | null } | null;
+  messageDeliveries?: Array<{
+    id: string;
+    phone: string;
+    status: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | string;
+    sentAt?: string | null;
+    error?: string | null;
+    createdAt: string;
+  }>;
   files?: Array<{
     id: string;
     fileType: string;
@@ -204,6 +215,20 @@ function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('es-CO');
+}
+
+function formatWhatsappPhone(value: string) {
+  const digits = value.replace(/\D/g, '');
+  const national = digits.startsWith('57') && digits.length === 12 ? digits.slice(2) : digits;
+  if (national.length !== 10) return value;
+  return `+57 ${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}`;
+}
+
+function whatsappDeliveryStatus(status: string) {
+  if (status === 'SENT') return { label: 'Enviada', color: 'green' };
+  if (status === 'FAILED') return { label: 'Fallida', color: 'red' };
+  if (status === 'SENDING') return { label: 'Enviando', color: 'blue' };
+  return { label: 'Pendiente', color: 'yellow' };
 }
 
 function parseNotes(notes: string | null) {
@@ -376,6 +401,7 @@ export default function DocumentDetailPage() {
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
+  const [printAudience, setPrintAudience] = useState<'internal' | 'customer'>('internal');
   const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
   const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
 
@@ -557,6 +583,20 @@ export default function DocumentDetailPage() {
     }
     return pages;
   }, [document?.items, document?.ledger, document?.type, warehouseNameById]);
+
+  useEffect(() => {
+    const resetPrintAudience = () => setPrintAudience('internal');
+    window.addEventListener('afterprint', resetPrintAudience);
+    return () => window.removeEventListener('afterprint', resetPrintAudience);
+  }, []);
+
+  const exportPdf = (audience: 'internal' | 'customer') => {
+    setPrintAudience(audience);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.print());
+    });
+  };
+
   const describeItem = (item: DocumentDetail['items'][number]) => {
     return (
       item.asset?.description ??
@@ -1019,7 +1059,11 @@ export default function DocumentDetailPage() {
 
   return (
     <main>
-      <Container size="lg" py="xl" className={styles.printContainer}>
+      <Container
+        size="lg"
+        py="xl"
+        className={`${styles.printContainer}${printAudience === 'customer' ? ` ${styles.customerCopy}` : ''}`}
+      >
         <ActionIcon
           variant="light"
           size="lg"
@@ -1058,11 +1102,52 @@ export default function DocumentDetailPage() {
                   </Button>
                 </>
               ) : null}
-              <Button onClick={() => window.print()} disabled={!document}>
-                Exportar PDF
+              <Button
+                variant="light"
+                onClick={() => exportPdf('internal')}
+                disabled={!document}
+              >
+                PDF interno
+              </Button>
+              <Button onClick={() => exportPdf('customer')} disabled={!document}>
+                PDF para cliente
               </Button>
             </Group>
           </Group>
+
+          {document?.recipientPhone || document?.messageDeliveries?.length ? (
+            <Paper withBorder radius="md" p="sm" mt="md" bg="green.0">
+              <Group align="flex-start" wrap="nowrap">
+                <ThemeIcon color="green" variant="light" radius="xl">
+                  <IconBrandWhatsapp size={17} />
+                </ThemeIcon>
+                <Stack gap={6} style={{ minWidth: 0 }}>
+                  <Text fw={700} size="sm">Copia por WhatsApp</Text>
+                  {document.messageDeliveries?.length ? (
+                    document.messageDeliveries.map((delivery) => {
+                      const deliveryStatus = whatsappDeliveryStatus(delivery.status);
+                      return (
+                        <Group key={delivery.id} gap="xs" wrap="wrap">
+                          <Text size="sm" fw={600}>{formatWhatsappPhone(delivery.phone)}</Text>
+                          <Badge size="sm" variant="light" color={deliveryStatus.color}>
+                            {deliveryStatus.label}
+                          </Badge>
+                          {delivery.sentAt ? (
+                            <Text size="xs" c="dimmed">{formatDateTime(delivery.sentAt)}</Text>
+                          ) : null}
+                        </Group>
+                      );
+                    })
+                  ) : (
+                    <Group gap="xs" wrap="wrap">
+                      <Text size="sm" fw={600}>{formatWhatsappPhone(document.recipientPhone ?? '')}</Text>
+                      <Badge size="sm" variant="light" color="yellow">Sin registro de entrega</Badge>
+                    </Group>
+                  )}
+                </Stack>
+              </Group>
+            </Paper>
+          ) : null}
 
           {loading ? <Text mt="md">Cargando...</Text> : null}
           {error ? (
@@ -1081,7 +1166,7 @@ export default function DocumentDetailPage() {
                     <Table.Th>Fecha de corte</Table.Th>
                     <Table.Th>Fecha real de devolución</Table.Th>
                     <Table.Th>Estado</Table.Th>
-                    <Table.Th></Table.Th>
+                    <Table.Th ta="right">Acciones</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -1107,9 +1192,17 @@ export default function DocumentDetailPage() {
                           </Badge>
                         </Table.Td>
                         <Table.Td>
-                          <Button size="xs" variant="light" onClick={() => openBillingModal(item)}>
-                            Definir corte
-                          </Button>
+                          <TableRowActions
+                            actions={[
+                              {
+                                key: 'cutoff',
+                                label: `Definir corte de ${describeItem(item)}`,
+                                icon: <IconCalendar size={16} />,
+                                color: 'blue',
+                                onClick: () => openBillingModal(item),
+                              },
+                            ]}
+                          />
                         </Table.Td>
                       </Table.Tr>
                     );
@@ -1225,7 +1318,7 @@ export default function DocumentDetailPage() {
                     <th style={{ width: '12%' }}>CANTIDAD</th>
                     <th>DESCRIPCION</th>
                     <th style={{ width: '10%' }}># EQ</th>
-                    <th style={{ width: '20%' }}>ORIGEN</th>
+                    <th className={styles.originColumn} style={{ width: '20%' }}>ORIGEN</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1234,7 +1327,7 @@ export default function DocumentDetailPage() {
                       <td>{line.qty > 0 ? line.qty : ''}</td>
                       <td>{line.desc}</td>
                       <td>{line.eq}</td>
-                      <td>{line.origin}</td>
+                      <td className={styles.originColumn}>{line.origin}</td>
                     </tr>
                   ))}
                 </tbody>

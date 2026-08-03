@@ -34,8 +34,8 @@ function getHeaderCopy(
 ) {
   if (pathname?.startsWith('/inventory/warehouse') && inventoryScope === 'own') {
     return inventoryView === 'bulk'
-      ? { title: 'Inventario bulk', subtitle: 'Bodega propia' }
-      : { title: 'Assets', subtitle: 'Bodega propia' };
+      ? { title: 'Materiales', subtitle: 'Bodega propia' }
+      : { title: 'Equipos', subtitle: 'Bodega propia' };
   }
 
   return routeTitles.find((item) => pathname?.startsWith(item.prefix)) ?? { title: 'Rev Logistica', subtitle: 'Panel operativo' };

@@ -33,6 +33,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import TableRowActions from '@/components/TableRowActions';
 import EmployeeFormModal, {
   appRoleLabelByValue,
   emptyEmployeeForm,
@@ -561,7 +562,7 @@ export default function EmployeesPage() {
                   <Table.Th>Acceso</Table.Th>
                   <Table.Th>Vehículos</Table.Th>
                   <Table.Th>Estado</Table.Th>
-                  <Table.Th />
+                  <Table.Th ta="right">Acciones</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -622,47 +623,37 @@ export default function EmployeesPage() {
                         <EmployeeStatusBadge active={employee.active} />
                       </Table.Td>
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <ActionIcon
-                            color="blue"
-                            variant="light"
-                            aria-label={`Documentos de ${getEmployeeFullName(employee)}`}
-                            onClick={() => setDocumentsEmployee(employee)}
-                          >
-                            <IconFileDescription size={16} />
-                          </ActionIcon>
-                          <Menu position="bottom-end" withinPortal>
-                            <Menu.Target>
-                              <ActionIcon
-                                variant="light"
-                                aria-label={`Acciones de ${getEmployeeFullName(employee)}`}
-                              >
-                                <IconDotsVertical size={16} />
-                              </ActionIcon>
-                            </Menu.Target>
-                            <Menu.Dropdown>
-                              <Menu.Item
-                                leftSection={<IconEye size={16} />}
-                                onClick={() => setDetailsEmployee(employee)}
-                              >
-                                Ver detalle
-                              </Menu.Item>
-                              <Menu.Item
-                                leftSection={<IconPencil size={16} />}
-                                onClick={() => openEdit(employee)}
-                              >
-                                Editar
-                              </Menu.Item>
-                              <Menu.Item
-                                color="red"
-                                leftSection={<IconTrash size={16} />}
-                                onClick={() => deleteEmployee(employee)}
-                              >
-                                Eliminar
-                              </Menu.Item>
-                            </Menu.Dropdown>
-                          </Menu>
-                        </Group>
+                        <TableRowActions
+                          actions={[
+                            {
+                              key: 'view',
+                              label: `Ver detalle de ${getEmployeeFullName(employee)}`,
+                              icon: <IconEye size={16} />,
+                              color: 'blue',
+                              onClick: () => setDetailsEmployee(employee),
+                            },
+                            {
+                              key: 'documents',
+                              label: `Documentos de ${getEmployeeFullName(employee)}`,
+                              icon: <IconFileDescription size={16} />,
+                              color: 'violet',
+                              onClick: () => setDocumentsEmployee(employee),
+                            },
+                            {
+                              key: 'edit',
+                              label: `Editar ${getEmployeeFullName(employee)}`,
+                              icon: <IconPencil size={16} />,
+                              onClick: () => openEdit(employee),
+                            },
+                            {
+                              key: 'delete',
+                              label: `Eliminar ${getEmployeeFullName(employee)}`,
+                              icon: <IconTrash size={16} />,
+                              color: 'red',
+                              onClick: () => deleteEmployee(employee),
+                            },
+                          ]}
+                        />
                       </Table.Td>
                     </Table.Tr>
                   ))}
