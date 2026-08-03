@@ -27,6 +27,7 @@ describe('DocumentCustomerMessagesService', () => {
       sendWhatsapp: jest.fn().mockResolvedValue({ sent: true }),
     };
     process.env.PUBLIC_WEB_URL = 'https://app.example.test';
+    process.env.PUBLIC_API_URL = 'https://api.example.test';
     const service = new DocumentCustomerMessagesService(
       prisma as any,
       transport as any,
@@ -43,6 +44,10 @@ describe('DocumentCustomerMessagesService', () => {
       '+573001234567',
       expect.objectContaining({
         link: 'https://app.example.test/documents/shared/share-token',
+        document: {
+          link: 'https://api.example.test/public/documents/share-token/pdf',
+          filename: 'remision-RM000001.pdf',
+        },
       }),
     );
   });

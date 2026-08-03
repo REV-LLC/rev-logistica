@@ -16,6 +16,7 @@ import { DocumentCustomerMessagesService } from '../document-messages/document-c
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
+import { DocumentPdfService } from './document-pdf.service';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -33,6 +34,7 @@ export class DocumentsService {
     private readonly inventoryService: InventoryService,
     private readonly documentEmails: DocumentCustomerEmailsService,
     private readonly documentMessages: DocumentCustomerMessagesService,
+    private readonly documentPdf: DocumentPdfService,
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -1388,6 +1390,14 @@ export class DocumentsService {
     });
     if (!document) throw new NotFoundException('Documento compartido no encontrado');
     return document;
+  }
+
+  async getSharedDocumentPdf(shareToken: string) {
+    const document = await this.getSharedDocument(shareToken);
+    return {
+      buffer: await this.documentPdf.render(document),
+      fileName: this.documentPdf.fileName(document),
+    };
   }
 
   sendDraftCustomerEmail(documentId: string) {

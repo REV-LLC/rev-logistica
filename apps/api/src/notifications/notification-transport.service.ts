@@ -6,6 +6,7 @@ export interface NotificationMessage {
   body: string;
   link?: string;
   recipientName?: string;
+  document?: { link: string; filename: string };
 }
 
 @Injectable()
@@ -39,6 +40,7 @@ export class NotificationTransportService {
       accessToken: process.env.WHATSAPP_ACCESS_TOKEN?.trim(),
       phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
       templateName: process.env.WHATSAPP_TEMPLATE_NAME?.trim(),
+      documentTemplateName: process.env.WHATSAPP_DOCUMENT_TEMPLATE_NAME?.trim(),
       templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || 'es_CO',
       apiVersion: process.env.WHATSAPP_API_VERSION?.trim(),
     };
@@ -52,6 +54,7 @@ export class NotificationTransportService {
         accessToken: string;
         phoneNumberId: string;
         templateName: string;
+        documentTemplateName?: string;
         templateLanguage: string;
         apiVersion: string;
       });
@@ -71,10 +74,48 @@ export class NotificationTransportService {
       accessToken: string;
       phoneNumberId: string;
       templateName: string;
+      documentTemplateName?: string;
       templateLanguage: string;
       apiVersion: string;
     },
   ) {
+    const useDocumentTemplate = Boolean(
+      message.document && config.documentTemplateName,
+    );
+    const components: Array<Record<string, unknown>> = [];
+    if (useDocumentTemplate && message.document) {
+      components.push({
+        type: 'header',
+        parameters: [{
+          type: 'document',
+          document: {
+            link: message.document.link,
+            filename: message.document.filename,
+          },
+        }],
+      });
+    }
+    components.push({
+      type: 'body',
+      parameters: [
+        { type: 'text', text: message.recipientName || 'usuario' },
+        {
+          type: 'text',
+          text: useDocumentTemplate
+            ? this.documentDescription(message.title)
+            : `${message.title}. ${message.body}`,
+        },
+      ],
+    });
+    if (!useDocumentTemplate) {
+      components.push({
+        type: 'button',
+        sub_type: 'url',
+        index: '0',
+        parameters: [{ type: 'text', text: this.dynamicButtonValue(message.link) }],
+      });
+    }
+
     const response = await fetch(
       `https://graph.facebook.com/${config.apiVersion}/${config.phoneNumberId}/messages`,
       {
@@ -89,20 +130,11 @@ export class NotificationTransportService {
           to: phone.replace(/\D/g, ''),
           type: 'template',
           template: {
-            name: config.templateName,
+            name: useDocumentTemplate
+              ? config.documentTemplateName
+              : config.templateName,
             language: { code: config.templateLanguage },
-            components: [{
-              type: 'body',
-              parameters: [
-                { type: 'text', text: message.recipientName || 'usuario' },
-                { type: 'text', text: `${message.title}. ${message.body}` },
-              ],
-            }, {
-              type: 'button',
-              sub_type: 'url',
-              index: '0',
-              parameters: [{ type: 'text', text: this.dynamicButtonValue(message.link) }],
-            }],
+            components,
           },
         }),
       },
@@ -167,5 +199,14 @@ export class NotificationTransportService {
     } catch {
       return link.replace(/^\/+/, '');
     }
+  }
+
+  private documentDescription(title: string) {
+    const normalized = title.trim();
+    if (!normalized) return 'el documento solicitado';
+    const lowered = `${normalized[0].toLocaleLowerCase('es-CO')}${normalized.slice(1)}`;
+    return /^(remisión|devolución)\b/i.test(normalized)
+      ? `la ${lowered}`
+      : `el ${lowered}`;
   }
 }
