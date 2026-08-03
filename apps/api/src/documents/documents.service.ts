@@ -11,8 +11,10 @@ import {
   Role,
 } from '@prisma/client';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
+import { DocumentCustomerMessagesService } from '../document-messages/document-customer-messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -29,6 +31,7 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly inventoryService: InventoryService,
     private readonly documentEmails: DocumentCustomerEmailsService,
+    private readonly documentMessages: DocumentCustomerMessagesService,
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -481,6 +484,7 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
+    recipientPhone: string;
     createdBy: string;
   }) {
     const type = payload.type as DocumentType;
@@ -489,7 +493,7 @@ export class DocumentsService {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const document = await this.prisma.$transaction(async (tx) => {
           const consecutive = await this.resolveConsecutive(
             type,
             tx,
@@ -503,10 +507,13 @@ export class DocumentsService {
               warehouseId: payload.warehouseId ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               notes: payload.notes ?? null,
+              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
               createdBy: payload.createdBy,
             },
           });
         });
+        await this.safeSendDraftMessages(document.id);
+        return document;
       } catch (error) {
         if (this.isConsecutiveConflict(error) && !payload.number) {
           continue;
@@ -527,6 +534,7 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
+    recipientPhone: string;
     receivedSignature?: string;
     createdBy: string;
     items: Array<{
@@ -542,7 +550,7 @@ export class DocumentsService {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const document = await this.prisma.$transaction(async (tx) => {
           const consecutive = await this.resolveConsecutive(
             type,
             tx,
@@ -561,6 +569,7 @@ export class DocumentsService {
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
+              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
               createdBy: payload.createdBy,
             },
           });
@@ -593,6 +602,8 @@ export class DocumentsService {
 
           return document;
         });
+        await this.safeSendDraftMessages(document.id);
+        return document;
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -616,6 +627,7 @@ export class DocumentsService {
       warehouseId?: string;
       customerWorksiteId?: string;
       notes?: string;
+      recipientPhone?: string;
       receivedSignature?: string;
       items: Array<{
         skuId?: string;
@@ -639,6 +651,7 @@ export class DocumentsService {
         warehouseId: true,
         customerWorksiteId: true,
         notes: true,
+        recipientPhone: true,
         docDate: true,
       },
     });
@@ -689,6 +702,10 @@ export class DocumentsService {
                 : existing.customerWorksiteId,
             docDate: nextDocDate,
             notes: nextNotes,
+            recipientPhone:
+              payload.recipientPhone !== undefined
+                ? normalizeRequiredColombianPhone(payload.recipientPhone)
+                : existing.recipientPhone,
             officeModifiedAt: new Date(),
             officeModifiedBy: userId,
           },
@@ -1305,7 +1322,74 @@ export class DocumentsService {
     };
   }
 
+  async getSharedDocument(shareToken: string) {
+    const document = await this.prisma.document.findUnique({
+      where: { shareToken },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        consecutive: true,
+        docDate: true,
+        notes: true,
+        customerWorksite: {
+          select: {
+            alias: true,
+            customer: { select: { name: true } },
+            worksite: { select: { name: true, address: true } },
+          },
+        },
+        items: {
+          select: {
+            id: true,
+            quantity: true,
+            requestedTag: true,
+            conditionNote: true,
+            sku: { select: { name: true } },
+            asset: {
+              select: {
+                serialOrEngine: true,
+                description: true,
+                internalNumber: true,
+                sku: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+        files: {
+          select: {
+            id: true,
+            fileType: true,
+            displayName: true,
+            originalName: true,
+            storageKey: true,
+            mimeType: true,
+          },
+          where: {
+            fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE'] },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+    if (!document) throw new NotFoundException('Documento compartido no encontrado');
+    return document;
+  }
+
   sendDraftCustomerEmail(documentId: string) {
     return this.documentEmails.sendDraftIfNeeded(documentId);
+  }
+
+  sendDraftCustomerMessages(documentId: string) {
+    return this.documentMessages.sendDraft(documentId);
+  }
+
+  private async safeSendDraftMessages(documentId: string) {
+    try {
+      await this.documentMessages.sendDraft(documentId);
+    } catch {
+      // Document creation must remain successful if an external provider is unavailable.
+    }
   }
 }

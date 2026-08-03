@@ -11,6 +11,7 @@ export type NotificationRecipientInput = {
   userId: string;
   emailEnabled: boolean;
   smsEnabled: boolean;
+  whatsappEnabled: boolean;
 };
 
 export type NotificationRecipient = NotificationRecipientInput & {
@@ -126,8 +127,9 @@ export const emptyMaintenanceItemInput = (): MaintenanceItemInput => ({
 export function recipientsFromTopic(topic?: NotificationTopic | null): NotificationRecipientInput[] {
   return (topic?.recipients ?? []).map((recipient) => ({
     userId: recipient.userId,
-    emailEnabled: recipient.emailEnabled,
+    emailEnabled: false,
     smsEnabled: recipient.smsEnabled,
+    whatsappEnabled: recipient.whatsappEnabled ?? true,
   }));
 }
 

@@ -11,6 +11,6 @@ import { NotificationSchedulerService } from './notification-scheduler.service';
   imports: [PrismaModule, AuthModule, MailModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationTransportService, NotificationSchedulerService],
-  exports: [NotificationsService],
+  exports: [NotificationsService, NotificationTransportService],
 })
 export class NotificationsModule {}

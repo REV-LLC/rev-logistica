@@ -150,8 +150,7 @@ export default function MaintenancePlanList({
                           {recipients.map((recipient) => (
                             <Badge key={recipient.userId} variant="light" color="gray">
                               {userById.get(recipient.userId)?.name ?? recipient.user?.email ?? recipient.userId}
-                              {recipient.emailEnabled ? ' · correo' : ''}
-                              {recipient.smsEnabled ? ' · SMS' : ''}
+                              {recipient.whatsappEnabled ? ' · WhatsApp' : ''}
                             </Badge>
                           ))}
                           {!recipients.length ? <Text size="sm" c="dimmed">Sin destinatarios</Text> : null}

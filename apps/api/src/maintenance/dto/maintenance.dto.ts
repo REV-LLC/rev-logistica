@@ -23,6 +23,10 @@ export class MaintenanceRecipientDto {
   @IsOptional()
   @IsBoolean()
   smsEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  whatsappEnabled?: boolean;
 }
 
 export class CreateMaintenanceItemDto {

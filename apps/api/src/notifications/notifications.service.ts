@@ -165,8 +165,7 @@ export class NotificationsService {
     for (const reminder of reminders) {
       for (const recipient of reminder.recipients) {
         const channels: NotificationChannel[] = [];
-        if (recipient.emailEnabled && recipient.email) channels.push(NotificationChannel.EMAIL);
-        if (recipient.smsEnabled && recipient.phone) channels.push(NotificationChannel.SMS);
+        if (recipient.whatsappEnabled && recipient.phone) channels.push(NotificationChannel.WHATSAPP);
         for (const channel of channels) {
           const result = await this.dispatchOne(reminder, recipient, channel);
           if (result === 'sent') sent += 1;
@@ -268,11 +267,15 @@ export class NotificationsService {
       data: { status: NotificationDeliveryStatus.SENDING, error: null },
     });
     if (!claimed.count) return 'skipped';
-    const message: NotificationMessage = { title: reminder.title, body: reminder.message };
+    const message: NotificationMessage = {
+      title: reminder.title,
+      body: reminder.message,
+      recipientName: recipient.name,
+    };
     try {
-      const response = channel === NotificationChannel.EMAIL
-        ? await this.transport.sendEmail(recipient.email, message)
-        : await this.transport.sendSms(recipient.phone, message);
+      const response = channel === NotificationChannel.WHATSAPP
+        ? await this.transport.sendWhatsapp(recipient.phone, message)
+        : await this.transport.sendEmail(recipient.email, message);
       await this.prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: response.sent
@@ -302,8 +305,9 @@ export class NotificationsService {
     if (new Set(ids).size !== ids.length) throw new BadRequestException('Recipients cannot be duplicated');
     return recipients.map((recipient) => ({
       userId: recipient.userId,
-      emailEnabled: recipient.emailEnabled ?? true,
-      smsEnabled: recipient.smsEnabled ?? false,
+      emailEnabled: false,
+      smsEnabled: false,
+      whatsappEnabled: recipient.whatsappEnabled ?? true,
     }));
   }
 
@@ -333,6 +337,7 @@ export class NotificationsService {
       phone: recipient.user.employee?.phone ?? null,
       emailEnabled: recipient.emailEnabled,
       smsEnabled: recipient.smsEnabled,
+      whatsappEnabled: recipient.whatsappEnabled,
     }));
   }
 
