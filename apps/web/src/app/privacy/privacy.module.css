@@ -1,0 +1,150 @@
+.page {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 34rem),
+    #f3f5f8;
+  color: #334155;
+}
+
+.header {
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 5rem;
+  padding-block: 1rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  color: #0f172a;
+  text-decoration: none;
+}
+
+.brandName {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.backLink {
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.backLink:hover,
+.backLink:focus-visible {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.main {
+  padding-block: clamp(2.5rem, 6vw, 5rem);
+}
+
+.article {
+  max-width: 50rem;
+  margin-inline: auto;
+}
+
+.intro {
+  margin-bottom: clamp(2rem, 5vw, 3.5rem);
+}
+
+.title {
+  max-width: 42rem;
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.updated {
+  margin: 1rem 0 0;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.summary {
+  max-width: 44rem;
+  margin: 1.5rem 0 0;
+  color: #475569;
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  line-height: 1.7;
+}
+
+.section {
+  padding-block: 1.75rem;
+  border-top: 1px solid #dbe3ee;
+}
+
+.section h2 {
+  margin: 0 0 0.75rem;
+  color: #0f172a;
+  font-size: clamp(1.2rem, 2.5vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.section p,
+.section li {
+  font-size: 0.975rem;
+  line-height: 1.75;
+}
+
+.section p {
+  margin: 0.75rem 0 0;
+}
+
+.section ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.section li + li {
+  margin-top: 0.5rem;
+}
+
+.section a {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.footer {
+  padding-block: 2rem;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+@media (max-width: 40rem) {
+  .headerInner {
+    min-height: 4.5rem;
+  }
+
+  .brandName {
+    display: none;
+  }
+
+  .main {
+    padding-top: 2.25rem;
+  }
+
+  .section {
+    padding-block: 1.5rem;
+  }
+}
