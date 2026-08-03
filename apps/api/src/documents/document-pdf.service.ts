@@ -36,6 +36,11 @@ type SharedDocument = {
     } | null;
   }>;
   files?: SharedDocumentFile[];
+  responsibles?: {
+    preparedBy: string;
+    transportedBy: string;
+    deliveredBy: string;
+  };
 };
 
 type PreparedImage = {
@@ -93,7 +98,7 @@ export class DocumentPdfService {
     this.drawItems(pdf, document);
     this.drawNotes(pdf, document.notes);
     this.drawTerms(pdf);
-    this.drawSignatures(pdf, assets.signature);
+    this.drawSignatures(pdf, document.responsibles, assets.signature);
     this.drawEvidence(pdf, document, assets.evidence);
     this.addPageNumbers(pdf);
     pdf.end();
@@ -266,9 +271,10 @@ export class DocumentPdfService {
 
   private drawSignatures(
     pdf: PDFKit.PDFDocument,
+    responsibles: SharedDocument['responsibles'],
     signature: PreparedImage | null,
   ) {
-    this.ensureSpace(pdf, 105);
+    this.ensureSpace(pdf, 125);
     const imageY = pdf.y;
     const y = imageY + 58;
     const columns = [36, 167, 298, 429];
@@ -280,11 +286,11 @@ export class DocumentPdfService {
       });
     }
     [
-      'ELABORADO POR',
-      'TRANSPORTADO POR',
-      'ENTREGADO POR',
-      'RECIBIDO POR',
-    ].forEach((label, index) => {
+      { label: 'ELABORADO POR', value: responsibles?.preparedBy },
+      { label: 'TRANSPORTADO POR', value: responsibles?.transportedBy },
+      { label: 'ENTREGADO POR', value: responsibles?.deliveredBy },
+      { label: 'RECIBIDO POR', value: null },
+    ].forEach(({ label, value }, index) => {
       const x = columns[index];
       pdf
         .moveTo(x, y)
@@ -294,8 +300,19 @@ export class DocumentPdfService {
         .font('Helvetica-Bold')
         .fontSize(7)
         .text(label, x, y + 5, { width: 112, align: 'center' });
+      if (value) {
+        pdf
+          .font('Helvetica')
+          .fontSize(6.5)
+          .text(value, x, y + 16, {
+            width: 112,
+            height: 18,
+            align: 'center',
+            ellipsis: true,
+          });
+      }
     });
-    pdf.y = y + 22;
+    pdf.y = y + 40;
   }
 
   private drawEvidence(
