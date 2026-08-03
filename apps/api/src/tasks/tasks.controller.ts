@@ -103,6 +103,13 @@ export class TasksController {
     return this.tasksService.updateTask(id, payload);
   }
 
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE)
+  deleteTask(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.tasksService.deleteTask(id);
+  }
+
   @Get(':id/assets')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OFFICE)

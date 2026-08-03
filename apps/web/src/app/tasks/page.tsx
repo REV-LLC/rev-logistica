@@ -40,6 +40,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
+import TableRowActions from '@/components/TableRowActions';
 import { api } from '@/lib/api';
 
 type TaskStatus = 'OPEN' | 'DOING' | 'DONE';
@@ -211,6 +212,8 @@ export default function TasksPage() {
 
   const [assetsModalOpen, setAssetsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [deletingTask, setDeletingTask] = useState(false);
   const [taskAssets, setTaskAssets] = useState<Asset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [assetSearchMode, setAssetSearchMode] = useState<'serial' | 'search'>('serial');
@@ -462,6 +465,22 @@ export default function TasksPage() {
     }
   };
 
+  const deleteTask = async () => {
+    if (!taskToDelete) return;
+    setDeletingTask(true);
+    setError(null);
+    try {
+      await api(`/tasks/${taskToDelete.id}`, { method: 'DELETE' });
+      setTasks((current) => current.filter((task) => task.id !== taskToDelete.id));
+      if (selectedTask?.id === taskToDelete.id) closeAssetsModal();
+      setTaskToDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar el pendiente');
+    } finally {
+      setDeletingTask(false);
+    }
+  };
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -545,7 +564,7 @@ export default function TasksPage() {
                           <TableTh>Vence</TableTh>
                           <TableTh>Asignado</TableTh>
                           <TableTh>Estado</TableTh>
-                          <TableTh>Seriales</TableTh>
+                          <TableTh ta="right">Acciones</TableTh>
                         </TableTr>
                       </TableThead>
                       <TableTbody>
@@ -624,9 +643,24 @@ export default function TasksPage() {
                                 />
                               </TableTd>
                               <TableTd>
-                                <Button size="xs" variant="light" onClick={() => openAssetsModal(task)}>
-                                  Seriales
-                                </Button>
+                                <TableRowActions
+                                  actions={[
+                                    {
+                                      key: 'assets',
+                                      label: `Gestionar activos de ${task.title}`,
+                                      icon: <IconPackage size={16} />,
+                                      color: 'blue',
+                                      onClick: () => openAssetsModal(task),
+                                    },
+                                    {
+                                      key: 'delete',
+                                      label: `Eliminar ${task.title}`,
+                                      icon: <IconTrash size={16} />,
+                                      color: 'red',
+                                      onClick: () => setTaskToDelete(task),
+                                    },
+                                  ]}
+                                />
                               </TableTd>
                             </TableTr>
                           );
@@ -729,9 +763,19 @@ export default function TasksPage() {
                               />
                             </SimpleGrid>
 
-                            <Button variant="light" onClick={() => openAssetsModal(task)}>
-                              Gestionar seriales
-                            </Button>
+                            <Group grow>
+                              <Button variant="light" onClick={() => openAssetsModal(task)}>
+                                Gestionar activos
+                              </Button>
+                              <Button
+                                variant="light"
+                                color="red"
+                                leftSection={<IconTrash size={16} />}
+                                onClick={() => setTaskToDelete(task)}
+                              >
+                                Eliminar
+                              </Button>
+                            </Group>
                           </Stack>
                         </Paper>
                       );
@@ -837,6 +881,33 @@ export default function TasksPage() {
             </Button>
             <Button onClick={handleCreate} loading={saving} disabled={!title.trim()}>
               Guardar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={Boolean(taskToDelete)}
+        onClose={() => setTaskToDelete(null)}
+        title="Eliminar pendiente"
+        centered
+        size="sm"
+        closeOnClickOutside={!deletingTask}
+        closeOnEscape={!deletingTask}
+      >
+        <Stack gap="lg">
+          <div>
+            <Text fw={700}>¿Eliminar “{taskToDelete?.title}”?</Text>
+            <Text size="sm" c="dimmed" mt={4}>
+              También se quitarán los activos vinculados a esta tarea. Esta acción no se puede deshacer.
+            </Text>
+          </div>
+          <Group justify="flex-end" className="mobile-actions">
+            <Button variant="default" onClick={() => setTaskToDelete(null)} disabled={deletingTask}>
+              Cancelar
+            </Button>
+            <Button color="red" onClick={() => void deleteTask()} loading={deletingTask}>
+              Eliminar pendiente
             </Button>
           </Group>
         </Stack>
