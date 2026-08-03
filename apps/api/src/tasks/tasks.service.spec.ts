@@ -71,4 +71,24 @@ describe('TasksService assignment notifications', () => {
 
     expect(transport.sendWhatsapp).not.toHaveBeenCalled();
   });
+
+  it('removes asset links before deleting a task', async () => {
+    const tx = {
+      taskAsset: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      task: { delete: jest.fn().mockResolvedValue(assignedTask) },
+    };
+    const prisma = {
+      task: { findUnique: jest.fn().mockResolvedValue({ id: assignedTask.id }) },
+      $transaction: jest.fn((operation) => operation(tx)),
+    };
+    const service = new TasksService(prisma as never, { sendWhatsapp: jest.fn() } as never);
+
+    await expect(service.deleteTask(assignedTask.id)).resolves.toEqual({ deleted: true });
+
+    expect(tx.taskAsset.deleteMany).toHaveBeenCalledWith({ where: { taskId: assignedTask.id } });
+    expect(tx.task.delete).toHaveBeenCalledWith({ where: { id: assignedTask.id } });
+    expect(tx.taskAsset.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.task.delete.mock.invocationCallOrder[0],
+    );
+  });
 });

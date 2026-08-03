@@ -272,6 +272,16 @@ export class TasksService {
     return { deleted: true };
   }
 
+  async deleteTask(taskId: string) {
+    await this.assertTaskExists(taskId);
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.taskAsset.deleteMany({ where: { taskId } });
+      await tx.task.delete({ where: { id: taskId } });
+      return { deleted: true };
+    });
+  }
+
   private async assertTaskExists(taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
