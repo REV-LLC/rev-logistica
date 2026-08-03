@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ActionIcon, Card, Modal, Table, Text } from '@mantine/core';
+import { Card, Modal, Table, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconEye } from '@tabler/icons-react';
+import TableRowActions from '@/components/TableRowActions';
 
 export type LedgerItem = {
   id: string;
@@ -94,7 +95,7 @@ export default function LedgerTable({
             <Table.Th style={isMobile ? { width: '15%', textAlign: 'center' } : { textAlign: 'center' }}>
               {isMobile ? 'Cant.' : 'Cantidad'}
             </Table.Th>
-            {isMobile ? <Table.Th style={{ width: '15%' }}>Ver</Table.Th> : null}
+            {isMobile ? <Table.Th style={{ width: '15%' }}>Acciones</Table.Th> : null}
             {!isMobile ? <Table.Th>Ubicación</Table.Th> : null}
             {!isMobile ? <Table.Th>Registrado por</Table.Th> : null}
             {!isMobile ? <Table.Th>Referencia</Table.Th> : null}
@@ -160,13 +161,17 @@ export default function LedgerTable({
                 <Table.Td style={{ textAlign: 'center' }}>{item.quantity}</Table.Td>
                 {isMobile ? (
                   <Table.Td>
-                    <ActionIcon
-                      variant="light"
-                      aria-label={`View movement details ${item.id}`}
-                      onClick={() => openDetails(item)}
-                    >
-                      <IconEye size={16} />
-                    </ActionIcon>
+                    <TableRowActions
+                      actions={[
+                        {
+                          key: 'view',
+                          label: 'Ver detalle del movimiento',
+                          icon: <IconEye size={16} />,
+                          color: 'blue',
+                          onClick: () => openDetails(item),
+                        },
+                      ]}
+                    />
                   </Table.Td>
                 ) : null}
                 {!isMobile ? <Table.Td>{location}</Table.Td> : null}

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -20,7 +19,6 @@ import {
   Text,
   TextInput,
   Textarea,
-  Tooltip,
 } from '@mantine/core';
 import {
   IconDeviceFloppy,
@@ -31,6 +29,7 @@ import {
   IconRefresh,
   IconTrash,
 } from '@tabler/icons-react';
+import TableRowActions from '@/components/TableRowActions';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
@@ -622,7 +621,7 @@ export default function QuotationPage() {
                     <Table.Th ta="right">Precio</Table.Th>
                     <Table.Th ta="right">Desc.</Table.Th>
                     <Table.Th ta="right">Total</Table.Th>
-                    <Table.Th />
+                    <Table.Th ta="right">Acciones</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -674,12 +673,18 @@ export default function QuotationPage() {
                         <Table.Td ta="right" fw={700}>
                           {formatMoney(lineTotal(line))}
                         </Table.Td>
-                        <Table.Td ta="center">
-                          <Tooltip label="Eliminar">
-                            <ActionIcon variant="subtle" color="red" onClick={() => removeLine(line.id)}>
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                          </Tooltip>
+                        <Table.Td>
+                          <TableRowActions
+                            actions={[
+                              {
+                                key: 'delete',
+                                label: `Eliminar ${line.name}`,
+                                icon: <IconTrash size={16} />,
+                                color: 'red',
+                                onClick: () => removeLine(line.id),
+                              },
+                            ]}
+                          />
                         </Table.Td>
                       </Table.Tr>
                     ))

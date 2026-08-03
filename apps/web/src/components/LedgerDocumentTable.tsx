@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  ActionIcon,
   Badge,
   Button,
   Card,
@@ -16,6 +15,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconEye } from '@tabler/icons-react';
+import TableRowActions from '@/components/TableRowActions';
 import type { LedgerItem } from '@/components/LedgerTable';
 
 export type LedgerDocumentGroup = {
@@ -177,13 +177,17 @@ export default function LedgerDocumentTable({
                       <Text fw={800}>{group.reference}</Text>
                     )}
                   </div>
-                  <ActionIcon
-                    variant="light"
-                    aria-label={`Ver movimientos del documento ${group.reference}`}
-                    onClick={() => setDetailsGroup(group)}
-                  >
-                    <IconEye size={16} />
-                  </ActionIcon>
+                  <TableRowActions
+                    actions={[
+                      {
+                        key: 'view',
+                        label: `Ver movimientos del documento ${group.reference}`,
+                        icon: <IconEye size={16} />,
+                        color: 'blue',
+                        onClick: () => setDetailsGroup(group),
+                      },
+                    ]}
+                  />
                 </Group>
                 <Group gap={6} mt={6}>
                   {group.documentType ? (
@@ -219,7 +223,7 @@ export default function LedgerDocumentTable({
               <Table.Th>Ítems</Table.Th>
               <Table.Th>Ubicación</Table.Th>
               <Table.Th>Creado por</Table.Th>
-              <Table.Th style={{ width: 72, textAlign: 'center' }}>Ver</Table.Th>
+              <Table.Th style={{ width: 92, textAlign: 'right' }}>Acciones</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -262,14 +266,18 @@ export default function LedgerDocumentTable({
                   </Table.Td>
                   <Table.Td>{getLocationSummary(group)}</Table.Td>
                   <Table.Td>{getCreator(primaryItem)}</Table.Td>
-                  <Table.Td style={{ textAlign: 'center' }}>
-                    <ActionIcon
-                      variant="light"
-                      aria-label={`Ver movimientos del documento ${group.reference}`}
-                      onClick={() => setDetailsGroup(group)}
-                    >
-                      <IconEye size={16} />
-                    </ActionIcon>
+                  <Table.Td>
+                    <TableRowActions
+                      actions={[
+                        {
+                          key: 'view',
+                          label: `Ver movimientos del documento ${group.reference}`,
+                          icon: <IconEye size={16} />,
+                          color: 'blue',
+                          onClick: () => setDetailsGroup(group),
+                        },
+                      ]}
+                    />
                   </Table.Td>
                 </Table.Tr>
               );

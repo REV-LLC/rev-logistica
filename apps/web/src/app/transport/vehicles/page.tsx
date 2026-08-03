@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Autocomplete,
   Badge,
@@ -27,6 +26,7 @@ import {
   IconCar,
   IconEye,
   IconFileDescription,
+  IconPencil,
   IconPlus,
   IconSteeringWheel,
   IconTool,
@@ -35,6 +35,7 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import TableRowActions from '@/components/TableRowActions';
 import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import EntityNotificationManager from '@/components/notifications/EntityNotificationManager';
 import NotificationRecipientsEditor from '@/components/notifications/NotificationRecipientsEditor';
@@ -565,7 +566,7 @@ export default function VehiclesPage() {
                   <Table.Th>Tipo / año / peso</Table.Th>
                   <Table.Th>Conductores</Table.Th>
                   <Table.Th>Documentacion</Table.Th>
-                  <Table.Th />
+                  <Table.Th ta="right">Acciones</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -611,26 +612,30 @@ export default function VehiclesPage() {
                         </Stack>
                       </Table.Td>
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button size="xs" variant="light" onClick={() => startEdit(vehicle)}>
-                            Editar
-                          </Button>
-                          <ActionIcon
-                            variant="light"
-                            aria-label={`Ver detalle de ${vehicle.plate}`}
-                            onClick={() => setDetailsVehicle(vehicle)}
-                          >
-                            <IconEye size={16} />
-                          </ActionIcon>
-                          <ActionIcon
-                            color="blue"
-                            variant="light"
-                            aria-label={`Documentos de ${vehicle.plate}`}
-                            onClick={() => setDocumentsVehicle(vehicle)}
-                          >
-                            <IconFileDescription size={16} />
-                          </ActionIcon>
-                        </Group>
+                        <TableRowActions
+                          actions={[
+                            {
+                              key: 'view',
+                              label: `Ver detalle de ${vehicle.plate}`,
+                              icon: <IconEye size={16} />,
+                              color: 'blue',
+                              onClick: () => setDetailsVehicle(vehicle),
+                            },
+                            {
+                              key: 'documents',
+                              label: `Documentos de ${vehicle.plate}`,
+                              icon: <IconFileDescription size={16} />,
+                              color: 'violet',
+                              onClick: () => setDocumentsVehicle(vehicle),
+                            },
+                            {
+                              key: 'edit',
+                              label: `Editar ${vehicle.plate}`,
+                              icon: <IconPencil size={16} />,
+                              onClick: () => startEdit(vehicle),
+                            },
+                          ]}
+                        />
                       </Table.Td>
                     </Table.Tr>
                   );

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -28,6 +27,7 @@ import {
   IconEye,
   IconFileCheck,
   IconFileText,
+  IconPencil,
   IconPlus,
   IconRoad,
   IconSearch,
@@ -35,6 +35,7 @@ import {
   IconUsersGroup,
 } from '@tabler/icons-react';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import TableRowActions from '@/components/TableRowActions';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -643,7 +644,7 @@ export default function CustomersPage() {
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Correo documentos</Table.Th>
                   <Table.Th>Estado</Table.Th>
-                  <Table.Th />
+                  <Table.Th ta="right">Acciones</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -682,29 +683,30 @@ export default function CustomersPage() {
                         </Badge>
                       </Table.Td>
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="wrap">
-                          <Button size="xs" variant="light" onClick={() => openEdit(customer)}>
-                            Editar
-                          </Button>
-                          <ActionIcon
-                            color="gray"
-                            variant="light"
-                            aria-label={`Ver detalle de ${customer.name}`}
-                            onClick={() => void openDetails(customer)}
-                          >
-                            <IconEye size={16} />
-                          </ActionIcon>
-                          <Button
-                            size="xs"
-                            variant="light"
-                            color="blue"
-                            leftSection={<IconFileText size={14} />}
-                            aria-label={`Documentos de ${customer.name}`}
-                            onClick={() => setDocumentsCustomer(customer)}
-                          >
-                            Documentos
-                          </Button>
-                        </Group>
+                        <TableRowActions
+                          actions={[
+                            {
+                              key: 'view',
+                              label: `Ver detalle de ${customer.name}`,
+                              icon: <IconEye size={16} />,
+                              color: 'blue',
+                              onClick: () => void openDetails(customer),
+                            },
+                            {
+                              key: 'documents',
+                              label: `Documentos de ${customer.name}`,
+                              icon: <IconFileText size={16} />,
+                              color: 'violet',
+                              onClick: () => setDocumentsCustomer(customer),
+                            },
+                            {
+                              key: 'edit',
+                              label: `Editar ${customer.name}`,
+                              icon: <IconPencil size={16} />,
+                              onClick: () => openEdit(customer),
+                            },
+                          ]}
+                        />
                       </Table.Td>
                     </Table.Tr>
                   ))}

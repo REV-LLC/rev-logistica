@@ -1128,7 +1128,7 @@ export default function WarehouseInventoryPageClient({
               <Group justify="space-between" align="center" wrap="wrap">
                 <div>
                   <Text fw={700}>
-                    {inventoryView === 'BULK' ? 'Inventario bulk' : 'Assets propios'}
+                    {inventoryView === 'BULK' ? 'Materiales propios' : 'Equipos propios'}
                   </Text>
                   <Text size="sm" c="dimmed">
                     {warehouses[0]

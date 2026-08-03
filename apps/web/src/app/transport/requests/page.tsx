@@ -29,10 +29,19 @@ import {
   Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconCamera, IconTrash } from '@tabler/icons-react';
+import {
+  IconCamera,
+  IconCheck,
+  IconEye,
+  IconFileDescription,
+  IconPencil,
+  IconTrash,
+  IconX,
+} from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
+import TableRowActions from '@/components/TableRowActions';
 import { ownerColorById } from '@/lib/owner-color';
 import InventoryItemPickerModal, {
   type InventoryItemPickerBulkItem,
@@ -2187,7 +2196,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                       <Table.Th>Creado por</Table.Th>
                       <Table.Th>Fecha</Table.Th>
                       <Table.Th>Estado</Table.Th>
-                      <Table.Th style={{ width: 220, whiteSpace: 'nowrap' }}>Acciones</Table.Th>
+                      <Table.Th ta="right" style={{ width: 188, whiteSpace: 'nowrap' }}>Acciones</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2214,53 +2223,50 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                           </Badge>
                         </Table.Td>
                         <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                          <Group gap="xs" wrap="nowrap">
-                            <Button
-                              component={Link}
-                              href={`/inventory/ledger/document/${row.id}`}
-                              variant="light"
-                              size="xs"
-                            >
-                              Ver
-                            </Button>
-                            <Button
-                              variant="light"
-                              color="blue"
-                              size="xs"
-                              onClick={() => setDocumentsRequest(row)}
-                            >
-                              Docs
-                            </Button>
-                            {canDecide ? (
-                              <>
-                                <Button
-                                  variant="light"
-                                  color="blue"
-                                  size="xs"
-                                  onClick={() => editRequest(row.id)}
-                                >
-                                  Editar
-                                </Button>
-                                <Button
-                                  color="green"
-                                  size="xs"
-                                  loading={decidingId === row.id}
-                                  onClick={() => decideRequest(row.id, 'APPROVE')}
-                                >
-                                  ✓
-                                </Button>
-                                <Button
-                                  color="red"
-                                  variant="light"
-                                  size="xs"
-                                  loading={decidingId === row.id}
-                                  onClick={() => decideRequest(row.id, 'REJECT')}
-                                >
-                                  ✕
-                                </Button>
-                              </>
-                            ) : null}
-                          </Group>
+                          <TableRowActions
+                            actions={[
+                              {
+                                key: 'view',
+                                label: `Ver ${row.consecutive ?? 'solicitud'}`,
+                                icon: <IconEye size={16} />,
+                                color: 'blue',
+                                href: `/inventory/ledger/document/${row.id}`,
+                              },
+                              {
+                                key: 'documents',
+                                label: `Documentos de ${row.consecutive ?? 'la solicitud'}`,
+                                icon: <IconFileDescription size={16} />,
+                                color: 'violet',
+                                onClick: () => setDocumentsRequest(row),
+                              },
+                              ...(canDecide
+                                ? [
+                                    {
+                                      key: 'edit',
+                                      label: `Editar ${row.consecutive ?? 'solicitud'}`,
+                                      icon: <IconPencil size={16} />,
+                                      onClick: () => editRequest(row.id),
+                                    },
+                                    {
+                                      key: 'approve',
+                                      label: `Aprobar ${row.consecutive ?? 'solicitud'}`,
+                                      icon: <IconCheck size={16} />,
+                                      color: 'green',
+                                      loading: decidingId === row.id,
+                                      onClick: () => decideRequest(row.id, 'APPROVE'),
+                                    },
+                                    {
+                                      key: 'reject',
+                                      label: `Rechazar ${row.consecutive ?? 'solicitud'}`,
+                                      icon: <IconX size={16} />,
+                                      color: 'red',
+                                      loading: decidingId === row.id,
+                                      onClick: () => decideRequest(row.id, 'REJECT'),
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                          />
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -2348,45 +2354,25 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                 onChange={(event) => setConsecutive(event.target.value)}
               />
             ) : null}
-            {isMobile ? (
-              <NativeSelect
-                label="Razón social"
-                value={customerId ?? ''}
-                onChange={(event) => {
-                  setCustomerId(event.currentTarget.value || null);
-                  setCustomerWorksiteId('');
-                  setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
-                }}
-                data={[
-                  { value: '', label: 'Seleccionar cliente' },
-                  ...customers.map((customer) => ({
-                    value: customer.id,
-                    label: customer.name,
-                  })),
-                ]}
-                required
-                error={generateFieldErrors.customerId}
-              />
-            ) : (
-              <Select
-                label="Razón social"
-                value={customerId}
-                onChange={(value) => {
-                  setCustomerId(value);
-                  setCustomerWorksiteId('');
-                  setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
-                }}
-                data={customers.map((customer) => ({
-                  value: customer.id,
-                  label: customer.name
-                }))}
-                searchable
-                clearable
-                required
-                placeholder="Seleccionar cliente"
-                error={generateFieldErrors.customerId}
-              />
-            )}
+            <Select
+              label="Razón social"
+              value={customerId}
+              onChange={(value) => {
+                setCustomerId(value);
+                setCustomerWorksiteId('');
+                setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
+              }}
+              data={customers.map((customer) => ({
+                value: customer.id,
+                label: customer.name,
+              }))}
+              searchable
+              clearable
+              required
+              placeholder="Buscar cliente"
+              nothingFoundMessage="No se encontraron clientes"
+              error={generateFieldErrors.customerId}
+            />
             <TextInput
               label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
               withAsterisk={false}
@@ -2611,26 +2597,17 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
-                  value={sourceOwnerWarehouseId ?? ''}
-                  onChange={(event) => setSourceOwnerWarehouseId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Seleccionar dueño' }, ...ownerWarehouseOptions]}
-                  w="100%"
-                />
-              ) : (
-                <Select
-                  label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
-                  value={sourceOwnerWarehouseId}
-                  onChange={(value) => setSourceOwnerWarehouseId(value)}
-                  data={ownerWarehouseOptions}
-                  searchable
-                  clearable
-                  placeholder="Seleccionar dueño"
-                  w={320}
-                />
-              )
+              <Select
+                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
+                value={sourceOwnerWarehouseId}
+                onChange={(value) => setSourceOwnerWarehouseId(value)}
+                data={ownerWarehouseOptions}
+                searchable
+                clearable
+                placeholder="Buscar origen"
+                nothingFoundMessage="No se encontraron bodegas"
+                w={isMobile ? '100%' : 320}
+              />
             )}
             {useManualWarehouseCapture ? null : (
               <Button onClick={() => void loadInventory()} loading={loadingInventory}>
