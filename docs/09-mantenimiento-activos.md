@@ -1,6 +1,6 @@
 # Notificaciones reutilizables y mantenimiento por horómetro
 
-El sistema separa el cálculo de cada alerta de su entrega. El módulo genérico de notificaciones administra temas, usuarios, correo/SMS, deduplicación y la bandeja personal. Vehículos y mantenimientos aportan sus propios vencimientos.
+El sistema separa el cálculo de cada alerta de su entrega. El módulo genérico de notificaciones administra temas, usuarios, WhatsApp, deduplicación y la bandeja personal. Vehículos y mantenimientos aportan sus propios vencimientos.
 
 El mantenimiento admite tanto `assetId` como `vehicleId` y separa lecturas acumuladas, planes, revisiones recurrentes y ejecuciones. Cada activo posee directamente `Asset.hourMeter` como valor actual obligatorio; `AssetHourReading` conserva el historial auditable. Ambos se actualizan en la misma transacción. Los recordatorios se calculan con:
 
@@ -28,7 +28,7 @@ POST /maintenance/plans
       "warningHours": 20,
       "baselineHours": 0,
       "recipients": [
-        { "userId": "UUID_DEL_USUARIO", "emailEnabled": true, "smsEnabled": true }
+        { "userId": "UUID_DEL_USUARIO", "whatsappEnabled": true }
       ]
     }
   ]
@@ -65,14 +65,28 @@ Content-Type: application/json
 
 ## Envío de alertas
 
-El correo usa la configuración SMTP existente. Para SMS se integra cualquier proveedor o automatización que reciba JSON por webhook:
+Las alertas externas se envían únicamente por WhatsApp. El correo queda reservado para documentos de clientes. Se puede configurar un webhook compartido:
 
 ```env
-NOTIFICATION_SMS_WEBHOOK_URL=https://proveedor.example/mensajes
-NOTIFICATION_SMS_WEBHOOK_TOKEN=token-opcional
+MESSAGING_WEBHOOK_URL=https://proveedor.example/mensajes
+MESSAGING_WEBHOOK_TOKEN=token-opcional
 ```
 
-El webhook recibe `{ "to": "+57...", "message": "..." }`. El API procesa automáticamente las alertas cada 60 minutos. Se controla con `NOTIFICATION_AUTO_DISPATCH` y `NOTIFICATION_DISPATCH_INTERVAL_MINUTES`. También se puede ejecutar manualmente:
+También se puede usar `NOTIFICATION_WHATSAPP_WEBHOOK_URL` para configurar un proveedor específico.
+
+La integración preferida es Meta WhatsApp Cloud API directa:
+
+```env
+WHATSAPP_ACCESS_TOKEN=token-permanente-del-system-user
+WHATSAPP_PHONE_NUMBER_ID=id-del-numero
+WHATSAPP_TEMPLATE_NAME=rev_logistica_notification
+WHATSAPP_TEMPLATE_LANGUAGE=es_CO
+WHATSAPP_API_VERSION=v25.0
+```
+
+La plantilla debe tener tres variables de cuerpo, en este orden: título, mensaje y enlace o instrucción de consulta.
+
+El webhook recibe `{ "channel": "WHATSAPP", "to": "+57...", "message": "...", "link"?: "..." }`. El campo `link` queda disponible para reutilizar el transporte al compartir documentos. El API procesa automáticamente las alertas cada 60 minutos. Se controla con `NOTIFICATION_AUTO_DISPATCH` y `NOTIFICATION_DISPATCH_INTERVAL_MINUTES`. También se puede ejecutar manualmente:
 
 ```http
 POST /notifications/dispatch
@@ -100,7 +114,7 @@ Al crear un vehículo se crean automáticamente los temas `SOAT_EXPIRY` y `TECH_
   "soatVigencia": "2026-12-20",
   "tecnomecanicaVigencia": "2027-01-15",
   "notificationRecipients": [
-    { "userId": "UUID", "emailEnabled": true, "smsEnabled": true }
+    { "userId": "UUID", "whatsappEnabled": true }
   ]
 }
 ```
@@ -128,7 +142,7 @@ POST /notifications/entities/CONTRACT/:contractId/topics
   "dueAt": "2027-03-15",
   "warningDays": 45,
   "recipients": [
-    { "userId": "UUID", "emailEnabled": true, "smsEnabled": false }
+    { "userId": "UUID", "whatsappEnabled": true }
   ]
 }
 ```

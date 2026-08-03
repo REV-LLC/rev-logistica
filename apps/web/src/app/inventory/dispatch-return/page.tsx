@@ -111,6 +111,7 @@ export default function RemisionDevolucionPage() {
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [recipientPhone, setRecipientPhone] = useState('');
   const [docDate, setDocDate] = useState('');
   const [cutOffDate, setCutOffDate] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('WAREHOUSE');
@@ -424,6 +425,9 @@ export default function RemisionDevolucionPage() {
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
+      if (!/^\d{10}$/.test(recipientPhone)) {
+        throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
+      }
       if (docType === 'RETURN' && !warehouseId) {
         throw new Error('Selecciona la bodega para la devolucion.');
       }
@@ -437,6 +441,7 @@ export default function RemisionDevolucionPage() {
         number: withDocPrefix(consecutive, docType),
         warehouseId: warehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
+        recipientPhone,
         notes: [
           `Fecha documento: ${docDate}`,
           docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
@@ -503,6 +508,12 @@ export default function RemisionDevolucionPage() {
 
       try {
         await uploadEvidencePhotos(created.id);
+        await api(`/documents/${created.id}/customer-email/draft`, {
+          method: 'POST',
+        });
+        await api(`/documents/${created.id}/customer-messages/draft`, {
+          method: 'POST',
+        });
       } catch (uploadError) {
         const message =
           uploadError instanceof ApiError
@@ -518,6 +529,7 @@ export default function RemisionDevolucionPage() {
       setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
       setConsecutive('');
       setCustomerId(null);
+      setRecipientPhone('');
       setDocDate('');
       setCutOffDate('');
       setDeliveryMode('WAREHOUSE');
@@ -597,6 +609,22 @@ export default function RemisionDevolucionPage() {
               type="date"
               value={docDate}
               onChange={(event) => setDocDate(event.target.value)}
+              required
+            />
+            <TextInput
+              label={helpLabel(
+                'Teléfono de quien recibe',
+                'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
+                true,
+              )}
+              leftSection="+57"
+              inputMode="numeric"
+              maxLength={10}
+              value={recipientPhone}
+              onChange={(event) => {
+                setRecipientPhone(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
+              }}
+              placeholder="3001234567"
               required
             />
             {docType === 'RETURN' && (

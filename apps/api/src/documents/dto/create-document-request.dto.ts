@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -59,6 +60,12 @@ export class CreateDocumentRequestDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsString()
+  @Matches(/^\d{10}$/, {
+    message: 'El teléfono debe contener exactamente 10 dígitos',
+  })
+  recipientPhone: string;
 
   @IsOptional()
   @IsString()

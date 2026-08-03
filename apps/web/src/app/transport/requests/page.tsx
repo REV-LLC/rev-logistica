@@ -120,6 +120,7 @@ type GenerateFieldErrors = {
   customerId?: string;
   docDate?: string;
   customerWorksiteId?: string;
+  recipientPhone?: string;
   driverId?: string;
 };
 
@@ -146,6 +147,7 @@ type RequestDocumentDetail = {
   consecutive: string | null;
   docDate: string;
   notes: string | null;
+  recipientPhone?: string | null;
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
     id: string;
@@ -422,6 +424,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [recipientPhone, setRecipientPhone] = useState('');
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
@@ -1682,6 +1685,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setError(null);
     setConsecutive('');
     setCustomerId(null);
+    setRecipientPhone('');
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
@@ -1718,6 +1722,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
+      setRecipientPhone(doc.recipientPhone?.replace(/^\+57/, '') ?? '');
       setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
@@ -1818,6 +1823,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
+      if (!/^\d{10}$/.test(recipientPhone)) {
+        throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
+      }
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
       }
@@ -1843,6 +1851,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
+        recipientPhone,
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
           `Fecha documento: ${docDate}`,
@@ -1907,6 +1916,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           await api(`/documents/${created.id}/customer-email/draft`, {
             method: 'POST',
           });
+          await api(`/documents/${created.id}/customer-messages/draft`, {
+            method: 'POST',
+          });
         }
       } catch (uploadError) {
         const message =
@@ -1946,6 +1958,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
     if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
     if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
+    if (!/^\d{10}$/.test(recipientPhone)) {
+      nextFieldErrors.recipientPhone = 'Ingresa exactamente 10 dígitos.';
+    }
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
       nextFieldErrors.driverId = 'Selecciona el conductor.';
     }
@@ -2383,6 +2398,24 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               }}
               required
               error={generateFieldErrors.docDate}
+            />
+            <TextInput
+              label={helpLabel(
+                'Teléfono de quien recibe',
+                'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
+                true,
+              )}
+              leftSection="+57"
+              inputMode="numeric"
+              maxLength={10}
+              value={recipientPhone}
+              onChange={(event) => {
+                setRecipientPhone(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
+                setGenerateFieldErrors((prev) => ({ ...prev, recipientPhone: undefined }));
+              }}
+              placeholder="3001234567"
+              required
+              error={generateFieldErrors.recipientPhone}
             />
                     </SimpleGrid>
                   </Stack>
