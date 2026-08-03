@@ -12,6 +12,10 @@ export class NotificationRecipientDto {
   @IsOptional()
   @IsBoolean()
   smsEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  whatsappEnabled?: boolean;
 }
 
 export class SetNotificationRecipientsDto {
