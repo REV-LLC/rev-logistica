@@ -28,6 +28,7 @@ import {
 } from '@mantine/core';
 import {
   IconCalendarEvent,
+  IconBrandWhatsapp,
   IconChecklist,
   IconClock,
   IconPackage,
@@ -70,12 +71,14 @@ type User = {
   name: string;
   email?: string;
   role?: string;
+  phone?: string | null;
 };
 
 type Employee = {
   id: string;
   name: string;
   lastName?: string;
+  phone?: string | null;
   active?: boolean;
   user?: {
     id: string;
@@ -92,16 +95,18 @@ type Asset = {
 type AssigneeOptionValue = `user:${string}` | `employee:${string}`;
 
 const statusOptions = [
-  { value: 'OPEN', label: 'OPEN' },
-  { value: 'DOING', label: 'DOING' },
-  { value: 'DONE', label: 'DONE' },
+  { value: 'OPEN', label: 'Abierta' },
+  { value: 'DOING', label: 'En curso' },
+  { value: 'DONE', label: 'Hecha' },
 ];
 
 const priorityOptions = [
-  { value: 'LOW', label: 'LOW' },
-  { value: 'MEDIUM', label: 'MEDIUM' },
-  { value: 'HIGH', label: 'HIGH' },
+  { value: 'LOW', label: 'Baja' },
+  { value: 'MEDIUM', label: 'Media' },
+  { value: 'HIGH', label: 'Alta' },
 ];
+
+const statusFilterOptions = [{ value: 'ALL', label: 'Todas' }, ...statusOptions];
 
 function formatDate(value?: string | null) {
   if (!value) return '-';
@@ -154,10 +159,16 @@ function parseAssigneeValue(value: string | null): {
 } {
   if (!value) return { assignedToUserId: null, assignedToEmployeeId: null };
   if (value.startsWith('user:')) {
-    return { assignedToUserId: value.slice('user:'.length), assignedToEmployeeId: null };
+    return {
+      assignedToUserId: value.slice('user:'.length),
+      assignedToEmployeeId: null,
+    };
   }
   if (value.startsWith('employee:')) {
-    return { assignedToUserId: null, assignedToEmployeeId: value.slice('employee:'.length) };
+    return {
+      assignedToUserId: null,
+      assignedToEmployeeId: value.slice('employee:'.length),
+    };
   }
   return { assignedToUserId: null, assignedToEmployeeId: null };
 }
@@ -174,7 +185,7 @@ function getDueState(value?: string | null) {
   const diffDays = Math.round((due.getTime() - now.getTime()) / 86400000);
 
   if (diffDays < 0) return { tone: 'red' as const, label: 'Vencida' };
-  if (diffDays <= 2) return { tone: 'yellow' as const, label: 'Upcoming' };
+  if (diffDays <= 2) return { tone: 'yellow' as const, label: 'Próxima' };
   return { tone: 'gray' as const, label: 'Programada' };
 }
 
@@ -182,6 +193,8 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | TaskStatus>('ALL');
 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -210,10 +223,7 @@ export default function TasksPage() {
     const loadAssignees = async () => {
       setAssigneesLoading(true);
       try {
-        const [usersData, employeesData] = await Promise.all([
-          api<User[]>('/users?active=true'),
-          api<Employee[]>('/employees'),
-        ]);
+        const [usersData, employeesData] = await Promise.all([api<User[]>('/users?active=true'), api<Employee[]>('/employees')]);
         if (mounted) {
           setUsers(usersData);
           setEmployees(employeesData.filter((employee) => employee.active !== false));
@@ -238,14 +248,14 @@ export default function TasksPage() {
         group: 'Usuarios activos',
         items: users.map((user) => ({
           value: `user:${user.id}`,
-          label: user.email ? `${user.name} · ${user.email}` : user.name,
+          label: `${user.name}${user.email ? ` · ${user.email}` : ''}${user.phone ? ' · WhatsApp' : ' · Sin teléfono'}`,
         })),
       },
       {
         group: 'Empleados',
         items: employees.map((employee) => ({
           value: `employee:${employee.id}`,
-          label: getEmployeeName(employee),
+          label: `${getEmployeeName(employee)}${employee.phone ? ' · WhatsApp' : ' · Sin teléfono'}`,
         })),
       },
     ],
@@ -296,6 +306,16 @@ export default function TasksPage() {
       dueSoonCount,
     };
   }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase('es');
+    return tasks.filter((task) => {
+      if (statusFilter !== 'ALL' && (task.status ?? 'OPEN') !== statusFilter) return false;
+      if (!normalizedSearch) return true;
+      const searchableText = [task.title, task.description, task.bulkItemName, getTaskAssigneeName(task)].filter(Boolean).join(' ').toLocaleLowerCase('es');
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [search, statusFilter, tasks]);
 
   const resetForm = () => {
     setTitle('');
@@ -357,7 +377,12 @@ export default function TasksPage() {
           next.assignedToEmployee = null;
         } else if (patch.assignedToEmployeeId) {
           const match = employees.find((employee) => employee.id === patch.assignedToEmployeeId);
-          if (match) next.assignedToEmployee = { id: match.id, name: getEmployeeName(match), active: match.active };
+          if (match)
+            next.assignedToEmployee = {
+              id: match.id,
+              name: getEmployeeName(match),
+              active: match.active,
+            };
         }
         return next;
       });
@@ -415,7 +440,10 @@ export default function TasksPage() {
   const addAssetToTask = async (assetId: string) => {
     if (!selectedTask) return;
     try {
-      await api(`/tasks/${selectedTask.id}/assets`, { method: 'POST', json: { assetId } });
+      await api(`/tasks/${selectedTask.id}/assets`, {
+        method: 'POST',
+        json: { assetId },
+      });
       await loadTaskAssets(selectedTask.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo vincular el activo');
@@ -425,7 +453,9 @@ export default function TasksPage() {
   const removeAssetFromTask = async (assetId: string) => {
     if (!selectedTask) return;
     try {
-      await api(`/tasks/${selectedTask.id}/assets/${assetId}`, { method: 'DELETE' });
+      await api(`/tasks/${selectedTask.id}/assets/${assetId}`, {
+        method: 'DELETE',
+      });
       await loadTaskAssets(selectedTask.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo quitar el activo');
@@ -437,7 +467,7 @@ export default function TasksPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Pendientes"
-          description="Organize tasks, follow-ups, and related assets from one operational view."
+          description="Asigna responsables, controla vencimientos y da seguimiento al trabajo del equipo."
           icon={<IconChecklist size={20} />}
           iconColor="yellow"
           accentColor="rgba(245,158,11,0.12)"
@@ -448,29 +478,11 @@ export default function TasksPage() {
           }
         >
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+            <StatCard label="Total" value={String(metrics.total)} hint="Tareas visibles" color="yellow" icon={<IconChecklist size={20} />} />
+            <StatCard label="Abiertas" value={String(metrics.openCount)} hint="Pendientes por iniciar" color="gray" icon={<IconClock size={20} />} />
+            <StatCard label="En curso" value={String(metrics.doingCount)} hint="Actualmente trabajando" color="blue" icon={<IconTargetArrow size={20} />} />
             <StatCard
-              label="Total"
-              value={String(metrics.total)}
-              hint="Tareas visibles"
-              color="yellow"
-              icon={<IconChecklist size={20} />}
-            />
-            <StatCard
-              label="Abiertas"
-              value={String(metrics.openCount)}
-              hint="Pendientes por iniciar"
-              color="gray"
-              icon={<IconClock size={20} />}
-            />
-            <StatCard
-              label="En curso"
-              value={String(metrics.doingCount)}
-              hint="Actualmente trabajando"
-              color="blue"
-              icon={<IconTargetArrow size={20} />}
-            />
-            <StatCard
-              label="Attention"
+              label="Por vencer"
               value={String(metrics.dueSoonCount)}
               hint={`${metrics.assignedCount} asignadas · ${metrics.doneCount} hechas`}
               color="green"
@@ -496,7 +508,8 @@ export default function TasksPage() {
                 <div>
                   <Text fw={700}>Lista de pendientes</Text>
                   <Text size="sm" c="dimmed">
-                    {tasks.length} pendiente{tasks.length === 1 ? '' : 's'} en el resultado actual.
+                    {filteredTasks.length} de {tasks.length} pendiente
+                    {tasks.length === 1 ? '' : 's'}.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
@@ -504,13 +517,30 @@ export default function TasksPage() {
                 </Badge>
               </Group>
 
-              {tasks.length ? (
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                <TextInput
+                  aria-label="Buscar pendientes"
+                  placeholder="Buscar por tarea, responsable o activo"
+                  value={search}
+                  onChange={(event) => setSearch(event.currentTarget.value)}
+                  leftSection={<IconSearch size={16} />}
+                />
+                <Select
+                  aria-label="Filtrar por estado"
+                  value={statusFilter}
+                  onChange={(value) => setStatusFilter((value as 'ALL' | TaskStatus) ?? 'ALL')}
+                  data={statusFilterOptions}
+                  allowDeselect={false}
+                />
+              </SimpleGrid>
+
+              {filteredTasks.length ? (
                 <>
                   <Paper withBorder radius="lg" p="sm" visibleFrom="sm">
                     <Table withTableBorder={false} verticalSpacing="md">
                       <TableThead>
                         <TableTr>
-                          <TableTh>Title</TableTh>
+                          <TableTh>Tarea</TableTh>
                           <TableTh>Prioridad</TableTh>
                           <TableTh>Vence</TableTh>
                           <TableTh>Asignado</TableTh>
@@ -519,7 +549,7 @@ export default function TasksPage() {
                         </TableTr>
                       </TableThead>
                       <TableTbody>
-                        {tasks.map((task) => {
+                        {filteredTasks.map((task) => {
                           const dueState = getDueState(task.dueDate);
                           return (
                             <TableTr key={task.id}>
@@ -528,11 +558,7 @@ export default function TasksPage() {
                                   <Group gap="xs">
                                     <Text fw={600}>{task.title}</Text>
                                     {task.bulkItemName ? (
-                                      <Badge
-                                        variant="light"
-                                        color="grape"
-                                        leftSection={<IconPackage size={12} />}
-                                      >
+                                      <Badge variant="light" color="grape" leftSection={<IconPackage size={12} />}>
                                         {task.bulkItemName}
                                       </Badge>
                                     ) : null}
@@ -545,20 +571,19 @@ export default function TasksPage() {
                                 </Stack>
                               </TableTd>
                               <TableTd>
-                                <Stack gap="xs">
-                                  <Badge color={priorityColor(task.priority)} variant="light" w="fit-content">
-                                    {formatPriorityLabel(task.priority)}
-                                  </Badge>
-                                  <Select
-                                    value={task.priority ?? 'MEDIUM'}
-                                    onChange={(value) =>
-                                      updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })
-                                    }
-                                    data={priorityOptions}
-                                    size="xs"
-                                    w={120}
-                                  />
-                                </Stack>
+                                <Select
+                                  aria-label={`Prioridad de ${task.title}`}
+                                  value={task.priority ?? 'MEDIUM'}
+                                  onChange={(value) =>
+                                    updateTask(task.id, {
+                                      priority: (value as TaskPriority) || 'MEDIUM',
+                                    })
+                                  }
+                                  data={priorityOptions}
+                                  size="xs"
+                                  w={120}
+                                  allowDeselect={false}
+                                />
                               </TableTd>
                               <TableTd>
                                 <Stack gap="xs">
@@ -584,20 +609,19 @@ export default function TasksPage() {
                                 />
                               </TableTd>
                               <TableTd>
-                                <Stack gap="xs">
-                                  <Badge color={statusColor(task.status)} variant="light" w="fit-content">
-                                    {formatStatusLabel(task.status)}
-                                  </Badge>
-                                  <Select
-                                    value={task.status ?? 'OPEN'}
-                                    onChange={(value) =>
-                                      updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })
-                                    }
-                                    data={statusOptions}
-                                    size="xs"
-                                    w={120}
-                                  />
-                                </Stack>
+                                <Select
+                                  aria-label={`Estado de ${task.title}`}
+                                  value={task.status ?? 'OPEN'}
+                                  onChange={(value) =>
+                                    updateTask(task.id, {
+                                      status: (value as TaskStatus) || 'OPEN',
+                                    })
+                                  }
+                                  data={statusOptions}
+                                  size="xs"
+                                  w={120}
+                                  allowDeselect={false}
+                                />
                               </TableTd>
                               <TableTd>
                                 <Button size="xs" variant="light" onClick={() => openAssetsModal(task)}>
@@ -612,7 +636,7 @@ export default function TasksPage() {
                   </Paper>
 
                   <Stack gap="sm" hiddenFrom="sm">
-                    {tasks.map((task) => {
+                    {filteredTasks.map((task) => {
                       const dueState = getDueState(task.dueDate);
                       return (
                         <Paper key={task.id} withBorder radius="lg" p="md">
@@ -641,49 +665,45 @@ export default function TasksPage() {
                                 </Badge>
                               ) : null}
                               {task.bulkItemName ? (
-                                <Badge
-                                  color="grape"
-                                  variant="light"
-                                  leftSection={<IconPackage size={12} />}
-                                >
+                                <Badge color="grape" variant="light" leftSection={<IconPackage size={12} />}>
                                   {task.bulkItemName}
                                 </Badge>
                               ) : null}
                             </Group>
 
-                            <SimpleGrid cols={2} spacing="sm">
-                              <Paper withBorder radius="md" p="sm" bg="gray.0">
-                                <Group gap="xs" wrap="nowrap">
-                                  <ThemeIcon size={30} radius="md" variant="light" color="gray">
-                                    <IconCalendarEvent size={16} />
-                                  </ThemeIcon>
-                                  <Stack gap={0}>
-                                    <Text size="xs" c="dimmed">Vence</Text>
-                                    <Text size="sm" fw={600}>{formatDate(task.dueDate)}</Text>
-                                  </Stack>
-                                </Group>
-                              </Paper>
-                              <Paper withBorder radius="md" p="sm" bg="gray.0">
-                                <Group gap="xs" wrap="nowrap">
-                                  <ThemeIcon size={30} radius="md" variant="light" color="blue">
-                                    <IconUserCheck size={16} />
-                                  </ThemeIcon>
-                                  <Stack gap={0}>
-                                    <Text size="xs" c="dimmed">Asignado</Text>
-                                    <Text size="sm" fw={600}>
-                                      {getTaskAssigneeName(task)}
-                                    </Text>
-                                  </Stack>
-                                </Group>
-                              </Paper>
-                            </SimpleGrid>
+                            <Stack gap="xs">
+                              <Group gap="xs" wrap="nowrap">
+                                <ThemeIcon size={28} radius="xl" variant="light" color="gray">
+                                  <IconCalendarEvent size={15} />
+                                </ThemeIcon>
+                                <Text size="sm" c="dimmed">
+                                  Vence
+                                </Text>
+                                <Text size="sm" fw={600}>
+                                  {formatDate(task.dueDate)}
+                                </Text>
+                              </Group>
+                              <Group gap="xs" wrap="nowrap">
+                                <ThemeIcon size={28} radius="xl" variant="light" color="blue">
+                                  <IconUserCheck size={15} />
+                                </ThemeIcon>
+                                <Text size="sm" c="dimmed">
+                                  Responsable
+                                </Text>
+                                <Text size="sm" fw={600} lineClamp={1}>
+                                  {getTaskAssigneeName(task)}
+                                </Text>
+                              </Group>
+                            </Stack>
 
                             <SimpleGrid cols={1} spacing="sm">
                               <Select
                                 label="Prioridad"
                                 value={task.priority ?? 'MEDIUM'}
                                 onChange={(value) =>
-                                  updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })
+                                  updateTask(task.id, {
+                                    priority: (value as TaskPriority) || 'MEDIUM',
+                                  })
                                 }
                                 data={priorityOptions}
                               />
@@ -691,7 +711,9 @@ export default function TasksPage() {
                                 label="Estado"
                                 value={task.status ?? 'OPEN'}
                                 onChange={(value) =>
-                                  updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })
+                                  updateTask(task.id, {
+                                    status: (value as TaskStatus) || 'OPEN',
+                                  })
                                 }
                                 data={statusOptions}
                               />
@@ -724,8 +746,19 @@ export default function TasksPage() {
                     </ThemeIcon>
                     <Text fw={700}>No hay pendientes para los filtros actuales</Text>
                     <Text size="sm" c="dimmed" ta="center">
-                      Adjust the status, clear the search, or create a new task to start working.
+                      Cambia el estado, limpia la búsqueda o crea un nuevo pendiente.
                     </Text>
+                    {search || statusFilter !== 'ALL' ? (
+                      <Button
+                        variant="light"
+                        onClick={() => {
+                          setSearch('');
+                          setStatusFilter('ALL');
+                        }}
+                      >
+                        Limpiar filtros
+                      </Button>
+                    ) : null}
                   </Stack>
                 </Paper>
               )}
@@ -741,7 +774,7 @@ export default function TasksPage() {
               <Stack gap={2}>
                 <Text fw={700}>Alta de pendiente</Text>
                 <Text size="sm" c="dimmed">
-                  Register an operational action, set priority, and clarify who should move it.
+                  Registra una tarea, define su prioridad y asígnala a la persona responsable.
                 </Text>
               </Stack>
               <Badge color={priorityColor(priority)} variant="light">
@@ -753,36 +786,16 @@ export default function TasksPage() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="md">
               <div>
-                <Text fw={700}>Informacion general</Text>
+                <Text fw={700}>Información general</Text>
                 <Text size="sm" c="dimmed">
-                  Define the objective, details, and task priority.
+                  Describe claramente qué se necesita y cuándo debe estar listo.
                 </Text>
               </div>
-              <TextInput
-                label="Title"
-                value={title}
-                onChange={(event) => setTitle(event.currentTarget.value)}
-                required
-              />
-              <Textarea
-                label="Description"
-                value={description}
-                onChange={(event) => setDescription(event.currentTarget.value)}
-                minRows={3}
-              />
+              <TextInput label="Título" value={title} onChange={(event) => setTitle(event.currentTarget.value)} required />
+              <Textarea label="Descripción" value={description} onChange={(event) => setDescription(event.currentTarget.value)} minRows={3} />
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <Select
-                  label="Prioridad"
-                  value={priority}
-                  onChange={(value) => setPriority((value as TaskPriority) || 'MEDIUM')}
-                  data={priorityOptions}
-                />
-                <TextInput
-                  label="Vence"
-                  type="date"
-                  value={dueDate}
-                  onChange={(event) => setDueDate(event.currentTarget.value)}
-                />
+                <Select label="Prioridad" value={priority} onChange={(value) => setPriority((value as TaskPriority) || 'MEDIUM')} data={priorityOptions} />
+                <TextInput label="Vence" type="date" value={dueDate} onChange={(event) => setDueDate(event.currentTarget.value)} />
               </SimpleGrid>
             </Stack>
           </Paper>
@@ -792,18 +805,12 @@ export default function TasksPage() {
               <div>
                 <Text fw={700}>Contexto operativo</Text>
                 <Text size="sm" c="dimmed">
-                  Assign the owner as an active user or operational employee.
+                  Selecciona quién debe atender este pendiente.
                 </Text>
               </div>
               <Select
                 label="Responsable"
-                value={
-                  assignedToUserId
-                    ? `user:${assignedToUserId}`
-                    : assignedToEmployeeId
-                    ? `employee:${assignedToEmployeeId}`
-                    : null
-                }
+                value={assignedToUserId ? `user:${assignedToUserId}` : assignedToEmployeeId ? `employee:${assignedToEmployeeId}` : null}
                 onChange={(value) => {
                   const assignee = parseAssigneeValue(value);
                   setAssignedToUserId(assignee.assignedToUserId);
@@ -815,6 +822,12 @@ export default function TasksPage() {
                 disabled={assigneesLoading}
                 placeholder={assigneesLoading ? 'Cargando...' : 'Seleccionar'}
               />
+              <Group gap="xs" wrap="nowrap" align="flex-start">
+                <IconBrandWhatsapp size={17} color="var(--mantine-color-green-6)" />
+                <Text size="xs" c="dimmed">
+                  Si el responsable tiene teléfono registrado, recibirá la asignación por WhatsApp.
+                </Text>
+              </Group>
             </Stack>
           </Paper>
 
@@ -829,13 +842,7 @@ export default function TasksPage() {
         </Stack>
       </Modal>
 
-      <Modal
-        opened={assetsModalOpen}
-        onClose={closeAssetsModal}
-        title={selectedTask ? `Seriales - ${selectedTask.title}` : 'Seriales'}
-        centered
-        size="lg"
-      >
+      <Modal opened={assetsModalOpen} onClose={closeAssetsModal} title={selectedTask ? `Seriales - ${selectedTask.title}` : 'Seriales'} centered size="lg">
         <Stack gap="md">
           <Paper withBorder radius="md" p="md">
             <Stack gap="sm">
@@ -843,11 +850,11 @@ export default function TasksPage() {
                 <div>
                   <Text fw={700}>Activos vinculados</Text>
                   <Text size="sm" c="dimmed">
-                    Serials related to this task for follow-up or pickup.
+                    Equipos relacionados con esta tarea para facilitar su seguimiento.
                   </Text>
                 </div>
                 <Badge color="gray" variant="light">
-                  {taskAssets.length} asset{taskAssets.length === 1 ? '' : 's'}
+                  {taskAssets.length} activo{taskAssets.length === 1 ? '' : 's'}
                 </Badge>
               </Group>
               {assetsLoading ? (
@@ -859,13 +866,10 @@ export default function TasksPage() {
                   {taskAssets.map((asset) => (
                     <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
                       <Group justify="space-between" align="center" wrap="nowrap">
-                        <Text size="sm" fw={600}>{asset.serial || asset.name || asset.id}</Text>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          aria-label="Remove asset"
-                          onClick={() => removeAssetFromTask(asset.id)}
-                        >
+                        <Text size="sm" fw={600}>
+                          {asset.serial || asset.name || asset.id}
+                        </Text>
+                        <ActionIcon variant="light" color="red" aria-label="Quitar activo" onClick={() => removeAssetFromTask(asset.id)}>
                           <IconTrash size={14} />
                         </ActionIcon>
                       </Group>
@@ -899,17 +903,8 @@ export default function TasksPage() {
                     { value: 'search', label: 'NOMBRE' },
                   ]}
                 />
-                <TextInput
-                  label="Buscar"
-                  value={assetQuery}
-                  onChange={(event) => setAssetQuery(event.currentTarget.value)}
-                />
-                <Button
-                  mt={{ base: 0, sm: 25 }}
-                  leftSection={<IconSearch size={14} />}
-                  onClick={searchAssets}
-                  loading={assetSearching}
-                >
+                <TextInput label="Buscar" value={assetQuery} onChange={(event) => setAssetQuery(event.currentTarget.value)} />
+                <Button mt={{ base: 0, sm: 25 }} leftSection={<IconSearch size={14} />} onClick={searchAssets} loading={assetSearching}>
                   Buscar
                 </Button>
               </SimpleGrid>
@@ -917,7 +912,9 @@ export default function TasksPage() {
                 {assetResults.map((asset) => (
                   <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" wrap="nowrap">
-                      <Text size="sm" fw={600}>{asset.serial || asset.name || asset.id}</Text>
+                      <Text size="sm" fw={600}>
+                        {asset.serial || asset.name || asset.id}
+                      </Text>
                       <Button size="xs" variant="light" onClick={() => addAssetToTask(asset.id)}>
                         Agregar
                       </Button>

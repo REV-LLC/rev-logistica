@@ -1,12 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
+import { NotificationTransportService } from '../notifications/notification-transport.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TasksService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationTransport: NotificationTransportService,
+  ) {}
 
   private toDateOrNull(value?: string | null) {
     if (!value) return null;
@@ -18,10 +24,7 @@ export class TasksService {
     return parsed;
   }
 
-  private assertSingleAssignee(payload: {
-    assignedToUserId?: string | null;
-    assignedToEmployeeId?: string | null;
-  }) {
+  private assertSingleAssignee(payload: { assignedToUserId?: string | null; assignedToEmployeeId?: string | null }) {
     if (payload.assignedToUserId && payload.assignedToEmployeeId) {
       throw new BadRequestException('Task can only be assigned to one responsible');
     }
@@ -30,7 +33,7 @@ export class TasksService {
   async createTask(payload: CreateTaskDto, createdByUserId: string) {
     this.assertSingleAssignee(payload);
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         title: payload.title,
         description: payload.description ?? null,
@@ -43,6 +46,12 @@ export class TasksService {
         assignedToEmployeeId: payload.assignedToEmployeeId ?? null,
       },
     });
+
+    if (task.assignedToUserId || task.assignedToEmployeeId) {
+      await this.notifyTaskAssignment(task);
+    }
+
+    return task;
   }
 
   async listTasks(params: {
@@ -134,13 +143,13 @@ export class TasksService {
       assignedTo: payload.assignedToUserId
         ? { connect: { id: payload.assignedToUserId } }
         : payload.assignedToUserId === null
-        ? { disconnect: true }
-        : undefined,
+          ? { disconnect: true }
+          : undefined,
       assignedToEmployee: payload.assignedToEmployeeId
         ? { connect: { id: payload.assignedToEmployeeId } }
         : payload.assignedToEmployeeId === null
-        ? { disconnect: true }
-        : undefined,
+          ? { disconnect: true }
+          : undefined,
     };
 
     if (payload.assignedToUserId) {
@@ -155,10 +164,71 @@ export class TasksService {
       data.dueDate = this.toDateOrNull(payload.dueDate);
     }
 
-    return this.prisma.task.update({
+    const assignmentChanged =
+      (payload.assignedToUserId !== undefined && payload.assignedToUserId !== existing.assignedToUserId) ||
+      (payload.assignedToEmployeeId !== undefined && payload.assignedToEmployeeId !== existing.assignedToEmployeeId);
+
+    const task = await this.prisma.task.update({
       where: { id },
       data,
     });
+
+    if (assignmentChanged && (task.assignedToUserId || task.assignedToEmployeeId)) {
+      await this.notifyTaskAssignment(task);
+    }
+
+    return task;
+  }
+
+  private async notifyTaskAssignment(task: {
+    id: string;
+    title: string;
+    assignedToUserId: string | null;
+    assignedToEmployeeId: string | null;
+  }) {
+    try {
+      const assignee = task.assignedToUserId
+        ? await this.prisma.user.findUnique({
+            where: { id: task.assignedToUserId },
+            select: {
+              active: true,
+              email: true,
+              employee: { select: { name: true, lastName: true, phone: true } },
+            },
+          })
+        : null;
+      const employee =
+        !assignee && task.assignedToEmployeeId
+          ? await this.prisma.employee.findUnique({
+              where: { id: task.assignedToEmployeeId },
+              select: { active: true, name: true, lastName: true, phone: true },
+            })
+          : null;
+      const active = assignee?.active ?? employee?.active ?? false;
+      const name = assignee?.employee
+        ? `${assignee.employee.name} ${assignee.employee.lastName}`.trim()
+        : employee
+          ? `${employee.name} ${employee.lastName}`.trim()
+          : assignee?.email;
+      const phone = assignee?.employee?.phone ?? employee?.phone;
+
+      if (!active || !phone || !name) return;
+
+      const publicWebUrl = process.env.PUBLIC_WEB_URL?.trim().replace(/\/+$/, '');
+      const response = await this.notificationTransport.sendWhatsapp(phone, {
+        title: 'Nueva tarea asignada',
+        body: `Se te ha asignado la tarea “${task.title}”. Por favor, revisa la app.`,
+        recipientName: name,
+        link: publicWebUrl ? `${publicWebUrl}/tasks` : '/tasks',
+      });
+
+      if (!response.sent) {
+        this.logger.warn(`Task assignment WhatsApp not sent for task ${task.id}: ${response.reason}`);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Task assignment WhatsApp failed for task ${task.id}: ${detail}`);
+    }
   }
 
   async listTaskAssets(taskId: string) {
@@ -203,7 +273,10 @@ export class TasksService {
   }
 
   private async assertTaskExists(taskId: string) {
-    const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true },
+    });
     if (!task) {
       throw new NotFoundException('Task not found');
     }
