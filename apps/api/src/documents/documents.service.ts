@@ -7,6 +7,7 @@ import {
   DocumentItemBillingStatus,
   DocumentStatus,
   DocumentType,
+  NotificationChannel,
   Prisma,
   Role,
 } from '@prisma/client';
@@ -1216,6 +1217,18 @@ export class DocumentsService {
             email: true,
             employee: { select: { name: true, lastName: true } },
           },
+        },
+        messageDeliveries: {
+          where: { channel: NotificationChannel.WHATSAPP },
+          select: {
+            id: true,
+            phone: true,
+            status: true,
+            sentAt: true,
+            error: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         },
         files: {
           select: {

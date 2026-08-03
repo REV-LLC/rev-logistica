@@ -27,6 +27,7 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import TableRowActions from '@/components/TableRowActions';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
@@ -824,7 +825,7 @@ export default function RemisionDevolucionPage() {
                 <Table.Tr>
                   <Table.Th>Item</Table.Th>
                   <Table.Th>Cantidad</Table.Th>
-                  <Table.Th></Table.Th>
+                  <Table.Th ta="right">Acciones</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -854,9 +855,17 @@ export default function RemisionDevolucionPage() {
                       )}
                     </Table.Td>
                     <Table.Td>
-                      <Button variant="subtle" color="red" onClick={() => removeSelected(index)}>
-                        Quitar
-                      </Button>
+                      <TableRowActions
+                        actions={[
+                          {
+                            key: 'remove',
+                            label: `Quitar ${item.name}`,
+                            icon: <IconTrash size={16} />,
+                            color: 'red',
+                            onClick: () => removeSelected(index),
+                          },
+                        ]}
+                      />
                     </Table.Td>
                   </Table.Tr>
                 ))}

@@ -83,14 +83,14 @@ const sections: NavSection[] = [
         children: [
           {
             href: '/inventory/warehouse?scope=own&view=serial',
-            label: 'Assets',
+            label: 'Equipos',
             icon: IconTools,
             roles: ['ADMIN', 'OFFICE'],
             exact: true,
           },
           {
             href: '/inventory/warehouse?scope=own&view=bulk',
-            label: 'Bulk',
+            label: 'Materiales',
             icon: IconBox,
             roles: ['ADMIN', 'OFFICE'],
             exact: true,
