@@ -1,10 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { ActionIcon, Badge, Box, FileButton, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { IconCamera, IconCar, IconFileDescription, IconIdBadge2, IconMail, IconPhone } from '@tabler/icons-react';
-import EmployeeAvatar from '@/components/EmployeeAvatar';
-import { api, ApiError } from '@/lib/api';
+import { ActionIcon, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  IconCar,
+  IconEye,
+  IconFileDescription,
+  IconIdBadge2,
+  IconMail,
+  IconPencil,
+  IconPhone,
+} from '@tabler/icons-react';
+import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 
 export type EmployeeCardVehicle = {
   id: string;
@@ -45,7 +51,7 @@ export type EmployeeCardRecord = {
   } | null;
 };
 
-const roleLabelByValue: Record<EmployeeCardRole, string> = {
+export const employeeCardRoleLabelByValue: Record<EmployeeCardRole, string> = {
   DRIVER: 'Conductor',
   HEAVY_MACHINERY_OPERATOR: 'Operario maquinaria amarilla',
   MACHINIST: 'Machinero',
@@ -84,86 +90,40 @@ export default function EmployeeCard({
   employee,
   onDocuments,
   onIdentityCard,
+  onDetails,
+  onEdit,
+  onPhotoPreview,
   identityCardLoading = false,
 }: {
   employee: EmployeeCardRecord;
   onDocuments: (employee: EmployeeCardRecord) => void;
   onIdentityCard: (employee: EmployeeCardRecord) => void;
+  onDetails: (employee: EmployeeCardRecord) => void;
+  onEdit: (employee: EmployeeCardRecord) => void;
+  onPhotoPreview: (employee: EmployeeCardRecord) => void;
   identityCardLoading?: boolean;
 }) {
-  const [photoVersion, setPhotoVersion] = useState(0);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
   const showVehicle = employee.role !== 'OFFICE';
-
-  const uploadProfilePhoto = async (file: File | null) => {
-    if (!file) return;
-
-    setUploadingPhoto(true);
-    setPhotoError(null);
-
-    const formData = new FormData();
-    formData.append('photo', file);
-
-    try {
-      await api<{ uploaded: true }>(`/employees/${employee.id}/photo`, {
-        method: 'POST',
-        body: formData,
-      });
-      setPhotoVersion((current) => current + 1);
-    } catch (error) {
-      setPhotoError(
-        error instanceof ApiError
-          ? `${error.status}: ${error.message}`
-          : error instanceof Error
-            ? error.message
-            : 'No se pudo subir la foto',
-      );
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
 
   return (
     <Paper withBorder radius="lg" p="lg">
       <Stack gap="md">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Box pos="relative" w={74} h={74}>
-            <EmployeeAvatar employee={employee} size={74} version={photoVersion} />
-            <FileButton onChange={uploadProfilePhoto} accept="image/png,image/jpeg,image/webp">
-              {(props) => (
-                <Tooltip label="Cambiar foto">
-                  <ActionIcon
-                    {...props}
-                    aria-label={`Cambiar foto de ${getEmployeeCardFullName(employee)}`}
-                    color="blue"
-                    loading={uploadingPhoto}
-                    radius="xl"
-                    size="sm"
-                    variant="filled"
-                    style={{ position: 'absolute', bottom: 0, right: 0 }}
-                  >
-                    <IconCamera style={iconSize14Style} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
-            </FileButton>
-          </Box>
+          <EmployeePhotoControl
+            employee={employee}
+            size={74}
+            editable
+            onPreview={() => onPhotoPreview(employee)}
+          />
           <EmployeeStatusBadge active={employee.active} />
         </Group>
-
-        {photoError ? (
-          <Text size="xs" c="red">
-            {photoError}
-          </Text>
-        ) : null}
 
         <Stack gap={2}>
           <Text fw={800} size="lg" lh={1.15}>
             {getEmployeeCardFullName(employee)}
           </Text>
           <Text size="sm" c="dimmed">
-            {roleLabelByValue[employee.role] ?? employee.role}
+            {employeeCardRoleLabelByValue[employee.role] ?? employee.role}
           </Text>
           <Text size="xs" c="dimmed">
             DOCUMENTO: {employee.documentId ?? 'SIN REGISTRAR'}
@@ -217,6 +177,25 @@ export default function EmployeeCard({
               onClick={() => onDocuments(employee)}
             >
               <IconFileDescription style={iconSize14Style} />
+            </ActionIcon>
+          </Tooltip>
+          <ActionIcon
+            color="blue"
+            variant="light"
+            title="Editar empleado"
+            aria-label={`Editar ${getEmployeeCardFullName(employee)}`}
+            onClick={() => onEdit(employee)}
+          >
+            <IconPencil style={iconSize14Style} />
+          </ActionIcon>
+          <Tooltip label="Ver información completa">
+            <ActionIcon
+              color="blue"
+              variant="filled"
+              aria-label={`Ver información de ${getEmployeeCardFullName(employee)}`}
+              onClick={() => onDetails(employee)}
+            >
+              <IconEye style={iconSize14Style} />
             </ActionIcon>
           </Tooltip>
         </Group>

@@ -37,6 +37,8 @@ export type NotificationTopic = {
   recipients: NotificationRecipient[];
 };
 
+export type MaintenanceScheduleType = 'HOURS' | 'CALENDAR_DAYS';
+
 export type MaintenanceReading = {
   id: string;
   hours: number | string;
@@ -44,6 +46,13 @@ export type MaintenanceReading = {
   note?: string | null;
   evidenceFileObjectId?: string | null;
   recordedByUserId: string;
+  recordedBy?: {
+    email: string;
+    employee?: {
+      name?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
   createdAt: string;
 };
 
@@ -52,9 +61,12 @@ export type MaintenanceItem = {
   planId: string;
   name: string;
   instructions?: string | null;
-  intervalHours: number | string;
-  warningHours: number | string;
-  baselineHours: number | string;
+  intervalHours?: number | string | null;
+  warningHours?: number | string | null;
+  baselineHours?: number | string | null;
+  intervalDays?: number | null;
+  warningDays?: number | null;
+  baselineDate?: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -73,7 +85,8 @@ export type MaintenancePlan = {
 };
 
 export type MaintenanceResponse = {
-  currentHours: number;
+  scheduleType: MaintenanceScheduleType;
+  currentHours: number | null;
   readings: MaintenanceReading[];
   plans: MaintenancePlan[];
 };
@@ -90,6 +103,8 @@ export type NotificationReminder = {
   dueHours?: number;
   remainingHours?: number;
   remainingDays?: number;
+  intervalDays?: number;
+  dueAt?: string;
   instructions?: string | null;
   itemId?: string;
   planId?: string;
@@ -110,16 +125,30 @@ export type MaintenanceItemInput = {
   intervalHours: number | '';
   warningHours: number | '';
   baselineHours: number | '';
+  intervalDays: number | '';
+  warningDays: number | '';
+  baselineDate: string;
   active: boolean;
   recipients: NotificationRecipientInput[];
 };
 
-export const emptyMaintenanceItemInput = (): MaintenanceItemInput => ({
+function currentLocalDate() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+}
+
+export const emptyMaintenanceItemInput = (
+  scheduleType: MaintenanceScheduleType = 'HOURS',
+): MaintenanceItemInput => ({
   name: '',
   instructions: '',
   intervalHours: '',
-  warningHours: 10,
-  baselineHours: 0,
+  warningHours: scheduleType === 'HOURS' ? 10 : '',
+  baselineHours: scheduleType === 'HOURS' ? 0 : '',
+  intervalDays: '',
+  warningDays: scheduleType === 'CALENDAR_DAYS' ? 7 : '',
+  baselineDate: scheduleType === 'CALENDAR_DAYS' ? currentLocalDate() : '',
   active: true,
   recipients: [],
 });

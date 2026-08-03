@@ -30,6 +30,12 @@ type AssetFamily = {
   id: string;
   code: string;
   name: string;
+  subfamilies: Array<{
+    id: string;
+    code: string;
+    name: string;
+    active: boolean;
+  }>;
 };
 
 type Warehouse = {
@@ -43,6 +49,7 @@ type AssetWorkflowStep = 'template' | 'commercial' | 'asset' | 'review';
 type Sku = {
   id: string;
   name: string;
+  assetSubfamilyId?: string | null;
   unitWeight?: number | string | null;
   price?: number | string | null;
   subrentalPrice?: number | string | null;
@@ -50,6 +57,9 @@ type Sku = {
   chargeType?: 'DAY' | 'HOUR' | null;
   minimumChargeHours?: number | string | null;
   size?: string | null;
+  lengthMeters?: number | string | null;
+  closedLengthMeters?: number | string | null;
+  extendedLengthMeters?: number | string | null;
 };
 
 type Asset = {
@@ -186,6 +196,8 @@ export default function CreateSerializedAssetPage() {
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [familyName, setFamilyName] = useState('');
   const [familyCode, setFamilyCode] = useState('');
+  const [subfamilyId, setSubfamilyId] = useState<string | null>(null);
+  const [subfamilyName, setSubfamilyName] = useState('ESTÁNDAR');
 
   const [skuSuggestionId, setSkuSuggestionId] = useState<string | null>(null);
   const [skuName, setSkuName] = useState('');
@@ -194,6 +206,9 @@ export default function CreateSerializedAssetPage() {
   const [skuYear, setSkuYear] = useState<number | ''>('');
   const [skuFuel, setSkuFuel] = useState('');
   const [skuSize, setSkuSize] = useState('');
+  const [skuLengthMeters, setSkuLengthMeters] = useState<number | string>('');
+  const [skuClosedLengthMeters, setSkuClosedLengthMeters] = useState<number | string>('');
+  const [skuExtendedLengthMeters, setSkuExtendedLengthMeters] = useState<number | string>('');
   const [skuUnit, setSkuUnit] = useState('');
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | string>('');
   const [skuPrice, setSkuPrice] = useState<number | ''>('');
@@ -300,8 +315,16 @@ export default function CreateSerializedAssetPage() {
     if (familyMode === 'new') {
       setSkuSuggestionId(null);
       setSkus([]);
+      setSubfamilyId(null);
+      setSubfamilyName('ESTÁNDAR');
+    } else if (familyId) {
+      const family = families.find((item) => item.id === familyId);
+      const standard =
+        family?.subfamilies.find((subfamily) => subfamily.code === 'ESTANDAR') ??
+        family?.subfamilies[0];
+      setSubfamilyId(standard?.id ?? null);
     }
-  }, [familyMode]);
+  }, [families, familyId, familyMode]);
 
   const familyOptions = families.map((family) => ({
     value: family.id,
@@ -363,6 +386,13 @@ export default function CreateSerializedAssetPage() {
   );
   const isAlternateOwnerWarehouse = selectedOwnerWarehouse?.type === 'ALLY';
   const selectedFamily = familyId ? familyNameById.get(familyId) : null;
+  const subfamilyOptions = (selectedFamily?.subfamilies ?? []).map((subfamily) => ({
+    value: subfamily.id,
+    label: subfamily.name,
+  }));
+  const selectedSubfamily = selectedFamily?.subfamilies.find(
+    (subfamily) => subfamily.id === subfamilyId,
+  );
   const selectedCurrentWarehouse = useMemo(
     () =>
       warehouses.find((warehouse) => warehouse.id === warehouseCurrentId) ?? null,
@@ -388,9 +418,8 @@ export default function CreateSerializedAssetPage() {
     (skuChargeType !== 'HOUR' ||
       (skuMinimumChargeHours !== '' && Number(skuMinimumChargeHours) > 0));
   const hasAssetData =
-    Boolean(serialOrEngine.trim()) &&
-    (!isAlternateOwnerWarehouse ||
-      (manualInternalNumber !== '' && Number(manualInternalNumber) > 0));
+    !isAlternateOwnerWarehouse ||
+    (manualInternalNumber !== '' && Number(manualInternalNumber) > 0);
   const isWarehouseStepActive = !warehouseLocked;
   const isFamilyStepActive = warehouseLocked && !familyLocked;
   const canEditAssetDetails = warehouseLocked && familyLocked;
@@ -403,6 +432,8 @@ export default function CreateSerializedAssetPage() {
     setFamilyId(null);
     setFamilyName('');
     setFamilyCode('');
+    setSubfamilyId(null);
+    setSubfamilyName('ESTÁNDAR');
     setSkuSuggestionId(null);
     setSkuName('');
     setSkuBrand('');
@@ -410,6 +441,9 @@ export default function CreateSerializedAssetPage() {
     setSkuYear('');
     setSkuFuel('');
     setSkuSize('');
+    setSkuLengthMeters('');
+    setSkuClosedLengthMeters('');
+    setSkuExtendedLengthMeters('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -438,6 +472,8 @@ export default function CreateSerializedAssetPage() {
     setFamilyId(null);
     setFamilyName('');
     setFamilyCode('');
+    setSubfamilyId(null);
+    setSubfamilyName('ESTÁNDAR');
     setSkuSuggestionId(null);
     setSkuName('');
     setSkuBrand('');
@@ -445,6 +481,9 @@ export default function CreateSerializedAssetPage() {
     setSkuYear('');
     setSkuFuel('');
     setSkuSize('');
+    setSkuLengthMeters('');
+    setSkuClosedLengthMeters('');
+    setSkuExtendedLengthMeters('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -505,8 +544,16 @@ export default function CreateSerializedAssetPage() {
       setValidationError('Select an equipment family.', familySelectRef);
       return;
     }
+    if (familyMode === 'existing' && !subfamilyId) {
+      setValidationError('Selecciona una subfamilia.');
+      return;
+    }
     if (familyMode === 'new' && !familyName.trim()) {
       setValidationError('Enter the category name.', familyNameRef);
+      return;
+    }
+    if (familyMode === 'new' && !subfamilyName.trim()) {
+      setValidationError('Ingresa la subfamilia.');
       return;
     }
     setFamilyLocked(true);
@@ -522,6 +569,9 @@ export default function CreateSerializedAssetPage() {
     setSkuYear('');
     setSkuFuel('');
     setSkuSize('');
+    setSkuLengthMeters('');
+    setSkuClosedLengthMeters('');
+    setSkuExtendedLengthMeters('');
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
@@ -578,10 +628,6 @@ export default function CreateSerializedAssetPage() {
   const goToReviewStep = () => {
     setError(null);
     setAssetAttempted(true);
-    if (!serialOrEngine.trim()) {
-      setValidationError('El serial o motor es requerido.', serialOrEngineRef);
-      return;
-    }
     if (
       isAlternateOwnerWarehouse &&
       (manualInternalNumber === '' || Number(manualInternalNumber) <= 0)
@@ -623,6 +669,10 @@ export default function CreateSerializedAssetPage() {
       );
       return;
     }
+    if (familyMode === 'existing' && !subfamilyId) {
+      setValidationError('Selecciona una subfamilia.');
+      return;
+    }
 
     if (familyMode === 'new' && !familyName.trim()) {
       setValidationError('Enter the category name.', familyNameRef);
@@ -631,14 +681,6 @@ export default function CreateSerializedAssetPage() {
 
     if (!resolvedSkuName) {
       setValidationError('Ingresa marca/modelo o confirma una familia.');
-      return;
-    }
-
-    if (!serialOrEngine.trim()) {
-      setValidationError(
-        'Serial or engine number is required.',
-        serialOrEngineRef,
-      );
       return;
     }
 
@@ -687,6 +729,10 @@ export default function CreateSerializedAssetPage() {
                 name: uppercaseInputValue(familyName.trim()),
                 code: familyCode.trim() ? uppercaseInputValue(familyCode.trim()) : undefined,
               },
+        subfamily:
+          familyMode === 'existing'
+            ? { id: subfamilyId }
+            : { name: uppercaseInputValue(subfamilyName.trim()) },
         sku: {
           name: resolvedSkuName || undefined,
           unitWeight: parsedSkuUnitWeight,
@@ -701,9 +747,12 @@ export default function CreateSerializedAssetPage() {
               ? parsedMinimumChargeHours
               : undefined,
           size: skuSize || undefined,
+          lengthMeters: toOptionalNumber(skuLengthMeters),
+          closedLengthMeters: toOptionalNumber(skuClosedLengthMeters),
+          extendedLengthMeters: toOptionalNumber(skuExtendedLengthMeters),
         },
         asset: {
-          serialOrEngine: serialOrEngine.trim(),
+          serialOrEngine: serialOrEngine.trim() || undefined,
           registrationNumber: registrationNumber.trim() || undefined,
           brand: skuBrand.trim() || undefined,
           model: skuModel.trim() || undefined,
@@ -962,7 +1011,16 @@ export default function CreateSerializedAssetPage() {
                       name="familyId"
                       data={familyOptions}
                       value={familyId}
-                      onChange={(value) => setFamilyId(value)}
+                      onChange={(value) => {
+                        setFamilyId(value);
+                        const family = value ? familyNameById.get(value) : null;
+                        const standard =
+                          family?.subfamilies.find(
+                            (subfamily) => subfamily.code === 'ESTANDAR',
+                          ) ?? family?.subfamilies[0];
+                        setSubfamilyId(standard?.id ?? null);
+                        setSkuSuggestionId(null);
+                      }}
                       placeholder={
                         loading ? 'Cargando...' : 'Seleccionar familia'
                       }
@@ -995,6 +1053,31 @@ export default function CreateSerializedAssetPage() {
                     </Group>
                   )}
 
+                  {familyMode === 'existing' ? (
+                    <Select
+                      label="Subfamilia / serie de numeración"
+                      name="subfamilyId"
+                      data={subfamilyOptions}
+                      value={subfamilyId}
+                      onChange={setSubfamilyId}
+                      placeholder="Seleccionar subfamilia"
+                      disabled={!familyId || familyLocked}
+                      searchable
+                      required
+                    />
+                  ) : (
+                    <UppercaseTextInput
+                      label="Subfamilia / serie de numeración"
+                      name="subfamilyName"
+                      autoComplete="off"
+                      value={subfamilyName}
+                      onChange={setSubfamilyName}
+                      placeholder="Ejemplo: ESTÁNDAR, MINI o PEQUEÑA"
+                      disabled={familyLocked}
+                      required
+                    />
+                  )}
+
                   <Group gap="xs">
                     <Badge color={familyMode === 'existing' ? 'blue' : 'violet'} variant="light">
                       {familyMode === 'existing' ? 'Familia existente' : 'Familia nueva'}
@@ -1002,6 +1085,11 @@ export default function CreateSerializedAssetPage() {
                     {(selectedFamily || familyName.trim()) ? (
                       <Badge color="teal" variant="light">
                         {selectedFamily?.name ?? familyName.trim()}
+                      </Badge>
+                    ) : null}
+                    {(selectedSubfamily || subfamilyName.trim()) ? (
+                      <Badge color="cyan" variant="light">
+                        {selectedSubfamily?.name ?? subfamilyName.trim()}
                       </Badge>
                     ) : null}
                   </Group>
@@ -1051,6 +1139,9 @@ export default function CreateSerializedAssetPage() {
                         setCopiedImageLabel('');
                         return;
                       }
+                      if (selectedSku.assetSubfamilyId) {
+                        setSubfamilyId(selectedSku.assetSubfamilyId);
+                      }
                       setSkuUnitWeight(toNumberInputValue(selectedSku.unitWeight));
                       setSkuUnit((current) => current || units[0] || '');
                       setSkuPrice(toNumberInputValue(selectedSku.price));
@@ -1082,6 +1173,9 @@ export default function CreateSerializedAssetPage() {
                       setSkuYear(sampleAsset?.year ?? '');
                       setSkuFuel(uppercaseInputValue(sampleAsset?.fuel?.trim() ?? ''));
                       setSkuSize(uppercaseInputValue(selectedSku.size?.trim() ?? ''));
+                      setSkuLengthMeters(toNumberInputValue(selectedSku.lengthMeters));
+                      setSkuClosedLengthMeters(toNumberInputValue(selectedSku.closedLengthMeters));
+                      setSkuExtendedLengthMeters(toNumberInputValue(selectedSku.extendedLengthMeters));
                       setCopiedImageFileObjectId(sampleAsset?.imageFileObjectId ?? null);
                       setCopiedImageLabel(sampleAsset?.imageFileObjectId ? 'Imagen copiada de la plantilla' : '');
                       setAssetImageFile(null);
@@ -1154,6 +1248,36 @@ export default function CreateSerializedAssetPage() {
                       value={skuSize}
                       onChange={(value) => setSkuSize(uppercaseInputValue(value ?? ''))}
                       clearable
+                    />
+                    <NumberInput
+                      label="Largo"
+                      name="skuLengthMeters"
+                      value={skuLengthMeters}
+                      onChange={setSkuLengthMeters}
+                      min={0}
+                      decimalSeparator={DECIMAL_SEPARATOR}
+                      allowedDecimalSeparators={ALLOWED_DECIMAL_SEPARATORS}
+                      suffix=" m"
+                    />
+                    <NumberInput
+                      label="Largo cerrado"
+                      name="skuClosedLengthMeters"
+                      value={skuClosedLengthMeters}
+                      onChange={setSkuClosedLengthMeters}
+                      min={0}
+                      decimalSeparator={DECIMAL_SEPARATOR}
+                      allowedDecimalSeparators={ALLOWED_DECIMAL_SEPARATORS}
+                      suffix=" m"
+                    />
+                    <NumberInput
+                      label="Largo extendido"
+                      name="skuExtendedLengthMeters"
+                      value={skuExtendedLengthMeters}
+                      onChange={setSkuExtendedLengthMeters}
+                      min={0}
+                      decimalSeparator={DECIMAL_SEPARATOR}
+                      allowedDecimalSeparators={ALLOWED_DECIMAL_SEPARATORS}
+                      suffix=" m"
                     />
                   </Group>
 
@@ -1308,8 +1432,7 @@ export default function CreateSerializedAssetPage() {
                     value={serialOrEngine}
                     onChange={setSerialOrEngine}
                     placeholder="Ej: A3NV16797"
-                    error={assetAttempted && !serialOrEngine.trim() ? 'Requerido' : null}
-                    required
+                    description="Opcional. El código público y el número interno identifican el activo cuando no tiene serial."
                   />
                   <UppercaseTextInput
                     label="Numero de registro"

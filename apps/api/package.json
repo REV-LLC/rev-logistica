@@ -8,6 +8,13 @@
   "scripts": {
     "build": "nest build",
     "import:cervino": "ts-node scripts/import-cervino.ts",
+    "import:customers": "ts-node scripts/import-customers.ts",
+    "import:inventory-snapshot": "ts-node scripts/import-inventory-snapshot.ts",
+    "import:warehouses": "ts-node scripts/import-warehouses.ts",
+    "import:worksites": "ts-node scripts/import-worksites.ts",
+    "cleanup:legal-names": "ts-node scripts/cleanup-legal-names.ts",
+    "consolidate:provider-gatos": "ts-node scripts/consolidate-provider-gatos.ts",
+    "correct:conventional-scaffold-naves": "ts-node scripts/correct-conventional-scaffold-naves.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -37,9 +38,10 @@ export class CreateMaintenanceItemDto {
   @IsString()
   instructions?: string;
 
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  intervalHours: number;
+  intervalHours?: number;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -50,6 +52,20 @@ export class CreateMaintenanceItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   baselineHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  intervalDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  warningDays?: number;
+
+  @IsOptional()
+  @IsDateString()
+  baselineDate?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -118,6 +134,20 @@ export class UpdateMaintenanceItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   baselineHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  intervalDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  warningDays?: number;
+
+  @IsOptional()
+  @IsDateString()
+  baselineDate?: string;
 
   @IsOptional()
   @IsBoolean()

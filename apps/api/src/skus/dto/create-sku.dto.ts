@@ -20,6 +20,10 @@ export class CreateSkuDto {
   assetFamilyId: string;
 
   @IsOptional()
+  @IsUUID()
+  assetSubfamilyId?: string;
+
+  @IsOptional()
   @IsNumber()
   unitWeight?: number;
 
@@ -46,6 +50,18 @@ export class CreateSkuDto {
   @IsOptional()
   @IsString()
   size?: string;
+
+  @IsOptional()
+  @IsNumber()
+  lengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  closedLengthMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  extendedLengthMeters?: number;
 
   @IsOptional()
   @IsNumber()

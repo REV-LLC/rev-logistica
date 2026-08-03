@@ -31,11 +31,12 @@ export class SkusController {
     @Query('search') search?: string,
     @Query('controlType') controlType?: SkuControlType,
     @Query('assetFamilyId') assetFamilyId?: string,
+    @Query('assetSubfamilyId') assetSubfamilyId?: string,
   ) {
     if (controlType && !Object.values(SkuControlType).includes(controlType)) {
       throw new BadRequestException('Invalid controlType');
     }
-    return this.skusService.listSkus({ search, controlType, assetFamilyId });
+    return this.skusService.listSkus({ search, controlType, assetFamilyId, assetSubfamilyId });
   }
 
   @Get('units')

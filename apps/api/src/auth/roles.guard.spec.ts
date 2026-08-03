@@ -41,6 +41,12 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(createContext(Role.OFFICE))).toBe(true);
   });
 
+  it('allows operators through field routes', () => {
+    const guard = createGuard([Role.DRIVER, Role.OPERATOR]);
+
+    expect(guard.canActivate(createContext(Role.OPERATOR))).toBe(true);
+  });
+
   it('blocks non-admin users without a required role', () => {
     const guard = createGuard([Role.OFFICE]);
 

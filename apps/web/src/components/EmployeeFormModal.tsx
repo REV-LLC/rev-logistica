@@ -231,7 +231,7 @@ export default function EmployeeFormModal({
       styles={{
         header: { padding: '20px 22px 12px' },
         body: { padding: '0 22px 22px' },
-        content: { overflow: 'hidden' },
+        content: { overflowY: 'auto', overscrollBehavior: 'contain' },
       }}
     >
       <Stack gap="md">
@@ -264,9 +264,10 @@ export default function EmployeeFormModal({
               <Switch
                 checked={form.active}
                 label="Empleado activo"
-                onChange={(event) =>
-                  onChange((previous) => ({ ...previous, active: event.currentTarget.checked }))
-                }
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  onChange((previous) => ({ ...previous, active: checked }));
+                }}
               />
             </Group>
           </Paper>
@@ -374,9 +375,10 @@ export default function EmployeeFormModal({
             <Switch
               checked={form.active}
               label="Empleado activo"
-              onChange={(event) =>
-                onChange((previous) => ({ ...previous, active: event.currentTarget.checked }))
-              }
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                onChange((previous) => ({ ...previous, active: checked }));
+              }}
             />
           ) : null}
         </FormSection>
@@ -410,9 +412,10 @@ export default function EmployeeFormModal({
           <Switch
             checked={form.loginEnabled}
             label="Crear o mantener acceso para este empleado"
-            onChange={(event) =>
-              onChange((previous) => ({ ...previous, loginEnabled: event.currentTarget.checked }))
-            }
+            onChange={(event) => {
+              const checked = event.currentTarget.checked;
+              onChange((previous) => ({ ...previous, loginEnabled: checked }));
+            }}
           />
 
           {form.loginEnabled ? (
@@ -458,12 +461,13 @@ export default function EmployeeFormModal({
                   mt={{ base: 0, sm: 'xl' }}
                   checked={form.loginActive}
                   label="Usuario activo"
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
                     onChange((previous) => ({
                       ...previous,
-                      loginActive: event.currentTarget.checked,
-                    }))
-                  }
+                      loginActive: checked,
+                    }));
+                  }}
                 />
               </SimpleGrid>
             </Stack>

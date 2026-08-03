@@ -9,6 +9,7 @@ type BackupTable =
   | 'customerWorksites'
   | 'warehouses'
   | 'assetFamilies'
+  | 'assetSubfamilies'
   | 'skus'
   | 'assets'
   | 'tasks'
@@ -39,6 +40,7 @@ const TABLES: TableConfig[] = [
   { key: 'customerWorksites', label: 'Clientes por obra', delegate: 'customerWorksite', orderBy: { createdAt: 'asc' } },
   { key: 'warehouses', label: 'Bodegas', delegate: 'warehouse', orderBy: { createdAt: 'asc' } },
   { key: 'assetFamilies', label: 'Familias de activos', delegate: 'assetFamily', orderBy: { createdAt: 'asc' } },
+  { key: 'assetSubfamilies', label: 'Subfamilias de activos', delegate: 'assetSubfamily', orderBy: { createdAt: 'asc' } },
   { key: 'skus', label: 'Referencias', delegate: 'sku', orderBy: { createdAt: 'asc' } },
   { key: 'assets', label: 'Equipos serializados', delegate: 'asset', orderBy: { createdAt: 'asc' } },
   { key: 'tasks', label: 'Pendientes', delegate: 'task', orderBy: { createdAt: 'asc' } },

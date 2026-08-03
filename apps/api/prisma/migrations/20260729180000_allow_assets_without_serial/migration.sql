@@ -1,0 +1,2 @@
+ALTER TABLE "Asset"
+ALTER COLUMN "serialOrEngine" DROP NOT NULL;

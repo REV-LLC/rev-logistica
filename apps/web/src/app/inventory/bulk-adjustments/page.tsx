@@ -35,6 +35,7 @@ import { getCurrentUserRole } from '@/lib/auth';
 type Warehouse = {
   id: string;
   name: string;
+  type: 'OWN' | 'ALLY';
 };
 
 type CatalogOption = {
@@ -122,7 +123,28 @@ type BulkPayload = {
   quantity: number;
 };
 
-const DEFAULT_FORMALETA_Y_OPTIONS = ['0.30', '0.60', '1.20', '2.40', '3.00'] as const;
+const DEFAULT_FORMALETA_X_OPTIONS = [
+  '0.10',
+  '0.15',
+  '0.20',
+  '0.25',
+  '0.30',
+  '0.35',
+  '0.40',
+  '0.45',
+  '0.50',
+  '0.60',
+] as const;
+const DEFAULT_FORMALETA_Y_OPTIONS = [
+  '0.30',
+  '0.35',
+  '0.50',
+  '0.60',
+  '0.80',
+  '1.20',
+  '2.40',
+  '3.00',
+] as const;
 const DEFAULT_CERTIFIED_SCAFFOLD_PARTS = [
   'VERTICALES',
   'HORIZONTALES',
@@ -132,6 +154,10 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS = [
   'PLATAFORMA',
   'ESCALERA PELDAÑO',
   'ESCALERA TIPO GATO',
+  'PASAMANOS PARA ESCALERA',
+  'PASAMANOS HORIZONTAL',
+  'TORNILLO PARA PLATINA EN U',
+  'GANCHO DE SEGURIDAD',
   'DIAGONALES',
   'RODA PIE',
 ] as const;
@@ -163,9 +189,16 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'TORNILLOS NIVELADORES',
   'ESCALERA PELDAÑO',
   'ESCALERA TIPO GATO',
+  'PASAMANOS PARA ESCALERA',
+  'TORNILLO PARA PLATINA EN U',
+  'GANCHO DE SEGURIDAD',
 ];
 
-const formatMeasure = (value: number) => value.toFixed(2).replace('.', ',');
+const formatMeasure = (value: number) => value.toFixed(2);
+const formatMeterMeasure = (value: string) => {
+  const parsed = Number(value.trim().replace(/M(?:T|TS)?$/i, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? `${formatMeasure(parsed)} M` : value.trim().toUpperCase();
+};
 const sanitizeDecimalInput = (value: string) => {
   let nextValue = '';
   let hasSeparator = false;
@@ -200,7 +233,7 @@ const toUpperInput = (value: string) => value.toLocaleUpperCase('es-CO');
 
 const buildFormaletaSkuName = (line: FormaletaLine, xMeasure: number, yMeasure: number) => {
   const prefix = line === 'FORMALETA_SARDINEL' ? 'FORMALETA SARDINEL' : 'FORMALETA';
-  return `${prefix} (${formatMeasure(xMeasure)})M x (${formatMeasure(yMeasure)})M`;
+  return `${prefix} (${formatMeasure(xMeasure)} M X ${formatMeasure(yMeasure)} M)`;
 };
 
 const normalizeWeightToKg = (value: number, unit: string) =>
@@ -275,7 +308,7 @@ export default function AddBulkStockPage() {
   const [isItemConfigured, setIsItemConfigured] = useState(false);
   const [confirmAttempted, setConfirmAttempted] = useState(false);
 
-  const [formaletaX, setFormaletaX] = useState<string>('0,10');
+  const [formaletaX, setFormaletaX] = useState<string>(DEFAULT_FORMALETA_X_OPTIONS[0]);
   const [formaletaY, setFormaletaY] = useState<string>(DEFAULT_FORMALETA_Y_OPTIONS[0]);
   const [formaletaLine, setFormaletaLine] = useState<FormaletaLine>('FORMALETA');
   const [formaletaIsAccessory, setFormaletaIsAccessory] = useState(false);
@@ -393,10 +426,16 @@ export default function AddBulkStockPage() {
     if (!warehouses.length) return;
     const ownerFromQuery = searchParams.get('ownerWarehouseId');
     const warehouseFromQuery = searchParams.get('warehouseId');
+    const requestedWarehouseId =
+      [ownerFromQuery, warehouseFromQuery].find(
+        (candidate) =>
+          candidate && warehouses.some((warehouse) => warehouse.id === candidate),
+      ) ?? null;
     const shouldOpenOperationStep =
       searchParams.get('flow') === 'bulk' || searchParams.get('step') === 'operation';
-    if (ownerFromQuery && warehouses.some((warehouse) => warehouse.id === ownerFromQuery)) {
-      setOwnerWarehouseId(ownerFromQuery);
+
+    if (requestedWarehouseId) {
+      setOwnerWarehouseId(requestedWarehouseId);
       if (shouldOpenOperationStep) {
         setFlowChoice('bulk');
         setWarehouseLocked(true);
@@ -404,13 +443,10 @@ export default function AddBulkStockPage() {
       }
       return;
     }
-    if (warehouseFromQuery && warehouses.some((warehouse) => warehouse.id === warehouseFromQuery)) {
-      setOwnerWarehouseId(warehouseFromQuery);
-      if (shouldOpenOperationStep) {
-        setFlowChoice('bulk');
-        setWarehouseLocked(true);
-        setModeLocked(false);
-      }
+
+    const ownWarehouse = warehouses.find((warehouse) => warehouse.type === 'OWN');
+    if (ownWarehouse) {
+      setOwnerWarehouseId((current) => current ?? ownWarehouse.id);
     }
   }, [searchParams, warehouses]);
 
@@ -470,10 +506,30 @@ export default function AddBulkStockPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [itemType]);
 
-  const warehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
-  }));
+  const preferredOwnerWarehouseId = useMemo(() => {
+    const requestedWarehouseId =
+      [searchParams.get('ownerWarehouseId'), searchParams.get('warehouseId')].find(
+        (candidate) =>
+          candidate && warehouses.some((warehouse) => warehouse.id === candidate),
+      ) ?? null;
+    if (requestedWarehouseId) {
+      return requestedWarehouseId;
+    }
+    return warehouses.find((warehouse) => warehouse.type === 'OWN')?.id ?? null;
+  }, [searchParams, warehouses]);
+  const warehouseOptions = useMemo(
+    () =>
+      [...warehouses]
+        .sort((a, b) => {
+          if (a.type === b.type) return a.name.localeCompare(b.name, 'es');
+          return a.type === 'OWN' ? -1 : 1;
+        })
+        .map((warehouse) => ({
+          value: warehouse.id,
+          label: warehouse.name,
+        })),
+    [warehouses],
+  );
   const existingItemOptions = existingItems.map((item) => ({
     value: item.skuId,
     label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
@@ -498,6 +554,7 @@ export default function AddBulkStockPage() {
     'FORMALETA',
     'FORMALETA_SARDINEL',
   ]);
+  const formaletaXOptions = catalogGroupOptions('BULK_FORMWORK_WIDTHS', DEFAULT_FORMALETA_X_OPTIONS);
   const formaletaYOptions = catalogGroupOptions('BULK_FORMWORK_HEIGHTS', DEFAULT_FORMALETA_Y_OPTIONS);
   const certifiedScaffoldPartOptions = catalogGroupOptions(
     'BULK_CERTIFIED_SCAFFOLD_PARTS',
@@ -510,11 +567,11 @@ export default function AddBulkStockPage() {
   const conventionalScaffoldMeasureOptions = catalogGroupOptions(
     'BULK_CONVENTIONAL_SCAFFOLD_MEASURES',
     DEFAULT_CONVENTIONAL_SCAFFOLD_MEASURES,
-  );
+  ).map((option) => ({ ...option, label: formatMeterMeasure(option.value) }));
   const certifiedScaffoldMeasureOptions = catalogGroupOptions(
     'BULK_CERTIFIED_SCAFFOLD_MEASURES',
     DEFAULT_CERTIFIED_SCAFFOLD_MEASURES,
-  );
+  ).map((option) => ({ ...option, label: formatMeterMeasure(option.value) }));
   const certifiedScaffoldPartsWithoutMeasure = new Set(
     catalogGroupValues('BULK_CERTIFIED_SCAFFOLD_WITHOUT_MEASURE', DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE),
   );
@@ -614,9 +671,9 @@ export default function AddBulkStockPage() {
     }
     const resolvedGenericSkuName =
       certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
-        ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+        ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
-          ? `${genericSkuName.trim()} (${certifiedScaffoldMeasure})`
+          ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : genericSkuName.trim();
 
     return {
@@ -734,7 +791,7 @@ export default function AddBulkStockPage() {
 
     const defaultWeightUnit = (weightUnits[0] as WeightUnit | undefined) ?? '';
     if (type === 'FORMALETA') {
-      setFormaletaX('0,10');
+      setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
       setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
       setFormaletaLine('FORMALETA');
       setFormaletaIsAccessory(false);
@@ -774,7 +831,7 @@ export default function AddBulkStockPage() {
     setIsItemConfigured(false);
     setConfirmAttempted(false);
 
-    setFormaletaX('0,10');
+    setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
     setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
     setFormaletaLine('FORMALETA');
     setFormaletaIsAccessory(false);
@@ -800,7 +857,7 @@ export default function AddBulkStockPage() {
     setGenericMinimumChargeHours('');
     setGenericWeightUnit(defaultWeightUnit);
 
-    setOwnerWarehouseId(null);
+    setOwnerWarehouseId(preferredOwnerWarehouseId);
     setQuantity('');
   };
 
@@ -1025,8 +1082,8 @@ export default function AddBulkStockPage() {
       }
       const xValue = parseLocaleDecimal(formaletaX);
       const yValue = Number(formaletaY);
-      if (!Number.isFinite(xValue) || xValue <= 0) {
-        setError('Enter a valid X measurement for formwork');
+      if (!formaletaXOptions.some((option) => Number(option.value) === xValue)) {
+        setError('The X formwork measurement is invalid');
         return;
       }
       if (!formaletaYOptions.some((option) => Number(option.value) === yValue)) {
@@ -1747,16 +1804,21 @@ export default function AddBulkStockPage() {
                                   }}
                                   required
                                 />
-                                <TextInput
+                                <Select
                                   label="Ancho X (m)"
+                                  data={formaletaXOptions.map((option) => ({
+                                    value: option.value,
+                                    label: formatMeasure(Number(option.value)),
+                                  }))}
                                   value={formaletaX}
-                                  onChange={(event) => {
-                                    setFormaletaX(sanitizeDecimalInput(event.currentTarget.value));
+                                  onChange={(value) => {
+                                    setFormaletaX(
+                                      value
+                                        ?? formaletaXOptions[0]?.value
+                                        ?? DEFAULT_FORMALETA_X_OPTIONS[0],
+                                    );
                                     setIsItemConfigured(false);
                                   }}
-                                  onBlur={() => setFormaletaX((value) => finalizeDecimalInput(value))}
-                                  inputMode="decimal"
-                                  placeholder="0,10"
                                   required
                                 />
                                 <Select

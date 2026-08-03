@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
+  Box,
   Button,
+  Center,
   Container,
   Group,
+  Modal,
   Paper,
   SimpleGrid,
   Stack,
@@ -14,10 +17,16 @@ import {
   TextInput,
   ThemeIcon,
 } from '@mantine/core';
-import { IconBuildingWarehouse, IconGauge, IconSearch } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconGauge, IconHistory, IconPhotoOff, IconSearch } from '@tabler/icons-react';
+import HourReadingHistory from '@/components/maintenance/HourReadingHistory';
 import RecordHoursModal from '@/components/maintenance/RecordHoursModal';
 import { api } from '@/lib/api';
-import { apiErrorMessage, type MaintenanceSubject } from '@/lib/maintenance-types';
+import {
+  apiErrorMessage,
+  type MaintenanceResponse,
+  type MaintenanceSubject,
+} from '@/lib/maintenance-types';
 
 type OperatorAsset = {
   id: string;
@@ -26,6 +35,7 @@ type OperatorAsset = {
   description?: string | null;
   brand?: string | null;
   model?: string | null;
+  imageUrl?: string | null;
   currentHourMeter: number;
   warehouseOwner: { id: string; name: string; type: 'OWN' };
   warehouseCurrent?: { id: string; name: string } | null;
@@ -52,10 +62,37 @@ const assetDisplayName = (asset: OperatorAsset) =>
   [asset.brand, asset.model].filter(Boolean).join(' ') ||
   'Equipo serializado';
 
+function OperatorAssetImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [broken, setBroken] = useState(false);
+
+  if (!src || broken) {
+    return (
+      <Center className="hour-meter-asset-image hour-meter-asset-image--empty">
+        <Stack align="center" gap={4}>
+          <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
+          <Text size="xs" c="dimmed">Sin foto</Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  return (
+    <Box className="hour-meter-asset-image">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} onError={() => setBroken(true)} />
+    </Box>
+  );
+}
+
 export default function HourMeterPage() {
+  const isMobile = useMediaQuery('(max-width: 48em)');
   const [assets, setAssets] = useState<OperatorAsset[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<OperatorAsset | null>(null);
+  const [historyAsset, setHistoryAsset] = useState<OperatorAsset | null>(null);
+  const [historyData, setHistoryData] = useState<MaintenanceResponse | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -88,6 +125,26 @@ export default function HourMeterPage() {
         label: `${assetDisplayName(selected)} · ${selected.publicCode}`,
       }
     : null;
+
+  const openHistory = async (asset: OperatorAsset) => {
+    setHistoryAsset(asset);
+    setHistoryData(null);
+    setHistoryError(null);
+    setHistoryLoading(true);
+    try {
+      setHistoryData(await api<MaintenanceResponse>(`/maintenance/assets/${asset.id}`));
+    } catch (err) {
+      setHistoryError(apiErrorMessage(err, 'No se pudo cargar el historial de horas.'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const closeHistory = () => {
+    setHistoryAsset(null);
+    setHistoryData(null);
+    setHistoryError(null);
+  };
 
   return (
     <Container size="xl" py="xl">
@@ -132,6 +189,11 @@ export default function HourMeterPage() {
             {visibleAssets.map((asset) => (
               <Paper key={asset.id} withBorder radius="xl" p="lg">
                 <Stack gap="md">
+                  <OperatorAssetImage
+                    key={asset.imageUrl ?? 'no-image'}
+                    src={asset.imageUrl}
+                    alt={`Foto de ${assetDisplayName(asset)}`}
+                  />
                   <Group justify="space-between" align="flex-start" wrap="nowrap">
                     <div>
                       <Text fw={900}>{assetDisplayName(asset)}</Text>
@@ -142,14 +204,24 @@ export default function HourMeterPage() {
                   <Stack gap={4}>
                     <Text size="xs" c="dimmed">Serial / motor</Text>
                     <Text size="sm" fw={600}>{asset.serialOrEngine}</Text>
-                    <Group gap={6} wrap="nowrap">
-                      <IconBuildingWarehouse size={15} />
-                      <Text size="sm">{asset.warehouseOwner.name}</Text>
-                    </Group>
                   </Stack>
-                  <Button leftSection={<IconGauge size={17} />} onClick={() => setSelected(asset)}>
-                    Registrar nueva lectura
-                  </Button>
+                  <Group grow gap="xs">
+                    <Button
+                      leftSection={<IconGauge size={17} />}
+                      aria-label={`Registrar horas de ${assetDisplayName(asset)}`}
+                      onClick={() => setSelected(asset)}
+                    >
+                      Registrar
+                    </Button>
+                    <Button
+                      variant="default"
+                      leftSection={<IconHistory size={17} />}
+                      aria-label={`Ver historial de ${assetDisplayName(asset)}`}
+                      onClick={() => void openHistory(asset)}
+                    >
+                      Ver historial
+                    </Button>
+                  </Group>
                 </Stack>
               </Paper>
             ))}
@@ -176,6 +248,39 @@ export default function HourMeterPage() {
           }}
         />
       ) : null}
+
+      <Modal
+        opened={Boolean(historyAsset)}
+        onClose={closeHistory}
+        title={historyAsset ? `Historial de horas · ${assetDisplayName(historyAsset)}` : 'Historial de horas'}
+        size="xl"
+        fullScreen={isMobile}
+        radius={isMobile ? 0 : 'md'}
+      >
+        <Stack gap="md">
+          {historyAsset ? (
+            <Group justify="space-between" align="flex-start" wrap="wrap">
+              <div>
+                <Text fw={800}>{historyAsset.publicCode}</Text>
+                <Text size="sm" c="dimmed">
+                  Serial / motor: {historyAsset.serialOrEngine}
+                </Text>
+              </div>
+              <Badge color="blue" variant="light">
+                {historyData?.currentHours ?? historyAsset.currentHourMeter} h actuales
+              </Badge>
+            </Group>
+          ) : null}
+
+          {historyLoading ? (
+            <Paper withBorder radius="lg" p="xl">
+              <Text c="dimmed" ta="center">Cargando historial...</Text>
+            </Paper>
+          ) : null}
+          {historyError ? <Alert color="red">{historyError}</Alert> : null}
+          {historyData ? <HourReadingHistory readings={historyData.readings} /> : null}
+        </Stack>
+      </Modal>
     </Container>
   );
 }

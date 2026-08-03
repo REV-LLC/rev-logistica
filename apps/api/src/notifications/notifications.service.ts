@@ -106,7 +106,9 @@ export class NotificationsService {
     const topics = await this.prisma.notificationTopic.findMany({
       where: {
         active: true,
-        recipients: { some: { ...(userId ? { userId } : {}), user: { active: true } } },
+        ...(userId ? {
+          recipients: { some: { userId, user: { active: true } } },
+        } : {}),
       },
       include: {
         recipients: {
@@ -132,11 +134,11 @@ export class NotificationsService {
         include: {
           plan: {
             include: {
-              asset: true,
+              asset: { include: { sku: { select: { chargeType: true } } } },
               vehicle: { include: { hourReadings: { orderBy: { hours: 'desc' }, take: 1 } } },
             },
           },
-          completions: { orderBy: { completedAtHours: 'desc' }, take: 1 },
+          completions: { orderBy: { completedAt: 'desc' }, take: 1 },
         },
       }),
     ]);
@@ -198,6 +200,30 @@ export class NotificationsService {
 
   private maintenanceReminder(topic: any, item: any) {
     const subject = item.plan.asset ?? item.plan.vehicle;
+    const label = item.plan.asset?.publicCode ?? item.plan.vehicle?.plate ?? 'EQUIPO';
+    if (item.plan.asset?.sku.chargeType === 'DAY') {
+      const cycleStart = item.completions[0]?.completedAt ?? item.baselineDate ?? item.createdAt;
+      const dueAt = this.addCalendarDays(new Date(cycleStart), Number(item.intervalDays));
+      const remainingDays = this.daysUntil(dueAt);
+      const status: ReminderStatus = remainingDays < 0 ? 'OVERDUE'
+        : remainingDays <= Number(item.warningDays) ? 'DUE' : 'UPCOMING';
+      return {
+        topicId: topic.id, entityType: topic.entityType, entityId: item.id, eventType: topic.eventType,
+        itemId: item.id, planId: item.planId, planName: item.plan.name, name: item.name,
+        title: `Mantenimiento de ${label}`,
+        message: `${item.name}: vence el ${this.formatDate(dueAt)}.${item.instructions ? ` ${item.instructions}` : ''}`,
+        instructions: item.instructions, intervalDays: Number(item.intervalDays), dueAt,
+        remainingDays, unit: 'DAYS', status, sortValue: remainingDays,
+        occurrenceKey: dueAt.toISOString().slice(0, 10),
+        entity: { id: subject.id, type: 'ASSET', label },
+        asset: {
+          id: item.plan.asset.id, publicCode: item.plan.asset.publicCode,
+          serialOrEngine: item.plan.asset.serialOrEngine, description: item.plan.asset.description,
+        },
+        recipients: this.mapRecipients(topic.recipients),
+      };
+    }
+
     const currentHours = item.plan.asset
       ? Number(item.plan.asset.hourMeter)
       : Number(item.plan.vehicle.hourReadings[0]?.hours ?? 0);
@@ -206,7 +232,6 @@ export class NotificationsService {
     const remainingHours = dueHours - currentHours;
     const status: ReminderStatus = remainingHours <= 0 ? 'OVERDUE'
       : remainingHours <= Number(item.warningHours) ? 'DUE' : 'UPCOMING';
-    const label = item.plan.asset?.publicCode ?? item.plan.vehicle?.plate ?? 'EQUIPO';
     return {
       topicId: topic.id, entityType: topic.entityType, entityId: item.id, eventType: topic.eventType,
       itemId: item.id, planId: item.planId, planName: item.plan.name, name: item.name,
@@ -351,6 +376,21 @@ export class NotificationsService {
     const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const due = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
     return Math.ceil((due - start) / 86400000);
+  }
+
+  private addCalendarDays(value: Date, days: number) {
+    const result = new Date(value);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result;
+  }
+
+  private formatDate(value: Date) {
+    return new Intl.DateTimeFormat('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(value);
   }
 
   private renderTemplate(template: string, variables: Record<string, string>) {

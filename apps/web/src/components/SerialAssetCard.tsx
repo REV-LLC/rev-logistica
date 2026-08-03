@@ -75,6 +75,7 @@ export default function SerialAssetCard({
   statusBadge,
   additionalDetails = [],
   footer,
+  compact = false,
 }: {
   item: SerialAssetCardItem;
   href?: string;
@@ -95,6 +96,7 @@ export default function SerialAssetCard({
   statusBadge?: { label: string; color: string };
   additionalDetails?: Array<{ label: string; value: ReactNode }>;
   footer?: ReactNode;
+  compact?: boolean;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
   const isMobile = useMediaQuery('(max-width: 48em)');
@@ -109,13 +111,14 @@ export default function SerialAssetCard({
       component={Link}
       href={href}
       fw={700}
+      size={compact ? 'sm' : undefined}
       lineClamp={2}
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       {description}
     </Text>
   ) : (
-    <Text fw={700} lineClamp={2}>
+    <Text fw={700} size={compact ? 'sm' : undefined} lineClamp={2}>
       {description}
     </Text>
   );
@@ -123,7 +126,7 @@ export default function SerialAssetCard({
   return (
     <Card
       withBorder
-      padding="sm"
+      padding={compact ? 'xs' : 'sm'}
       radius="md"
       onClick={onOpen}
       onKeyDown={(event) => {
@@ -138,19 +141,33 @@ export default function SerialAssetCard({
         display: 'flex',
         flexDirection: isMobile ? 'row' : 'column',
         overflow: 'hidden',
-        minHeight: isMobile ? 160 : 320,
+        minHeight: isMobile ? (compact ? 132 : 160) : compact ? 248 : 320,
         height: '100%',
-        aspectRatio: isMobile ? 'auto' : '1 / 1',
-        gap: isMobile ? '0.75rem' : 0,
+        aspectRatio: isMobile || compact ? 'auto' : '1 / 1',
+        gap: isMobile ? (compact ? '0.625rem' : '0.75rem') : 0,
         cursor: onOpen ? 'pointer' : undefined,
       }}
     >
       <Box
         style={{
-          flex: isMobile ? '0 0 clamp(112px, 32vw, 156px)' : '0 0 62%',
-          width: isMobile ? 'clamp(112px, 32vw, 156px)' : '100%',
-          minWidth: isMobile ? 'clamp(112px, 32vw, 156px)' : undefined,
-          height: isMobile ? 'auto' : '62%',
+          flex: isMobile
+            ? compact
+              ? '0 0 clamp(76px, 22vw, 92px)'
+              : '0 0 clamp(112px, 32vw, 156px)'
+            : compact
+              ? '0 0 48%'
+              : '0 0 62%',
+          width: isMobile
+            ? compact
+              ? 'clamp(76px, 22vw, 92px)'
+              : 'clamp(112px, 32vw, 156px)'
+            : '100%',
+          minWidth: isMobile
+            ? compact
+              ? 'clamp(76px, 22vw, 92px)'
+              : 'clamp(112px, 32vw, 156px)'
+            : undefined,
+          height: isMobile ? 'auto' : compact ? '48%' : '62%',
           background: '#ffffff',
           display: 'flex',
           alignItems: 'center',
@@ -177,18 +194,22 @@ export default function SerialAssetCard({
       </Box>
 
       <Stack
-        gap={6}
-        mt={isMobile ? 0 : 'xs'}
+        gap={compact ? 4 : 6}
+        mt={isMobile ? 0 : compact ? 6 : 'xs'}
         justify={onAction ? 'space-between' : 'flex-start'}
         style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0 }}
       >
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Group align="flex-start" justify="space-between" wrap="nowrap" style={{ minWidth: 0 }}>
-            <Group gap={6} wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+            <Box style={{ minWidth: 0, flex: 1 }}>
               {title}
-            </Group>
+            </Box>
             <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-              <Badge color={statusBadge?.color ?? getStatusColor(item.status)} variant="light">
+              <Badge
+                size={compact ? 'xs' : 'sm'}
+                color={statusBadge?.color ?? getStatusColor(item.status)}
+                variant="light"
+              >
                 {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
               </Badge>
               {showMenu ? (

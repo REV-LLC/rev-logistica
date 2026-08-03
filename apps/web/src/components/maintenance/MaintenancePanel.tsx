@@ -16,6 +16,7 @@ import {
   ThemeIcon,
 } from '@mantine/core';
 import {
+  IconCalendar,
   IconGauge,
   IconHistory,
   IconPlus,
@@ -91,6 +92,8 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
     () => new Map(reminders.filter((reminder) => reminder.itemId).map((reminder) => [reminder.itemId!, reminder])),
     [reminders],
   );
+  const scheduleType = data?.scheduleType ?? (subject.type === 'VEHICLE' ? 'HOURS' : 'CALENDAR_DAYS');
+  const isHourly = scheduleType === 'HOURS';
 
   const refreshWithSuccess = async (message: string) => {
     await load();
@@ -151,27 +154,34 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
           <Group gap="sm" align="flex-start" wrap="nowrap">
             <ThemeIcon color="blue" variant="light" radius="xl" size={42}>
-              <IconTool size={21} />
+              {isHourly ? <IconTool size={21} /> : <IconCalendar size={21} />}
             </ThemeIcon>
             <div>
-              <Text fw={900} size="lg">Mantenimiento por horómetro</Text>
+              <Text fw={900} size="lg">
+                {isHourly ? 'Mantenimiento por horómetro' : 'Mantenimiento por calendario'}
+              </Text>
               <Text size="sm" c="dimmed">
-                Lecturas, revisiones periódicas y responsables de {subject.label}.
+                {isHourly
+                  ? `Lecturas, revisiones periódicas y responsables de ${subject.label}.`
+                  : `Revisiones programadas por días calendario para ${subject.label}.`}
               </Text>
             </div>
           </Group>
           <Group gap="xs">
-            <Button
-              variant="light"
-              leftSection={<IconGauge size={16} />}
-              onClick={() => setHoursOpened(true)}
-              disabled={!data}
-            >
-              Registrar horas
-            </Button>
+            {isHourly ? (
+              <Button
+                variant="light"
+                leftSection={<IconGauge size={16} />}
+                onClick={() => setHoursOpened(true)}
+                disabled={!data}
+              >
+                Registrar horas
+              </Button>
+            ) : null}
             <Button
               leftSection={<IconPlus size={16} />}
               onClick={() => setPlanOpened(true)}
+              disabled={!data}
             >
               Nuevo plan
             </Button>
@@ -180,16 +190,26 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
 
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="lg">
           <Paper radius="lg" p="md" bg="blue.0">
-            <Text size="xs" c="blue.8" fw={700} tt="uppercase">Horómetro actual</Text>
-            <Text fw={900} size="xl">{data?.currentHours ?? 0} h</Text>
+            <Text size="xs" c="blue.8" fw={700} tt="uppercase">
+              {isHourly ? 'Horómetro actual' : 'Programación'}
+            </Text>
+            <Text fw={900} size="xl">
+              {isHourly ? `${data?.currentHours ?? 0} h` : 'Días calendario'}
+            </Text>
           </Paper>
           <Paper radius="lg" p="md" bg="gray.0">
             <Text size="xs" c="dimmed" fw={700} tt="uppercase">Planes activos</Text>
             <Text fw={900} size="xl">{data?.plans.filter((plan) => plan.active).length ?? 0}</Text>
           </Paper>
           <Paper radius="lg" p="md" bg="gray.0">
-            <Text size="xs" c="dimmed" fw={700} tt="uppercase">Lecturas registradas</Text>
-            <Text fw={900} size="xl">{data?.readings.length ?? 0}</Text>
+            <Text size="xs" c="dimmed" fw={700} tt="uppercase">
+              {isHourly ? 'Lecturas registradas' : 'Revisiones configuradas'}
+            </Text>
+            <Text fw={900} size="xl">
+              {isHourly
+                ? data?.readings.length ?? 0
+                : data?.plans.reduce((total, plan) => total + plan.items.filter((item) => item.active).length, 0) ?? 0}
+            </Text>
           </Paper>
         </SimpleGrid>
       </Paper>
@@ -209,7 +229,9 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         <Tabs defaultValue="plans" keepMounted={false}>
           <Tabs.List>
             <Tabs.Tab value="plans" leftSection={<IconSettings size={16} />}>Planes</Tabs.Tab>
-            <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Historial de horas</Tabs.Tab>
+            {isHourly ? (
+              <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Historial de horas</Tabs.Tab>
+            ) : null}
           </Tabs.List>
           <Tabs.Panel value="plans" pt="md">
             <MaintenancePlanList
@@ -217,6 +239,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
               users={users}
               reminderByItemId={reminderByItemId}
               canManage={canManage}
+              scheduleType={scheduleType}
               onAddItem={setItemPlan}
               onEditItem={setEditingItem}
               onCompleteItem={setCompletingItem}
@@ -228,9 +251,11 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
               onArchivePlan={(plan) => void archivePlan(plan)}
             />
           </Tabs.Panel>
-          <Tabs.Panel value="history" pt="md">
-            <HourReadingHistory readings={data.readings} />
-          </Tabs.Panel>
+          {isHourly ? (
+            <Tabs.Panel value="history" pt="md">
+              <HourReadingHistory readings={data.readings} />
+            </Tabs.Panel>
+          ) : null}
         </Tabs>
       ) : null}
 
@@ -244,6 +269,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
       <MaintenancePlanFormModal
         opened={planOpened}
         subject={subject}
+        scheduleType={scheduleType}
         users={users}
         onClose={() => setPlanOpened(false)}
         onSaved={() => refreshWithSuccess('Plan creado correctamente.')}
@@ -253,6 +279,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         planId={itemPlan?.id ?? editingItem?.planId ?? null}
         item={editingItem}
         users={users}
+        scheduleType={scheduleType}
         onClose={() => {
           setItemPlan(null);
           setEditingItem(null);
@@ -263,6 +290,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         opened={!!completingItem}
         item={completingItem}
         currentHours={data?.currentHours ?? 0}
+        scheduleType={scheduleType}
         onClose={() => setCompletingItem(null)}
         onSaved={() => refreshWithSuccess('Mantenimiento registrado como realizado.')}
       />

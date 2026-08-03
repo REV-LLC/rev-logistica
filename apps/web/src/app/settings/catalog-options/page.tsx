@@ -22,8 +22,13 @@ const GROUPS = [
     description: 'Tipos principales usados para crear referencias de formaleta.',
   },
   {
+    key: 'BULK_FORMWORK_WIDTHS',
+    title: 'Anchos de formaleta',
+    description: 'Anchos X disponibles en metros. Usa punto decimal: 0.40.',
+  },
+  {
     key: 'BULK_FORMWORK_HEIGHTS',
-    title: 'Medidas formaleta',
+    title: 'Altos de formaleta',
     description: 'Altos Y disponibles en metros. Usa punto decimal: 2.40.',
   },
   {

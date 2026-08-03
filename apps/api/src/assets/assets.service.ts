@@ -18,8 +18,23 @@ export class AssetsService {
     return String(value).padStart(4, '0');
   }
 
-  private buildAssetPublicCode(assetFamilyCode: string, ownerWarehouseId: string, internalNumber: number) {
-    return `${assetFamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
+  private buildAssetPublicCode(
+    assetFamilyCode: string,
+    assetSubfamilyCode: string,
+    ownerWarehouseId: string,
+    internalNumber: number,
+  ) {
+    return `${assetFamilyCode}-${assetSubfamilyCode}-${ownerWarehouseId.slice(0, 4).toUpperCase()}-${this.padInternalNumber(internalNumber)}`;
+  }
+
+  private buildAssetSubfamilyCode(value: string) {
+    return value
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
   }
 
   async listAssets(params: { serial?: string; search?: string; take?: number; skip?: number }) {
@@ -79,6 +94,7 @@ export class AssetsService {
             areaM2: true,
             unitWeight: true,
             assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
           },
         },
         warehouseOwner: {
@@ -115,6 +131,7 @@ export class AssetsService {
             areaM2: item.sku.areaM2,
             unitWeight: item.sku.unitWeight,
             controlType: item.sku.assetFamily?.controlType ?? null,
+            assetSubfamily: item.sku.assetSubfamily,
           }
         : item.sku,
     }));
@@ -128,9 +145,59 @@ export class AssetsService {
         code: true,
         name: true,
         controlType: true,
+        subfamilies: {
+          where: { active: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            active: true,
+          },
+          orderBy: { name: 'asc' },
+        },
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async createAssetSubfamily(
+    assetFamilyId: string,
+    payload: { name: string; code?: string },
+  ) {
+    const assetFamily = await this.prisma.assetFamily.findUnique({
+      where: { id: assetFamilyId },
+      select: { id: true, controlType: true },
+    });
+    if (!assetFamily) {
+      throw new NotFoundException('Asset family not found');
+    }
+    if (assetFamily.controlType !== SkuControlType.SERIAL) {
+      throw new BadRequestException('Only SERIAL families use subfamilies');
+    }
+
+    const name = payload.name.trim().toUpperCase();
+    const code = this.buildAssetSubfamilyCode(payload.code ?? name);
+    if (!name || !code) {
+      throw new BadRequestException('Asset subfamily name is required');
+    }
+
+    try {
+      return await this.prisma.assetSubfamily.create({
+        data: { assetFamilyId, name, code },
+        select: {
+          id: true,
+          assetFamilyId: true,
+          code: true,
+          name: true,
+          active: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('Asset subfamily already exists');
+      }
+      throw error;
+    }
   }
 
   async getAssetById(assetId: string) {
@@ -170,6 +237,7 @@ export class AssetsService {
             areaM2: true,
             unitWeight: true,
             assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
           },
         },
         warehouseOwner: {
@@ -218,6 +286,7 @@ export class AssetsService {
             areaM2: item.sku.areaM2,
             unitWeight: item.sku.unitWeight,
             controlType: item.sku.assetFamily?.controlType ?? null,
+            assetSubfamily: item.sku.assetSubfamily,
           }
         : item.sku,
     };
@@ -244,6 +313,8 @@ export class AssetsService {
         id: true,
         assetFamilyId: true,
         assetFamily: { select: { code: true, controlType: true } },
+        assetSubfamilyId: true,
+        assetSubfamily: { select: { code: true, active: true } },
       },
     });
 
@@ -255,9 +326,14 @@ export class AssetsService {
       throw new BadRequestException('Sku must be SERIAL');
     }
 
-    if (!sku.assetFamilyId) {
-      throw new BadRequestException('Sku has no asset family');
+    if (!sku.assetSubfamilyId || !sku.assetSubfamily) {
+      throw new BadRequestException('Serial SKU has no asset subfamily');
     }
+    if (!sku.assetSubfamily.active) {
+      throw new BadRequestException('Asset subfamily is archived');
+    }
+    const assetSubfamilyId = sku.assetSubfamilyId;
+    const assetSubfamilyCode = sku.assetSubfamily.code;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -284,14 +360,14 @@ export class AssetsService {
 
         const counter = await tx.assetInternalCounter.upsert({
           where: {
-            ownerWarehouseId_assetFamilyId: {
+            ownerWarehouseId_assetSubfamilyId: {
               ownerWarehouseId: payload.warehouseOwnerId,
-              assetFamilyId: sku.assetFamilyId,
+              assetSubfamilyId,
             },
           },
           create: {
             ownerWarehouseId: payload.warehouseOwnerId,
-            assetFamilyId: sku.assetFamilyId,
+            assetSubfamilyId,
             nextNumber: 2,
           },
           update: {
@@ -301,15 +377,14 @@ export class AssetsService {
         });
 
         const internalNumber = counter.nextNumber - 1;
-        const serialOrEngine =
-          payload.serialOrEngine?.trim() ||
-          `${this.sanitizeOwnerName(warehouseOwner.name)}-${this.padInternalNumber(internalNumber)}`;
+        const serialOrEngine = payload.serialOrEngine?.trim() || null;
 
         const createdAsset = await tx.asset.create({
           data: {
             skuId: payload.skuId,
             publicCode: this.buildAssetPublicCode(
               sku.assetFamily.code,
+              assetSubfamilyCode,
               payload.warehouseOwnerId,
               internalNumber,
             ),
