@@ -301,10 +301,20 @@ export class NotificationsService {
       const response = channel === NotificationChannel.WHATSAPP
         ? await this.transport.sendWhatsapp(recipient.phone, message)
         : await this.transport.sendEmail(recipient.email, message);
+      const providerMessageId = 'providerMessageId' in response
+        ? response.providerMessageId
+        : undefined;
       await this.prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: response.sent
-          ? { status: NotificationDeliveryStatus.SENT, sentAt: new Date(), error: null }
+          ? channel === NotificationChannel.WHATSAPP && providerMessageId
+            ? {
+              status: NotificationDeliveryStatus.ACCEPTED,
+              providerMessageId,
+              sentAt: new Date(),
+              error: null,
+            }
+            : { status: NotificationDeliveryStatus.SENT, sentAt: new Date(), error: null }
           : { status: NotificationDeliveryStatus.FAILED, error: response.reason },
       });
       return response.sent ? 'sent' : 'failed';

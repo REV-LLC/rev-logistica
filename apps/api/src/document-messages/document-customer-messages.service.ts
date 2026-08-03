@@ -112,10 +112,20 @@ export class DocumentCustomerMessagesService {
 
     try {
       const response = await this.transport.sendWhatsapp(phone, message);
+      const providerMessageId = 'providerMessageId' in response
+        ? response.providerMessageId
+        : undefined;
       await this.prisma.documentMessageDelivery.update({
         where: { id: delivery.id },
         data: response.sent
-          ? { status: NotificationDeliveryStatus.SENT, sentAt: new Date(), error: null }
+          ? providerMessageId
+            ? {
+              status: NotificationDeliveryStatus.ACCEPTED,
+              providerMessageId,
+              sentAt: new Date(),
+              error: null,
+            }
+            : { status: NotificationDeliveryStatus.SENT, sentAt: new Date(), error: null }
           : { status: NotificationDeliveryStatus.FAILED, error: response.reason },
       });
       return response.sent ? 'sent' : 'failed';

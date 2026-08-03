@@ -79,7 +79,11 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(UppercaseBodyMiddleware)
-      .exclude({ path: 'auth/login', method: RequestMethod.POST })
+      .exclude(
+        { path: 'auth/login', method: RequestMethod.POST },
+        { path: 'webhooks/whatsapp', method: RequestMethod.GET },
+        { path: 'webhooks/whatsapp', method: RequestMethod.POST },
+      )
       .forRoutes('*');
   }
 }

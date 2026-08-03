@@ -1,6 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter, NestExpressApplication } from '@nestjs/platform-express';
+import {
+  ExpressAdapter,
+  NestExpressApplication,
+} from '@nestjs/platform-express';
 import { json, urlencoded } from 'express';
+import type { Request } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AppModule } from './app.module';
@@ -18,7 +22,9 @@ function loadEnvFileFromCandidates() {
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
-      const normalized = line.startsWith('export ') ? line.slice(7).trim() : line;
+      const normalized = line.startsWith('export ')
+        ? line.slice(7).trim()
+        : line;
       const separatorIndex = normalized.indexOf('=');
       if (separatorIndex <= 0) continue;
       const key = normalized.slice(0, separatorIndex).trim();
@@ -43,6 +49,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule,
     new ExpressAdapter(),
+    { bodyParser: false },
   );
   const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? '')
     .split(',')
@@ -67,12 +74,20 @@ async function bootstrap() {
     },
     credentials: true,
   });
-  app.use(json({ limit: '25mb' }));
+  app.use(
+    json({
+      limit: '25mb',
+      verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {
+        request.rawBody = Buffer.from(buffer);
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '25mb' }));
   const localAuthBypass =
-    process.env.NODE_ENV !== 'production'
-    && process.env.AUTH_BYPASS_LOCAL?.trim().toLowerCase() === 'true';
-  const host = process.env.HOST?.trim() || (localAuthBypass ? '127.0.0.1' : '0.0.0.0');
+    process.env.NODE_ENV !== 'production' &&
+    process.env.AUTH_BYPASS_LOCAL?.trim().toLowerCase() === 'true';
+  const host =
+    process.env.HOST?.trim() || (localAuthBypass ? '127.0.0.1' : '0.0.0.0');
   await app.listen(process.env.PORT ?? 3000, host);
 }
 bootstrap();
