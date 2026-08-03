@@ -5,12 +5,13 @@ import { DocumentMessagesModule } from '../document-messages/document-messages.m
 import { InventoryModule } from '../inventory/inventory.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DocumentsController } from './documents.controller';
+import { DocumentPdfService } from './document-pdf.service';
 import { DocumentsService } from './documents.service';
 import { PublicDocumentsController } from './public-documents.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule, InventoryModule, DocumentEmailsModule, DocumentMessagesModule],
   controllers: [DocumentsController, PublicDocumentsController],
-  providers: [DocumentsService],
+  providers: [DocumentsService, DocumentPdfService],
 })
 export class DocumentsModule {}
