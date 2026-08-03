@@ -140,6 +140,9 @@ export default function SerialAssetCard({
       style={{
         display: 'flex',
         flexDirection: isMobile ? 'row' : 'column',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
         overflow: 'hidden',
         minHeight: isMobile ? (compact ? 132 : 160) : compact ? 248 : 320,
         height: '100%',

@@ -51,6 +51,7 @@ function formatMovementType(item: LedgerItem) {
     if (item.assetId && item.quantity > 0) return 'CREATION';
     return 'ADJUSTMENT';
   }
+  if (item.movementType === 'ON_SITE') return 'En obra';
   return item.movementType;
 }
 
@@ -66,7 +67,13 @@ function renderReference(item: LedgerItem) {
   return <Link href={`/inventory/ledger/document/${documentId}`}>{label}</Link>;
 }
 
-export default function LedgerTable({ items }: { items: LedgerItem[] }) {
+export default function LedgerTable({
+  items,
+  showItemIdentifiers = true,
+}: {
+  items: LedgerItem[];
+  showItemIdentifiers?: boolean;
+}) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsItem, setDetailsItem] = useState<LedgerItem | null>(null);
@@ -83,28 +90,37 @@ export default function LedgerTable({ items }: { items: LedgerItem[] }) {
           <Table.Tr>
             <Table.Th style={isMobile ? { width: '25%' } : undefined}>Fecha</Table.Th>
             {!isMobile ? <Table.Th>Movimiento</Table.Th> : null}
-            <Table.Th style={isMobile ? { width: '45%' } : undefined}>Item</Table.Th>
+            <Table.Th style={isMobile ? { width: '45%' } : undefined}>Ítem</Table.Th>
             <Table.Th style={isMobile ? { width: '15%', textAlign: 'center' } : { textAlign: 'center' }}>
               {isMobile ? 'Cant.' : 'Cantidad'}
             </Table.Th>
-            {isMobile ? <Table.Th style={{ width: '15%' }}>View</Table.Th> : null}
-            {!isMobile ? <Table.Th>Location</Table.Th> : null}
-            {!isMobile ? <Table.Th>Created by</Table.Th> : null}
-            {!isMobile ? <Table.Th>Reference</Table.Th> : null}
+            {isMobile ? <Table.Th style={{ width: '15%' }}>Ver</Table.Th> : null}
+            {!isMobile ? <Table.Th>Ubicación</Table.Th> : null}
+            {!isMobile ? <Table.Th>Registrado por</Table.Th> : null}
+            {!isMobile ? <Table.Th>Referencia</Table.Th> : null}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {items.map((item) => {
-            const skuName = item.sku?.name ?? item.asset?.sku?.name ?? item.skuId ?? '-';
+            const skuName =
+              item.sku?.name ??
+              item.asset?.sku?.name ??
+              (showItemIdentifiers ? item.skuId : null) ??
+              'Sin referencia';
             const primaryLabel = item.assetId
-              ? item.asset?.description ?? skuName ?? item.assetId ?? '-'
+              ? item.asset?.description ??
+                skuName ??
+                (showItemIdentifiers ? item.assetId : null) ??
+                'Sin referencia'
               : item.skuId
               ? skuName
               : '-';
-            const secondaryLabel = item.assetId
-              ? item.asset?.serialOrEngine ?? item.assetId ?? null
-              : item.skuId
-              ? item.skuId
+            const secondaryLabel = showItemIdentifiers
+              ? item.assetId
+                ? item.asset?.serialOrEngine ?? item.assetId ?? null
+                : item.skuId
+                  ? item.skuId
+                  : null
               : null;
             const location = item.warehouse
               ? item.warehouse.name
