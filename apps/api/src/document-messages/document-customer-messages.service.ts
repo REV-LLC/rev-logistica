@@ -54,11 +54,17 @@ export class DocumentCustomerMessagesService {
     const documentName = document.type === 'REMISSION' ? 'remisión'
       : document.type === 'RETURN' ? 'devolución' : 'documento';
     const link = this.buildPublicLink(document.shareToken);
+    const documentLink = this.buildPublicPdfLink(document.shareToken);
+    const fileName = `${documentName}-${number}.pdf`
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_.-]/g, '-');
     const message = {
       title: `${documentName[0].toUpperCase()}${documentName.slice(1)} ${number}`,
       body: `REV Logística comparte una copia de la ${documentName} ${number}.`,
       link,
       recipientName: document.customerWorksite?.customer.name || 'usuario',
+      document: { link: documentLink, filename: fileName },
     };
     let sent = 0;
     let skipped = 0;
@@ -83,7 +89,13 @@ export class DocumentCustomerMessagesService {
     kind: MessageKind,
     channel: NotificationChannel,
     phone: string,
-    message: { title: string; body: string; link: string; recipientName: string },
+    message: {
+      title: string;
+      body: string;
+      link: string;
+      recipientName: string;
+      document: { link: string; filename: string };
+    },
   ) {
     const key = { documentId, kind, channel, phone };
     const existing = await this.prisma.documentMessageDelivery.findUnique({
@@ -146,5 +158,15 @@ export class DocumentCustomerMessagesService {
       || process.env.ALLOWED_ORIGINS?.split(',')[0]?.trim()
       || 'http://localhost:3101';
     return `${configured.replace(/\/+$/, '')}/documents/shared/${shareToken}`;
+  }
+
+  private buildPublicPdfLink(shareToken: string) {
+    const configured = process.env.PUBLIC_API_URL?.trim()
+      || process.env.API_PUBLIC_URL?.trim()
+      || process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+      || '';
+    if (!configured) return `${this.buildPublicLink(shareToken)}?format=pdf`;
+    const base = /^https?:\/\//i.test(configured) ? configured : `https://${configured}`;
+    return `${base.replace(/\/+$/, '')}/public/documents/${shareToken}/pdf`;
   }
 }
