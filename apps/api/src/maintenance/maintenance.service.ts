@@ -12,6 +12,11 @@ import {
 
 type MaintenanceScheduleType = 'HOURS' | 'CALENDAR_DAYS';
 
+const HOUR_METER_EVIDENCE_CATEGORIES = [
+  'EVIDENCIA_HOROMETRO',
+  'MANTENIMIENTO',
+] as const;
+
 @Injectable()
 export class MaintenanceService {
   constructor(
@@ -159,7 +164,7 @@ export class MaintenanceService {
   ) {
     await this.assertHourlyAsset(assetId, role === Role.OPERATOR);
     if (!payload.evidenceFileObjectId) {
-      throw new BadRequestException('Photographic evidence is required');
+      throw new BadRequestException('Debes adjuntar una evidencia fotográfica');
     }
     await this.assertHourEvidence(assetId, payload.evidenceFileObjectId, userId);
     return this.recordHours('asset', assetId, payload, userId);
@@ -463,14 +468,14 @@ export class MaintenanceService {
         id: fileObjectId,
         entityType: 'ASSET',
         entityId: assetId,
-        category: 'MANTENIMIENTO',
+        category: { in: [...HOUR_METER_EVIDENCE_CATEGORIES] },
         createdBy: userId,
         mimeType: { startsWith: 'image/' },
       },
       select: { id: true },
     });
     if (!evidence) {
-      throw new BadRequestException('Valid photographic evidence is required');
+      throw new BadRequestException('La evidencia fotográfica no es válida');
     }
   }
 
