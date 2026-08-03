@@ -516,15 +516,20 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const useManualWarehouseCapture = sourceMode === 'warehouse' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
+      warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       warehouses.find((warehouse) => warehouse.name.trim().toUpperCase() === 'BODEGA PRINCIPAL') ??
       warehouses.find((warehouse) => warehouse.name.toUpperCase().includes('PRINCIPAL')) ??
-      warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       null,
     [warehouses],
   );
   const ownerWarehouseOptions = warehouses.map((warehouse) => ({
     value: warehouse.id,
-    label: warehouse.type === 'ALLY' ? `${warehouse.name} (Alterna)` : warehouse.name,
+    label:
+      warehouse.type === 'OWN'
+        ? 'Bodega propia'
+        : warehouse.type === 'ALLY'
+          ? `${warehouse.name} (Alterna)`
+          : warehouse.name,
   }));
   const worksiteOptions = worksites.map((item) => ({
     value: item.id,
@@ -920,6 +925,12 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setWarehouseId(principalWarehouse.id);
     }
   }, [principalWarehouse?.id, warehouseId]);
+
+  useEffect(() => {
+    if (sourceMode !== 'warehouse' || !principalWarehouse?.id || sourceOwnerWarehouseId) return;
+    lastAutoOpenedWarehouseRef.current = principalWarehouse.id;
+    setSourceOwnerWarehouseId(principalWarehouse.id);
+  }, [principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
 
   useEffect(() => {
     let mounted = true;
