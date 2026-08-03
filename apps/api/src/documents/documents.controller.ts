@@ -208,6 +208,14 @@ export class DocumentsController {
     return this.documentsService.sendDraftCustomerEmail(documentId);
   }
 
+  @Post(':documentId/customer-messages/draft')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  sendDraftCustomerMessages(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+  ) {
+    return this.documentsService.sendDraftCustomerMessages(documentId);
+  }
+
   @Get(':documentId')
   @Roles(Role.ADMIN, Role.OFFICE)
   getDocument(@Param('documentId', new ParseUUIDPipe()) documentId: string) {

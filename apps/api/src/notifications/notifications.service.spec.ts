@@ -1,3 +1,4 @@
+import { NotificationChannel } from '@prisma/client';
 import { NOTIFICATION_ENTITY, NOTIFICATION_EVENT } from './notification.constants';
 import { NotificationsService } from './notifications.service';
 
@@ -123,6 +124,47 @@ describe('NotificationsService', () => {
       currentHours: 255, dueHours: 250, remainingHours: -5,
       entity: { id: 'vehicle-1', type: 'VEHICLE', label: 'ABC123' },
     });
+  });
+
+  it('dispatches alerts only through WhatsApp', async () => {
+    const service = new NotificationsService({} as any, {} as any);
+    jest.spyOn(service, 'listReminders').mockResolvedValue([{
+      topicId: 'topic-1',
+      status: 'DUE',
+      recipients: [{
+        userId: 'user-1',
+        email: 'ana@example.com',
+        phone: '+573001234567',
+        emailEnabled: true,
+        smsEnabled: true,
+        whatsappEnabled: true,
+      }],
+    }] as any);
+    const dispatchOne = jest.spyOn(service as any, 'dispatchOne').mockResolvedValue('sent');
+
+    await expect(service.dispatchNotifications()).resolves.toEqual({
+      reminders: 1,
+      sent: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(dispatchOne).toHaveBeenCalledTimes(1);
+    expect(dispatchOne).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.anything(),
+      NotificationChannel.WHATSAPP,
+    );
+    expect(dispatchOne).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      NotificationChannel.EMAIL,
+    );
+    expect(dispatchOne).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      NotificationChannel.SMS,
+    );
   });
 
   it('calculates daily asset maintenance from calendar dates', async () => {

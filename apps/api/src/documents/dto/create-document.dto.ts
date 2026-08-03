@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
 import { DocumentStatus, DocumentType } from '@prisma/client';
 
 export class CreateDocumentDto {
@@ -24,4 +24,10 @@ export class CreateDocumentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsString()
+  @Matches(/^\d{10}$/, {
+    message: 'El teléfono debe contener exactamente 10 dígitos',
+  })
+  recipientPhone: string;
 }

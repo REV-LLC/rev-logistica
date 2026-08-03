@@ -28,15 +28,16 @@ export default function NotificationRecipientsEditor({
     onChange(
       ids.map((userId) => existingById.get(userId) ?? {
         userId,
-        emailEnabled: true,
+        emailEnabled: false,
         smsEnabled: false,
+        whatsappEnabled: Boolean(userById.get(userId)?.phone),
       }),
     );
   };
 
   const updateChannel = (
     userId: string,
-    channel: 'emailEnabled' | 'smsEnabled',
+    channel: 'whatsappEnabled',
     checked: boolean,
   ) => {
     onChange(value.map((recipient) => (
@@ -77,25 +78,15 @@ export default function NotificationRecipientsEditor({
                   </div>
                   <Group gap="md">
                     <Checkbox
-                      label="Correo"
-                      checked={recipient.emailEnabled}
-                      disabled={disabled}
+                      label="WhatsApp"
+                      checked={recipient.whatsappEnabled}
+                      disabled={disabled || !user.phone}
                       onChange={(event) => updateChannel(
                         recipient.userId,
-                        'emailEnabled',
+                        'whatsappEnabled',
                         event.currentTarget.checked,
                       )}
-                    />
-                    <Checkbox
-                      label="SMS"
-                      checked={recipient.smsEnabled}
-                      disabled={disabled}
-                      onChange={(event) => updateChannel(
-                        recipient.userId,
-                        'smsEnabled',
-                        event.currentTarget.checked,
-                      )}
-                      description={user.phone === null ? 'Sin teléfono asociado' : undefined}
+                      description={!user.phone ? 'Sin teléfono asociado' : undefined}
                     />
                   </Group>
                 </Group>

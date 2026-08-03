@@ -98,6 +98,7 @@ enum TaskPriority {
 enum NotificationChannel {
   EMAIL
   SMS
+  WHATSAPP
 }
 
 enum NotificationDeliveryStatus {
@@ -452,11 +453,12 @@ model NotificationTopic {
 }
 
 model NotificationRecipient {
-  id           String  @id @default(uuid())
-  topicId      String
-  userId       String
-  emailEnabled Boolean @default(true)
-  smsEnabled   Boolean @default(false)
+  id              String  @id @default(uuid())
+  topicId         String
+  userId          String
+  emailEnabled    Boolean @default(false)
+  smsEnabled      Boolean @default(false)
+  whatsappEnabled Boolean @default(true)
 
   topic NotificationTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
   user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -541,6 +543,7 @@ model TaskAsset {
 
 model Document {
   id                 String         @id @default(uuid())
+  shareToken         String         @unique @default(uuid())
   type               DocumentType
   status             DocumentStatus @default(DRAFT)
   consecutive        String?        @unique
@@ -549,6 +552,7 @@ model Document {
   createdBy          String
   docDate            DateTime       @default(now())
   notes              String?
+  recipientPhone     String?
 
   // Failed fields
   failedReason         String?
@@ -575,9 +579,28 @@ model Document {
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
   creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
-  items  DocumentItem[]
-  ledger StockLedger[]
-  files  FileObject[]
+  items             DocumentItem[]
+  ledger            StockLedger[]
+  files             FileObject[]
+  messageDeliveries DocumentMessageDelivery[]
+}
+
+model DocumentMessageDelivery {
+  id         String                     @id @default(uuid())
+  documentId String
+  kind       String
+  channel    NotificationChannel
+  phone      String
+  status     NotificationDeliveryStatus @default(PENDING)
+  sentAt     DateTime?
+  error      String?
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, kind, channel, phone])
+  @@index([documentId, status])
 }
 
 model DocumentItem {
