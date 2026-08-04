@@ -13,6 +13,8 @@ type PendingItem = {
   customer: string | null;
   worksite: string | null;
   providerWarehouse: { id: string; name: string };
+  custodyWarehouse: { id: string; name: string } | null;
+  logisticsStatus: 'TRANSIT' | 'IN_REV_WAREHOUSE';
   type: 'SERIAL' | 'BULK';
   skuName: string | null;
   publicCode: string | null;
@@ -115,7 +117,7 @@ export default function ProviderReturnsPage() {
         {groups.map((group) => (
           <Paper key={group.key} withBorder radius="md" p="md">
             <Group justify="space-between" align="flex-start" mb="md">
-              <div><Group gap="xs"><Title order={3}>{group.consecutive ?? 'DV sin consecutivo'}</Title><Badge color="yellow">En transición</Badge></Group><Text size="sm">{group.customer ?? 'Cliente'} · {group.worksite ?? 'Obra'}</Text></div>
+              <div><Group gap="xs"><Title order={3}>{group.consecutive ?? 'DV sin consecutivo'}</Title><Badge color={group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'blue' : 'yellow'}>{group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'En bodega REV' : 'En transición'}</Badge></Group><Text size="sm">{group.customer ?? 'Cliente'} · {group.worksite ?? 'Obra'}</Text>{group.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {group.items[0].custodyWarehouse.name}</Text> : null}</div>
               <div style={{ textAlign: 'right' }}><Text fw={700}>{group.provider.name}</Text><Text size="xs" c="dimmed">Bodega receptora</Text></div>
             </Group>
             <Stack gap="xs">
