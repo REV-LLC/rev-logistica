@@ -1535,6 +1535,10 @@ export class DocumentsService {
     return this.documentEmails.sendDraftIfNeeded(documentId);
   }
 
+  sendFinalCustomerEmail(documentId: string) {
+    return this.documentEmails.sendFinalIfNeeded(documentId);
+  }
+
   sendDraftCustomerMessages(documentId: string) {
     return this.documentMessages.sendDraft(documentId);
   }
