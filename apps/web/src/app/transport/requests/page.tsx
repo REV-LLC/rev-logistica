@@ -66,11 +66,16 @@ type Employee = {
 const getEmployeeFullName = (employee: Pick<Employee, 'name' | 'lastName'>) =>
   `${employee.name} ${employee.lastName ?? ''}`.trim();
 
-type Customer = { id: string; name: string };
+type Customer = { id: string; name: string; phone?: string | null };
 type CustomerWorksite = {
   id: string;
   alias: string | null;
-  worksite: { id: string; name: string; address: string | null };
+  worksite: {
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+  };
 };
 
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
@@ -105,7 +110,7 @@ type GenerateFieldErrors = {
   customerId?: string;
   docDate?: string;
   customerWorksiteId?: string;
-  recipientPhone?: string;
+  recipientPhones?: string;
   driverId?: string;
 };
 
@@ -133,6 +138,7 @@ type RequestDocumentDetail = {
   docDate: string;
   notes: string | null;
   recipientPhone?: string | null;
+  recipientPhones?: string[];
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
     id: string;
@@ -265,6 +271,14 @@ function normalizeQuantityInput(value: string | number, fallback = 1) {
   if (!trimmed) return fallback;
   const parsed = Number(trimmed.replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeLocalWhatsappPhone(value?: string | null) {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  if (/^\d{10}$/.test(digits)) return digits;
+  if (/^57\d{10}$/.test(digits)) return digits.slice(2);
+  return null;
 }
 
 function parseNotes(notes: string | null) {
@@ -412,7 +426,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [recipientPhone, setRecipientPhone] = useState('');
+  const [additionalRecipientPhones, setAdditionalRecipientPhones] = useState<string[]>([]);
+  const [recipientPhoneDraft, setRecipientPhoneDraft] = useState('');
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
@@ -577,6 +592,37 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   }, [onSiteItemOptions, warehouses]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
+  const defaultWhatsappRecipients = useMemo(
+    () => [
+      {
+        key: 'worksite',
+        label: 'Encargado de obra',
+        phone: normalizeLocalWhatsappPhone(selectedWorksite?.worksite.phone),
+      },
+      {
+        key: 'customer',
+        label: 'Cliente',
+        phone: normalizeLocalWhatsappPhone(selectedCustomer?.phone),
+      },
+    ],
+    [selectedCustomer?.phone, selectedWorksite?.worksite.phone],
+  );
+  const defaultWhatsappPhones = useMemo(
+    () => defaultWhatsappRecipients
+      .map((recipient) => recipient.phone)
+      .filter((phone): phone is string => Boolean(phone)),
+    [defaultWhatsappRecipients],
+  );
+  const manualWhatsappPhones = useMemo(
+    () => additionalRecipientPhones.filter(
+      (phone) => !defaultWhatsappPhones.includes(phone),
+    ),
+    [additionalRecipientPhones, defaultWhatsappPhones],
+  );
+  const whatsappRecipientPhones = useMemo(
+    () => [...new Set([...defaultWhatsappPhones, ...additionalRecipientPhones])],
+    [additionalRecipientPhones, defaultWhatsappPhones],
+  );
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
@@ -823,6 +869,37 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     if (evidenceInputRef.current) {
       evidenceInputRef.current.value = '';
     }
+  };
+
+  const addWhatsappRecipient = () => {
+    const phone = normalizeLocalWhatsappPhone(recipientPhoneDraft);
+    if (!phone) {
+      setGenerateFieldErrors((prev) => ({
+        ...prev,
+        recipientPhones: 'Ingresa un número colombiano de exactamente 10 dígitos.',
+      }));
+      return;
+    }
+    if (whatsappRecipientPhones.includes(phone)) {
+      setRecipientPhoneDraft('');
+      setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+      return;
+    }
+    if (whatsappRecipientPhones.length >= 10) {
+      setGenerateFieldErrors((prev) => ({
+        ...prev,
+        recipientPhones: 'Puedes agregar máximo 10 destinatarios.',
+      }));
+      return;
+    }
+    setAdditionalRecipientPhones((prev) => [...prev, phone]);
+    setRecipientPhoneDraft('');
+    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+  };
+
+  const removeWhatsappRecipient = (phone: string) => {
+    setAdditionalRecipientPhones((prev) => prev.filter((value) => value !== phone));
+    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
   };
 
   const uploadEvidencePhotos = async (documentId: string) => {
@@ -1648,7 +1725,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setError(null);
     setConsecutive('');
     setCustomerId(null);
-    setRecipientPhone('');
+    setAdditionalRecipientPhones([]);
+    setRecipientPhoneDraft('');
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
@@ -1685,7 +1763,17 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
-      setRecipientPhone(doc.recipientPhone?.replace(/^\+57/, '') ?? '');
+      setAdditionalRecipientPhones(
+        (doc.recipientPhones?.length
+          ? doc.recipientPhones
+          : doc.recipientPhone
+            ? [doc.recipientPhone]
+            : []
+        )
+          .map((phone) => normalizeLocalWhatsappPhone(phone))
+          .filter((phone): phone is string => Boolean(phone)),
+      );
+      setRecipientPhoneDraft('');
       setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
@@ -1786,8 +1874,25 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
-      if (!/^\d{10}$/.test(recipientPhone)) {
-        throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
+      const pendingRecipientPhone = recipientPhoneDraft
+        ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
+        : null;
+      if (recipientPhoneDraft && !pendingRecipientPhone) {
+        throw new Error('El número adicional debe contener exactamente 10 dígitos.');
+      }
+      const recipientPhones = [
+        ...new Set([
+          ...whatsappRecipientPhones,
+          ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
+        ]),
+      ];
+      if (!recipientPhones.length) {
+        throw new Error(
+          'El cliente y la obra no tienen teléfono. Agrega al menos un destinatario de WhatsApp.',
+        );
+      }
+      if (recipientPhones.length > 10) {
+        throw new Error('Puedes enviar el documento a máximo 10 destinatarios de WhatsApp.');
       }
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
@@ -1820,7 +1925,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
-        recipientPhone,
+        recipientPhones,
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
           `Fecha documento: ${docDate}`,
@@ -1933,9 +2038,6 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
     if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
     if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
-    if (!/^\d{10}$/.test(recipientPhone)) {
-      nextFieldErrors.recipientPhone = 'Ingresa exactamente 10 dígitos.';
-    }
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
       nextFieldErrors.driverId = 'Selecciona el conductor.';
     }
@@ -2359,24 +2461,6 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               }}
               required
               error={generateFieldErrors.docDate}
-            />
-            <TextInput
-              label={helpLabel(
-                'Teléfono de quien recibe',
-                'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
-                true,
-              )}
-              leftSection="+57"
-              inputMode="numeric"
-              maxLength={10}
-              value={recipientPhone}
-              onChange={(event) => {
-                setRecipientPhone(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
-                setGenerateFieldErrors((prev) => ({ ...prev, recipientPhone: undefined }));
-              }}
-              placeholder="3001234567"
-              required
-              error={generateFieldErrors.recipientPhone}
             />
                     </SimpleGrid>
                   </Stack>
@@ -2881,6 +2965,78 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                 <Text size="sm" fw={700}>{selectedItems.length} item{selectedItems.length === 1 ? '' : 's'}</Text>
               </div>
             </SimpleGrid>
+          </Paper>
+
+          <Paper withBorder radius="lg" p="md" mb="md">
+            <Stack gap="sm">
+              <div>
+                <Text fw={700}>Destinatarios de WhatsApp</Text>
+                <Text size="sm" c="dimmed">
+                  El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
+                </Text>
+              </div>
+
+              {defaultWhatsappRecipients.map((recipient) => (
+                <Group key={recipient.key} justify="space-between" align="center" wrap="nowrap">
+                  <div>
+                    <Text size="sm" fw={700}>{recipient.label}</Text>
+                    <Text size="xs" c="dimmed">Destinatario predeterminado</Text>
+                  </div>
+                  {recipient.phone ? (
+                    <Badge color="green" variant="light">+57 {recipient.phone}</Badge>
+                  ) : (
+                    <Badge color="gray" variant="light">Sin teléfono registrado</Badge>
+                  )}
+                </Group>
+              ))}
+
+              {manualWhatsappPhones.map((phone, index) => (
+                <Group key={phone} justify="space-between" align="center" wrap="nowrap">
+                  <div>
+                    <Text size="sm" fw={700}>Destinatario adicional {index + 1}</Text>
+                    <Text size="xs" c="dimmed">+57 {phone}</Text>
+                  </div>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={() => removeWhatsappRecipient(phone)}
+                  >
+                    Quitar
+                  </Button>
+                </Group>
+              ))}
+
+              <Group align="flex-end" wrap="wrap">
+                <TextInput
+                  label="Agregar otro número"
+                  description="Escribe únicamente los 10 dígitos; el sistema agrega +57."
+                  leftSection="+57"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={recipientPhoneDraft}
+                  onChange={(event) => {
+                    setRecipientPhoneDraft(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
+                    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      addWhatsappRecipient();
+                    }
+                  }}
+                  placeholder="3001234567"
+                  style={{ flex: '1 1 260px' }}
+                />
+                <Button type="button" variant="light" onClick={addWhatsappRecipient}>
+                  Agregar
+                </Button>
+              </Group>
+              {generateFieldErrors.recipientPhones ? (
+                <Text size="xs" c="red">{generateFieldErrors.recipientPhones}</Text>
+              ) : null}
+            </Stack>
           </Paper>
 
           {isTabletOrMobile ? (

@@ -1,17 +1,15 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
-import { NotificationTransportService } from '../notifications/notification-transport.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
 @Injectable()
 export class TasksService {
-  private readonly logger = new Logger(TasksService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationTransport: NotificationTransportService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private toDateOrNull(value?: string | null) {
@@ -46,11 +44,7 @@ export class TasksService {
         assignedToEmployeeId: payload.assignedToEmployeeId ?? null,
       },
     });
-
-    if (task.assignedToUserId || task.assignedToEmployeeId) {
-      await this.notifyTaskAssignment(task);
-    }
-
+    await this.notifications.syncTaskNotification(task.id, 'CREATED');
     return task;
   }
 
@@ -68,7 +62,10 @@ export class TasksService {
     }
 
     if (params.assignedToUserId) {
-      where.assignedToUserId = params.assignedToUserId;
+      where.OR = [
+        { assignedToUserId: params.assignedToUserId },
+        { assignedToEmployee: { userId: params.assignedToUserId } },
+      ];
     }
 
     if (params.q) {
@@ -167,68 +164,17 @@ export class TasksService {
     const assignmentChanged =
       (payload.assignedToUserId !== undefined && payload.assignedToUserId !== existing.assignedToUserId) ||
       (payload.assignedToEmployeeId !== undefined && payload.assignedToEmployeeId !== existing.assignedToEmployeeId);
-
     const task = await this.prisma.task.update({
       where: { id },
       data,
     });
-
-    if (assignmentChanged && (task.assignedToUserId || task.assignedToEmployeeId)) {
-      await this.notifyTaskAssignment(task);
-    }
-
+    const dueDateChanged = payload.dueDate !== undefined
+      && task.dueDate?.toISOString() !== existing.dueDate?.toISOString();
+    await this.notifications.syncTaskNotification(
+      task.id,
+      assignmentChanged ? 'REASSIGNED' : dueDateChanged ? 'DUE_DATE_CHANGED' : 'UPDATED',
+    );
     return task;
-  }
-
-  private async notifyTaskAssignment(task: {
-    id: string;
-    title: string;
-    assignedToUserId: string | null;
-    assignedToEmployeeId: string | null;
-  }) {
-    try {
-      const assignee = task.assignedToUserId
-        ? await this.prisma.user.findUnique({
-            where: { id: task.assignedToUserId },
-            select: {
-              active: true,
-              email: true,
-              employee: { select: { name: true, lastName: true, phone: true } },
-            },
-          })
-        : null;
-      const employee =
-        !assignee && task.assignedToEmployeeId
-          ? await this.prisma.employee.findUnique({
-              where: { id: task.assignedToEmployeeId },
-              select: { active: true, name: true, lastName: true, phone: true },
-            })
-          : null;
-      const active = assignee?.active ?? employee?.active ?? false;
-      const name = assignee?.employee
-        ? `${assignee.employee.name} ${assignee.employee.lastName}`.trim()
-        : employee
-          ? `${employee.name} ${employee.lastName}`.trim()
-          : assignee?.email;
-      const phone = assignee?.employee?.phone ?? employee?.phone;
-
-      if (!active || !phone || !name) return;
-
-      const publicWebUrl = process.env.PUBLIC_WEB_URL?.trim().replace(/\/+$/, '');
-      const response = await this.notificationTransport.sendWhatsapp(phone, {
-        title: 'Nueva tarea asignada',
-        body: `Se te ha asignado la tarea “${task.title}”. Por favor, revisa la app.`,
-        recipientName: name,
-        link: publicWebUrl ? `${publicWebUrl}/tasks` : '/tasks',
-      });
-
-      if (!response.sent) {
-        this.logger.warn(`Task assignment WhatsApp not sent for task ${task.id}: ${response.reason}`);
-      }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Task assignment WhatsApp failed for task ${task.id}: ${detail}`);
-    }
   }
 
   async listTaskAssets(taskId: string) {

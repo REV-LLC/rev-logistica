@@ -9,8 +9,10 @@ import { Prisma, Role } from '@prisma/client';
 import { FilesService, UploadedBusinessFile } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMobilityGuideDto } from './dto/create-mobility-guide.dto';
+import { CreateProviderMobilityGuideDto } from './dto/create-provider-mobility-guide.dto';
 
 const GUIDE_RETENTION_MONTHS = 3;
+const PROVIDER_GUIDE_RETENTION_MONTHS = 6;
 
 function atMiddayUtc(value: string) {
   return new Date(`${value.slice(0, 10)}T12:00:00.000Z`);
@@ -26,6 +28,14 @@ export function addCalendarMonths(value: Date, months: number) {
   ).getUTCDate();
   result.setUTCDate(Math.min(value.getUTCDate(), lastDay));
   return result;
+}
+
+export function buildProviderGuideName(
+  providerName: string,
+  machineReference: string,
+) {
+  const normalize = (value: string) => value.trim().replace(/\s+/g, ' ');
+  return `Guia de movilidad ${normalize(providerName)} ${normalize(machineReference)}`;
 }
 
 @Injectable()
@@ -150,6 +160,122 @@ export class MobilityGuidesService {
     });
   }
 
+  listProviders() {
+    return this.prisma.warehouse.findMany({
+      where: { type: 'ALLY', active: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+  }
+
+  listProviderGuides(search?: string, providerId?: string) {
+    const normalizedSearch = search?.trim();
+    return this.prisma.providerMobilityGuide.findMany({
+      where: {
+        ...(providerId ? { providerId } : {}),
+        ...(normalizedSearch
+          ? {
+              OR: [
+                {
+                  machineReference: {
+                    contains: normalizedSearch,
+                    mode: 'insensitive',
+                  },
+                },
+                { name: { contains: normalizedSearch, mode: 'insensitive' } },
+                {
+                  provider: {
+                    name: { contains: normalizedSearch, mode: 'insensitive' },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        name: true,
+        machineReference: true,
+        issuedAt: true,
+        expiresAt: true,
+        createdAt: true,
+        provider: { select: { id: true, name: true } },
+        fileObject: {
+          select: {
+            id: true,
+            mimeType: true,
+            sizeBytes: true,
+            originalName: true,
+          },
+        },
+      },
+    });
+  }
+
+  async createProviderGuide(
+    payload: CreateProviderMobilityGuideDto,
+    file: UploadedBusinessFile | undefined,
+    user: { id: string; role: Role },
+  ) {
+    if (!file) throw new BadRequestException('Debe adjuntar la guia en PDF');
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('La guia debe ser un archivo PDF');
+    }
+
+    const issuedAt = atMiddayUtc(payload.issuedAt);
+    const expiresAt = atMiddayUtc(payload.expiresAt);
+    if (Number.isNaN(issuedAt.getTime()) || Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException('Las fechas no son validas');
+    }
+    if (expiresAt <= issuedAt) {
+      throw new BadRequestException(
+        'La expiracion debe ser posterior a la expedicion',
+      );
+    }
+    if (expiresAt > addCalendarMonths(issuedAt, 1)) {
+      throw new BadRequestException('La vigencia no puede superar un mes');
+    }
+
+    const provider = await this.prisma.warehouse.findFirst({
+      where: { id: payload.providerId, type: 'ALLY', active: true },
+      select: { id: true, name: true },
+    });
+    if (!provider) throw new NotFoundException('Proveedor no encontrado');
+
+    const machineReference = payload.machineReference.trim();
+    const name = buildProviderGuideName(provider.name, machineReference);
+    const renamedFile = { ...file, originalname: `${name}.pdf` };
+    const upload = await this.files.uploadEntityFiles(
+      'WAREHOUSE',
+      provider.id,
+      [renamedFile],
+      {
+        category: 'GUIA_MOVILIDAD_PROVEEDOR',
+        displayName: `${name}.pdf`,
+        expiresAt: payload.expiresAt,
+      },
+      user,
+    );
+    const uploadedFile = upload.files[0];
+    try {
+      return await this.prisma.providerMobilityGuide.create({
+        data: {
+          providerId: provider.id,
+          fileObjectId: uploadedFile.id,
+          machineReference,
+          name,
+          issuedAt,
+          expiresAt,
+          createdByUserId: user.id,
+        },
+      });
+    } catch (error) {
+      await this.files.deleteFile(uploadedFile.id, user).catch(() => undefined);
+      throw error;
+    }
+  }
+
   async create(
     payload: CreateMobilityGuideDto,
     file: UploadedBusinessFile | undefined,
@@ -220,6 +346,15 @@ export class MobilityGuidesService {
     return this.files.deleteFile(guide.fileObjectId, user);
   }
 
+  async removeProviderGuide(guideId: string, user: { id: string; role: Role }) {
+    const guide = await this.prisma.providerMobilityGuide.findUnique({
+      where: { id: guideId },
+      select: { fileObjectId: true },
+    });
+    if (!guide) throw new NotFoundException('Guia de proveedor no encontrada');
+    return this.files.deleteFile(guide.fileObjectId, user);
+  }
+
   @Cron('0 0 3 * * *', { timeZone: 'America/Bogota', waitForCompletion: true })
   async purgeExpiredRetention() {
     const cutoff = addCalendarMonths(new Date(), -GUIDE_RETENTION_MONTHS);
@@ -237,5 +372,30 @@ export class MobilityGuidesService {
       }
     }
     if (guides.length > 0) this.logger.log(`Guias depuradas: ${guides.length}`);
+
+    const providerCutoff = addCalendarMonths(
+      new Date(),
+      -PROVIDER_GUIDE_RETENTION_MONTHS,
+    );
+    const providerGuides = await this.prisma.providerMobilityGuide.findMany({
+      where: { issuedAt: { lt: providerCutoff } },
+      select: { id: true, fileObjectId: true },
+      take: 100,
+    });
+    for (const guide of providerGuides) {
+      try {
+        await this.files.deleteFileForRetention(guide.fileObjectId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `No se pudo depurar la guia de proveedor ${guide.id}: ${message}`,
+        );
+      }
+    }
+    if (providerGuides.length > 0) {
+      this.logger.log(
+        `Guias de proveedores depuradas: ${providerGuides.length}`,
+      );
+    }
   }
 }

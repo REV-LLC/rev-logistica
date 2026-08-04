@@ -258,7 +258,7 @@ export default function TasksPage() {
         group: 'Empleados',
         items: employees.map((employee) => ({
           value: `employee:${employee.id}`,
-          label: `${getEmployeeName(employee)}${employee.phone ? ' · WhatsApp' : ' · Sin teléfono'}`,
+          label: `${getEmployeeName(employee)}${employee.phone ? ' · WhatsApp' : ' · Sin teléfono'}${employee.user?.active ? '' : ' · sin recordatorios de vencimiento'}`,
         })),
       },
     ],

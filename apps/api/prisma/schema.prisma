@@ -137,17 +137,47 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  documentsCreated           Document[]              @relation("CreatedBy")
-  ledgerCreated              StockLedger[]           @relation("LedgerCreatedBy")
-  tasksCreated               Task[]                  @relation("TaskCreatedBy")
-  tasksAssigned              Task[]                  @relation("TaskAssignedTo")
-  mobilityGuidesCreated      MobilityGuide[]         @relation("MobilityGuideCreatedBy")
-  employee                   Employee?
-  notificationRecipients     NotificationRecipient[]
-  maintenanceReadings        AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
-  vehicleMaintenanceReadings VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
-  maintenanceCompletions     MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
-  notificationDeliveries     NotificationDelivery[]
+  documentsCreated              Document[]              @relation("CreatedBy")
+  ledgerCreated                 StockLedger[]           @relation("LedgerCreatedBy")
+  tasksCreated                  Task[]                  @relation("TaskCreatedBy")
+  tasksAssigned                 Task[]                  @relation("TaskAssignedTo")
+  mobilityGuidesCreated         MobilityGuide[]         @relation("MobilityGuideCreatedBy")
+  providerMobilityGuidesCreated ProviderMobilityGuide[] @relation("ProviderMobilityGuideCreatedBy")
+  employee                      Employee?
+  notificationRecipients        NotificationRecipient[]
+  maintenanceReadings           AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
+  vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
+  maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
+  notificationDeliveries        NotificationDelivery[]
+  appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
+}
+
+model AppSetting {
+  key         String   @id
+  value       Json
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  auditEntries AppSettingAudit[]
+
+  @@index([category])
+}
+
+model AppSettingAudit {
+  id              String   @id @default(uuid())
+  settingKey      String
+  oldValue        Json?
+  newValue        Json
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+
+  setting   AppSetting @relation(fields: [settingKey], references: [key], onDelete: Cascade)
+  updatedBy User       @relation("AppSettingUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@index([settingKey, createdAt(sort: Desc)])
+  @@index([updatedByUserId])
 }
 
 model Customer {
@@ -221,6 +251,7 @@ model Warehouse {
   internalCounters          AssetInternalCounter[]
   inventorySnapshotEntries  InventorySnapshotEntry[]
   legacyWarehouseReferences LegacyWarehouse[]
+  providerMobilityGuides    ProviderMobilityGuide[]
 }
 
 model LegacyWarehouse {
@@ -276,25 +307,25 @@ model AssetSubfamily {
 }
 
 model Sku {
-  id                 String     @id @default(uuid())
-  name               String
-  imageUrl           String?
-  imageFileObjectId  String?
-  assetFamilyId      String
-  assetSubfamilyId   String?
-  price              Decimal?
-  subrentalPrice     Decimal?
-  replacementValue   Decimal?
-  chargeType         ChargeType @default(DAY)
-  minimumChargeHours Decimal?
-  size               String?
-  lengthMeters       Decimal?   @db.Decimal(10, 2)
-  closedLengthMeters Decimal?   @db.Decimal(10, 2)
-  extendedLengthMeters Decimal? @db.Decimal(10, 2)
-  areaM2             Decimal?
-  unitWeight         Decimal?
-  active             Boolean    @default(true)
-  createdAt          DateTime   @default(now())
+  id                   String     @id @default(uuid())
+  name                 String
+  imageUrl             String?
+  imageFileObjectId    String?
+  assetFamilyId        String
+  assetSubfamilyId     String?
+  price                Decimal?
+  subrentalPrice       Decimal?
+  replacementValue     Decimal?
+  chargeType           ChargeType @default(DAY)
+  minimumChargeHours   Decimal?
+  size                 String?
+  lengthMeters         Decimal?   @db.Decimal(10, 2)
+  closedLengthMeters   Decimal?   @db.Decimal(10, 2)
+  extendedLengthMeters Decimal?   @db.Decimal(10, 2)
+  areaM2               Decimal?
+  unitWeight           Decimal?
+  active               Boolean    @default(true)
+  createdAt            DateTime   @default(now())
 
   assets          Asset[]
   documentItems   DocumentItem[]
@@ -355,6 +386,26 @@ model Asset {
 
   @@index([skuId])
   @@index([registrationNumber])
+}
+
+model ProviderMobilityGuide {
+  id               String   @id @default(uuid())
+  providerId       String
+  fileObjectId     String   @unique
+  machineReference String
+  name             String
+  issuedAt         DateTime
+  expiresAt        DateTime
+  createdByUserId  String
+  createdAt        DateTime @default(now())
+
+  provider   Warehouse  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("ProviderMobilityGuideCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([providerId, issuedAt])
+  @@index([issuedAt])
+  @@index([expiresAt])
 }
 
 model MobilityGuide {
@@ -554,6 +605,7 @@ model Document {
   docDate            DateTime       @default(now())
   notes              String?
   recipientPhone     String?
+  recipientPhones    String[]       @default([])
 
   // Failed fields
   failedReason         String?
@@ -584,6 +636,27 @@ model Document {
   ledger            StockLedger[]
   files             FileObject[]
   messageDeliveries DocumentMessageDelivery[]
+  emailDeliveries   DocumentEmailDelivery[]
+}
+
+model DocumentEmailDelivery {
+  id              String                     @id @default(uuid())
+  documentId      String
+  kind            String
+  email           String
+  subject         String
+  attachmentNames Json
+  status          NotificationDeliveryStatus @default(PENDING)
+  sentAt          DateTime?
+  error           String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, kind])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([documentId, createdAt(sort: Desc)])
 }
 
 model DocumentMessageDelivery {
@@ -891,10 +964,11 @@ model FileObject {
   createdAt       DateTime  @default(now())
   createdBy       String
 
-  document      Document?      @relation(fields: [documentId], references: [id])
-  skuImages     Sku[]          @relation("SkuImage")
-  assetImages   Asset[]        @relation("AssetImage")
-  mobilityGuide MobilityGuide?
+  document              Document?              @relation(fields: [documentId], references: [id])
+  skuImages             Sku[]                  @relation("SkuImage")
+  assetImages           Asset[]                @relation("AssetImage")
+  mobilityGuide         MobilityGuide?
+  providerMobilityGuide ProviderMobilityGuide?
 
   @@index([documentId])
   @@index([entityType, entityId])

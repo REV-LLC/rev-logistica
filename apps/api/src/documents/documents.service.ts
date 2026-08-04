@@ -502,12 +502,17 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     createdBy: string;
   }) {
     const type = payload.type as DocumentType;
     const status =
       (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -525,7 +530,8 @@ export class DocumentsService {
               warehouseId: payload.warehouseId ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -552,7 +558,8 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     receivedSignature?: string;
     createdBy: string;
     items: Array<{
@@ -565,6 +572,10 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -587,7 +598,8 @@ export class DocumentsService {
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -620,7 +632,6 @@ export class DocumentsService {
 
           return document;
         });
-        await this.safeSendDraftMessages(document.id);
         return document;
       } catch (error) {
         if (
@@ -646,6 +657,7 @@ export class DocumentsService {
       customerWorksiteId?: string;
       notes?: string;
       recipientPhone?: string;
+      recipientPhones?: string[];
       receivedSignature?: string;
       items: Array<{
         skuId?: string;
@@ -670,6 +682,7 @@ export class DocumentsService {
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
+        recipientPhones: true,
         docDate: true,
       },
     });
@@ -705,6 +718,19 @@ export class DocumentsService {
           this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
         const defaultBillingCutoffDate =
           nextType === DocumentType.RETURN ? nextDocDate : null;
+        const recipientsWereUpdated =
+          payload.recipientPhones !== undefined ||
+          payload.recipientPhone !== undefined;
+        const nextRecipientPhones = recipientsWereUpdated
+          ? this.normalizeDocumentRecipientPhones(
+              payload.recipientPhones,
+              payload.recipientPhone,
+            )
+          : existing.recipientPhones.length
+            ? existing.recipientPhones
+            : existing.recipientPhone
+              ? [existing.recipientPhone]
+              : [];
         const updated = await tx.document.update({
           where: { id: documentId },
           data: {
@@ -720,10 +746,8 @@ export class DocumentsService {
                 : existing.customerWorksiteId,
             docDate: nextDocDate,
             notes: nextNotes,
-            recipientPhone:
-              payload.recipientPhone !== undefined
-                ? normalizeRequiredColombianPhone(payload.recipientPhone)
-                : existing.recipientPhone,
+            recipientPhone: nextRecipientPhones[0] ?? null,
+            recipientPhones: nextRecipientPhones,
             officeModifiedAt: new Date(),
             officeModifiedBy: userId,
           },
@@ -1368,6 +1392,12 @@ export class DocumentsService {
         consecutive: true,
         docDate: true,
         notes: true,
+        creator: {
+          select: {
+            email: true,
+            employee: { select: { name: true, lastName: true } },
+          },
+        },
         customerWorksite: {
           select: {
             alias: true,
@@ -1420,7 +1450,46 @@ export class DocumentsService {
       },
     });
     if (!document) throw new NotFoundException('Documento compartido no encontrado');
-    return document;
+    const responsibleIds = this.parseDocumentResponsibleIds(document.notes);
+    const employeeIds = [
+      responsibleIds.driverId,
+      responsibleIds.dispatcherId,
+    ].filter((id): id is string => Boolean(id));
+    const employees = employeeIds.length
+      ? await this.prisma.employee.findMany({
+          where: { id: { in: employeeIds } },
+          select: { id: true, name: true, lastName: true },
+        })
+      : [];
+    const employeeNameById = new Map(
+      employees.map((employee) => [
+        employee.id,
+        `${employee.name} ${employee.lastName}`.trim(),
+      ]),
+    );
+    const driverName = responsibleIds.driverId
+      ? (employeeNameById.get(responsibleIds.driverId) ?? null)
+      : null;
+    const dispatcherName = responsibleIds.dispatcherId
+      ? (employeeNameById.get(responsibleIds.dispatcherId) ?? null)
+      : null;
+    const preparedBy = document.creator.employee
+      ? `${document.creator.employee.name} ${document.creator.employee.lastName}`.trim()
+      : document.creator.email;
+    const isOnSite = this.parseDeliveryMode(document.notes) === 'ON_SITE';
+    return {
+      ...document,
+      creator: undefined,
+      responsibles: {
+        preparedBy,
+        transportedBy: isOnSite
+          ? (driverName ?? 'Sin conductor asignado')
+          : 'No aplica · retiro en bodega',
+        deliveredBy: isOnSite
+          ? (driverName ?? 'Sin conductor asignado')
+          : (dispatcherName ?? 'Sin despachador asignado'),
+      },
+    };
   }
 
   async getSharedDocumentPdf(shareToken: string) {
@@ -1445,5 +1514,39 @@ export class DocumentsService {
     } catch {
       // Document creation must remain successful if an external provider is unavailable.
     }
+  }
+
+  private parseDocumentResponsibleIds(notes?: string | null) {
+    const values = new Map<string, string>();
+    notes
+      ?.split('|')
+      .map((value) => value.trim())
+      .forEach((entry) => {
+        const [key, ...rest] = entry.split(':');
+        if (key && rest.length) {
+          values.set(key.trim().toLowerCase(), rest.join(':').trim());
+        }
+      });
+    return {
+      driverId: values.get('conductor') || null,
+      dispatcherId: values.get('despachador') || null,
+    };
+  }
+
+  private normalizeDocumentRecipientPhones(
+    recipientPhones?: string[],
+    recipientPhone?: string,
+  ) {
+    const normalized = [
+      ...(recipientPhones ?? []),
+      ...(recipientPhone ? [recipientPhone] : []),
+    ].map((phone) => normalizeRequiredColombianPhone(phone));
+    const unique = [...new Set(normalized)];
+    if (!unique.length) {
+      throw new BadRequestException(
+        'Agrega al menos un destinatario de WhatsApp',
+      );
+    }
+    return unique;
   }
 }
