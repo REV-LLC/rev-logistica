@@ -64,6 +64,17 @@ const statusPresentation = {
   PENDING: { label: "Pendiente", color: "yellow" },
 } as const;
 
+function getStatusPresentation(status?: string | null) {
+  if (status && status in statusPresentation) {
+    return statusPresentation[status as keyof typeof statusPresentation];
+  }
+
+  return {
+    label: status?.trim() || "Estado desconocido",
+    color: "gray",
+  };
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("es-CO", {
@@ -114,9 +125,23 @@ export default function NotificationDeliveriesPage() {
     setLoading(true);
     setError("");
     try {
-      setDeliveries(
-        await api<Delivery[]>("/notifications/deliveries?limit=300"),
+      const response = await api<unknown>(
+        "/notifications/deliveries?limit=300",
       );
+      if (!Array.isArray(response)) {
+        const serverMessage =
+          response &&
+          typeof response === "object" &&
+          "message" in response &&
+          typeof response.message === "string"
+            ? response.message
+            : null;
+        throw new Error(
+          serverMessage ||
+            "El servidor respondió con un formato inesperado. Intenta actualizar nuevamente.",
+        );
+      }
+      setDeliveries(response as Delivery[]);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -281,8 +306,9 @@ export default function NotificationDeliveriesPage() {
                       </Table.Thead>
                       <Table.Tbody>
                         {filteredDeliveries.map((delivery) => {
-                          const presentation =
-                            statusPresentation[delivery.status];
+                          const presentation = getStatusPresentation(
+                            delivery.status,
+                          );
                           return (
                             <Table.Tr key={delivery.id}>
                               <Table.Td>
@@ -400,8 +426,9 @@ export default function NotificationDeliveriesPage() {
                   <Box hiddenFrom="sm" p="sm">
                     <Stack gap="sm">
                       {filteredDeliveries.map((delivery) => {
-                        const presentation =
-                          statusPresentation[delivery.status];
+                        const presentation = getStatusPresentation(
+                          delivery.status,
+                        );
                         return (
                           <Paper
                             key={delivery.id}

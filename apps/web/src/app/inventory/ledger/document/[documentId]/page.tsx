@@ -383,6 +383,8 @@ export default function DocumentDetailPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [decisionLoading, setDecisionLoading] = useState<'APPROVE' | 'REJECT' | null>(null);
+  const [emailRetryLoading, setEmailRetryLoading] = useState(false);
+  const [emailRetryMessage, setEmailRetryMessage] = useState<string | null>(null);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveDocument, setResolveDocument] = useState<DocumentDetail | null>(null);
   const [resolveSkuByIndex, setResolveSkuByIndex] = useState<Record<number, string>>({});
@@ -1004,6 +1006,39 @@ export default function DocumentDetailPage() {
     }
   };
 
+  const resendFinalCustomerEmail = async () => {
+    if (!document?.id) return;
+    if (!window.confirm('¿Reenviar el correo final de este documento al cliente?')) return;
+
+    setEmailRetryLoading(true);
+    setEmailRetryMessage(null);
+    setError(null);
+    try {
+      const result = await api<{ sent: boolean; reason?: string }>(
+        `/documents/${document.id}/customer-email/final`,
+        { method: 'POST' },
+      );
+      if (!result.sent) {
+        throw new Error(
+          result.reason === 'already-sent'
+            ? 'El correo final ya había sido enviado.'
+            : `No se pudo reenviar el correo final${result.reason ? `: ${result.reason}` : '.'}`,
+        );
+      }
+      setEmailRetryMessage('Correo final enviado correctamente.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('No se pudo reenviar el correo final.');
+      }
+    } finally {
+      setEmailRetryLoading(false);
+    }
+  };
+
   const resolveAndApprove = async () => {
     if (!resolveDocument) return;
     const unresolved = resolveDocument.items
@@ -1144,6 +1179,15 @@ export default function DocumentDetailPage() {
                   </Button>
                 </>
               ) : null}
+              {canDecide && document?.status === 'CONFIRMED' ? (
+                <Button
+                  variant="light"
+                  loading={emailRetryLoading}
+                  onClick={() => void resendFinalCustomerEmail()}
+                >
+                  Reenviar correo final
+                </Button>
+              ) : null}
               <Button
                 variant="light"
                 onClick={() => exportPdf('internal')}
@@ -1195,6 +1239,11 @@ export default function DocumentDetailPage() {
           {error ? (
             <Text c="red" mt="md">
               {error}
+            </Text>
+          ) : null}
+          {emailRetryMessage ? (
+            <Text c="green" mt="md">
+              {emailRetryMessage}
             </Text>
           ) : null}
           {document?.type === 'RETURN' ? (

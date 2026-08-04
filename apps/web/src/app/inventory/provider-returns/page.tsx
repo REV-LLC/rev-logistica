@@ -154,7 +154,7 @@ export default function ProviderReturnsPage() {
       </Paper>}
       {activeGroup && <Paper withBorder radius="md" p="md">
             <Group justify="space-between" align="flex-start" mb="md">
-              <div><Title order={3}>{activeGroup.consecutive ?? 'DV sin consecutivo'}</Title><Text size="sm">{activeGroup.customer ?? 'Cliente'} · {activeGroup.worksite ?? 'Obra'}</Text>{activeGroup.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {activeGroup.items[0].custodyWarehouse.name}</Text> : null}</div>
+              <div><Group gap="xs"><Title order={3}>{activeGroup.consecutive ?? 'DV sin consecutivo'}</Title><Badge color={activeGroup.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'blue' : 'yellow'}>{activeGroup.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'En bodega REV' : 'En transición'}</Badge></Group><Text size="sm">{activeGroup.customer ?? 'Cliente'} · {activeGroup.worksite ?? 'Obra'}</Text>{activeGroup.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {activeGroup.items[0].custodyWarehouse.name}</Text> : null}</div>
               <div style={{ textAlign: 'right' }}><Text fw={700}>{activeGroup.provider.name}</Text><Text size="xs" c="dimmed">Bodega receptora</Text></div>
             </Group>
             <Stack gap="xs">
