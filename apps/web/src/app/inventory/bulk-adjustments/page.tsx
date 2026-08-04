@@ -1869,7 +1869,7 @@ export default function AddBulkStockPage() {
                             <div>
                               <Text fw={600} size="sm">Commercial parameters</Text>
                               <Text size="xs" c="dimmed">
-                                Peso, area, precio, subalquiler y valor reposicion son obligatorios.
+                                Peso, area, precio cliente y valor reposicion son obligatorios.
                               </Text>
                             </div>
                             <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
