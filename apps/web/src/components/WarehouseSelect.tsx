@@ -1,139 +1,137 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Autocomplete, Text } from '@mantine/core';
+import { forwardRef, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Select } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
-import type { ReactNode } from 'react';
 
-type Warehouse = {
+export type WarehouseSelectItem = {
   id: string;
   name: string;
+  type?: 'OWN' | 'ALLY' | string;
 };
 
-type Props = {
+type WarehouseSelectProps = {
   value: string | null;
   onChange: (warehouseId: string | null) => void;
+  warehouses?: readonly WarehouseSelectItem[];
   defaultName?: string;
   label?: ReactNode;
+  placeholder?: string;
+  name?: string;
+  disabled?: boolean;
+  loading?: boolean;
+  required?: boolean;
+  clearable?: boolean;
+  error?: ReactNode;
+  width?: string | number;
+  formatLabels?: boolean;
 };
 
-export default function WarehouseSelect({
-  value,
-  onChange,
-  defaultName = 'Bodega principal',
-  label = 'Location warehouse',
-}: Props) {
-  const [items, setItems] = useState<Warehouse[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const nameMap = useMemo(() => {
-    const map = new Map<string, Warehouse>();
-    items.forEach((item) => map.set(item.name.toLowerCase(), item));
-    return map;
-  }, [items]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await api<Warehouse[]>('/warehouses', { method: 'GET' });
-        if (!mounted) return;
-        setItems(data);
-      } catch (err) {
-        if (!mounted) return;
-        if (err instanceof ApiError) {
-          setError(`${err.status}: ${err.message}`);
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Error loading warehouses');
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!items.length) return;
-
-    if (!value) {
-      const desired = items.find(
-        (item) => item.name.toLowerCase() === defaultName.toLowerCase()
-      );
-      const chosen = desired ?? items[0];
-      if (chosen) {
-        onChange(chosen.id);
-        setInputValue(chosen.name);
-        setError(null);
-      }
-      return;
-    }
-
-    const match = items.find((item) => item.id === value);
-    if (match) {
-      setInputValue(match.name);
-      setError(null);
-    }
-  }, [items, value, defaultName, onChange]);
-
-  const handleNameChange = (nextValue: string) => {
-    setInputValue(nextValue);
-    if (!nextValue.trim()) {
-      setError(null);
-      onChange(null);
-      return;
-    }
-
-    const match = nameMap.get(nextValue.trim().toLowerCase());
-    if (match) {
-      setError(null);
-      onChange(match.id);
-      return;
-    }
-
-    setError('Selecciona una bodega valida');
-    onChange(null);
-  };
-
-  const selectedName = useMemo(() => {
-    if (!value) return '';
-    return items.find((item) => item.id === value)?.name ?? '';
-  }, [items, value]);
-
-  return (
-    <div>
-      <Autocomplete
-        label={label}
-        placeholder={loading ? 'Cargando bodegas...' : 'Buscar por nombre'}
-        data={items.map((warehouse) => warehouse.name)}
-        value={inputValue}
-        onChange={handleNameChange}
-        disabled={loading}
-        onFocus={() => {
-          setError(null);
-          setInputValue('');
-        }}
-        onBlur={() => {
-          if (value && !inputValue.trim()) {
-            setInputValue(selectedName);
-          }
-        }}
-      />
-      {error && (
-        <Text c="red" size="sm" mt={4}>
-          {error}
-        </Text>
-      )}
-    </div>
-  );
+export function formatWarehouseSelectLabel(warehouse: WarehouseSelectItem) {
+  if (warehouse.type === 'OWN') return 'Bodega propia';
+  if (warehouse.type === 'ALLY') return `${warehouse.name} (Alterna)`;
+  return warehouse.name;
 }
+
+const WarehouseSelect = forwardRef<HTMLInputElement, WarehouseSelectProps>(
+  function WarehouseSelect(
+    {
+      value,
+      onChange,
+      warehouses,
+      defaultName,
+      label = 'Bodega',
+      placeholder = 'Buscar bodega',
+      name,
+      disabled = false,
+      loading = false,
+      required = false,
+      clearable = true,
+      error,
+      width,
+      formatLabels = true,
+    },
+    ref,
+  ) {
+    const [loadedWarehouses, setLoadedWarehouses] = useState<WarehouseSelectItem[]>([]);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [internalLoading, setInternalLoading] = useState(false);
+
+    useEffect(() => {
+      if (warehouses) return;
+      let mounted = true;
+      const load = async () => {
+        setInternalLoading(true);
+        setLoadError(null);
+        try {
+          const data = await api<WarehouseSelectItem[]>('/warehouses', { method: 'GET' });
+          if (mounted) setLoadedWarehouses(data);
+        } catch (err) {
+          if (!mounted) return;
+          setLoadError(
+            err instanceof ApiError
+              ? `${err.status}: ${err.message}`
+              : 'No se pudieron cargar las bodegas.',
+          );
+        } finally {
+          if (mounted) setInternalLoading(false);
+        }
+      };
+      void load();
+      return () => {
+        mounted = false;
+      };
+    }, [warehouses]);
+
+    const items = warehouses ?? loadedWarehouses;
+    const options = useMemo(
+      () =>
+        [...items]
+          .sort((a, b) => {
+            if (a.type === b.type) return a.name.localeCompare(b.name, 'es');
+            if (a.type === 'OWN') return -1;
+            if (b.type === 'OWN') return 1;
+            return a.name.localeCompare(b.name, 'es');
+          })
+          .map((warehouse) => ({
+            value: warehouse.id,
+            label: formatLabels ? formatWarehouseSelectLabel(warehouse) : warehouse.name,
+          })),
+      [formatLabels, items],
+    );
+
+    useEffect(() => {
+      if (value || !defaultName || !items.length) return;
+      const normalizedDefault = defaultName.trim().toLocaleLowerCase('es');
+      const preferred = items.find(
+        (warehouse) =>
+          warehouse.name.trim().toLocaleLowerCase('es') === normalizedDefault ||
+          (normalizedDefault === 'bodega propia' && warehouse.type === 'OWN'),
+      );
+      if (preferred) onChange(preferred.id);
+    }, [defaultName, items, onChange, value]);
+
+    const isLoading = loading || internalLoading;
+
+    return (
+      <Select
+        ref={ref}
+        label={label}
+        name={name}
+        value={value}
+        onChange={onChange}
+        data={options}
+        searchable
+        clearable={clearable}
+        disabled={disabled || isLoading}
+        required={required}
+        error={error ?? loadError}
+        placeholder={isLoading ? 'Cargando bodegas...' : placeholder}
+        nothingFoundMessage="No se encontraron bodegas"
+        w={width}
+      />
+    );
+  },
+);
+
+export default WarehouseSelect;

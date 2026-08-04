@@ -27,12 +27,12 @@ type SharedDocument = {
     quantity: { toString(): string } | string | number | null;
     requestedTag: string | null;
     conditionNote: string | null;
-    sku: { name: string } | null;
+    sku: { name: string; assetFamily?: { name: string } | null } | null;
     asset: {
       serialOrEngine: string | null;
       description: string | null;
       internalNumber: number | null;
-      sku: { name: string } | null;
+      sku: { name: string; assetFamily?: { name: string } | null } | null;
     } | null;
   }>;
   files?: SharedDocumentFile[];
@@ -42,6 +42,30 @@ type SharedDocument = {
     deliveredBy: string;
   };
 };
+
+type PdfItem = SharedDocument['items'][number];
+
+export function buildPdfItemDescription(item: PdfItem) {
+  const reference =
+    item.asset?.sku?.name
+    || item.sku?.name
+    || item.asset?.description
+    || item.requestedTag
+    || 'Ítem';
+  const family = (
+    item.asset?.sku?.assetFamily?.name
+    || item.sku?.assetFamily?.name
+    || ''
+  ).trim();
+
+  if (!family) return reference;
+  const normalizedFamily = family.toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
+  const normalizedReference = reference.trim().toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
+  if (normalizedReference === normalizedFamily || normalizedReference.startsWith(`${normalizedFamily} `)) {
+    return reference;
+  }
+  return `${family} ${reference}`.trim();
+}
 
 type PreparedImage = {
   buffer: Buffer;
@@ -193,12 +217,7 @@ export class DocumentPdfService {
         this.itemHeader(pdf);
       }
       const y = pdf.y;
-      const description =
-        item.asset?.description ||
-        item.asset?.sku?.name ||
-        item.sku?.name ||
-        item.requestedTag ||
-        'Ítem';
+      const description = buildPdfItemDescription(item);
       const equipment =
         item.asset?.internalNumber != null
           ? String(item.asset.internalNumber)

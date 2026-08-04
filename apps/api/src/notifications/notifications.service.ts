@@ -1,9 +1,28 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationChannel, NotificationDeliveryStatus, Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  NotificationChannel,
+  NotificationDeliveryStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ConfigureNotificationTopicDto, NotificationRecipientDto } from './dto/notification.dto';
-import { NOTIFICATION_ENTITY, NOTIFICATION_EVENT, VEHICLE_REQUIRED_EVENTS } from './notification.constants';
-import { NotificationMessage, NotificationTransportService } from './notification-transport.service';
+import { SettingsService } from '../settings/settings.service';
+import {
+  ConfigureNotificationTopicDto,
+  NotificationRecipientDto,
+} from './dto/notification.dto';
+import {
+  NOTIFICATION_ENTITY,
+  NOTIFICATION_EVENT,
+  VEHICLE_REQUIRED_EVENTS,
+} from './notification.constants';
+import {
+  NotificationMessage,
+  NotificationTransportService,
+} from './notification-transport.service';
 
 type DbClient = PrismaService | Prisma.TransactionClient;
 type ReminderStatus = 'UPCOMING' | 'DUE' | 'OVERDUE';
@@ -13,25 +32,134 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transport: NotificationTransportService,
+    private readonly settings: SettingsService,
   ) {}
 
-  async ensureVehicleTopics(vehicleId: string, recipients?: NotificationRecipientDto[], db: DbClient = this.prisma) {
+  async syncTaskNotification(
+    taskId: string,
+    reason: 'CREATED' | 'REASSIGNED' | 'DUE_DATE_CHANGED' | 'UPDATED',
+  ) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignedTo: { include: { employee: true } },
+        assignedToEmployee: { include: { user: true } },
+      },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+    const candidateUser =
+      task.assignedTo ?? task.assignedToEmployee?.user ?? null;
+    const user = candidateUser?.active ? candidateUser : null;
+    const topicKey = {
+      entityType: NOTIFICATION_ENTITY.TASK,
+      entityId: task.id,
+      eventType: NOTIFICATION_EVENT.TASK_DUE,
+    };
+    const topic = await this.prisma.notificationTopic.upsert({
+      where: { entityType_entityId_eventType: topicKey },
+      create: { ...topicKey, active: task.status !== 'DONE' && Boolean(user) },
+      update: { active: task.status !== 'DONE' && Boolean(user) },
+    });
+    await this.replaceRecipients(
+      topic.id,
+      user ? [{ userId: user.id, whatsappEnabled: true }] : [],
+      this.prisma,
+    );
+    if (task.status === 'DONE') return { sent: 0, skipped: 1 };
+
+    const shouldNotify =
+      reason === 'CREATED' || reason === 'REASSIGNED'
+        ? await this.settings.get<boolean>('tasks.notify_on_assignment')
+        : reason === 'DUE_DATE_CHANGED'
+          ? await this.settings.get<boolean>('tasks.notify_on_due_date_change')
+          : false;
+    if (!shouldNotify) return { sent: 0, skipped: 1 };
+
+    if (!user) {
+      const employee = task.assignedToEmployee;
+      if (!employee?.active || !employee.phone) return { sent: 0, skipped: 1 };
+      const isDueChange = reason === 'DUE_DATE_CHANGED';
+      try {
+        const response = await this.transport.sendWhatsapp(employee.phone, {
+          title: isDueChange
+            ? `Nueva fecha para: ${task.title}`
+            : `Nueva tarea: ${task.title}`,
+          body: `${isDueChange ? 'Se actualizó la fecha de esta tarea' : 'Te asignaron esta tarea'}${task.dueDate ? `; vence el ${this.formatDate(task.dueDate)}` : ''}.`,
+          recipientName: `${employee.name} ${employee.lastName}`.trim(),
+          link: this.appLink('/tasks'),
+        });
+        return { sent: response.sent ? 1 : 0, skipped: response.sent ? 0 : 1 };
+      } catch {
+        return { sent: 0, skipped: 0, failed: 1 };
+      }
+    }
+
+    const hydrated = await this.prisma.notificationTopic.findUniqueOrThrow({
+      where: { id: topic.id },
+      include: this.topicRecipientsInclude(),
+    });
+    const recipient = this.mapRecipients(hydrated.recipients)[0];
+    if (!recipient?.phone) return { sent: 0, skipped: 1 };
+    const isDueChange = reason === 'DUE_DATE_CHANGED';
+    const reminder = {
+      topicId: topic.id,
+      occurrenceKey: `${isDueChange ? 'due-change' : 'assignment'}:${task.updatedAt.toISOString()}`,
+      title: isDueChange
+        ? `Nueva fecha para: ${task.title}`
+        : `Nueva tarea: ${task.title}`,
+      message: `${isDueChange ? 'Se actualizó la fecha de esta tarea' : 'Te asignaron esta tarea'}${task.dueDate ? `; vence el ${this.formatDate(task.dueDate)}` : ''}.`,
+      link: this.appLink('/tasks'),
+    };
+    const result = await this.dispatchOne(
+      reminder,
+      recipient,
+      NotificationChannel.WHATSAPP,
+    );
+    return {
+      sent: result === 'sent' ? 1 : 0,
+      skipped: result === 'skipped' ? 1 : 0,
+      failed: result === 'failed' ? 1 : 0,
+    };
+  }
+
+  async ensureVehicleTopics(
+    vehicleId: string,
+    recipients?: NotificationRecipientDto[],
+    db: DbClient = this.prisma,
+  ) {
     const topics: Array<{ id: string }> = [];
     for (const eventType of VEHICLE_REQUIRED_EVENTS) {
-      topics.push(await db.notificationTopic.upsert({
-        where: { entityType_entityId_eventType: { entityType: NOTIFICATION_ENTITY.VEHICLE, entityId: vehicleId, eventType } },
-        create: { entityType: NOTIFICATION_ENTITY.VEHICLE, entityId: vehicleId, eventType },
-        update: { active: true },
-      }));
+      topics.push(
+        await db.notificationTopic.upsert({
+          where: {
+            entityType_entityId_eventType: {
+              entityType: NOTIFICATION_ENTITY.VEHICLE,
+              entityId: vehicleId,
+              eventType,
+            },
+          },
+          create: {
+            entityType: NOTIFICATION_ENTITY.VEHICLE,
+            entityId: vehicleId,
+            eventType,
+          },
+          update: { active: true },
+        }),
+      );
     }
     if (recipients) {
       await this.assertRecipients(recipients, db);
-      for (const topic of topics) await this.replaceRecipients(topic.id, recipients, db);
+      for (const topic of topics)
+        await this.replaceRecipients(topic.id, recipients, db);
     }
     return topics;
   }
 
-  async ensureMaintenanceTopic(itemId: string, recipients: NotificationRecipientDto[], db: DbClient = this.prisma) {
+  async ensureMaintenanceTopic(
+    itemId: string,
+    recipients: NotificationRecipientDto[],
+    db: DbClient = this.prisma,
+  ) {
     await this.assertRecipients(recipients, db);
     const topic = await db.notificationTopic.upsert({
       where: {
@@ -57,41 +185,70 @@ export class NotificationsService {
     await this.assertRecipients(recipients, this.prisma);
     return this.prisma.$transaction(async (tx) => {
       await this.replaceRecipients(topicId, recipients, tx);
-      return tx.notificationTopic.findUnique({ where: { id: topicId }, include: this.topicRecipientsInclude() });
+      return tx.notificationTopic.findUnique({
+        where: { id: topicId },
+        include: this.topicRecipientsInclude(),
+      });
     });
   }
 
-  async configureDateTopic(entityType: string, entityId: string, payload: ConfigureNotificationTopicDto) {
+  async configureDateTopic(
+    entityType: string,
+    entityId: string,
+    payload: ConfigureNotificationTopicDto,
+  ) {
     entityType = entityType.trim().toUpperCase();
     if (
       entityType === NOTIFICATION_ENTITY.VEHICLE &&
       (VEHICLE_REQUIRED_EVENTS as readonly string[]).includes(payload.eventType)
     ) {
-      throw new BadRequestException('Mandatory vehicle topics only allow recipient changes');
+      throw new BadRequestException(
+        'Mandatory vehicle topics only allow recipient changes',
+      );
     }
     await this.assertRecipients(payload.recipients, this.prisma);
     return this.prisma.$transaction(async (tx) => {
       const topic = await tx.notificationTopic.upsert({
-        where: { entityType_entityId_eventType: { entityType, entityId, eventType: payload.eventType } },
+        where: {
+          entityType_entityId_eventType: {
+            entityType,
+            entityId,
+            eventType: payload.eventType,
+          },
+        },
         create: {
-          entityType, entityId, eventType: payload.eventType,
-          titleTemplate: payload.titleTemplate.trim(), messageTemplate: payload.messageTemplate.trim(),
-          dueAt: new Date(payload.dueAt), warningDays: payload.warningDays ?? 30, active: payload.active ?? true,
+          entityType,
+          entityId,
+          eventType: payload.eventType,
+          titleTemplate: payload.titleTemplate.trim(),
+          messageTemplate: payload.messageTemplate.trim(),
+          dueAt: new Date(payload.dueAt),
+          warningDays: payload.warningDays ?? 30,
+          active: payload.active ?? true,
         },
         update: {
-          titleTemplate: payload.titleTemplate.trim(), messageTemplate: payload.messageTemplate.trim(),
-          dueAt: new Date(payload.dueAt), warningDays: payload.warningDays ?? 30, active: payload.active ?? true,
+          titleTemplate: payload.titleTemplate.trim(),
+          messageTemplate: payload.messageTemplate.trim(),
+          dueAt: new Date(payload.dueAt),
+          warningDays: payload.warningDays ?? 30,
+          active: payload.active ?? true,
         },
       });
       await this.replaceRecipients(topic.id, payload.recipients, tx);
-      return tx.notificationTopic.findUnique({ where: { id: topic.id }, include: this.topicRecipientsInclude() });
+      return tx.notificationTopic.findUnique({
+        where: { id: topic.id },
+        include: this.topicRecipientsInclude(),
+      });
     });
   }
 
   async getEntityTopics(entityType: string, entityId: string) {
     entityType = entityType.trim().toUpperCase();
     if (entityType === NOTIFICATION_ENTITY.VEHICLE) {
-      const vehicle = await this.prisma.vehicle.findUnique({ where: { id: entityId }, select: { id: true } });
+      const vehicle = await this.prisma.vehicle.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
       if (!vehicle) throw new NotFoundException('Vehicle not found');
       await this.ensureVehicleTopics(entityId);
     }
@@ -102,13 +259,153 @@ export class NotificationsService {
     });
   }
 
+  async listCommunicationDeliveries(requestedLimit = 200) {
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 500)
+      : 200;
+    const documentInclude = {
+      select: {
+        id: true,
+        type: true,
+        consecutive: true,
+        customerWorksite: {
+          select: {
+            customer: { select: { name: true } },
+            worksite: { select: { name: true } },
+          },
+        },
+      },
+    } as const;
+    const [emails, whatsapps, legacyDocuments] = await Promise.all([
+      this.prisma.documentEmailDelivery.findMany({
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: { document: documentInclude },
+      }),
+      this.prisma.documentMessageDelivery.findMany({
+        where: { channel: NotificationChannel.WHATSAPP },
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: { document: documentInclude },
+      }),
+      this.prisma.document.findMany({
+        where: {
+          emailDeliveries: { none: {} },
+          OR: [
+            { customerDraftEmailedAt: { not: null } },
+            { customerFinalEmailedAt: { not: null } },
+          ],
+        },
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          ...documentInclude.select,
+          customerDraftEmailedAt: true,
+          customerFinalEmailedAt: true,
+          customerWorksite: {
+            select: {
+              customer: {
+                select: {
+                  name: true,
+                  email: true,
+                  documentsEmail: true,
+                },
+              },
+              worksite: { select: { name: true } },
+            },
+          },
+          files: {
+            where: {
+              fileType: { in: ['PHOTO_EVIDENCE', 'SIGNATURE_RECEIVED'] },
+            },
+            select: { displayName: true, originalName: true, fileType: true },
+          },
+        },
+      }),
+    ]);
+
+    const rows: any[] = [
+      ...emails.map((delivery) => ({
+        id: `email:${delivery.id}`,
+        channel: NotificationChannel.EMAIL,
+        status: delivery.status,
+        kind: delivery.kind,
+        recipient: delivery.email,
+        subject: delivery.subject,
+        attachments: this.jsonStringArray(delivery.attachmentNames),
+        sentAt: delivery.sentAt,
+        createdAt: delivery.createdAt,
+        error: delivery.error,
+        reference: this.documentReference(delivery.document),
+      })),
+      ...whatsapps.map((delivery) => ({
+        id: `whatsapp:${delivery.id}`,
+        channel: NotificationChannel.WHATSAPP,
+        status: delivery.status,
+        kind: delivery.kind,
+        recipient: delivery.phone,
+        subject:
+          `Copia de ${this.documentTypeLabel(delivery.document.type)} ${delivery.document.consecutive ?? ''}`.trim(),
+        attachments: [this.documentPdfName(delivery.document)],
+        sentAt: delivery.sentAt,
+        createdAt: delivery.createdAt,
+        error: delivery.error,
+        reference: this.documentReference(delivery.document),
+      })),
+    ];
+
+    for (const document of legacyDocuments) {
+      const recipient =
+        document.customerWorksite?.customer.documentsEmail ||
+        document.customerWorksite?.customer.email ||
+        'Correo del cliente';
+      const attachments = document.files.map(
+        (file, index) =>
+          file.displayName ||
+          file.originalName ||
+          `${file.fileType.toLowerCase()}-${index + 1}`,
+      );
+      for (const [kind, timestamp] of [
+        ['DRAFT', document.customerDraftEmailedAt],
+        ['FINAL', document.customerFinalEmailedAt],
+      ] as const) {
+        if (!timestamp) continue;
+        rows.push({
+          id: `legacy-email:${document.id}:${kind}`,
+          channel: NotificationChannel.EMAIL,
+          status: NotificationDeliveryStatus.SENT,
+          kind,
+          recipient,
+          subject:
+            `${this.documentTypeLabel(document.type)} ${document.consecutive ?? ''}`.trim(),
+          attachments,
+          sentAt: timestamp,
+          createdAt: timestamp,
+          error: null,
+          legacy: true,
+          reference: this.documentReference(document),
+        });
+      }
+    }
+
+    return rows
+      .sort(
+        (left, right) =>
+          new Date(right.createdAt).getTime() -
+          new Date(left.createdAt).getTime(),
+      )
+      .slice(0, limit);
+  }
+
   async listReminders(userId?: string) {
     const topics = await this.prisma.notificationTopic.findMany({
       where: {
         active: true,
-        ...(userId ? {
-          recipients: { some: { userId, user: { active: true } } },
-        } : {}),
+        ...(userId
+          ? {
+              recipients: { some: { userId, user: { active: true } } },
+            }
+          : {}),
       },
       include: {
         recipients: {
@@ -117,33 +414,75 @@ export class NotificationsService {
         },
       },
     });
-    const vehicleTopics = topics.filter((topic) => topic.entityType === NOTIFICATION_ENTITY.VEHICLE);
-    const maintenanceTopics = topics.filter((topic) => topic.entityType === NOTIFICATION_ENTITY.MAINTENANCE_ITEM);
-    const genericTopics = topics.filter((topic) =>
-      topic.entityType !== NOTIFICATION_ENTITY.VEHICLE && topic.entityType !== NOTIFICATION_ENTITY.MAINTENANCE_ITEM,
+    const vehicleTopics = topics.filter(
+      (topic) => topic.entityType === NOTIFICATION_ENTITY.VEHICLE,
     );
-    const [vehicles, items] = await Promise.all([
+    const maintenanceTopics = topics.filter(
+      (topic) => topic.entityType === NOTIFICATION_ENTITY.MAINTENANCE_ITEM,
+    );
+    const taskTopics = topics.filter(
+      (topic) => topic.entityType === NOTIFICATION_ENTITY.TASK,
+    );
+    const genericTopics = topics.filter(
+      (topic) =>
+        topic.entityType !== NOTIFICATION_ENTITY.VEHICLE &&
+        topic.entityType !== NOTIFICATION_ENTITY.MAINTENANCE_ITEM &&
+        topic.entityType !== NOTIFICATION_ENTITY.TASK,
+    );
+    const [
+      vehicles,
+      items,
+      tasks,
+      dueWarningHours,
+      overdueRepeatEnabled,
+      overdueRepeatIntervalHours,
+    ] = await Promise.all([
       this.prisma.vehicle.findMany({
-        where: { id: { in: vehicleTopics.map((topic) => topic.entityId) }, active: true },
+        where: {
+          id: { in: vehicleTopics.map((topic) => topic.entityId) },
+          active: true,
+        },
       }),
       this.prisma.maintenanceItem.findMany({
         where: {
-          id: { in: maintenanceTopics.map((topic) => topic.entityId) }, active: true,
-          plan: { active: true, OR: [{ asset: { active: true } }, { vehicle: { active: true } }] },
+          id: { in: maintenanceTopics.map((topic) => topic.entityId) },
+          active: true,
+          plan: {
+            active: true,
+            OR: [{ asset: { active: true } }, { vehicle: { active: true } }],
+          },
         },
         include: {
           plan: {
             include: {
               asset: { include: { sku: { select: { chargeType: true } } } },
-              vehicle: { include: { hourReadings: { orderBy: { hours: 'desc' }, take: 1 } } },
+              vehicle: {
+                include: {
+                  hourReadings: { orderBy: { hours: 'desc' }, take: 1 },
+                },
+              },
             },
           },
           completions: { orderBy: { completedAt: 'desc' }, take: 1 },
         },
       }),
+      taskTopics.length
+        ? this.prisma.task.findMany({
+            where: {
+              id: { in: taskTopics.map((topic) => topic.entityId) },
+              status: { not: 'DONE' },
+            },
+          })
+        : Promise.resolve([]),
+      this.settings.get<number>('tasks.due_warning_hours'),
+      this.settings.get<boolean>('tasks.overdue_repeat_enabled'),
+      this.settings.get<number>('tasks.overdue_repeat_interval_hours'),
     ]);
-    const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+    const vehicleById = new Map(
+      vehicles.map((vehicle) => [vehicle.id, vehicle]),
+    );
     const itemById = new Map(items.map((item) => [item.id, item]));
+    const taskById = new Map(tasks.map((task) => [task.id, task] as const));
     const reminders: any[] = topics.flatMap<any>((topic) => {
       if (topic.entityType === NOTIFICATION_ENTITY.VEHICLE) {
         const vehicle = vehicleById.get(topic.entityId);
@@ -153,6 +492,20 @@ export class NotificationsService {
         const item = itemById.get(topic.entityId);
         return item ? [this.maintenanceReminder(topic, item)] : [];
       }
+      if (topic.entityType === NOTIFICATION_ENTITY.TASK) {
+        const task = taskById.get(topic.entityId);
+        return task
+          ? [
+              this.taskReminder(
+                topic,
+                task,
+                dueWarningHours,
+                overdueRepeatEnabled,
+                overdueRepeatIntervalHours,
+              ),
+            ]
+          : [];
+      }
       if (genericTopics.some((candidate) => candidate.id === topic.id)) {
         return topic.dueAt ? [this.genericDateReminder(topic)] : [];
       }
@@ -161,13 +514,63 @@ export class NotificationsService {
     return reminders.sort((a, b) => a.sortValue - b.sortValue);
   }
 
+  private taskReminder(
+    topic: any,
+    task: any,
+    warningHours: number,
+    repeatEnabled: boolean,
+    repeatHours: number,
+  ) {
+    const dueAt = task.dueDate as Date | null;
+    const remainingHours = dueAt
+      ? (dueAt.getTime() - Date.now()) / 3_600_000
+      : Number.POSITIVE_INFINITY;
+    const status: ReminderStatus =
+      remainingHours < 0
+        ? 'OVERDUE'
+        : remainingHours <= warningHours
+          ? 'DUE'
+          : 'UPCOMING';
+    const overdueBucket =
+      dueAt && status === 'OVERDUE'
+        ? Math.floor(Math.max(0, -remainingHours) / Math.max(1, repeatHours))
+        : 0;
+    return {
+      topicId: topic.id,
+      entityType: topic.entityType,
+      entityId: task.id,
+      eventType: topic.eventType,
+      title: `Tarea: ${task.title}`,
+      message: dueAt
+        ? `${status === 'OVERDUE' ? 'La tarea está vencida' : `La tarea vence el ${this.formatDate(dueAt)}`}.`
+        : 'Tarea asignada sin fecha de vencimiento.',
+      link: this.appLink('/tasks'),
+      status,
+      dueAt,
+      remainingHours,
+      unit: 'HOURS',
+      sortValue: remainingHours,
+      occurrenceKey:
+        status === 'OVERDUE'
+          ? `overdue:${dueAt?.toISOString()}:${repeatEnabled ? overdueBucket : 'once'}`
+          : `due:${dueAt?.toISOString() ?? 'none'}`,
+      entity: { id: task.id, type: 'TASK', label: task.title },
+      recipients: this.mapRecipients(topic.recipients),
+    };
+  }
+
   async dispatchNotifications() {
-    const reminders = (await this.listReminders()).filter((reminder) => reminder.status !== 'UPCOMING');
-    let sent = 0; let skipped = 0; let failed = 0;
+    const reminders = (await this.listReminders()).filter(
+      (reminder) => reminder.status !== 'UPCOMING',
+    );
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
     for (const reminder of reminders) {
       for (const recipient of reminder.recipients) {
         const channels: NotificationChannel[] = [];
-        if (recipient.whatsappEnabled && recipient.phone) channels.push(NotificationChannel.WHATSAPP);
+        if (recipient.whatsappEnabled && recipient.phone)
+          channels.push(NotificationChannel.WHATSAPP);
         for (const channel of channels) {
           const result = await this.dispatchOne(reminder, recipient, channel);
           if (result === 'sent') sent += 1;
@@ -181,44 +584,82 @@ export class NotificationsService {
 
   private vehicleReminder(topic: any, vehicle: any) {
     const isSoat = topic.eventType === NOTIFICATION_EVENT.SOAT_EXPIRY;
-    const dueAt: Date | null = isSoat ? vehicle.soatVigencia : vehicle.tecnomecanicaVigencia;
+    const dueAt: Date | null = isSoat
+      ? vehicle.soatVigencia
+      : vehicle.tecnomecanicaVigencia;
     if (!dueAt) return [];
     const remainingDays = this.daysUntil(dueAt);
     const warningDays = this.vehicleWarningDays();
-    const status: ReminderStatus = remainingDays < 0 ? 'OVERDUE' : remainingDays <= warningDays ? 'DUE' : 'UPCOMING';
+    const status: ReminderStatus =
+      remainingDays < 0
+        ? 'OVERDUE'
+        : remainingDays <= warningDays
+          ? 'DUE'
+          : 'UPCOMING';
     const documentName = isSoat ? 'SOAT' : 'TECNOMECÁNICA';
-    return [{
-      topicId: topic.id, entityType: topic.entityType, entityId: vehicle.id, eventType: topic.eventType,
-      title: `${documentName} de ${vehicle.plate}`,
-      message: `${documentName} del vehículo ${vehicle.plate} ${status === 'OVERDUE' ? 'está vencido' : `vence en ${remainingDays} días`}.`,
-      status, dueAt, remainingDays, unit: 'DAYS', sortValue: remainingDays,
-      occurrenceKey: dueAt.toISOString().slice(0, 10),
-      entity: { id: vehicle.id, type: 'VEHICLE', label: vehicle.plate },
-      recipients: this.mapRecipients(topic.recipients),
-    }];
+    return [
+      {
+        topicId: topic.id,
+        entityType: topic.entityType,
+        entityId: vehicle.id,
+        eventType: topic.eventType,
+        title: `${documentName} de ${vehicle.plate}`,
+        message: `${documentName} del vehículo ${vehicle.plate} ${status === 'OVERDUE' ? 'está vencido' : `vence en ${remainingDays} días`}.`,
+        status,
+        dueAt,
+        remainingDays,
+        unit: 'DAYS',
+        sortValue: remainingDays,
+        occurrenceKey: dueAt.toISOString().slice(0, 10),
+        entity: { id: vehicle.id, type: 'VEHICLE', label: vehicle.plate },
+        recipients: this.mapRecipients(topic.recipients),
+      },
+    ];
   }
 
   private maintenanceReminder(topic: any, item: any) {
     const subject = item.plan.asset ?? item.plan.vehicle;
-    const label = item.plan.asset?.publicCode ?? item.plan.vehicle?.plate ?? 'EQUIPO';
+    const label =
+      item.plan.asset?.publicCode ?? item.plan.vehicle?.plate ?? 'EQUIPO';
     if (item.plan.asset?.sku.chargeType === 'DAY') {
-      const cycleStart = item.completions[0]?.completedAt ?? item.baselineDate ?? item.createdAt;
-      const dueAt = this.addCalendarDays(new Date(cycleStart), Number(item.intervalDays));
+      const cycleStart =
+        item.completions[0]?.completedAt ?? item.baselineDate ?? item.createdAt;
+      const dueAt = this.addCalendarDays(
+        new Date(cycleStart),
+        Number(item.intervalDays),
+      );
       const remainingDays = this.daysUntil(dueAt);
-      const status: ReminderStatus = remainingDays < 0 ? 'OVERDUE'
-        : remainingDays <= Number(item.warningDays) ? 'DUE' : 'UPCOMING';
+      const status: ReminderStatus =
+        remainingDays < 0
+          ? 'OVERDUE'
+          : remainingDays <= Number(item.warningDays)
+            ? 'DUE'
+            : 'UPCOMING';
       return {
-        topicId: topic.id, entityType: topic.entityType, entityId: item.id, eventType: topic.eventType,
-        itemId: item.id, planId: item.planId, planName: item.plan.name, name: item.name,
+        topicId: topic.id,
+        entityType: topic.entityType,
+        entityId: item.id,
+        eventType: topic.eventType,
+        itemId: item.id,
+        planId: item.planId,
+        planName: item.plan.name,
+        name: item.name,
         title: `Mantenimiento de ${label}`,
         message: `${item.name}: vence el ${this.formatDate(dueAt)}.${item.instructions ? ` ${item.instructions}` : ''}`,
-        instructions: item.instructions, intervalDays: Number(item.intervalDays), dueAt,
-        remainingDays, unit: 'DAYS', status, sortValue: remainingDays,
+        instructions: item.instructions,
+        intervalDays: Number(item.intervalDays),
+        dueAt,
+        remainingDays,
+        unit: 'DAYS',
+        status,
+        sortValue: remainingDays,
         occurrenceKey: dueAt.toISOString().slice(0, 10),
         entity: { id: subject.id, type: 'ASSET', label },
         asset: {
-          id: item.plan.asset.id, publicCode: item.plan.asset.publicCode,
-          serialOrEngine: item.plan.asset.serialOrEngine, description: item.plan.asset.description,
+          id: item.plan.asset.id,
+          publicCode: item.plan.asset.publicCode,
+          serialOrEngine: item.plan.asset.serialOrEngine,
+          description: item.plan.asset.description,
         },
         recipients: this.mapRecipients(topic.recipients),
       };
@@ -227,25 +668,54 @@ export class NotificationsService {
     const currentHours = item.plan.asset
       ? Number(item.plan.asset.hourMeter)
       : Number(item.plan.vehicle.hourReadings[0]?.hours ?? 0);
-    const cycleStartHours = Number(item.completions[0]?.completedAtHours ?? item.baselineHours);
+    const cycleStartHours = Number(
+      item.completions[0]?.completedAtHours ?? item.baselineHours,
+    );
     const dueHours = cycleStartHours + Number(item.intervalHours);
     const remainingHours = dueHours - currentHours;
-    const status: ReminderStatus = remainingHours <= 0 ? 'OVERDUE'
-      : remainingHours <= Number(item.warningHours) ? 'DUE' : 'UPCOMING';
+    const status: ReminderStatus =
+      remainingHours <= 0
+        ? 'OVERDUE'
+        : remainingHours <= Number(item.warningHours)
+          ? 'DUE'
+          : 'UPCOMING';
     return {
-      topicId: topic.id, entityType: topic.entityType, entityId: item.id, eventType: topic.eventType,
-      itemId: item.id, planId: item.planId, planName: item.plan.name, name: item.name,
+      topicId: topic.id,
+      entityType: topic.entityType,
+      entityId: item.id,
+      eventType: topic.eventType,
+      itemId: item.id,
+      planId: item.planId,
+      planName: item.plan.name,
+      name: item.name,
       title: `Mantenimiento de ${label}`,
       message: `${item.name}: vence a las ${dueHours} h; horómetro actual ${currentHours} h.${item.instructions ? ` ${item.instructions}` : ''}`,
-      instructions: item.instructions, intervalHours: Number(item.intervalHours), currentHours,
-      cycleStartHours, dueHours, remainingHours, unit: 'HOURS', status, sortValue: remainingHours,
+      instructions: item.instructions,
+      intervalHours: Number(item.intervalHours),
+      currentHours,
+      cycleStartHours,
+      dueHours,
+      remainingHours,
+      unit: 'HOURS',
+      status,
+      sortValue: remainingHours,
       occurrenceKey: dueHours.toFixed(2),
-      entity: { id: subject.id, type: item.plan.asset ? 'ASSET' : 'VEHICLE', label },
-      asset: item.plan.asset ? {
-        id: item.plan.asset.id, publicCode: item.plan.asset.publicCode,
-        serialOrEngine: item.plan.asset.serialOrEngine, description: item.plan.asset.description,
-      } : undefined,
-      vehicle: item.plan.vehicle ? { id: item.plan.vehicle.id, plate: item.plan.vehicle.plate } : undefined,
+      entity: {
+        id: subject.id,
+        type: item.plan.asset ? 'ASSET' : 'VEHICLE',
+        label,
+      },
+      asset: item.plan.asset
+        ? {
+            id: item.plan.asset.id,
+            publicCode: item.plan.asset.publicCode,
+            serialOrEngine: item.plan.asset.serialOrEngine,
+            description: item.plan.asset.description,
+          }
+        : undefined,
+      vehicle: item.plan.vehicle
+        ? { id: item.plan.vehicle.id, plate: item.plan.vehicle.plate }
+        : undefined,
       recipients: this.mapRecipients(topic.recipients),
     };
   }
@@ -254,7 +724,12 @@ export class NotificationsService {
     const dueAt = topic.dueAt as Date;
     const remainingDays = this.daysUntil(dueAt);
     const warningDays = topic.warningDays ?? 30;
-    const status: ReminderStatus = remainingDays < 0 ? 'OVERDUE' : remainingDays <= warningDays ? 'DUE' : 'UPCOMING';
+    const status: ReminderStatus =
+      remainingDays < 0
+        ? 'OVERDUE'
+        : remainingDays <= warningDays
+          ? 'DUE'
+          : 'UPCOMING';
     const variables = {
       entityId: topic.entityId,
       dueDate: dueAt.toISOString().slice(0, 10),
@@ -262,82 +737,146 @@ export class NotificationsService {
       status,
     };
     return {
-      topicId: topic.id, entityType: topic.entityType, entityId: topic.entityId, eventType: topic.eventType,
-      title: this.renderTemplate(topic.titleTemplate ?? topic.eventType, variables),
-      message: this.renderTemplate(topic.messageTemplate ?? `Vence el {{dueDate}}`, variables),
-      status, dueAt, remainingDays, unit: 'DAYS', sortValue: remainingDays,
+      topicId: topic.id,
+      entityType: topic.entityType,
+      entityId: topic.entityId,
+      eventType: topic.eventType,
+      title: this.renderTemplate(
+        topic.titleTemplate ?? topic.eventType,
+        variables,
+      ),
+      message: this.renderTemplate(
+        topic.messageTemplate ?? `Vence el {{dueDate}}`,
+        variables,
+      ),
+      status,
+      dueAt,
+      remainingDays,
+      unit: 'DAYS',
+      sortValue: remainingDays,
       occurrenceKey: dueAt.toISOString().slice(0, 10),
-      entity: { id: topic.entityId, type: topic.entityType, label: topic.entityId },
+      entity: {
+        id: topic.entityId,
+        type: topic.entityType,
+        label: topic.entityId,
+      },
       recipients: this.mapRecipients(topic.recipients),
     };
   }
 
-  private async dispatchOne(reminder: any, recipient: any, channel: NotificationChannel) {
-    const key = { topicId: reminder.topicId, userId: recipient.userId, occurrenceKey: reminder.occurrenceKey, channel };
+  private async dispatchOne(
+    reminder: any,
+    recipient: any,
+    channel: NotificationChannel,
+  ) {
+    const key = {
+      topicId: reminder.topicId,
+      userId: recipient.userId,
+      occurrenceKey: reminder.occurrenceKey,
+      channel,
+    };
     const existing = await this.prisma.notificationDelivery.findUnique({
       where: { topicId_userId_occurrenceKey_channel: key },
     });
     if (existing?.status === NotificationDeliveryStatus.SENT) return 'skipped';
-    if (existing?.status === NotificationDeliveryStatus.SENDING && existing.updatedAt < new Date(Date.now() - 600000)) {
+    if (
+      existing?.status === NotificationDeliveryStatus.SENDING &&
+      existing.updatedAt < new Date(Date.now() - 600000)
+    ) {
       await this.prisma.notificationDelivery.updateMany({
-        where: { id: existing.id, status: NotificationDeliveryStatus.SENDING, updatedAt: existing.updatedAt },
-        data: { status: NotificationDeliveryStatus.FAILED, error: 'Stale delivery claim recovered' },
+        where: {
+          id: existing.id,
+          status: NotificationDeliveryStatus.SENDING,
+          updatedAt: existing.updatedAt,
+        },
+        data: {
+          status: NotificationDeliveryStatus.FAILED,
+          error: 'Stale delivery claim recovered',
+        },
       });
     }
     const delivery = await this.prisma.notificationDelivery.upsert({
-      where: { topicId_userId_occurrenceKey_channel: key }, create: key, update: {},
+      where: { topicId_userId_occurrenceKey_channel: key },
+      create: key,
+      update: {},
     });
     const claimed = await this.prisma.notificationDelivery.updateMany({
-      where: { id: delivery.id, status: { in: [NotificationDeliveryStatus.PENDING, NotificationDeliveryStatus.FAILED] } },
+      where: {
+        id: delivery.id,
+        status: {
+          in: [
+            NotificationDeliveryStatus.PENDING,
+            NotificationDeliveryStatus.FAILED,
+          ],
+        },
+      },
       data: { status: NotificationDeliveryStatus.SENDING, error: null },
     });
     if (!claimed.count) return 'skipped';
     const message: NotificationMessage = {
       title: reminder.title,
       body: reminder.message,
+      link: reminder.link,
       recipientName: recipient.name,
     };
     try {
-      const response = channel === NotificationChannel.WHATSAPP
-        ? await this.transport.sendWhatsapp(recipient.phone, message)
-        : await this.transport.sendEmail(recipient.email, message);
-      const providerMessageId = 'providerMessageId' in response
-        ? response.providerMessageId
-        : undefined;
+      const response =
+        channel === NotificationChannel.WHATSAPP
+          ? await this.transport.sendWhatsapp(recipient.phone, message)
+          : await this.transport.sendEmail(recipient.email, message);
+      const providerMessageId =
+        'providerMessageId' in response ? response.providerMessageId : undefined;
       await this.prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: response.sent
           ? channel === NotificationChannel.WHATSAPP && providerMessageId
             ? {
-              status: NotificationDeliveryStatus.ACCEPTED,
-              providerMessageId,
-              sentAt: new Date(),
-              error: null,
-            }
-            : { status: NotificationDeliveryStatus.SENT, sentAt: new Date(), error: null }
-          : { status: NotificationDeliveryStatus.FAILED, error: response.reason },
+                status: NotificationDeliveryStatus.ACCEPTED,
+                providerMessageId,
+                sentAt: new Date(),
+                error: null,
+              }
+            : {
+                status: NotificationDeliveryStatus.SENT,
+                sentAt: new Date(),
+                error: null,
+              }
+          : {
+              status: NotificationDeliveryStatus.FAILED,
+              error: response.reason,
+            },
       });
       return response.sent ? 'sent' : 'failed';
     } catch (error) {
       await this.prisma.notificationDelivery.update({
         where: { id: delivery.id },
-        data: { status: NotificationDeliveryStatus.FAILED, error: this.errorMessage(error) },
+        data: {
+          status: NotificationDeliveryStatus.FAILED,
+          error: this.errorMessage(error),
+        },
       });
       return 'failed';
     }
   }
 
-  private async replaceRecipients(topicId: string, recipients: NotificationRecipientDto[], db: DbClient) {
+  private async replaceRecipients(
+    topicId: string,
+    recipients: NotificationRecipientDto[],
+    db: DbClient,
+  ) {
     const data = this.recipientData(recipients);
     await db.notificationRecipient.deleteMany({ where: { topicId } });
     if (data.length) {
-      await db.notificationRecipient.createMany({ data: data.map((recipient) => ({ topicId, ...recipient })) });
+      await db.notificationRecipient.createMany({
+        data: data.map((recipient) => ({ topicId, ...recipient })),
+      });
     }
   }
 
   private recipientData(recipients: NotificationRecipientDto[]) {
     const ids = recipients.map((recipient) => recipient.userId);
-    if (new Set(ids).size !== ids.length) throw new BadRequestException('Recipients cannot be duplicated');
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException('Recipients cannot be duplicated');
     return recipients.map((recipient) => ({
       userId: recipient.userId,
       emailEnabled: false,
@@ -346,34 +885,94 @@ export class NotificationsService {
     }));
   }
 
-  private async assertRecipients(recipients: NotificationRecipientDto[], db: DbClient) {
+  private async assertRecipients(
+    recipients: NotificationRecipientDto[],
+    db: DbClient,
+  ) {
     this.recipientData(recipients);
     const ids = [...new Set(recipients.map((recipient) => recipient.userId))];
-    const count = await db.user.count({ where: { id: { in: ids }, active: true } });
-    if (count !== ids.length) throw new BadRequestException('Every recipient must be an active user');
+    const count = await db.user.count({
+      where: { id: { in: ids }, active: true },
+    });
+    if (count !== ids.length)
+      throw new BadRequestException('Every recipient must be an active user');
   }
 
   private async assertTopic(id: string) {
-    if (!await this.prisma.notificationTopic.findUnique({ where: { id }, select: { id: true } })) {
+    if (
+      !(await this.prisma.notificationTopic.findUnique({
+        where: { id },
+        select: { id: true },
+      }))
+    ) {
       throw new NotFoundException('Notification topic not found');
     }
   }
 
   private topicRecipientsInclude() {
-    return { recipients: { include: { user: { select: { id: true, email: true, active: true, employee: true } } } } } as const;
+    return {
+      recipients: {
+        include: {
+          user: {
+            select: { id: true, email: true, active: true, employee: true },
+          },
+        },
+      },
+    } as const;
   }
 
   private mapRecipients(recipients: any[]) {
     return recipients.map((recipient) => ({
       userId: recipient.userId,
       name: recipient.user.employee
-        ? `${recipient.user.employee.name} ${recipient.user.employee.lastName}`.trim() : recipient.user.email,
+        ? `${recipient.user.employee.name} ${recipient.user.employee.lastName}`.trim()
+        : recipient.user.email,
       email: recipient.user.email,
       phone: recipient.user.employee?.phone ?? null,
       emailEnabled: recipient.emailEnabled,
       smsEnabled: recipient.smsEnabled,
       whatsappEnabled: recipient.whatsappEnabled,
     }));
+  }
+
+  private documentTypeLabel(type: string) {
+    if (type === 'REMISSION') return 'Remisión';
+    if (type === 'RETURN') return 'Devolución';
+    return 'Documento';
+  }
+
+  private documentPdfName(document: {
+    type: string;
+    consecutive: string | null;
+  }) {
+    const prefix = document.type === 'RETURN' ? 'devolucion' : 'remision';
+    return `${prefix}-${document.consecutive ?? 'documento'}.pdf`;
+  }
+
+  private documentReference(document: {
+    id: string;
+    type: string;
+    consecutive: string | null;
+    customerWorksite: {
+      customer: { name: string } | null;
+      worksite: { name: string } | null;
+    } | null;
+  }) {
+    return {
+      documentId: document.id,
+      documentType: document.type,
+      number: document.consecutive,
+      label: `${this.documentTypeLabel(document.type)} ${document.consecutive ?? document.id.slice(0, 8)}`,
+      customer: document.customerWorksite?.customer?.name ?? null,
+      worksite: document.customerWorksite?.worksite?.name ?? null,
+      href: `/inventory/ledger/document/${document.id}`,
+    };
+  }
+
+  private jsonStringArray(value: Prisma.JsonValue) {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : [];
   }
 
   private vehicleWarningDays() {
@@ -383,8 +982,16 @@ export class NotificationsService {
 
   private daysUntil(value: Date) {
     const today = new Date();
-    const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    const due = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+    const start = Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    );
+    const due = Date.UTC(
+      value.getUTCFullYear(),
+      value.getUTCMonth(),
+      value.getUTCDate(),
+    );
     return Math.ceil((due - start) / 86400000);
   }
 
@@ -403,11 +1010,21 @@ export class NotificationsService {
     }).format(value);
   }
 
+  private appLink(path: string) {
+    const base = process.env.PUBLIC_WEB_URL?.trim()?.replace(/\/+$/, '');
+    return base ? `${base}${path}` : path;
+  }
+
   private renderTemplate(template: string, variables: Record<string, string>) {
-    return template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key: string) => variables[key] ?? match);
+    return template.replace(
+      /\{\{([a-zA-Z0-9_]+)\}\}/g,
+      (match, key: string) => variables[key] ?? match,
+    );
   }
 
   private errorMessage(error: unknown) {
-    return (error instanceof Error ? error.message : 'Unknown notification error').slice(0, 500);
+    return (
+      error instanceof Error ? error.message : 'Unknown notification error'
+    ).slice(0, 500);
   }
 }

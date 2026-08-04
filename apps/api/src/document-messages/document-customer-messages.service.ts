@@ -29,10 +29,14 @@ export class DocumentCustomerMessagesService {
         type: true,
         consecutive: true,
         recipientPhone: true,
+        recipientPhones: true,
         customerWorksite: {
           select: {
             customer: {
               select: { name: true, phone: true },
+            },
+            worksite: {
+              select: { phone: true },
             },
           },
         },
@@ -42,8 +46,12 @@ export class DocumentCustomerMessagesService {
 
     const phones = new Set(
       [
+        ...document.recipientPhones.map((phone) =>
+          normalizeStoredColombianPhone(phone),
+        ),
         normalizeStoredColombianPhone(document.recipientPhone),
         normalizeStoredColombianPhone(document.customerWorksite?.customer.phone),
+        normalizeStoredColombianPhone(document.customerWorksite?.worksite.phone),
       ].filter((phone): phone is string => Boolean(phone)),
     );
     if (!phones.size) {

@@ -30,6 +30,7 @@ type FileUploadModalProps = {
   categories: FileCategoryOption[];
   onClose: () => void;
   onUploaded: () => Promise<void> | void;
+  mode?: 'generic' | 'document-evidence';
 };
 
 const ACCEPTED_FILE_TYPES = [
@@ -44,6 +45,8 @@ const ACCEPTED_FILE_TYPES = [
   'text/plain',
   'text/csv',
 ].join(',');
+const EVIDENCE_FILE_TYPES = ['image/png', 'image/jpeg', 'image/webp'].join(',');
+const MAX_EVIDENCE_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function FileUploadModal({
   opened,
@@ -52,6 +55,7 @@ export default function FileUploadModal({
   categories,
   onClose,
   onUploaded,
+  mode = 'generic',
 }: FileUploadModalProps) {
   const [category, setCategory] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
@@ -80,20 +84,39 @@ export default function FileUploadModal({
   };
 
   const upload = async () => {
-    if (!selectedFiles.length || !category) return;
+    const isEvidenceMode = mode === 'document-evidence';
+    if (!selectedFiles.length || (!isEvidenceMode && !category)) return;
+    if (
+      isEvidenceMode &&
+      selectedFiles.some((file) => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type))
+    ) {
+      setError('Solo puedes anexar fotografías PNG, JPG o WEBP.');
+      return;
+    }
+    if (isEvidenceMode && selectedFiles.some((file) => file.size > MAX_EVIDENCE_FILE_SIZE)) {
+      setError('Cada fotografía debe pesar máximo 10 MB.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const formData = new FormData();
-      selectedFiles.forEach((file) => formData.append('files', file));
-      formData.append('category', category);
-      if (displayName.trim()) formData.append('displayName', displayName.trim());
-      if (expiresAt) formData.append('expiresAt', expiresAt);
+      selectedFiles.forEach((file) =>
+        formData.append(isEvidenceMode ? 'photos' : 'files', file),
+      );
+      if (!isEvidenceMode && category) formData.append('category', category);
+      if (!isEvidenceMode && displayName.trim()) formData.append('displayName', displayName.trim());
+      if (!isEvidenceMode && expiresAt) formData.append('expiresAt', expiresAt);
 
-      await api(`/files/entities/${entityType}/${entityId}`, {
+      await api(
+        isEvidenceMode
+          ? `/files/documents/${entityId}/evidence`
+          : `/files/entities/${entityType}/${entityId}`,
+        {
         method: 'POST',
         body: formData,
-      });
+        },
+      );
       await onUploaded();
       reset();
       onClose();
@@ -112,7 +135,7 @@ export default function FileUploadModal({
     <Modal
       opened={opened}
       onClose={close}
-      title="Subir documentos"
+      title={mode === 'document-evidence' ? 'Anexar fotografías' : 'Subir documentos'}
       size="lg"
       centered
       closeOnClickOutside={!saving}
@@ -120,16 +143,22 @@ export default function FileUploadModal({
     >
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Elige los archivos y completa la información con la que aparecerán en el registro.
+          {mode === 'document-evidence'
+            ? 'Selecciona las fotografías que faltaron en el borrador.'
+            : 'Elige los archivos y completa la información con la que aparecerán en el registro.'}
         </Text>
 
         {error ? <Alert color="red">{error}</Alert> : null}
 
         <FileInput
-          label="Archivos"
-          placeholder="Selecciona uno o varios archivos"
-          description="PDF, imágenes, Word, Excel, TXT o CSV. Máximo 100 MB por archivo."
-          accept={ACCEPTED_FILE_TYPES}
+          label={mode === 'document-evidence' ? 'Fotografías' : 'Archivos'}
+          placeholder={mode === 'document-evidence' ? 'Selecciona una o varias fotos' : 'Selecciona uno o varios archivos'}
+          description={
+            mode === 'document-evidence'
+              ? 'PNG, JPG o WEBP. Máximo 10 MB por fotografía.'
+              : 'PDF, imágenes, Word, Excel, TXT o CSV. Máximo 100 MB por archivo.'
+          }
+          accept={mode === 'document-evidence' ? EVIDENCE_FILE_TYPES : ACCEPTED_FILE_TYPES}
           multiple
           value={selectedFiles}
           onChange={setSelectedFiles}
@@ -138,15 +167,15 @@ export default function FileUploadModal({
           required
         />
 
-        <TextInput
+        {mode === 'generic' ? <TextInput
           label="Nombre visible"
           description="Opcional. Si lo dejas vacío se usará el nombre original del archivo."
           placeholder="Ej. Manual de operación"
           value={displayName}
           onChange={(event) => setDisplayName(event.currentTarget.value)}
-        />
+        /> : null}
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        {mode === 'generic' ? <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Select
             label="Categoría"
             data={categories}
@@ -161,7 +190,7 @@ export default function FileUploadModal({
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.currentTarget.value)}
           />
-        </SimpleGrid>
+        </SimpleGrid> : null}
 
         {selectedFiles.length ? (
           <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
@@ -177,9 +206,11 @@ export default function FileUploadModal({
             leftSection={<IconUpload size={16} />}
             onClick={upload}
             loading={saving}
-            disabled={!selectedFiles.length || !category}
+            disabled={!selectedFiles.length || (mode === 'generic' && !category)}
           >
-            Subir archivo{selectedFiles.length === 1 ? '' : 's'}
+            {mode === 'document-evidence'
+              ? `Anexar foto${selectedFiles.length === 1 ? '' : 's'}`
+              : `Subir archivo${selectedFiles.length === 1 ? '' : 's'}`}
           </Button>
         </Group>
       </Stack>

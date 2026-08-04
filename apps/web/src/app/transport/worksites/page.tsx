@@ -38,6 +38,7 @@ import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
 import TableRowActions from '@/components/TableRowActions';
 import { api, ApiError } from '@/lib/api';
+import OpenInMapsButton from '@/components/worksites/OpenInMapsButton';
 
 type Customer = {
   id: string;
@@ -58,6 +59,8 @@ type WorksiteRow = {
     id: string;
     name: string;
     address: string | null;
+    contactName: string | null;
+    phone: string | null;
     active: boolean;
   };
 };
@@ -66,6 +69,8 @@ type WorksiteForm = {
   customerId: string | null;
   name: string;
   address: string;
+  contactName: string;
+  phone: string;
   department: string | null;
   city: string | null;
   alias: string;
@@ -77,6 +82,8 @@ const emptyForm: WorksiteForm = {
   customerId: null,
   name: '',
   address: '',
+  contactName: '',
+  phone: '',
   department: null,
   city: null,
   alias: '',
@@ -307,6 +314,8 @@ export default function WorksitesPage() {
           row.alias,
           row.customer.name,
           row.worksite.address,
+          row.worksite.contactName,
+          row.worksite.phone,
         ]
           .filter(Boolean)
           .some((value) => value!.toLocaleLowerCase('es').includes(term));
@@ -342,6 +351,8 @@ export default function WorksitesPage() {
       customerId: row.customer.id,
       name: row.worksite.name ?? '',
       address: row.worksite.address ?? '',
+      contactName: row.worksite.contactName ?? '',
+      phone: row.worksite.phone ?? '',
       department: null,
       city: null,
       alias: row.alias ?? '',
@@ -424,6 +435,8 @@ export default function WorksitesPage() {
             customerId: form.customerId,
             name: form.name.trim().toUpperCase(),
             address: form.address.trim() || undefined,
+            contactName: form.contactName.trim() || undefined,
+            phone: form.phone.trim() || undefined,
             alias: form.alias.trim().toUpperCase() || undefined,
             active: form.active,
             worksiteActive: form.worksiteActive,
@@ -436,6 +449,8 @@ export default function WorksitesPage() {
             customerId: form.customerId,
             name: form.name.trim().toUpperCase(),
             address: form.address.trim() || undefined,
+            contactName: form.contactName.trim() || undefined,
+            phone: form.phone.trim() || undefined,
             alias: form.alias.trim().toUpperCase() || undefined,
             active: true,
           },
@@ -859,6 +874,28 @@ export default function WorksitesPage() {
                 }}
               />
 
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <TextInput
+                  label="Encargado en obra"
+                  placeholder="Nombre de la persona de contacto"
+                  value={form.contactName}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, contactName: value }));
+                  }}
+                />
+                <TextInput
+                  label="Teléfono en obra"
+                  placeholder="Número de contacto"
+                  inputMode="tel"
+                  value={form.phone}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, phone: value }));
+                  }}
+                />
+              </SimpleGrid>
+
               <Group justify="space-between" align="flex-start" gap="sm">
                 <Button
                   variant="default"
@@ -954,17 +991,7 @@ export default function WorksitesPage() {
                       >
                         Conservar escrita
                       </Button>
-                      <Button
-                        size="xs"
-                        variant="default"
-                        component="a"
-                        href={getGoogleMapsSearchUrl(addressValidation)}
-                        target="_blank"
-                        rel="noreferrer"
-                        leftSection={<IconExternalLink size={14} />}
-                      >
-                        Abrir en Maps
-                      </Button>
+                      <OpenInMapsButton href={getGoogleMapsSearchUrl(addressValidation)} />
                       <Button
                         size="xs"
                         variant="light"

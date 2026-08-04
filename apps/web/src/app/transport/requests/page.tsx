@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
-  Autocomplete,
   Badge,
   Button,
   Checkbox,
@@ -48,21 +47,10 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import WarehouseSelect from '@/components/WarehouseSelect';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
-
-type CatalogSku = {
-  skuId: string;
-  name: string;
-  controlType: 'BULK' | 'SERIAL';
-};
-
-type CatalogAsset = {
-  assetId: string;
-  serialOrEngine: string | null;
-  skuId: string | null;
-};
 
 type Employee = {
   id: string;
@@ -78,11 +66,16 @@ type Employee = {
 const getEmployeeFullName = (employee: Pick<Employee, 'name' | 'lastName'>) =>
   `${employee.name} ${employee.lastName ?? ''}`.trim();
 
-type Customer = { id: string; name: string };
+type Customer = { id: string; name: string; phone?: string | null };
 type CustomerWorksite = {
   id: string;
   alias: string | null;
-  worksite: { id: string; name: string; address: string | null };
+  worksite: {
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+  };
 };
 
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
@@ -113,23 +106,11 @@ const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_PHOTO_COUNT = 12;
 const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
-type PrincipalCatalogEntry = {
-  key: string;
-  label: string;
-  type: 'bulk' | 'serial';
-  skuName?: string;
-  skuId?: string;
-  assetId?: string;
-  ownerWarehouseId: string;
-  quantity?: number;
-  serial?: string | null;
-};
-
 type GenerateFieldErrors = {
   customerId?: string;
   docDate?: string;
   customerWorksiteId?: string;
-  recipientPhone?: string;
+  recipientPhones?: string;
   driverId?: string;
 };
 
@@ -157,6 +138,7 @@ type RequestDocumentDetail = {
   docDate: string;
   notes: string | null;
   recipientPhone?: string | null;
+  recipientPhones?: string[];
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
     id: string;
@@ -198,7 +180,10 @@ type SkuOption = {
   category?: string | null;
 };
 
-type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
+type ResolveInventoryByOwner = Record<
+  string,
+  { bulk: InventoryBulk[]; serial: InventorySerial[] }
+>;
 
 type CreateSerializedAssetResponse = {
   asset: {
@@ -210,7 +195,6 @@ type CreateSerializedAssetResponse = {
   };
 };
 const WAREHOUSES_CACHE_KEY = 'requests.warehouses.v1';
-const PRINCIPAL_TAGS_CACHE_KEY = 'requests.principalTags.v1';
 
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
@@ -289,6 +273,14 @@ function normalizeQuantityInput(value: string | number, fallback = 1) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeLocalWhatsappPhone(value?: string | null) {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  if (/^\d{10}$/.test(digits)) return digits;
+  if (/^57\d{10}$/.test(digits)) return digits.slice(2);
+  return null;
+}
+
 function parseNotes(notes: string | null) {
   if (!notes) return {};
   const parts = notes.split('|').map((value) => value.trim());
@@ -302,6 +294,7 @@ function parseNotes(notes: string | null) {
     deliveryMode: map.get('entrega') ?? '',
     vehicleId: map.get('vehículo') ?? '',
     driverId: map.get('conductor') ?? '',
+    receiverId: map.get('recibe') ?? '',
     dispatcherId: map.get('despachador') ?? '',
   };
 }
@@ -433,7 +426,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [recipientPhone, setRecipientPhone] = useState('');
+  const [additionalRecipientPhones, setAdditionalRecipientPhones] = useState<string[]>([]);
+  const [recipientPhoneDraft, setRecipientPhoneDraft] = useState('');
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
@@ -452,10 +446,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [onSiteItemSelect, setOnSiteItemSelect] = useState<string | null>(null);
   const [freeTagInput, setFreeTagInput] = useState('');
-  const [freeQtyInput, setFreeQtyInput] = useState<number | ''>('');
   const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
-  const [principalCatalog, setPrincipalCatalog] = useState<PrincipalCatalogEntry[]>([]);
-  const [loadingPrincipalTags, setLoadingPrincipalTags] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -498,9 +489,11 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
   const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
+  const [alternateSourceDocument, setAlternateSourceDocument] = useState<EvidencePhotoDraft | null>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const alternateSourceDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
@@ -514,18 +507,16 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
   const isAlternateOwnerMode = sourceMode === 'warehouse' && sourceOwnerWarehouse?.type === 'ALLY';
   const useManualWarehouseCapture = sourceMode === 'warehouse' && isAlternateOwnerMode;
+  const requiresAlternateSourceDocument =
+    isDriverRole && docType === 'REMISSION' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
+      warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       warehouses.find((warehouse) => warehouse.name.trim().toUpperCase() === 'BODEGA PRINCIPAL') ??
       warehouses.find((warehouse) => warehouse.name.toUpperCase().includes('PRINCIPAL')) ??
-      warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       null,
     [warehouses],
   );
-  const ownerWarehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.type === 'ALLY' ? `${warehouse.name} (Alterna)` : warehouse.name,
-  }));
   const worksiteOptions = worksites.map((item) => ({
     value: item.id,
     label: item.alias ? `${item.alias} · ${item.worksite.name}` : item.worksite.name,
@@ -601,31 +592,42 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   }, [onSiteItemOptions, warehouses]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
+  const defaultWhatsappRecipients = useMemo(
+    () => [
+      {
+        key: 'worksite',
+        label: 'Encargado de obra',
+        phone: normalizeLocalWhatsappPhone(selectedWorksite?.worksite.phone),
+      },
+      {
+        key: 'customer',
+        label: 'Cliente',
+        phone: normalizeLocalWhatsappPhone(selectedCustomer?.phone),
+      },
+    ],
+    [selectedCustomer?.phone, selectedWorksite?.worksite.phone],
+  );
+  const defaultWhatsappPhones = useMemo(
+    () => defaultWhatsappRecipients
+      .map((recipient) => recipient.phone)
+      .filter((phone): phone is string => Boolean(phone)),
+    [defaultWhatsappRecipients],
+  );
+  const manualWhatsappPhones = useMemo(
+    () => additionalRecipientPhones.filter(
+      (phone) => !defaultWhatsappPhones.includes(phone),
+    ),
+    [additionalRecipientPhones, defaultWhatsappPhones],
+  );
+  const whatsappRecipientPhones = useMemo(
+    () => [...new Set([...defaultWhatsappPhones, ...additionalRecipientPhones])],
+    [additionalRecipientPhones, defaultWhatsappPhones],
+  );
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
-  const alternateTagCatalog = useMemo(() => {
-    if (!isAlternateOwnerMode) return [] as Array<{ label: string; type: 'bulk' | 'serial' }>;
-    const byLabel = new Map<string, { label: string; type: 'bulk' | 'serial' }>();
-    principalCatalog.forEach((entry) => {
-      const rawLabel =
-        entry.type === 'serial'
-          ? entry.skuName?.trim() || entry.label.trim()
-          : entry.label.trim();
-      if (!rawLabel) return;
-      const key = rawLabel.toUpperCase();
-      if (!byLabel.has(key)) {
-        byLabel.set(key, { label: rawLabel, type: entry.type });
-      }
-    });
-    return [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [isAlternateOwnerMode, principalCatalog]);
-  const alternateTagMatch = useMemo(() => {
-    if (!isAlternateOwnerMode) return null;
-    const typed = freeTagInput.trim().toUpperCase();
-    if (!typed) return null;
-    return alternateTagCatalog.find((entry) => entry.label.toUpperCase() === typed) ?? null;
-  }, [isAlternateOwnerMode, freeTagInput, alternateTagCatalog]);
+  const customerSignatureLabel =
+    docType === 'RETURN' ? 'Firma de quien entrega' : 'Firma de recibido';
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.name ?? '-';
   const effectiveSourceWorksiteId =
@@ -644,6 +646,21 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       return skuType === 'SERIAL';
     }
     return false;
+  };
+  const getResolveSkuOptions = (ownerWarehouseId?: string | null) => {
+    if (!ownerWarehouseId) return [];
+    const inventory = resolveInventoryByOwner[ownerWarehouseId];
+    if (!inventory) return [];
+    const availableSkuIds = new Set<string>();
+    inventory.bulk.forEach((item) => {
+      if (item.quantity > 0) availableSkuIds.add(item.skuId);
+    });
+    inventory.serial.forEach((item) => {
+      if (item.skuId) availableSkuIds.add(item.skuId);
+    });
+    return skuOptions
+      .filter((sku) => availableSkuIds.has(sku.id))
+      .map((sku) => ({ value: sku.id, label: sku.name }));
   };
 
   useEffect(() => {
@@ -790,6 +807,13 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     };
   }, []);
 
+  useEffect(() => {
+    const previewUrl = alternateSourceDocument?.previewUrl;
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [alternateSourceDocument?.previewUrl]);
+
   const addEvidencePhotos = (fileList: FileList | null) => {
     if (!fileList?.length) return;
     setError(null);
@@ -847,6 +871,37 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     }
   };
 
+  const addWhatsappRecipient = () => {
+    const phone = normalizeLocalWhatsappPhone(recipientPhoneDraft);
+    if (!phone) {
+      setGenerateFieldErrors((prev) => ({
+        ...prev,
+        recipientPhones: 'Ingresa un número colombiano de exactamente 10 dígitos.',
+      }));
+      return;
+    }
+    if (whatsappRecipientPhones.includes(phone)) {
+      setRecipientPhoneDraft('');
+      setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+      return;
+    }
+    if (whatsappRecipientPhones.length >= 10) {
+      setGenerateFieldErrors((prev) => ({
+        ...prev,
+        recipientPhones: 'Puedes agregar máximo 10 destinatarios.',
+      }));
+      return;
+    }
+    setAdditionalRecipientPhones((prev) => [...prev, phone]);
+    setRecipientPhoneDraft('');
+    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+  };
+
+  const removeWhatsappRecipient = (phone: string) => {
+    setAdditionalRecipientPhones((prev) => prev.filter((value) => value !== phone));
+    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+  };
+
   const uploadEvidencePhotos = async (documentId: string) => {
     if (!evidencePhotos.length) return;
     const formData = new FormData();
@@ -854,6 +909,47 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       formData.append('photos', photo.file);
     });
     await api(`/files/documents/${documentId}/evidence`, {
+      method: 'POST',
+      body: formData,
+    });
+  };
+
+  const selectAlternateSourceDocument = (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    setError(null);
+    if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
+      setError('El documento de la bodega debe ser una foto PNG, WEBP o JPEG.');
+      return;
+    }
+    if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
+      setError('La foto del documento de la bodega debe pesar maximo 10 MB.');
+      return;
+    }
+    setAlternateSourceDocument({
+      id: `${file.name}-${file.lastModified}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+    if (alternateSourceDocumentInputRef.current) {
+      alternateSourceDocumentInputRef.current.value = '';
+    }
+  };
+
+  const clearAlternateSourceDocument = () => {
+    setAlternateSourceDocument(null);
+    if (alternateSourceDocumentInputRef.current) {
+      alternateSourceDocumentInputRef.current.value = '';
+    }
+  };
+
+  const uploadAlternateSourceDocument = async (documentId: string) => {
+    if (!alternateSourceDocument) return;
+    const formData = new FormData();
+    formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
+    formData.append('displayName', 'Remisión física entregada por el proveedor');
+    formData.append('files', alternateSourceDocument.file);
+    await api(`/files/entities/DOCUMENT/${documentId}`, {
       method: 'POST',
       body: formData,
     });
@@ -922,67 +1018,10 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   }, [principalWarehouse?.id, warehouseId]);
 
   useEffect(() => {
-    let mounted = true;
-    const loadPrincipalTags = async () => {
-      if (!principalWarehouse?.id) return;
-      setLoadingPrincipalTags(true);
-      try {
-        const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/warehouse/${principalWarehouse.id}`,
-          { method: 'GET' },
-        );
-        if (!mounted) return;
-        const catalogEntries: PrincipalCatalogEntry[] = [];
-        const uniqueLabels = new Map<string, string>();
-        data.bulk.forEach((item) => {
-          const label = item.skuName?.trim();
-          if (!label) return;
-          const key = `bulk:${item.skuId}:${item.ownerWarehouseId ?? principalWarehouse.id}`;
-          catalogEntries.push({
-            key,
-            label,
-            type: 'bulk',
-            skuName: label,
-            skuId: item.skuId,
-            ownerWarehouseId: item.ownerWarehouseId ?? principalWarehouse.id,
-            quantity: item.quantity,
-          });
-          uniqueLabels.set(label.toUpperCase(), label);
-        });
-        data.serial.forEach((item) => {
-          const label = getSerialDisplayName(item);
-          if (!label) return;
-          const key = `serial:${item.assetId}`;
-          catalogEntries.push({
-            key,
-            label,
-            type: 'serial',
-            skuName: item.skuName?.trim() || undefined,
-            assetId: item.assetId,
-            ownerWarehouseId: item.ownerWarehouseId ?? principalWarehouse.id,
-            serial: item.serialOrEngine,
-          });
-          uniqueLabels.set(label.toUpperCase(), label);
-        });
-        const sortedTags = [...uniqueLabels.values()].sort((a, b) => a.localeCompare(b));
-        setPrincipalCatalog(catalogEntries);
-        writeJsonCache(PRINCIPAL_TAGS_CACHE_KEY, {
-          tags: sortedTags,
-          principalWarehouseId: principalWarehouse.id,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch {
-        if (!mounted) return;
-        // ignore: si no carga, la captura alterna queda sin sugerencias hasta refrescar
-      } finally {
-        if (mounted) setLoadingPrincipalTags(false);
-      }
-    };
-    loadPrincipalTags();
-    return () => {
-      mounted = false;
-    };
-  }, [principalWarehouse?.id]);
+    if (sourceMode !== 'warehouse' || !principalWarehouse?.id || sourceOwnerWarehouseId) return;
+    lastAutoOpenedWarehouseRef.current = principalWarehouse.id;
+    setSourceOwnerWarehouseId(principalWarehouse.id);
+  }, [principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
 
   useEffect(() => {
     let mounted = true;
@@ -1154,7 +1193,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setSerialItems([]);
     setOnSiteItemSelect(null);
     setFreeTagInput('');
-    setFreeQtyInput('');
+    setFreeInternalNumber('');
+    clearAlternateSourceDocument();
     setItemsModalOpen(false);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
@@ -1242,12 +1282,18 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     const loadedEntries = await Promise.all(
       uniqueOwnerIds.map(async (ownerId) => {
         try {
-          const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
+          const inventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
             method: 'GET',
           });
-          return [ownerId, { serial: inventory.serial ?? [] }] as const;
+          return [
+            ownerId,
+            {
+              bulk: (inventory.bulk ?? []).filter((item) => item.ownerWarehouseId === ownerId),
+              serial: (inventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerId),
+            },
+          ] as const;
         } catch {
-          return [ownerId, { serial: [] }] as const;
+          return [ownerId, { bulk: [], serial: [] }] as const;
         }
       }),
     );
@@ -1271,11 +1317,18 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
       if (!matchedSku) return;
 
+      const ownerWarehouseId = item.condition?.trim();
+      if (!ownerWarehouseId) return;
+      const inventory = inventoriesByOwner[ownerWarehouseId];
+      const skuIsAvailable = Boolean(
+        inventory?.bulk.some((bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0) ||
+          inventory?.serial.some((serial) => serial.skuId === matchedSku.id),
+      );
+      if (!skuIsAvailable) return;
+
       initialSkuMap[index] = matchedSku.id;
 
       if (matchedSku.controlType !== 'SERIAL') return;
-      const ownerWarehouseId = item.condition?.trim();
-      if (!ownerWarehouseId) return;
       const serialCandidates =
         inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
       const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
@@ -1350,12 +1403,19 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         },
       });
 
-      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
         ...prev,
-        [ownerWarehouseId]: { serial: refreshedInventory.serial ?? [] },
+        [ownerWarehouseId]: {
+          bulk: (refreshedInventory.bulk ?? []).filter(
+            (item) => item.ownerWarehouseId === ownerWarehouseId,
+          ),
+          serial: (refreshedInventory.serial ?? []).filter(
+            (item) => item.ownerWarehouseId === ownerWarehouseId,
+          ),
+        },
       }));
       setResolveAssetByIndex((prev) => ({
         ...prev,
@@ -1589,9 +1649,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
   const addFreeItem = () => {
     const tag = freeTagInput.trim().toUpperCase();
-    const qty = typeof freeQtyInput === 'number' ? freeQtyInput : 0;
     if (!tag) {
-      setError('Escribe el item');
+      setError('Escribe la referencia');
       return;
     }
     if (!sourceOwnerWarehouseId) {
@@ -1601,58 +1660,30 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     const selectedOwnerType = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.type;
 
     if (selectedOwnerType === 'ALLY') {
-      const isAlternateSerial = alternateTagMatch?.type === 'serial';
-      if (isAlternateSerial) {
-        const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : 0;
-        if (!internal || internal <= 0) {
-          setError('Ingresa el numero interno del equipo');
-          return;
-        }
-        const serialLabel = `${tag} #${internal}`;
-        setError(null);
-        setSelectedItems((prev) => {
-          const exists = prev.some(
-            (item) =>
-              item.ownerWarehouseId === sourceOwnerWarehouseId &&
-              (item.requestedTag ?? item.name).toUpperCase() === serialLabel.toUpperCase(),
-          );
-          if (exists) return prev;
-          return [
-            ...prev,
-            {
-              type: 'free',
-              name: serialLabel,
-              requestedTag: serialLabel,
-              quantity: 1,
-              ownerWarehouseId: sourceOwnerWarehouseId,
-            },
-          ];
-        });
-        setFreeTagInput('');
-        setFreeQtyInput('');
-        setFreeInternalNumber('');
-        setItemsAddedNotice(`${serialLabel} agregado a la lista.`);
-        return;
-      }
-      if (!qty || qty <= 0) {
-        setError('Invalid quantity for the item');
-        return;
-      }
+      const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : null;
+      const requestedReference = internal ? `${tag} #${internal}` : tag;
       setError(null);
-      setSelectedItems((prev) => [
-        ...prev,
-        {
-          type: 'free',
-          name: tag,
-          requestedTag: tag,
-          quantity: qty,
-          ownerWarehouseId: sourceOwnerWarehouseId,
-        },
-      ]);
+      setSelectedItems((prev) => {
+        const exists = prev.some(
+          (item) =>
+            item.ownerWarehouseId === sourceOwnerWarehouseId &&
+            (item.requestedTag ?? item.name).toUpperCase() === requestedReference,
+        );
+        if (exists) return prev;
+        return [
+          ...prev,
+          {
+            type: 'free',
+            name: requestedReference,
+            requestedTag: requestedReference,
+            quantity: 1,
+            ownerWarehouseId: sourceOwnerWarehouseId,
+          },
+        ];
+      });
       setFreeTagInput('');
-      setFreeQtyInput('');
       setFreeInternalNumber('');
-      setItemsAddedNotice(`${tag} agregado a la lista.`);
+      setItemsAddedNotice(`${requestedReference} agregado a la lista.`);
       return;
     }
 
@@ -1694,7 +1725,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setError(null);
     setConsecutive('');
     setCustomerId(null);
-    setRecipientPhone('');
+    setAdditionalRecipientPhones([]);
+    setRecipientPhoneDraft('');
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
@@ -1708,12 +1740,12 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setSerialItems([]);
     setSelectedItems([]);
     setFreeTagInput('');
-    setFreeQtyInput('');
     setFreeInternalNumber('');
     setGenerateFieldErrors({});
     setGenerateStep('info');
     setReceivedSignature(null);
     clearEvidencePhotos();
+    clearAlternateSourceDocument();
   };
 
   const editRequest = async (documentId: string) => {
@@ -1731,13 +1763,23 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
-      setRecipientPhone(doc.recipientPhone?.replace(/^\+57/, '') ?? '');
+      setAdditionalRecipientPhones(
+        (doc.recipientPhones?.length
+          ? doc.recipientPhones
+          : doc.recipientPhone
+            ? [doc.recipientPhone]
+            : []
+        )
+          .map((phone) => normalizeLocalWhatsappPhone(phone))
+          .filter((phone): phone is string => Boolean(phone)),
+      );
+      setRecipientPhoneDraft('');
       setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
       setVehicleId(parsed.vehicleId ?? null);
-      setDriverId(parsed.driverId ?? null);
+      setDriverId(parsed.receiverId || parsed.driverId || null);
       setDispatcherId(parsed.dispatcherId ?? null);
       setSourceOwnerWarehouseId(null);
       setSourceWorksiteId(null);
@@ -1832,11 +1874,31 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
-      if (!/^\d{10}$/.test(recipientPhone)) {
-        throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
+      const pendingRecipientPhone = recipientPhoneDraft
+        ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
+        : null;
+      if (recipientPhoneDraft && !pendingRecipientPhone) {
+        throw new Error('El número adicional debe contener exactamente 10 dígitos.');
+      }
+      const recipientPhones = [
+        ...new Set([
+          ...whatsappRecipientPhones,
+          ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
+        ]),
+      ];
+      if (!recipientPhones.length) {
+        throw new Error(
+          'El cliente y la obra no tienen teléfono. Agrega al menos un destinatario de WhatsApp.',
+        );
+      }
+      if (recipientPhones.length > 10) {
+        throw new Error('Puedes enviar el documento a máximo 10 destinatarios de WhatsApp.');
       }
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
+      }
+      if (requiresAlternateSourceDocument && !alternateSourceDocument) {
+        throw new Error('Adjunta la foto del documento entregado por la bodega alterna.');
       }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
@@ -1847,6 +1909,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       }
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
         throw new Error('Tu usuario no esta vinculado a un empleado conductor.');
+      }
+      if (docType === 'RETURN' && !driverId) {
+        throw new Error('Selecciona el empleado de REV que recibe la devolución.');
       }
       const damagedWithoutDescription = selectedItems.find(
         (item) => item.isDamaged && !item.damageDescription?.trim(),
@@ -1860,13 +1925,16 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
-        recipientPhone,
+        recipientPhones,
         receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
         notes: [
           `Fecha documento: ${docDate}`,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
           deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
-          deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
+          docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
+            ? `Conductor: ${driverId}`
+            : null,
+          docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
           deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
         ].filter(Boolean).join(' | ')
       } as const;
@@ -1920,7 +1988,10 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         ? `Request updated (${created.id}).`
         : `Request sent as draft (${created.id}).`;
       try {
-        await uploadEvidencePhotos(created.id);
+        await Promise.all([
+          uploadEvidencePhotos(created.id),
+          uploadAlternateSourceDocument(created.id),
+        ]);
         if (!editingRequestId) {
           await api(`/documents/${created.id}/customer-email/draft`, {
             method: 'POST',
@@ -1935,8 +2006,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             ? `${uploadError.status}: ${uploadError.message}`
             : uploadError instanceof Error
               ? uploadError.message
-              : 'No se pudieron subir las evidencias.';
-        throw new Error(`La solicitud se guardo (${created.id}), pero fallaron las fotos: ${message}`);
+              : 'No se pudieron subir los archivos.';
+        throw new Error(`La solicitud se guardo (${created.id}), pero fallaron los archivos: ${message}`);
       }
       resetGenerateForm();
       setSubmitResult(successMessage);
@@ -1967,11 +2038,11 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
     if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
     if (!customerWorksiteId) nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
-    if (!/^\d{10}$/.test(recipientPhone)) {
-      nextFieldErrors.recipientPhone = 'Ingresa exactamente 10 dígitos.';
-    }
     if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
       nextFieldErrors.driverId = 'Selecciona el conductor.';
+    }
+    if (docType === 'RETURN' && !driverId) {
+      nextFieldErrors.driverId = 'Selecciona quién recibe la devolución.';
     }
     setGenerateFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -2050,7 +2121,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const pageTitle = isGeneratePage ? 'Generar documento' : 'Solicitudes de documentos';
   const pageDescription = isGeneratePage
     ? 'Completa informacion, items y firma para crear una solicitud de documento.'
-    : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
+    : isDriverRole
+      ? 'Consulta tus borradores y anexa fotografías que hayan quedado pendientes.'
+      : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
 
   return (
     <main>
@@ -2079,9 +2152,11 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             <Tabs.Panel value="list" pt="md">
               <Group justify="space-between" mb="sm">
                 <div>
-                  <Text fw={700}>Solicitudes en borrador</Text>
+                  <Text fw={700}>{isDriverRole ? 'Mis borradores' : 'Solicitudes en borrador'}</Text>
                   <Text size="sm" c="dimmed">
-                    Revisa solicitudes pendientes, abre detalles o decide aprobacion y rechazo.
+                    {isDriverRole
+                      ? 'Abre un borrador para consultar y anexar fotografías.'
+                      : 'Revisa solicitudes pendientes, abre detalles o decide aprobacion y rechazo.'}
                   </Text>
                 </div>
                 <Button variant="light" onClick={loadRequests} loading={requestsLoading}>
@@ -2146,7 +2221,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                             size="xs"
                             onClick={() => setDocumentsRequest(row)}
                           >
-                            Documentos
+                            {isDriverRole ? 'Anexar fotos' : 'Documentos'}
                           </Button>
                           {canDecide ? (
                             <>
@@ -2234,7 +2309,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                               },
                               {
                                 key: 'documents',
-                                label: `Documentos de ${row.consecutive ?? 'la solicitud'}`,
+                                label: isDriverRole
+                                  ? `Anexar fotos a ${row.consecutive ?? 'la solicitud'}`
+                                  : `Documentos de ${row.consecutive ?? 'la solicitud'}`,
                                 icon: <IconFileDescription size={16} />,
                                 color: 'violet',
                                 onClick: () => setDocumentsRequest(row),
@@ -2385,24 +2462,6 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               required
               error={generateFieldErrors.docDate}
             />
-            <TextInput
-              label={helpLabel(
-                'Teléfono de quien recibe',
-                'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
-                true,
-              )}
-              leftSection="+57"
-              inputMode="numeric"
-              maxLength={10}
-              value={recipientPhone}
-              onChange={(event) => {
-                setRecipientPhone(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
-                setGenerateFieldErrors((prev) => ({ ...prev, recipientPhone: undefined }));
-              }}
-              placeholder="3001234567"
-              required
-              error={generateFieldErrors.recipientPhone}
-            />
                     </SimpleGrid>
                   </Stack>
                 </Paper>
@@ -2513,6 +2572,38 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                 />
               )
             )}
+            {docType === 'RETURN' && (
+              isMobile ? (
+                <NativeSelect
+                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.')}
+                  value={driverId ?? ''}
+                  onChange={(event) => {
+                    setDriverId(event.currentTarget.value || null);
+                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
+                  }}
+                  data={[{ value: '', label: 'Seleccionar empleado' }, ...employeeOptions]}
+                  disabled={isDriverRole}
+                  error={generateFieldErrors.driverId}
+                  required
+                />
+              ) : (
+                <Select
+                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.')}
+                  value={driverId}
+                  onChange={(value) => {
+                    setDriverId(value);
+                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
+                  }}
+                  data={employeeOptions}
+                  searchable
+                  clearable
+                  disabled={isDriverRole}
+                  error={generateFieldErrors.driverId}
+                  required
+                  placeholder="Buscar empleado"
+                />
+              )
+            )}
             {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
               isMobile ? (
                 <NativeSelect
@@ -2597,16 +2688,18 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
-              <Select
+              <WarehouseSelect
                 label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                 value={sourceOwnerWarehouseId}
-                onChange={(value) => setSourceOwnerWarehouseId(value)}
-                data={ownerWarehouseOptions}
-                searchable
+                onChange={(value) => {
+                  setSourceOwnerWarehouseId(value);
+                  const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
+                  if (nextWarehouse?.type !== 'ALLY') clearAlternateSourceDocument();
+                }}
+                warehouses={warehouses}
                 clearable
                 placeholder="Buscar origen"
-                nothingFoundMessage="No se encontraron bodegas"
-                w={isMobile ? '100%' : 320}
+                width={isMobile ? '100%' : 320}
               />
             )}
             {useManualWarehouseCapture ? null : (
@@ -2619,38 +2712,74 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           {useManualWarehouseCapture ? (
             <Stack mt="md" gap="sm">
               <Group align="flex-end" wrap="wrap">
-                <Autocomplete
-                  label="Item/s"
-                  placeholder={loadingPrincipalTags ? 'Cargando items...' : 'Selecciona o escribe el item'}
-                  data={alternateTagCatalog.map((entry) => entry.label)}
+                <TextInput
+                  label="Referencia"
+                  placeholder="Escribe la referencia entregada"
                   value={freeTagInput}
                   onChange={(value) => {
-                    setFreeTagInput(value);
+                    setFreeTagInput(value.currentTarget.value);
                     setError(null);
                   }}
-                  disabled={loadingPrincipalTags}
                   w={isMobile ? '100%' : 320}
                 />
-                {isAlternateOwnerMode && alternateTagMatch?.type === 'serial' ? (
-                  <NumberInput
-                    label="N° interno"
-                    min={1}
-                    value={freeInternalNumber}
-                    onChange={(value) => setFreeInternalNumber(typeof value === 'number' ? value : '')}
-                    w={isMobile ? '100%' : 140}
-                  />
-                ) : null}
-                {alternateTagMatch?.type !== 'serial' ? (
-                  <NumberInput
-                    label="Cantidad"
-                    min={1}
-                    value={freeQtyInput}
-                    onChange={(value) => setFreeQtyInput(typeof value === 'number' ? value : '')}
-                    w={isMobile ? '100%' : 140}
-                  />
-                ) : null}
+                <NumberInput
+                  label="N° interno (opcional)"
+                  min={1}
+                  allowDecimal={false}
+                  value={freeInternalNumber}
+                  onChange={(value) => setFreeInternalNumber(typeof value === 'number' ? value : '')}
+                  w={isMobile ? '100%' : 190}
+                />
                 <Button onClick={addFreeItem}>Agregar item</Button>
               </Group>
+              {requiresAlternateSourceDocument ? (
+                <Paper withBorder radius="md" p="sm">
+                  <Stack gap="xs">
+                    <div>
+                      <Text fw={700}>Remisión física del proveedor *</Text>
+                      <Text size="sm" c="dimmed">
+                        Foto legible del documento entregado por el proveedor. Se guarda separada de las evidencias del cliente.
+                      </Text>
+                    </div>
+                    <input
+                      ref={alternateSourceDocumentInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      capture="environment"
+                      onChange={(event) => selectAlternateSourceDocument(event.currentTarget.files)}
+                      style={{ display: 'none' }}
+                    />
+                    <Group align="flex-start" wrap="wrap">
+                      <Button
+                        type="button"
+                        variant="light"
+                        leftSection={<IconCamera size={16} />}
+                        onClick={() => alternateSourceDocumentInputRef.current?.click()}
+                      >
+                        {alternateSourceDocument ? 'Cambiar foto' : 'Tomar / adjuntar foto'}
+                      </Button>
+                      {alternateSourceDocument ? (
+                        <Button type="button" variant="subtle" color="red" onClick={clearAlternateSourceDocument}>
+                          Quitar
+                        </Button>
+                      ) : null}
+                    </Group>
+                    {alternateSourceDocument ? (
+                      <img
+                        src={alternateSourceDocument.previewUrl}
+                        alt="Remisión física entregada por el proveedor"
+                        style={{
+                          width: '100%',
+                          maxWidth: 320,
+                          aspectRatio: '4 / 3',
+                          objectFit: 'cover',
+                          borderRadius: 8,
+                        }}
+                      />
+                    ) : null}
+                  </Stack>
+                </Paper>
+              ) : null}
             </Stack>
           ) : null}
 
@@ -2838,6 +2967,78 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             </SimpleGrid>
           </Paper>
 
+          <Paper withBorder radius="lg" p="md" mb="md">
+            <Stack gap="sm">
+              <div>
+                <Text fw={700}>Destinatarios de WhatsApp</Text>
+                <Text size="sm" c="dimmed">
+                  El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
+                </Text>
+              </div>
+
+              {defaultWhatsappRecipients.map((recipient) => (
+                <Group key={recipient.key} justify="space-between" align="center" wrap="nowrap">
+                  <div>
+                    <Text size="sm" fw={700}>{recipient.label}</Text>
+                    <Text size="xs" c="dimmed">Destinatario predeterminado</Text>
+                  </div>
+                  {recipient.phone ? (
+                    <Badge color="green" variant="light">+57 {recipient.phone}</Badge>
+                  ) : (
+                    <Badge color="gray" variant="light">Sin teléfono registrado</Badge>
+                  )}
+                </Group>
+              ))}
+
+              {manualWhatsappPhones.map((phone, index) => (
+                <Group key={phone} justify="space-between" align="center" wrap="nowrap">
+                  <div>
+                    <Text size="sm" fw={700}>Destinatario adicional {index + 1}</Text>
+                    <Text size="xs" c="dimmed">+57 {phone}</Text>
+                  </div>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={() => removeWhatsappRecipient(phone)}
+                  >
+                    Quitar
+                  </Button>
+                </Group>
+              ))}
+
+              <Group align="flex-end" wrap="wrap">
+                <TextInput
+                  label="Agregar otro número"
+                  description="Escribe únicamente los 10 dígitos; el sistema agrega +57."
+                  leftSection="+57"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={recipientPhoneDraft}
+                  onChange={(event) => {
+                    setRecipientPhoneDraft(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
+                    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      addWhatsappRecipient();
+                    }
+                  }}
+                  placeholder="3001234567"
+                  style={{ flex: '1 1 260px' }}
+                />
+                <Button type="button" variant="light" onClick={addWhatsappRecipient}>
+                  Agregar
+                </Button>
+              </Group>
+              {generateFieldErrors.recipientPhones ? (
+                <Text size="xs" c="red">{generateFieldErrors.recipientPhones}</Text>
+              ) : null}
+            </Stack>
+          </Paper>
+
           {isTabletOrMobile ? (
             <Stack gap="xs" mb="md">
               {selectedItems.map((item, index) => (
@@ -2908,7 +3109,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           )}
 
           <Stack gap="xs">
-            <Text fw={600}>Firma de recibido</Text>
+            <Text fw={600}>{customerSignatureLabel}</Text>
             <Group justify="space-between" align="center">
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
@@ -2933,7 +3134,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             {receivedSignature ? (
               <img
                 src={receivedSignature}
-                alt="Firma de recibido"
+                alt={customerSignatureLabel}
                 style={{
                   width: '100%',
                   maxWidth: 420,
@@ -3042,7 +3243,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       <Modal
         opened={signatureModalOpen}
         onClose={() => setSignatureModalOpen(false)}
-        title="Firma de recibido"
+        title={customerSignatureLabel}
         centered
       >
         <Stack gap="md">
@@ -3143,10 +3344,11 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                   </Text>
                   <Select
                     label="Equipo"
-                    placeholder="Seleccionar SKU"
+                    placeholder="Buscar equipo de esta bodega"
                     searchable
-                    data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
+                    data={getResolveSkuOptions(item.condition)}
                     value={resolveSkuByIndex[index] ?? null}
+                    nothingFoundMessage="Esta bodega no tiene equipos disponibles"
                     onChange={(value) => {
                       setResolveSkuByIndex((prev) => ({
                         ...prev,
@@ -3168,8 +3370,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                     const serialOptions = inventory
                       .filter(
                         (serial) =>
-                          serial.skuId === selectedSku.id &&
-                          (expectedInternal == null || serial.internalNumber === expectedInternal),
+                          serial.skuId === selectedSku.id,
                       )
                       .map((serial) => ({
                         value: serial.assetId,
@@ -3257,7 +3458,13 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       <Modal
         opened={!!documentsRequest}
         onClose={() => setDocumentsRequest(null)}
-        title={documentsRequest ? `Documentos ${documentsRequest.consecutive ?? ''}` : 'Documentos'}
+        title={
+          documentsRequest
+            ? `${isDriverRole ? 'Fotos del borrador' : 'Documentos'} ${documentsRequest.consecutive ?? ''}`
+            : isDriverRole
+              ? 'Fotos del borrador'
+              : 'Documentos'
+        }
         centered
         size="xl"
       >
@@ -3265,7 +3472,14 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           <FileAttachmentsPanel
             entityType="DOCUMENT"
             entityId={documentsRequest.id}
-            title="Documentos y evidencias de la solicitud"
+            title={isDriverRole ? 'Evidencias fotográficas' : 'Documentos y evidencias de la solicitud'}
+            description={
+              isDriverRole
+                ? 'Anexa las fotografías que olvidaste incluir. Solo puedes modificar tus propios borradores.'
+                : undefined
+            }
+            uploadMode={isDriverRole ? 'document-evidence' : 'generic'}
+            allowDelete={!isDriverRole}
           />
         ) : null}
       </Modal>

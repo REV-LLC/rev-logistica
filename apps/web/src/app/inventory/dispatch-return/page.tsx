@@ -54,7 +54,7 @@ type CustomerWorksite = {
 };
 
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
-type Warehouse = { id: string; name: string };
+type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
 type SelectedItem = {
   type: 'bulk' | 'serial';
@@ -144,10 +144,6 @@ export default function RemisionDevolucionPage() {
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
-  const ownerWarehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
-  }));
 
   useEffect(() => {
     let mounted = true;
@@ -429,8 +425,15 @@ export default function RemisionDevolucionPage() {
       if (!/^\d{10}$/.test(recipientPhone)) {
         throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
       }
-      if (docType === 'RETURN' && !warehouseId) {
-        throw new Error('Selecciona la bodega para la devolucion.');
+      const providerOwnerIds = new Set(warehouses.filter((item) => item.type === 'ALLY').map((item) => item.id));
+      const providerReturnItems = docType === 'RETURN'
+        ? selectedItems.filter((item) => item.ownerWarehouseId && providerOwnerIds.has(item.ownerWarehouseId))
+        : [];
+      const ownReturnItems = docType === 'RETURN'
+        ? selectedItems.filter((item) => !item.ownerWarehouseId || !providerOwnerIds.has(item.ownerWarehouseId))
+        : [];
+      if (docType === 'RETURN' && ownReturnItems.length && !warehouseId) {
+        throw new Error('Selecciona la bodega REV que recibirá los equipos propios.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !warehouseId) {
         throw new Error('Selecciona la bodega de despacho.');
@@ -496,15 +499,29 @@ export default function RemisionDevolucionPage() {
           });
         }
       } else {
+        const providerMovementItems = movementItems.filter((_, index) => providerReturnItems.includes(selectedItems[index]));
+        const ownMovementItems = movementItems.filter((_, index) => ownReturnItems.includes(selectedItems[index]));
+        if (providerMovementItems.length) {
+          await api('/inventory/return-transit', {
+            method: 'POST',
+            json: {
+              customerWorksiteId,
+              items: providerMovementItems,
+              documentId: created.id
+            }
+          });
+        }
+        if (ownMovementItems.length) {
         await api('/inventory/in', {
           method: 'POST',
           json: {
             warehouseId,
             customerWorksiteId,
-            items: movementItems,
+            items: ownMovementItems,
             documentId: created.id
           }
         });
+        }
       }
 
       try {
@@ -618,6 +635,7 @@ export default function RemisionDevolucionPage() {
                 'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
                 true,
               )}
+              withAsterisk={false}
               leftSection="+57"
               inputMode="numeric"
               maxLength={10}
@@ -656,7 +674,14 @@ export default function RemisionDevolucionPage() {
             <WarehouseSelect
               value={warehouseId}
               onChange={setWarehouseId}
-              label={helpLabel('Bodega de ubicacion', 'Bodega fisica donde se despacha o recibe inventario.')}
+              warehouses={docType === 'RETURN' ? warehouses.filter((item) => item.type === 'OWN') : warehouses}
+              defaultName={docType === 'REMISSION' ? 'Bodega propia' : undefined}
+              label={helpLabel(
+                docType === 'RETURN' ? 'Bodega REV para equipos propios' : 'Bodega de ubicación',
+                docType === 'RETURN'
+                  ? 'Los equipos de proveedores quedan En transición y se reciben desde Entregas a proveedor.'
+                  : 'Bodega física desde donde se despacha inventario.',
+              )}
             />
             <Select
               label={helpLabel('Obra', 'Obra destino del movimiento.')}
@@ -779,15 +804,14 @@ export default function RemisionDevolucionPage() {
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
-              <Select
-                label={helpLabel('Owner', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
+              <WarehouseSelect
+                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                 value={sourceOwnerWarehouseId}
                 onChange={(value) => setSourceOwnerWarehouseId(value)}
-                data={ownerWarehouseOptions}
-                searchable
+                warehouses={warehouses}
                 clearable
                 placeholder="Seleccionar dueño"
-                w={320}
+                width={320}
               />
             )}
             {sourceMode === 'on-site' && (

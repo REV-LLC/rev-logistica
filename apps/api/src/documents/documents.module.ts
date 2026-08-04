@@ -10,7 +10,13 @@ import { DocumentsService } from './documents.service';
 import { PublicDocumentsController } from './public-documents.controller';
 
 @Module({
-  imports: [PrismaModule, AuthModule, InventoryModule, DocumentEmailsModule, DocumentMessagesModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    InventoryModule,
+    DocumentEmailsModule,
+    DocumentMessagesModule,
+  ],
   controllers: [DocumentsController, PublicDocumentsController],
   providers: [DocumentsService, DocumentPdfService],
 })

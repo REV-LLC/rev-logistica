@@ -29,6 +29,7 @@ import {
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import UppercaseTextInput from '@/components/UppercaseTextInput';
+import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 
@@ -43,6 +44,41 @@ type CatalogOption = {
   value: string;
   label: string;
   active: boolean;
+};
+
+type AssetSubfamily = {
+  id: string;
+  assetFamilyId: string;
+  code: string;
+  name: string;
+  active: boolean;
+};
+
+type AssetFamily = {
+  id: string;
+  code: string;
+  name: string;
+  controlType: 'BULK';
+  subfamilies: AssetSubfamily[];
+};
+
+type GlobalBulkSku = {
+  id: string;
+  name: string;
+  assetFamilyId: string;
+  assetSubfamilyId: string | null;
+  price: number | null;
+  subrentalPrice: number | null;
+  replacementValue: number | null;
+  chargeType: ChargeType | null;
+  minimumChargeHours: number | null;
+  areaM2: number | null;
+  lengthMeters: number | null;
+  unitWeight: number | null;
+  active: boolean;
+  category: string;
+  assetFamily: { id: string; code: string; name: string };
+  assetSubfamily: AssetSubfamily | null;
 };
 
 type CreateBulkResponse = {
@@ -87,12 +123,14 @@ type ExistingBulkItem = {
   name: string | null;
   category: string | null;
   assetFamilyId: string | null;
+  assetSubfamilyId?: string | null;
   price: number | null;
   subrentalPrice: number | null;
   replacementValue: number | null;
   chargeType: ChargeType | null;
   minimumChargeHours: number | null;
   areaM2: number | null;
+  lengthMeters?: number | null;
   unitWeight: number | null;
   quantity: number;
 };
@@ -107,6 +145,11 @@ type BulkPayload = {
     code?: string;
     name?: string;
   };
+  subfamily?: {
+    id?: string;
+    code?: string;
+    name?: string;
+  };
   sku: {
     id?: string;
     name?: string;
@@ -117,6 +160,7 @@ type BulkPayload = {
     chargeType?: ChargeType;
     minimumChargeHours?: number;
     areaM2?: number;
+    lengthMeters?: number;
   };
   ownerWarehouseId: string;
   warehouseId: string;
@@ -237,6 +281,31 @@ const parseLocaleDecimal = (value: number | string) => {
   return Number.isFinite(parsed) ? parsed : NaN;
 };
 const toUpperInput = (value: string) => value.toLocaleUpperCase('es-CO');
+const normalizeBulkReference = (name: string, lengthMeters?: number) => {
+  const normalized = toUpperInput(name.trim()).replace(/\s+/g, ' ');
+  const suffix = normalized.match(
+    /(?:\(\s*)?(\d+(?:[.,]\d+)?)\s*(?:M|MT|MTS|METRO|METROS)(?:\s*\))?\s*$/i,
+  );
+  const parsedSuffix = suffix ? Number(suffix[1].replace(',', '.')) : undefined;
+  const resolvedLength = lengthMeters ?? parsedSuffix;
+  const baseName = suffix
+    ? normalized.slice(0, suffix.index).trim().replace(/[(-]+\s*$/, '').trim()
+    : normalized;
+  return {
+    name:
+      resolvedLength && Number.isFinite(resolvedLength) && resolvedLength > 0
+        ? `${baseName} (${resolvedLength.toFixed(2)} M)`
+        : normalized,
+    lengthMeters:
+      resolvedLength && Number.isFinite(resolvedLength) && resolvedLength > 0
+        ? resolvedLength
+        : undefined,
+  };
+};
+const bulkReferenceKey = (name: string, lengthMeters?: number) =>
+  normalizeBulkReference(name, lengthMeters)
+    .name.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 
 const buildFormaletaSkuName = (line: FormaletaLine, xMeasure: number, yMeasure: number) => {
   const prefix = line === 'FORMALETA_SARDINEL' ? 'FORMALETA SARDINEL' : 'FORMALETA';
@@ -295,6 +364,8 @@ export default function AddBulkStockPage() {
   const entrySectionRef = useRef<HTMLDivElement | null>(null);
   const isEmbedded = searchParams.get('embed') === '1';
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [bulkFamilies, setBulkFamilies] = useState<AssetFamily[]>([]);
+  const [globalBulkSkus, setGlobalBulkSkus] = useState<GlobalBulkSku[]>([]);
   const [weightUnits, setWeightUnits] = useState<string[]>([]);
   const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,9 +396,12 @@ export default function AddBulkStockPage() {
   const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | string>('');
   const [formaletaWeightUnit, setFormaletaWeightUnit] = useState<WeightUnit | ''>('');
 
-  const [genericFamilyName, setGenericFamilyName] = useState('');
-  const [genericFamilyCode, setGenericFamilyCode] = useState('');
   const [genericSkuName, setGenericSkuName] = useState('');
+  const [genericLengthMeters, setGenericLengthMeters] = useState<number | ''>('');
+  const [genericCompatibilityLb, setGenericCompatibilityLb] = useState<string | null>(null);
+  const [selectedSubfamilyId, setSelectedSubfamilyId] = useState<string | null>(null);
+  const [newSubfamilyName, setNewSubfamilyName] = useState('');
+  const [creatingSubfamily, setCreatingSubfamily] = useState(false);
   const [certifiedScaffoldMeasure, setCertifiedScaffoldMeasure] = useState('');
   const [genericSkuUnitWeight, setGenericSkuUnitWeight] = useState<number | ''>('');
   const [genericSkuPrice, setGenericSkuPrice] = useState<number | ''>('');
@@ -366,18 +440,10 @@ export default function AddBulkStockPage() {
     replacementValue: formaletaSkuReplacementValue,
     areaM2: formaletaAreaM2,
   };
-  const genericRequiredSkuData: RequiredSkuData = {
-    unitWeight: genericSkuUnitWeight,
-    weightUnit: genericWeightUnit,
-    price: genericSkuPrice,
-    replacementValue: genericSkuReplacementValue,
-  };
   const requiredSkuDataMissing =
     itemType === 'FORMALETA'
       ? hasMissingRequiredSkuData(formaletaRequiredSkuData, true)
-      : itemType === 'GENERIC'
-        ? hasMissingRequiredSkuData(genericRequiredSkuData, false)
-        : false;
+      : false;
   const showRequiredSkuErrors = confirmAttempted;
   const confirmButtonNeedsAttention = confirmAttempted && requiredSkuDataMissing;
   const selectedExistingItem = useMemo(
@@ -391,15 +457,19 @@ export default function AddBulkStockPage() {
       setLoading(true);
       setError(null);
       try {
-        const [warehouseData, weightUnitData, catalogData] = await Promise.all([
+        const [warehouseData, weightUnitData, catalogData, familyData, skuData] = await Promise.all([
           api<Warehouse[]>('/warehouses'),
           api<string[]>('/skus/units'),
           api<CatalogOption[]>('/catalog/options').catch(() => []),
+          api<AssetFamily[]>('/asset-families?controlType=BULK'),
+          api<GlobalBulkSku[]>('/skus?controlType=BULK'),
         ]);
         if (!mounted) return;
         setWarehouses(warehouseData);
         setWeightUnits(weightUnitData);
         setCatalogOptions(catalogData.filter((option) => option.active));
+        setBulkFamilies(familyData);
+        setGlobalBulkSkus(skuData.filter((sku) => sku.active));
 
         const defaultWeightUnit = (weightUnitData[0] as WeightUnit | undefined) ?? '';
 
@@ -464,12 +534,35 @@ export default function AddBulkStockPage() {
     setExistingItemsLoading(true);
     setError(null);
 
-    const includeZeroParam = isAdminRole ? '?includeZero=true' : '';
-    api<WarehouseInventoryResponse>(`/inventory/warehouse/${ownerWarehouseId}${includeZeroParam}`)
+    api<WarehouseInventoryResponse>(`/inventory/warehouse/${ownerWarehouseId}`)
       .then((data) => {
         if (!mounted) return;
-        const bulkItems = (data.bulk ?? [])
-          .filter((item) => item.skuId && item.assetFamilyId)
+        const quantityBySku = new Map(
+          (data.bulk ?? [])
+            .filter((item) => item.ownerWarehouseId === ownerWarehouseId)
+            .map((item) => [item.skuId, Number(item.quantity)]),
+        );
+        const selectedWarehouse = warehouses.find((item) => item.id === ownerWarehouseId);
+        const bulkItems: ExistingBulkItem[] = globalBulkSkus
+          .map((sku) => ({
+            skuId: sku.id,
+            ownerWarehouseId,
+            ownerWarehouseName: selectedWarehouse?.name ?? null,
+            skuName: sku.name,
+            name: sku.name,
+            category: sku.category,
+            assetFamilyId: sku.assetFamilyId,
+            assetSubfamilyId: sku.assetSubfamilyId,
+            price: sku.price == null ? null : Number(sku.price),
+            subrentalPrice: sku.subrentalPrice == null ? null : Number(sku.subrentalPrice),
+            replacementValue: sku.replacementValue == null ? null : Number(sku.replacementValue),
+            chargeType: sku.chargeType,
+            minimumChargeHours: sku.minimumChargeHours == null ? null : Number(sku.minimumChargeHours),
+            areaM2: sku.areaM2 == null ? null : Number(sku.areaM2),
+            lengthMeters: sku.lengthMeters == null ? null : Number(sku.lengthMeters),
+            unitWeight: sku.unitWeight == null ? null : Number(sku.unitWeight),
+            quantity: quantityBySku.get(sku.id) ?? 0,
+          }))
           .sort((a, b) => (a.skuName ?? a.name ?? '').localeCompare(b.skuName ?? b.name ?? ''));
         setExistingItems(bulkItems);
         setExistingSkuId((current) =>
@@ -493,7 +586,7 @@ export default function AddBulkStockPage() {
     return () => {
       mounted = false;
     };
-  }, [entryMode, isAdminRole, modeLocked, ownerWarehouseId, warehouseLocked]);
+  }, [entryMode, globalBulkSkus, modeLocked, ownerWarehouseId, warehouseLocked, warehouses]);
 
   useEffect(() => {
     if (itemType !== 'FORMALETA') return;
@@ -574,12 +667,14 @@ export default function AddBulkStockPage() {
   };
   const catalogGroupValues = (groupKey: string, fallback: readonly string[]) =>
     catalogGroupOptions(groupKey, fallback).map((option) => option.value);
-  const typeOptions = [
-    { value: 'FORMALETA', label: 'FORMALETA' },
-    { value: 'ANDAMIO_CERTIFICADO', label: 'ANDAMIO CERTIFICADO' },
-    { value: 'ANDAMIO_CONVENCIONAL', label: 'ANDAMIO CONVENCIONAL' },
-    { value: 'ENCOFRADO', label: 'ENCOFRADO' },
-  ];
+  const typeOptions = bulkFamilies.map((family) => ({ value: family.id, label: family.name }));
+  const selectedFamily = bulkFamilies.find((family) => family.id === itemTypeSelection) ?? null;
+  const selectedFamilyCode = selectedFamily?.code.toUpperCase() ?? '';
+  const selectedFamilyKey = toUpperInput(selectedFamily?.name ?? '').replace(/\s+/g, '_');
+  const subfamilyOptions = (selectedFamily?.subfamilies ?? []).map((subfamily) => ({
+    value: subfamily.id,
+    label: subfamily.name,
+  }));
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
   const formaletaLineOptions = catalogGroupOptions('BULK_FORMWORK_LINES', [
     'FORMALETA',
@@ -609,8 +704,10 @@ export default function AddBulkStockPage() {
   const conventionalScaffoldPartsWithMeasure = new Set(
     catalogGroupValues('BULK_CONVENTIONAL_SCAFFOLD_WITH_MEASURE', DEFAULT_CONVENTIONAL_SCAFFOLD_PARTS_WITH_MEASURE),
   );
-  const isCertifiedScaffold = itemTypeSelection === 'ANDAMIO_CERTIFICADO';
-  const isConventionalScaffold = itemTypeSelection === 'ANDAMIO_CONVENCIONAL';
+  const isCertifiedScaffold =
+    selectedFamilyCode === 'ANDAMIO_CERTIFICADO' || selectedFamilyKey === 'ANDAMIO_CERTIFICADO';
+  const isConventionalScaffold =
+    selectedFamilyCode === 'ANDAMIO_CONVENCIONAL' || selectedFamilyKey === 'ANDAMIO_CONVENCIONAL';
   const certifiedScaffoldNeedsMeasure =
     isCertifiedScaffold &&
     !!genericSkuName &&
@@ -650,8 +747,11 @@ export default function AddBulkStockPage() {
         }
         const suffix = formaletaLine === 'FORMALETA_SARDINEL' ? ' SARDINEL' : '';
         return {
+          familyId: selectedFamily?.id,
           familyName: 'FORMALETA',
           familyCode: 'FORMALETA',
+          subfamilyId: selectedSubfamilyId ?? undefined,
+          reusesExistingSku: false,
           skuName: `${accessoryName.toUpperCase()}${suffix}`,
           skuUnitWeight:
             formaletaSkuUnitWeight === ''
@@ -674,8 +774,11 @@ export default function AddBulkStockPage() {
         return null;
       }
       return {
+        familyId: selectedFamily?.id,
         familyName: 'FORMALETA',
         familyCode: 'FORMALETA',
+        subfamilyId: selectedSubfamilyId ?? undefined,
+        reusesExistingSku: false,
         skuName: buildFormaletaSkuName(formaletaLine, xValue, yValue),
         skuUnitWeight:
           formaletaSkuUnitWeight === ''
@@ -693,20 +796,40 @@ export default function AddBulkStockPage() {
       };
     }
 
-    if (!genericFamilyName.trim() || !genericSkuName.trim()) {
+    if (!selectedFamily || !genericSkuName.trim()) {
       return null;
     }
-    const resolvedGenericSkuName =
+    const legacyResolvedName =
       certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
         ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
           ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : genericSkuName.trim();
+    const compatibleReferenceName = genericCompatibilityLb
+      ? `${legacyResolvedName} (${genericCompatibilityLb} LB)`
+      : legacyResolvedName;
+    const normalizedReference = normalizeBulkReference(
+      compatibleReferenceName,
+      genericLengthMeters === '' ? undefined : Number(genericLengthMeters),
+    );
+    const existingCanonicalSku = globalBulkSkus.find(
+      (sku) =>
+        sku.assetFamilyId === selectedFamily.id &&
+        bulkReferenceKey(
+          sku.name,
+          sku.lengthMeters == null ? undefined : Number(sku.lengthMeters),
+        ) === bulkReferenceKey(normalizedReference.name, normalizedReference.lengthMeters),
+    );
 
     return {
-      familyName: toUpperInput(genericFamilyName.trim()),
-      familyCode: genericFamilyCode.trim() ? toUpperInput(genericFamilyCode.trim()) : undefined,
-      skuName: toUpperInput(resolvedGenericSkuName),
+      familyId: selectedFamily.id,
+      familyName: selectedFamily.name,
+      familyCode: selectedFamily.code,
+      subfamilyId: existingCanonicalSku?.assetSubfamilyId ?? selectedSubfamilyId ?? undefined,
+      skuId: existingCanonicalSku?.id,
+      reusesExistingSku: Boolean(existingCanonicalSku),
+      skuName: normalizedReference.name,
+      lengthMeters: normalizedReference.lengthMeters,
       skuUnitWeight:
         genericSkuUnitWeight === ''
           ? undefined
@@ -734,9 +857,9 @@ export default function AddBulkStockPage() {
     formaletaMinimumChargeHours,
     formaletaAreaM2,
     formaletaWeightUnit,
-    genericFamilyName,
-    genericFamilyCode,
     genericSkuName,
+    genericLengthMeters,
+    genericCompatibilityLb,
     certifiedScaffoldMeasure,
     certifiedScaffoldNeedsMeasure,
     conventionalScaffoldNeedsMeasure,
@@ -746,6 +869,9 @@ export default function AddBulkStockPage() {
     genericChargeType,
     genericMinimumChargeHours,
     genericWeightUnit,
+    selectedFamily,
+    selectedSubfamilyId,
+    globalBulkSkus,
     itemType,
     isItemConfigured,
   ]);
@@ -786,15 +912,19 @@ export default function AddBulkStockPage() {
 
     const payload: BulkPayload = {
       family: {
+        id: builtItem.familyId,
         name: builtItem.familyName,
         code: builtItem.familyCode,
       },
+      subfamily: builtItem.subfamilyId ? { id: builtItem.subfamilyId } : undefined,
       sku: {
+        id: builtItem.skuId,
         name: builtItem.skuName,
         unitWeight: builtItem.skuUnitWeight,
         price: builtItem.skuPrice,
         replacementValue: builtItem.skuReplacementValue,
         areaM2: builtItem.areaM2,
+        lengthMeters: builtItem.lengthMeters,
       },
       ownerWarehouseId,
       warehouseId: ownerWarehouseId,
@@ -835,9 +965,11 @@ export default function AddBulkStockPage() {
       return;
     }
 
-    setGenericFamilyName('');
-    setGenericFamilyCode('');
     setGenericSkuName('');
+    setGenericLengthMeters('');
+    setGenericCompatibilityLb(null);
+    setSelectedSubfamilyId(null);
+    setNewSubfamilyName('');
     setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
@@ -871,9 +1003,11 @@ export default function AddBulkStockPage() {
     setFormaletaAreaM2('');
     setFormaletaWeightUnit(defaultWeightUnit);
 
-    setGenericFamilyName('');
-    setGenericFamilyCode('');
     setGenericSkuName('');
+    setGenericLengthMeters('');
+    setGenericCompatibilityLb(null);
+    setSelectedSubfamilyId(null);
+    setNewSubfamilyName('');
     setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
@@ -1015,6 +1149,41 @@ export default function AddBulkStockPage() {
     });
   };
 
+  const createSubfamily = async () => {
+    if (!selectedFamily || !newSubfamilyName.trim()) return;
+    const normalizedName = toUpperInput(newSubfamilyName.trim());
+    if (!window.confirm(`¿Crear la subfamilia ${normalizedName} en ${selectedFamily.name}?`)) {
+      return;
+    }
+
+    setCreatingSubfamily(true);
+    setError(null);
+    try {
+      const created = await api<AssetSubfamily>(
+        `/asset-families/${selectedFamily.id}/subfamilies`,
+        { method: 'POST', json: { name: normalizedName } },
+      );
+      setBulkFamilies((families) =>
+        families.map((family) =>
+          family.id === selectedFamily.id
+            ? {
+                ...family,
+                subfamilies: [...family.subfamilies, created].sort((a, b) =>
+                  a.name.localeCompare(b.name, 'es'),
+                ),
+              }
+            : family,
+        ),
+      );
+      setSelectedSubfamilyId(created.id);
+      setNewSubfamilyName('');
+    } catch (err) {
+      setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudo crear la subfamilia');
+    } finally {
+      setCreatingSubfamily(false);
+    }
+  };
+
   const closeDeleteModal = () => {
     setDeleteModalOpen(false);
     setDeleteQuantity('');
@@ -1123,8 +1292,8 @@ export default function AddBulkStockPage() {
         return;
       }
     } else {
-      if (!genericFamilyName.trim()) {
-        setError('Enter the type/family for the generic item');
+      if (!selectedFamily) {
+        setError('Selecciona una familia');
         return;
       }
       if (!genericSkuName.trim()) {
@@ -1141,14 +1310,6 @@ export default function AddBulkStockPage() {
       }
       if (genericChargeType === 'HOUR' && (genericMinimumChargeHours === '' || Number(genericMinimumChargeHours) <= 0)) {
         setError('Enter the minimum hourly charge');
-        return;
-      }
-      if (!validateRequiredSkuData({
-        unitWeight: genericSkuUnitWeight,
-        weightUnit: genericWeightUnit,
-        price: genericSkuPrice,
-        replacementValue: genericSkuReplacementValue,
-      }, false)) {
         return;
       }
     }
@@ -1223,10 +1384,13 @@ export default function AddBulkStockPage() {
             }
           : {
               family: {
+                id: builtItem?.familyId,
                 name: builtItem?.familyName,
                 code: builtItem?.familyCode,
               },
+              subfamily: builtItem?.subfamilyId ? { id: builtItem.subfamilyId } : undefined,
               sku: {
+                id: builtItem?.skuId,
                 name: builtItem?.skuName,
                 unitWeight: builtItem?.skuUnitWeight,
                 price: builtItem?.skuPrice,
@@ -1234,6 +1398,7 @@ export default function AddBulkStockPage() {
                 chargeType: builtItem?.chargeType,
                 minimumChargeHours: builtItem?.minimumChargeHours,
                 areaM2: builtItem?.areaM2,
+                lengthMeters: builtItem?.lengthMeters,
               },
               ownerWarehouseId,
               warehouseId: ownerWarehouseId,
@@ -1246,6 +1411,9 @@ export default function AddBulkStockPage() {
         method: 'POST',
         json: payload,
       });
+      api<GlobalBulkSku[]>('/skus?controlType=BULK')
+        .then((items) => setGlobalBulkSkus(items.filter((sku) => sku.active)))
+        .catch(() => undefined);
 
       const warehouseLabel = warehouses.find((entry) => entry.id === ownerWarehouseId)?.name;
       const skuName =
@@ -1522,13 +1690,14 @@ export default function AddBulkStockPage() {
                   ) : null}
                 </Group>
 
-                <Select
+                <WarehouseSelect
                   label="Bodega dueña"
-                  data={warehouseOptions}
+                  warehouses={warehouses}
                   value={ownerWarehouseId}
                   onChange={handleWarehouseChange}
                   placeholder={loading ? 'Cargando...' : 'Seleccionar bodega'}
-                  disabled={loading || warehouseLocked}
+                  loading={loading}
+                  disabled={warehouseLocked}
                   required
                 />
 
@@ -1660,7 +1829,7 @@ export default function AddBulkStockPage() {
                       }
                       disabled={!ownerWarehouseId || existingItemsLoading}
                       searchable
-                      nothingFoundMessage="No hay items por cantidad"
+                      nothingFoundMessage="No hay referencias en el catálogo"
                       required
                     />
 
@@ -1718,6 +1887,8 @@ export default function AddBulkStockPage() {
                     value={itemTypeSelection}
                     onChange={(value) => {
                       setItemTypeSelection(value);
+                      setSelectedSubfamilyId(null);
+                      setNewSubfamilyName('');
                       setIsItemConfigured(false);
                       if (!value) {
                         setItemType(null);
@@ -1725,7 +1896,11 @@ export default function AddBulkStockPage() {
                         return;
                       }
 
-                      if (value === 'FORMALETA') {
+                      const family = bulkFamilies.find((entry) => entry.id === value);
+                      if (!family) return;
+                      const familyKey = toUpperInput(family.name).replace(/\s+/g, '_');
+
+                      if (family.code === 'FORMALETA' || familyKey === 'FORMALETA') {
                         setItemType('FORMALETA');
                         resetTypeForm('FORMALETA');
                         return;
@@ -1733,21 +1908,50 @@ export default function AddBulkStockPage() {
 
                       setItemType('GENERIC');
                       resetTypeForm('GENERIC');
-                      if (value === 'ANDAMIO_CERTIFICADO') {
-                        setGenericFamilyName('ANDAMIO CERTIFICADO');
-                        setGenericFamilyCode('ADCR');
-                      } else if (value === 'ANDAMIO_CONVENCIONAL') {
-                        setGenericFamilyName('ANDAMIO CONVENCIONAL');
-                        setGenericFamilyCode('ADCV');
-                      } else if (value === 'ENCOFRADO') {
-                        setGenericFamilyName('ENCOFRADO');
-                        setGenericFamilyCode('ENCOFRADO');
-                      }
                     }}
                     placeholder={loading ? 'Cargando...' : 'Seleccionar familia'}
                     disabled={loading}
                     required
                   />
+
+                  {selectedFamily ? (
+                    <Paper withBorder radius="md" p="sm">
+                      <Stack gap="sm">
+                        <Select
+                          label="Subfamilia (opcional)"
+                          data={subfamilyOptions}
+                          value={selectedSubfamilyId}
+                          onChange={(value) => {
+                            setSelectedSubfamilyId(value);
+                            setIsItemConfigured(false);
+                          }}
+                          placeholder="Sin subfamilia"
+                          searchable
+                          clearable
+                          nothingFoundMessage="No hay subfamilias"
+                        />
+                        <Group align="flex-end" wrap="wrap">
+                          <UppercaseTextInput
+                            label="Crear subfamilia"
+                            value={newSubfamilyName}
+                            onChange={setNewSubfamilyName}
+                            placeholder="Ej: ACCESORIOS"
+                            style={{ flex: 1, minWidth: 220 }}
+                          />
+                          <Button
+                            type="button"
+                            variant="light"
+                            leftSection={<IconPlus size={16} />}
+                            loading={creatingSubfamily}
+                            disabled={!newSubfamilyName.trim()}
+                            onClick={createSubfamily}
+                          >
+                            Crear y seleccionar
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Paper>
+                  ) : null}
 
                   {itemType === 'FORMALETA' ? (
                     <Paper ref={formaletaFormRef} withBorder radius="lg" p={{ base: 'md', md: 'lg' }}>
@@ -2103,72 +2307,76 @@ export default function AddBulkStockPage() {
                               </Paper>
                             </>
                           ) : (
-                            <UppercaseTextInput
-                              label="Referencia"
-                              value={genericSkuName}
-                              onChange={(value) => {
-                                setGenericSkuName(value);
-                                setIsItemConfigured(false);
-                              }}
-                              placeholder="Ej: VERTICAL 3.00M"
-                              required
-                            />
+                            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                              <UppercaseTextInput
+                                label="Referencia"
+                                value={genericSkuName}
+                                onChange={(value) => {
+                                  setGenericSkuName(value);
+                                  setIsItemConfigured(false);
+                                }}
+                                placeholder="Ej: PUNTA APT"
+                                required
+                              />
+                              <NumberInput
+                                label="Longitud (m) (opcional)"
+                                value={genericLengthMeters}
+                                onChange={(value) => {
+                                  setGenericLengthMeters(typeof value === 'number' ? value : '');
+                                  setIsItemConfigured(false);
+                                }}
+                                min={0.01}
+                                decimalScale={2}
+                                decimalSeparator=","
+                                placeholder="Ej: 30,00"
+                              />
+                              <Select
+                                label="Compatibilidad (opcional)"
+                                data={['20', '30', '40', '60', '90'].map((value) => ({
+                                  value,
+                                  label: `${value} LB`,
+                                }))}
+                                value={genericCompatibilityLb}
+                                onChange={(value) => {
+                                  setGenericCompatibilityLb(value);
+                                  setIsItemConfigured(false);
+                                }}
+                                placeholder="Sin compatibilidad"
+                                clearable
+                              />
+                            </SimpleGrid>
                           )}
                           <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
                             <NumberInput
-                              label="Peso"
+                              label="Peso (opcional)"
                               value={genericSkuUnitWeight}
                               onChange={(value) => setGenericSkuUnitWeight(typeof value === 'number' ? value : '')}
                               min={0}
                               step={0.1}
-                              error={
-                                showRequiredSkuErrors && isMissingPositiveNumber(genericSkuUnitWeight)
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                              required
                             />
                             <Select
-                              label="Unidad"
+                              label="Unidad de peso (opcional)"
                               data={weightUnitOptions}
                               value={genericWeightUnit}
                               onChange={(value) => setGenericWeightUnit((value as WeightUnit | null) ?? '')}
                               searchable
                               nothingFoundMessage="No hay unidades"
-                              error={
-                                showRequiredSkuErrors && !genericWeightUnit
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                              required
                             />
                             <NumberInput
-                              label="Precio cliente"
+                              label="Precio cliente (opcional)"
                               value={genericSkuPrice}
                               onChange={(value) => setGenericSkuPrice(typeof value === 'number' ? value : '')}
                               min={0}
                               step={1000}
-                              error={
-                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuPrice)
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                              required
                             />
                             <NumberInput
-                              label="Valor reposicion"
+                              label="Valor reposicion (opcional)"
                               value={genericSkuReplacementValue}
                               onChange={(value) =>
                                 setGenericSkuReplacementValue(typeof value === 'number' ? value : '')
                               }
                               min={0}
                               step={1000}
-                              error={
-                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuReplacementValue)
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                              required
                             />
                             <ChargeTypeSelect
                               value={genericChargeType}
@@ -2219,7 +2427,7 @@ export default function AddBulkStockPage() {
                         </Text>
                       </Stack>
                       <Badge color="green" variant="light">
-                        Listo
+                        {builtItem.reusesExistingSku ? 'Referencia existente' : 'Nueva referencia'}
                       </Badge>
                     </Group>
                   </Paper>

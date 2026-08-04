@@ -6,10 +6,11 @@ import { CustomersService } from './customers.service';
 import { CustomerRutPdfParserService } from './customer-rut-pdf-parser.service';
 import { WorksiteAddressValidationService } from './worksite-address-validation.service';
 import { WorksitesController } from './worksites.controller';
+import { PublicCustomerUpdatesController } from './public-customer-updates.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule],
-  controllers: [CustomersController, WorksitesController],
+  controllers: [CustomersController, WorksitesController, PublicCustomerUpdatesController],
   providers: [CustomersService, CustomerRutPdfParserService, WorksiteAddressValidationService],
 })
 export class CustomersModule {}

@@ -28,9 +28,11 @@ import { BillingModule } from './billing/billing.module';
 import { BackupsModule } from './backups/backups.module';
 import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
 import { MaintenanceModule } from './maintenance/maintenance.module';
+import { SettingsModule } from './settings/settings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
+import { ProviderReturnsModule } from './provider-returns/provider-returns.module';
 
 @Module({
   imports: [
@@ -46,6 +48,7 @@ import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
       },
     ]),
     PrismaModule,
+    SettingsModule,
     AuthModule,
     CatalogModule,
     PartnersModule,
@@ -65,6 +68,7 @@ import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
     MaintenanceModule,
     NotificationsModule,
     MobilityGuidesModule,
+    ProviderReturnsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -22,11 +22,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
+import { CreateInventoryTransitDto } from './dto/create-inventory-transit.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
 import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import {
@@ -482,9 +484,17 @@ export class InventoryService {
   }
 
   async addBulkAdjustment(payload: CreateBulkAdjustmentDto, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.BULK, tx);
-      const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+      const assetSubfamily = payload.subfamily
+        ? await this.resolveAssetSubfamily(payload.subfamily, assetFamily.id, tx, payload.sku.id)
+        : null;
+      const sku = await this.resolveBulkSku(
+        payload.sku,
+        assetFamily.id,
+        tx,
+        assetSubfamily?.id,
+      );
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
@@ -529,6 +539,9 @@ export class InventoryService {
         providerPrice,
       };
     });
+
+    await this.invalidateInventoryCache({ warehouseId: payload.warehouseId });
+    return result;
   }
 
   async deleteBulkStock(payload: DeleteBulkStockDto, userId: string) {
@@ -968,7 +981,7 @@ export class InventoryService {
           by: ['skuId', 'ownerWarehouseId'],
           where: {
             ownerWarehouseId: { in: ownerWarehouseIds },
-            movementType: MovementType.IN,
+            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
             customerWorksiteId: { not: null },
             skuId: { in: bulkSkuIds },
           },
@@ -1051,7 +1064,7 @@ export class InventoryService {
           by: ['assetId'],
           where: {
             ownerWarehouseId: { in: ownerWarehouseIds },
-            movementType: MovementType.IN,
+            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
             customerWorksiteId: { not: null },
             assetId: { in: serialIds },
           },
@@ -1153,6 +1166,102 @@ export class InventoryService {
     };
   }
 
+  async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findUnique({
+        where: { id: payload.documentId },
+        select: { id: true, type: true, customerWorksiteId: true },
+      });
+      if (!document || document.type !== DocumentType.RETURN) {
+        throw new BadRequestException('El documento debe ser una devolución');
+      }
+      if (document.customerWorksiteId !== payload.customerWorksiteId) {
+        throw new BadRequestException('La obra no coincide con la devolución');
+      }
+
+      const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
+        this.normalizeOperationItems(payload.items);
+      const ownerWarehouseIds = [...new Set(payload.items.map((item) => item.ownerWarehouseId))];
+      const providers = await tx.warehouse.findMany({
+        where: { id: { in: ownerWarehouseIds }, type: 'ALLY', active: true },
+        select: { id: true },
+      });
+      if (providers.length !== ownerWarehouseIds.length) {
+        throw new BadRequestException('Todos los ítems en tránsito deben pertenecer a proveedores activos');
+      }
+
+      const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
+      const serialIds = [...serialAssetIds.values()];
+      const sourceRows = await tx.stockLedger.groupBy({
+        by: ['skuId', 'assetId', 'ownerWarehouseId'],
+        where: {
+          customerWorksiteId: payload.customerWorksiteId,
+          warehouseId: null,
+          OR: [
+            ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
+            ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
+          ],
+        },
+        _sum: { quantity: true },
+      });
+      const alreadyReturned = await tx.stockLedger.groupBy({
+        by: ['skuId', 'assetId', 'ownerWarehouseId'],
+        where: {
+          customerWorksiteId: payload.customerWorksiteId,
+          movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+          OR: [
+            ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
+            ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
+          ],
+        },
+        _sum: { quantity: true },
+      });
+      const keyOf = (row: { skuId: string | null; assetId: string | null; ownerWarehouseId: string }) =>
+        `${row.skuId ?? ''}:${row.assetId ?? ''}:${row.ownerWarehouseId}`;
+      const available = new Map(sourceRows.map((row) => [keyOf(row), Number(row._sum.quantity ?? 0)]));
+      alreadyReturned.forEach((row) => available.set(keyOf(row), (available.get(keyOf(row)) ?? 0) - Number(row._sum.quantity ?? 0)));
+
+      bulkGroups.forEach((item) => {
+        const key = `${item.skuId}::${item.ownerWarehouseId}`;
+        if ((available.get(key) ?? 0) < item.quantity) {
+          throw new BadRequestException(`Inventario insuficiente en obra para ${item.skuId}`);
+        }
+      });
+
+      const assets = serialIds.length
+        ? await tx.asset.findMany({ where: { id: { in: serialIds } }, select: { id: true, warehouseOwnerId: true } })
+        : [];
+      const assetOwner = new Map(assets.map((asset) => [asset.id, asset.warehouseOwnerId]));
+      serialIds.forEach((assetId) => {
+        const ownerId = serialOwnerWarehouseByAsset.get(assetId);
+        if (!ownerId || assetOwner.get(assetId) !== ownerId || (available.get(`:${assetId}:${ownerId}`) ?? 0) < 1) {
+          throw new BadRequestException(`El equipo ${assetId} no está disponible en esta obra`);
+        }
+      });
+
+      const created = await Promise.all([
+        ...bulkGroups.map((item) => tx.stockLedger.create({ data: {
+          movementType: MovementType.TRANSIT, warehouseId: null,
+          customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
+          refDocumentType: DocumentType.RETURN, skuId: item.skuId, assetId: null,
+          ownerWarehouseId: item.ownerWarehouseId, quantity: item.quantity, createdBy: userId,
+        }})),
+        ...serialIds.map((assetId) => tx.stockLedger.create({ data: {
+          movementType: MovementType.TRANSIT, warehouseId: null,
+          customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
+          refDocumentType: DocumentType.RETURN, skuId: null, assetId,
+          ownerWarehouseId: assetOwner.get(assetId)!, quantity: 1, createdBy: userId,
+        }})),
+      ]);
+      if (serialIds.length) {
+        await tx.asset.updateMany({ where: { id: { in: serialIds } }, data: { warehouseCurrentId: null } });
+      }
+      return { count: created.length, ids: created.map((row) => row.id) };
+    });
+    await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
+    return result;
+  }
+
   async moveIn(payload: CreateInventoryInDto, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       let refDocumentType: DocumentType | null = null;
@@ -1199,7 +1308,7 @@ export class InventoryService {
           by: ['skuId', 'ownerWarehouseId'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            movementType: MovementType.IN,
+            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
             skuId: { in: bulkSkuIds },
           },
           _sum: { quantity: true },
@@ -1246,7 +1355,7 @@ export class InventoryService {
           by: ['assetId'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            movementType: MovementType.IN,
+            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
             assetId: { in: serialIds },
           },
           _sum: { quantity: true },
@@ -1750,7 +1859,7 @@ export class InventoryService {
       by: ['skuId', 'ownerWarehouseId'],
       where: {
         customerWorksiteId,
-        movementType: MovementType.IN,
+        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
         skuId: { not: null },
       },
       _sum: { quantity: true },
@@ -1769,7 +1878,7 @@ export class InventoryService {
       by: ['assetId'],
       where: {
         customerWorksiteId,
-        movementType: MovementType.IN,
+        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
         assetId: { not: null },
       },
       _sum: { quantity: true },
@@ -2062,7 +2171,20 @@ export class InventoryService {
             worksite: { select: { id: true, name: true } },
           },
         },
-        document: { select: { id: true, consecutive: true, type: true } },
+        document: {
+          select: {
+            id: true,
+            consecutive: true,
+            type: true,
+            creator: {
+              select: {
+                id: true,
+                email: true,
+                employee: { select: { name: true, lastName: true } },
+              },
+            },
+          },
+        },
         creator: {
           select: {
             id: true,
@@ -2618,6 +2740,58 @@ export class InventoryService {
       },
       select: { id: true },
     });
+  }
+
+  private async resolveBulkSku(
+    input: {
+      id?: string;
+      name?: string;
+      unitWeight?: number;
+      price?: number;
+      subrentalPrice?: number;
+      replacementValue?: number;
+      chargeType?: ChargeType;
+      minimumChargeHours?: number;
+      size?: string;
+      lengthMeters?: number;
+      areaM2?: number;
+    },
+    assetFamilyId: string,
+    tx: Prisma.TransactionClient,
+    assetSubfamilyId?: string | null,
+  ) {
+    if (input.id) {
+      return this.resolveSku(input, assetFamilyId, tx, assetSubfamilyId);
+    }
+
+    const normalizedInput = normalizeBulkSkuInput(input);
+    const canonicalName = bulkSkuCanonicalKey(normalizedInput);
+    if (!canonicalName) {
+      throw new BadRequestException('Sku name is required');
+    }
+
+    const familySkus = await tx.sku.findMany({
+      where: { assetFamilyId },
+      select: { id: true, name: true, lengthMeters: true },
+    });
+    const canonicalMatch = familySkus.find(
+      (sku) =>
+        bulkSkuCanonicalKey({
+          name: sku.name,
+          lengthMeters: sku.lengthMeters == null ? undefined : Number(sku.lengthMeters),
+        }) === canonicalName,
+    );
+
+    if (canonicalMatch) {
+      return this.resolveSku(
+        { ...normalizedInput, id: canonicalMatch.id },
+        assetFamilyId,
+        tx,
+        assetSubfamilyId,
+      );
+    }
+
+    return this.resolveSku(normalizedInput, assetFamilyId, tx, assetSubfamilyId);
   }
 
   private resolveChargeConfig(chargeType?: ChargeType, minimumChargeHours?: number) {

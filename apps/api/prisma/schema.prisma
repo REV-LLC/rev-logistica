@@ -49,6 +49,7 @@ enum DocumentType {
   RETURN
   ADJUSTMENT
   CUTOVER
+  PROVIDER_RECEIPT
 }
 
 enum DocumentStatus {
@@ -140,17 +141,47 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  documentsCreated           Document[]              @relation("CreatedBy")
-  ledgerCreated              StockLedger[]           @relation("LedgerCreatedBy")
-  tasksCreated               Task[]                  @relation("TaskCreatedBy")
-  tasksAssigned              Task[]                  @relation("TaskAssignedTo")
-  mobilityGuidesCreated      MobilityGuide[]         @relation("MobilityGuideCreatedBy")
-  employee                   Employee?
-  notificationRecipients     NotificationRecipient[]
-  maintenanceReadings        AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
-  vehicleMaintenanceReadings VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
-  maintenanceCompletions     MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
-  notificationDeliveries     NotificationDelivery[]
+  documentsCreated              Document[]              @relation("CreatedBy")
+  ledgerCreated                 StockLedger[]           @relation("LedgerCreatedBy")
+  tasksCreated                  Task[]                  @relation("TaskCreatedBy")
+  tasksAssigned                 Task[]                  @relation("TaskAssignedTo")
+  mobilityGuidesCreated         MobilityGuide[]         @relation("MobilityGuideCreatedBy")
+  providerMobilityGuidesCreated ProviderMobilityGuide[] @relation("ProviderMobilityGuideCreatedBy")
+  employee                      Employee?
+  notificationRecipients        NotificationRecipient[]
+  maintenanceReadings           AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
+  vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
+  maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
+  notificationDeliveries        NotificationDelivery[]
+  appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
+}
+
+model AppSetting {
+  key         String   @id
+  value       Json
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  auditEntries AppSettingAudit[]
+
+  @@index([category])
+}
+
+model AppSettingAudit {
+  id              String   @id @default(uuid())
+  settingKey      String
+  oldValue        Json?
+  newValue        Json
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+
+  setting   AppSetting @relation(fields: [settingKey], references: [key], onDelete: Cascade)
+  updatedBy User       @relation("AppSettingUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@index([settingKey, createdAt(sort: Desc)])
+  @@index([updatedByUserId])
 }
 
 model Customer {
@@ -161,6 +192,12 @@ model Customer {
   phone                 String?
   email                 String?
   documentsEmail        String?
+  documentsPhone        String?
+  contactDirectory      Json?
+  updateToken            String?                        @unique
+  updateTokenExpiresAt   DateTime?
+  contactUpdatedAt       DateTime?
+  contactUpdatedBy       String?
   billingAddress        String?
   billingPhone          String?
   billingAlternatePhone String?
@@ -177,6 +214,7 @@ model Worksite {
   externalCode   String?  @unique
   name           String
   address        String?
+  contactName    String?
   phone          String?
   alternatePhone String?
   email          String?
@@ -223,6 +261,7 @@ model Warehouse {
   internalCounters          AssetInternalCounter[]
   inventorySnapshotEntries  InventorySnapshotEntry[]
   legacyWarehouseReferences LegacyWarehouse[]
+  providerMobilityGuides    ProviderMobilityGuide[]
   providerSkuPrices         ProviderSkuPrice[]
 }
 
@@ -299,13 +338,14 @@ model Sku {
   active               Boolean    @default(true)
   createdAt            DateTime   @default(now())
 
-  assets          Asset[]
-  documentItems   DocumentItem[]
-  ledger          StockLedger[]
-  imageFileObject FileObject?        @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily     AssetFamily        @relation(fields: [assetFamilyId], references: [id])
-  assetSubfamily  AssetSubfamily?    @relation(fields: [assetSubfamilyId], references: [id])
-  providerPrices  ProviderSkuPrice[]
+  assets               Asset[]
+  documentItems        DocumentItem[]
+  ledger               StockLedger[]
+  imageFileObject      FileObject?           @relation("SkuImage", fields: [imageFileObjectId], references: [id])
+  assetFamily          AssetFamily           @relation(fields: [assetFamilyId], references: [id])
+  assetSubfamily       AssetSubfamily?       @relation(fields: [assetSubfamilyId], references: [id])
+  providerPrices       ProviderSkuPrice[]
+  providerReceiptItems ProviderReceiptItem[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
@@ -365,15 +405,36 @@ model Asset {
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
 
-  documentItems    DocumentItem[]
-  ledger           StockLedger[]
-  taskAssets       TaskAsset[]
-  mobilityGuides   MobilityGuide[]
-  hourReadings     AssetHourReading[]
-  maintenancePlans MaintenancePlan[]
+  documentItems        DocumentItem[]
+  ledger               StockLedger[]
+  taskAssets           TaskAsset[]
+  mobilityGuides       MobilityGuide[]
+  hourReadings         AssetHourReading[]
+  maintenancePlans     MaintenancePlan[]
+  providerReceiptItems ProviderReceiptItem[]
 
   @@index([skuId])
   @@index([registrationNumber])
+}
+
+model ProviderMobilityGuide {
+  id               String   @id @default(uuid())
+  providerId       String
+  fileObjectId     String   @unique
+  machineReference String
+  name             String
+  issuedAt         DateTime
+  expiresAt        DateTime
+  createdByUserId  String
+  createdAt        DateTime @default(now())
+
+  provider   Warehouse  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("ProviderMobilityGuideCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([providerId, issuedAt])
+  @@index([issuedAt])
+  @@index([expiresAt])
 }
 
 model MobilityGuide {
@@ -576,6 +637,7 @@ model Document {
   docDate            DateTime       @default(now())
   notes              String?
   recipientPhone     String?
+  recipientPhones    String[]       @default([])
 
   // Failed fields
   failedReason         String?
@@ -586,6 +648,10 @@ model Document {
   retryOfDocumentId String?
   retryOfDocument   Document?  @relation("RetryChain", fields: [retryOfDocumentId], references: [id])
   retries           Document[] @relation("RetryChain")
+
+  providerSourceDocumentId String?
+  providerSourceDocument   Document?  @relation("ProviderReceiptSource", fields: [providerSourceDocumentId], references: [id])
+  providerReceipts         Document[] @relation("ProviderReceiptSource")
 
   // Void fields
   voidReason String?
@@ -602,10 +668,58 @@ model Document {
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
   creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
-  items             DocumentItem[]
-  ledger            StockLedger[]
-  files             FileObject[]
-  messageDeliveries DocumentMessageDelivery[]
+  items                      DocumentItem[]
+  ledger                     StockLedger[]
+  files                      FileObject[]
+  messageDeliveries          DocumentMessageDelivery[]
+  emailDeliveries            DocumentEmailDelivery[]
+  providerReceiptItems       ProviderReceiptItem[]     @relation("ProviderReceiptDocument")
+  providerReceiptSourceItems ProviderReceiptItem[]     @relation("ProviderReceiptSourceDocument")
+
+  @@index([providerSourceDocumentId])
+}
+
+model ProviderReceiptItem {
+  id                String   @id @default(uuid())
+  receiptDocumentId String
+  sourceDocumentId  String
+  sourceLedgerId    String
+  skuId             String?
+  assetId           String?
+  quantity          Decimal
+  createdAt         DateTime @default(now())
+
+  receiptDocument Document    @relation("ProviderReceiptDocument", fields: [receiptDocumentId], references: [id], onDelete: Cascade)
+  sourceDocument  Document    @relation("ProviderReceiptSourceDocument", fields: [sourceDocumentId], references: [id])
+  sourceLedger    StockLedger @relation(fields: [sourceLedgerId], references: [id])
+  sku             Sku?        @relation(fields: [skuId], references: [id])
+  asset           Asset?      @relation(fields: [assetId], references: [id])
+
+  @@index([receiptDocumentId])
+  @@index([sourceDocumentId])
+  @@index([sourceLedgerId])
+  @@index([skuId])
+  @@index([assetId])
+}
+
+model DocumentEmailDelivery {
+  id              String                     @id @default(uuid())
+  documentId      String
+  kind            String
+  email           String
+  subject         String
+  attachmentNames Json
+  status          NotificationDeliveryStatus @default(PENDING)
+  sentAt          DateTime?
+  error           String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, kind])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([documentId, createdAt(sort: Desc)])
 }
 
 model DocumentMessageDelivery {
@@ -690,7 +804,8 @@ model StockLedger {
   sku   Sku?   @relation(fields: [skuId], references: [id])
   asset Asset? @relation(fields: [assetId], references: [id])
 
-  creator User @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
+  creator              User                  @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
+  providerReceiptItems ProviderReceiptItem[]
 
   @@index([refDocumentId])
   @@index([skuId])
@@ -916,10 +1031,11 @@ model FileObject {
   createdAt       DateTime  @default(now())
   createdBy       String
 
-  document      Document?      @relation(fields: [documentId], references: [id])
-  skuImages     Sku[]          @relation("SkuImage")
-  assetImages   Asset[]        @relation("AssetImage")
-  mobilityGuide MobilityGuide?
+  document              Document?              @relation(fields: [documentId], references: [id])
+  skuImages             Sku[]                  @relation("SkuImage")
+  assetImages           Asset[]                @relation("AssetImage")
+  mobilityGuide         MobilityGuide?
+  providerMobilityGuide ProviderMobilityGuide?
 
   @@index([documentId])
   @@index([entityType, entityId])

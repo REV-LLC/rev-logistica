@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,20 @@ import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfService } from './document-pdf.service';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
+
+export function assertCanViewDocument(
+  document: { createdBy: string },
+  requester?: { role: Role; userId: string },
+) {
+  if (
+    requester?.role === Role.DRIVER &&
+    document.createdBy !== requester.userId
+  ) {
+    throw new ForbiddenException(
+      'Drivers can only view their own documents',
+    );
+  }
+}
 
 @Injectable()
 export class DocumentsService {
@@ -487,12 +502,17 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     createdBy: string;
   }) {
     const type = payload.type as DocumentType;
     const status =
       (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -510,7 +530,8 @@ export class DocumentsService {
               warehouseId: payload.warehouseId ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -537,7 +558,8 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     receivedSignature?: string;
     createdBy: string;
     items: Array<{
@@ -550,6 +572,10 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -572,7 +598,8 @@ export class DocumentsService {
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -630,6 +657,7 @@ export class DocumentsService {
       customerWorksiteId?: string;
       notes?: string;
       recipientPhone?: string;
+      recipientPhones?: string[];
       receivedSignature?: string;
       items: Array<{
         skuId?: string;
@@ -654,6 +682,7 @@ export class DocumentsService {
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
+        recipientPhones: true,
         docDate: true,
       },
     });
@@ -689,6 +718,19 @@ export class DocumentsService {
           this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
         const defaultBillingCutoffDate =
           nextType === DocumentType.RETURN ? nextDocDate : null;
+        const recipientsWereUpdated =
+          payload.recipientPhones !== undefined ||
+          payload.recipientPhone !== undefined;
+        const nextRecipientPhones = recipientsWereUpdated
+          ? this.normalizeDocumentRecipientPhones(
+              payload.recipientPhones,
+              payload.recipientPhone,
+            )
+          : existing.recipientPhones.length
+            ? existing.recipientPhones
+            : existing.recipientPhone
+              ? [existing.recipientPhone]
+              : [];
         const updated = await tx.document.update({
           where: { id: documentId },
           data: {
@@ -704,10 +746,8 @@ export class DocumentsService {
                 : existing.customerWorksiteId,
             docDate: nextDocDate,
             notes: nextNotes,
-            recipientPhone:
-              payload.recipientPhone !== undefined
-                ? normalizeRequiredColombianPhone(payload.recipientPhone)
-                : existing.recipientPhone,
+            recipientPhone: nextRecipientPhones[0] ?? null,
+            recipientPhones: nextRecipientPhones,
             officeModifiedAt: new Date(),
             officeModifiedBy: userId,
           },
@@ -899,6 +939,7 @@ export class DocumentsService {
           select: {
             id: true,
             email: true,
+            role: true,
             employee: { select: { name: true, lastName: true } },
           },
         })
@@ -915,6 +956,7 @@ export class DocumentsService {
         return {
           id: creator.id,
           email: creator.email,
+          role: creator.role,
           name: creator.employee
             ? `${creator.employee.name} ${creator.employee.lastName}`.trim()
             : creator.email,
@@ -1079,7 +1121,13 @@ export class DocumentsService {
         },
         files: {
           where: {
-            fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE'] },
+            fileType: {
+              in: [
+                'SIGNATURE_RECEIVED',
+                'PHOTO_EVIDENCE',
+                'COMPROBANTE_SALIDA_PROVEEDOR',
+              ],
+            },
           },
           select: {
             id: true,
@@ -1095,7 +1143,6 @@ export class DocumentsService {
             createdAt: true,
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 1,
         },
       },
     });
@@ -1114,6 +1161,32 @@ export class DocumentsService {
       throw new BadRequestException(
         'Solo se pueden aprobar remisiones o devoluciones',
       );
+    }
+
+    if (document.type === DocumentType.REMISSION) {
+      const ownerWarehouseIds = [
+        ...new Set(
+          document.items
+            .map((item) => item.condition?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ];
+      const providerOwner = ownerWarehouseIds.length
+        ? await this.prisma.warehouse.findFirst({
+            where: { id: { in: ownerWarehouseIds }, type: 'ALLY' },
+            select: { id: true },
+          })
+        : null;
+      if (
+        providerOwner &&
+        !document.files.some(
+          (file) => file.category === 'COMPROBANTE_SALIDA_PROVEEDOR',
+        )
+      ) {
+        throw new BadRequestException(
+          'La remisión incluye equipos de proveedor y requiere la foto de la remisión física entregada por el proveedor',
+        );
+      }
     }
 
     if (
@@ -1197,7 +1270,10 @@ export class DocumentsService {
     });
   }
 
-  async getDocument(documentId: string) {
+  async getDocument(
+    documentId: string,
+    requester?: { role: Role; userId: string },
+  ) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: {
@@ -1309,6 +1385,7 @@ export class DocumentsService {
     if (!document) {
       throw new NotFoundException('Document not found');
     }
+    assertCanViewDocument(document, requester);
 
     return {
       ...document,
@@ -1365,13 +1442,23 @@ export class DocumentsService {
             quantity: true,
             requestedTag: true,
             conditionNote: true,
-            sku: { select: { name: true } },
+            sku: {
+              select: {
+                name: true,
+                assetFamily: { select: { name: true } },
+              },
+            },
             asset: {
               select: {
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
-                sku: { select: { name: true } },
+                sku: {
+                  select: {
+                    name: true,
+                    assetFamily: { select: { name: true } },
+                  },
+                },
               },
             },
           },
@@ -1475,5 +1562,22 @@ export class DocumentsService {
       driverId: values.get('conductor') || null,
       dispatcherId: values.get('despachador') || null,
     };
+  }
+
+  private normalizeDocumentRecipientPhones(
+    recipientPhones?: string[],
+    recipientPhone?: string,
+  ) {
+    const normalized = [
+      ...(recipientPhones ?? []),
+      ...(recipientPhone ? [recipientPhone] : []),
+    ].map((phone) => normalizeRequiredColombianPhone(phone));
+    const unique = [...new Set(normalized)];
+    if (!unique.length) {
+      throw new BadRequestException(
+        'Agrega al menos un destinatario de WhatsApp',
+      );
+    }
+    return unique;
   }
 }

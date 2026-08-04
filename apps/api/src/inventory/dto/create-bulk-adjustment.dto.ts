@@ -25,6 +25,20 @@ export class BulkAssetFamilyInput {
   name?: string;
 }
 
+export class BulkAssetSubfamilyInput {
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
+
 export class BulkSkuInput {
   @IsOptional()
   @IsUUID()
@@ -65,12 +79,23 @@ export class BulkSkuInput {
   @IsOptional()
   @IsNumber()
   areaM2?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  lengthMeters?: number;
 }
 
 export class CreateBulkAdjustmentDto {
   @ValidateNested()
   @Type(() => BulkAssetFamilyInput)
   family: BulkAssetFamilyInput;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BulkAssetSubfamilyInput)
+  subfamily?: BulkAssetSubfamilyInput;
 
   @ValidateNested()
   @Type(() => BulkSkuInput)

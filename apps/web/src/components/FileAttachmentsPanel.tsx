@@ -74,7 +74,7 @@ type FileActionsProps = {
   previewLoadingId: string | null;
   onPreview: (file: AttachedFile) => void;
   onDownload: (file: AttachedFile) => void;
-  onRemove: (file: AttachedFile) => void;
+  onRemove?: (file: AttachedFile) => void;
 };
 
 function FileActions({
@@ -104,13 +104,15 @@ function FileActions({
           color: 'violet',
           onClick: () => onDownload(file),
         },
-        {
-          key: 'delete',
-          label: `Eliminar ${fileLabel(file)}`,
-          icon: <IconTrash size={16} />,
-          color: 'red',
-          onClick: () => onRemove(file),
-        },
+        ...(onRemove
+          ? [{
+              key: 'delete',
+              label: `Eliminar ${fileLabel(file)}`,
+              icon: <IconTrash size={16} />,
+              color: 'red',
+              onClick: () => onRemove(file),
+            }]
+          : []),
       ]}
     />
   );
@@ -120,10 +122,16 @@ export default function FileAttachmentsPanel({
   entityType,
   entityId,
   title = 'Documentos',
+  description = 'Sube, consulta y descarga documentos asociados a este registro.',
+  uploadMode = 'generic',
+  allowDelete = true,
 }: {
   entityType: FileEntityType;
   entityId: string;
   title?: string;
+  description?: string;
+  uploadMode?: 'generic' | 'document-evidence';
+  allowDelete?: boolean;
 }) {
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [categories, setCategories] = useState<FileCategoryOption[]>([]);
@@ -149,12 +157,18 @@ export default function FileAttachmentsPanel({
     setLoading(true);
     setError(null);
     try {
-      const [categoryData, fileData] = await Promise.all([
-        api<FileCategoryOption[]>(`/files/categories/${entityType}`),
+      const [categoryData, allFiles] = await Promise.all([
+        uploadMode === 'document-evidence'
+          ? Promise.resolve([{ value: 'PHOTO_EVIDENCE', label: 'Evidencia fotográfica' }])
+          : api<FileCategoryOption[]>(`/files/categories/${entityType}`),
         api<AttachedFile[]>(`/files/entities/${entityType}/${entityId}`),
       ]);
       setCategories(categoryData);
-      setFiles(fileData);
+      setFiles(
+        uploadMode === 'document-evidence'
+          ? allFiles.filter((file) => file.fileType === 'PHOTO_EVIDENCE')
+          : allFiles,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudieron cargar los archivos');
     } finally {
@@ -164,7 +178,7 @@ export default function FileAttachmentsPanel({
 
   useEffect(() => {
     void loadFiles();
-  }, [entityType, entityId]);
+  }, [entityType, entityId, uploadMode]);
 
   const download = async (file: AttachedFile) => {
     setError(null);
@@ -213,7 +227,7 @@ export default function FileAttachmentsPanel({
         <div>
           <Title order={4}>{title}</Title>
           <Text size="sm" c="dimmed">
-            Sube, consulta y descarga documentos asociados a este registro.
+            {description}
           </Text>
         </div>
         <Group gap="xs" wrap="wrap">
@@ -226,7 +240,7 @@ export default function FileAttachmentsPanel({
             onClick={() => setUploadOpened(true)}
             disabled={loading || !categories.length}
           >
-            Subir archivo
+            {uploadMode === 'document-evidence' ? 'Anexar fotos' : 'Subir archivo'}
           </Button>
         </Group>
       </Group>
@@ -286,7 +300,7 @@ export default function FileAttachmentsPanel({
                       previewLoadingId={previewLoadingId}
                       onPreview={openPreview}
                       onDownload={download}
-                      onRemove={remove}
+                      onRemove={allowDelete ? remove : undefined}
                     />
                   </Table.Td>
                 </Table.Tr>
@@ -320,7 +334,7 @@ export default function FileAttachmentsPanel({
                       previewLoadingId={previewLoadingId}
                       onPreview={openPreview}
                       onDownload={download}
-                      onRemove={remove}
+                      onRemove={allowDelete ? remove : undefined}
                     />
                   </Group>
                 </Stack>
@@ -334,10 +348,18 @@ export default function FileAttachmentsPanel({
             <ThemeIcon color="gray" variant="light" size={42} radius="xl">
               <IconFile size={20} />
             </ThemeIcon>
-            <Text fw={700}>{loading ? 'Cargando archivos...' : 'No hay documentos adjuntos'}</Text>
+            <Text fw={700}>
+              {loading
+                ? 'Cargando archivos...'
+                : uploadMode === 'document-evidence'
+                  ? 'No hay fotografías anexadas'
+                  : 'No hay documentos adjuntos'}
+            </Text>
             {!loading ? (
               <Text size="sm" c="dimmed" ta="center">
-                Usa el bloque de subida para asociar fotos, manuales, fichas, certificados u otros soportes.
+                {uploadMode === 'document-evidence'
+                  ? 'Puedes anexar ahora las fotografías que faltaron al crear el borrador.'
+                  : 'Usa el bloque de subida para asociar fotos, manuales, fichas, certificados u otros soportes.'}
               </Text>
             ) : null}
           </Stack>
@@ -374,6 +396,7 @@ export default function FileAttachmentsPanel({
         categories={categories}
         onClose={() => setUploadOpened(false)}
         onUploaded={loadFiles}
+        mode={uploadMode}
       />
     </Stack>
   );

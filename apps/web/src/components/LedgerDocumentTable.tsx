@@ -103,6 +103,13 @@ function getCreator(item: LedgerItem) {
   return employeeName || item.creator?.email || '-';
 }
 
+function getDocumentRequester(item: LedgerItem) {
+  const employeeName = item.document?.creator?.employee
+    ? `${item.document.creator.employee.name} ${item.document.creator.employee.lastName ?? ''}`.trim()
+    : null;
+  return employeeName || item.document?.creator?.email || '-';
+}
+
 function getMovementSummary(group: LedgerDocumentGroup) {
   return Array.from(new Set(group.items.map(formatMovementType))).join(' / ');
 }
@@ -209,6 +216,9 @@ export default function LedgerDocumentTable({
                 <Text size="xs" c="dimmed" mt={4} lineClamp={1}>
                   {getLocationSummary(group)}
                 </Text>
+                <Text size="xs" c="dimmed" mt={4} lineClamp={1}>
+                  Solicitado por: {getDocumentRequester(primaryItem)}
+                </Text>
               </Paper>
             );
           })}
@@ -222,6 +232,7 @@ export default function LedgerDocumentTable({
               <Table.Th>Movimiento</Table.Th>
               <Table.Th>Ítems</Table.Th>
               <Table.Th>Ubicación</Table.Th>
+              <Table.Th>Solicitado por</Table.Th>
               <Table.Th>Creado por</Table.Th>
               <Table.Th style={{ width: 92, textAlign: 'right' }}>Acciones</Table.Th>
             </Table.Tr>
@@ -265,6 +276,7 @@ export default function LedgerDocumentTable({
                     </Group>
                   </Table.Td>
                   <Table.Td>{getLocationSummary(group)}</Table.Td>
+                  <Table.Td>{getDocumentRequester(primaryItem)}</Table.Td>
                   <Table.Td>{getCreator(primaryItem)}</Table.Td>
                   <Table.Td>
                     <TableRowActions
@@ -303,6 +315,9 @@ export default function LedgerDocumentTable({
                 </Text>
                 <Text fw={700}>{getMovementSummary(detailsGroup)}</Text>
                 <Text size="sm">{getLocationSummary(detailsGroup)}</Text>
+                <Text size="sm" c="dimmed">
+                  Solicitado por: {getDocumentRequester(detailsGroup.items[0])}
+                </Text>
               </div>
               <Badge variant="light" color="blue">
                 {detailsGroup.items.length} ítem{detailsGroup.items.length === 1 ? '' : 's'}

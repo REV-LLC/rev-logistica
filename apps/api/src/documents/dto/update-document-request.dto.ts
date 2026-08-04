@@ -1,5 +1,6 @@
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsNumber,
@@ -68,6 +69,17 @@ export class UpdateDocumentRequestDto {
     message: 'El teléfono debe contener exactamente 10 dígitos',
   })
   recipientPhone?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @Matches(/^\d{10}$/, {
+    each: true,
+    message: 'Cada teléfono debe contener exactamente 10 dígitos',
+  })
+  recipientPhones?: string[];
 
   @IsOptional()
   @IsString()

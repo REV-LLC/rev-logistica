@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { DocumentPdfService } from './document-pdf.service';
+import { buildPdfItemDescription, DocumentPdfService } from './document-pdf.service';
 
 describe('DocumentPdfService', () => {
   const document = {
@@ -23,7 +23,10 @@ describe('DocumentPdfService', () => {
         quantity: 2,
         requestedTag: null,
         conditionNote: null,
-        sku: { name: 'Andamio certificado' },
+        sku: {
+          name: 'Globalmeq 1TN',
+          assetFamily: { name: 'Vibrocompactador' },
+        },
         asset: null,
       },
     ],
@@ -101,5 +104,31 @@ describe('DocumentPdfService', () => {
     expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
     expect(buffer.length).toBeGreaterThan(5_000);
     expect(pageCount(buffer)).toBe(2);
+  });
+
+  it('prefixes the item reference with its family', () => {
+    expect(buildPdfItemDescription({
+      quantity: 1,
+      requestedTag: null,
+      conditionNote: null,
+      sku: {
+        name: 'GLOBALMEQ 1TN',
+        assetFamily: { name: 'VIBROCOMPACTADOR' },
+      },
+      asset: null,
+    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
+  });
+
+  it('does not repeat the family when it is already part of the reference', () => {
+    expect(buildPdfItemDescription({
+      quantity: 1,
+      requestedTag: null,
+      conditionNote: null,
+      sku: {
+        name: 'VIBROCOMPACTADOR GLOBALMEQ 1TN',
+        assetFamily: { name: 'VIBROCOMPACTADOR' },
+      },
+      asset: null,
+    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
   });
 });

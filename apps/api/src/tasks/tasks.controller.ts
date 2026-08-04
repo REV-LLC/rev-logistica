@@ -75,7 +75,8 @@ export class TasksController {
       throw new BadRequestException('Invalid status');
     }
 
-    const assignedToUserId = assignedToMe === 'true' ? request?.user.sub : undefined;
+    const assignedToUserId = request?.user.role === Role.DRIVER || assignedToMe === 'true'
+      ? request?.user.sub : undefined;
 
     return this.tasksService.listTasks({
       status,
@@ -101,6 +102,13 @@ export class TasksController {
     payload: UpdateTaskDto,
   ) {
     return this.tasksService.updateTask(id, payload);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE)
+  deleteTask(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.tasksService.deleteTask(id);
   }
 
   @Get(':id/assets')

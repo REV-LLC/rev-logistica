@@ -5,13 +5,7 @@ import { Alert, Badge, Button, Group, Paper, Stack, Text, ThemeIcon } from '@man
 import { IconBell, IconDeviceFloppy } from '@tabler/icons-react';
 import NotificationRecipientsEditor from './NotificationRecipientsEditor';
 import { api } from '@/lib/api';
-import {
-  apiErrorMessage,
-  recipientsFromTopic,
-  type AppUserOption,
-  type NotificationRecipientInput,
-  type NotificationTopic,
-} from '@/lib/maintenance-types';
+import { apiErrorMessage, recipientsFromTopic, type AppUserOption, type NotificationRecipientInput, type NotificationTopic } from '@/lib/maintenance-types';
 
 const topicLabels: Record<string, string> = {
   SOAT_EXPIRY: 'SOAT',
@@ -24,6 +18,82 @@ type TopicEditorProps = {
   users: AppUserOption[];
   onSaved: () => Promise<void>;
 };
+
+type VehicleRecipientsEditorProps = {
+  entityId: string;
+  topics: NotificationTopic[];
+  users: AppUserOption[];
+  onSaved: () => Promise<void>;
+};
+
+function mergeTopicRecipients(topics: NotificationTopic[]) {
+  const recipientsByUser = new Map<string, NotificationRecipientInput>();
+
+  for (const topic of topics) {
+    for (const recipient of recipientsFromTopic(topic)) {
+      const current = recipientsByUser.get(recipient.userId);
+      recipientsByUser.set(recipient.userId, {
+        userId: recipient.userId,
+        emailEnabled: Boolean(current?.emailEnabled || recipient.emailEnabled),
+        smsEnabled: Boolean(current?.smsEnabled || recipient.smsEnabled),
+        whatsappEnabled: Boolean(current?.whatsappEnabled || recipient.whatsappEnabled),
+      });
+    }
+  }
+
+  return Array.from(recipientsByUser.values());
+}
+
+function VehicleRecipientsEditor({ entityId, topics, users, onSaved }: VehicleRecipientsEditorProps) {
+  const [recipients, setRecipients] = useState<NotificationRecipientInput[]>(() => mergeTopicRecipients(topics));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRecipients(mergeTopicRecipients(topics));
+    setError(null);
+  }, [topics]);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api(`/vehicles/${entityId}`, {
+        method: 'PATCH',
+        json: { notificationRecipients: recipients },
+      });
+      await onSaved();
+    } catch (err) {
+      setError(apiErrorMessage(err, 'No se pudieron guardar los destinatarios.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Paper withBorder radius="lg" p="md">
+      <Stack gap="md">
+        <div>
+          <Text fw={800}>Alertas de documentos</Text>
+          <Text size="sm" c="dimmed">
+            Estos destinatarios recibirán tanto las alertas de SOAT como las de tecnomecánica.
+          </Text>
+        </div>
+        {error ? (
+          <Alert color="red" role="alert">
+            {error}
+          </Alert>
+        ) : null}
+        <NotificationRecipientsEditor users={users} value={recipients} onChange={setRecipients} label="Destinatarios comunes" />
+        <Group justify="flex-end">
+          <Button size="sm" leftSection={<IconDeviceFloppy size={16} />} loading={saving} onClick={save}>
+            Guardar destinatarios
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+}
 
 function TopicEditor({ topic, users, onSaved }: TopicEditorProps) {
   const [recipients, setRecipients] = useState<NotificationRecipientInput[]>(() => recipientsFromTopic(topic));
@@ -65,20 +135,14 @@ function TopicEditor({ topic, users, onSaved }: TopicEditorProps) {
             {topic.active ? 'Activa' : 'Inactiva'}
           </Badge>
         </Group>
-        {error ? <Alert color="red" role="alert">{error}</Alert> : null}
-        <NotificationRecipientsEditor
-          users={users}
-          value={recipients}
-          onChange={setRecipients}
-          label="Destinatarios"
-        />
+        {error ? (
+          <Alert color="red" role="alert">
+            {error}
+          </Alert>
+        ) : null}
+        <NotificationRecipientsEditor users={users} value={recipients} onChange={setRecipients} label="Destinatarios" />
         <Group justify="flex-end">
-          <Button
-            size="sm"
-            leftSection={<IconDeviceFloppy size={16} />}
-            loading={saving}
-            onClick={save}
-          >
+          <Button size="sm" leftSection={<IconDeviceFloppy size={16} />} loading={saving} onClick={save}>
             Guardar destinatarios
           </Button>
         </Group>
@@ -92,11 +156,7 @@ type Props = {
   entityLabel?: string;
 };
 
-export default function EntityNotificationManager({
-  entityType,
-  entityId,
-  entityLabel,
-}: Props) {
+export default function EntityNotificationManager({ entityType, entityId, entityLabel }: Props) {
   const [topics, setTopics] = useState<NotificationTopic[]>([]);
   const [users, setUsers] = useState<AppUserOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +189,8 @@ export default function EntityNotificationManager({
     setSuccess('Destinatarios actualizados.');
   };
 
+  const usesCommonVehicleRecipients = entityType.toUpperCase() === 'VEHICLE';
+
   return (
     <Stack gap="lg">
       <Group gap="sm" align="flex-start" wrap="nowrap">
@@ -136,14 +198,22 @@ export default function EntityNotificationManager({
           <IconBell size={21} />
         </ThemeIcon>
         <div>
-          <Text fw={900} size="lg">Alertas de {entityLabel ?? 'la entidad'}</Text>
+          <Text fw={900} size="lg">
+            Alertas de {entityLabel ?? 'la entidad'}
+          </Text>
           <Text size="sm" c="dimmed">
-            Cada tipo de alerta puede tener destinatarios y canales diferentes.
+            {usesCommonVehicleRecipients
+              ? 'Una sola selección aplica a todas las alertas de documentos del vehículo.'
+              : 'Cada tipo de alerta puede tener destinatarios y canales diferentes.'}
           </Text>
         </div>
       </Group>
 
-      {error ? <Alert color="red" role="alert">{error}</Alert> : null}
+      {error ? (
+        <Alert color="red" role="alert">
+          {error}
+        </Alert>
+      ) : null}
       {success ? (
         <Alert color="green" withCloseButton onClose={() => setSuccess(null)}>
           {success}
@@ -152,17 +222,23 @@ export default function EntityNotificationManager({
 
       {loading ? (
         <Paper withBorder radius="lg" p="xl">
-          <Text c="dimmed" ta="center">Cargando alertas...</Text>
+          <Text c="dimmed" ta="center">
+            Cargando alertas...
+          </Text>
         </Paper>
       ) : topics.length ? (
         <Stack gap="md">
-          {topics.map((topic) => (
-            <TopicEditor key={topic.id} topic={topic} users={users} onSaved={saved} />
-          ))}
+          {usesCommonVehicleRecipients ? (
+            <VehicleRecipientsEditor entityId={entityId} topics={topics} users={users} onSaved={saved} />
+          ) : (
+            topics.map((topic) => <TopicEditor key={topic.id} topic={topic} users={users} onSaved={saved} />)
+          )}
         </Stack>
       ) : (
         <Paper withBorder radius="lg" p="xl" bg="gray.0">
-          <Text fw={700} ta="center">No hay alertas configuradas.</Text>
+          <Text fw={700} ta="center">
+            No hay alertas configuradas.
+          </Text>
         </Paper>
       )}
     </Stack>

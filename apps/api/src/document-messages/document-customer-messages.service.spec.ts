@@ -2,7 +2,7 @@ import { NotificationDeliveryStatus } from '@prisma/client';
 import { DocumentCustomerMessagesService } from './document-customer-messages.service';
 
 describe('DocumentCustomerMessagesService', () => {
-  it('deduplicates equal receiver and customer phones and sends WhatsApp once', async () => {
+  it('deduplicates document, customer and worksite phones before sending WhatsApp', async () => {
     const prisma = {
       document: {
         findUnique: jest.fn().mockResolvedValue({
@@ -11,14 +11,20 @@ describe('DocumentCustomerMessagesService', () => {
           type: 'REMISSION',
           consecutive: 'RM000001',
           recipientPhone: '+573001234567',
+          recipientPhones: ['+573001234567', '+573111111111', '+573222222222'],
           customerWorksite: {
             customer: { name: 'Cliente', phone: '3001234567' },
+            worksite: { phone: '3111111111' },
           },
         }),
       },
       documentMessageDelivery: {
         findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValueOnce({ id: 'delivery-whatsapp' }),
+        upsert: jest
+          .fn()
+          .mockResolvedValueOnce({ id: 'delivery-whatsapp-1' })
+          .mockResolvedValueOnce({ id: 'delivery-whatsapp-2' })
+          .mockResolvedValueOnce({ id: 'delivery-whatsapp-3' }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -37,12 +43,12 @@ describe('DocumentCustomerMessagesService', () => {
     );
 
     await expect(service.sendDraft('document-1')).resolves.toMatchObject({
-      sent: 1,
+      sent: 3,
       failed: 0,
-      recipients: 1,
+      recipients: 3,
       link: 'https://app.example.test/documents/shared/share-token',
     });
-    expect(transport.sendWhatsapp).toHaveBeenCalledTimes(1);
+    expect(transport.sendWhatsapp).toHaveBeenCalledTimes(3);
     expect(transport.sendWhatsapp).toHaveBeenCalledWith(
       '+573001234567',
       expect.objectContaining({
@@ -54,7 +60,7 @@ describe('DocumentCustomerMessagesService', () => {
       }),
     );
     expect(prisma.documentMessageDelivery.update).toHaveBeenCalledWith({
-      where: { id: 'delivery-whatsapp' },
+      where: { id: 'delivery-whatsapp-1' },
       data: expect.objectContaining({
         status: NotificationDeliveryStatus.ACCEPTED,
         providerMessageId: 'wamid.document-1',

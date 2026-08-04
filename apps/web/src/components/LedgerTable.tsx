@@ -18,6 +18,11 @@ export type LedgerItem = {
     id: string;
     consecutive: string | null;
     type: string;
+    creator?: {
+      id: string;
+      email: string;
+      employee?: { name: string; lastName?: string | null } | null;
+    } | null;
   } | null;
   skuId?: string | null;
   assetId?: string | null;

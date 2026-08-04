@@ -14,6 +14,9 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateWorksiteDto } from './dto/create-worksite.dto';
 import { UpdateWorksiteDto } from './dto/update-worksite.dto';
 import { normalizeLegalName } from './normalize-legal-name';
+import { randomBytes } from 'crypto';
+import { PublicCustomerUpdateDto } from './dto/public-customer-update.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
@@ -26,6 +29,55 @@ export class CustomersService {
     return this.prisma.customer.findMany({
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async createUpdateLink(id: string) {
+    await this.getById(id);
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await this.prisma.customer.update({
+      where: { id },
+      data: { updateToken: token, updateTokenExpiresAt: expiresAt },
+    });
+    return { token, expiresAt };
+  }
+
+  async getPublicUpdate(token: string) {
+    const customer = await this.customerForToken(token);
+    return {
+      name: customer.name,
+      nitOrId: customer.nitOrId,
+      contacts: Array.isArray(customer.contactDirectory) ? customer.contactDirectory : [],
+      documentsPhone: customer.documentsPhone ?? customer.phone ?? '',
+      documentsEmail: customer.documentsEmail ?? customer.email ?? '',
+    };
+  }
+
+  async applyPublicUpdate(token: string, payload: PublicCustomerUpdateDto) {
+    const customer = await this.customerForToken(token);
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        contactDirectory: payload.contacts as unknown as Prisma.InputJsonValue,
+        phone: payload.contacts.find((contact) => contact.type === 'GENERAL')?.phone ?? customer.phone,
+        email: payload.contacts.find((contact) => contact.type === 'GENERAL')?.email ?? customer.email,
+        documentsPhone: payload.documentsPhone.trim(),
+        documentsEmail: payload.documentsEmail.trim().toLowerCase(),
+        contactUpdatedAt: new Date(),
+        contactUpdatedBy: payload.updatedBy.trim(),
+        updateToken: null,
+        updateTokenExpiresAt: null,
+      },
+    });
+    return { updated: true };
+  }
+
+  private async customerForToken(token: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { updateToken: token } });
+    if (!customer || !customer.updateTokenExpiresAt || customer.updateTokenExpiresAt < new Date()) {
+      throw new NotFoundException('El enlace no existe o ya venció');
+    }
+    return customer;
   }
 
   async getById(id: string) {
@@ -138,6 +190,7 @@ export class CustomersService {
             externalCode: true,
             name: true,
             address: true,
+            contactName: true,
             phone: true,
             alternatePhone: true,
             email: true,
@@ -188,11 +241,37 @@ export class CustomersService {
             externalCode: true,
             name: true,
             address: true,
+            contactName: true,
             phone: true,
             alternatePhone: true,
             email: true,
             active: true,
             createdAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  async listDriverWorksiteDirectory() {
+    return this.prisma.customerWorksite.findMany({
+      where: {
+        active: true,
+        customer: { active: true },
+        worksite: { active: true },
+      },
+      orderBy: [{ worksite: { name: 'asc' } }, { id: 'asc' }],
+      select: {
+        id: true,
+        alias: true,
+        customer: { select: { name: true } },
+        worksite: {
+          select: {
+            name: true,
+            address: true,
+            contactName: true,
+            phone: true,
+            alternatePhone: true,
           },
         },
       },
@@ -208,6 +287,7 @@ export class CustomersService {
           name: payload.name,
           externalCode: payload.externalCode ?? null,
           address: payload.address ?? null,
+          contactName: payload.contactName?.trim() || null,
           phone: payload.phone ?? null,
           alternatePhone: payload.alternatePhone ?? null,
           email: this.normalizeOptionalEmail(payload.email),
@@ -240,6 +320,7 @@ export class CustomersService {
               externalCode: true,
               name: true,
               address: true,
+              contactName: true,
               phone: true,
               alternatePhone: true,
               email: true,
@@ -279,6 +360,7 @@ export class CustomersService {
         payload.name !== undefined ||
         payload.externalCode !== undefined ||
         payload.address !== undefined ||
+        payload.contactName !== undefined ||
         payload.phone !== undefined ||
         payload.alternatePhone !== undefined ||
         payload.email !== undefined ||
@@ -290,6 +372,10 @@ export class CustomersService {
             name: payload.name ?? undefined,
             externalCode: payload.externalCode ?? undefined,
             address: payload.address ?? undefined,
+            contactName:
+              payload.contactName !== undefined
+                ? payload.contactName.trim() || null
+                : undefined,
             phone: payload.phone ?? undefined,
             alternatePhone: payload.alternatePhone ?? undefined,
             email:
@@ -317,6 +403,7 @@ export class CustomersService {
               externalCode: true,
               name: true,
               address: true,
+              contactName: true,
               phone: true,
               alternatePhone: true,
               email: true,

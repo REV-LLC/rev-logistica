@@ -22,6 +22,7 @@ import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
 import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import { CreateProviderReceiptDto } from './dto/create-provider-receipt.dto';
+import { CreateInventoryTransitDto } from './dto/create-inventory-transit.dto';
 import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
@@ -209,6 +210,17 @@ export class InventoryController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.inventoryService.moveIn(payload, request.user.sub);
+  }
+
+  @Post('return-transit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  moveReturnTransit(
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+    payload: CreateInventoryTransitDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.moveReturnTransit(payload, request.user.sub);
   }
 
   @Get('warehouse/:warehouseId')

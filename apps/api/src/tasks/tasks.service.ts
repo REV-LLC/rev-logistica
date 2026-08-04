@@ -1,12 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private toDateOrNull(value?: string | null) {
     if (!value) return null;
@@ -18,10 +22,7 @@ export class TasksService {
     return parsed;
   }
 
-  private assertSingleAssignee(payload: {
-    assignedToUserId?: string | null;
-    assignedToEmployeeId?: string | null;
-  }) {
+  private assertSingleAssignee(payload: { assignedToUserId?: string | null; assignedToEmployeeId?: string | null }) {
     if (payload.assignedToUserId && payload.assignedToEmployeeId) {
       throw new BadRequestException('Task can only be assigned to one responsible');
     }
@@ -30,7 +31,7 @@ export class TasksService {
   async createTask(payload: CreateTaskDto, createdByUserId: string) {
     this.assertSingleAssignee(payload);
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         title: payload.title,
         description: payload.description ?? null,
@@ -43,6 +44,8 @@ export class TasksService {
         assignedToEmployeeId: payload.assignedToEmployeeId ?? null,
       },
     });
+    await this.notifications.syncTaskNotification(task.id, 'CREATED');
+    return task;
   }
 
   async listTasks(params: {
@@ -59,7 +62,10 @@ export class TasksService {
     }
 
     if (params.assignedToUserId) {
-      where.assignedToUserId = params.assignedToUserId;
+      where.OR = [
+        { assignedToUserId: params.assignedToUserId },
+        { assignedToEmployee: { userId: params.assignedToUserId } },
+      ];
     }
 
     if (params.q) {
@@ -134,13 +140,13 @@ export class TasksService {
       assignedTo: payload.assignedToUserId
         ? { connect: { id: payload.assignedToUserId } }
         : payload.assignedToUserId === null
-        ? { disconnect: true }
-        : undefined,
+          ? { disconnect: true }
+          : undefined,
       assignedToEmployee: payload.assignedToEmployeeId
         ? { connect: { id: payload.assignedToEmployeeId } }
         : payload.assignedToEmployeeId === null
-        ? { disconnect: true }
-        : undefined,
+          ? { disconnect: true }
+          : undefined,
     };
 
     if (payload.assignedToUserId) {
@@ -155,10 +161,20 @@ export class TasksService {
       data.dueDate = this.toDateOrNull(payload.dueDate);
     }
 
-    return this.prisma.task.update({
+    const assignmentChanged =
+      (payload.assignedToUserId !== undefined && payload.assignedToUserId !== existing.assignedToUserId) ||
+      (payload.assignedToEmployeeId !== undefined && payload.assignedToEmployeeId !== existing.assignedToEmployeeId);
+    const task = await this.prisma.task.update({
       where: { id },
       data,
     });
+    const dueDateChanged = payload.dueDate !== undefined
+      && task.dueDate?.toISOString() !== existing.dueDate?.toISOString();
+    await this.notifications.syncTaskNotification(
+      task.id,
+      assignmentChanged ? 'REASSIGNED' : dueDateChanged ? 'DUE_DATE_CHANGED' : 'UPDATED',
+    );
+    return task;
   }
 
   async listTaskAssets(taskId: string) {
@@ -202,8 +218,21 @@ export class TasksService {
     return { deleted: true };
   }
 
+  async deleteTask(taskId: string) {
+    await this.assertTaskExists(taskId);
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.taskAsset.deleteMany({ where: { taskId } });
+      await tx.task.delete({ where: { id: taskId } });
+      return { deleted: true };
+    });
+  }
+
   private async assertTaskExists(taskId: string) {
-    const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true },
+    });
     if (!task) {
       throw new NotFoundException('Task not found');
     }

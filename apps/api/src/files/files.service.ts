@@ -12,7 +12,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DocumentType, Role } from '@prisma/client';
+import { DocumentStatus, DocumentType, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
@@ -30,6 +30,7 @@ export type FileEntityType =
   | 'EMPLOYEE'
   | 'VEHICLE'
   | 'CUSTOMER'
+  | 'WAREHOUSE'
   | 'ASSET';
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
@@ -43,13 +44,18 @@ const ENTITY_TYPES = new Set<FileEntityType>([
   'EMPLOYEE',
   'VEHICLE',
   'CUSTOMER',
+  'WAREHOUSE',
   'ASSET',
 ]);
 
 const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
   DOCUMENT: new Set([
     'PHOTO_EVIDENCE',
+    'EVIDENCIA_ENTREGA_PROVEEDOR',
+    'COMPROBANTE_RECEPCION_PROVEEDOR',
+    'COMPROBANTE_SALIDA_PROVEEDOR',
     'SIGNATURE_RECEIVED',
+    'INTERNAL_SOURCE_DOCUMENT',
     'DOCUMENTO',
     'FIRMA',
     'OTRO',
@@ -62,7 +68,6 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'CURSO_ALTURAS',
     'CONTRATO',
     'CERTIFICADO',
-    'GUIA_MOVILIDAD',
     'OTRO',
   ]),
   VEHICLE: new Set([
@@ -82,12 +87,14 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'CERTIFICADO',
     'OTRO',
   ]),
+  WAREHOUSE: new Set(['GUIA_MOVILIDAD_PROVEEDOR', 'OTRO']),
   ASSET: new Set([
     'PHOTO',
     'FICHA_TECNICA',
     'MANTENIMIENTO',
     'MANUAL',
     'CERTIFICADO',
+    'GUIA_MOVILIDAD',
     'OTRO',
     HOUR_METER_EVIDENCE_CATEGORY,
   ]),
@@ -157,9 +164,7 @@ export class FilesService {
               select: { evidenceFileObjectId: true },
             })
           ).flatMap((reading) =>
-            reading.evidenceFileObjectId
-              ? [reading.evidenceFileObjectId]
-              : [],
+            reading.evidenceFileObjectId ? [reading.evidenceFileObjectId] : [],
           )
         : [];
 
@@ -416,7 +421,9 @@ export class FilesService {
   private normalizeEntityType(value: string): FileEntityType {
     const normalized = value.trim().toUpperCase() as FileEntityType;
     if (!ENTITY_TYPES.has(normalized)) {
-      throw new BadRequestException('Invalid file entity type');
+      throw new BadRequestException(
+        'El tipo de entidad del archivo no es válido',
+      );
     }
     return normalized;
   }
@@ -425,7 +432,9 @@ export class FilesService {
     const normalized = value?.trim().toUpperCase() || 'OTRO';
     const allowed = CATEGORIES_BY_ENTITY[entityType];
     if (!allowed.has(normalized)) {
-      throw new BadRequestException(`Invalid category for ${entityType}`);
+      throw new BadRequestException(
+        'La categoría del archivo no es válida para este tipo de registro',
+      );
     }
     return normalized;
   }
@@ -438,7 +447,9 @@ export class FilesService {
   ) {
     if (user.role === Role.OPERATOR) {
       if (entityType !== 'ASSET') {
-        throw new ForbiddenException('Operators can only access asset evidence');
+        throw new ForbiddenException(
+          'Operators can only access asset evidence',
+        );
       }
       const ownAsset = await this.prisma.asset.findFirst({
         where: {
@@ -449,7 +460,9 @@ export class FilesService {
         select: { id: true },
       });
       if (!ownAsset) {
-        throw new ForbiddenException('Operators can only access assets from own warehouses');
+        throw new ForbiddenException(
+          'Operators can only access assets from own warehouses',
+        );
       }
       return;
     }
@@ -465,12 +478,13 @@ export class FilesService {
     if (entityType === 'DOCUMENT') {
       const document = await this.prisma.document.findUnique({
         where: { id: entityId },
-        select: { id: true, type: true, createdBy: true },
+        select: { id: true, type: true, status: true, createdBy: true },
       });
       if (!document) throw new NotFoundException('Document not found');
       if (
         document.type !== DocumentType.REMISSION &&
-        document.type !== DocumentType.RETURN
+        document.type !== DocumentType.RETURN &&
+        document.type !== DocumentType.PROVIDER_RECEIPT
       ) {
         throw new BadRequestException(
           'Files are only available for remissions and returns',
@@ -479,6 +493,15 @@ export class FilesService {
       if (user.role === Role.DRIVER && document.createdBy !== user.id) {
         throw new ForbiddenException(
           'Drivers can only access their own document files',
+        );
+      }
+      if (
+        mode === 'write' &&
+        user.role === Role.DRIVER &&
+        document.status !== DocumentStatus.DRAFT
+      ) {
+        throw new ForbiddenException(
+          'Drivers can only add files to their own draft documents',
         );
       }
       return;
@@ -508,6 +531,20 @@ export class FilesService {
         select: { id: true },
       });
       if (!found) throw new NotFoundException('Customer not found');
+      return;
+    }
+
+    if (entityType === 'WAREHOUSE') {
+      const found = await this.prisma.warehouse.findUnique({
+        where: { id: entityId },
+        select: { id: true, type: true },
+      });
+      if (!found) throw new NotFoundException('Proveedor no encontrado');
+      if (found.type !== 'ALLY') {
+        throw new BadRequestException(
+          'La bodega seleccionada no es un proveedor',
+        );
+      }
       return;
     }
 
@@ -583,6 +620,9 @@ export class FilesService {
   }
 
   private formatCategoryLabel(value: string) {
+    if (value === 'INTERNAL_SOURCE_DOCUMENT') {
+      return 'Documento interno de bodega';
+    }
     return value
       .toLowerCase()
       .split('_')
