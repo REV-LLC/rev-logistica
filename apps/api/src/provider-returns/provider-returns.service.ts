@@ -13,7 +13,7 @@ export class ProviderReturnsService {
   async listPending(user: { id: string; role: Role }) {
     const rows = await this.prisma.stockLedger.findMany({
       where: {
-        movementType: MovementType.TRANSIT,
+        movementType: { in: [MovementType.TRANSIT, MovementType.IN] },
         refDocumentType: DocumentType.RETURN,
         document: user.role === Role.DRIVER ? { createdBy: user.id } : undefined,
       },
@@ -22,6 +22,7 @@ export class ProviderReturnsService {
         sku: { select: { id: true, name: true, assetFamily: { select: { controlType: true } } } },
         asset: { select: { id: true, publicCode: true, serialOrEngine: true, description: true, sku: { select: { name: true } } } },
         ownerWarehouse: { select: { id: true, name: true, type: true } },
+        warehouse: { select: { id: true, name: true, type: true } },
         document: { select: {
           id: true, consecutive: true, docDate: true, createdBy: true,
           customerWorksite: { select: { id: true, customer: { select: { name: true } }, worksite: { select: { name: true } } } },
@@ -36,7 +37,17 @@ export class ProviderReturnsService {
     return rows.flatMap((row) => {
       const delivered = row.providerReceiptItems.reduce((sum, item) => sum + Number(item.quantity), 0);
       const pendingQuantity = Number(row.quantity) - delivered;
-      if (pendingQuantity <= 0 || row.ownerWarehouse.type !== 'ALLY' || !row.document) return [];
+      const isTransit = row.movementType === MovementType.TRANSIT;
+      const isInRevCustody =
+        row.movementType === MovementType.IN &&
+        row.warehouse?.type === 'OWN' &&
+        row.warehouseId !== row.ownerWarehouseId;
+      if (
+        pendingQuantity <= 0 ||
+        row.ownerWarehouse.type !== 'ALLY' ||
+        !row.document ||
+        (!isTransit && !isInRevCustody)
+      ) return [];
       return [{
         sourceLedgerId: row.id,
         sourceDocumentId: row.document.id,
@@ -45,6 +56,8 @@ export class ProviderReturnsService {
         customer: row.document.customerWorksite?.customer.name ?? null,
         worksite: row.document.customerWorksite?.worksite.name ?? null,
         providerWarehouse: row.ownerWarehouse,
+        custodyWarehouse: row.warehouse,
+        logisticsStatus: isTransit ? 'TRANSIT' : 'IN_REV_WAREHOUSE',
         type: row.assetId ? 'SERIAL' : 'BULK',
         skuId: row.skuId,
         skuName: row.sku?.name ?? row.asset?.sku.name ?? null,
@@ -84,7 +97,12 @@ export class ProviderReturnsService {
       for (const ledger of ledgers) {
         const quantity = requested.get(ledger.id)!;
         const delivered = ledger.providerReceiptItems.reduce((sum, item) => sum + Number(item.quantity), 0);
-        if (ledger.movementType !== MovementType.TRANSIT || ledger.refDocumentId !== sourceDocument.id ||
+        const isTransit = ledger.movementType === MovementType.TRANSIT;
+        const isInRevCustody =
+          ledger.movementType === MovementType.IN &&
+          Boolean(ledger.warehouseId) &&
+          ledger.warehouseId !== ledger.ownerWarehouseId;
+        if ((!isTransit && !isInRevCustody) || ledger.refDocumentId !== sourceDocument.id ||
             ledger.ownerWarehouseId !== provider.id || quantity > Number(ledger.quantity) - delivered ||
             (ledger.assetId && quantity !== 1)) {
           throw new BadRequestException('La selección no coincide con los pendientes de esta DV y proveedor');
@@ -145,6 +163,30 @@ export class ProviderReturnsService {
         }
       }
 
+      const custodyItems = receipt.providerReceiptItems.filter(
+        (item) =>
+          item.sourceLedger.movementType === MovementType.IN &&
+          item.sourceLedger.warehouseId &&
+          item.sourceLedger.warehouseId !== item.sourceLedger.ownerWarehouseId,
+      );
+      await Promise.all(
+        custodyItems.map((item) =>
+          tx.stockLedger.create({
+            data: {
+              movementType: MovementType.OUT,
+              warehouseId: item.sourceLedger.warehouseId!,
+              customerWorksiteId: null,
+              refDocumentId: receipt.id,
+              refDocumentType: DocumentType.PROVIDER_RECEIPT,
+              skuId: item.skuId,
+              assetId: item.assetId,
+              ownerWarehouseId: receipt.warehouseId!,
+              quantity: item.quantity.negated(),
+              createdBy: user.id,
+            },
+          }),
+        ),
+      );
       await Promise.all(receipt.providerReceiptItems.map((item) => tx.stockLedger.create({ data: {
         movementType: MovementType.IN,
         warehouseId: receipt.warehouseId!, customerWorksiteId: null,

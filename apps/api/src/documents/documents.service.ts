@@ -378,18 +378,49 @@ export class DocumentsService {
         );
       }
     } else {
-      if (!document.warehouseId || !document.customerWorksiteId) {
-        throw new BadRequestException('La devolución requiere bodega y obra');
+      if (!document.customerWorksiteId) {
+        throw new BadRequestException('La devolución requiere obra');
       }
-      await this.inventoryService.moveIn(
-        {
-          warehouseId: document.warehouseId,
-          customerWorksiteId: document.customerWorksiteId,
-          items,
-          documentId: document.id,
-        },
-        userId,
-      );
+
+      if (!document.warehouseId) {
+        throw new BadRequestException('La devolución requiere bodega destino');
+      }
+      const destinationWarehouse = await this.prisma.warehouse.findFirst({
+        where: { id: document.warehouseId, active: true },
+        select: { id: true, type: true },
+      });
+      if (!destinationWarehouse) {
+        throw new BadRequestException('La bodega destino no es válida');
+      }
+
+      if (destinationWarehouse.type === 'OWN') {
+        await this.inventoryService.moveIn(
+          {
+            warehouseId: document.warehouseId,
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      } else {
+        const mismatchedItem = items.find(
+          (item) => item.ownerWarehouseId !== destinationWarehouse.id,
+        );
+        if (mismatchedItem) {
+          throw new BadRequestException(
+            'Una devolución directa a proveedor solo puede incluir equipos de esa bodega dueña',
+          );
+        }
+        await this.inventoryService.moveReturnTransit(
+          {
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      }
       await this.prisma.documentItem.updateMany({
         where: {
           documentId: document.id,
@@ -885,6 +916,72 @@ export class DocumentsService {
       });
 
       return { updatedItem: updated, splitItem: null };
+    });
+  }
+
+  async applyDocumentItemsBillingCutoff(
+    documentId: string,
+    billingCutoffDate: string,
+    userId: string,
+  ) {
+    const cutoff = this.parseBillingDate(
+      billingCutoffDate,
+      'billingCutoffDate',
+    );
+    if (!cutoff) {
+      throw new BadRequestException('La fecha de corte es obligatoria');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findUnique({
+        where: { id: documentId },
+        select: { id: true, type: true },
+      });
+      if (!document) throw new NotFoundException('Document not found');
+      if (document.type !== DocumentType.RETURN) {
+        throw new BadRequestException(
+          'Solo aplica para documentos de devolución',
+        );
+      }
+
+      const items = await tx.documentItem.findMany({
+        where: { documentId },
+        select: { returnedAt: true },
+      });
+      const itemWithEarlierReturn = items.find(
+        (item) =>
+          item.returnedAt && cutoff.getTime() > item.returnedAt.getTime(),
+      );
+      if (itemWithEarlierReturn) {
+        throw new BadRequestException(
+          'La fecha de corte no puede ser posterior a una fecha real de devolución',
+        );
+      }
+
+      const billingUpdatedAt = new Date();
+      const openItems = await tx.documentItem.updateMany({
+        where: { documentId, returnedAt: null },
+        data: {
+          billingCutoffDate: cutoff,
+          billingStatus: DocumentItemBillingStatus.CUT,
+          billingUpdatedAt,
+          billingUpdatedBy: userId,
+        },
+      });
+      const closedItems = await tx.documentItem.updateMany({
+        where: { documentId, returnedAt: { not: null } },
+        data: {
+          billingCutoffDate: cutoff,
+          billingStatus: DocumentItemBillingStatus.CLOSED,
+          billingUpdatedAt,
+          billingUpdatedBy: userId,
+        },
+      });
+
+      return {
+        updatedCount: openItems.count + closedItems.count,
+        billingCutoffDate: cutoff,
+      };
     });
   }
 
