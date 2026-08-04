@@ -16,15 +16,39 @@ type SharedDocument = {
     quantity: unknown;
     requestedTag: string | null;
     conditionNote: string | null;
-    sku: { name: string } | null;
+    sku: { name: string; assetFamily?: { name: string } | null } | null;
     asset: {
       serialOrEngine: string | null;
       description: string | null;
       internalNumber: number | null;
-      sku: { name: string } | null;
+      sku: { name: string; assetFamily?: { name: string } | null } | null;
     } | null;
   }>;
 };
+
+type PdfItem = SharedDocument['items'][number];
+
+export function buildPdfItemDescription(item: PdfItem) {
+  const reference =
+    item.asset?.sku?.name
+    || item.sku?.name
+    || item.asset?.description
+    || item.requestedTag
+    || 'Ítem';
+  const family = (
+    item.asset?.sku?.assetFamily?.name
+    || item.sku?.assetFamily?.name
+    || ''
+  ).trim();
+
+  if (!family) return reference;
+  const normalizedFamily = family.toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
+  const normalizedReference = reference.trim().toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
+  if (normalizedReference === normalizedFamily || normalizedReference.startsWith(`${normalizedFamily} `)) {
+    return reference;
+  }
+  return `${family} ${reference}`.trim();
+}
 
 const TERMS = [
   'Entre los suscritos a saber JESUS ALVARO GUERRERO VILLAMICENCIO, quien obra en este acto en representación de la empresa persona natural JESUS ALVARO GUERRERO VILLAMICENCIO, con establecimiento comercial denominado RENTA EQUIPOS DEL VALLE, identificada con la cédula de ciudadanía No 94.371.184, que en lo sucesivo para los efectos de este contrato se denominará LA ARRENDADORA, por una parte y quien firma el presente documento en nombre propio o en representación de la obra donde se remisiona el equipo en adelante se denominará LA ARRENDATARIA, acuerdan por medio del presente documento celebrar un contrato de arrendamiento de equipos para la construcción el cual se regirá por las siguientes cláusulas:',
@@ -123,11 +147,7 @@ export class DocumentPdfService {
         this.itemHeader(pdf);
       }
       const y = pdf.y;
-      const description = item.asset?.description
-        || item.asset?.sku?.name
-        || item.sku?.name
-        || item.requestedTag
-        || 'Ítem';
+      const description = buildPdfItemDescription(item);
       const equipment = item.asset?.internalNumber != null
         ? String(item.asset.internalNumber)
         : item.asset?.serialOrEngine || '-';

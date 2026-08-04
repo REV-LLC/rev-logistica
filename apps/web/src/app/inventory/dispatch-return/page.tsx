@@ -54,7 +54,7 @@ type CustomerWorksite = {
 };
 
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
-type Warehouse = { id: string; name: string };
+type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
 type SelectedItem = {
   type: 'bulk' | 'serial';
@@ -144,10 +144,6 @@ export default function RemisionDevolucionPage() {
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
-  const ownerWarehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
-  }));
 
   useEffect(() => {
     let mounted = true;
@@ -656,6 +652,8 @@ export default function RemisionDevolucionPage() {
             <WarehouseSelect
               value={warehouseId}
               onChange={setWarehouseId}
+              warehouses={warehouses}
+              defaultName="Bodega propia"
               label={helpLabel('Bodega de ubicacion', 'Bodega fisica donde se despacha o recibe inventario.')}
             />
             <Select
@@ -779,15 +777,14 @@ export default function RemisionDevolucionPage() {
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
-              <Select
-                label={helpLabel('Owner', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
+              <WarehouseSelect
+                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
                 value={sourceOwnerWarehouseId}
                 onChange={(value) => setSourceOwnerWarehouseId(value)}
-                data={ownerWarehouseOptions}
-                searchable
+                warehouses={warehouses}
                 clearable
                 placeholder="Seleccionar dueño"
-                w={320}
+                width={320}
               />
             )}
             {sourceMode === 'on-site' && (

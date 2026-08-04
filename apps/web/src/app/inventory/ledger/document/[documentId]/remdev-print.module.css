@@ -9,6 +9,21 @@
 
 .printContainer {
   width: 100%;
+  min-width: 0;
+}
+
+.billingSection {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mobileBillingList {
+  display: none;
+}
+
+.mobileItemName {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .pageBreakAfter {
@@ -37,7 +52,8 @@
 }
 
 .logoImage {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
   display: block;
 }
@@ -127,6 +143,9 @@
   border: 1px solid #111;
   padding: 2px 4px;
   font-size: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .table th {
@@ -194,12 +213,40 @@
 }
 
 @media (max-width: 768px) {
+  .sheet {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 8px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .company {
-    font-size: 20px;
+    font-size: 17px;
   }
 
   .statusBox {
-    min-width: 160px;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-top: 0;
+  }
+
+  .topRow {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .desktopBillingTable {
+    display: none;
+  }
+
+  .mobileBillingList {
+    display: flex;
   }
 
   .grid2 {
@@ -212,6 +259,12 @@
 
   .signatures {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .table th,
+  .table td {
+    padding: 2px;
+    font-size: 8px;
   }
 }
 
@@ -228,6 +281,14 @@
   .printContainer {
     max-width: none !important;
     padding: 0 !important;
+  }
+
+  .desktopBillingTable {
+    display: block;
+  }
+
+  .mobileBillingList {
+    display: none;
   }
 
   .sheet {

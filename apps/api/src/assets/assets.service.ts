@@ -171,10 +171,6 @@ export class AssetsService {
     if (!assetFamily) {
       throw new NotFoundException('Asset family not found');
     }
-    if (assetFamily.controlType !== SkuControlType.SERIAL) {
-      throw new BadRequestException('Only SERIAL families use subfamilies');
-    }
-
     const name = payload.name.trim().toUpperCase();
     const code = this.buildAssetSubfamilyCode(payload.code ?? name);
     if (!name || !code) {

@@ -12,7 +12,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DocumentType, Role } from '@prisma/client';
+import { DocumentStatus, DocumentType, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
@@ -50,6 +50,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
   DOCUMENT: new Set([
     'PHOTO_EVIDENCE',
     'SIGNATURE_RECEIVED',
+    'INTERNAL_SOURCE_DOCUMENT',
     'DOCUMENTO',
     'FIRMA',
     'OTRO',
@@ -465,7 +466,7 @@ export class FilesService {
     if (entityType === 'DOCUMENT') {
       const document = await this.prisma.document.findUnique({
         where: { id: entityId },
-        select: { id: true, type: true, createdBy: true },
+        select: { id: true, type: true, status: true, createdBy: true },
       });
       if (!document) throw new NotFoundException('Document not found');
       if (
@@ -479,6 +480,15 @@ export class FilesService {
       if (user.role === Role.DRIVER && document.createdBy !== user.id) {
         throw new ForbiddenException(
           'Drivers can only access their own document files',
+        );
+      }
+      if (
+        mode === 'write' &&
+        user.role === Role.DRIVER &&
+        document.status !== DocumentStatus.DRAFT
+      ) {
+        throw new ForbiddenException(
+          'Drivers can only add files to their own draft documents',
         );
       }
       return;
@@ -583,6 +593,9 @@ export class FilesService {
   }
 
   private formatCategoryLabel(value: string) {
+    if (value === 'INTERNAL_SOURCE_DOCUMENT') {
+      return 'Documento interno de bodega';
+    }
     return value
       .toLowerCase()
       .split('_')

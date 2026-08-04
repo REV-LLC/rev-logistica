@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,20 @@ import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfService } from './document-pdf.service';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
+
+export function assertCanViewDocument(
+  document: { createdBy: string },
+  requester?: { role: Role; userId: string },
+) {
+  if (
+    requester?.role === Role.DRIVER &&
+    document.createdBy !== requester.userId
+  ) {
+    throw new ForbiddenException(
+      'Drivers can only view their own documents',
+    );
+  }
+}
 
 @Injectable()
 export class DocumentsService {
@@ -900,6 +915,7 @@ export class DocumentsService {
           select: {
             id: true,
             email: true,
+            role: true,
             employee: { select: { name: true, lastName: true } },
           },
         })
@@ -916,6 +932,7 @@ export class DocumentsService {
         return {
           id: creator.id,
           email: creator.email,
+          role: creator.role,
           name: creator.employee
             ? `${creator.employee.name} ${creator.employee.lastName}`.trim()
             : creator.email,
@@ -1198,7 +1215,10 @@ export class DocumentsService {
     });
   }
 
-  async getDocument(documentId: string) {
+  async getDocument(
+    documentId: string,
+    requester?: { role: Role; userId: string },
+  ) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: {
@@ -1310,6 +1330,7 @@ export class DocumentsService {
     if (!document) {
       throw new NotFoundException('Document not found');
     }
+    assertCanViewDocument(document, requester);
 
     return {
       ...document,
@@ -1360,13 +1381,23 @@ export class DocumentsService {
             quantity: true,
             requestedTag: true,
             conditionNote: true,
-            sku: { select: { name: true } },
+            sku: {
+              select: {
+                name: true,
+                assetFamily: { select: { name: true } },
+              },
+            },
             asset: {
               select: {
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
-                sku: { select: { name: true } },
+                sku: {
+                  select: {
+                    name: true,
+                    assetFamily: { select: { name: true } },
+                  },
+                },
               },
             },
           },

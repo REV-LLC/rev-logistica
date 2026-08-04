@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Badge, Box, Button, Collapse, Divider, Group, NavLink, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
 import { AppRole, clearToken, getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
+import OfficeDraftBrowserNotifications from '@/components/OfficeDraftBrowserNotifications';
 import {
   IconArrowsShuffle,
   IconBuilding,
@@ -69,6 +70,12 @@ const sections: NavSection[] = [
           { href: '/transport/worksites', label: 'Obras', icon: IconBuilding, roles: ['ADMIN', 'OFFICE'] },
           { href: '/tasks', label: 'Pendientes', icon: IconChecklist, roles: ['ADMIN', 'OFFICE'] },
         ],
+      },
+      {
+        href: '/transport/driver-worksites',
+        label: 'Obras',
+        icon: IconMap2,
+        roles: ['DRIVER'],
       },
     ],
   },
@@ -584,6 +591,7 @@ export default function Nav({ onNavigate }: NavProps) {
       <Box mt="auto" style={{ flexShrink: 0 }}>
         <Divider mb="sm" color="rgba(226,232,240,0.8)" />
         <Stack gap="xs">
+          <OfficeDraftBrowserNotifications />
           <Button
             variant="subtle"
             color="red"

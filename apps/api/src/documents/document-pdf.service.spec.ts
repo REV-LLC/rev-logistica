@@ -1,4 +1,4 @@
-import { DocumentPdfService } from './document-pdf.service';
+import { buildPdfItemDescription, DocumentPdfService } from './document-pdf.service';
 
 describe('DocumentPdfService', () => {
   it('renders a valid PDF customer copy', async () => {
@@ -18,7 +18,10 @@ describe('DocumentPdfService', () => {
         quantity: 2,
         requestedTag: null,
         conditionNote: null,
-        sku: { name: 'Andamio certificado' },
+        sku: {
+          name: 'Globalmeq 1TN',
+          assetFamily: { name: 'Vibrocompactador' },
+        },
         asset: null,
       }],
     });
@@ -29,5 +32,31 @@ describe('DocumentPdfService', () => {
       type: 'REMISSION',
       consecutive: 'RM000001',
     })).toBe('remision-RM000001.pdf');
+  });
+
+  it('prefixes the item reference with its family', () => {
+    expect(buildPdfItemDescription({
+      quantity: 1,
+      requestedTag: null,
+      conditionNote: null,
+      sku: {
+        name: 'GLOBALMEQ 1TN',
+        assetFamily: { name: 'VIBROCOMPACTADOR' },
+      },
+      asset: null,
+    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
+  });
+
+  it('does not repeat the family when it is already part of the reference', () => {
+    expect(buildPdfItemDescription({
+      quantity: 1,
+      requestedTag: null,
+      conditionNote: null,
+      sku: {
+        name: 'VIBROCOMPACTADOR GLOBALMEQ 1TN',
+        assetFamily: { name: 'VIBROCOMPACTADOR' },
+      },
+      asset: null,
+    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
   });
 });
