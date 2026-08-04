@@ -8,7 +8,15 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { ChargeType, DocumentType, MovementType, Prisma, Role, SkuControlType } from '@prisma/client';
+import {
+  ChargeType,
+  DocumentType,
+  MovementType,
+  Prisma,
+  Role,
+  SkuControlType,
+  WarehouseType,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
@@ -288,11 +296,18 @@ export class InventoryService {
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, type: true },
       });
       if (!ownerWarehouse) {
         throw new NotFoundException('Owner warehouse not found');
       }
+
+      const providerPrice = await this.upsertProviderPriceIfProvided(
+        payload.providerPrice,
+        ownerWarehouse,
+        sku.id,
+        tx,
+      );
 
       const currentWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseCurrentId },
@@ -429,7 +444,7 @@ export class InventoryService {
         });
       }
 
-        return { asset, ledger };
+      return { asset, ledger, providerPrice };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -473,11 +488,18 @@ export class InventoryService {
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
-        select: { id: true },
+        select: { id: true, name: true, type: true },
       });
       if (!ownerWarehouse) {
         throw new NotFoundException('Owner warehouse not found');
       }
+
+      const providerPrice = await this.upsertProviderPriceIfProvided(
+        payload.providerPrice,
+        ownerWarehouse,
+        sku.id,
+        tx,
+      );
 
       const warehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseId },
@@ -504,6 +526,7 @@ export class InventoryService {
       return {
         sku: { id: sku.id, assetFamilyId: assetFamily.id },
         ledger,
+        providerPrice,
       };
     });
   }
@@ -2359,6 +2382,31 @@ export class InventoryService {
     });
   }
 
+  private async upsertProviderPriceIfProvided(
+    price: number | undefined,
+    ownerWarehouse: { id: string; name: string; type: WarehouseType },
+    skuId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    if (price === undefined) return null;
+    if (ownerWarehouse.type !== WarehouseType.ALLY) {
+      throw new BadRequestException('El costo proveedor solo aplica a bodegas proveedoras');
+    }
+
+    const row = await tx.providerSkuPrice.upsert({
+      where: {
+        providerWarehouseId_skuId: {
+          providerWarehouseId: ownerWarehouse.id,
+          skuId,
+        },
+      },
+      create: { providerWarehouseId: ownerWarehouse.id, skuId, price },
+      update: { price },
+      select: { id: true, providerWarehouseId: true, skuId: true, price: true },
+    });
+    return { ...row, price: Number(row.price) };
+  }
+
   private async resolveAssetFamily(
     input: { id?: string; code?: string; name?: string },
     controlType: SkuControlType,
@@ -2479,7 +2527,13 @@ export class InventoryService {
     if (input.id) {
       const existing = await tx.sku.findUnique({
         where: { id: input.id },
-        select: { id: true, assetFamilyId: true, assetSubfamilyId: true, active: true },
+        select: {
+          id: true,
+          assetFamilyId: true,
+          assetSubfamilyId: true,
+          active: true,
+          chargeType: true,
+        },
       });
       if (!existing) {
         throw new NotFoundException('Sku not found');
@@ -2493,7 +2547,27 @@ export class InventoryService {
       if (!existing.active) {
         throw new BadRequestException('Sku is archived');
       }
-      return existing;
+      const chargeConfig =
+        input.chargeType !== undefined
+          ? this.resolveChargeConfig(input.chargeType, input.minimumChargeHours)
+          : null;
+      return tx.sku.update({
+        where: { id: existing.id },
+        data: {
+          price: input.price ?? undefined,
+          subrentalPrice: input.subrentalPrice ?? undefined,
+          replacementValue: input.replacementValue ?? undefined,
+          chargeType: chargeConfig?.chargeType,
+          minimumChargeHours: chargeConfig?.minimumChargeHours,
+          size: this.resolveSkuSize(input.size) ?? undefined,
+          lengthMeters: input.lengthMeters ?? undefined,
+          closedLengthMeters: input.closedLengthMeters ?? undefined,
+          extendedLengthMeters: input.extendedLengthMeters ?? undefined,
+          areaM2: input.areaM2 ?? undefined,
+          unitWeight: input.unitWeight ?? undefined,
+        },
+        select: { id: true },
+      });
     }
 
     const name = input.name?.trim();

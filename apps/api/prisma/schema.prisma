@@ -223,6 +223,7 @@ model Warehouse {
   internalCounters          AssetInternalCounter[]
   inventorySnapshotEntries  InventorySnapshotEntry[]
   legacyWarehouseReferences LegacyWarehouse[]
+  providerSkuPrices         ProviderSkuPrice[]
 }
 
 model LegacyWarehouse {
@@ -278,35 +279,51 @@ model AssetSubfamily {
 }
 
 model Sku {
-  id                 String     @id @default(uuid())
-  name               String
-  imageUrl           String?
-  imageFileObjectId  String?
-  assetFamilyId      String
-  assetSubfamilyId   String?
-  price              Decimal?
-  subrentalPrice     Decimal?
-  replacementValue   Decimal?
-  chargeType         ChargeType @default(DAY)
-  minimumChargeHours Decimal?
-  size               String?
-  lengthMeters       Decimal?   @db.Decimal(10, 2)
-  closedLengthMeters Decimal?   @db.Decimal(10, 2)
-  extendedLengthMeters Decimal? @db.Decimal(10, 2)
-  areaM2             Decimal?
-  unitWeight         Decimal?
-  active             Boolean    @default(true)
-  createdAt          DateTime   @default(now())
+  id                   String     @id @default(uuid())
+  name                 String
+  imageUrl             String?
+  imageFileObjectId    String?
+  assetFamilyId        String
+  assetSubfamilyId     String?
+  price                Decimal?
+  subrentalPrice       Decimal?
+  replacementValue     Decimal?
+  chargeType           ChargeType @default(DAY)
+  minimumChargeHours   Decimal?
+  size                 String?
+  lengthMeters         Decimal?   @db.Decimal(10, 2)
+  closedLengthMeters   Decimal?   @db.Decimal(10, 2)
+  extendedLengthMeters Decimal?   @db.Decimal(10, 2)
+  areaM2               Decimal?
+  unitWeight           Decimal?
+  active               Boolean    @default(true)
+  createdAt            DateTime   @default(now())
 
   assets          Asset[]
   documentItems   DocumentItem[]
   ledger          StockLedger[]
-  imageFileObject FileObject?     @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily     AssetFamily     @relation(fields: [assetFamilyId], references: [id])
-  assetSubfamily  AssetSubfamily? @relation(fields: [assetSubfamilyId], references: [id])
+  imageFileObject FileObject?        @relation("SkuImage", fields: [imageFileObjectId], references: [id])
+  assetFamily     AssetFamily        @relation(fields: [assetFamilyId], references: [id])
+  assetSubfamily  AssetSubfamily?    @relation(fields: [assetSubfamilyId], references: [id])
+  providerPrices  ProviderSkuPrice[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
+}
+
+model ProviderSkuPrice {
+  id                  String   @id @default(uuid())
+  providerWarehouseId String
+  skuId               String
+  price               Decimal
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  providerWarehouse Warehouse @relation(fields: [providerWarehouseId], references: [id], onDelete: Cascade)
+  sku               Sku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([providerWarehouseId, skuId])
+  @@index([skuId])
 }
 
 model CatalogOption {
@@ -487,19 +504,19 @@ model MaintenanceCompletion {
 }
 
 model NotificationDelivery {
-  id            String                     @id @default(uuid())
-  topicId       String
-  userId        String
-  occurrenceKey String
-  channel       NotificationChannel
-  status        NotificationDeliveryStatus @default(PENDING)
-  providerMessageId String?                 @unique
-  sentAt        DateTime?
-  deliveredAt   DateTime?
-  readAt        DateTime?
-  error         String?
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
+  id                String                     @id @default(uuid())
+  topicId           String
+  userId            String
+  occurrenceKey     String
+  channel           NotificationChannel
+  status            NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?                    @unique
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  error             String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   topic NotificationTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
   user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -592,19 +609,19 @@ model Document {
 }
 
 model DocumentMessageDelivery {
-  id         String                     @id @default(uuid())
-  documentId String
-  kind       String
-  channel    NotificationChannel
-  phone      String
-  status     NotificationDeliveryStatus @default(PENDING)
-  providerMessageId String?              @unique
-  sentAt     DateTime?
-  deliveredAt DateTime?
-  readAt      DateTime?
-  error      String?
-  createdAt  DateTime                   @default(now())
-  updatedAt  DateTime                   @updatedAt
+  id                String                     @id @default(uuid())
+  documentId        String
+  kind              String
+  channel           NotificationChannel
+  phone             String
+  status            NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?                    @unique
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  error             String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
