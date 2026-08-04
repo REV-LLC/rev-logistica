@@ -165,4 +165,9 @@ export class CreateSerializedAssetDto {
 
   @IsUUID()
   warehouseCurrentId: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  providerPrice?: number;
 }
