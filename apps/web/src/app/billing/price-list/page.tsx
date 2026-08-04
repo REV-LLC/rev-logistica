@@ -9,6 +9,7 @@ import {
   Group,
   Paper,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Table,
@@ -47,6 +48,18 @@ type PriceListSku = {
   };
   controlType: ControlType;
   category: string;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+  type: 'OWN' | 'ALLY';
+};
+
+type ProviderSkuPrice = {
+  providerWarehouseId: string;
+  skuId: string;
+  price: number;
 };
 
 const controlTypeOptions = [
@@ -90,6 +103,9 @@ function csvEscape(value: string | number | null | undefined) {
 export default function PriceListPage() {
   const [controlType, setControlType] = useState<ControlType>('BULK');
   const [items, setItems] = useState<PriceListSku[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [providerWarehouseId, setProviderWarehouseId] = useState<string | null>(null);
+  const [providerPrices, setProviderPrices] = useState<ProviderSkuPrice[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,8 +116,12 @@ export default function PriceListPage() {
 
     try {
       const params = new URLSearchParams({ controlType: targetControlType });
-      const response = await api<PriceListSku[]>(`/skus?${params.toString()}`, { method: 'GET' });
+      const [response, priceResponse] = await Promise.all([
+        api<PriceListSku[]>(`/skus?${params.toString()}`, { method: 'GET' }),
+        api<ProviderSkuPrice[]>('/skus/provider-prices', { method: 'GET' }),
+      ]);
       setItems(response);
+      setProviderPrices(priceResponse);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -119,6 +139,12 @@ export default function PriceListPage() {
     loadItems(controlType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlType]);
+
+  useEffect(() => {
+    api<Warehouse[]>('/warehouses')
+      .then((rows) => setWarehouses(rows.filter((row) => row.type === 'ALLY')))
+      .catch(() => setWarehouses([]));
+  }, []);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -141,9 +167,18 @@ export default function PriceListPage() {
     [filteredItems],
   );
 
-  const subrentalCount = useMemo(
-    () => filteredItems.filter((item) => toNumber(item.subrentalPrice) != null).length,
-    [filteredItems],
+  const providerPriceBySku = useMemo(
+    () =>
+      new Map(
+        providerPrices
+          .filter((row) => row.providerWarehouseId === providerWarehouseId)
+          .map((row) => [row.skuId, row.price]),
+      ),
+    [providerPrices, providerWarehouseId],
+  );
+  const providerPricedCount = useMemo(
+    () => filteredItems.filter((item) => providerPriceBySku.has(item.id)).length,
+    [filteredItems, providerPriceBySku],
   );
 
   const inactiveCount = useMemo(
@@ -152,14 +187,16 @@ export default function PriceListPage() {
   );
 
   const exportCsv = () => {
-    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio', 'Sub precio', 'Valor reposicion', 'Tipo de cobro', 'Estado'];
+    const selectedProvider = warehouses.find((warehouse) => warehouse.id === providerWarehouseId);
+    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio cliente', 'Proveedor', 'Costo proveedor', 'Valor reposicion', 'Tipo de cobro', 'Estado'];
     const rows = filteredItems.map((item) => [
       item.controlType,
       item.name,
       item.assetFamily.code,
       item.assetFamily.name,
       toNumber(item.price) ?? '',
-      toNumber(item.subrentalPrice) ?? '',
+      selectedProvider?.name ?? '',
+      providerPriceBySku.get(item.id) ?? '',
       toNumber(item.replacementValue) ?? '',
       formatChargeType(item.chargeType, item.minimumChargeHours),
       item.active ? 'Activo' : 'Inactivo',
@@ -182,7 +219,7 @@ export default function PriceListPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Lista de precios"
-          description="Consulta referencias, codigos, precios, sub precios y tipo de cobro por inventario Bulk o Serial."
+          description="Compara el precio al cliente con el costo específico de cada proveedor."
           icon={<IconFileDollar size={20} />}
           iconColor="yellow"
           accentColor="rgba(217, 154, 24, 0.16)"
@@ -223,6 +260,16 @@ export default function PriceListPage() {
               onChange={(event) => setSearch(event.currentTarget.value)}
               style={{ flex: '1 1 320px' }}
             />
+            <Select
+              label="Proveedor"
+              placeholder="Seleccionar proveedor"
+              data={warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
+              value={providerWarehouseId}
+              onChange={setProviderWarehouseId}
+              searchable
+              clearable
+              style={{ minWidth: 260 }}
+            />
           </Group>
         </PageHeaderCard>
 
@@ -241,16 +288,22 @@ export default function PriceListPage() {
             color="yellow"
           />
           <StatCard
-            label="Con precio"
+            label="Con precio cliente"
             value={pricedCount}
             hint="Precio principal registrado"
             icon={<IconTag size={20} />}
             color="green"
           />
           <StatCard
-            label="Sub precio"
-            value={subrentalCount}
-            hint={inactiveCount ? `${inactiveCount} inactivas en filtro` : 'Subalquiler registrado'}
+            label="Con costo proveedor"
+            value={providerPricedCount}
+            hint={
+              providerWarehouseId
+                ? inactiveCount
+                  ? `${inactiveCount} inactivas en filtro`
+                  : 'Costo específico registrado'
+                : 'Selecciona un proveedor'
+            }
             icon={<IconFileDollar size={20} />}
             color="blue"
           />
@@ -279,8 +332,8 @@ export default function PriceListPage() {
                     <Table.Th>Referencia</Table.Th>
                     <Table.Th>Codigo</Table.Th>
                     <Table.Th>Familia</Table.Th>
-                    <Table.Th>Precio</Table.Th>
-                    <Table.Th>Sub precio</Table.Th>
+                    <Table.Th>Precio cliente</Table.Th>
+                    <Table.Th>Costo proveedor</Table.Th>
                     <Table.Th>Valor reposicion</Table.Th>
                     <Table.Th>Tipo de cobro</Table.Th>
                     <Table.Th>Estado</Table.Th>
@@ -299,7 +352,7 @@ export default function PriceListPage() {
                       </Table.Td>
                       <Table.Td>{item.assetFamily.name}</Table.Td>
                       <Table.Td>{formatMoney(item.price)}</Table.Td>
-                      <Table.Td>{formatMoney(item.subrentalPrice)}</Table.Td>
+                      <Table.Td>{formatMoney(providerPriceBySku.get(item.id))}</Table.Td>
                       <Table.Td>{formatMoney(item.replacementValue)}</Table.Td>
                       <Table.Td>{formatChargeType(item.chargeType, item.minimumChargeHours)}</Table.Td>
                       <Table.Td>
@@ -311,7 +364,7 @@ export default function PriceListPage() {
                   ))}
                   {!filteredItems.length ? (
                     <Table.Tr>
-                      <Table.Td colSpan={7}>
+                      <Table.Td colSpan={8}>
                         <Text ta="center" c="dimmed" py="xl">
                           {loading ? 'Cargando...' : 'No hay items para este filtro.'}
                         </Text>
