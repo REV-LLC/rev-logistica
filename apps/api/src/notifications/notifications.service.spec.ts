@@ -3,12 +3,19 @@ import { NOTIFICATION_ENTITY, NOTIFICATION_EVENT } from './notification.constant
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService', () => {
+  const settings = {
+    get: jest.fn((key: string) => Promise.resolve({
+      'tasks.due_warning_hours': 24,
+      'tasks.overdue_repeat_enabled': true,
+      'tasks.overdue_repeat_interval_hours': 24,
+    }[key])),
+  };
   it('automatically creates the mandatory SOAT and technical inspection topics', async () => {
     const upsert = jest.fn()
       .mockResolvedValueOnce({ id: 'soat-topic' })
       .mockResolvedValueOnce({ id: 'tech-topic' });
     const prisma = { notificationTopic: { upsert } };
-    const service = new NotificationsService(prisma as any, {} as any);
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
 
     const topics = await service.ensureVehicleTopics('vehicle-1');
 
@@ -43,7 +50,7 @@ describe('NotificationsService', () => {
       vehicle: { findMany: jest.fn().mockResolvedValue([{ id: 'vehicle-1', plate: 'ABC123', active: true, soatVigencia: yesterday }]) },
       maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const service = new NotificationsService(prisma as any, {} as any);
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
 
     const reminders = await service.listReminders('user-1');
 
@@ -78,7 +85,7 @@ describe('NotificationsService', () => {
       },
       maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const service = new NotificationsService(prisma as any, {} as any);
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
 
     const reminders = await service.listReminders();
 
@@ -115,7 +122,7 @@ describe('NotificationsService', () => {
       vehicle: { findMany: jest.fn().mockResolvedValue([]) },
       maintenanceItem: { findMany: jest.fn().mockResolvedValue([item]) },
     };
-    const service = new NotificationsService(prisma as any, {} as any);
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
 
     const reminders = await service.listReminders('user-1');
 
@@ -127,7 +134,7 @@ describe('NotificationsService', () => {
   });
 
   it('dispatches alerts only through WhatsApp', async () => {
-    const service = new NotificationsService({} as any, {} as any);
+    const service = new NotificationsService({} as any, {} as any, settings as any);
     jest.spyOn(service, 'listReminders').mockResolvedValue([{
       topicId: 'topic-1',
       status: 'DUE',
@@ -167,6 +174,31 @@ describe('NotificationsService', () => {
     );
   });
 
+  it('marks an assigned task due using the warning hours stored in settings', async () => {
+    const dueDate = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    const topic = {
+      id: 'topic-task', entityType: 'TASK', entityId: 'task-1', eventType: 'TASK_DUE',
+      recipients: [{
+        userId: 'user-1', emailEnabled: false, smsEnabled: false, whatsappEnabled: true,
+        user: { email: 'hector@example.com', employee: { name: 'Héctor', lastName: 'Ruiz', phone: '+573001234567' } },
+      }],
+    };
+    const prisma = {
+      notificationTopic: { findMany: jest.fn().mockResolvedValue([topic]) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([]) },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
+      task: { findMany: jest.fn().mockResolvedValue([{ id: 'task-1', title: 'Revisar equipo', dueDate, status: 'OPEN' }]) },
+    };
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
+
+    await expect(service.listReminders('user-1')).resolves.toEqual([
+      expect.objectContaining({
+        topicId: 'topic-task', status: 'DUE', unit: 'HOURS',
+        entity: { id: 'task-1', type: 'TASK', label: 'Revisar equipo' },
+      }),
+    ]);
+  });
+
   it('calculates daily asset maintenance from calendar dates', async () => {
     const baselineDate = new Date();
     baselineDate.setUTCHours(0, 0, 0, 0);
@@ -197,7 +229,7 @@ describe('NotificationsService', () => {
       vehicle: { findMany: jest.fn().mockResolvedValue([]) },
       maintenanceItem: { findMany: jest.fn().mockResolvedValue([item]) },
     };
-    const service = new NotificationsService(prisma as any, {} as any);
+    const service = new NotificationsService(prisma as any, {} as any, settings as any);
 
     const reminders = await service.listReminders('user-1');
 

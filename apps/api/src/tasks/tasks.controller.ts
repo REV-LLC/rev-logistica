@@ -75,7 +75,8 @@ export class TasksController {
       throw new BadRequestException('Invalid status');
     }
 
-    const assignedToUserId = assignedToMe === 'true' ? request?.user.sub : undefined;
+    const assignedToUserId = request?.user.role === Role.DRIVER || assignedToMe === 'true'
+      ? request?.user.sub : undefined;
 
     return this.tasksService.listTasks({
       status,

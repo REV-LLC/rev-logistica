@@ -149,6 +149,35 @@ model User {
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
   notificationDeliveries        NotificationDelivery[]
+  appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
+}
+
+model AppSetting {
+  key         String   @id
+  value       Json
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  auditEntries AppSettingAudit[]
+
+  @@index([category])
+}
+
+model AppSettingAudit {
+  id              String   @id @default(uuid())
+  settingKey      String
+  oldValue        Json?
+  newValue        Json
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+
+  setting   AppSetting @relation(fields: [settingKey], references: [key], onDelete: Cascade)
+  updatedBy User       @relation("AppSettingUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@index([settingKey, createdAt(sort: Desc)])
+  @@index([updatedByUserId])
 }
 
 model Customer {

@@ -17,26 +17,14 @@ describe('TasksService assignment notifications', () => {
     updatedAt: new Date(),
   };
 
-  afterEach(() => {
-    delete process.env.PUBLIC_WEB_URL;
-  });
-
-  it('sends WhatsApp when a task is created with a responsible user', async () => {
+  it('synchronizes notifications when a task is created with a responsible user', async () => {
     const prisma = {
       task: { create: jest.fn().mockResolvedValue(assignedTask) },
-      user: {
-        findUnique: jest.fn().mockResolvedValue({
-          active: true,
-          email: 'ana@example.com',
-          employee: { name: 'Ana', lastName: 'Ruiz', phone: '3001234567' },
-        }),
-      },
     };
-    const transport = {
-      sendWhatsapp: jest.fn().mockResolvedValue({ sent: true }),
+    const notifications = {
+      syncTaskNotification: jest.fn().mockResolvedValue({ sent: 1 }),
     };
-    process.env.PUBLIC_WEB_URL = 'https://app.example.test/';
-    const service = new TasksService(prisma as never, transport as never);
+    const service = new TasksService(prisma as never, notifications as never);
 
     await service.createTask(
       {
@@ -46,12 +34,7 @@ describe('TasksService assignment notifications', () => {
       assignedTask.createdByUserId,
     );
 
-    expect(transport.sendWhatsapp).toHaveBeenCalledWith('3001234567', {
-      title: 'Nueva tarea asignada',
-      body: 'Se te ha asignado la tarea “Revisar equipo”. Por favor, revisa la app.',
-      recipientName: 'Ana Ruiz',
-      link: 'https://app.example.test/tasks',
-    });
+    expect(notifications.syncTaskNotification).toHaveBeenCalledWith(assignedTask.id, 'CREATED');
   });
 
   it('does not notify again when an unrelated task field changes', async () => {
@@ -64,12 +47,12 @@ describe('TasksService assignment notifications', () => {
         }),
       },
     };
-    const transport = { sendWhatsapp: jest.fn() };
-    const service = new TasksService(prisma as never, transport as never);
+    const notifications = { syncTaskNotification: jest.fn().mockResolvedValue({ skipped: 1 }) };
+    const service = new TasksService(prisma as never, notifications as never);
 
     await service.updateTask(assignedTask.id, { priority: TaskPriority.HIGH });
 
-    expect(transport.sendWhatsapp).not.toHaveBeenCalled();
+    expect(notifications.syncTaskNotification).toHaveBeenCalledWith(assignedTask.id, 'UPDATED');
   });
 
   it('removes asset links before deleting a task', async () => {
@@ -81,7 +64,7 @@ describe('TasksService assignment notifications', () => {
       task: { findUnique: jest.fn().mockResolvedValue({ id: assignedTask.id }) },
       $transaction: jest.fn((operation) => operation(tx)),
     };
-    const service = new TasksService(prisma as never, { sendWhatsapp: jest.fn() } as never);
+    const service = new TasksService(prisma as never, { syncTaskNotification: jest.fn() } as never);
 
     await expect(service.deleteTask(assignedTask.id)).resolves.toEqual({ deleted: true });
 
