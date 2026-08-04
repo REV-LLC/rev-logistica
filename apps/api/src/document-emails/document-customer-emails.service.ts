@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DocumentStatus, DocumentType, Prisma } from '@prisma/client';
+import {
+  DocumentStatus,
+  DocumentType,
+  NotificationDeliveryStatus,
+  Prisma,
+} from '@prisma/client';
+import { DocumentPdfService } from '../documents/document-pdf.service';
 import { MailAttachment, MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -71,6 +77,7 @@ export class DocumentCustomerEmailsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly documentPdf: DocumentPdfService,
   ) {}
 
   async sendDraftIfNeeded(documentId: string) {
@@ -94,9 +101,6 @@ export class DocumentCustomerEmailsService {
       if (document.status !== DocumentStatus.CONFIRMED) {
         return { sent: false, reason: 'not-confirmed' as const };
       }
-      if (!document.officeModifiedAt) {
-        return { sent: false, reason: 'not-office-modified' as const };
-      }
       if (document.customerFinalEmailedAt) {
         return { sent: false, reason: 'already-sent' as const };
       }
@@ -106,23 +110,79 @@ export class DocumentCustomerEmailsService {
     if (!recipient)
       return { sent: false, reason: 'missing-recipient' as const };
 
-    const message = this.buildMessage(document, kind, recipient);
+    let deliveryId: string | null = null;
     try {
-      const result = await this.mailService.sendMail(message);
-      if (!result.sent) return result;
-
-      await this.prisma.document.update({
-        where: { id: document.id },
-        data:
-          kind === 'DRAFT'
-            ? { customerDraftEmailedAt: new Date() }
-            : { customerFinalEmailedAt: new Date() },
+      const message = await this.buildMessage(document, kind, recipient);
+      const delivery = await this.prisma.documentEmailDelivery.upsert({
+        where: { documentId_kind: { documentId: document.id, kind } },
+        create: {
+          documentId: document.id,
+          kind,
+          email: recipient,
+          subject: message.subject,
+          attachmentNames: message.attachments.map(
+            (attachment) => attachment.filename || 'archivo',
+          ),
+          status: NotificationDeliveryStatus.SENDING,
+        },
+        update: {
+          email: recipient,
+          subject: message.subject,
+          attachmentNames: message.attachments.map(
+            (attachment) => attachment.filename || 'archivo',
+          ),
+          status: NotificationDeliveryStatus.SENDING,
+          error: null,
+        },
         select: { id: true },
       });
+      deliveryId = delivery.id;
+      const result = await this.mailService.sendMail(message);
+      if (!result.sent) {
+        await this.prisma.documentEmailDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: NotificationDeliveryStatus.FAILED,
+            error: result.reason,
+          },
+        });
+        return result;
+      }
+
+      const sentAt = new Date();
+      await this.prisma.$transaction([
+        this.prisma.documentEmailDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: NotificationDeliveryStatus.SENT,
+            sentAt,
+            error: null,
+          },
+        }),
+        this.prisma.document.update({
+          where: { id: document.id },
+          data:
+            kind === 'DRAFT'
+              ? { customerDraftEmailedAt: sentAt }
+              : { customerFinalEmailedAt: sentAt },
+          select: { id: true },
+        }),
+      ]);
       return { sent: true as const };
     } catch (error) {
       const messageText =
         error instanceof Error ? error.message : String(error);
+      if (deliveryId) {
+        await this.prisma.documentEmailDelivery
+          .update({
+            where: { id: deliveryId },
+            data: {
+              status: NotificationDeliveryStatus.FAILED,
+              error: messageText.slice(0, 500),
+            },
+          })
+          .catch(() => undefined);
+      }
       this.logger.error(
         `Customer document email failed for ${document.id}: ${messageText}`,
       );
@@ -198,7 +258,7 @@ export class DocumentCustomerEmailsService {
     return email || null;
   }
 
-  private buildMessage(
+  private async buildMessage(
     document: DocumentForEmail,
     kind: EmailKind,
     recipient: string,
@@ -213,7 +273,15 @@ export class DocumentCustomerEmailsService {
     const signatureFiles = document.files.filter(
       (file) => file.fileType === 'SIGNATURE_RECEIVED',
     );
-    const attachments = this.buildAttachments(document);
+    const pdf = await this.documentPdf.render(document);
+    const attachments = [
+      {
+        filename: this.documentPdf.fileName(document),
+        content: pdf,
+        contentType: 'application/pdf',
+      },
+      ...this.buildAttachments(document),
+    ];
     const html = this.buildHtml(document, kind, photoFiles, signatureFiles);
     const text = this.buildText(document, kind, photoFiles, signatureFiles);
 
@@ -272,7 +340,7 @@ export class DocumentCustomerEmailsService {
     return `
       <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.45">
         <h2>${this.escapeHtml(this.getDocumentLabel(document.type))} ${this.escapeHtml(document.consecutive ?? '')}</h2>
-        <p>Adjuntamos copia ${kind === 'DRAFT' ? 'en borrador' : 'aprobada'} del documento con su evidencia fotografica.</p>
+        <p>Adjuntamos la copia en PDF ${kind === 'DRAFT' ? 'en borrador' : 'aprobada'} del documento, junto con su evidencia fotográfica y la firma de quien recibe.</p>
         <table style="border-collapse:collapse;margin:16px 0">
           ${this.summaryRow('Cliente', document.customerWorksite?.customer.name)}
           ${this.summaryRow('Obra', document.customerWorksite?.worksite.name)}

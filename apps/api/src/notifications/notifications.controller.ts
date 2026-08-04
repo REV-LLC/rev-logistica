@@ -1,14 +1,37 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Req, UseGuards, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { ConfigureNotificationTopicDto, SetNotificationRecipientsDto } from './dto/notification.dto';
+import {
+  ConfigureNotificationTopicDto,
+  SetNotificationRecipientsDto,
+} from './dto/notification.dto';
 import { NotificationsService } from './notifications.service';
 
-interface JwtPayload { sub: string; email: string; role: Role }
-const validation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: Role;
+}
+const validation = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+});
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,14 +41,23 @@ export class NotificationsController {
 
   @Get('reminders/me')
   myReminders(@Req() request: Request & { user: JwtPayload }) {
-    const hasGlobalInbox = request.user.role === Role.ADMIN || request.user.role === Role.OFFICE;
-    return this.notifications.listReminders(hasGlobalInbox ? undefined : request.user.sub);
+    const hasGlobalInbox =
+      request.user.role === Role.ADMIN || request.user.role === Role.OFFICE;
+    return this.notifications.listReminders(
+      hasGlobalInbox ? undefined : request.user.sub,
+    );
   }
 
   @Get('reminders')
   @Roles(Role.ADMIN, Role.OFFICE)
   allReminders() {
     return this.notifications.listReminders();
+  }
+
+  @Get('deliveries')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  deliveries(@Query('limit') limit?: string) {
+    return this.notifications.listCommunicationDeliveries(Number(limit));
   }
 
   @Get('entities/:entityType/:entityId/topics')
