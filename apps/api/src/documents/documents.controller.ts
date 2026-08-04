@@ -18,6 +18,7 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { ApplyDocumentItemsCutoffDto } from './dto/apply-document-items-cutoff.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateDocumentRequestDto } from './dto/create-document-request.dto';
 import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
@@ -134,6 +135,27 @@ export class DocumentsController {
       documentId,
       itemId,
       payload,
+      request.user.sub,
+    );
+  }
+
+  @Patch(':documentId/items/billing-cutoff')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  applyDocumentItemsBillingCutoff(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: ApplyDocumentItemsCutoffDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.documentsService.applyDocumentItemsBillingCutoff(
+      documentId,
+      payload.billingCutoffDate,
       request.user.sub,
     );
   }
