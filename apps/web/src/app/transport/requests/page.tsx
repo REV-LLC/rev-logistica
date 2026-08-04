@@ -2579,7 +2579,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             {docType === 'RETURN' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.')}
+                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.', true)}
+                  withAsterisk={false}
                   value={driverId ?? ''}
                   onChange={(event) => {
                     setDriverId(event.currentTarget.value || null);
@@ -2592,7 +2593,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                 />
               ) : (
                 <Select
-                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.')}
+                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.', true)}
+                  withAsterisk={false}
                   value={driverId}
                   onChange={(value) => {
                     setDriverId(value);
