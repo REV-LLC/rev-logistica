@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Checkbox, Container, FileInput, Group, NumberInput, Paper, Stack, Text, Textarea, Title } from '@mantine/core';
-import { IconCamera, IconCheck, IconRefresh } from '@tabler/icons-react';
+import { Alert, Badge, Button, Checkbox, Container, FileInput, Group, NumberInput, Paper, ScrollArea, Stack, Table, Text, Textarea, Title } from '@mantine/core';
+import { IconCamera, IconCheck, IconChevronRight, IconRefresh } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 
 type PendingItem = {
@@ -24,6 +24,7 @@ type PendingItem = {
 };
 
 const errorMessage = (error: unknown) => error instanceof ApiError ? `${error.status}: ${error.message}` : error instanceof Error ? error.message : 'No se pudo completar la entrega.';
+const dateFormatter = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' });
 
 export default function ProviderReturnsPage() {
   const [items, setItems] = useState<PendingItem[]>([]);
@@ -33,6 +34,7 @@ export default function ProviderReturnsPage() {
   const [notesByGroup, setNotesByGroup] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,15 +53,20 @@ export default function ProviderReturnsPage() {
   useEffect(() => { void load(); }, [load]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, { key: string; sourceDocumentId: string; provider: PendingItem['providerWarehouse']; consecutive: string | null; customer: string | null; worksite: string | null; items: PendingItem[] }>();
+    const map = new Map<string, { key: string; sourceDocumentId: string; provider: PendingItem['providerWarehouse']; consecutive: string | null; docDate: string; customer: string | null; worksite: string | null; items: PendingItem[] }>();
     items.forEach((item) => {
       const key = `${item.sourceDocumentId}:${item.providerWarehouse.id}`;
-      const group = map.get(key) ?? { key, sourceDocumentId: item.sourceDocumentId, provider: item.providerWarehouse, consecutive: item.consecutive, customer: item.customer, worksite: item.worksite, items: [] };
+      const group = map.get(key) ?? { key, sourceDocumentId: item.sourceDocumentId, provider: item.providerWarehouse, consecutive: item.consecutive, docDate: item.docDate, customer: item.customer, worksite: item.worksite, items: [] };
       group.items.push(item);
       map.set(key, group);
     });
     return [...map.values()];
   }, [items]);
+
+  const activeGroup = useMemo(
+    () => groups.find((group) => group.key === activeGroupKey) ?? null,
+    [activeGroupKey, groups],
+  );
 
   const upload = async (documentId: string, category: string, file: File) => {
     const body = new FormData();
@@ -96,6 +103,7 @@ export default function ProviderReturnsPage() {
       setProofByGroup((current) => ({ ...current, [group.key]: null }));
       setNotesByGroup((current) => ({ ...current, [group.key]: '' }));
       setSelected({});
+      setActiveGroupKey(null);
       await load();
     } catch (submitError) {
       setError(errorMessage(submitError));
@@ -113,15 +121,44 @@ export default function ProviderReturnsPage() {
       {error && <Alert color="red" mb="md">{error}</Alert>}
       {message && <Alert color="green" mb="md">{message}</Alert>}
       {!loading && !error && !groups.length && <Paper withBorder p="xl"><Text ta="center" c="dimmed">No tienes devoluciones pendientes de entregar a proveedores.</Text></Paper>}
-      <Stack gap="lg">
-        {groups.map((group) => (
-          <Paper key={group.key} withBorder radius="md" p="md">
+      {!!groups.length && <Paper withBorder radius="md" mb="lg" style={{ overflow: 'hidden' }}>
+        <ScrollArea>
+          <Table highlightOnHover verticalSpacing="sm" miw={760}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>DV</Table.Th>
+                <Table.Th>Fecha</Table.Th>
+                <Table.Th>Cliente / obra</Table.Th>
+                <Table.Th>Proveedor</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th ta="right">Ítems</Table.Th>
+                <Table.Th ta="right">Acción</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {groups.map((group) => {
+                const inRevWarehouse = group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE');
+                return <Table.Tr key={group.key} bg={activeGroupKey === group.key ? 'var(--mantine-color-blue-light)' : undefined}>
+                  <Table.Td><Text fw={700}>{group.consecutive ?? 'Sin consecutivo'}</Text></Table.Td>
+                  <Table.Td><Text size="sm">{dateFormatter.format(new Date(group.docDate))}</Text></Table.Td>
+                  <Table.Td><Text size="sm" fw={500}>{group.customer ?? 'Cliente'}</Text><Text size="xs" c="dimmed">{group.worksite ?? 'Sin obra'}</Text></Table.Td>
+                  <Table.Td><Text size="sm" fw={600}>{group.provider.name}</Text></Table.Td>
+                  <Table.Td><Badge color={inRevWarehouse ? 'blue' : 'yellow'} variant="light">{inRevWarehouse ? 'En bodega REV' : 'En transición'}</Badge></Table.Td>
+                  <Table.Td ta="right">{group.items.length}</Table.Td>
+                  <Table.Td ta="right"><Button size="xs" variant={activeGroupKey === group.key ? 'filled' : 'light'} rightSection={<IconChevronRight size={14} />} onClick={() => setActiveGroupKey(group.key)}>{activeGroupKey === group.key ? 'Seleccionada' : 'Procesar'}</Button></Table.Td>
+                </Table.Tr>;
+              })}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      </Paper>}
+      {activeGroup && <Paper withBorder radius="md" p="md">
             <Group justify="space-between" align="flex-start" mb="md">
-              <div><Group gap="xs"><Title order={3}>{group.consecutive ?? 'DV sin consecutivo'}</Title><Badge color={group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'blue' : 'yellow'}>{group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'En bodega REV' : 'En transición'}</Badge></Group><Text size="sm">{group.customer ?? 'Cliente'} · {group.worksite ?? 'Obra'}</Text>{group.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {group.items[0].custodyWarehouse.name}</Text> : null}</div>
-              <div style={{ textAlign: 'right' }}><Text fw={700}>{group.provider.name}</Text><Text size="xs" c="dimmed">Bodega receptora</Text></div>
+              <div><Title order={3}>{activeGroup.consecutive ?? 'DV sin consecutivo'}</Title><Text size="sm">{activeGroup.customer ?? 'Cliente'} · {activeGroup.worksite ?? 'Obra'}</Text>{activeGroup.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {activeGroup.items[0].custodyWarehouse.name}</Text> : null}</div>
+              <div style={{ textAlign: 'right' }}><Text fw={700}>{activeGroup.provider.name}</Text><Text size="xs" c="dimmed">Bodega receptora</Text></div>
             </Group>
             <Stack gap="xs">
-              {group.items.map((item) => {
+              {activeGroup.items.map((item) => {
                 const quantity = selected[item.sourceLedgerId] ?? 0;
                 return <Paper key={item.sourceLedgerId} withBorder p="sm" radius="sm">
                   <Group justify="space-between" align="center" wrap="nowrap">
@@ -132,14 +169,12 @@ export default function ProviderReturnsPage() {
               })}
             </Stack>
             <Stack mt="md">
-              <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Evidencia de entrega" description="Foto del equipo entregado físicamente en la bodega." value={evidenceByGroup[group.key] ?? null} onChange={(file) => setEvidenceByGroup((current) => ({ ...current, [group.key]: file }))} />
-              <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Comprobante del proveedor" description="Foto legible del recibo físico entregado por el proveedor." value={proofByGroup[group.key] ?? null} onChange={(file) => setProofByGroup((current) => ({ ...current, [group.key]: file }))} />
-              <Textarea label="Observaciones" value={notesByGroup[group.key] ?? ''} onChange={(event) => setNotesByGroup((current) => ({ ...current, [group.key]: event.currentTarget.value }))} />
-              <Button size="md" leftSection={<IconCheck size={18} />} loading={submittingKey === group.key} onClick={() => void confirm(group)}>Confirmar entrega en {group.provider.name}</Button>
+              <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Evidencia de entrega" description="Foto del equipo entregado físicamente en la bodega." value={evidenceByGroup[activeGroup.key] ?? null} onChange={(file) => setEvidenceByGroup((current) => ({ ...current, [activeGroup.key]: file }))} />
+              <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Comprobante del proveedor" description="Foto legible del recibo físico entregado por el proveedor." value={proofByGroup[activeGroup.key] ?? null} onChange={(file) => setProofByGroup((current) => ({ ...current, [activeGroup.key]: file }))} />
+              <Textarea label="Observaciones" value={notesByGroup[activeGroup.key] ?? ''} onChange={(event) => setNotesByGroup((current) => ({ ...current, [activeGroup.key]: event.currentTarget.value }))} />
+              <Button size="md" leftSection={<IconCheck size={18} />} loading={submittingKey === activeGroup.key} onClick={() => void confirm(activeGroup)}>Confirmar entrega en {activeGroup.provider.name}</Button>
             </Stack>
-          </Paper>
-        ))}
-      </Stack>
+          </Paper>}
     </Container>
   );
 }
