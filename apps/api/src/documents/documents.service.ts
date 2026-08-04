@@ -919,6 +919,72 @@ export class DocumentsService {
     });
   }
 
+  async applyDocumentItemsBillingCutoff(
+    documentId: string,
+    billingCutoffDate: string,
+    userId: string,
+  ) {
+    const cutoff = this.parseBillingDate(
+      billingCutoffDate,
+      'billingCutoffDate',
+    );
+    if (!cutoff) {
+      throw new BadRequestException('La fecha de corte es obligatoria');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findUnique({
+        where: { id: documentId },
+        select: { id: true, type: true },
+      });
+      if (!document) throw new NotFoundException('Document not found');
+      if (document.type !== DocumentType.RETURN) {
+        throw new BadRequestException(
+          'Solo aplica para documentos de devolución',
+        );
+      }
+
+      const items = await tx.documentItem.findMany({
+        where: { documentId },
+        select: { returnedAt: true },
+      });
+      const itemWithEarlierReturn = items.find(
+        (item) =>
+          item.returnedAt && cutoff.getTime() > item.returnedAt.getTime(),
+      );
+      if (itemWithEarlierReturn) {
+        throw new BadRequestException(
+          'La fecha de corte no puede ser posterior a una fecha real de devolución',
+        );
+      }
+
+      const billingUpdatedAt = new Date();
+      const openItems = await tx.documentItem.updateMany({
+        where: { documentId, returnedAt: null },
+        data: {
+          billingCutoffDate: cutoff,
+          billingStatus: DocumentItemBillingStatus.CUT,
+          billingUpdatedAt,
+          billingUpdatedBy: userId,
+        },
+      });
+      const closedItems = await tx.documentItem.updateMany({
+        where: { documentId, returnedAt: { not: null } },
+        data: {
+          billingCutoffDate: cutoff,
+          billingStatus: DocumentItemBillingStatus.CLOSED,
+          billingUpdatedAt,
+          billingUpdatedBy: userId,
+        },
+      });
+
+      return {
+        updatedCount: openItems.count + closedItems.count,
+        billingCutoffDate: cutoff,
+      };
+    });
+  }
+
   async listDocuments(params: {
     role: Role;
     userId: string;

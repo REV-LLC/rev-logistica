@@ -25,7 +25,7 @@ import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
-import { IconArrowLeft, IconBrandWhatsapp, IconCalendar } from '@tabler/icons-react';
+import { IconArrowLeft, IconBrandWhatsapp, IconCalendar, IconCopy } from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
 
 const PRINT_LINES_PER_PAGE = 20;
@@ -697,6 +697,37 @@ export default function DocumentDetailPage() {
       setBillingLoading(false);
     }
   };
+
+  const applyBillingCutoffToAll = async () => {
+    if (!document?.id || !billingCutoffDate) return;
+    setBillingLoading(true);
+    setBillingError(null);
+    try {
+      const cutoffValue = toApiDateInput(billingCutoffDate, 'Fecha corte');
+      if (!cutoffValue) {
+        setBillingError('Selecciona una fecha de corte');
+        return;
+      }
+      await api(`/documents/${document.id}/items/billing-cutoff`, {
+        method: 'PATCH',
+        json: { billingCutoffDate: cutoffValue },
+      });
+      await reloadDocumentOnly();
+      setBillingModalOpen(false);
+      setBillingItemId(null);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setBillingError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setBillingError(err.message);
+      } else {
+        setBillingError('Error aplicando la fecha de corte a los ítems');
+      }
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
 
   const handleApprovalError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
@@ -1543,6 +1574,19 @@ export default function DocumentDetailPage() {
             tabIndex={-1}
             aria-hidden="true"
           />
+          <Button
+            variant="light"
+            leftSection={<IconCopy size={16} />}
+            onClick={applyBillingCutoffToAll}
+            loading={billingLoading}
+            disabled={!billingCutoffDate}
+            fullWidth
+          >
+            Aplicar esta fecha a los {document?.items.length ?? 0} ítems
+          </Button>
+          <Text size="xs" c="dimmed">
+            Replica únicamente la fecha de corte. Las fechas reales de devolución y las notas se conservan.
+          </Text>
           <TextInput
             label="Fecha real de devolución (opcional)"
             value={billingReturnedAt ? toDisplayDateInput(billingReturnedAt) : ''}
