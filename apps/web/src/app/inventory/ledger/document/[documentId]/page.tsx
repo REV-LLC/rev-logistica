@@ -983,7 +983,17 @@ export default function DocumentDetailPage() {
     setEmailRetryMessage(null);
     setError(null);
     try {
-      await api(`/documents/${document.id}/customer-email/final`, { method: 'POST' });
+      const result = await api<{ sent: boolean; reason?: string }>(
+        `/documents/${document.id}/customer-email/final`,
+        { method: 'POST' },
+      );
+      if (!result.sent) {
+        throw new Error(
+          result.reason === 'already-sent'
+            ? 'El correo final ya había sido enviado.'
+            : `No se pudo reenviar el correo final${result.reason ? `: ${result.reason}` : '.'}`,
+        );
+      }
       setEmailRetryMessage('Correo final enviado correctamente.');
     } catch (err) {
       if (err instanceof ApiError) {
