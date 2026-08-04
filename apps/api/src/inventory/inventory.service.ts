@@ -19,6 +19,7 @@ import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
 import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import {
@@ -467,9 +468,17 @@ export class InventoryService {
   }
 
   async addBulkAdjustment(payload: CreateBulkAdjustmentDto, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.BULK, tx);
-      const sku = await this.resolveSku(payload.sku, assetFamily.id, tx);
+      const assetSubfamily = payload.subfamily
+        ? await this.resolveAssetSubfamily(payload.subfamily, assetFamily.id, tx, payload.sku.id)
+        : null;
+      const sku = await this.resolveBulkSku(
+        payload.sku,
+        assetFamily.id,
+        tx,
+        assetSubfamily?.id,
+      );
 
       const ownerWarehouse = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
@@ -506,6 +515,9 @@ export class InventoryService {
         ledger,
       };
     });
+
+    await this.invalidateInventoryCache({ warehouseId: payload.warehouseId });
+    return result;
   }
 
   async deleteBulkStock(payload: DeleteBulkStockDto, userId: string) {
@@ -2544,6 +2556,58 @@ export class InventoryService {
       },
       select: { id: true },
     });
+  }
+
+  private async resolveBulkSku(
+    input: {
+      id?: string;
+      name?: string;
+      unitWeight?: number;
+      price?: number;
+      subrentalPrice?: number;
+      replacementValue?: number;
+      chargeType?: ChargeType;
+      minimumChargeHours?: number;
+      size?: string;
+      lengthMeters?: number;
+      areaM2?: number;
+    },
+    assetFamilyId: string,
+    tx: Prisma.TransactionClient,
+    assetSubfamilyId?: string | null,
+  ) {
+    if (input.id) {
+      return this.resolveSku(input, assetFamilyId, tx, assetSubfamilyId);
+    }
+
+    const normalizedInput = normalizeBulkSkuInput(input);
+    const canonicalName = bulkSkuCanonicalKey(normalizedInput);
+    if (!canonicalName) {
+      throw new BadRequestException('Sku name is required');
+    }
+
+    const familySkus = await tx.sku.findMany({
+      where: { assetFamilyId },
+      select: { id: true, name: true, lengthMeters: true },
+    });
+    const canonicalMatch = familySkus.find(
+      (sku) =>
+        bulkSkuCanonicalKey({
+          name: sku.name,
+          lengthMeters: sku.lengthMeters == null ? undefined : Number(sku.lengthMeters),
+        }) === canonicalName,
+    );
+
+    if (canonicalMatch) {
+      return this.resolveSku(
+        { ...normalizedInput, id: canonicalMatch.id },
+        assetFamilyId,
+        tx,
+        assetSubfamilyId,
+      );
+    }
+
+    return this.resolveSku(normalizedInput, assetFamilyId, tx, assetSubfamilyId);
   }
 
   private resolveChargeConfig(chargeType?: ChargeType, minimumChargeHours?: number) {

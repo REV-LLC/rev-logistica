@@ -204,6 +204,7 @@ model Worksite {
   externalCode   String?  @unique
   name           String
   address        String?
+  contactName    String?
   phone          String?
   alternatePhone String?
   email          String?

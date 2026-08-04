@@ -22,6 +22,7 @@ import {
   getCurrentUserRole,
   getCurrentUserSession,
 } from "@/lib/auth";
+import OfficeDraftBrowserNotifications from "@/components/OfficeDraftBrowserNotifications";
 import {
   IconArrowsShuffle,
   IconBell,
@@ -118,6 +119,12 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
           },
         ],
+      },
+      {
+        href: "/transport/driver-worksites",
+        label: "Obras",
+        icon: IconMap2,
+        roles: ["DRIVER"],
       },
       {
         href: "/notifications/deliveries",
@@ -755,6 +762,7 @@ export default function Nav({ onNavigate }: NavProps) {
       <Box mt="auto" style={{ flexShrink: 0 }}>
         <Divider mb="sm" color="rgba(226,232,240,0.8)" />
         <Stack gap="xs">
+          <OfficeDraftBrowserNotifications />
           <Button
             variant="subtle"
             color="red"

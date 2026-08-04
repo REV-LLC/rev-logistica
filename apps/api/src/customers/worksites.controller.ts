@@ -34,6 +34,12 @@ export class WorksitesController {
     return this.customersService.listAllWorksites();
   }
 
+  @Get('driver-directory')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  listDriverDirectory() {
+    return this.customersService.listDriverWorksiteDirectory();
+  }
+
   @Post()
   create(
     @Body(

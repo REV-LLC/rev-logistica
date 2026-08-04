@@ -88,7 +88,12 @@ const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
 };
 
 const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
-  DRIVER: ['/transport/generate', '/transport/requests', '/mobility-guides'],
+  DRIVER: [
+    '/transport/generate',
+    '/transport/requests',
+    '/transport/driver-worksites',
+    '/mobility-guides',
+  ],
   OPERATOR: ['/inventory/hour-meter'],
 };
 

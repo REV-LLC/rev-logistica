@@ -357,7 +357,13 @@ export class DocumentCustomerEmailsService {
         </table>
         <h3>Evidencia fotografica</h3>
         <ul>${photoLinks}</ul>
-        <p>${signatureFiles.length ? 'La firma recibida tambien va adjunta.' : 'Sin firma recibida adjunta.'}</p>
+        <p>${signatureFiles.length
+          ? document.type === DocumentType.RETURN
+            ? 'La firma de quien entrega tambien va adjunta.'
+            : 'La firma recibida tambien va adjunta.'
+          : document.type === DocumentType.RETURN
+            ? 'Sin firma de quien entrega adjunta.'
+            : 'Sin firma recibida adjunta.'}</p>
       </div>
     `.replace(
       /<t([hd])>/g,
@@ -389,8 +395,12 @@ export class DocumentCustomerEmailsService {
         ? photoFiles.map((file) => file.storageKey)
         : ['Sin fotos adjuntas.']),
       signatureFiles.length
-        ? 'Firma recibida adjunta.'
-        : 'Sin firma recibida adjunta.',
+        ? document.type === DocumentType.RETURN
+          ? 'Firma de quien entrega adjunta.'
+          : 'Firma recibida adjunta.'
+        : document.type === DocumentType.RETURN
+          ? 'Sin firma de quien entrega adjunta.'
+          : 'Sin firma recibida adjunta.',
     ];
     return lines.join('\n');
   }

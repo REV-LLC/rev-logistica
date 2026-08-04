@@ -244,6 +244,7 @@ function parseNotes(notes: string | null) {
     deliveryMode: map.get('entrega') ?? '',
     vehicleId: map.get('vehiculo') ?? map.get('vehículo') ?? map.get('vehicle') ?? '',
     driverId: map.get('conductor') ?? '',
+    receiverId: map.get('recibe') ?? '',
     dispatcherId: map.get('despachador') ?? '',
     cutOffDate: map.get('fecha corte') ?? map.get('cutoff date') ?? '',
   };
@@ -517,6 +518,16 @@ export default function DocumentDetailPage() {
     );
     return found ? getEmployeeFullName(found) : '-';
   }, [parsedNotes.dispatcherId, employees]);
+  const receiverDisplay = useMemo(() => {
+    const receiverId = parsedNotes.receiverId ?? parsedNotes.driverId ?? '';
+    if (receiverId) {
+      const found = employees.find(
+        (employee) => employee.id.toLowerCase() === receiverId.toLowerCase(),
+      );
+      if (found) return getEmployeeFullName(found);
+    }
+    return document?.creator?.name ?? document?.creator?.email ?? '-';
+  }, [document?.creator?.email, document?.creator?.name, employees, parsedNotes.driverId, parsedNotes.receiverId]);
   const transportadoPorDisplay = useMemo(() => {
     const driver = driverDisplay && driverDisplay !== '-' ? driverDisplay : '';
     const plate = vehiclePlateDisplay && vehiclePlateDisplay !== '-' ? vehiclePlateDisplay : '';
@@ -1156,59 +1167,114 @@ export default function DocumentDetailPage() {
             </Text>
           ) : null}
           {document?.type === 'RETURN' ? (
-            <Paper withBorder p="md" mt="md">
+            <Paper withBorder p={{ base: 'sm', sm: 'md' }} mt="md" className={styles.billingSection}>
               <Title order={5}>Corte de items</Title>
-              <Table mt="sm" striped>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Item</Table.Th>
-                    <Table.Th>Cantidad</Table.Th>
-                    <Table.Th>Fecha de corte</Table.Th>
-                    <Table.Th>Fecha real de devolución</Table.Th>
-                    <Table.Th>Estado</Table.Th>
-                    <Table.Th ta="right">Acciones</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {document.items.map((item) => {
-                    const cutoffDate = getEffectiveBillingCutoffDate(item);
-                    const billingStatus = getEffectiveBillingStatus(item);
-                    return (
-                      <Table.Tr key={`billing-${item.id}`}>
-                        <Table.Td>
-                          <Text>{describeItem(item)}</Text>
-                          {item.conditionNote ? (
-                            <Text size="xs" c="red">
-                              Averia: {item.conditionNote}
-                            </Text>
-                          ) : null}
-                        </Table.Td>
-                        <Table.Td>{displayQuantity(item.quantity)}</Table.Td>
-                        <Table.Td>{cutoffDate ? formatDate(cutoffDate) : '-'}</Table.Td>
-                        <Table.Td>{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Table.Td>
-                        <Table.Td>
+              <div className={styles.desktopBillingTable}>
+                <Table.ScrollContainer minWidth={820} mt="sm">
+                  <Table striped>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Item</Table.Th>
+                        <Table.Th>Cantidad</Table.Th>
+                        <Table.Th>Fecha de corte</Table.Th>
+                        <Table.Th>Fecha real de devolución</Table.Th>
+                        <Table.Th>Estado</Table.Th>
+                        <Table.Th ta="right">Acciones</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {document.items.map((item) => {
+                        const cutoffDate = getEffectiveBillingCutoffDate(item);
+                        const billingStatus = getEffectiveBillingStatus(item);
+                        return (
+                          <Table.Tr key={`billing-${item.id}`}>
+                            <Table.Td>
+                              <Text>{describeItem(item)}</Text>
+                              {item.conditionNote ? (
+                                <Text size="xs" c="red">
+                                  Averia: {item.conditionNote}
+                                </Text>
+                              ) : null}
+                            </Table.Td>
+                            <Table.Td>{displayQuantity(item.quantity)}</Table.Td>
+                            <Table.Td>{cutoffDate ? formatDate(cutoffDate) : '-'}</Table.Td>
+                            <Table.Td>{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Table.Td>
+                            <Table.Td>
+                              <Badge size="sm" variant="light" color={billingStatusColor(billingStatus)}>
+                                {formatBillingStatus(billingStatus)}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>
+                              <TableRowActions
+                                actions={[
+                                  {
+                                    key: 'cutoff',
+                                    label: `Definir corte de ${describeItem(item)}`,
+                                    icon: <IconCalendar size={16} />,
+                                    color: 'blue',
+                                    onClick: () => openBillingModal(item),
+                                  },
+                                ]}
+                              />
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              </div>
+              <Stack gap="sm" mt="sm" className={styles.mobileBillingList}>
+                {document.items.map((item) => {
+                  const cutoffDate = getEffectiveBillingCutoffDate(item);
+                  const billingStatus = getEffectiveBillingStatus(item);
+                  return (
+                    <Paper key={`billing-mobile-${item.id}`} withBorder radius="md" p="sm">
+                      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+                        <Text fw={700} size="sm" className={styles.mobileItemName}>
+                          {describeItem(item)}
+                        </Text>
+                        <TableRowActions
+                          actions={[
+                            {
+                              key: 'cutoff',
+                              label: `Definir corte de ${describeItem(item)}`,
+                              icon: <IconCalendar size={16} />,
+                              color: 'blue',
+                              onClick: () => openBillingModal(item),
+                            },
+                          ]}
+                        />
+                      </Group>
+                      {item.conditionNote ? (
+                        <Text size="xs" c="red" mt={4}>
+                          Avería: {item.conditionNote}
+                        </Text>
+                      ) : null}
+                      <SimpleGrid cols={2} spacing="xs" mt="sm">
+                        <div>
+                          <Text size="xs" c="dimmed">Cantidad</Text>
+                          <Text size="sm" fw={600}>{displayQuantity(item.quantity)}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" c="dimmed">Estado</Text>
                           <Badge size="sm" variant="light" color={billingStatusColor(billingStatus)}>
                             {formatBillingStatus(billingStatus)}
                           </Badge>
-                        </Table.Td>
-                        <Table.Td>
-                          <TableRowActions
-                            actions={[
-                              {
-                                key: 'cutoff',
-                                label: `Definir corte de ${describeItem(item)}`,
-                                icon: <IconCalendar size={16} />,
-                                color: 'blue',
-                                onClick: () => openBillingModal(item),
-                              },
-                            ]}
-                          />
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
+                        </div>
+                        <div>
+                          <Text size="xs" c="dimmed">Fecha de corte</Text>
+                          <Text size="sm">{cutoffDate ? formatDate(cutoffDate) : '-'}</Text>
+                        </div>
+                        <div>
+                          <Text size="xs" c="dimmed">Devolución real</Text>
+                          <Text size="sm">{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Text>
+                        </div>
+                      </SimpleGrid>
+                    </Paper>
+                  );
+                })}
+              </Stack>
             </Paper>
           ) : null}
           {evidenceFiles.length ? (
@@ -1261,6 +1327,7 @@ export default function DocumentDetailPage() {
                     width={240}
                     height={74}
                     className={styles.logoImage}
+                    style={{ height: 'auto' }}
                     priority
                   />
                 </div>
@@ -1346,6 +1413,7 @@ export default function DocumentDetailPage() {
                 {parsedNotes.deliveryMode ? ` | Entrega: ${parsedNotes.deliveryMode}` : ''}
                 {parsedNotes.vehicleId ? ` | Vehiculo: ${vehicleDisplay}` : ''}
                 {parsedNotes.driverId ? ` | Conductor: ${driverDisplay}` : ''}
+                {parsedNotes.receiverId ? ` | Recibido por: ${receiverDisplay}` : ''}
                 {parsedNotes.dispatcherId ? ` | Despachador: ${parsedNotes.dispatcherId}` : ''}
                 {parsedNotes.cutOffDate ? ` | Fecha corte: ${parsedNotes.cutOffDate}` : ''}
               </div>
@@ -1354,14 +1422,30 @@ export default function DocumentDetailPage() {
             <section className={styles.signatures}>
               <div>ELABORADO POR<br />{document.creator?.name ?? document.creator?.email ?? '-'}</div>
               <div>TRANSPORTADO POR<br />{transportadoPorDisplay}</div>
-              <div>ENTREGADO POR<br />{deliveredByDisplay}</div>
+              <div>
+                ENTREGADO POR
+                <br />
+                {isReturn ? (
+                  hasRenderableSignature ? (
+                    <img
+                      src={receivedSignature ?? undefined}
+                      alt="Firma de quien entrega"
+                      className={styles.signatureImage}
+                    />
+                  ) : (
+                    '_____________________'
+                  )
+                ) : deliveredByDisplay}
+              </div>
               <div>
                 RECIBIDO POR
                 <br />
-                {hasRenderableSignature ? (
+                {isReturn ? (
+                  receiverDisplay
+                ) : hasRenderableSignature ? (
                   <img
                     src={receivedSignature ?? undefined}
-                    alt="Signature received by"
+                    alt="Firma de recibido"
                     className={styles.signatureImage}
                   />
                 ) : (

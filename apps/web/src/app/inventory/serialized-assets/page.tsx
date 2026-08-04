@@ -23,6 +23,7 @@ import {
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import UppercaseTextInput, { uppercaseInputValue } from '@/components/UppercaseTextInput';
+import WarehouseSelect from '@/components/WarehouseSelect';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 
@@ -329,10 +330,6 @@ export default function CreateSerializedAssetPage() {
   const familyOptions = families.map((family) => ({
     value: family.id,
     label: family.name,
-  }));
-  const warehouseOptions = warehouses.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
   }));
   const unitOptions = units.map((unit) => ({ value: unit, label: unit }));
   const skuOptions = skus.map((sku) => ({ value: sku.id, label: sku.name }));
@@ -924,21 +921,21 @@ export default function CreateSerializedAssetPage() {
                   </Group>
 
                   <Group grow className="mobile-stack">
-                    <Select
+                    <WarehouseSelect
                       ref={ownerWarehouseRef}
                       label="Bodega dueña"
                       name="ownerWarehouseId"
-                      data={warehouseOptions}
+                      warehouses={warehouses}
                       value={ownerWarehouseId}
                       onChange={handleOwnerWarehouseChange}
                       disabled={warehouseLocked}
                       required
                     />
-                    <Select
+                    <WarehouseSelect
                       ref={warehouseCurrentRef}
                       label="Ubicacion actual"
                       name="warehouseCurrentId"
-                      data={warehouseOptions}
+                      warehouses={warehouses}
                       value={warehouseCurrentId}
                       onChange={(value) => setWarehouseCurrentId(value)}
                       disabled={warehouseLocked}

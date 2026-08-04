@@ -217,8 +217,14 @@ export class DocumentsController {
   }
 
   @Get(':documentId')
-  @Roles(Role.ADMIN, Role.OFFICE)
-  getDocument(@Param('documentId', new ParseUUIDPipe()) documentId: string) {
-    return this.documentsService.getDocument(documentId);
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getDocument(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.documentsService.getDocument(documentId, {
+      role: request.user.role,
+      userId: request.user.sub,
+    });
   }
 }

@@ -20,6 +20,11 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Nuevo documento",
     },
     {
+      prefix: "/transport/driver-worksites",
+      title: "Obras",
+      subtitle: "Ubicaciones y contactos",
+    },
+    {
       prefix: "/mobility-guides",
       title: "Guias de movilidad",
       subtitle: "Documentos por activo",
