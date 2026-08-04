@@ -92,6 +92,12 @@ const sections: NavSection[] = [
             icon: IconFileCertificate,
             roles: ["ADMIN", "OFFICE", "DRIVER"],
           },
+          {
+            href: "/inventory/provider-returns",
+            label: "Entregas a proveedor",
+            icon: IconBuildingWarehouse,
+            roles: ["ADMIN", "OFFICE", "DRIVER"],
+          },
         ],
       },
       {

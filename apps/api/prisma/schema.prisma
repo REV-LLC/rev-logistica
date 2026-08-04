@@ -49,6 +49,7 @@ enum DocumentType {
   RETURN
   ADJUSTMENT
   CUTOVER
+  PROVIDER_RECEIPT
 }
 
 enum DocumentStatus {
@@ -328,13 +329,14 @@ model Sku {
   active               Boolean    @default(true)
   createdAt            DateTime   @default(now())
 
-  assets          Asset[]
-  documentItems   DocumentItem[]
-  ledger          StockLedger[]
-  imageFileObject FileObject?        @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily     AssetFamily        @relation(fields: [assetFamilyId], references: [id])
-  assetSubfamily  AssetSubfamily?    @relation(fields: [assetSubfamilyId], references: [id])
-  providerPrices  ProviderSkuPrice[]
+  assets               Asset[]
+  documentItems        DocumentItem[]
+  ledger               StockLedger[]
+  imageFileObject      FileObject?           @relation("SkuImage", fields: [imageFileObjectId], references: [id])
+  assetFamily          AssetFamily           @relation(fields: [assetFamilyId], references: [id])
+  assetSubfamily       AssetSubfamily?       @relation(fields: [assetSubfamilyId], references: [id])
+  providerPrices       ProviderSkuPrice[]
+  providerReceiptItems ProviderReceiptItem[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
@@ -394,12 +396,13 @@ model Asset {
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
 
-  documentItems    DocumentItem[]
-  ledger           StockLedger[]
-  taskAssets       TaskAsset[]
-  mobilityGuides   MobilityGuide[]
-  hourReadings     AssetHourReading[]
-  maintenancePlans MaintenancePlan[]
+  documentItems        DocumentItem[]
+  ledger               StockLedger[]
+  taskAssets           TaskAsset[]
+  mobilityGuides       MobilityGuide[]
+  hourReadings         AssetHourReading[]
+  maintenancePlans     MaintenancePlan[]
+  providerReceiptItems ProviderReceiptItem[]
 
   @@index([skuId])
   @@index([registrationNumber])
@@ -634,6 +637,10 @@ model Document {
   retryOfDocument   Document?  @relation("RetryChain", fields: [retryOfDocumentId], references: [id])
   retries           Document[] @relation("RetryChain")
 
+  providerSourceDocumentId String?
+  providerSourceDocument   Document?  @relation("ProviderReceiptSource", fields: [providerSourceDocumentId], references: [id])
+  providerReceipts         Document[] @relation("ProviderReceiptSource")
+
   // Void fields
   voidReason String?
   voidedBy   String?
@@ -649,11 +656,38 @@ model Document {
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
   creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
-  items             DocumentItem[]
-  ledger            StockLedger[]
-  files             FileObject[]
-  messageDeliveries DocumentMessageDelivery[]
-  emailDeliveries   DocumentEmailDelivery[]
+  items                      DocumentItem[]
+  ledger                     StockLedger[]
+  files                      FileObject[]
+  messageDeliveries          DocumentMessageDelivery[]
+  emailDeliveries            DocumentEmailDelivery[]
+  providerReceiptItems       ProviderReceiptItem[]     @relation("ProviderReceiptDocument")
+  providerReceiptSourceItems ProviderReceiptItem[]     @relation("ProviderReceiptSourceDocument")
+
+  @@index([providerSourceDocumentId])
+}
+
+model ProviderReceiptItem {
+  id                String   @id @default(uuid())
+  receiptDocumentId String
+  sourceDocumentId  String
+  sourceLedgerId    String
+  skuId             String?
+  assetId           String?
+  quantity          Decimal
+  createdAt         DateTime @default(now())
+
+  receiptDocument Document    @relation("ProviderReceiptDocument", fields: [receiptDocumentId], references: [id], onDelete: Cascade)
+  sourceDocument  Document    @relation("ProviderReceiptSourceDocument", fields: [sourceDocumentId], references: [id])
+  sourceLedger    StockLedger @relation(fields: [sourceLedgerId], references: [id])
+  sku             Sku?        @relation(fields: [skuId], references: [id])
+  asset           Asset?      @relation(fields: [assetId], references: [id])
+
+  @@index([receiptDocumentId])
+  @@index([sourceDocumentId])
+  @@index([sourceLedgerId])
+  @@index([skuId])
+  @@index([assetId])
 }
 
 model DocumentEmailDelivery {
@@ -755,7 +789,8 @@ model StockLedger {
   sku   Sku?   @relation(fields: [skuId], references: [id])
   asset Asset? @relation(fields: [assetId], references: [id])
 
-  creator User @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
+  creator              User                  @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
+  providerReceiptItems ProviderReceiptItem[]
 
   @@index([refDocumentId])
   @@index([skuId])

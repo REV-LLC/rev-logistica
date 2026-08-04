@@ -32,6 +32,7 @@ import { SettingsModule } from './settings/settings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
+import { ProviderReturnsModule } from './provider-returns/provider-returns.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
     MaintenanceModule,
     NotificationsModule,
     MobilityGuidesModule,
+    ProviderReturnsModule,
   ],
   controllers: [AppController],
   providers: [

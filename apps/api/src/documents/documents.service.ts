@@ -1121,7 +1121,13 @@ export class DocumentsService {
         },
         files: {
           where: {
-            fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE'] },
+            fileType: {
+              in: [
+                'SIGNATURE_RECEIVED',
+                'PHOTO_EVIDENCE',
+                'COMPROBANTE_SALIDA_PROVEEDOR',
+              ],
+            },
           },
           select: {
             id: true,
@@ -1137,7 +1143,6 @@ export class DocumentsService {
             createdAt: true,
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 1,
         },
       },
     });
@@ -1156,6 +1161,32 @@ export class DocumentsService {
       throw new BadRequestException(
         'Solo se pueden aprobar remisiones o devoluciones',
       );
+    }
+
+    if (document.type === DocumentType.REMISSION) {
+      const ownerWarehouseIds = [
+        ...new Set(
+          document.items
+            .map((item) => item.condition?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ];
+      const providerOwner = ownerWarehouseIds.length
+        ? await this.prisma.warehouse.findFirst({
+            where: { id: { in: ownerWarehouseIds }, type: 'ALLY' },
+            select: { id: true },
+          })
+        : null;
+      if (
+        providerOwner &&
+        !document.files.some(
+          (file) => file.category === 'COMPROBANTE_SALIDA_PROVEEDOR',
+        )
+      ) {
+        throw new BadRequestException(
+          'La remisión incluye equipos de proveedor y requiere la foto de la remisión física entregada por el proveedor',
+        );
+      }
     }
 
     if (

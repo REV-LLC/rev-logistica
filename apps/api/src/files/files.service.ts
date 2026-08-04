@@ -51,6 +51,9 @@ const ENTITY_TYPES = new Set<FileEntityType>([
 const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
   DOCUMENT: new Set([
     'PHOTO_EVIDENCE',
+    'EVIDENCIA_ENTREGA_PROVEEDOR',
+    'COMPROBANTE_RECEPCION_PROVEEDOR',
+    'COMPROBANTE_SALIDA_PROVEEDOR',
     'SIGNATURE_RECEIVED',
     'INTERNAL_SOURCE_DOCUMENT',
     'DOCUMENTO',
@@ -480,7 +483,8 @@ export class FilesService {
       if (!document) throw new NotFoundException('Document not found');
       if (
         document.type !== DocumentType.REMISSION &&
-        document.type !== DocumentType.RETURN
+        document.type !== DocumentType.RETURN &&
+        document.type !== DocumentType.PROVIDER_RECEIPT
       ) {
         throw new BadRequestException(
           'Files are only available for remissions and returns',

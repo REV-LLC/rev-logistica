@@ -24,6 +24,16 @@ describe('FilesService categories', () => {
     });
   });
 
+  it('separa evidencia y comprobante de recepción del proveedor', () => {
+    expect(service.getCategories('DOCUMENT')).toEqual(
+      expect.arrayContaining([
+        { value: 'EVIDENCIA_ENTREGA_PROVEEDOR', label: 'Evidencia Entrega Proveedor' },
+        { value: 'COMPROBANTE_RECEPCION_PROVEEDOR', label: 'Comprobante Recepcion Proveedor' },
+        { value: 'COMPROBANTE_SALIDA_PROVEEDOR', label: 'Comprobante Salida Proveedor' },
+      ]),
+    );
+  });
+
   it('devuelve en español los errores de categorías inválidas', () => {
     expect(() => service.getCategories('TIPO_DESCONOCIDO')).toThrow(
       'El tipo de entidad del archivo no es válido',
@@ -62,6 +72,17 @@ describe('FilesService document access', () => {
     documentFindUnique.mockResolvedValue({
       id: 'document-1',
       type: DocumentType.REMISSION,
+      status: DocumentStatus.DRAFT,
+      createdBy: 'driver-1',
+    });
+
+    await expect(assertEntityAccess('driver-1', 'write')).resolves.toBeUndefined();
+  });
+
+  it('allows a driver to upload both supports to their own provider receipt draft', async () => {
+    documentFindUnique.mockResolvedValue({
+      id: 'document-1',
+      type: DocumentType.PROVIDER_RECEIPT,
       status: DocumentStatus.DRAFT,
       createdBy: 'driver-1',
     });

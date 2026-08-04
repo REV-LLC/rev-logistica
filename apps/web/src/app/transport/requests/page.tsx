@@ -946,8 +946,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const uploadAlternateSourceDocument = async (documentId: string) => {
     if (!alternateSourceDocument) return;
     const formData = new FormData();
-    formData.append('category', 'INTERNAL_SOURCE_DOCUMENT');
-    formData.append('displayName', 'Documento entregado por bodega alterna');
+    formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
+    formData.append('displayName', 'Remisión física entregada por el proveedor');
     formData.append('files', alternateSourceDocument.file);
     await api(`/files/entities/DOCUMENT/${documentId}`, {
       method: 'POST',
@@ -2736,9 +2736,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                 <Paper withBorder radius="md" p="sm">
                   <Stack gap="xs">
                     <div>
-                      <Text fw={700}>Documento de entrega de la bodega *</Text>
+                      <Text fw={700}>Remisión física del proveedor *</Text>
                       <Text size="sm" c="dimmed">
-                        Foto interna para oficina. No se comparte con el cliente.
+                        Foto legible del documento entregado por el proveedor. Se guarda separada de las evidencias del cliente.
                       </Text>
                     </div>
                     <input
@@ -2767,7 +2767,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                     {alternateSourceDocument ? (
                       <img
                         src={alternateSourceDocument.previewUrl}
-                        alt="Documento entregado por la bodega alterna"
+                        alt="Remisión física entregada por el proveedor"
                         style={{
                           width: '100%',
                           maxWidth: 320,
