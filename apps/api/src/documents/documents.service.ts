@@ -378,18 +378,49 @@ export class DocumentsService {
         );
       }
     } else {
-      if (!document.warehouseId || !document.customerWorksiteId) {
-        throw new BadRequestException('La devolución requiere bodega y obra');
+      if (!document.customerWorksiteId) {
+        throw new BadRequestException('La devolución requiere obra');
       }
-      await this.inventoryService.moveIn(
-        {
-          warehouseId: document.warehouseId,
-          customerWorksiteId: document.customerWorksiteId,
-          items,
-          documentId: document.id,
-        },
-        userId,
-      );
+
+      if (!document.warehouseId) {
+        throw new BadRequestException('La devolución requiere bodega destino');
+      }
+      const destinationWarehouse = await this.prisma.warehouse.findFirst({
+        where: { id: document.warehouseId, active: true },
+        select: { id: true, type: true },
+      });
+      if (!destinationWarehouse) {
+        throw new BadRequestException('La bodega destino no es válida');
+      }
+
+      if (destinationWarehouse.type === 'OWN') {
+        await this.inventoryService.moveIn(
+          {
+            warehouseId: document.warehouseId,
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      } else {
+        const mismatchedItem = items.find(
+          (item) => item.ownerWarehouseId !== destinationWarehouse.id,
+        );
+        if (mismatchedItem) {
+          throw new BadRequestException(
+            'Una devolución directa a proveedor solo puede incluir equipos de esa bodega dueña',
+          );
+        }
+        await this.inventoryService.moveReturnTransit(
+          {
+            customerWorksiteId: document.customerWorksiteId,
+            items,
+            documentId: document.id,
+          },
+          userId,
+        );
+      }
       await this.prisma.documentItem.updateMany({
         where: {
           documentId: document.id,
