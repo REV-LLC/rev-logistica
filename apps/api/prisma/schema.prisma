@@ -604,6 +604,7 @@ model Document {
   docDate            DateTime       @default(now())
   notes              String?
   recipientPhone     String?
+  recipientPhones    String[]       @default([])
 
   // Failed fields
   failedReason         String?
