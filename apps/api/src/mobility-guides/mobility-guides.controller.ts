@@ -22,6 +22,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { UploadedBusinessFile } from '../files/files.service';
 import { CreateMobilityGuideDto } from './dto/create-mobility-guide.dto';
+import { CreateProviderMobilityGuideDto } from './dto/create-provider-mobility-guide.dto';
 import { MobilityGuidesService } from './mobility-guides.service';
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
@@ -36,6 +37,57 @@ export class MobilityGuidesController {
   @Get('assets')
   listAssets(@Query('search') search?: string) {
     return this.service.listRegisteredAssets(search);
+  }
+
+  @Get('providers')
+  listProviders() {
+    return this.service.listProviders();
+  }
+
+  @Get('provider-guides')
+  listProviderGuides(
+    @Query('search') search?: string,
+    @Query('providerId') providerId?: string,
+  ) {
+    return this.service.listProviderGuides(search, providerId);
+  }
+
+  @Post('provider-guides')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+    }),
+  )
+  createProviderGuide(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    body: CreateProviderMobilityGuideDto,
+    @UploadedFile() file: UploadedBusinessFile | undefined,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.service.createProviderGuide(body, file, {
+      id: request.user.sub,
+      role: request.user.role,
+    });
+  }
+
+  @Delete('provider-guides/:guideId')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  removeProviderGuide(
+    @Param('guideId', new ParseUUIDPipe()) guideId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.service.removeProviderGuide(guideId, {
+      id: request.user.sub,
+      role: request.user.role,
+    });
   }
 
   @Get('assets/:assetId')
