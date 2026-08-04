@@ -614,6 +614,7 @@ export default function RemisionDevolucionPage() {
                 'Se enviará una copia por WhatsApp. Escribe solo los 10 dígitos.',
                 true,
               )}
+              withAsterisk={false}
               leftSection="+57"
               inputMode="numeric"
               maxLength={10}
