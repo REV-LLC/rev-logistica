@@ -176,7 +176,7 @@ export class MailService {
         headers: {
           Accept: 'application/json',
           Authorization: `Zoho-oauthtoken ${accessToken}`,
-          'Content-Type': attachment.contentType || 'application/octet-stream',
+          'Content-Type': 'application/octet-stream',
         },
         body: new Uint8Array(content),
         signal: AbortSignal.timeout(30_000),
