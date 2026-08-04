@@ -64,6 +64,8 @@ body {
   --picker-scroll-max-height: min(58dvh, 38.75rem);
   --picker-viewport-gutter: clamp(0.5rem, 2.5vw, 2rem);
   border-radius: clamp(var(--mantine-radius-sm), 1.25vw, var(--mantine-radius-xl));
+  display: flex;
+  flex-direction: column;
   max-height: calc(100dvh - (var(--picker-viewport-gutter) * 2));
   overflow: hidden;
   width: calc(100vw - (var(--picker-viewport-gutter) * 2));
@@ -384,12 +386,29 @@ body {
 }
 
 .inventory-picker-modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   padding: var(--picker-inline-space);
 }
 
-.inventory-picker,
-.inventory-picker-content {
+.inventory-picker {
+  flex: 1 1 auto;
   gap: var(--picker-gap);
+  min-height: 0;
+  width: 100%;
+}
+
+.inventory-picker-content {
+  flex: 1 1 auto;
+  gap: var(--picker-gap);
+  min-height: 0;
+}
+
+.inventory-picker-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .inventory-picker-toolbar {
@@ -488,6 +507,7 @@ body {
     calc(var(--picker-inline-space) * -1);
   padding: var(--picker-gap) var(--picker-inline-space);
   position: sticky;
+  flex: 0 0 auto;
   z-index: 2;
 }
 
