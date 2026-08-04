@@ -68,6 +68,13 @@ type AssetResponse = {
 type Warehouse = {
   id: string;
   name: string;
+  type: 'OWN' | 'ALLY';
+};
+
+type ProviderSkuPrice = {
+  providerWarehouseId: string;
+  skuId: string;
+  price: number;
 };
 
 type AssetLedgerResponse = {
@@ -141,6 +148,7 @@ export default function EditSerializedAssetPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [asset, setAsset] = useState<AssetResponse | null>(null);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [providerPrice, setProviderPrice] = useState<number | null>(null);
 
   const [brand, setBrand] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
@@ -167,6 +175,20 @@ export default function EditSerializedAssetPage() {
           api<AssetResponse>(`/assets/${assetId}`),
           api<Warehouse[]>('/warehouses'),
         ]);
+        const ownerWarehouse = warehouseData.find(
+          (warehouse) => warehouse.id === assetData.warehouseOwnerId,
+        );
+        let resolvedProviderPrice: number | null = null;
+        if (ownerWarehouse?.type === 'ALLY' && assetData.sku?.id) {
+          const params = new URLSearchParams({
+            providerWarehouseId: ownerWarehouse.id,
+            skuId: assetData.sku.id,
+          });
+          const rows = await api<ProviderSkuPrice[]>(
+            `/skus/provider-prices?${params.toString()}`,
+          );
+          resolvedProviderPrice = rows[0] ? Number(rows[0].price) : null;
+        }
         let resolvedWorksiteLocation: string | null = null;
         if (!assetData.warehouseCurrentId) {
           try {
@@ -190,6 +212,7 @@ export default function EditSerializedAssetPage() {
         if (!mounted) return;
         setAsset(assetData);
         setWarehouses(warehouseData);
+        setProviderPrice(resolvedProviderPrice);
         setBrand(assetData.brand ?? '');
         setRegistrationNumber(assetData.registrationNumber ?? '');
         setModel(assetData.model ?? '');
@@ -313,8 +336,10 @@ export default function EditSerializedAssetPage() {
       {
         title: 'Valores comerciales',
         fields: [
-          { label: 'Precio', value: formatCurrency(asset?.sku?.price) },
-          { label: 'Precio sub alquiler', value: formatCurrency(asset?.sku?.subrentalPrice) },
+          { label: 'Precio cliente', value: formatCurrency(asset?.sku?.price) },
+          ...(providerPrice != null
+            ? [{ label: 'Costo proveedor', value: formatCurrency(providerPrice) }]
+            : []),
           { label: 'Valor reposicion', value: formatCurrency(asset?.sku?.replacementValue) },
           {
             label: 'Tipo de cobro',
@@ -323,7 +348,7 @@ export default function EditSerializedAssetPage() {
         ],
       },
     ],
-    [active, asset, brand, fuelLabel, model, registrationNumber, year],
+    [active, asset, brand, fuelLabel, model, providerPrice, registrationNumber, year],
   );
 
   const handleSave = async () => {
