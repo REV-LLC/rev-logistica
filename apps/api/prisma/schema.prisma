@@ -189,6 +189,12 @@ model Customer {
   phone                 String?
   email                 String?
   documentsEmail        String?
+  documentsPhone        String?
+  contactDirectory      Json?
+  updateToken            String?                        @unique
+  updateTokenExpiresAt   DateTime?
+  contactUpdatedAt       DateTime?
+  contactUpdatedBy       String?
   billingAddress        String?
   billingPhone          String?
   billingAlternatePhone String?
