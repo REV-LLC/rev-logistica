@@ -1,3 +1,4 @@
+import { NotificationDeliveryStatus } from '@prisma/client';
 import { DocumentCustomerMessagesService } from './document-customer-messages.service';
 
 describe('DocumentCustomerMessagesService', () => {
@@ -29,7 +30,10 @@ describe('DocumentCustomerMessagesService', () => {
       },
     };
     const transport = {
-      sendWhatsapp: jest.fn().mockResolvedValue({ sent: true }),
+      sendWhatsapp: jest.fn().mockResolvedValue({
+        sent: true,
+        providerMessageId: 'wamid.document-1',
+      }),
     };
     process.env.PUBLIC_WEB_URL = 'https://app.example.test';
     process.env.PUBLIC_API_URL = 'https://api.example.test';
@@ -55,5 +59,12 @@ describe('DocumentCustomerMessagesService', () => {
         },
       }),
     );
+    expect(prisma.documentMessageDelivery.update).toHaveBeenCalledWith({
+      where: { id: 'delivery-whatsapp-1' },
+      data: expect.objectContaining({
+        status: NotificationDeliveryStatus.ACCEPTED,
+        providerMessageId: 'wamid.document-1',
+      }),
+    });
   });
 });

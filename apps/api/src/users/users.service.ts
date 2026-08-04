@@ -26,7 +26,7 @@ export class UsersService {
         role: true,
         active: true,
         employee: {
-          select: { name: true, lastName: true },
+          select: { name: true, lastName: true, phone: true },
         },
       },
     });
@@ -37,6 +37,7 @@ export class UsersService {
       email: user.email,
       role: user.role,
       active: user.active,
+      phone: user.employee?.phone ?? null,
     }));
   }
 }

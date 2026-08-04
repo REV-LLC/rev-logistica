@@ -6,11 +6,18 @@ import { NotificationTransportService } from './notification-transport.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationSchedulerService } from './notification-scheduler.service';
+import { WhatsappWebhookController } from './whatsapp-webhook.controller';
+import { WhatsappWebhookService } from './whatsapp-webhook.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, MailModule],
-  controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationTransportService, NotificationSchedulerService],
+  controllers: [NotificationsController, WhatsappWebhookController],
+  providers: [
+    NotificationsService,
+    NotificationTransportService,
+    NotificationSchedulerService,
+    WhatsappWebhookService,
+  ],
   exports: [NotificationsService, NotificationTransportService],
 })
 export class NotificationsModule {}

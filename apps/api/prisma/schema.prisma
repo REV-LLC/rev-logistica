@@ -105,6 +105,9 @@ enum NotificationChannel {
 enum NotificationDeliveryStatus {
   PENDING
   SENDING
+  ACCEPTED
+  DELIVERED
+  READ
   SENT
   FAILED
 }
@@ -562,16 +565,19 @@ model MaintenanceCompletion {
 }
 
 model NotificationDelivery {
-  id            String                     @id @default(uuid())
-  topicId       String
-  userId        String
-  occurrenceKey String
-  channel       NotificationChannel
-  status        NotificationDeliveryStatus @default(PENDING)
-  sentAt        DateTime?
-  error         String?
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
+  id                String                     @id @default(uuid())
+  topicId           String
+  userId            String
+  occurrenceKey     String
+  channel           NotificationChannel
+  status            NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?                    @unique
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  error             String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   topic NotificationTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
   user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -717,16 +723,19 @@ model DocumentEmailDelivery {
 }
 
 model DocumentMessageDelivery {
-  id         String                     @id @default(uuid())
-  documentId String
-  kind       String
-  channel    NotificationChannel
-  phone      String
-  status     NotificationDeliveryStatus @default(PENDING)
-  sentAt     DateTime?
-  error      String?
-  createdAt  DateTime                   @default(now())
-  updatedAt  DateTime                   @updatedAt
+  id                String                     @id @default(uuid())
+  documentId        String
+  kind              String
+  channel           NotificationChannel
+  phone             String
+  status            NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?                    @unique
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  error             String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
