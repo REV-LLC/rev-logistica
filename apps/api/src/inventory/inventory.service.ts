@@ -2051,7 +2051,20 @@ export class InventoryService {
             worksite: { select: { id: true, name: true } },
           },
         },
-        document: { select: { id: true, consecutive: true, type: true } },
+        document: {
+          select: {
+            id: true,
+            consecutive: true,
+            type: true,
+            creator: {
+              select: {
+                id: true,
+                email: true,
+                employee: { select: { name: true, lastName: true } },
+              },
+            },
+          },
+        },
         creator: {
           select: {
             id: true,
