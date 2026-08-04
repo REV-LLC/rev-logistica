@@ -49,6 +49,12 @@ export class CustomersController {
     return this.customersService.parseRutPdf(file);
   }
 
+  @Post(':id/update-link')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createUpdateLink(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.customersService.createUpdateLink(id);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   getById(@Param('id', new ParseUUIDPipe()) id: string) {

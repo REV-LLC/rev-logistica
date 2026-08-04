@@ -27,6 +27,7 @@ import {
   IconEye,
   IconFileCheck,
   IconFileText,
+  IconLink,
   IconPencil,
   IconPlus,
   IconRoad,
@@ -104,12 +105,14 @@ function CustomerDetails({
   worksitesLoading,
   worksitesError,
   onEdit,
+  onCreateUpdateLink,
 }: {
   customer: Customer;
   worksites: CustomerWorksite[];
   worksitesLoading: boolean;
   worksitesError: string | null;
   onEdit?: (customer: Customer) => void;
+  onCreateUpdateLink?: (customer: Customer) => void;
 }) {
   return (
     <Stack gap="md">
@@ -221,6 +224,11 @@ function CustomerDetails({
 
       {onEdit ? (
         <Group className="mobile-actions">
+          {onCreateUpdateLink ? (
+            <Button variant="default" leftSection={<IconLink size={16} />} onClick={() => onCreateUpdateLink(customer)}>
+              Copiar enlace de actualización
+            </Button>
+          ) : null}
           <Button variant="light" onClick={() => onEdit(customer)}>
             Editar
           </Button>
@@ -236,6 +244,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updateLinkMessage, setUpdateLinkMessage] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
@@ -290,6 +299,17 @@ export default function CustomersPage() {
     setRutParseMessage(null);
     setRutParseStatus(null);
     setModalOpen(true);
+  };
+
+  const createUpdateLink = async (customer: Customer) => {
+    try {
+      const result = await api<{ token: string; expiresAt: string }>(`/customers/${customer.id}/update-link`, { method: 'POST' });
+      const link = `${window.location.origin}/actualizar-datos?token=${result.token}`;
+      await navigator.clipboard.writeText(link);
+      setUpdateLinkMessage(`Enlace copiado. Vence el ${new Date(result.expiresAt).toLocaleDateString('es-CO')}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo generar el enlace.');
+    }
   };
 
   const openEdit = (customer: Customer) => {
@@ -469,6 +489,11 @@ export default function CustomersPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
+        {updateLinkMessage ? (
+          <Alert color="green" withCloseButton onClose={() => setUpdateLinkMessage(null)}>
+            {updateLinkMessage}
+          </Alert>
+        ) : null}
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
             <div>
@@ -763,6 +788,7 @@ export default function CustomersPage() {
               setDetailsCustomer(null);
               openEdit(customer);
             }}
+            onCreateUpdateLink={createUpdateLink}
           />
         ) : null}
       </Modal>

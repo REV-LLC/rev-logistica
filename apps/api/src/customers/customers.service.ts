@@ -14,6 +14,9 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateWorksiteDto } from './dto/create-worksite.dto';
 import { UpdateWorksiteDto } from './dto/update-worksite.dto';
 import { normalizeLegalName } from './normalize-legal-name';
+import { randomBytes } from 'crypto';
+import { PublicCustomerUpdateDto } from './dto/public-customer-update.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
@@ -26,6 +29,55 @@ export class CustomersService {
     return this.prisma.customer.findMany({
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async createUpdateLink(id: string) {
+    await this.getById(id);
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await this.prisma.customer.update({
+      where: { id },
+      data: { updateToken: token, updateTokenExpiresAt: expiresAt },
+    });
+    return { token, expiresAt };
+  }
+
+  async getPublicUpdate(token: string) {
+    const customer = await this.customerForToken(token);
+    return {
+      name: customer.name,
+      nitOrId: customer.nitOrId,
+      contacts: Array.isArray(customer.contactDirectory) ? customer.contactDirectory : [],
+      documentsPhone: customer.documentsPhone ?? customer.phone ?? '',
+      documentsEmail: customer.documentsEmail ?? customer.email ?? '',
+    };
+  }
+
+  async applyPublicUpdate(token: string, payload: PublicCustomerUpdateDto) {
+    const customer = await this.customerForToken(token);
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        contactDirectory: payload.contacts as unknown as Prisma.InputJsonValue,
+        phone: payload.contacts.find((contact) => contact.type === 'GENERAL')?.phone ?? customer.phone,
+        email: payload.contacts.find((contact) => contact.type === 'GENERAL')?.email ?? customer.email,
+        documentsPhone: payload.documentsPhone.trim(),
+        documentsEmail: payload.documentsEmail.trim().toLowerCase(),
+        contactUpdatedAt: new Date(),
+        contactUpdatedBy: payload.updatedBy.trim(),
+        updateToken: null,
+        updateTokenExpiresAt: null,
+      },
+    });
+    return { updated: true };
+  }
+
+  private async customerForToken(token: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { updateToken: token } });
+    if (!customer || !customer.updateTokenExpiresAt || customer.updateTokenExpiresAt < new Date()) {
+      throw new NotFoundException('El enlace no existe o ya venció');
+    }
+    return customer;
   }
 
   async getById(id: string) {
