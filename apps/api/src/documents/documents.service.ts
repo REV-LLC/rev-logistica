@@ -382,51 +382,40 @@ export class DocumentsService {
         throw new BadRequestException('La devolución requiere obra');
       }
 
-      const ownerWarehouseIds = [
-        ...new Set(items.map((item) => item.ownerWarehouseId)),
-      ];
-      const providerWarehouses = ownerWarehouseIds.length
-        ? await this.prisma.warehouse.findMany({
-            where: {
-              id: { in: ownerWarehouseIds },
-              type: 'ALLY',
-              active: true,
-            },
-            select: { id: true },
-          })
-        : [];
-      const providerWarehouseIds = new Set(
-        providerWarehouses.map((warehouse) => warehouse.id),
-      );
-      const providerItems = items.filter((item) =>
-        providerWarehouseIds.has(item.ownerWarehouseId),
-      );
-      const ownItems = items.filter(
-        (item) => !providerWarehouseIds.has(item.ownerWarehouseId),
-      );
+      if (!document.warehouseId) {
+        throw new BadRequestException('La devolución requiere bodega destino');
+      }
+      const destinationWarehouse = await this.prisma.warehouse.findFirst({
+        where: { id: document.warehouseId, active: true },
+        select: { id: true, type: true },
+      });
+      if (!destinationWarehouse) {
+        throw new BadRequestException('La bodega destino no es válida');
+      }
 
-      if (ownItems.length) {
-        if (!document.warehouseId) {
-          throw new BadRequestException(
-            'La devolución de equipos propios requiere bodega REV',
-          );
-        }
+      if (destinationWarehouse.type === 'OWN') {
         await this.inventoryService.moveIn(
           {
             warehouseId: document.warehouseId,
             customerWorksiteId: document.customerWorksiteId,
-            items: ownItems,
+            items,
             documentId: document.id,
           },
           userId,
         );
-      }
-
-      if (providerItems.length) {
+      } else {
+        const mismatchedItem = items.find(
+          (item) => item.ownerWarehouseId !== destinationWarehouse.id,
+        );
+        if (mismatchedItem) {
+          throw new BadRequestException(
+            'Una devolución directa a proveedor solo puede incluir equipos de esa bodega dueña',
+          );
+        }
         await this.inventoryService.moveReturnTransit(
           {
             customerWorksiteId: document.customerWorksiteId,
-            items: providerItems,
+            items,
             documentId: document.id,
           },
           userId,
