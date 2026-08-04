@@ -378,18 +378,60 @@ export class DocumentsService {
         );
       }
     } else {
-      if (!document.warehouseId || !document.customerWorksiteId) {
-        throw new BadRequestException('La devolución requiere bodega y obra');
+      if (!document.customerWorksiteId) {
+        throw new BadRequestException('La devolución requiere obra');
       }
-      await this.inventoryService.moveIn(
-        {
-          warehouseId: document.warehouseId,
-          customerWorksiteId: document.customerWorksiteId,
-          items,
-          documentId: document.id,
-        },
-        userId,
+
+      const ownerWarehouseIds = [
+        ...new Set(items.map((item) => item.ownerWarehouseId)),
+      ];
+      const providerWarehouses = ownerWarehouseIds.length
+        ? await this.prisma.warehouse.findMany({
+            where: {
+              id: { in: ownerWarehouseIds },
+              type: 'ALLY',
+              active: true,
+            },
+            select: { id: true },
+          })
+        : [];
+      const providerWarehouseIds = new Set(
+        providerWarehouses.map((warehouse) => warehouse.id),
       );
+      const providerItems = items.filter((item) =>
+        providerWarehouseIds.has(item.ownerWarehouseId),
+      );
+      const ownItems = items.filter(
+        (item) => !providerWarehouseIds.has(item.ownerWarehouseId),
+      );
+
+      if (ownItems.length) {
+        if (!document.warehouseId) {
+          throw new BadRequestException(
+            'La devolución de equipos propios requiere bodega REV',
+          );
+        }
+        await this.inventoryService.moveIn(
+          {
+            warehouseId: document.warehouseId,
+            customerWorksiteId: document.customerWorksiteId,
+            items: ownItems,
+            documentId: document.id,
+          },
+          userId,
+        );
+      }
+
+      if (providerItems.length) {
+        await this.inventoryService.moveReturnTransit(
+          {
+            customerWorksiteId: document.customerWorksiteId,
+            items: providerItems,
+            documentId: document.id,
+          },
+          userId,
+        );
+      }
       await this.prisma.documentItem.updateMany({
         where: {
           documentId: document.id,
