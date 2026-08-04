@@ -1160,6 +1160,10 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   };
 
   useEffect(() => {
+    if (activeTab !== 'generate' || generateStep !== 'items') {
+      setItemsModalOpen(false);
+      return;
+    }
     if (sourceMode !== 'warehouse') return;
     if (!sourceOwnerWarehouseId) {
       lastAutoOpenedWarehouseRef.current = null;
@@ -1173,7 +1177,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     if (lastAutoOpenedWarehouseRef.current === sourceOwnerWarehouseId) return;
     lastAutoOpenedWarehouseRef.current = sourceOwnerWarehouseId;
     void loadInventory(true);
-  }, [sourceMode, sourceOwnerWarehouseId, warehouses]);
+  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, warehouses]);
 
   useEffect(() => {
     if (sourceMode !== 'on-site') return;
@@ -3436,7 +3440,12 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       </Modal>
 
       <InventoryItemPickerModal
-        opened={itemsModalOpen && !useManualWarehouseCapture}
+        opened={
+          activeTab === 'generate' &&
+          generateStep === 'items' &&
+          itemsModalOpen &&
+          !useManualWarehouseCapture
+        }
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
         bulkItems={availableBulkItems}
