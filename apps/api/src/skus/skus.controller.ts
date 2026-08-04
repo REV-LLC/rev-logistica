@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
   ValidationPipe,
@@ -18,6 +19,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
+import { UpsertProviderSkuPriceDto } from './dto/upsert-provider-sku-price.dto';
 import { SkusService } from './skus.service';
 
 @Controller('skus')
@@ -42,6 +44,38 @@ export class SkusController {
   @Get('units')
   listUnits() {
     return this.skusService.listUnits();
+  }
+
+  @Get('provider-prices')
+  listProviderPrices(
+    @Query('providerWarehouseId') providerWarehouseId?: string,
+    @Query('skuId') skuId?: string,
+  ) {
+    return this.skusService.listProviderPrices({ providerWarehouseId, skuId });
+  }
+
+  @Put(':skuId/provider-prices/:providerWarehouseId')
+  upsertProviderPrice(
+    @Param('skuId', new ParseUUIDPipe()) skuId: string,
+    @Param('providerWarehouseId', new ParseUUIDPipe()) providerWarehouseId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: UpsertProviderSkuPriceDto,
+  ) {
+    return this.skusService.upsertProviderPrice(skuId, providerWarehouseId, payload.price);
+  }
+
+  @Delete(':skuId/provider-prices/:providerWarehouseId')
+  deleteProviderPrice(
+    @Param('skuId', new ParseUUIDPipe()) skuId: string,
+    @Param('providerWarehouseId', new ParseUUIDPipe()) providerWarehouseId: string,
+  ) {
+    return this.skusService.deleteProviderPrice(skuId, providerWarehouseId);
   }
 
   @Post()
