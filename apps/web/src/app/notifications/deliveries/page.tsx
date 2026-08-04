@@ -125,9 +125,23 @@ export default function NotificationDeliveriesPage() {
     setLoading(true);
     setError("");
     try {
-      setDeliveries(
-        await api<Delivery[]>("/notifications/deliveries?limit=300"),
+      const response = await api<unknown>(
+        "/notifications/deliveries?limit=300",
       );
+      if (!Array.isArray(response)) {
+        const serverMessage =
+          response &&
+          typeof response === "object" &&
+          "message" in response &&
+          typeof response.message === "string"
+            ? response.message
+            : null;
+        throw new Error(
+          serverMessage ||
+            "El servidor respondió con un formato inesperado. Intenta actualizar nuevamente.",
+        );
+      }
+      setDeliveries(response as Delivery[]);
     } catch (loadError) {
       setError(
         loadError instanceof Error
