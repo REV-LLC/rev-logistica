@@ -487,12 +487,17 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     createdBy: string;
   }) {
     const type = payload.type as DocumentType;
     const status =
       (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -510,7 +515,8 @@ export class DocumentsService {
               warehouseId: payload.warehouseId ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -537,7 +543,8 @@ export class DocumentsService {
     warehouseId?: string;
     customerWorksiteId?: string;
     notes?: string;
-    recipientPhone: string;
+    recipientPhone?: string;
+    recipientPhones?: string[];
     receivedSignature?: string;
     createdBy: string;
     items: Array<{
@@ -550,6 +557,10 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    const recipientPhones = this.normalizeDocumentRecipientPhones(
+      payload.recipientPhones,
+      payload.recipientPhone,
+    );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -572,7 +583,8 @@ export class DocumentsService {
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
-              recipientPhone: normalizeRequiredColombianPhone(payload.recipientPhone),
+              recipientPhone: recipientPhones[0],
+              recipientPhones,
               createdBy: payload.createdBy,
             },
           });
@@ -630,6 +642,7 @@ export class DocumentsService {
       customerWorksiteId?: string;
       notes?: string;
       recipientPhone?: string;
+      recipientPhones?: string[];
       receivedSignature?: string;
       items: Array<{
         skuId?: string;
@@ -654,6 +667,7 @@ export class DocumentsService {
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
+        recipientPhones: true,
         docDate: true,
       },
     });
@@ -689,6 +703,19 @@ export class DocumentsService {
           this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
         const defaultBillingCutoffDate =
           nextType === DocumentType.RETURN ? nextDocDate : null;
+        const recipientsWereUpdated =
+          payload.recipientPhones !== undefined ||
+          payload.recipientPhone !== undefined;
+        const nextRecipientPhones = recipientsWereUpdated
+          ? this.normalizeDocumentRecipientPhones(
+              payload.recipientPhones,
+              payload.recipientPhone,
+            )
+          : existing.recipientPhones.length
+            ? existing.recipientPhones
+            : existing.recipientPhone
+              ? [existing.recipientPhone]
+              : [];
         const updated = await tx.document.update({
           where: { id: documentId },
           data: {
@@ -704,10 +731,8 @@ export class DocumentsService {
                 : existing.customerWorksiteId,
             docDate: nextDocDate,
             notes: nextNotes,
-            recipientPhone:
-              payload.recipientPhone !== undefined
-                ? normalizeRequiredColombianPhone(payload.recipientPhone)
-                : existing.recipientPhone,
+            recipientPhone: nextRecipientPhones[0] ?? null,
+            recipientPhones: nextRecipientPhones,
             officeModifiedAt: new Date(),
             officeModifiedBy: userId,
           },
@@ -1475,5 +1500,22 @@ export class DocumentsService {
       driverId: values.get('conductor') || null,
       dispatcherId: values.get('despachador') || null,
     };
+  }
+
+  private normalizeDocumentRecipientPhones(
+    recipientPhones?: string[],
+    recipientPhone?: string,
+  ) {
+    const normalized = [
+      ...(recipientPhones ?? []),
+      ...(recipientPhone ? [recipientPhone] : []),
+    ].map((phone) => normalizeRequiredColombianPhone(phone));
+    const unique = [...new Set(normalized)];
+    if (!unique.length) {
+      throw new BadRequestException(
+        'Agrega al menos un destinatario de WhatsApp',
+      );
+    }
+    return unique;
   }
 }
