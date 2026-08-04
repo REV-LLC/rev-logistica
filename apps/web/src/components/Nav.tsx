@@ -158,6 +158,7 @@ const sections: NavSection[] = [
   {
     title: 'Configuración',
     links: [
+      { href: '/settings/task-notifications', label: 'Alertas de tareas', icon: IconChecklist, roles: ['ADMIN'] },
       { href: '/settings/catalog-options', label: 'Catálogo de ítems', icon: IconSettings, roles: ['ADMIN'] },
     ],
   },

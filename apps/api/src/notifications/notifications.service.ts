@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigureNotificationTopicDto, NotificationRecipientDto } from './dto/notification.dto';
 import { NOTIFICATION_ENTITY, NOTIFICATION_EVENT, VEHICLE_REQUIRED_EVENTS } from './notification.constants';
 import { NotificationMessage, NotificationTransportService } from './notification-transport.service';
+import { SettingsService } from '../settings/settings.service';
 
 type DbClient = PrismaService | Prisma.TransactionClient;
 type ReminderStatus = 'UPCOMING' | 'DUE' | 'OVERDUE';
@@ -13,7 +14,68 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transport: NotificationTransportService,
+    private readonly settings: SettingsService,
   ) {}
+
+  async syncTaskNotification(taskId: string, reason: 'CREATED' | 'REASSIGNED' | 'DUE_DATE_CHANGED' | 'UPDATED') {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignedTo: { include: { employee: true } },
+        assignedToEmployee: { include: { user: true } },
+      },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+    const candidateUser = task.assignedTo ?? task.assignedToEmployee?.user ?? null;
+    const user = candidateUser?.active ? candidateUser : null;
+    const topicKey = { entityType: NOTIFICATION_ENTITY.TASK, entityId: task.id, eventType: NOTIFICATION_EVENT.TASK_DUE };
+    const topic = await this.prisma.notificationTopic.upsert({
+      where: { entityType_entityId_eventType: topicKey },
+      create: { ...topicKey, active: task.status !== 'DONE' && Boolean(user) },
+      update: { active: task.status !== 'DONE' && Boolean(user) },
+    });
+    await this.replaceRecipients(topic.id, user ? [{ userId: user.id, whatsappEnabled: true }] : [], this.prisma);
+    if (task.status === 'DONE') return { sent: 0, skipped: 1 };
+
+    const shouldNotify = reason === 'CREATED' || reason === 'REASSIGNED'
+      ? await this.settings.get<boolean>('tasks.notify_on_assignment')
+      : reason === 'DUE_DATE_CHANGED'
+        ? await this.settings.get<boolean>('tasks.notify_on_due_date_change') : false;
+    if (!shouldNotify) return { sent: 0, skipped: 1 };
+
+    if (!user) {
+      const employee = task.assignedToEmployee;
+      if (!employee?.active || !employee.phone) return { sent: 0, skipped: 1 };
+      const isDueChange = reason === 'DUE_DATE_CHANGED';
+      try {
+        const response = await this.transport.sendWhatsapp(employee.phone, {
+          title: isDueChange ? `Nueva fecha para: ${task.title}` : `Nueva tarea: ${task.title}`,
+          body: `${isDueChange ? 'Se actualizó la fecha de esta tarea' : 'Te asignaron esta tarea'}${task.dueDate ? `; vence el ${this.formatDate(task.dueDate)}` : ''}.`,
+          recipientName: `${employee.name} ${employee.lastName}`.trim(),
+          link: this.appLink('/tasks'),
+        });
+        return { sent: response.sent ? 1 : 0, skipped: response.sent ? 0 : 1 };
+      } catch {
+        return { sent: 0, skipped: 0, failed: 1 };
+      }
+    }
+
+    const hydrated = await this.prisma.notificationTopic.findUniqueOrThrow({
+      where: { id: topic.id }, include: this.topicRecipientsInclude(),
+    });
+    const recipient = this.mapRecipients(hydrated.recipients)[0];
+    if (!recipient?.phone) return { sent: 0, skipped: 1 };
+    const isDueChange = reason === 'DUE_DATE_CHANGED';
+    const reminder = {
+      topicId: topic.id,
+      occurrenceKey: `${isDueChange ? 'due-change' : 'assignment'}:${task.updatedAt.toISOString()}`,
+      title: isDueChange ? `Nueva fecha para: ${task.title}` : `Nueva tarea: ${task.title}`,
+      message: `${isDueChange ? 'Se actualizó la fecha de esta tarea' : 'Te asignaron esta tarea'}${task.dueDate ? `; vence el ${this.formatDate(task.dueDate)}` : ''}.`,
+      link: this.appLink('/tasks'),
+    };
+    const result = await this.dispatchOne(reminder, recipient, NotificationChannel.WHATSAPP);
+    return { sent: result === 'sent' ? 1 : 0, skipped: result === 'skipped' ? 1 : 0, failed: result === 'failed' ? 1 : 0 };
+  }
 
   async ensureVehicleTopics(vehicleId: string, recipients?: NotificationRecipientDto[], db: DbClient = this.prisma) {
     const topics: Array<{ id: string }> = [];
@@ -119,10 +181,13 @@ export class NotificationsService {
     });
     const vehicleTopics = topics.filter((topic) => topic.entityType === NOTIFICATION_ENTITY.VEHICLE);
     const maintenanceTopics = topics.filter((topic) => topic.entityType === NOTIFICATION_ENTITY.MAINTENANCE_ITEM);
+    const taskTopics = topics.filter((topic) => topic.entityType === NOTIFICATION_ENTITY.TASK);
     const genericTopics = topics.filter((topic) =>
-      topic.entityType !== NOTIFICATION_ENTITY.VEHICLE && topic.entityType !== NOTIFICATION_ENTITY.MAINTENANCE_ITEM,
+      topic.entityType !== NOTIFICATION_ENTITY.VEHICLE
+      && topic.entityType !== NOTIFICATION_ENTITY.MAINTENANCE_ITEM
+      && topic.entityType !== NOTIFICATION_ENTITY.TASK,
     );
-    const [vehicles, items] = await Promise.all([
+    const [vehicles, items, tasks, dueWarningHours, overdueRepeatEnabled, overdueRepeatIntervalHours] = await Promise.all([
       this.prisma.vehicle.findMany({
         where: { id: { in: vehicleTopics.map((topic) => topic.entityId) }, active: true },
       }),
@@ -141,9 +206,16 @@ export class NotificationsService {
           completions: { orderBy: { completedAt: 'desc' }, take: 1 },
         },
       }),
+      taskTopics.length ? this.prisma.task.findMany({
+        where: { id: { in: taskTopics.map((topic) => topic.entityId) }, status: { not: 'DONE' } },
+      }) : Promise.resolve([]),
+      this.settings.get<number>('tasks.due_warning_hours'),
+      this.settings.get<boolean>('tasks.overdue_repeat_enabled'),
+      this.settings.get<number>('tasks.overdue_repeat_interval_hours'),
     ]);
     const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
     const itemById = new Map(items.map((item) => [item.id, item]));
+    const taskById = new Map(tasks.map((task) => [task.id, task] as const));
     const reminders: any[] = topics.flatMap<any>((topic) => {
       if (topic.entityType === NOTIFICATION_ENTITY.VEHICLE) {
         const vehicle = vehicleById.get(topic.entityId);
@@ -153,12 +225,38 @@ export class NotificationsService {
         const item = itemById.get(topic.entityId);
         return item ? [this.maintenanceReminder(topic, item)] : [];
       }
+      if (topic.entityType === NOTIFICATION_ENTITY.TASK) {
+        const task = taskById.get(topic.entityId);
+        return task ? [this.taskReminder(topic, task, dueWarningHours, overdueRepeatEnabled, overdueRepeatIntervalHours)] : [];
+      }
       if (genericTopics.some((candidate) => candidate.id === topic.id)) {
         return topic.dueAt ? [this.genericDateReminder(topic)] : [];
       }
       return [];
     });
     return reminders.sort((a, b) => a.sortValue - b.sortValue);
+  }
+
+  private taskReminder(topic: any, task: any, warningHours: number, repeatEnabled: boolean, repeatHours: number) {
+    const dueAt = task.dueDate as Date | null;
+    const remainingHours = dueAt ? (dueAt.getTime() - Date.now()) / 3_600_000 : Number.POSITIVE_INFINITY;
+    const status: ReminderStatus = remainingHours < 0 ? 'OVERDUE' : remainingHours <= warningHours ? 'DUE' : 'UPCOMING';
+    const overdueBucket = dueAt && status === 'OVERDUE'
+      ? Math.floor(Math.max(0, -remainingHours) / Math.max(1, repeatHours)) : 0;
+    return {
+      topicId: topic.id, entityType: topic.entityType, entityId: task.id, eventType: topic.eventType,
+      title: `Tarea: ${task.title}`,
+      message: dueAt
+        ? `${status === 'OVERDUE' ? 'La tarea está vencida' : `La tarea vence el ${this.formatDate(dueAt)}`}.`
+        : 'Tarea asignada sin fecha de vencimiento.',
+      link: this.appLink('/tasks'),
+      status, dueAt, remainingHours, unit: 'HOURS', sortValue: remainingHours,
+      occurrenceKey: status === 'OVERDUE'
+        ? `overdue:${dueAt?.toISOString()}:${repeatEnabled ? overdueBucket : 'once'}`
+        : `due:${dueAt?.toISOString() ?? 'none'}`,
+      entity: { id: task.id, type: 'TASK', label: task.title },
+      recipients: this.mapRecipients(topic.recipients),
+    };
   }
 
   async dispatchNotifications() {
@@ -295,6 +393,7 @@ export class NotificationsService {
     const message: NotificationMessage = {
       title: reminder.title,
       body: reminder.message,
+      link: reminder.link,
       recipientName: recipient.name,
     };
     try {
@@ -391,6 +490,11 @@ export class NotificationsService {
       year: 'numeric',
       timeZone: 'UTC',
     }).format(value);
+  }
+
+  private appLink(path: string) {
+    const base = process.env.PUBLIC_WEB_URL?.trim()?.replace(/\/+$/, '');
+    return base ? `${base}${path}` : path;
   }
 
   private renderTemplate(template: string, variables: Record<string, string>) {
