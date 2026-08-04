@@ -62,6 +62,12 @@ type Sku = {
   extendedLengthMeters?: number | string | null;
 };
 
+type ProviderSkuPrice = {
+  skuId: string;
+  providerWarehouseId: string;
+  price: number;
+};
+
 type Asset = {
   id: string;
   imageFileObjectId?: string | null;
@@ -212,7 +218,8 @@ export default function CreateSerializedAssetPage() {
   const [skuUnit, setSkuUnit] = useState('');
   const [skuUnitWeight, setSkuUnitWeight] = useState<number | string>('');
   const [skuPrice, setSkuPrice] = useState<number | ''>('');
-  const [skuSubrentalPrice, setSkuSubrentalPrice] = useState<number | ''>('');
+  const [providerPrice, setProviderPrice] = useState<number | ''>('');
+  const [providerPrices, setProviderPrices] = useState<Map<string, number>>(() => new Map());
   const [skuReplacementValue, setSkuReplacementValue] = useState<number | ''>('');
   const [skuChargeType, setSkuChargeType] = useState<'DAY' | 'HOUR'>('DAY');
   const [skuMinimumChargeHours, setSkuMinimumChargeHours] = useState<number | string>('');
@@ -385,6 +392,27 @@ export default function CreateSerializedAssetPage() {
     [ownerWarehouseId, warehouses],
   );
   const isAlternateOwnerWarehouse = selectedOwnerWarehouse?.type === 'ALLY';
+  useEffect(() => {
+    if (!ownerWarehouseId || selectedOwnerWarehouse?.type !== 'ALLY') {
+      setProviderPrices(new Map());
+      setProviderPrice('');
+      return;
+    }
+
+    let mounted = true;
+    api<ProviderSkuPrice[]>(`/skus/provider-prices?providerWarehouseId=${ownerWarehouseId}`)
+      .then((rows) => {
+        if (!mounted) return;
+        setProviderPrices(new Map(rows.map((row) => [row.skuId, Number(row.price)])));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setProviderPrices(new Map());
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [ownerWarehouseId, selectedOwnerWarehouse?.type]);
   const selectedFamily = familyId ? familyNameById.get(familyId) : null;
   const subfamilyOptions = (selectedFamily?.subfamilies ?? []).map((subfamily) => ({
     value: subfamily.id,
@@ -399,6 +427,9 @@ export default function CreateSerializedAssetPage() {
     [warehouseCurrentId, warehouses],
   );
   const resolvedSkuName = useMemo(() => {
+    const selectedTemplate = skuSuggestionId ? skuById.get(skuSuggestionId) : null;
+    if (selectedTemplate?.name?.trim()) return selectedTemplate.name.trim();
+
     const brandModelName = [skuBrand.trim(), skuModel.trim()].filter(Boolean).join(' ').trim();
     if (brandModelName) return brandModelName;
 
@@ -406,15 +437,14 @@ export default function CreateSerializedAssetPage() {
     if (templateName) return templateName;
 
     return (selectedFamily?.name ?? familyName.trim()).trim();
-  }, [familyName, selectedFamily?.name, skuBrand, skuModel, skuName]);
+  }, [familyName, selectedFamily?.name, skuBrand, skuById, skuModel, skuName, skuSuggestionId]);
   const hasTemplateData = Boolean(resolvedSkuName && skuUnit);
   const hasCommercialData =
     skuPrice !== '' &&
     Number(skuPrice) >= 0 &&
-    skuSubrentalPrice !== '' &&
-    Number(skuSubrentalPrice) >= 0 &&
     skuReplacementValue !== '' &&
     Number(skuReplacementValue) >= 0 &&
+    (!isAlternateOwnerWarehouse || (providerPrice !== '' && Number(providerPrice) >= 0)) &&
     (skuChargeType !== 'HOUR' ||
       (skuMinimumChargeHours !== '' && Number(skuMinimumChargeHours) > 0));
   const hasAssetData =
@@ -447,7 +477,8 @@ export default function CreateSerializedAssetPage() {
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
-    setSkuSubrentalPrice('');
+    setProviderPrice('');
+    setProviderPrices(new Map());
     setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
@@ -487,7 +518,7 @@ export default function CreateSerializedAssetPage() {
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
-    setSkuSubrentalPrice('');
+    setProviderPrice('');
     setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
@@ -508,6 +539,7 @@ export default function CreateSerializedAssetPage() {
   const handleOwnerWarehouseChange = (value: string | null) => {
     setOwnerWarehouseId(value);
     setWarehouseCurrentId(value);
+    setProviderPrice('');
     setWarehouseLocked(false);
     clearFamilyAndAssetInputs();
     const selected = warehouses.find((warehouse) => warehouse.id === value);
@@ -575,7 +607,6 @@ export default function CreateSerializedAssetPage() {
     setSkuUnit('');
     setSkuUnitWeight('');
     setSkuPrice('');
-    setSkuSubrentalPrice('');
     setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
@@ -618,7 +649,11 @@ export default function CreateSerializedAssetPage() {
     setError(null);
     setCommercialAttempted(true);
     if (!hasCommercialData) {
-      setValidationError('Completa precio, subalquiler, reposición y regla de cobro.');
+      setValidationError(
+        isAlternateOwnerWarehouse
+          ? 'Completa precio cliente, costo proveedor, reposición y regla de cobro.'
+          : 'Completa precio cliente, reposición y regla de cobro.',
+      );
       return;
     }
     setCommercialAttempted(false);
@@ -734,11 +769,10 @@ export default function CreateSerializedAssetPage() {
             ? { id: subfamilyId }
             : { name: uppercaseInputValue(subfamilyName.trim()) },
         sku: {
-          name: resolvedSkuName || undefined,
+          id: skuSuggestionId || undefined,
+          name: skuSuggestionId ? undefined : resolvedSkuName || undefined,
           unitWeight: parsedSkuUnitWeight,
           price: skuPrice === '' ? undefined : skuPrice,
-          subrentalPrice:
-            skuSubrentalPrice === '' ? undefined : skuSubrentalPrice,
           replacementValue:
             skuReplacementValue === '' ? undefined : skuReplacementValue,
           chargeType: skuChargeType,
@@ -752,6 +786,7 @@ export default function CreateSerializedAssetPage() {
           extendedLengthMeters: toOptionalNumber(skuExtendedLengthMeters),
         },
         asset: {
+          description: resolvedSkuName || undefined,
           serialOrEngine: serialOrEngine.trim() || undefined,
           registrationNumber: registrationNumber.trim() || undefined,
           brand: skuBrand.trim() || undefined,
@@ -767,6 +802,10 @@ export default function CreateSerializedAssetPage() {
         },
         ownerWarehouseId,
         warehouseCurrentId,
+        providerPrice:
+          isAlternateOwnerWarehouse && providerPrice !== ''
+            ? providerPrice
+            : undefined,
       };
 
       const response = await api<CreateSerializedResponse>(
@@ -1145,7 +1184,7 @@ export default function CreateSerializedAssetPage() {
                       setSkuUnitWeight(toNumberInputValue(selectedSku.unitWeight));
                       setSkuUnit((current) => current || units[0] || '');
                       setSkuPrice(toNumberInputValue(selectedSku.price));
-                      setSkuSubrentalPrice(toNumberInputValue(selectedSku.subrentalPrice));
+                      setProviderPrice(providerPrices.get(selectedSku.id) ?? '');
                       setSkuReplacementValue(toNumberInputValue(selectedSku.replacementValue));
                       setSkuChargeType(
                         selectedSku.chargeType === 'HOUR' ? 'HOUR' : 'DAY',
@@ -1167,7 +1206,9 @@ export default function CreateSerializedAssetPage() {
                       );
                       const inferred = inferBrandModelFromSkuName(selectedSku.name ?? '', brandOptions);
                       const copiedBrand = uppercaseInputValue(sampleAsset?.brand?.trim() || inferred.brand);
-                      const copiedModel = uppercaseInputValue(sampleAsset?.model?.trim() || inferred.model);
+                      const copiedModel = uppercaseInputValue(
+                        sampleAsset?.model?.trim() || (inferred.brand ? inferred.model : ''),
+                      );
                       setSkuBrand(copiedBrand);
                       setSkuModel(copiedModel);
                       setSkuYear(sampleAsset?.year ?? '');
@@ -1324,13 +1365,13 @@ export default function CreateSerializedAssetPage() {
                   <div>
                     <Text fw={700}>4. Datos comerciales</Text>
                     <Text size="sm" c="dimmed">
-                      Precio, subalquiler, reposicion y regla de cobro.
+                      Separa lo que paga el cliente del costo que cobra el proveedor.
                     </Text>
                   </div>
 
                   <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
                     <NumberInput
-                      label="Precio"
+                      label="Precio cliente"
                       name="skuPrice"
                       autoComplete="off"
                       value={skuPrice}
@@ -1345,22 +1386,25 @@ export default function CreateSerializedAssetPage() {
                       error={commercialAttempted && skuPrice === '' ? 'Requerido' : null}
                       required
                     />
-                    <NumberInput
-                      label="Precio sub alquiler"
-                      name="skuSubrentalPrice"
-                      autoComplete="off"
-                      value={skuSubrentalPrice}
-                      onChange={(value) =>
-                        setSkuSubrentalPrice(typeof value === 'number' ? value : '')
-                      }
-                      min={0}
-                      step={1000}
-                      allowDecimal={false}
-                      prefix="$ "
-                      thousandSeparator=","
-                      error={commercialAttempted && skuSubrentalPrice === '' ? 'Requerido' : null}
-                      required
-                    />
+                    {isAlternateOwnerWarehouse ? (
+                      <NumberInput
+                        label="Costo proveedor"
+                        description={`Costo específico de ${selectedOwnerWarehouse?.name ?? 'este proveedor'}`}
+                        name="providerPrice"
+                        autoComplete="off"
+                        value={providerPrice}
+                        onChange={(value) =>
+                          setProviderPrice(typeof value === 'number' ? value : '')
+                        }
+                        min={0}
+                        step={1000}
+                        allowDecimal={false}
+                        prefix="$ "
+                        thousandSeparator=","
+                        error={commercialAttempted && providerPrice === '' ? 'Requerido' : null}
+                        required
+                      />
+                    ) : null}
                     <NumberInput
                       label="Valor reposicion"
                       name="skuReplacementValue"

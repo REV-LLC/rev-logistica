@@ -121,6 +121,13 @@ type BulkPayload = {
   ownerWarehouseId: string;
   warehouseId: string;
   quantity: number;
+  providerPrice?: number;
+};
+
+type ProviderSkuPrice = {
+  skuId: string;
+  providerWarehouseId: string;
+  price: number;
 };
 
 const DEFAULT_FORMALETA_X_OPTIONS = [
@@ -243,7 +250,6 @@ type RequiredSkuData = {
   unitWeight: number | '';
   weightUnit: WeightUnit | '';
   price: number | '';
-  subrentalPrice: number | '';
   replacementValue: number | '';
   areaM2?: number | string;
 };
@@ -270,7 +276,6 @@ const hasMissingRequiredSkuData = ({
   unitWeight,
   weightUnit,
   price,
-  subrentalPrice,
   replacementValue,
   areaM2,
 }: RequiredSkuData, requireAreaM2: boolean) =>
@@ -278,7 +283,6 @@ const hasMissingRequiredSkuData = ({
   !weightUnit ||
   (requireAreaM2 && isMissingPositiveNumber(areaM2 ?? '')) ||
   isMissingNonNegativeNumber(price) ||
-  isMissingNonNegativeNumber(subrentalPrice) ||
   isMissingNonNegativeNumber(replacementValue);
 
 const getWorkflowStepClassName = (isActive: boolean) =>
@@ -315,7 +319,6 @@ export default function AddBulkStockPage() {
   const [formaletaAccessoryName, setFormaletaAccessoryName] = useState('');
   const [formaletaSkuUnitWeight, setFormaletaSkuUnitWeight] = useState<number | ''>('');
   const [formaletaSkuPrice, setFormaletaSkuPrice] = useState<number | ''>('');
-  const [formaletaSkuSubrentalPrice, setFormaletaSkuSubrentalPrice] = useState<number | ''>('');
   const [formaletaSkuReplacementValue, setFormaletaSkuReplacementValue] = useState<number | ''>('');
   const [formaletaChargeType, setFormaletaChargeType] = useState<ChargeType>('DAY');
   const [formaletaMinimumChargeHours, setFormaletaMinimumChargeHours] = useState<number | ''>('');
@@ -328,13 +331,14 @@ export default function AddBulkStockPage() {
   const [certifiedScaffoldMeasure, setCertifiedScaffoldMeasure] = useState('');
   const [genericSkuUnitWeight, setGenericSkuUnitWeight] = useState<number | ''>('');
   const [genericSkuPrice, setGenericSkuPrice] = useState<number | ''>('');
-  const [genericSkuSubrentalPrice, setGenericSkuSubrentalPrice] = useState<number | ''>('');
   const [genericSkuReplacementValue, setGenericSkuReplacementValue] = useState<number | ''>('');
   const [genericChargeType, setGenericChargeType] = useState<ChargeType>('DAY');
   const [genericMinimumChargeHours, setGenericMinimumChargeHours] = useState<number | ''>('');
   const [genericWeightUnit, setGenericWeightUnit] = useState<WeightUnit | ''>('');
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
+  const [providerPrice, setProviderPrice] = useState<number | ''>('');
+  const [providerPrices, setProviderPrices] = useState<Map<string, number>>(() => new Map());
   const [quantity, setQuantity] = useState<number | ''>('');
   const [warehouseLocked, setWarehouseLocked] = useState(false);
   const [modeLocked, setModeLocked] = useState(false);
@@ -359,7 +363,6 @@ export default function AddBulkStockPage() {
     unitWeight: formaletaSkuUnitWeight,
     weightUnit: formaletaWeightUnit,
     price: formaletaSkuPrice,
-    subrentalPrice: formaletaSkuSubrentalPrice,
     replacementValue: formaletaSkuReplacementValue,
     areaM2: formaletaAreaM2,
   };
@@ -367,7 +370,6 @@ export default function AddBulkStockPage() {
     unitWeight: genericSkuUnitWeight,
     weightUnit: genericWeightUnit,
     price: genericSkuPrice,
-    subrentalPrice: genericSkuSubrentalPrice,
     replacementValue: genericSkuReplacementValue,
   };
   const requiredSkuDataMissing =
@@ -530,6 +532,35 @@ export default function AddBulkStockPage() {
         })),
     [warehouses],
   );
+  const selectedOwnerWarehouse = useMemo(
+    () => warehouses.find((warehouse) => warehouse.id === ownerWarehouseId) ?? null,
+    [ownerWarehouseId, warehouses],
+  );
+  const isProviderWarehouse = selectedOwnerWarehouse?.type === 'ALLY';
+  useEffect(() => {
+    if (!ownerWarehouseId || !isProviderWarehouse) {
+      setProviderPrices(new Map());
+      setProviderPrice('');
+      return;
+    }
+    let mounted = true;
+    api<ProviderSkuPrice[]>(`/skus/provider-prices?providerWarehouseId=${ownerWarehouseId}`)
+      .then((rows) => {
+        if (!mounted) return;
+        setProviderPrices(new Map(rows.map((row) => [row.skuId, Number(row.price)])));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setProviderPrices(new Map());
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isProviderWarehouse, ownerWarehouseId]);
+  useEffect(() => {
+    if (entryMode !== 'existing' || !existingSkuId || !isProviderWarehouse) return;
+    setProviderPrice(providerPrices.get(existingSkuId) ?? '');
+  }, [entryMode, existingSkuId, isProviderWarehouse, providerPrices]);
   const existingItemOptions = existingItems.map((item) => ({
     value: item.skuId,
     label: `${item.skuName ?? item.name ?? item.skuId} · ${item.category ?? 'Sin familia'} · ${item.quantity}`,
@@ -627,8 +658,6 @@ export default function AddBulkStockPage() {
               ? undefined
               : normalizeWeightToKg(Number(formaletaSkuUnitWeight), formaletaWeightUnit || 'KG'),
           skuPrice: formaletaSkuPrice === '' ? undefined : Number(formaletaSkuPrice),
-          skuSubrentalPrice:
-            formaletaSkuSubrentalPrice === '' ? undefined : Number(formaletaSkuSubrentalPrice),
           skuReplacementValue:
             formaletaSkuReplacementValue === '' ? undefined : Number(formaletaSkuReplacementValue),
           chargeType: formaletaChargeType,
@@ -653,8 +682,6 @@ export default function AddBulkStockPage() {
             ? undefined
             : normalizeWeightToKg(Number(formaletaSkuUnitWeight), formaletaWeightUnit || 'KG'),
         skuPrice: formaletaSkuPrice === '' ? undefined : Number(formaletaSkuPrice),
-        skuSubrentalPrice:
-          formaletaSkuSubrentalPrice === '' ? undefined : Number(formaletaSkuSubrentalPrice),
         skuReplacementValue:
           formaletaSkuReplacementValue === '' ? undefined : Number(formaletaSkuReplacementValue),
         chargeType: formaletaChargeType,
@@ -685,8 +712,6 @@ export default function AddBulkStockPage() {
           ? undefined
           : normalizeWeightToKg(Number(genericSkuUnitWeight), genericWeightUnit || 'KG'),
       skuPrice: genericSkuPrice === '' ? undefined : Number(genericSkuPrice),
-      skuSubrentalPrice:
-        genericSkuSubrentalPrice === '' ? undefined : Number(genericSkuSubrentalPrice),
       skuReplacementValue:
         genericSkuReplacementValue === '' ? undefined : Number(genericSkuReplacementValue),
       chargeType: genericChargeType,
@@ -704,7 +729,6 @@ export default function AddBulkStockPage() {
     formaletaLine,
     formaletaSkuUnitWeight,
     formaletaSkuPrice,
-    formaletaSkuSubrentalPrice,
     formaletaSkuReplacementValue,
     formaletaChargeType,
     formaletaMinimumChargeHours,
@@ -718,7 +742,6 @@ export default function AddBulkStockPage() {
     conventionalScaffoldNeedsMeasure,
     genericSkuUnitWeight,
     genericSkuPrice,
-    genericSkuSubrentalPrice,
     genericSkuReplacementValue,
     genericChargeType,
     genericMinimumChargeHours,
@@ -729,6 +752,9 @@ export default function AddBulkStockPage() {
 
   const payloadPreview = useMemo(() => {
     if (!ownerWarehouseId || quantity === '' || Number(quantity) <= 0) {
+      return null;
+    }
+    if (isProviderWarehouse && (providerPrice === '' || Number(providerPrice) < 0)) {
       return null;
     }
 
@@ -749,6 +775,8 @@ export default function AddBulkStockPage() {
         ownerWarehouseId,
         warehouseId: ownerWarehouseId,
         quantity: Number(quantity),
+        providerPrice:
+          isProviderWarehouse && providerPrice !== '' ? Number(providerPrice) : undefined,
       };
     }
 
@@ -765,17 +793,18 @@ export default function AddBulkStockPage() {
         name: builtItem.skuName,
         unitWeight: builtItem.skuUnitWeight,
         price: builtItem.skuPrice,
-        subrentalPrice: builtItem.skuSubrentalPrice,
         replacementValue: builtItem.skuReplacementValue,
         areaM2: builtItem.areaM2,
       },
       ownerWarehouseId,
       warehouseId: ownerWarehouseId,
       quantity: Number(quantity),
+      providerPrice:
+        isProviderWarehouse && providerPrice !== '' ? Number(providerPrice) : undefined,
     };
 
     return payload;
-  }, [builtItem, entryMode, ownerWarehouseId, quantity, selectedExistingItem]);
+  }, [builtItem, entryMode, isProviderWarehouse, ownerWarehouseId, providerPrice, quantity, selectedExistingItem]);
 
   const productReady =
     modeLocked &&
@@ -798,7 +827,6 @@ export default function AddBulkStockPage() {
       setFormaletaAccessoryName('');
       setFormaletaSkuUnitWeight('');
       setFormaletaSkuPrice('');
-      setFormaletaSkuSubrentalPrice('');
       setFormaletaSkuReplacementValue('');
       setFormaletaChargeType('DAY');
       setFormaletaMinimumChargeHours('');
@@ -813,7 +841,6 @@ export default function AddBulkStockPage() {
     setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
-    setGenericSkuSubrentalPrice('');
     setGenericSkuReplacementValue('');
     setGenericChargeType('DAY');
     setGenericMinimumChargeHours('');
@@ -838,7 +865,6 @@ export default function AddBulkStockPage() {
     setFormaletaAccessoryName('');
     setFormaletaSkuUnitWeight('');
     setFormaletaSkuPrice('');
-    setFormaletaSkuSubrentalPrice('');
     setFormaletaSkuReplacementValue('');
     setFormaletaChargeType('DAY');
     setFormaletaMinimumChargeHours('');
@@ -851,13 +877,14 @@ export default function AddBulkStockPage() {
     setCertifiedScaffoldMeasure('');
     setGenericSkuUnitWeight('');
     setGenericSkuPrice('');
-    setGenericSkuSubrentalPrice('');
     setGenericSkuReplacementValue('');
     setGenericChargeType('DAY');
     setGenericMinimumChargeHours('');
     setGenericWeightUnit(defaultWeightUnit);
 
     setOwnerWarehouseId(preferredOwnerWarehouseId);
+    setProviderPrice('');
+    setProviderPrices(new Map());
     setQuantity('');
   };
 
@@ -868,6 +895,7 @@ export default function AddBulkStockPage() {
     setConfirmAttempted(false);
     setModeLocked(false);
     setExistingSkuId(null);
+    setProviderPrice('');
     setQuantity('');
     if (mode === 'existing') {
       setItemType(null);
@@ -878,6 +906,7 @@ export default function AddBulkStockPage() {
 
   const handleWarehouseChange = (value: string | null) => {
     setOwnerWarehouseId(value);
+    setProviderPrice('');
     setWarehouseLocked(false);
     setModeLocked(false);
     setExistingSkuId(null);
@@ -942,7 +971,6 @@ export default function AddBulkStockPage() {
     unitWeight,
     weightUnit,
     price,
-    subrentalPrice,
     replacementValue,
     areaM2,
   }: RequiredSkuData, requireAreaM2: boolean) => {
@@ -964,14 +992,6 @@ export default function AddBulkStockPage() {
       Number(price) < 0
     ) {
       setError('Enter the product price');
-      return false;
-    }
-    if (
-      subrentalPrice === '' ||
-      !Number.isFinite(Number(subrentalPrice)) ||
-      Number(subrentalPrice) < 0
-    ) {
-      setError('Enter the product subrental price');
       return false;
     }
     if (
@@ -1069,7 +1089,6 @@ export default function AddBulkStockPage() {
           unitWeight: formaletaSkuUnitWeight,
           weightUnit: formaletaWeightUnit,
           price: formaletaSkuPrice,
-          subrentalPrice: formaletaSkuSubrentalPrice,
           replacementValue: formaletaSkuReplacementValue,
           areaM2: formaletaAreaM2,
         }, true)) {
@@ -1098,7 +1117,6 @@ export default function AddBulkStockPage() {
         unitWeight: formaletaSkuUnitWeight,
         weightUnit: formaletaWeightUnit,
         price: formaletaSkuPrice,
-        subrentalPrice: formaletaSkuSubrentalPrice,
         replacementValue: formaletaSkuReplacementValue,
         areaM2: formaletaAreaM2,
       }, true)) {
@@ -1129,7 +1147,6 @@ export default function AddBulkStockPage() {
         unitWeight: genericSkuUnitWeight,
         weightUnit: genericWeightUnit,
         price: genericSkuPrice,
-        subrentalPrice: genericSkuSubrentalPrice,
         replacementValue: genericSkuReplacementValue,
       }, false)) {
         return;
@@ -1182,6 +1199,11 @@ export default function AddBulkStockPage() {
       return;
     }
 
+    if (isProviderWarehouse && (providerPrice === '' || Number(providerPrice) < 0)) {
+      setError('Ingresa el costo que cobra el proveedor.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: BulkPayload =
@@ -1196,6 +1218,8 @@ export default function AddBulkStockPage() {
               ownerWarehouseId,
               warehouseId: ownerWarehouseId,
               quantity: Number(quantity),
+              providerPrice:
+                isProviderWarehouse && providerPrice !== '' ? Number(providerPrice) : undefined,
             }
           : {
               family: {
@@ -1206,7 +1230,6 @@ export default function AddBulkStockPage() {
                 name: builtItem?.skuName,
                 unitWeight: builtItem?.skuUnitWeight,
                 price: builtItem?.skuPrice,
-                subrentalPrice: builtItem?.skuSubrentalPrice,
                 replacementValue: builtItem?.skuReplacementValue,
                 chargeType: builtItem?.chargeType,
                 minimumChargeHours: builtItem?.minimumChargeHours,
@@ -1215,6 +1238,8 @@ export default function AddBulkStockPage() {
               ownerWarehouseId,
               warehouseId: ownerWarehouseId,
               quantity: Number(quantity),
+              providerPrice:
+                isProviderWarehouse && providerPrice !== '' ? Number(providerPrice) : undefined,
             };
 
       const response = await api<CreateBulkResponse>('/inventory/bulk-adjustments', {
@@ -1899,7 +1924,7 @@ export default function AddBulkStockPage() {
                                 required
                               />
                               <NumberInput
-                                label="Precio"
+                                label="Precio cliente"
                                 value={formaletaSkuPrice}
                                 onChange={(value) =>
                                   setFormaletaSkuPrice(typeof value === 'number' ? value : '')
@@ -1908,21 +1933,6 @@ export default function AddBulkStockPage() {
                               step={1000}
                               error={
                                 showRequiredSkuErrors && isMissingNonNegativeNumber(formaletaSkuPrice)
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                                required
-                              />
-                              <NumberInput
-                                label="Precio sub alquiler"
-                                value={formaletaSkuSubrentalPrice}
-                                onChange={(value) =>
-                                  setFormaletaSkuSubrentalPrice(typeof value === 'number' ? value : '')
-                                }
-                                min={0}
-                              step={1000}
-                              error={
-                                showRequiredSkuErrors && isMissingNonNegativeNumber(formaletaSkuSubrentalPrice)
                                   ? 'Obligatorio'
                                   : undefined
                               }
@@ -2133,28 +2143,13 @@ export default function AddBulkStockPage() {
                               required
                             />
                             <NumberInput
-                              label="Precio"
+                              label="Precio cliente"
                               value={genericSkuPrice}
                               onChange={(value) => setGenericSkuPrice(typeof value === 'number' ? value : '')}
                               min={0}
                               step={1000}
                               error={
                                 showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuPrice)
-                                  ? 'Obligatorio'
-                                  : undefined
-                              }
-                              required
-                            />
-                            <NumberInput
-                              label="Precio sub alquiler"
-                              value={genericSkuSubrentalPrice}
-                              onChange={(value) =>
-                                setGenericSkuSubrentalPrice(typeof value === 'number' ? value : '')
-                              }
-                              min={0}
-                              step={1000}
-                              error={
-                                showRequiredSkuErrors && isMissingNonNegativeNumber(genericSkuSubrentalPrice)
                                   ? 'Obligatorio'
                                   : undefined
                               }
@@ -2250,14 +2245,29 @@ export default function AddBulkStockPage() {
                 </div>
 
                 {warehouseLocked && modeLocked ? (
-                  <NumberInput
-                    label="Cantidad"
-                    value={quantity}
-                    onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
-                    min={0}
-                    step={1}
-                    required
-                  />
+                  <SimpleGrid cols={{ base: 1, sm: isProviderWarehouse ? 2 : 1 }} spacing="md">
+                    <NumberInput
+                      label="Cantidad"
+                      value={quantity}
+                      onChange={(value) => setQuantity(typeof value === 'number' ? value : '')}
+                      min={0}
+                      step={1}
+                      required
+                    />
+                    {isProviderWarehouse ? (
+                      <NumberInput
+                        label="Costo proveedor"
+                        description={`Costo específico de ${selectedOwnerWarehouse?.name ?? 'este proveedor'}`}
+                        value={providerPrice}
+                        onChange={(value) => setProviderPrice(typeof value === 'number' ? value : '')}
+                        min={0}
+                        step={1000}
+                        prefix="$ "
+                        thousandSeparator=","
+                        required
+                      />
+                    ) : null}
+                  </SimpleGrid>
                 ) : (
                   <Paper radius="md" p="sm" bg="gray.0">
                     <Text size="sm" c="dimmed">
@@ -2308,6 +2318,11 @@ export default function AddBulkStockPage() {
                       <Text size="sm" c="dimmed">
                         Ubicacion inicial: {warehouseOptions.find((item) => item.value === ownerWarehouseId)?.label ?? '-'}
                       </Text>
+                      {payloadPreview.providerPrice != null ? (
+                        <Text size="sm" c="dimmed">
+                          Costo proveedor: ${Number(payloadPreview.providerPrice).toLocaleString('es-CO')}
+                        </Text>
+                      ) : null}
                     </Paper>
                   </SimpleGrid>
                 ) : (

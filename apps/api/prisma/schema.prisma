@@ -223,6 +223,7 @@ model Warehouse {
   internalCounters          AssetInternalCounter[]
   inventorySnapshotEntries  InventorySnapshotEntry[]
   legacyWarehouseReferences LegacyWarehouse[]
+  providerSkuPrices         ProviderSkuPrice[]
 }
 
 model LegacyWarehouse {
@@ -301,12 +302,28 @@ model Sku {
   assets          Asset[]
   documentItems   DocumentItem[]
   ledger          StockLedger[]
-  imageFileObject FileObject?     @relation("SkuImage", fields: [imageFileObjectId], references: [id])
-  assetFamily     AssetFamily     @relation(fields: [assetFamilyId], references: [id])
-  assetSubfamily  AssetSubfamily? @relation(fields: [assetSubfamilyId], references: [id])
+  imageFileObject FileObject?        @relation("SkuImage", fields: [imageFileObjectId], references: [id])
+  assetFamily     AssetFamily        @relation(fields: [assetFamilyId], references: [id])
+  assetSubfamily  AssetSubfamily?    @relation(fields: [assetSubfamilyId], references: [id])
+  providerPrices  ProviderSkuPrice[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
+}
+
+model ProviderSkuPrice {
+  id                  String   @id @default(uuid())
+  providerWarehouseId String
+  skuId               String
+  price               Decimal
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  providerWarehouse Warehouse @relation(fields: [providerWarehouseId], references: [id], onDelete: Cascade)
+  sku               Sku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([providerWarehouseId, skuId])
+  @@index([skuId])
 }
 
 model CatalogOption {

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ChargeType, Prisma, SkuControlType } from '@prisma/client';
+import { ChargeType, Prisma, SkuControlType, WarehouseType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SKU_WEIGHT_UNITS } from './skus.constants';
 
@@ -85,6 +85,73 @@ export class SkusService {
 
   listUnits() {
     return SKU_WEIGHT_UNITS;
+  }
+
+  async listProviderPrices(params: { providerWarehouseId?: string; skuId?: string }) {
+    const rows = await this.prisma.providerSkuPrice.findMany({
+      where: {
+        providerWarehouseId: params.providerWarehouseId,
+        skuId: params.skuId,
+      },
+      orderBy: [
+        { providerWarehouse: { name: 'asc' } },
+        { sku: { name: 'asc' } },
+      ],
+      select: {
+        id: true,
+        providerWarehouseId: true,
+        skuId: true,
+        price: true,
+        createdAt: true,
+        updatedAt: true,
+        providerWarehouse: { select: { name: true, type: true } },
+        sku: { select: { name: true } },
+      },
+    });
+
+    return rows.map((row) => ({ ...row, price: Number(row.price) }));
+  }
+
+  async upsertProviderPrice(skuId: string, providerWarehouseId: string, price: number) {
+    const [sku, providerWarehouse] = await Promise.all([
+      this.prisma.sku.findUnique({ where: { id: skuId }, select: { id: true, active: true } }),
+      this.prisma.warehouse.findUnique({
+        where: { id: providerWarehouseId },
+        select: { id: true, name: true, type: true, active: true },
+      }),
+    ]);
+    if (!sku || !sku.active) throw new NotFoundException('SKU activo no encontrado');
+    if (!providerWarehouse || !providerWarehouse.active) {
+      throw new NotFoundException('Bodega proveedora activa no encontrada');
+    }
+    if (providerWarehouse.type !== WarehouseType.ALLY) {
+      throw new BadRequestException('El costo proveedor solo aplica a bodegas proveedoras');
+    }
+
+    const row = await this.prisma.providerSkuPrice.upsert({
+      where: { providerWarehouseId_skuId: { providerWarehouseId, skuId } },
+      create: { providerWarehouseId, skuId, price },
+      update: { price },
+      select: {
+        id: true,
+        providerWarehouseId: true,
+        skuId: true,
+        price: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return { ...row, price: Number(row.price) };
+  }
+
+  async deleteProviderPrice(skuId: string, providerWarehouseId: string) {
+    const existing = await this.prisma.providerSkuPrice.findUnique({
+      where: { providerWarehouseId_skuId: { providerWarehouseId, skuId } },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Costo proveedor no encontrado');
+    await this.prisma.providerSkuPrice.delete({ where: { id: existing.id } });
+    return { deleted: true, skuId, providerWarehouseId };
   }
 
   async createSku(payload: {

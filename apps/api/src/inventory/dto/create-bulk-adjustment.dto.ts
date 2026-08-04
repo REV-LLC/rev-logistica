@@ -6,6 +6,7 @@ import {
   IsString,
   IsUUID,
   ValidateNested,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChargeType } from '@prisma/client';
@@ -84,4 +85,9 @@ export class CreateBulkAdjustmentDto {
   @IsNumber()
   @IsPositive()
   quantity: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  providerPrice?: number;
 }
