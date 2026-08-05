@@ -29,6 +29,7 @@ import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
+import { normalizeAssetFamilyIdentity } from './asset-family-normalization';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
 import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import {
@@ -2569,14 +2570,15 @@ export class InventoryService {
     }
 
     if (name) {
-      const existingByName = await tx.assetFamily.findFirst({
-        where: { name },
-        select: { id: true, code: true, controlType: true },
+      const existingFamilies = await tx.assetFamily.findMany({
+        where: { controlType },
+        select: { id: true, code: true, name: true, controlType: true },
       });
+      const normalizedName = normalizeAssetFamilyIdentity(name);
+      const existingByName = existingFamilies.find(
+        (family) => normalizeAssetFamilyIdentity(family.name) === normalizedName,
+      );
       if (existingByName) {
-        if (existingByName.controlType !== controlType) {
-          throw new BadRequestException('Asset family controlType mismatch');
-        }
         return existingByName;
       }
     }
@@ -2608,14 +2610,15 @@ export class InventoryService {
         }
 
         if (name) {
-          const concurrentByName = await tx.assetFamily.findFirst({
-            where: { name },
-            select: { id: true, code: true, controlType: true },
+          const concurrentFamilies = await tx.assetFamily.findMany({
+            where: { controlType },
+            select: { id: true, code: true, name: true, controlType: true },
           });
+          const normalizedName = normalizeAssetFamilyIdentity(name);
+          const concurrentByName = concurrentFamilies.find(
+            (family) => normalizeAssetFamilyIdentity(family.name) === normalizedName,
+          );
           if (concurrentByName) {
-            if (concurrentByName.controlType !== controlType) {
-              throw new BadRequestException('Asset family controlType mismatch');
-            }
             return concurrentByName;
           }
         }
