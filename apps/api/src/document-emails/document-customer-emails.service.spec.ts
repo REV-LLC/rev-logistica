@@ -91,8 +91,8 @@ describe('DocumentCustomerEmailsService', () => {
             filename: 'remision-RM000001.pdf',
             contentType: 'application/pdf',
           }),
-          expect.objectContaining({ filename: 'Entrega.jpg' }),
-          expect.objectContaining({ filename: 'Firma.png' }),
+          expect.objectContaining({ filename: 'evidencia-fotografica-1.jpg' }),
+          expect.objectContaining({ filename: 'firma-quien-recibe-1.png' }),
         ],
       }),
     );
@@ -112,8 +112,8 @@ describe('DocumentCustomerEmailsService', () => {
           subject: 'Remision RM000001 aprobada',
           attachmentNames: [
             'remision-RM000001.pdf',
-            'Entrega.jpg',
-            'Firma.png',
+            'evidencia-fotografica-1.jpg',
+            'firma-quien-recibe-1.png',
           ],
         }),
       }),
