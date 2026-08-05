@@ -12,7 +12,7 @@ type SharedDocumentFile = {
   mimeType: string | null;
 };
 
-type SharedDocument = {
+export type SharedDocument = {
   type: string;
   status: string;
   consecutive: string | null;
@@ -40,6 +40,7 @@ type SharedDocument = {
     preparedBy: string;
     transportedBy: string;
     deliveredBy: string;
+    receivedBy?: string | null;
   };
 };
 
@@ -47,21 +48,29 @@ type PdfItem = SharedDocument['items'][number];
 
 export function buildPdfItemDescription(item: PdfItem) {
   const reference =
-    item.asset?.sku?.name
-    || item.sku?.name
-    || item.asset?.description
-    || item.requestedTag
-    || 'Ítem';
+    item.asset?.sku?.name ||
+    item.sku?.name ||
+    item.asset?.description ||
+    item.requestedTag ||
+    'Ítem';
   const family = (
-    item.asset?.sku?.assetFamily?.name
-    || item.sku?.assetFamily?.name
-    || ''
+    item.asset?.sku?.assetFamily?.name ||
+    item.sku?.assetFamily?.name ||
+    ''
   ).trim();
 
   if (!family) return reference;
-  const normalizedFamily = family.toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
-  const normalizedReference = reference.trim().toLocaleUpperCase('es-CO').replace(/\s+/g, ' ');
-  if (normalizedReference === normalizedFamily || normalizedReference.startsWith(`${normalizedFamily} `)) {
+  const normalizedFamily = family
+    .toLocaleUpperCase('es-CO')
+    .replace(/\s+/g, ' ');
+  const normalizedReference = reference
+    .trim()
+    .toLocaleUpperCase('es-CO')
+    .replace(/\s+/g, ' ');
+  if (
+    normalizedReference === normalizedFamily ||
+    normalizedReference.startsWith(`${normalizedFamily} `)
+  ) {
     return reference;
   }
   return `${family} ${reference}`.trim();
@@ -77,6 +86,38 @@ type PreparedDocumentAssets = {
   evidence: PreparedImage[];
   signature: PreparedImage | null;
 };
+
+const INTERNAL_NOTE_PREFIXES = [
+  'fecha doc:',
+  'fecha documento:',
+  'fecha corte:',
+  'document date:',
+  'cutoff date:',
+  'entrega:',
+  'vehicle:',
+  'vehiculo:',
+  'vehículo:',
+  'driver:',
+  'conductor:',
+  'recibe:',
+  'dispatcher:',
+  'despachador:',
+];
+
+export function buildPdfObservationText(notes?: string | null) {
+  if (!notes) return '';
+  return notes
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter(
+      (part) =>
+        !INTERNAL_NOTE_PREFIXES.some((prefix) =>
+          part.toLocaleLowerCase('es-CO').startsWith(prefix),
+        ),
+    )
+    .join(' | ');
+}
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const IMAGE_FETCH_TIMEOUT_MS = 10_000;
@@ -120,9 +161,14 @@ export class DocumentPdfService {
     this.drawHeader(pdf, document, assets.logo);
     this.drawCustomer(pdf, document);
     this.drawItems(pdf, document);
-    this.drawNotes(pdf, document.notes);
+    this.drawNotes(pdf, buildPdfObservationText(document.notes));
     this.drawTerms(pdf);
-    this.drawSignatures(pdf, document.responsibles, assets.signature);
+    this.drawSignatures(
+      pdf,
+      document.type,
+      document.responsibles,
+      assets.signature,
+    );
     this.drawEvidence(pdf, document, assets.evidence);
     this.addPageNumbers(pdf);
     pdf.end();
@@ -185,7 +231,7 @@ export class DocumentPdfService {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
-        }).format(document.docDate)}    Estado: ${document.status}`,
+        }).format(document.docDate)}`,
       );
     pdf.moveDown(0.8);
   }
@@ -290,6 +336,7 @@ export class DocumentPdfService {
 
   private drawSignatures(
     pdf: PDFKit.PDFDocument,
+    documentType: string,
     responsibles: SharedDocument['responsibles'],
     signature: PreparedImage | null,
   ) {
@@ -297,8 +344,10 @@ export class DocumentPdfService {
     const imageY = pdf.y;
     const y = imageY + 58;
     const columns = [36, 167, 298, 429];
+    const isReturn = documentType === 'RETURN';
+    const signatureColumn = isReturn ? 2 : 3;
     if (signature) {
-      pdf.image(signature.buffer, columns[3] + 6, imageY, {
+      pdf.image(signature.buffer, columns[signatureColumn] + 6, imageY, {
         fit: [100, 54],
         align: 'center',
         valign: 'bottom',
@@ -307,8 +356,14 @@ export class DocumentPdfService {
     [
       { label: 'ELABORADO POR', value: responsibles?.preparedBy },
       { label: 'TRANSPORTADO POR', value: responsibles?.transportedBy },
-      { label: 'ENTREGADO POR', value: responsibles?.deliveredBy },
-      { label: 'RECIBIDO POR', value: null },
+      {
+        label: 'ENTREGADO POR',
+        value: isReturn ? null : responsibles?.deliveredBy,
+      },
+      {
+        label: 'RECIBIDO POR',
+        value: isReturn ? responsibles?.receivedBy : null,
+      },
     ].forEach(({ label, value }, index) => {
       const x = columns[index];
       pdf

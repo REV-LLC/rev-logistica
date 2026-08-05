@@ -70,14 +70,16 @@ describe('DocumentCustomerEmailsService', () => {
     const mail = {
       sendMail: jest.fn().mockResolvedValue({ sent: true }),
     };
-    const pdf = {
-      render: jest.fn().mockResolvedValue(Buffer.from('pdf-content')),
-      fileName: jest.fn().mockReturnValue('remision-RM000001.pdf'),
+    const pdfSnapshots = {
+      getOrCreate: jest.fn().mockResolvedValue({
+        originalName: 'remision-RM000001.pdf',
+        storageKey: 'https://files.test/remision-RM000001.pdf',
+      }),
     };
     const service = new DocumentCustomerEmailsService(
       prisma as any,
       mail as any,
-      pdf as any,
+      pdfSnapshots as any,
     );
 
     await expect(service.sendFinalIfNeeded(document.id)).resolves.toEqual({
@@ -89,6 +91,7 @@ describe('DocumentCustomerEmailsService', () => {
         attachments: [
           expect.objectContaining({
             filename: 'remision-RM000001.pdf',
+            path: 'https://files.test/remision-RM000001.pdf',
             contentType: 'application/pdf',
           }),
           expect.objectContaining({ filename: 'Entrega.jpg' }),
