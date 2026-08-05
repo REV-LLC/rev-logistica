@@ -264,6 +264,7 @@ function buildObservationText(notes: string | null) {
     'vehiculo:',
     'driver:',
     'conductor:',
+    'recibe:',
     'dispatcher:',
     'despachador:',
   ];
@@ -1494,7 +1495,7 @@ export default function DocumentDetailPage() {
                 {parsedNotes.vehicleId ? ` | Vehiculo: ${vehicleDisplay}` : ''}
                 {parsedNotes.driverId ? ` | Conductor: ${driverDisplay}` : ''}
                 {parsedNotes.receiverId ? ` | Recibido por: ${receiverDisplay}` : ''}
-                {parsedNotes.dispatcherId ? ` | Despachador: ${parsedNotes.dispatcherId}` : ''}
+                {parsedNotes.dispatcherId ? ` | Despachador: ${dispatcherDisplay}` : ''}
                 {parsedNotes.cutOffDate ? ` | Fecha corte: ${parsedNotes.cutOffDate}` : ''}
               </div>
             </section>

@@ -8,6 +8,7 @@ describe('FilesService categories', () => {
   const service = new FilesService(
     {} as PrismaService,
     {} as DocumentCustomerEmailsService,
+    {} as never,
   );
 
   it('acepta la categoría de guías de movilidad para activos', () => {
@@ -27,9 +28,18 @@ describe('FilesService categories', () => {
   it('separa evidencia y comprobante de recepción del proveedor', () => {
     expect(service.getCategories('DOCUMENT')).toEqual(
       expect.arrayContaining([
-        { value: 'EVIDENCIA_ENTREGA_PROVEEDOR', label: 'Evidencia Entrega Proveedor' },
-        { value: 'COMPROBANTE_RECEPCION_PROVEEDOR', label: 'Comprobante Recepcion Proveedor' },
-        { value: 'COMPROBANTE_SALIDA_PROVEEDOR', label: 'Comprobante Salida Proveedor' },
+        {
+          value: 'EVIDENCIA_ENTREGA_PROVEEDOR',
+          label: 'Evidencia Entrega Proveedor',
+        },
+        {
+          value: 'COMPROBANTE_RECEPCION_PROVEEDOR',
+          label: 'Comprobante Recepcion Proveedor',
+        },
+        {
+          value: 'COMPROBANTE_SALIDA_PROVEEDOR',
+          label: 'Comprobante Salida Proveedor',
+        },
       ]),
     );
   });
@@ -45,6 +55,7 @@ describe('FilesService document access', () => {
   const documentFindUnique = jest.fn();
   const service = new FilesService(
     { document: { findUnique: documentFindUnique } } as never,
+    {} as never,
     {} as never,
   );
   const assertEntityAccess = (userId: string, mode: 'read' | 'write') =>
@@ -76,7 +87,9 @@ describe('FilesService document access', () => {
       createdBy: 'driver-1',
     });
 
-    await expect(assertEntityAccess('driver-1', 'write')).resolves.toBeUndefined();
+    await expect(
+      assertEntityAccess('driver-1', 'write'),
+    ).resolves.toBeUndefined();
   });
 
   it('allows a driver to upload both supports to their own provider receipt draft', async () => {
@@ -87,7 +100,9 @@ describe('FilesService document access', () => {
       createdBy: 'driver-1',
     });
 
-    await expect(assertEntityAccess('driver-1', 'write')).resolves.toBeUndefined();
+    await expect(
+      assertEntityAccess('driver-1', 'write'),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects writes to another driver document', async () => {
@@ -98,9 +113,9 @@ describe('FilesService document access', () => {
       createdBy: 'driver-2',
     });
 
-    await expect(assertEntityAccess('driver-1', 'write')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      assertEntityAccess('driver-1', 'write'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects driver writes after the document leaves draft status', async () => {
@@ -111,8 +126,8 @@ describe('FilesService document access', () => {
       createdBy: 'driver-1',
     });
 
-    await expect(assertEntityAccess('driver-1', 'write')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      assertEntityAccess('driver-1', 'write'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

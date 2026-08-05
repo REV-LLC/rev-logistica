@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -17,7 +18,7 @@ import { DocumentCustomerMessagesService } from '../document-messages/document-c
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
-import { DocumentPdfService } from './document-pdf.service';
+import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -29,14 +30,13 @@ export function assertCanViewDocument(
     requester?.role === Role.DRIVER &&
     document.createdBy !== requester.userId
   ) {
-    throw new ForbiddenException(
-      'Drivers can only view their own documents',
-    );
+    throw new ForbiddenException('Drivers can only view their own documents');
   }
 }
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
   private readonly businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
     year: 'numeric',
@@ -49,7 +49,7 @@ export class DocumentsService {
     private readonly inventoryService: InventoryService,
     private readonly documentEmails: DocumentCustomerEmailsService,
     private readonly documentMessages: DocumentCustomerMessagesService,
-    private readonly documentPdf: DocumentPdfService,
+    private readonly documentPdfSnapshots: DocumentPdfSnapshotService,
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -663,6 +663,7 @@ export class DocumentsService {
 
           return document;
         });
+        await this.documentPdfSnapshots.refresh(document.id);
         return document;
       } catch (error) {
         if (
@@ -736,7 +737,7 @@ export class DocumentsService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const updated = await this.prisma.$transaction(async (tx) => {
         const consecutive =
           payload.number !== undefined
             ? await this.resolveConsecutive(nextType, tx, payload.number)
@@ -817,6 +818,8 @@ export class DocumentsService {
 
         return updated;
       });
+      await this.documentPdfSnapshots.refresh(documentId);
+      return updated;
     } catch (error) {
       if (this.isConsecutiveConflict(error)) {
         throw new BadRequestException('El consecutivo ya existe');
@@ -1309,7 +1312,7 @@ export class DocumentsService {
         confirmedDocuments.push(
           await this.approveLoadedRequestDocument(splitDocument, userId),
         );
-        await this.documentEmails.sendFinalIfNeeded(splitDocumentId);
+        this.sendFinalEmailInBackground(splitDocumentId);
       }
       return {
         id: confirmedDocuments[0]?.id ?? document.id,
@@ -1322,7 +1325,7 @@ export class DocumentsService {
     }
 
     const confirmed = await this.approveLoadedRequestDocument(document, userId);
-    await this.documentEmails.sendFinalIfNeeded(confirmed.id);
+    this.sendFinalEmailInBackground(confirmed.id);
     return {
       id: confirmed.id,
       status: confirmed.status,
@@ -1577,10 +1580,12 @@ export class DocumentsService {
         },
       },
     });
-    if (!document) throw new NotFoundException('Documento compartido no encontrado');
+    if (!document)
+      throw new NotFoundException('Documento compartido no encontrado');
     const responsibleIds = this.parseDocumentResponsibleIds(document.notes);
     const employeeIds = [
       responsibleIds.driverId,
+      responsibleIds.receiverId,
       responsibleIds.dispatcherId,
     ].filter((id): id is string => Boolean(id));
     const employees = employeeIds.length
@@ -1601,6 +1606,9 @@ export class DocumentsService {
     const dispatcherName = responsibleIds.dispatcherId
       ? (employeeNameById.get(responsibleIds.dispatcherId) ?? null)
       : null;
+    const receiverName = responsibleIds.receiverId
+      ? (employeeNameById.get(responsibleIds.receiverId) ?? null)
+      : null;
     const preparedBy = document.creator.employee
       ? `${document.creator.employee.name} ${document.creator.employee.lastName}`.trim()
       : document.creator.email;
@@ -1616,16 +1624,14 @@ export class DocumentsService {
         deliveredBy: isOnSite
           ? (driverName ?? 'Sin conductor asignado')
           : (dispatcherName ?? 'Sin despachador asignado'),
+        receivedBy: receiverName ?? null,
       },
     };
   }
 
   async getSharedDocumentPdf(shareToken: string) {
     const document = await this.getSharedDocument(shareToken);
-    return {
-      buffer: await this.documentPdf.render(document),
-      fileName: this.documentPdf.fileName(document),
-    };
+    return this.documentPdfSnapshots.read(document.id);
   }
 
   sendDraftCustomerEmail(documentId: string) {
@@ -1648,6 +1654,15 @@ export class DocumentsService {
     }
   }
 
+  private sendFinalEmailInBackground(documentId: string) {
+    void this.documentEmails.sendFinalIfNeeded(documentId).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `No se pudo enviar el correo final del documento ${documentId}: ${message}`,
+      );
+    });
+  }
+
   private parseDocumentResponsibleIds(notes?: string | null) {
     const values = new Map<string, string>();
     notes
@@ -1661,6 +1676,7 @@ export class DocumentsService {
       });
     return {
       driverId: values.get('conductor') || null,
+      receiverId: values.get('recibe') || null,
       dispatcherId: values.get('despachador') || null,
     };
   }

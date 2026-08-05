@@ -16,6 +16,10 @@ import { DocumentStatus, DocumentType, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
+import {
+  DocumentPdfSnapshotService,
+  GENERATED_DOCUMENT_PDF,
+} from '../documents/document-pdf-snapshot.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type UploadedBusinessFile = {
@@ -134,6 +138,7 @@ export class FilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentEmails: DocumentCustomerEmailsService,
+    private readonly documentPdfSnapshots: DocumentPdfSnapshotService,
   ) {}
 
   getCategories(entityType: string) {
@@ -172,6 +177,7 @@ export class FilesService {
       where: {
         entityType,
         entityId,
+        fileType: { not: GENERATED_DOCUMENT_PDF },
         id: hourEvidenceIds.length ? { notIn: hourEvidenceIds } : undefined,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -284,6 +290,8 @@ export class FilesService {
       { category: EVIDENCE_FILE_TYPE },
       user,
     );
+
+    await this.documentPdfSnapshots.refresh(documentId);
 
     try {
       await this.documentEmails.sendDraftIfNeeded(documentId);

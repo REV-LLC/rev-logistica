@@ -1,5 +1,9 @@
 import sharp from 'sharp';
-import { buildPdfItemDescription, DocumentPdfService } from './document-pdf.service';
+import {
+  buildPdfItemDescription,
+  buildPdfObservationText,
+  DocumentPdfService,
+} from './document-pdf.service';
 
 describe('DocumentPdfService', () => {
   const document = {
@@ -107,28 +111,40 @@ describe('DocumentPdfService', () => {
   });
 
   it('prefixes the item reference with its family', () => {
-    expect(buildPdfItemDescription({
-      quantity: 1,
-      requestedTag: null,
-      conditionNote: null,
-      sku: {
-        name: 'GLOBALMEQ 1TN',
-        assetFamily: { name: 'VIBROCOMPACTADOR' },
-      },
-      asset: null,
-    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
+    expect(
+      buildPdfItemDescription({
+        quantity: 1,
+        requestedTag: null,
+        conditionNote: null,
+        sku: {
+          name: 'GLOBALMEQ 1TN',
+          assetFamily: { name: 'VIBROCOMPACTADOR' },
+        },
+        asset: null,
+      }),
+    ).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
   });
 
   it('does not repeat the family when it is already part of the reference', () => {
-    expect(buildPdfItemDescription({
-      quantity: 1,
-      requestedTag: null,
-      conditionNote: null,
-      sku: {
-        name: 'VIBROCOMPACTADOR GLOBALMEQ 1TN',
-        assetFamily: { name: 'VIBROCOMPACTADOR' },
-      },
-      asset: null,
-    })).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
+    expect(
+      buildPdfItemDescription({
+        quantity: 1,
+        requestedTag: null,
+        conditionNote: null,
+        sku: {
+          name: 'VIBROCOMPACTADOR GLOBALMEQ 1TN',
+          assetFamily: { name: 'VIBROCOMPACTADOR' },
+        },
+        asset: null,
+      }),
+    ).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
+  });
+
+  it('does not expose internal identifiers in PDF observations', () => {
+    expect(
+      buildPdfObservationText(
+        'Fecha documento: 2026-08-05 | Recibe: B278F3D0-06FA-4997-B080-5592751865C5 | Entrega sin novedades.',
+      ),
+    ).toBe('Entrega sin novedades.');
   });
 });
