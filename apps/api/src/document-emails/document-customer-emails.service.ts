@@ -5,7 +5,7 @@ import {
   NotificationDeliveryStatus,
   Prisma,
 } from '@prisma/client';
-import { DocumentPdfService } from '../documents/document-pdf.service';
+import { DocumentPdfSnapshotService } from '../documents/document-pdf-snapshot.service';
 import { MailAttachment, MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -77,7 +77,7 @@ export class DocumentCustomerEmailsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
-    private readonly documentPdf: DocumentPdfService,
+    private readonly documentPdfSnapshots: DocumentPdfSnapshotService,
   ) {}
 
   async sendDraftIfNeeded(documentId: string) {
@@ -273,11 +273,11 @@ export class DocumentCustomerEmailsService {
     const signatureFiles = document.files.filter(
       (file) => file.fileType === 'SIGNATURE_RECEIVED',
     );
-    const pdf = await this.documentPdf.render(document);
+    const pdf = await this.documentPdfSnapshots.getOrCreate(document.id);
     const attachments = [
       {
-        filename: this.documentPdf.fileName(document),
-        content: pdf,
+        filename: pdf.originalName ?? 'documento.pdf',
+        path: pdf.storageKey,
         contentType: 'application/pdf',
       },
       ...this.buildAttachments(document),
@@ -363,13 +363,15 @@ export class DocumentCustomerEmailsService {
         </table>
         <h3>Evidencia fotografica</h3>
         <ul>${photoLinks}</ul>
-        <p>${signatureFiles.length
-          ? document.type === DocumentType.RETURN
-            ? 'La firma de quien entrega tambien va adjunta.'
-            : 'La firma recibida tambien va adjunta.'
-          : document.type === DocumentType.RETURN
-            ? 'Sin firma de quien entrega adjunta.'
-            : 'Sin firma recibida adjunta.'}</p>
+        <p>${
+          signatureFiles.length
+            ? document.type === DocumentType.RETURN
+              ? 'La firma de quien entrega tambien va adjunta.'
+              : 'La firma recibida tambien va adjunta.'
+            : document.type === DocumentType.RETURN
+              ? 'Sin firma de quien entrega adjunta.'
+              : 'Sin firma recibida adjunta.'
+        }</p>
       </div>
     `.replace(
       /<t([hd])>/g,
