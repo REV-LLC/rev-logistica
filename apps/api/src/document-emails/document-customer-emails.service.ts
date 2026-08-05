@@ -295,20 +295,26 @@ export class DocumentCustomerEmailsService {
   }
 
   private buildAttachments(document: DocumentForEmail): MailAttachment[] {
+    let evidenceIndex = 0;
+    let signatureIndex = 0;
     return document.files
       .filter(
         (file) =>
           file.fileType === 'PHOTO_EVIDENCE' ||
           file.fileType === 'SIGNATURE_RECEIVED',
       )
-      .map((file, index) => ({
-        filename:
-          file.displayName?.trim() ||
-          file.originalName?.trim() ||
-          `${file.fileType.toLowerCase()}-${index + 1}.${this.extensionFromMime(file.mimeType)}`,
-        path: file.storageKey,
-        contentType: file.mimeType ?? undefined,
-      }));
+      .map((file) => {
+        const extension = this.extensionFromMime(file.mimeType);
+        const filename =
+          file.fileType === 'SIGNATURE_RECEIVED'
+            ? `firma-quien-recibe-${++signatureIndex}.${extension}`
+            : `evidencia-fotografica-${++evidenceIndex}.${extension}`;
+        return {
+          filename,
+          path: file.storageKey,
+          contentType: file.mimeType ?? undefined,
+        };
+      });
   }
 
   private buildHtml(
