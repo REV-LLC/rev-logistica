@@ -7,7 +7,7 @@ import { APP_SETTING_DEFINITIONS, AppSettingKey } from './settings.constants';
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async get<T extends boolean | number>(key: AppSettingKey): Promise<T> {
+  async get<T extends boolean | number | string>(key: AppSettingKey): Promise<T> {
     const definition = APP_SETTING_DEFINITIONS[key];
     const row = await this.prisma.appSetting.findUnique({ where: { key }, select: { value: true } });
     return (row?.value ?? definition.defaultValue) as T;
@@ -60,6 +60,14 @@ export class SettingsService {
       if (!Number.isFinite(value) || (numericDefinition.min != null && value < numericDefinition.min)
         || (numericDefinition.max != null && value > numericDefinition.max)) {
         throw new BadRequestException(`Value out of range for ${key}`);
+      }
+    }
+    if (typeof value === 'string') {
+      const stringDefinition = definition as { minLength?: number; maxLength?: number };
+      const normalizedValue = value.trim();
+      if ((stringDefinition.minLength != null && normalizedValue.length < stringDefinition.minLength)
+        || (stringDefinition.maxLength != null && normalizedValue.length > stringDefinition.maxLength)) {
+        throw new BadRequestException(`Invalid length for ${key}`);
       }
     }
   }
