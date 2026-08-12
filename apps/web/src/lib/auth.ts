@@ -94,6 +94,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/transport/driver-worksites',
     '/mobility-guides',
     '/inventory/provider-returns',
+    '/inventory/ledger/document',
   ],
   OPERATOR: ['/inventory/hour-meter'],
 };

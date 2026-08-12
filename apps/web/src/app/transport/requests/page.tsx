@@ -292,11 +292,49 @@ function parseNotes(notes: string | null) {
   });
   return {
     deliveryMode: map.get('entrega') ?? '',
-    vehicleId: map.get('vehículo') ?? '',
+    vehicleId: map.get('vehículo') ?? map.get('vehiculo') ?? '',
     driverId: map.get('conductor') ?? '',
     receiverId: map.get('recibe') ?? '',
     dispatcherId: map.get('despachador') ?? '',
   };
+}
+
+const SYSTEM_NOTE_KEYS = new Set([
+  'fecha documento',
+  'fecha doc',
+  'fecha corte',
+  'document date',
+  'cutoff date',
+  'entrega',
+  'vehicle',
+  'vehiculo',
+  'conductor',
+  'driver',
+  'recibe',
+  'dispatcher',
+  'despachador',
+]);
+
+function normalizeNoteKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function extractUserObservations(notes: string | null) {
+  if (!notes) return '';
+  return notes
+    .split('|')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((part) => {
+      const separatorIndex = part.indexOf(':');
+      if (separatorIndex < 0) return true;
+      return !SYSTEM_NOTE_KEYS.has(normalizeNoteKey(part.slice(0, separatorIndex)));
+    })
+    .join(' | ');
 }
 
 function normalizeApiErrorMessages(error: ApiError) {
@@ -432,6 +470,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [observations, setObservations] = useState('');
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [dispatcherId, setDispatcherId] = useState<string | null>(null);
@@ -499,6 +538,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
+  const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
@@ -1011,10 +1051,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   }, []);
 
   useEffect(() => {
-    if (!principalWarehouse?.id) return;
-    if (warehouseId !== principalWarehouse.id) {
-      setWarehouseId(principalWarehouse.id);
-    }
+    if (!principalWarehouse?.id || warehouseId) return;
+    setWarehouseId(principalWarehouse.id);
   }, [principalWarehouse?.id, warehouseId]);
 
   useEffect(() => {
@@ -1720,6 +1758,21 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setSelectedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)));
   };
 
+  const updateSelectedOwner = (index: number, ownerWarehouseId: string | null) => {
+    setSelectedItems((prev) =>
+      prev.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        return {
+          ...item,
+          ownerWarehouseId,
+          ...(item.type === 'bulk' && item.skuId
+            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId }) }
+            : {}),
+        };
+      }),
+    );
+  };
+
   const removeSelected = (index: number) => {
     setSelectedItems((prev) => prev.filter((_, i) => i !== index));
   };
@@ -1735,6 +1788,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
+    setObservations('');
     setVehicleId(null);
     setDriverId(null);
     setDispatcherId(null);
@@ -1782,6 +1836,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
+      setObservations(extractUserObservations(doc.notes ?? null));
       setVehicleId(parsed.vehicleId ?? null);
       setDriverId(parsed.receiverId || parsed.driverId || null);
       setDispatcherId(parsed.dispatcherId ?? null);
@@ -1930,8 +1985,10 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         recipientPhones,
-        receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
+        receivedSignature:
+          editingRequestId && !isAdminRole ? undefined : (receivedSignature ?? ''),
         notes: [
+          observations.trim() || null,
           `Fecha documento: ${docDate}`,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
           deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
@@ -2106,6 +2163,33 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
             required
           />
         ) : null}
+      </Stack>
+    );
+  };
+
+  const renderAdminItemFields = (item: SelectedItem, index: number) => {
+    if (!editingRequestId || !isAdminRole) return null;
+    return (
+      <Stack gap="xs" mt="xs">
+        {item.type === 'free' ? (
+          <TextInput
+            label="Referencia del item"
+            value={item.requestedTag ?? item.name}
+            onChange={(event) => {
+              const requestedTag = event.currentTarget.value;
+              updateSelected(index, { requestedTag, name: requestedTag });
+            }}
+          />
+        ) : null}
+        <WarehouseSelect
+          label="Bodega dueña del item"
+          value={item.ownerWarehouseId ?? null}
+          onChange={(value) => updateSelectedOwner(index, value)}
+          warehouses={warehouses}
+          clearable={false}
+          required
+          width="100%"
+        />
       </Stack>
     );
   };
@@ -2467,6 +2551,31 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               error={generateFieldErrors.docDate}
             />
                     </SimpleGrid>
+                    {editingRequestId && isAdminRole ? (
+                      <WarehouseSelect
+                        label={docType === 'RETURN' ? 'Bodega destino' : 'Bodega del documento'}
+                        value={warehouseId}
+                        onChange={setWarehouseId}
+                        warehouses={warehouses}
+                        clearable={false}
+                        required
+                        width="100%"
+                      />
+                    ) : null}
+                    <Textarea
+                      label="Observaciones"
+                      description="Información adicional que aparecerá en el documento."
+                      placeholder={
+                        docType === 'RETURN'
+                          ? 'Ej. Equipos entregados sin novedades'
+                          : 'Ej. Entregar en la portería de la obra'
+                      }
+                      value={observations}
+                      onChange={(event) => setObservations(event.currentTarget.value)}
+                      minRows={3}
+                      maxRows={6}
+                      autosize
+                    />
                   </Stack>
                 </Paper>
 
@@ -2825,6 +2934,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                         </Text>
                       )}
                       {renderDamageFields(item, index)}
+                      {renderAdminItemFields(item, index)}
                     </Table.Td>
                     <Table.Td>
                       {item.type === 'bulk' || item.type === 'free' ? (
@@ -2892,6 +3002,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                       <Text size="sm">Cantidad: 1</Text>
                     )}
                     {renderDamageFields(item, index)}
+                    {renderAdminItemFields(item, index)}
                     {canResolveInline && item.type === 'free' ? (
                       <Select
                         label="Resolver a SKU"
@@ -3120,21 +3231,36 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
-              {editingRequestId ? (
+              {editingRequestId && !isAdminRole ? (
                 <Text size="xs" c="dimmed">
                   Firma bloqueada durante la edicion
                 </Text>
               ) : (
-                <Button
-                  type="button"
-                  variant="light"
-                  onClick={() => {
-                    setSignatureDraft(receivedSignature);
-                    setSignatureModalOpen(true);
-                  }}
-                >
-                  Firmar
-                </Button>
+                <Group gap="xs">
+                  {editingRequestId && receivedSignature ? (
+                    <Button
+                      type="button"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => {
+                        setReceivedSignature(null);
+                        setSignatureDraft(null);
+                      }}
+                    >
+                      Eliminar firma
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="light"
+                    onClick={() => {
+                      setSignatureDraft(receivedSignature);
+                      setSignatureModalOpen(true);
+                    }}
+                  >
+                    {receivedSignature ? 'Cambiar firma' : 'Firmar'}
+                  </Button>
+                </Group>
               )}
             </Group>
             {receivedSignature ? (

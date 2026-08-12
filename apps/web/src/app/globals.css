@@ -1314,22 +1314,12 @@ a {
     display: table-cell;
   }
 }
-.hour-meter-asset-image {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border-radius: var(--mantine-radius-lg);
-  background: var(--mantine-color-gray-0);
-}
-
-.hour-meter-asset-image img {
-  display: block;
+.asset-card-image-placeholder {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-}
-
-.hour-meter-asset-image--empty {
+  min-height: 7rem;
+  border-radius: var(--mantine-radius-lg);
+  background: var(--mantine-color-gray-0);
   color: var(--mantine-color-gray-5);
   border: 1px dashed var(--mantine-color-gray-3);
 }

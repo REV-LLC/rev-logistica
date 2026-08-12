@@ -1480,7 +1480,7 @@ export class InventoryService {
 
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id: warehouseId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!warehouse) {
@@ -1651,17 +1651,45 @@ export class InventoryService {
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
     const serialStatusByAssetId = new Map<string, MovementType>();
+    const serialLocationByAssetId = new Map<
+      string,
+      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT'; name: string | null }
+    >();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        select: { assetId: true, movementType: true },
+        select: {
+          assetId: true,
+          movementType: true,
+          warehouse: { select: { name: true } },
+          customerWorksite: {
+            select: {
+              alias: true,
+              worksite: { select: { name: true } },
+            },
+          },
+        },
       });
       serialLedgerRows.forEach((row) => {
         if (!row.assetId) return;
         const key = row.assetId.toLowerCase();
         if (!serialStatusByAssetId.has(key)) {
           serialStatusByAssetId.set(key, row.movementType);
+          const worksiteName =
+            row.customerWorksite?.alias?.trim()
+            || row.customerWorksite?.worksite.name
+            || null;
+          if (row.movementType === MovementType.ON_SITE && worksiteName) {
+            serialLocationByAssetId.set(key, { type: 'WORKSITE', name: worksiteName });
+          } else if (
+            (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+            && row.warehouse?.name
+          ) {
+            serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse.name });
+          } else {
+            serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
+          }
         }
       });
     }
@@ -1797,6 +1825,11 @@ export class InventoryService {
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          location:
+            serialLocationByAssetId.get(row.assetId)
+            ?? (row.quantity > 0
+              ? { type: 'WAREHOUSE' as const, name: warehouse.name }
+              : { type: 'TRANSIT' as const, name: null }),
           internalNumber: asset?.internalNumber ?? null,
           assetFamily: sku?.assetFamily ?? null,
           weight: asset?.weight ?? null,

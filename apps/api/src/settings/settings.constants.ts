@@ -1,4 +1,8 @@
 export const APP_SETTING_DEFINITIONS = {
+  'branding.service_name': {
+    category: 'BRANDING', description: 'Nombre del servicio mostrado en la navegación', defaultValue: 'finge',
+    minLength: 1, maxLength: 80,
+  },
   'tasks.notify_on_assignment': {
     category: 'TASKS', description: 'Enviar WhatsApp al asignar o reasignar una tarea', defaultValue: true,
   },
