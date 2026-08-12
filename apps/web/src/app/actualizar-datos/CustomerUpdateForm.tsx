@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActionIcon, Alert, Button, Loader, Select, TextInput } from '@mantine/core';
-import { IconBrandWhatsapp, IconCheck, IconCircleCheckFilled, IconClock, IconLock, IconMail, IconPlus, IconTrash, IconUser } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowRight, IconBrandWhatsapp, IconCheck, IconCircleCheckFilled, IconClock, IconLock, IconMail, IconPlus, IconTrash, IconUser } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import styles from './customer-update.module.css';
 
@@ -31,6 +31,8 @@ function RecipientChoice({
   customType = 'text',
   customValue,
   onCustomChange,
+  showCustom,
+  onShowCustom,
 }: {
   icon: ReactNode;
   title: string;
@@ -43,6 +45,8 @@ function RecipientChoice({
   customType?: 'text' | 'email';
   customValue: string;
   onCustomChange: (value: string) => void;
+  showCustom: boolean;
+  onShowCustom: () => void;
 }) {
   return (
     <div className={styles.recipientBlock}>
@@ -70,31 +74,17 @@ function RecipientChoice({
             {selected === option.value ? <IconCircleCheckFilled size={22} /> : <span className={styles.emptyCheck} />}
           </button>
         ))}
-        <button
-          type="button"
-          className={`${styles.recipientOption} ${selected === 'custom' ? styles.selectedOption : ''}`}
-          aria-pressed={selected === 'custom'}
-          onClick={() => onSelect('custom')}
-        >
-          <span>
-            <small>Otra opción</small>
-            <b>{customLabel}</b>
-          </span>
-          {selected === 'custom' ? <IconCircleCheckFilled size={22} /> : <span className={styles.emptyCheck} />}
-        </button>
       </div>
 
-      {selected === 'custom' ? (
-        <TextInput
-          className={styles.customRecipient}
-          label={customLabel}
-          placeholder={customPlaceholder}
-          type={customType}
-          inputMode={customType === 'email' ? 'email' : 'tel'}
-          value={customValue}
-          onChange={(event) => onCustomChange(event.currentTarget.value)}
-        />
-      ) : null}
+      {showCustom ? <TextInput
+        className={styles.customRecipient}
+        label={customLabel}
+        placeholder={customPlaceholder}
+        type={customType}
+        inputMode={customType === 'email' ? 'email' : 'tel'}
+        value={customValue}
+        onChange={(event) => onCustomChange(event.currentTarget.value)}
+      /> : <Button className={styles.addRecipient} variant="subtle" leftSection={<IconPlus size={17} />} onClick={onShowCustom}>{customLabel}</Button>}
     </div>
   );
 }
@@ -107,6 +97,9 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
   const [emailSource, setEmailSource] = useState('custom');
   const [documentsPhone, setDocumentsPhone] = useState('');
   const [documentsEmail, setDocumentsEmail] = useState('');
+  const [showPhoneCustom, setShowPhoneCustom] = useState(false);
+  const [showEmailCustom, setShowEmailCustom] = useState(false);
+  const [screen, setScreen] = useState<'contacts' | 'documents'>('contacts');
   const [loading, setLoading] = useState(Boolean(token));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(token ? null : 'Este enlace no incluye un código de actualización válido.');
@@ -123,8 +116,12 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
         setContacts(initial);
         setDocumentsPhone(data.documentsPhone ?? '');
         setDocumentsEmail(data.documentsEmail ?? '');
-        setPhoneSource(initial.find((contact) => contact.phone && contact.phone === data.documentsPhone)?.id ?? 'custom');
-        setEmailSource(initial.find((contact) => contact.email && contact.email === data.documentsEmail)?.id ?? 'custom');
+        const matchingPhone = initial.find((contact) => contact.phone && contact.phone === data.documentsPhone)?.id;
+        const matchingEmail = initial.find((contact) => contact.email && contact.email === data.documentsEmail)?.id;
+        setPhoneSource(matchingPhone ?? 'custom');
+        setEmailSource(matchingEmail ?? 'custom');
+        setShowPhoneCustom(Boolean(data.documentsPhone && !matchingPhone));
+        setShowEmailCustom(Boolean(data.documentsEmail && !matchingEmail));
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'No pudimos abrir este enlace.'))
       .finally(() => setLoading(false));
@@ -143,8 +140,15 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
     if (phoneSource === id) setPhoneSource('custom');
     if (emailSource === id) setEmailSource('custom');
   };
-  const selectPhone = (value: string) => { setPhoneSource(value); if (value !== 'custom') setDocumentsPhone(contacts.find((contact) => contact.id === value)?.phone ?? ''); };
-  const selectEmail = (value: string) => { setEmailSource(value); if (value !== 'custom') setDocumentsEmail(contacts.find((contact) => contact.id === value)?.email ?? ''); };
+  const selectPhone = (value: string) => { setPhoneSource(value); setShowPhoneCustom(false); if (value !== 'custom') setDocumentsPhone(contacts.find((contact) => contact.id === value)?.phone ?? ''); };
+  const selectEmail = (value: string) => { setEmailSource(value); setShowEmailCustom(false); if (value !== 'custom') setDocumentsEmail(contacts.find((contact) => contact.id === value)?.email ?? ''); };
+
+  const goToDocuments = () => {
+    setError(null);
+    if (!updatedBy.trim()) { setError('Escribe el nombre de la persona que está actualizando los datos.'); return; }
+    setScreen('documents');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const submit = async () => {
     setError(null);
@@ -171,8 +175,8 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
         <h1>Mantengamos tus datos al día</h1><p>Confirma la información de tu empresa y elige dónde quieres recibir tus documentos.</p><small><IconClock size={17} /> Te tomará cerca de 3 minutos</small>
       </section>
       {error && <Alert color="red" role="alert" mb="md">{error}</Alert>}
-      <section className={styles.section}><h2>Empresa</h2><div className={styles.companyGrid}><TextInput label="Razón social" value={company.name} disabled /><TextInput label="NIT" value={company.nitOrId} disabled /><TextInput required label="Nombre de quien actualiza" placeholder="Tu nombre completo" leftSection={<IconUser size={17} />} value={updatedBy} onChange={(e) => setUpdatedBy(e.currentTarget.value)} /></div></section>
-      <section className={styles.section}><h2>Contactos de la empresa</h2><p className={styles.helper}>Agrega solo los que uses. Puedes indicar para qué sirve cada contacto.</p>
+      {screen === 'contacts' ? <><section className={styles.section}><h2>Empresa</h2><div className={styles.companyGrid}><TextInput label="Razón social" value={company.name} disabled /><TextInput label="NIT" value={company.nitOrId} disabled /><TextInput required label="Nombre de quien actualiza" placeholder="Tu nombre completo" leftSection={<IconUser size={17} />} value={updatedBy} onChange={(e) => setUpdatedBy(e.currentTarget.value)} /></div></section>
+      <section className={styles.section}><h2>Contactos de la empresa</h2><p className={styles.helper}>Agrega los teléfonos y correos que usa tu empresa. En la siguiente pantalla elegirás cuáles recibirán los documentos.</p>
         <div className={styles.contacts}>{contacts.map((contact) => <div className={styles.contactRow} key={contact.id}>
           <Select label="Tipo de contacto" data={types} value={contact.type} onChange={(value) => updateContact(contact.id, { type: value as ContactType })} />
           <TextInput label="Nombre o área" placeholder="Ej. Recepción" value={contact.label} onChange={(e) => updateContact(contact.id, { label: e.currentTarget.value })} />
@@ -181,13 +185,12 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
           <ActionIcon className={styles.remove} variant="subtle" color="gray" aria-label="Eliminar contacto" disabled={contacts.length === 1} onClick={() => removeContact(contact.id)}><IconTrash size={19} /></ActionIcon>
         </div>)}</div>
         <Button variant="outline" color="dark" leftSection={<IconPlus size={18} />} onClick={() => setContacts((all) => [...all, emptyContact()])}>Agregar otro contacto</Button>
-      </section>
-      <section className={styles.section}><h2>Envío de documentos</h2><p className={styles.helper}>Selecciona directamente el teléfono y el correo donde quieres recibirlos.</p>
-        <RecipientChoice icon={<IconBrandWhatsapp size={24} />} title="WhatsApp" question="¿A qué número enviamos los documentos?" options={phoneOptions} selected={phoneSource} onSelect={selectPhone} customLabel="Usar otro número" customPlaceholder="Ej. 300 123 4567" customValue={documentsPhone} onCustomChange={setDocumentsPhone} />
-        <RecipientChoice icon={<IconMail size={24} />} title="Correo" question="¿A qué correo enviamos los documentos?" options={emailOptions} selected={emailSource} onSelect={selectEmail} customLabel="Usar otro correo" customPlaceholder="Ej. documentos@empresa.com" customType="email" customValue={documentsEmail} onCustomChange={setDocumentsEmail} />
+      </section></> : <section className={styles.section}><h2>Envío de documentos</h2><p className={styles.helper}>Elige entre los contactos que acabas de confirmar.</p>
+        <RecipientChoice icon={<IconBrandWhatsapp size={24} />} title="WhatsApp" question="¿A qué número enviamos los documentos?" options={phoneOptions} selected={phoneSource} onSelect={selectPhone} customLabel="Agregar nuevo número para documentos" customPlaceholder="Ej. 300 123 4567" customValue={documentsPhone} onCustomChange={setDocumentsPhone} showCustom={showPhoneCustom} onShowCustom={() => { setPhoneSource('custom'); setShowPhoneCustom(true); setDocumentsPhone(''); }} />
+        <RecipientChoice icon={<IconMail size={24} />} title="Correo" question="¿A qué correo enviamos los documentos?" options={emailOptions} selected={emailSource} onSelect={selectEmail} customLabel="Agregar nuevo correo para documentos" customPlaceholder="Ej. documentos@empresa.com" customType="email" customValue={documentsEmail} onCustomChange={setDocumentsEmail} showCustom={showEmailCustom} onShowCustom={() => { setEmailSource('custom'); setShowEmailCustom(true); setDocumentsEmail(''); }} />
         <div className={styles.summary}><IconCheck size={24} /><strong>Tus documentos llegarán a</strong><span><IconBrandWhatsapp size={18} /> {documentsPhone || 'Por definir'}</span><span><IconMail size={18} /> {documentsEmail || 'Por definir'}</span></div>
-      </section>
-      <footer className={styles.footer}><p><IconLock size={17} /> Usaremos estos datos únicamente para la operación y el envío de documentos.</p><Button color="blue" leftSection={<IconCheck size={20} />} loading={saving} disabled={!token} onClick={submit}>Confirmar actualización</Button></footer>
+      </section>}
+      <footer className={styles.footer}><p><IconLock size={17} /> Usaremos estos datos únicamente para la operación y el envío de documentos.</p>{screen === 'contacts' ? <Button color="blue" rightSection={<IconArrowRight size={19} />} onClick={goToDocuments}>Siguiente</Button> : <div className={styles.footerActions}><Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => setScreen('contacts')}>Volver</Button><Button color="blue" leftSection={<IconCheck size={20} />} loading={saving} disabled={!token} onClick={submit}>Confirmar actualización</Button></div>}</footer>
     </div>
   </main>;
 }
