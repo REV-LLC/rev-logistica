@@ -38,6 +38,10 @@ import {
   LEDGER_MAX_TAKE,
 } from './dto/get-inventory-ledger.dto';
 import { GetInventorySummaryDto } from './dto/get-inventory-summary.dto';
+import {
+  getWorksiteQuantityDelta,
+  WORKSITE_BALANCE_MOVEMENT_TYPES,
+} from './worksite-ledger-balance';
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
 
@@ -1194,22 +1198,10 @@ export class InventoryService {
       const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
       const serialIds = [...serialAssetIds.values()];
       const sourceRows = await tx.stockLedger.groupBy({
-        by: ['skuId', 'assetId', 'ownerWarehouseId'],
+        by: ['skuId', 'assetId', 'ownerWarehouseId', 'movementType'],
         where: {
           customerWorksiteId: payload.customerWorksiteId,
-          warehouseId: null,
-          OR: [
-            ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
-            ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
-          ],
-        },
-        _sum: { quantity: true },
-      });
-      const alreadyReturned = await tx.stockLedger.groupBy({
-        by: ['skuId', 'assetId', 'ownerWarehouseId'],
-        where: {
-          customerWorksiteId: payload.customerWorksiteId,
-          movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+          movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
           OR: [
             ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
             ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
@@ -1219,8 +1211,15 @@ export class InventoryService {
       });
       const keyOf = (row: { skuId: string | null; assetId: string | null; ownerWarehouseId: string }) =>
         `${row.skuId ?? ''}:${row.assetId ?? ''}:${row.ownerWarehouseId}`;
-      const available = new Map(sourceRows.map((row) => [keyOf(row), Number(row._sum.quantity ?? 0)]));
-      alreadyReturned.forEach((row) => available.set(keyOf(row), (available.get(keyOf(row)) ?? 0) - Number(row._sum.quantity ?? 0)));
+      const available = new Map<string, number>();
+      sourceRows.forEach((row) => {
+        const key = keyOf(row);
+        const delta = getWorksiteQuantityDelta(
+          row.movementType,
+          Number(row._sum.quantity ?? 0),
+        );
+        available.set(key, (available.get(key) ?? 0) + delta);
+      });
 
       bulkGroups.forEach((item) => {
         const key = `${item.skuId}::${item.ownerWarehouseId}`;
@@ -1296,44 +1295,29 @@ export class InventoryService {
       const serialIds = [...serialAssetIds.values()];
 
       if (bulkSkuIds.length) {
-        const onSiteRows = await tx.stockLedger.groupBy({
-          by: ['skuId', 'ownerWarehouseId'],
+        const movementRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId', 'movementType'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            warehouseId: null,
+            movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
             skuId: { in: bulkSkuIds },
           },
           _sum: { quantity: true },
         });
-        const inRows = await tx.stockLedger.groupBy({
-          by: ['skuId', 'ownerWarehouseId'],
-          where: {
-            customerWorksiteId: payload.customerWorksiteId,
-            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
-            skuId: { in: bulkSkuIds },
-          },
-          _sum: { quantity: true },
+        const availableByGroup = new Map<string, number>();
+        movementRows.forEach((row) => {
+          const ownerWarehouseId = row.ownerWarehouseId ?? null;
+          const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
+          const delta = getWorksiteQuantityDelta(
+            row.movementType,
+            Number(row._sum.quantity ?? 0),
+          );
+          availableByGroup.set(key, (availableByGroup.get(key) ?? 0) + delta);
         });
-        const onSiteByGroup = new Map(
-          onSiteRows.map((row) => {
-            const ownerWarehouseId = row.ownerWarehouseId ?? null;
-            const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
-            return [key, Number(row._sum.quantity ?? 0)] as const;
-          }),
-        );
-        const returnedByGroup = new Map(
-          inRows.map((row) => {
-            const ownerWarehouseId = row.ownerWarehouseId ?? null;
-            const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
-            return [key, Number(row._sum.quantity ?? 0)] as const;
-          }),
-        );
 
         bulkGroups.forEach((group) => {
           const key = `${group.skuId}::${group.ownerWarehouseId ?? 'null'}`;
-          const onSite = onSiteByGroup.get(key) ?? 0;
-          const returned = returnedByGroup.get(key) ?? 0;
-          const net = onSite - returned;
+          const net = availableByGroup.get(key) ?? 0;
           if (net < group.quantity) {
             throw new BadRequestException(
               `Insufficient on-site stock for skuId ${group.skuId} at customer worksite`,
@@ -1343,35 +1327,27 @@ export class InventoryService {
       }
 
       if (serialIds.length) {
-        const onSiteRows = await tx.stockLedger.groupBy({
-          by: ['assetId'],
+        const movementRows = await tx.stockLedger.groupBy({
+          by: ['assetId', 'movementType'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            warehouseId: null,
+            movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
             assetId: { in: serialIds },
           },
           _sum: { quantity: true },
         });
-        const inRows = await tx.stockLedger.groupBy({
-          by: ['assetId'],
-          where: {
-            customerWorksiteId: payload.customerWorksiteId,
-            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
-            assetId: { in: serialIds },
-          },
-          _sum: { quantity: true },
+        const availableByAsset = new Map<string, number>();
+        movementRows.forEach((row) => {
+          const assetId = row.assetId as string;
+          const delta = getWorksiteQuantityDelta(
+            row.movementType,
+            Number(row._sum.quantity ?? 0),
+          );
+          availableByAsset.set(assetId, (availableByAsset.get(assetId) ?? 0) + delta);
         });
-        const onSiteByAsset = new Map(
-          onSiteRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-        );
-        const returnedByAsset = new Map(
-          inRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-        );
 
         serialIds.forEach((assetId) => {
-          const onSite = onSiteByAsset.get(assetId) ?? 0;
-          const returned = returnedByAsset.get(assetId) ?? 0;
-          const net = onSite - returned;
+          const net = availableByAsset.get(assetId) ?? 0;
           if (net <= 0) {
             throw new BadRequestException(
               `Asset ${assetId} is not currently on-site for this customer worksite`,
@@ -1509,7 +1485,7 @@ export class InventoryService {
       where: {
         ownerWarehouseId: warehouseId,
         customerWorksiteId: { not: null },
-        movementType: { in: [MovementType.ON_SITE, MovementType.IN] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         skuId: { not: null },
       },
       _sum: { quantity: true },
@@ -1569,8 +1545,10 @@ export class InventoryService {
       const ownerWarehouseId = (row.ownerWarehouseId ?? warehouseId).toLowerCase();
       const key = `${skuId}::${ownerWarehouseId}`;
       const locations = worksiteQuantityBySkuAndOwner.get(key) ?? new Map<string, number>();
-      const signedQuantity = Number(row._sum.quantity ?? 0)
-        * (row.movementType === MovementType.ON_SITE ? 1 : -1);
+      const signedQuantity = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
       locations.set(
         row.customerWorksiteId,
         (locations.get(row.customerWorksiteId) ?? 0) + signedQuantity,
@@ -1847,68 +1825,41 @@ export class InventoryService {
       throw new NotFoundException('Customer worksite not found');
     }
 
-    const bulkOnSiteRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId', 'ownerWarehouseId'],
+    const bulkMovementRows = await this.prisma.stockLedger.groupBy({
+      by: ['skuId', 'ownerWarehouseId', 'movementType'],
       where: {
         customerWorksiteId,
-        warehouseId: null,
-        skuId: { not: null },
-      },
-      _sum: { quantity: true },
-    });
-    const bulkInRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId', 'ownerWarehouseId'],
-      where: {
-        customerWorksiteId,
-        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         skuId: { not: null },
       },
       _sum: { quantity: true },
     });
 
-    const serialOnSiteRows = await this.prisma.stockLedger.groupBy({
-      by: ['assetId'],
+    const serialMovementRows = await this.prisma.stockLedger.groupBy({
+      by: ['assetId', 'movementType'],
       where: {
         customerWorksiteId,
-        warehouseId: null,
-        assetId: { not: null },
-      },
-      _sum: { quantity: true },
-    });
-    const serialInRows = await this.prisma.stockLedger.groupBy({
-      by: ['assetId'],
-      where: {
-        customerWorksiteId,
-        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         assetId: { not: null },
       },
       _sum: { quantity: true },
     });
 
-    const bulkOnSiteByGroup = new Map<string, number>();
-    bulkOnSiteRows.forEach((row) => {
+    const bulkBalanceByGroup = new Map<string, number>();
+    bulkMovementRows.forEach((row) => {
       const skuId = row.skuId as string;
       const ownerWarehouseId = row.ownerWarehouseId as string;
       const key = `${skuId}::${ownerWarehouseId}`;
-      bulkOnSiteByGroup.set(key, Number(row._sum.quantity ?? 0));
+      const delta = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
+      bulkBalanceByGroup.set(key, (bulkBalanceByGroup.get(key) ?? 0) + delta);
     });
-    const bulkInByGroup = new Map<string, number>();
-    bulkInRows.forEach((row) => {
-      const skuId = row.skuId as string;
-      const ownerWarehouseId = row.ownerWarehouseId as string;
-      const key = `${skuId}::${ownerWarehouseId}`;
-      bulkInByGroup.set(key, Number(row._sum.quantity ?? 0));
+    const bulkNet = [...bulkBalanceByGroup.entries()].map(([key, quantity]) => {
+      const [skuId, ownerWarehouseId] = key.split('::');
+      return { skuId, ownerWarehouseId, quantity };
     });
-    const bulkNet = [...new Set([...bulkOnSiteByGroup.keys(), ...bulkInByGroup.keys()])].map(
-      (key) => {
-        const [skuId, ownerWarehouseId] = key.split('::');
-        return {
-          skuId,
-          ownerWarehouseId,
-          quantity: (bulkOnSiteByGroup.get(key) ?? 0) - (bulkInByGroup.get(key) ?? 0),
-        };
-      },
-    );
     const bulkNegative = bulkNet.filter((row) => row.quantity < 0);
     if (bulkNegative.length) {
       console.warn('On-site bulk negative quantity detected', {
@@ -1919,19 +1870,18 @@ export class InventoryService {
     }
     const bulkBase = bulkNet.filter((row) => row.quantity !== 0);
 
-    const serialOnSiteByAsset = new Map(
-      serialOnSiteRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const serialInByAsset = new Map(
-      serialInRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const serialNet = [
-      ...new Set([...serialOnSiteByAsset.keys(), ...serialInByAsset.keys()]),
-    ].map((assetId) => ({
+    const serialBalanceByAsset = new Map<string, number>();
+    serialMovementRows.forEach((row) => {
+      const assetId = row.assetId as string;
+      const delta = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
+      serialBalanceByAsset.set(assetId, (serialBalanceByAsset.get(assetId) ?? 0) + delta);
+    });
+    const serialNet = [...serialBalanceByAsset.entries()].map(([assetId, quantity]) => ({
       assetId,
-      quantity:
-        (serialOnSiteByAsset.get(assetId) ?? 0) -
-        (serialInByAsset.get(assetId) ?? 0),
+      quantity,
     }));
     const serialNegative = serialNet.filter((row) => row.quantity < 0);
     if (serialNegative.length) {
