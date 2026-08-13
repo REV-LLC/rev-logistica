@@ -1,10 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { MovementType, Prisma, SkuControlType } from '@prisma/client';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import {
+  AssetKind,
+  AssetMotorConfiguration,
+  MovementType,
+  Prisma,
+  SkuControlType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AssetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   private sanitizeOwnerName(value: string) {
     return value
@@ -79,6 +90,21 @@ export class AssetsService {
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
+        kind: true,
+        motorConfiguration: true,
+        assignedMotorId: true,
+        assignedMotor: {
+          select: {
+            id: true,
+            internalNumber: true,
+            serialOrEngine: true,
+            brand: true,
+            model: true,
+            fuel: true,
+            sku: { select: { name: true } },
+          },
+        },
+        assignedToMixer: { select: { id: true } },
         createdAt: true,
         sku: {
           select: {
@@ -218,6 +244,21 @@ export class AssetsService {
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
+        kind: true,
+        motorConfiguration: true,
+        assignedMotorId: true,
+        assignedMotor: {
+          select: {
+            id: true,
+            internalNumber: true,
+            serialOrEngine: true,
+            brand: true,
+            model: true,
+            fuel: true,
+            sku: { select: { name: true } },
+          },
+        },
+        assignedToMixer: { select: { id: true } },
         createdAt: true,
         sku: {
           select: {
@@ -542,6 +583,79 @@ export class AssetsService {
     }
 
     return this.getAssetById(assetId);
+  }
+
+  async assignMotor(assetId: string, motorId: string) {
+    if (assetId === motorId) {
+      throw new BadRequestException('Un equipo no puede ser su propio motor');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const [mixer, motor] = await Promise.all([
+        tx.asset.findUnique({
+          where: { id: assetId },
+          select: {
+            id: true,
+            motorConfiguration: true,
+            warehouseCurrentId: true,
+          },
+        }),
+        tx.asset.findUnique({
+          where: { id: motorId },
+          select: {
+            id: true,
+            kind: true,
+            active: true,
+            warehouseCurrentId: true,
+            assignedToMixer: { select: { id: true } },
+          },
+        }),
+      ]);
+
+      if (!mixer) throw new NotFoundException('Mezcladora no encontrada');
+      if (mixer.motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE) {
+        throw new BadRequestException('Este equipo no usa motor intercambiable');
+      }
+      if (!motor || motor.kind !== AssetKind.MOTOR || !motor.active) {
+        throw new BadRequestException('El motor seleccionado no está disponible');
+      }
+      if (!mixer.warehouseCurrentId || motor.warehouseCurrentId !== mixer.warehouseCurrentId) {
+        throw new BadRequestException('La mezcladora y el motor deben estar en la misma bodega');
+      }
+      if (motor.assignedToMixer && motor.assignedToMixer.id !== mixer.id) {
+        throw new BadRequestException('El motor ya está asignado a otra mezcladora');
+      }
+
+      return tx.asset.update({
+        where: { id: mixer.id },
+        data: { assignedMotorId: motor.id },
+        select: {
+          id: true,
+          assignedMotorId: true,
+          warehouseCurrentId: true,
+          assignedMotor: {
+            select: {
+              id: true,
+              internalNumber: true,
+              serialOrEngine: true,
+              brand: true,
+              model: true,
+              fuel: true,
+              sku: { select: { name: true } },
+            },
+          },
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.warehouseCurrentId) {
+      const baseKey = `inventory:warehouse:${result.warehouseCurrentId}`;
+      await Promise.all([
+        this.cacheManager.del(baseKey),
+        this.cacheManager.del(`${baseKey}:default`),
+        this.cacheManager.del(`${baseKey}:include-zero`),
+      ]);
+    }
+    return result;
   }
 
   async deleteAsset(assetId: string) {

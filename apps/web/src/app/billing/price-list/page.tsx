@@ -12,10 +12,8 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import {
   IconBox,
@@ -27,6 +25,10 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
+import DataTableToolbar from '@/components/tables/DataTableToolbar';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
+import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
 
 type ControlType = 'BULK' | 'SERIAL';
@@ -176,6 +178,96 @@ export default function PriceListPage() {
       ),
     [providerPrices, providerWarehouseId],
   );
+  const priceColumns = useMemo<DataTableColumn<PriceListSku>[]>(() => [
+    {
+      id: 'reference',
+      header: 'Referencia',
+      ariaLabel: 'referencia',
+      width: '19%',
+      sortValue: (item) => item.name,
+      mobile: { priority: 'primary' },
+      cell: (item) => (
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Text fw={600}>{item.name}</Text>
+            <Badge mt={4} variant="light" color="gray" radius="sm">
+              {item.assetFamily.code}
+            </Badge>
+          </div>
+          <Badge hiddenFrom="md" color={item.active ? 'green' : 'gray'} variant="light">
+            {item.active ? 'Activo' : 'Inactivo'}
+          </Badge>
+        </Group>
+      ),
+    },
+    {
+      id: 'family',
+      header: 'Familia',
+      ariaLabel: 'familia',
+      width: '14%',
+      sortValue: (item) => item.assetFamily.name,
+      mobile: { label: 'Familia', priority: 'detail' },
+      cell: (item) => item.assetFamily.name,
+    },
+    {
+      id: 'customerPrice',
+      header: 'Precio cliente',
+      ariaLabel: 'precio cliente',
+      width: '13%',
+      align: 'right',
+      sortValue: (item) => toNumber(item.price),
+      mobile: { label: 'Precio cliente', priority: 'detail' },
+      cell: (item) => formatMoney(item.price),
+    },
+    {
+      id: 'providerPrice',
+      header: 'Costo proveedor',
+      ariaLabel: 'costo proveedor',
+      width: '14%',
+      align: 'right',
+      sortValue: (item) => providerPriceBySku.get(item.id),
+      mobile: { label: 'Costo proveedor', priority: 'detail' },
+      cell: (item) => formatMoney(providerPriceBySku.get(item.id)),
+    },
+    {
+      id: 'replacementValue',
+      header: 'Reposición',
+      ariaLabel: 'valor de reposición',
+      width: '13%',
+      align: 'right',
+      sortValue: (item) => toNumber(item.replacementValue),
+      mobile: { label: 'Reposición', priority: 'detail' },
+      cell: (item) => formatMoney(item.replacementValue),
+    },
+    {
+      id: 'chargeType',
+      header: 'Tipo de cobro',
+      ariaLabel: 'tipo de cobro',
+      width: '16%',
+      sortValue: (item) => item.chargeType,
+      mobile: { label: 'Tipo de cobro', priority: 'detail' },
+      cell: (item) => formatChargeType(item.chargeType, item.minimumChargeHours),
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      ariaLabel: 'estado',
+      width: '11%',
+      sortValue: (item) => item.active,
+      mobile: false,
+      cell: (item) => (
+        <Badge color={item.active ? 'green' : 'gray'} variant="light">
+          {item.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      ),
+    },
+  ], [providerPriceBySku]);
+
+  const priceTable = useClientTableData({
+    rows: filteredItems,
+    columns: priceColumns,
+    initialPageSize: 20,
+  });
   const providerPricedCount = useMemo(
     () => filteredItems.filter((item) => providerPriceBySku.has(item.id)).length,
     [filteredItems, providerPriceBySku],
@@ -311,69 +403,31 @@ export default function PriceListPage() {
 
         <Paper withBorder radius="md" p="md">
           <Stack gap="md">
-            <Group justify="space-between" align="center" gap="sm">
-              <div>
-                <Title order={3} size="h4">
-                  {controlType === 'BULK' ? 'Items Bulk' : 'Items Serial'}
-                </Title>
-                <Text size="sm" c="dimmed">
-                  {loading ? 'Cargando referencias...' : `${filteredItems.length} items encontrados`}
-                </Text>
-              </div>
+            <DataTableToolbar
+              title={controlType === 'BULK' ? 'Items Bulk' : 'Items Serial'}
+              description={loading ? 'Cargando referencias...' : `${filteredItems.length} items encontrados`}
+              mb={0}
+            >
               <Badge color={controlType === 'BULK' ? 'yellow' : 'blue'} variant="light" size="lg">
                 {controlType}
               </Badge>
-            </Group>
+            </DataTableToolbar>
 
-            <Table.ScrollContainer minWidth={980}>
-              <Table striped highlightOnHover verticalSpacing="sm">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Referencia</Table.Th>
-                    <Table.Th>Codigo</Table.Th>
-                    <Table.Th>Familia</Table.Th>
-                    <Table.Th>Precio cliente</Table.Th>
-                    <Table.Th>Costo proveedor</Table.Th>
-                    <Table.Th>Valor reposicion</Table.Th>
-                    <Table.Th>Tipo de cobro</Table.Th>
-                    <Table.Th>Estado</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {filteredItems.map((item) => (
-                    <Table.Tr key={item.id}>
-                      <Table.Td>
-                        <Text fw={600}>{item.name}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color="gray" radius="sm">
-                          {item.assetFamily.code}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>{item.assetFamily.name}</Table.Td>
-                      <Table.Td>{formatMoney(item.price)}</Table.Td>
-                      <Table.Td>{formatMoney(providerPriceBySku.get(item.id))}</Table.Td>
-                      <Table.Td>{formatMoney(item.replacementValue)}</Table.Td>
-                      <Table.Td>{formatChargeType(item.chargeType, item.minimumChargeHours)}</Table.Td>
-                      <Table.Td>
-                        <Badge color={item.active ? 'green' : 'gray'} variant="light">
-                          {item.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                  {!filteredItems.length ? (
-                    <Table.Tr>
-                      <Table.Td colSpan={8}>
-                        <Text ta="center" c="dimmed" py="xl">
-                          {loading ? 'Cargando...' : 'No hay items para este filtro.'}
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ) : null}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
+            <EntityDataTable
+              rows={priceTable.rows}
+              columns={priceColumns}
+              getRowId={(item) => item.id}
+              loading={loading}
+              sort={priceTable.sort}
+              onSortChange={priceTable.onSortChange}
+              pagination={priceTable.pagination}
+              onPageSizeChange={priceTable.onPageSizeChange}
+              tableMinWidth={860}
+              emptyState={{
+                title: 'No hay referencias para mostrar',
+                description: 'Prueba cambiando el tipo, proveedor o búsqueda.',
+              }}
+            />
           </Stack>
         </Paper>
       </Stack>

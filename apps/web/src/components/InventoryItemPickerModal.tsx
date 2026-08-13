@@ -486,8 +486,7 @@ export default function InventoryItemPickerModal({
                   </Stack>
                 </Paper>
 
-                <ScrollArea.Autosize
-                  mah="var(--picker-scroll-max-height)"
+                <ScrollArea
                   offsetScrollbars
                   type="auto"
                   className="inventory-picker-scroll"
@@ -654,7 +653,7 @@ export default function InventoryItemPickerModal({
                       </Paper>
                     )}
                   </Stack>
-                </ScrollArea.Autosize>
+                </ScrollArea>
               </>
             ) : (
               <Paper withBorder radius="lg" p="xl" className="inventory-picker-empty">

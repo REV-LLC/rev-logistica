@@ -15,19 +15,11 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Table,
-  TableTbody,
-  TableTd,
-  TableTh,
-  TableThead,
-  TableTr,
   Text,
   TextInput,
   Textarea,
-  ThemeIcon,
 } from '@mantine/core';
 import {
-  IconCalendarEvent,
   IconBrandWhatsapp,
   IconChecklist,
   IconClock,
@@ -40,7 +32,9 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
-import TableRowActions from '@/components/TableRowActions';
+import DataTableToolbar from '@/components/tables/DataTableToolbar';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
 import { api } from '@/lib/api';
 
 type TaskStatus = 'OPEN' | 'DOING' | 'DONE';
@@ -116,22 +110,10 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString('es-CO');
 }
 
-function statusColor(status?: string | null) {
-  if (status === 'DONE') return 'green';
-  if (status === 'DOING') return 'blue';
-  return 'gray';
-}
-
 function priorityColor(priority?: string | null) {
   if (priority === 'HIGH') return 'red';
   if (priority === 'MEDIUM') return 'yellow';
   return 'gray';
-}
-
-function formatStatusLabel(status?: TaskStatus | null) {
-  if (status === 'DOING') return 'EN CURSO';
-  if (status === 'DONE') return 'HECHA';
-  return 'ABIERTA';
 }
 
 function formatPriorityLabel(priority?: TaskPriority | null) {
@@ -481,6 +463,106 @@ export default function TasksPage() {
     }
   };
 
+  const taskColumns: DataTableColumn<Task>[] = [
+    {
+      id: 'task',
+      header: 'Tarea',
+      ariaLabel: 'tarea',
+      width: '25%',
+      sortValue: (task) => task.title,
+      mobile: { priority: 'primary' },
+      cell: (task) => (
+        <Stack gap={4}>
+          <Group gap="xs">
+            <Text fw={600}>{task.title}</Text>
+            {task.bulkItemName ? (
+              <Badge variant="light" color="grape" leftSection={<IconPackage size={12} />}>
+                {task.bulkItemName}
+              </Badge>
+            ) : null}
+          </Group>
+          {task.description ? <Text size="xs" c="dimmed">{task.description}</Text> : null}
+        </Stack>
+      ),
+    },
+    {
+      id: 'priority',
+      header: 'Prioridad',
+      ariaLabel: 'prioridad',
+      width: '12%',
+      sortValue: (task) => task.priority ?? 'MEDIUM',
+      mobile: { label: 'Prioridad', priority: 'detail' },
+      cell: (task) => (
+        <Select
+          aria-label={`Prioridad de ${task.title}`}
+          value={task.priority ?? 'MEDIUM'}
+          onChange={(value) => updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })}
+          data={priorityOptions}
+          size="xs"
+          allowDeselect={false}
+        />
+      ),
+    },
+    {
+      id: 'dueDate',
+      header: 'Vence',
+      ariaLabel: 'fecha de vencimiento',
+      width: '12%',
+      sortValue: (task) => task.dueDate ? new Date(task.dueDate) : null,
+      mobile: { label: 'Vence', priority: 'detail' },
+      cell: (task) => {
+        const dueState = getDueState(task.dueDate);
+        return (
+          <Stack gap={4}>
+            <Text size="sm">{formatDate(task.dueDate)}</Text>
+            {dueState ? (
+              <Badge color={dueState.tone} variant="light" w="fit-content">{dueState.label}</Badge>
+            ) : null}
+          </Stack>
+        );
+      },
+    },
+    {
+      id: 'assignee',
+      header: 'Responsable',
+      ariaLabel: 'responsable',
+      width: '20%',
+      sortValue: getTaskAssigneeName,
+      mobile: { label: 'Responsable', priority: 'detail' },
+      cell: (task) => (
+        <Select
+          aria-label={`Responsable de ${task.title}`}
+          value={getTaskAssigneeValue(task)}
+          onChange={(value) => updateTask(task.id, parseAssigneeValue(value))}
+          data={assigneeOptions}
+          size="xs"
+          placeholder="-"
+          searchable
+          clearable
+          disabled={assigneesLoading}
+        />
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      ariaLabel: 'estado',
+      width: '12%',
+      sortValue: (task) => task.status ?? 'OPEN',
+      mobile: { label: 'Estado', priority: 'detail' },
+      cell: (task) => (
+        <Select
+          aria-label={`Estado de ${task.title}`}
+          value={task.status ?? 'OPEN'}
+          onChange={(value) => updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })}
+          data={statusOptions}
+          size="xs"
+          allowDeselect={false}
+        />
+      ),
+    },
+  ];
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -517,297 +599,74 @@ export default function TasksPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          {loading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
-          ) : (
-            <Stack gap="md">
-              <Group justify="space-between" align="center">
-                <div>
-                  <Text fw={700}>Lista de pendientes</Text>
-                  <Text size="sm" c="dimmed">
-                    {filteredTasks.length} de {tasks.length} pendiente
-                    {tasks.length === 1 ? '' : 's'}.
-                  </Text>
-                </div>
-                <Badge color="gray" variant="light">
-                  Tablero general
-                </Badge>
-              </Group>
+          <Stack gap="md">
+            <DataTableToolbar
+              title="Lista de pendientes"
+              description={`${filteredTasks.length} de ${tasks.length} pendiente${tasks.length === 1 ? '' : 's'}.`}
+              mb={0}
+            >
+              <Badge color="gray" variant="light">
+                Tablero general
+              </Badge>
+            </DataTableToolbar>
 
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                <TextInput
-                  aria-label="Buscar pendientes"
-                  placeholder="Buscar por tarea, responsable o activo"
-                  value={search}
-                  onChange={(event) => setSearch(event.currentTarget.value)}
-                  leftSection={<IconSearch size={16} />}
-                />
-                <Select
-                  aria-label="Filtrar por estado"
-                  value={statusFilter}
-                  onChange={(value) => setStatusFilter((value as 'ALL' | TaskStatus) ?? 'ALL')}
-                  data={statusFilterOptions}
-                  allowDeselect={false}
-                />
-              </SimpleGrid>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TextInput
+                aria-label="Buscar pendientes"
+                placeholder="Buscar por tarea, responsable o activo"
+                value={search}
+                onChange={(event) => setSearch(event.currentTarget.value)}
+                leftSection={<IconSearch size={16} />}
+              />
+              <Select
+                aria-label="Filtrar por estado"
+                value={statusFilter}
+                onChange={(value) => setStatusFilter((value as 'ALL' | TaskStatus) ?? 'ALL')}
+                data={statusFilterOptions}
+                allowDeselect={false}
+              />
+            </SimpleGrid>
 
-              {filteredTasks.length ? (
-                <>
-                  <Paper withBorder radius="lg" p="sm" visibleFrom="sm">
-                    <Table withTableBorder={false} verticalSpacing="md">
-                      <TableThead>
-                        <TableTr>
-                          <TableTh>Tarea</TableTh>
-                          <TableTh>Prioridad</TableTh>
-                          <TableTh>Vence</TableTh>
-                          <TableTh>Asignado</TableTh>
-                          <TableTh>Estado</TableTh>
-                          <TableTh ta="right">Acciones</TableTh>
-                        </TableTr>
-                      </TableThead>
-                      <TableTbody>
-                        {filteredTasks.map((task) => {
-                          const dueState = getDueState(task.dueDate);
-                          return (
-                            <TableTr key={task.id}>
-                              <TableTd>
-                                <Stack gap={4}>
-                                  <Group gap="xs">
-                                    <Text fw={600}>{task.title}</Text>
-                                    {task.bulkItemName ? (
-                                      <Badge variant="light" color="grape" leftSection={<IconPackage size={12} />}>
-                                        {task.bulkItemName}
-                                      </Badge>
-                                    ) : null}
-                                  </Group>
-                                  {task.description ? (
-                                    <Text size="xs" c="dimmed">
-                                      {task.description}
-                                    </Text>
-                                  ) : null}
-                                </Stack>
-                              </TableTd>
-                              <TableTd>
-                                <Select
-                                  aria-label={`Prioridad de ${task.title}`}
-                                  value={task.priority ?? 'MEDIUM'}
-                                  onChange={(value) =>
-                                    updateTask(task.id, {
-                                      priority: (value as TaskPriority) || 'MEDIUM',
-                                    })
-                                  }
-                                  data={priorityOptions}
-                                  size="xs"
-                                  w={120}
-                                  allowDeselect={false}
-                                />
-                              </TableTd>
-                              <TableTd>
-                                <Stack gap="xs">
-                                  <Text size="sm">{formatDate(task.dueDate)}</Text>
-                                  {dueState ? (
-                                    <Badge color={dueState.tone} variant="light" w="fit-content">
-                                      {dueState.label}
-                                    </Badge>
-                                  ) : null}
-                                </Stack>
-                              </TableTd>
-                              <TableTd>
-                                <Select
-                                  value={getTaskAssigneeValue(task)}
-                                  onChange={(value) => updateTask(task.id, parseAssigneeValue(value))}
-                                  data={assigneeOptions}
-                                  size="xs"
-                                  w={220}
-                                  placeholder="-"
-                                  searchable
-                                  clearable
-                                  disabled={assigneesLoading}
-                                />
-                              </TableTd>
-                              <TableTd>
-                                <Select
-                                  aria-label={`Estado de ${task.title}`}
-                                  value={task.status ?? 'OPEN'}
-                                  onChange={(value) =>
-                                    updateTask(task.id, {
-                                      status: (value as TaskStatus) || 'OPEN',
-                                    })
-                                  }
-                                  data={statusOptions}
-                                  size="xs"
-                                  w={120}
-                                  allowDeselect={false}
-                                />
-                              </TableTd>
-                              <TableTd>
-                                <TableRowActions
-                                  actions={[
-                                    {
-                                      key: 'assets',
-                                      label: `Gestionar activos de ${task.title}`,
-                                      icon: <IconPackage size={16} />,
-                                      color: 'blue',
-                                      onClick: () => openAssetsModal(task),
-                                    },
-                                    {
-                                      key: 'delete',
-                                      label: `Eliminar ${task.title}`,
-                                      icon: <IconTrash size={16} />,
-                                      color: 'red',
-                                      onClick: () => setTaskToDelete(task),
-                                    },
-                                  ]}
-                                />
-                              </TableTd>
-                            </TableTr>
-                          );
-                        })}
-                      </TableTbody>
-                    </Table>
-                  </Paper>
-
-                  <Stack gap="sm" hiddenFrom="sm">
-                    {filteredTasks.map((task) => {
-                      const dueState = getDueState(task.dueDate);
-                      return (
-                        <Paper key={task.id} withBorder radius="lg" p="md">
-                          <Stack gap="md">
-                            <Group justify="space-between" align="flex-start" wrap="nowrap">
-                              <Stack gap={4} style={{ flex: 1 }}>
-                                <Text fw={700}>{task.title}</Text>
-                                {task.description ? (
-                                  <Text size="sm" c="dimmed">
-                                    {task.description}
-                                  </Text>
-                                ) : null}
-                              </Stack>
-                              <Badge color={statusColor(task.status)} variant="light">
-                                {formatStatusLabel(task.status)}
-                              </Badge>
-                            </Group>
-
-                            <Group gap="xs">
-                              <Badge color={priorityColor(task.priority)} variant="light">
-                                {formatPriorityLabel(task.priority)}
-                              </Badge>
-                              {dueState ? (
-                                <Badge color={dueState.tone} variant="light">
-                                  {dueState.label}
-                                </Badge>
-                              ) : null}
-                              {task.bulkItemName ? (
-                                <Badge color="grape" variant="light" leftSection={<IconPackage size={12} />}>
-                                  {task.bulkItemName}
-                                </Badge>
-                              ) : null}
-                            </Group>
-
-                            <Stack gap="xs">
-                              <Group gap="xs" wrap="nowrap">
-                                <ThemeIcon size={28} radius="xl" variant="light" color="gray">
-                                  <IconCalendarEvent size={15} />
-                                </ThemeIcon>
-                                <Text size="sm" c="dimmed">
-                                  Vence
-                                </Text>
-                                <Text size="sm" fw={600}>
-                                  {formatDate(task.dueDate)}
-                                </Text>
-                              </Group>
-                              <Group gap="xs" wrap="nowrap">
-                                <ThemeIcon size={28} radius="xl" variant="light" color="blue">
-                                  <IconUserCheck size={15} />
-                                </ThemeIcon>
-                                <Text size="sm" c="dimmed">
-                                  Responsable
-                                </Text>
-                                <Text size="sm" fw={600} lineClamp={1}>
-                                  {getTaskAssigneeName(task)}
-                                </Text>
-                              </Group>
-                            </Stack>
-
-                            <SimpleGrid cols={1} spacing="sm">
-                              <Select
-                                label="Prioridad"
-                                value={task.priority ?? 'MEDIUM'}
-                                onChange={(value) =>
-                                  updateTask(task.id, {
-                                    priority: (value as TaskPriority) || 'MEDIUM',
-                                  })
-                                }
-                                data={priorityOptions}
-                              />
-                              <Select
-                                label="Estado"
-                                value={task.status ?? 'OPEN'}
-                                onChange={(value) =>
-                                  updateTask(task.id, {
-                                    status: (value as TaskStatus) || 'OPEN',
-                                  })
-                                }
-                                data={statusOptions}
-                              />
-                              <Select
-                                label="Responsable"
-                                value={getTaskAssigneeValue(task)}
-                                onChange={(value) => updateTask(task.id, parseAssigneeValue(value))}
-                                data={assigneeOptions}
-                                placeholder="-"
-                                searchable
-                                clearable
-                                disabled={assigneesLoading}
-                              />
-                            </SimpleGrid>
-
-                            <Group grow>
-                              <Button variant="light" onClick={() => openAssetsModal(task)}>
-                                Gestionar activos
-                              </Button>
-                              <Button
-                                variant="light"
-                                color="red"
-                                leftSection={<IconTrash size={16} />}
-                                onClick={() => setTaskToDelete(task)}
-                              >
-                                Eliminar
-                              </Button>
-                            </Group>
-                          </Stack>
-                        </Paper>
-                      );
-                    })}
-                  </Stack>
-                </>
-              ) : (
-                <Paper withBorder radius="lg" p="xl" bg="gray.0">
-                  <Stack align="center" gap="sm">
-                    <ThemeIcon size={48} radius="xl" variant="light" color="gray">
-                      <IconChecklist size={24} />
-                    </ThemeIcon>
-                    <Text fw={700}>No hay pendientes para los filtros actuales</Text>
-                    <Text size="sm" c="dimmed" ta="center">
-                      Cambia el estado, limpia la búsqueda o crea un nuevo pendiente.
-                    </Text>
-                    {search || statusFilter !== 'ALL' ? (
-                      <Button
-                        variant="light"
-                        onClick={() => {
-                          setSearch('');
-                          setStatusFilter('ALL');
-                        }}
-                      >
-                        Limpiar filtros
-                      </Button>
-                    ) : null}
-                  </Stack>
-                </Paper>
-              )}
-            </Stack>
-          )}
+            <EntityDataTable
+              rows={filteredTasks}
+              columns={taskColumns}
+              getRowId={(task) => task.id}
+              loading={loading}
+              tableMinWidth={820}
+              emptyState={{
+                title: 'No hay pendientes para los filtros actuales',
+                description: 'Cambia el estado, limpia la búsqueda o crea un nuevo pendiente.',
+                icon: <IconChecklist size={24} />,
+                action: search || statusFilter !== 'ALL' ? (
+                  <Button
+                    variant="light"
+                    onClick={() => {
+                      setSearch('');
+                      setStatusFilter('ALL');
+                    }}
+                  >
+                    Limpiar filtros
+                  </Button>
+                ) : null,
+              }}
+              actions={(task) => [
+                {
+                  key: 'assets',
+                  label: `Gestionar activos de ${task.title}`,
+                  icon: <IconPackage size={16} />,
+                  color: 'blue',
+                  onClick: () => openAssetsModal(task),
+                },
+                {
+                  key: 'delete',
+                  label: `Eliminar ${task.title}`,
+                  icon: <IconTrash size={16} />,
+                  color: 'red',
+                  onClick: () => setTaskToDelete(task),
+                },
+              ]}
+            />
+          </Stack>
         </Paper>
       </Stack>
 

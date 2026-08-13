@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -11,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ChargeType } from '@prisma/client';
+import { AssetMotorConfiguration, ChargeType } from '@prisma/client';
 
 export class SerializedAssetFamilyInput {
   @IsOptional()
@@ -133,6 +134,14 @@ export class SerializedAssetInput {
   active?: boolean;
 
   @IsOptional()
+  @IsEnum(AssetMotorConfiguration)
+  motorConfiguration?: AssetMotorConfiguration;
+
+  @IsOptional()
+  @IsUUID()
+  assignedMotorId?: string;
+
+  @IsOptional()
   @IsInt()
   internalNumber?: number;
 
@@ -140,6 +149,27 @@ export class SerializedAssetInput {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   hourMeter?: number;
+}
+
+export class SerializedMotorInput {
+  @IsOptional()
+  @IsString()
+  serialOrEngine?: string;
+
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsInt()
+  year?: number;
+
+  @IsIn(['ELECTRICO', 'GASOLINA'])
+  fuel: 'ELECTRICO' | 'GASOLINA';
 }
 
 export class CreateSerializedAssetDto {
@@ -170,4 +200,9 @@ export class CreateSerializedAssetDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   providerPrice?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SerializedMotorInput)
+  newMotor?: SerializedMotorInput;
 }

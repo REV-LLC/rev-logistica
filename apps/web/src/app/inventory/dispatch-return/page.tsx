@@ -12,14 +12,12 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   TextInput,
   Title,
   NumberInput,
   Tooltip
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import { IconCamera, IconTrash } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import InventoryItemPickerModal, {
@@ -27,7 +25,8 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
 import WarehouseSelect from '@/components/WarehouseSelect';
-import TableRowActions from '@/components/TableRowActions';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
@@ -84,6 +83,9 @@ const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) 
 const getEmployeeFullName = (employee: Employee) =>
   `${employee.name} ${employee.lastName ?? ''}`.trim();
 
+const getSelectedItemKey = (item: SelectedItem) =>
+  `${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId ?? item.name}`;
+
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
     <Text span>{label}</Text>
@@ -107,7 +109,6 @@ function withDocPrefix(value: string, docType: 'REMISSION' | 'RETURN') {
 }
 
 export default function RemisionDevolucionPage() {
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const router = useRouter();
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
@@ -578,6 +579,41 @@ export default function RemisionDevolucionPage() {
     }
   };
 
+  const selectedItemColumns: DataTableColumn<SelectedItem>[] = [
+    {
+      id: 'item',
+      header: 'Ítem',
+      width: '55%',
+      mobile: { priority: 'primary' },
+      cell: (item) => (
+        <div>
+          <Text fw={600}>{item.name}</Text>
+          {item.serial ? <Text size="xs" c="dimmed">{item.serial}</Text> : null}
+        </div>
+      ),
+    },
+    {
+      id: 'quantity',
+      header: 'Cantidad',
+      align: 'right',
+      width: '25%',
+      mobile: { label: 'Cantidad', priority: 'detail' },
+      cell: (item) => {
+        const index = selectedItems.indexOf(item);
+        return item.type === 'bulk' ? (
+          <NumberInput
+            aria-label={`Cantidad de ${item.name}`}
+            min={0}
+            value={item.quantity ?? 1}
+            onChange={(value) => updateSelected(index, {
+              quantity: typeof value === 'number' ? value : 1,
+            })}
+          />
+        ) : <Text ta="right">1</Text>;
+      },
+    },
+  ];
+
   return (
     <main>
       <Container size="lg" py="xl">
@@ -843,98 +879,26 @@ export default function RemisionDevolucionPage() {
           <Divider my="md" />
 
           <Title order={4}>Seleccionados</Title>
-          {!isMobile ? (
-            <Table striped highlightOnHover mt="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Item</Table.Th>
-                  <Table.Th>Cantidad</Table.Th>
-                  <Table.Th ta="right">Acciones</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {selectedItems.map((item, index) => (
-                  <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
-                    <Table.Td>
-                      <Text fw={600}>{item.name}</Text>
-                      {item.serial && (
-                        <Text size="xs" c="dimmed">
-                          {item.serial}
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      {item.type === 'bulk' ? (
-                        <NumberInput
-                          min={0}
-                          value={item.quantity ?? 1}
-                          onChange={(value) =>
-                            updateSelected(index, {
-                              quantity: typeof value === 'number' ? value : 1
-                            })
-                          }
-                        />
-                      ) : (
-                        <Text>1</Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      <TableRowActions
-                        actions={[
-                          {
-                            key: 'remove',
-                            label: `Quitar ${item.name}`,
-                            icon: <IconTrash size={16} />,
-                            color: 'red',
-                            onClick: () => removeSelected(index),
-                          },
-                        ]}
-                      />
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          ) : (
-            <Stack mt="md" gap="sm">
-              {selectedItems.map((item, index) => (
-                <Paper
-                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
-                  withBorder
-                  radius="md"
-                  p="sm"
-                >
-                  <Stack gap="xs">
-                    <div>
-                      <Text fw={600}>{item.name}</Text>
-                      {item.serial && (
-                        <Text size="xs" c="dimmed">
-                          {item.serial}
-                        </Text>
-                      )}
-                    </div>
-                    {item.type === 'bulk' ? (
-                      <NumberInput
-                        label="Cantidad"
-                        min={0}
-                        value={item.quantity ?? 1}
-                        onChange={(value) =>
-                          updateSelected(index, {
-                            quantity: typeof value === 'number' ? value : 1
-                          })
-                        }
-                      />
-                    ) : (
-                      <Text size="sm">Cantidad: 1</Text>
-                    )}
-                    <Button variant="light" color="red" onClick={() => removeSelected(index)}>
-                      Quitar
-                    </Button>
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          )}
+          <EntityDataTable
+            rows={selectedItems}
+            columns={selectedItemColumns}
+            getRowId={getSelectedItemKey}
+            tableMinWidth={620}
+            emptyState={{
+              title: 'No hay ítems seleccionados',
+              description: 'Carga inventario y agrega los equipos o materiales del documento.',
+            }}
+            actions={(item) => {
+              const index = selectedItems.indexOf(item);
+              return [{
+                key: 'remove',
+                label: `Quitar ${item.name}`,
+                icon: <IconTrash size={16} />,
+                color: 'red',
+                onClick: () => removeSelected(index),
+              }];
+            }}
+          />
 
           {error && (
             <Text c="red" mt="sm">

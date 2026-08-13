@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   Alert,
@@ -15,18 +14,13 @@ import {
   SimpleGrid,
   Stack,
   Switch,
-  Table,
   Text,
   TextInput,
-  ThemeIcon,
-  Title,
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import {
   IconBuilding,
   IconBuildingEstate,
   IconExternalLink,
-  IconMapPin,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -36,9 +30,12 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
-import TableRowActions from '@/components/TableRowActions';
+import DataTableToolbar from '@/components/tables/DataTableToolbar';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
+import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
-import OpenInMapsButton from '@/components/worksites/OpenInMapsButton';
+import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 
 type Customer = {
   id: string;
@@ -105,59 +102,8 @@ type CityOption = {
   label: string;
 };
 
-type AddressValidationResponse = {
-  inputAddress: string;
-  formattedAddress: string;
-  context: {
-    department: string | null;
-    city: string | null;
-  };
-  googleContext: {
-    department: string | null;
-    city: string | null;
-  };
-  placeId: string | null;
-  location: { lat: number; lng: number } | null;
-  verdict: {
-    inputGranularity: string | null;
-    validationGranularity: string | null;
-    geocodeGranularity: string | null;
-    hasInferredComponents: boolean;
-    hasReplacedComponents: boolean;
-    hasUnconfirmedComponents: boolean;
-  };
-};
-
-function getMapsQuery(addressValidation: AddressValidationResponse) {
-  if (addressValidation.location) {
-    return `${addressValidation.location.lat},${addressValidation.location.lng}`;
-  }
-  return addressValidation.formattedAddress;
-}
-
-function getGoogleMapsSearchUrl(addressValidation: AddressValidationResponse) {
-  const params = new URLSearchParams({
-    api: '1',
-    query: getMapsQuery(addressValidation),
-  });
-  if (addressValidation.placeId) {
-    params.set('query_place_id', addressValidation.placeId);
-  }
-  return `https://www.google.com/maps/search/?${params.toString()}`;
-}
-
-function getGoogleMapsPreviewUrl(addressValidation: AddressValidationResponse) {
-  const params = new URLSearchParams({
-    q: getMapsQuery(addressValidation),
-    z: '17',
-    output: 'embed',
-  });
-  return `https://www.google.com/maps?${params.toString()}`;
-}
-
 export default function WorksitesPage() {
   const searchParams = useSearchParams();
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const [worksites, setWorksites] = useState<WorksiteRow[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,9 +113,6 @@ export default function WorksitesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorksiteRow | null>(null);
   const [form, setForm] = useState<WorksiteForm>(emptyForm);
-  const [addressValidation, setAddressValidation] = useState<AddressValidationResponse | null>(null);
-  const [addressValidationError, setAddressValidationError] = useState<string | null>(null);
-  const [addressValidationLoading, setAddressValidationLoading] = useState(false);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [cities, setCities] = useState<CityOption[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
@@ -340,8 +283,6 @@ export default function WorksitesPage() {
     setEditing(null);
     setForm(emptyForm);
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
     setModalOpen(true);
   };
 
@@ -360,8 +301,6 @@ export default function WorksitesPage() {
       worksiteActive: row.worksite.active,
     });
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
     setModalOpen(true);
   };
 
@@ -370,49 +309,12 @@ export default function WorksitesPage() {
     setEditing(null);
     setForm(emptyForm);
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
   };
 
   const selectedDepartmentName =
     departments.find((department) => department.value === form.department)?.label ??
     form.department ??
     '';
-
-  const validateAddressWithMaps = async () => {
-    const address = form.address.trim();
-    setAddressValidation(null);
-    setAddressValidationError(null);
-
-    if (!address) {
-      setAddressValidationError('Ingresa una direccion para revisarla con Maps.');
-      return;
-    }
-
-    setAddressValidationLoading(true);
-    try {
-      const result = await api<AddressValidationResponse>('/worksites/address/validate', {
-        method: 'POST',
-        json: {
-          address,
-          regionCode: 'CO',
-          department: selectedDepartmentName || undefined,
-          city: form.city || undefined,
-        },
-      });
-      setAddressValidation(result);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setAddressValidationError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setAddressValidationError(err.message);
-      } else {
-        setAddressValidationError('No se pudo revisar la direccion con Maps.');
-      }
-    } finally {
-      setAddressValidationLoading(false);
-    }
-  };
 
   const saveWorksite = async () => {
     setError(null);
@@ -472,6 +374,74 @@ export default function WorksitesPage() {
     }
   };
 
+  const worksiteColumns: DataTableColumn<WorksiteRow>[] = [
+    {
+      id: 'worksite',
+      header: 'Obra',
+      ariaLabel: 'obra',
+      width: '22%',
+      sortValue: (row) => row.worksite.name,
+      mobile: { priority: 'primary' },
+      cell: (row) => (
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Stack gap={2}>
+            <Text fw={700}>{row.worksite.name}</Text>
+            <Text size="sm" c="dimmed">{row.customer.name}</Text>
+          </Stack>
+          <Badge hiddenFrom="md" color={row.worksite.active ? 'green' : 'gray'} variant="light">
+            {row.worksite.active ? 'Activo' : 'Inactivo'}
+          </Badge>
+        </Group>
+      ),
+    },
+    {
+      id: 'customer',
+      header: 'Cliente',
+      width: '20%',
+      sortValue: (row) => row.customer.name,
+      mobile: false,
+      cell: (row) => <Text>{row.customer.name}</Text>,
+    },
+    {
+      id: 'alias',
+      header: 'Alias',
+      width: '14%',
+      sortValue: (row) => row.alias,
+      mobile: { label: 'Alias', priority: 'secondary' },
+      cell: (row) => row.alias ?? '-',
+    },
+    {
+      id: 'address',
+      header: 'Direccion',
+      width: '28%',
+      mobile: { label: 'Dirección', priority: 'detail' },
+      cell: (row) => <Text size="sm" maw={280}>{row.worksite.address ?? 'Sin direccion'}</Text>,
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      ariaLabel: 'estado',
+      width: '10%',
+      sortValue: (row) => row.worksite.active,
+      mobile: { priority: 'hidden' },
+      cell: (row) => (
+        <Badge
+          variant="light"
+          color={row.worksite.active ? 'green' : 'gray'}
+          style={{ minWidth: 74, justifyContent: 'center' }}
+        >
+          {row.worksite.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      ),
+    },
+  ];
+
+  const worksiteTable = useClientTableData({
+    rows: filteredWorksites,
+    columns: worksiteColumns,
+    initialPageSize: 20,
+  });
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -519,217 +489,88 @@ export default function WorksitesPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <Group justify="space-between" align="flex-end" gap="md" mb="lg" wrap="wrap">
-            <div>
-              <Text fw={800}>Directorio de obras</Text>
-              <Text size="sm" c="dimmed">
-                {filteredWorksites.length} de {worksites.length} obras visibles
-              </Text>
-            </div>
-            <Group gap="sm" align="flex-end" wrap="wrap" style={{ flex: '1 1 620px', justifyContent: 'flex-end' }}>
-              <TextInput
-                aria-label="Buscar obras"
-                placeholder="Buscar obra, cliente, alias o dirección"
-                value={search}
-                onChange={(event) => setSearch(event.currentTarget.value)}
-                leftSection={<IconSearch size={16} />}
-                w="100%"
-                flex={{ base: '1 1 100%', sm: '1 1 280px' }}
-              />
-              <Select
-                aria-label="Filtrar obras por cliente"
-                placeholder="Todos los clientes"
-                searchable
-                clearable
-                value={customerFilter}
-                onChange={setCustomerFilter}
-                data={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
-                w="100%"
-                flex={{ base: '1 1 100%', sm: '1 1 210px' }}
-              />
-              <Select
-                aria-label="Filtrar obras por estado"
-                placeholder="Todos los estados"
-                clearable
-                value={statusFilter}
-                onChange={setStatusFilter}
-                data={[
-                  { value: 'active', label: 'Activas' },
-                  { value: 'inactive', label: 'Inactivas' },
-                ]}
-                w="100%"
-                flex={{ base: '1 1 100%', sm: '0 0 150px' }}
-              />
-              {hasActiveFilters ? (
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  leftSection={<IconX size={15} />}
-                  onClick={clearFilters}
-                >
-                  Limpiar
-                </Button>
-              ) : null}
-            </Group>
-          </Group>
-          {isMobile ? (
-            <Stack gap="sm">
-              {!loading &&
-                filteredWorksites.map((row) => (
-                  <Paper key={row.id} withBorder radius="lg" p="md">
-                    <Stack gap="md">
-                      <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{row.worksite.name}</Text>
-                          <Text size="sm" c="dimmed">
-                            {row.customer.name}
-                          </Text>
-                        </div>
-                        <Badge color={row.worksite.active ? 'green' : 'gray'} variant="light">
-                          {row.worksite.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </Group>
-
-                      <SimpleGrid cols={2} spacing="sm">
-                        <div>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Alias
-                          </Text>
-                          <Text size="sm">{row.alias ?? '-'}</Text>
-                        </div>
-                      </SimpleGrid>
-
-                      <Text size="sm" c="dimmed">
-                        {row.worksite.address ?? 'Sin direccion registrada'}
-                      </Text>
-
-                      <Group grow>
-                        <Button variant="default" component={Link} href={`/transport/worksites/${row.id}`}>
-                          Abrir obra
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Paper>
-                ))}
-
-              {!loading && filteredWorksites.length === 0 ? (
-                <Paper radius="lg" p="xl" bg="gray.0">
-                  <Stack align="center" gap="xs">
-                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                      <IconBuildingEstate size={20} />
-                    </ThemeIcon>
-                    <Text fw={700}>{worksites.length ? 'No hay resultados' : 'No hay obras registradas'}</Text>
-                    <Text size="sm" c="dimmed" ta="center">
-                      {worksites.length ? 'Ajusta o limpia los filtros para ver más obras.' : 'Crea una obra para empezar.'}
-                    </Text>
-                  </Stack>
-                </Paper>
-              ) : null}
-
-              {loading ? (
-                <Paper radius="lg" p="xl" bg="gray.0">
-                  <Text c="dimmed" ta="center">
-                    Cargando...
-                  </Text>
-                </Paper>
-              ) : null}
-            </Stack>
-          ) : (
-            <Table highlightOnHover verticalSpacing="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Obra</Table.Th>
-                  <Table.Th>Cliente</Table.Th>
-                  <Table.Th>Alias</Table.Th>
-                  <Table.Th>Direccion</Table.Th>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th ta="right">Acciones</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {!loading &&
-                  filteredWorksites.map((row) => (
-                    <Table.Tr key={row.id}>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700}>
-                            {row.worksite.name}
-                          </Text>
-                          <Text size="sm" c="dimmed">
-                            {row.worksite.active ? 'Obra activa' : 'Obra inactiva'}
-                          </Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text>{row.customer.name}</Text>
-                      </Table.Td>
-                      <Table.Td>{row.alias ?? '-'}</Table.Td>
-                      <Table.Td>
-                        <Text size="sm" maw={280}>
-                          {row.worksite.address ?? 'Sin direccion'}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Stack gap="xs">
-                          <Badge
-                            variant="light"
-                            color={row.worksite.active ? 'green' : 'gray'}
-                            style={{ minWidth: 74, justifyContent: 'center' }}
-                          >
-                            {row.worksite.active ? 'Activo' : 'Inactivo'}
-                          </Badge>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <TableRowActions
-                          actions={[
-                            {
-                              key: 'open',
-                              label: `Abrir ${row.worksite.name}`,
-                              icon: <IconExternalLink size={16} />,
-                              color: 'blue',
-                              href: `/transport/worksites/${row.id}`,
-                            },
-                            {
-                              key: 'edit',
-                              label: `Editar ${row.worksite.name}`,
-                              icon: <IconPencil size={16} />,
-                              onClick: () => openEdit(row),
-                            },
-                          ]}
-                        />
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-
-                {!loading && filteredWorksites.length === 0 && (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Stack align="center" gap="xs" py="lg">
-                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                          <IconBuildingEstate size={20} />
-                        </ThemeIcon>
-                        <Text fw={700}>{worksites.length ? 'No hay resultados' : 'No hay obras para mostrar'}</Text>
-                        <Text size="sm" c="dimmed">
-                          {worksites.length ? 'Ajusta o limpia los filtros.' : 'Registra una obra nueva.'}
-                        </Text>
-                      </Stack>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-
-                {loading && (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Text c="dimmed" ta="center">
-                        Cargando...
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          )}
+          <DataTableToolbar
+            title="Directorio de obras"
+            description={`${filteredWorksites.length} de ${worksites.length} obras visibles`}
+            mb="lg"
+            controlsStyle={{ flex: '1 1 620px', justifyContent: 'flex-end' }}
+          >
+            <TextInput
+              aria-label="Buscar obras"
+              placeholder="Buscar obra, cliente, alias o dirección"
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              leftSection={<IconSearch size={16} />}
+              w="100%"
+              flex={{ base: '1 1 100%', sm: '1 1 280px' }}
+            />
+            <Select
+              aria-label="Filtrar obras por cliente"
+              placeholder="Todos los clientes"
+              searchable
+              clearable
+              value={customerFilter}
+              onChange={setCustomerFilter}
+              data={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+              w="100%"
+              flex={{ base: '1 1 100%', sm: '1 1 210px' }}
+            />
+            <Select
+              aria-label="Filtrar obras por estado"
+              placeholder="Todos los estados"
+              clearable
+              value={statusFilter}
+              onChange={setStatusFilter}
+              data={[
+                { value: 'active', label: 'Activas' },
+                { value: 'inactive', label: 'Inactivas' },
+              ]}
+              w="100%"
+              flex={{ base: '1 1 100%', sm: '0 0 150px' }}
+            />
+            {hasActiveFilters ? (
+              <Button
+                variant="subtle"
+                color="gray"
+                leftSection={<IconX size={15} />}
+                onClick={clearFilters}
+              >
+                Limpiar
+              </Button>
+            ) : null}
+          </DataTableToolbar>
+          <EntityDataTable
+            rows={worksiteTable.rows}
+            columns={worksiteColumns}
+            getRowId={(row) => row.id}
+            loading={loading}
+            sort={worksiteTable.sort}
+            onSortChange={worksiteTable.onSortChange}
+            pagination={worksiteTable.pagination}
+            onPageSizeChange={worksiteTable.onPageSizeChange}
+            emptyState={{
+              title: worksites.length ? 'No hay resultados' : 'No hay obras registradas',
+              description: worksites.length
+                ? 'Ajusta o limpia los filtros para ver más obras.'
+                : 'Crea una obra para empezar.',
+              icon: <IconBuildingEstate size={20} />,
+            }}
+            actions={(row) => [
+              {
+                key: 'open',
+                label: `Abrir ${row.worksite.name}`,
+                icon: <IconExternalLink size={16} />,
+                color: 'blue',
+                href: `/transport/worksites/${row.id}`,
+              },
+              {
+                key: 'edit',
+                label: `Editar ${row.worksite.name}`,
+                icon: <IconPencil size={16} />,
+                onClick: () => openEdit(row),
+              },
+            ]}
+          />
         </Paper>
       </Stack>
 
@@ -830,8 +671,6 @@ export default function WorksitesPage() {
                   onChange={(value) => {
                     setForm((prev) => ({ ...prev, department: value, city: null }));
                     setCities([]);
-                    setAddressValidation(null);
-                    setAddressValidationError(null);
                     if (value) loadCities(value);
                   }}
                   searchable
@@ -844,11 +683,7 @@ export default function WorksitesPage() {
                   placeholder={form.department ? 'Opcional' : 'Selecciona departamento'}
                   data={cities}
                   value={form.city}
-                  onChange={(value) => {
-                    setForm((prev) => ({ ...prev, city: value }));
-                    setAddressValidation(null);
-                    setAddressValidationError(null);
-                  }}
+                  onChange={(value) => setForm((prev) => ({ ...prev, city: value }))}
                   searchable
                   clearable
                   disabled={!form.department || locationsLoading}
@@ -862,15 +697,12 @@ export default function WorksitesPage() {
                 </Alert>
               ) : null}
 
-              <TextInput
-                label="Dirección"
-                placeholder="Dirección o descripción de ubicación"
+              <WorksiteAddressField
                 value={form.address}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
+                department={selectedDepartmentName}
+                city={form.city}
+                onChange={(value) => {
                   setForm((prev) => ({ ...prev, address: value }));
-                  setAddressValidation(null);
-                  setAddressValidationError(null);
                 }}
               />
 
@@ -896,119 +728,6 @@ export default function WorksitesPage() {
                 />
               </SimpleGrid>
 
-              <Group justify="space-between" align="flex-start" gap="sm">
-                <Button
-                  variant="default"
-                  leftSection={<IconMapPin size={16} />}
-                  loading={addressValidationLoading}
-                  disabled={!form.address.trim()}
-                  onClick={validateAddressWithMaps}
-                >
-                  Revisar con Maps
-                </Button>
-                {addressValidation?.location ? (
-                  <Text size="xs" c="dimmed">
-                    {addressValidation.location.lat.toFixed(6)}, {addressValidation.location.lng.toFixed(6)}
-                  </Text>
-                ) : null}
-              </Group>
-
-              {addressValidationError ? (
-                <Alert color="yellow" variant="light" title="Maps no pudo normalizar la dirección">
-                  {addressValidationError}
-                </Alert>
-              ) : null}
-
-              {addressValidation ? (
-                <Alert
-                  color={addressValidation.verdict.hasUnconfirmedComponents ? 'yellow' : 'green'}
-                  variant="light"
-                  title={
-                    addressValidation.verdict.hasUnconfirmedComponents
-                      ? 'Maps encontró una sugerencia para confirmar'
-                      : 'Dirección normalizada por Maps'
-                  }
-                >
-                  <Stack gap="md">
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                      <div>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          Escrita
-                        </Text>
-                        <Text size="sm">{addressValidation.inputAddress}</Text>
-                        {addressValidation.context.city || addressValidation.context.department ? (
-                          <Text size="xs" c="dimmed" mt={4}>
-                            {[addressValidation.context.city, addressValidation.context.department, 'Colombia']
-                              .filter(Boolean)
-                              .join(', ')}
-                          </Text>
-                        ) : null}
-                      </div>
-                      <div>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          Sugerida por Maps
-                        </Text>
-                        <Text size="sm">{addressValidation.formattedAddress}</Text>
-                        {addressValidation.googleContext.city || addressValidation.googleContext.department ? (
-                          <Text size="xs" c="dimmed" mt={4}>
-                            {[addressValidation.googleContext.city, addressValidation.googleContext.department]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </Text>
-                        ) : null}
-                      </div>
-                    </SimpleGrid>
-
-                    <div
-                      style={{
-                        border: '1px solid var(--mantine-color-gray-3)',
-                        borderRadius: 8,
-                        height: 220,
-                        overflow: 'hidden',
-                        background: 'var(--mantine-color-gray-0)',
-                      }}
-                    >
-                      <iframe
-                        title="Vista previa de la ubicación"
-                        src={getGoogleMapsPreviewUrl(addressValidation)}
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        style={{ border: 0, width: '100%', height: '100%' }}
-                      />
-                    </div>
-
-                    <Group justify="flex-end">
-                      <Button
-                        size="xs"
-                        variant="default"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            address: addressValidation.inputAddress,
-                          }));
-                          setAddressValidation(null);
-                        }}
-                      >
-                        Conservar escrita
-                      </Button>
-                      <OpenInMapsButton href={getGoogleMapsSearchUrl(addressValidation)} />
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            address: addressValidation.formattedAddress,
-                          }));
-                          setAddressValidation(null);
-                        }}
-                      >
-                        Usar sugerida
-                      </Button>
-                    </Group>
-                  </Stack>
-                </Alert>
-              ) : null}
             </Stack>
           </Paper>
 

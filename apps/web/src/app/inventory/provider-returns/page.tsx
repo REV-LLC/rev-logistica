@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Checkbox, Container, FileInput, Group, NumberInput, Paper, ScrollArea, Stack, Table, Text, Textarea, Title } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Container, FileInput, Group, NumberInput, Paper, Stack, Text, Textarea, Title } from '@mantine/core';
 import { IconCamera, IconCheck, IconChevronRight, IconRefresh } from '@tabler/icons-react';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
 import { api, ApiError } from '@/lib/api';
 
 type PendingItem = {
@@ -21,6 +23,17 @@ type PendingItem = {
   serialOrEngine: string | null;
   description: string | null;
   pendingQuantity: number;
+};
+
+type ReturnGroup = {
+  key: string;
+  sourceDocumentId: string;
+  provider: PendingItem['providerWarehouse'];
+  consecutive: string | null;
+  docDate: string;
+  customer: string | null;
+  worksite: string | null;
+  items: PendingItem[];
 };
 
 const errorMessage = (error: unknown) => error instanceof ApiError ? `${error.status}: ${error.message}` : error instanceof Error ? error.message : 'No se pudo completar la entrega.';
@@ -53,7 +66,7 @@ export default function ProviderReturnsPage() {
   useEffect(() => { void load(); }, [load]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, { key: string; sourceDocumentId: string; provider: PendingItem['providerWarehouse']; consecutive: string | null; docDate: string; customer: string | null; worksite: string | null; items: PendingItem[] }>();
+    const map = new Map<string, ReturnGroup>();
     items.forEach((item) => {
       const key = `${item.sourceDocumentId}:${item.providerWarehouse.id}`;
       const group = map.get(key) ?? { key, sourceDocumentId: item.sourceDocumentId, provider: item.providerWarehouse, consecutive: item.consecutive, docDate: item.docDate, customer: item.customer, worksite: item.worksite, items: [] };
@@ -112,6 +125,80 @@ export default function ProviderReturnsPage() {
     }
   };
 
+  const groupColumns: DataTableColumn<ReturnGroup>[] = [
+    {
+      id: 'document',
+      header: 'Devolución',
+      width: '16%',
+      mobile: { priority: 'primary' },
+      cell: (group) => (
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Text fw={700}>{group.consecutive ?? 'Sin consecutivo'}</Text>
+            <Text size="xs" c="dimmed" mt={3}>{dateFormatter.format(new Date(group.docDate))}</Text>
+          </div>
+          <Badge hiddenFrom="md" color={group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'blue' : 'yellow'} variant="light">
+            {group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'En bodega REV' : 'En transición'}
+          </Badge>
+        </Group>
+      ),
+    },
+    {
+      id: 'customer',
+      header: 'Cliente / obra',
+      width: '24%',
+      mobile: { label: 'Cliente / obra', priority: 'detail' },
+      cell: (group) => (
+        <div>
+          <Text size="sm" fw={500}>{group.customer ?? 'Cliente'}</Text>
+          <Text size="xs" c="dimmed">{group.worksite ?? 'Sin obra'}</Text>
+        </div>
+      ),
+    },
+    {
+      id: 'provider',
+      header: 'Proveedor',
+      width: '20%',
+      mobile: { label: 'Proveedor', priority: 'detail' },
+      cell: (group) => <Text size="sm" fw={600}>{group.provider.name}</Text>,
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      width: '16%',
+      mobile: false,
+      cell: (group) => {
+        const inRevWarehouse = group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE');
+        return <Badge color={inRevWarehouse ? 'blue' : 'yellow'} variant="light">{inRevWarehouse ? 'En bodega REV' : 'En transición'}</Badge>;
+      },
+    },
+    {
+      id: 'items',
+      header: 'Ítems',
+      align: 'center',
+      width: '8%',
+      mobile: { label: 'Ítems', priority: 'detail' },
+      cell: (group) => group.items.length,
+    },
+    {
+      id: 'process',
+      header: 'Acción',
+      align: 'right',
+      width: '16%',
+      mobile: { priority: 'primary' },
+      cell: (group) => (
+        <Button
+          size="xs"
+          variant={activeGroupKey === group.key ? 'filled' : 'light'}
+          rightSection={<IconChevronRight size={14} />}
+          onClick={() => setActiveGroupKey(group.key)}
+        >
+          {activeGroupKey === group.key ? 'Seleccionada' : 'Procesar'}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <Container size="md" py="lg">
       <Group justify="space-between" mb="lg">
@@ -120,38 +207,21 @@ export default function ProviderReturnsPage() {
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
       {message && <Alert color="green" mb="md">{message}</Alert>}
-      {!loading && !error && !groups.length && <Paper withBorder p="xl"><Text ta="center" c="dimmed">No tienes devoluciones pendientes de entregar a proveedores.</Text></Paper>}
-      {!!groups.length && <Paper withBorder radius="md" mb="lg" style={{ overflow: 'hidden' }}>
-        <ScrollArea>
-          <Table highlightOnHover verticalSpacing="sm" miw={760}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>DV</Table.Th>
-                <Table.Th>Fecha</Table.Th>
-                <Table.Th>Cliente / obra</Table.Th>
-                <Table.Th>Proveedor</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th ta="right">Ítems</Table.Th>
-                <Table.Th ta="right">Acción</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {groups.map((group) => {
-                const inRevWarehouse = group.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE');
-                return <Table.Tr key={group.key} bg={activeGroupKey === group.key ? 'var(--mantine-color-blue-light)' : undefined}>
-                  <Table.Td><Text fw={700}>{group.consecutive ?? 'Sin consecutivo'}</Text></Table.Td>
-                  <Table.Td><Text size="sm">{dateFormatter.format(new Date(group.docDate))}</Text></Table.Td>
-                  <Table.Td><Text size="sm" fw={500}>{group.customer ?? 'Cliente'}</Text><Text size="xs" c="dimmed">{group.worksite ?? 'Sin obra'}</Text></Table.Td>
-                  <Table.Td><Text size="sm" fw={600}>{group.provider.name}</Text></Table.Td>
-                  <Table.Td><Badge color={inRevWarehouse ? 'blue' : 'yellow'} variant="light">{inRevWarehouse ? 'En bodega REV' : 'En transición'}</Badge></Table.Td>
-                  <Table.Td ta="right">{group.items.length}</Table.Td>
-                  <Table.Td ta="right"><Button size="xs" variant={activeGroupKey === group.key ? 'filled' : 'light'} rightSection={<IconChevronRight size={14} />} onClick={() => setActiveGroupKey(group.key)}>{activeGroupKey === group.key ? 'Seleccionada' : 'Procesar'}</Button></Table.Td>
-                </Table.Tr>;
-              })}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Paper>}
+      {!error ? (
+        <Paper withBorder radius="md" mb="lg" p={{ base: 'sm', md: 'md' }}>
+          <EntityDataTable
+            rows={groups}
+            columns={groupColumns}
+            getRowId={(group) => group.key}
+            loading={loading}
+            tableMinWidth={760}
+            emptyState={{
+              title: 'No hay devoluciones pendientes',
+              description: 'Las entregas pendientes a proveedores aparecerán aquí.',
+            }}
+          />
+        </Paper>
+      ) : null}
       {activeGroup && <Paper withBorder radius="md" p="md">
             <Group justify="space-between" align="flex-start" mb="md">
               <div><Group gap="xs"><Title order={3}>{activeGroup.consecutive ?? 'DV sin consecutivo'}</Title><Badge color={activeGroup.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'blue' : 'yellow'}>{activeGroup.items.some((item) => item.logisticsStatus === 'IN_REV_WAREHOUSE') ? 'En bodega REV' : 'En transición'}</Badge></Group><Text size="sm">{activeGroup.customer ?? 'Cliente'} · {activeGroup.worksite ?? 'Obra'}</Text>{activeGroup.items[0]?.custodyWarehouse ? <Text size="xs" c="dimmed">Custodia actual: {activeGroup.items[0].custodyWarehouse.name}</Text> : null}</div>

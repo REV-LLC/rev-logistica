@@ -34,6 +34,7 @@ export class MaintenanceService {
       orderBy: [{ warehouseOwner: { name: 'asc' } }, { publicCode: 'asc' }],
       select: {
         id: true,
+        internalNumber: true,
         publicCode: true,
         serialOrEngine: true,
         description: true,

@@ -9,6 +9,8 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
+  AssetKind,
+  AssetMotorConfiguration,
   ChargeType,
   DocumentType,
   MovementType,
@@ -77,6 +79,92 @@ export class InventoryService {
       keys.push(this.getOnSiteCacheKey(params.customerWorksiteId));
     }
     await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  }
+
+  private async createMotorAsset(
+    input: NonNullable<CreateSerializedAssetDto['newMotor']>,
+    ownerWarehouseId: string,
+    warehouseCurrentId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const family = await this.resolveAssetFamily(
+      { code: 'MOTORES', name: 'MOTORES' },
+      SkuControlType.SERIAL,
+      tx,
+    );
+    const fuelLabel = input.fuel === 'ELECTRICO' ? 'ELÉCTRICO' : 'GASOLINA';
+    const subfamily = await this.resolveAssetSubfamily(
+      { code: `MOTOR_${input.fuel}`, name: `MOTOR ${fuelLabel}` },
+      family.id,
+      tx,
+    );
+    const reference = [input.brand?.trim(), input.model?.trim()].filter(Boolean).join(' ')
+      || `MOTOR ${fuelLabel}`;
+    const sku = await this.resolveSku(
+      { name: reference, chargeType: ChargeType.DAY },
+      family.id,
+      tx,
+      subfamily.id,
+    );
+    const counter = await tx.assetInternalCounter.upsert({
+      where: {
+        ownerWarehouseId_assetSubfamilyId: {
+          ownerWarehouseId,
+          assetSubfamilyId: subfamily.id,
+        },
+      },
+      create: {
+        ownerWarehouseId,
+        assetSubfamilyId: subfamily.id,
+        nextNumber: 2,
+      },
+      update: { nextNumber: { increment: 1 } },
+      select: { nextNumber: true },
+    });
+    const internalNumber = counter.nextNumber - 1;
+    const motor = await tx.asset.create({
+      data: {
+        skuId: sku.id,
+        publicCode: this.buildAssetPublicCode(
+          family.code,
+          subfamily.code,
+          ownerWarehouseId,
+          internalNumber,
+        ),
+        internalNumber,
+        serialOrEngine: input.serialOrEngine?.trim() || null,
+        description: reference,
+        brand: input.brand?.trim() || null,
+        model: input.model?.trim() || null,
+        year: input.year ?? null,
+        fuel: input.fuel,
+        kind: AssetKind.MOTOR,
+        warehouseOwnerId: ownerWarehouseId,
+        warehouseCurrentId,
+        active: true,
+      },
+      select: {
+        id: true,
+        internalNumber: true,
+        skuId: true,
+        warehouseOwnerId: true,
+        warehouseCurrentId: true,
+      },
+    });
+    await tx.stockLedger.create({
+      data: {
+        movementType: MovementType.ADJUST,
+        warehouseId: warehouseCurrentId,
+        ownerWarehouseId,
+        customerWorksiteId: null,
+        skuId: null,
+        assetId: motor.id,
+        quantity: 1,
+        createdBy: userId,
+      },
+    });
+    return motor;
   }
 
   private async assertDocumentExists(
@@ -324,6 +412,57 @@ export class InventoryService {
         throw new NotFoundException('Current warehouse not found');
       }
 
+      const motorConfiguration =
+        payload.asset.motorConfiguration ?? AssetMotorConfiguration.NONE;
+      if (
+        motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE
+        && (payload.asset.assignedMotorId || payload.newMotor)
+      ) {
+        throw new BadRequestException(
+          'Solo los equipos con motor intercambiable pueden tener un motor asociado',
+        );
+      }
+      if (payload.asset.assignedMotorId && payload.newMotor) {
+        throw new BadRequestException(
+          'Selecciona un motor existente o crea uno nuevo, no ambos',
+        );
+      }
+
+      let assignedMotorId = payload.asset.assignedMotorId ?? null;
+      let createdMotor: {
+        id: string;
+        internalNumber: number;
+        skuId: string;
+        warehouseOwnerId: string;
+        warehouseCurrentId: string | null;
+      } | null = null;
+      if (assignedMotorId) {
+        const motor = await tx.asset.findFirst({
+          where: {
+            id: assignedMotorId,
+            kind: AssetKind.MOTOR,
+            active: true,
+            warehouseCurrentId: payload.warehouseCurrentId,
+            assignedToMixer: null,
+          },
+          select: { id: true },
+        });
+        if (!motor) {
+          throw new BadRequestException(
+            'El motor seleccionado no está disponible en la bodega actual',
+          );
+        }
+      } else if (payload.newMotor) {
+        createdMotor = await this.createMotorAsset(
+          payload.newMotor,
+          payload.ownerWarehouseId,
+          payload.warehouseCurrentId,
+          userId,
+          tx,
+        );
+        assignedMotorId = createdMotor.id;
+      }
+
       const serialOrEngine = payload.asset.serialOrEngine?.trim();
 
       const requestedInternalNumber =
@@ -416,6 +555,8 @@ export class InventoryService {
           warehouseOwnerId: payload.ownerWarehouseId,
           warehouseCurrentId: payload.warehouseCurrentId,
           active: payload.asset.active ?? true,
+          motorConfiguration,
+          assignedMotorId,
         },
         select: {
           id: true,
@@ -451,7 +592,7 @@ export class InventoryService {
         });
       }
 
-      return { asset, ledger, providerPrice };
+      return { asset, ledger, providerPrice, motor: createdMotor };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -1456,7 +1597,7 @@ export class InventoryService {
 
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id: warehouseId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!warehouse) {
@@ -1629,17 +1770,49 @@ export class InventoryService {
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
     const serialStatusByAssetId = new Map<string, MovementType>();
+    const serialLocationByAssetId = new Map<
+      string,
+      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT'; name: string | null }
+    >();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        select: { assetId: true, movementType: true },
+        select: {
+          assetId: true,
+          movementType: true,
+          warehouse: { select: { name: true } },
+          customerWorksite: {
+            select: {
+              alias: true,
+              worksite: { select: { name: true } },
+            },
+          },
+        },
       });
       serialLedgerRows.forEach((row) => {
         if (!row.assetId) return;
         const key = row.assetId.toLowerCase();
         if (!serialStatusByAssetId.has(key)) {
           serialStatusByAssetId.set(key, row.movementType);
+          const worksiteName =
+            row.customerWorksite?.alias?.trim()
+            || row.customerWorksite?.worksite.name
+            || null;
+          if (
+            (row.movementType === MovementType.ON_SITE
+              || row.movementType === MovementType.OUT)
+            && worksiteName
+          ) {
+            serialLocationByAssetId.set(key, { type: 'WORKSITE', name: worksiteName });
+          } else if (
+            (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+            && row.warehouse?.name
+          ) {
+            serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse.name });
+          } else {
+            serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
+          }
         }
       });
     }
@@ -1659,6 +1832,10 @@ export class InventoryService {
             imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
+            kind: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -1775,7 +1952,17 @@ export class InventoryService {
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          location:
+            serialLocationByAssetId.get(row.assetId)
+            ?? (row.quantity > 0
+              ? { type: 'WAREHOUSE' as const, name: warehouse.name }
+              : { type: 'TRANSIT' as const, name: null }),
           internalNumber: asset?.internalNumber ?? null,
+          kind: asset?.kind ?? AssetKind.STANDARD,
+          motorConfiguration:
+            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
+          assignedMotorId: asset?.assignedMotorId ?? null,
+          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ?? null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId },
@@ -1924,6 +2111,10 @@ export class InventoryService {
             imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
+            kind: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -2028,6 +2219,11 @@ export class InventoryService {
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
+          kind: asset?.kind ?? AssetKind.STANDARD,
+          motorConfiguration:
+            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
+          assignedMotorId: asset?.assignedMotorId ?? null,
+          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ? { code: sku.assetFamily.code, name: sku.assetFamily.name } : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },

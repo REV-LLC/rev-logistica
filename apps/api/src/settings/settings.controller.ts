@@ -13,6 +13,12 @@ import { SettingsService } from './settings.service';
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
+  @Get('branding')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  async branding() {
+    return { serviceName: await this.settings.get<string>('branding.service_name') };
+  }
+
   @Get()
   list(@Query('category') category?: string) { return this.settings.list(category); }
 

@@ -4,9 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
-  Box,
   Button,
-  Center,
   Container,
   Group,
   Modal,
@@ -18,9 +16,10 @@ import {
   ThemeIcon,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconGauge, IconHistory, IconPhotoOff, IconSearch } from '@tabler/icons-react';
+import { IconGauge, IconHistory, IconSearch } from '@tabler/icons-react';
 import HourReadingHistory from '@/components/maintenance/HourReadingHistory';
 import RecordHoursModal from '@/components/maintenance/RecordHoursModal';
+import SerialAssetCard from '@/components/SerialAssetCard';
 import { api } from '@/lib/api';
 import {
   apiErrorMessage,
@@ -30,6 +29,7 @@ import {
 
 type OperatorAsset = {
   id: string;
+  internalNumber: number;
   publicCode: string;
   serialOrEngine: string;
   description?: string | null;
@@ -45,6 +45,7 @@ type OperatorAsset = {
 const searchValue = (asset: OperatorAsset) =>
   [
     asset.publicCode,
+    asset.internalNumber,
     asset.serialOrEngine,
     asset.description,
     asset.brand,
@@ -61,28 +62,6 @@ const assetDisplayName = (asset: OperatorAsset) =>
   asset.sku?.name?.trim() ||
   [asset.brand, asset.model].filter(Boolean).join(' ') ||
   'Equipo serializado';
-
-function OperatorAssetImage({ src, alt }: { src?: string | null; alt: string }) {
-  const [broken, setBroken] = useState(false);
-
-  if (!src || broken) {
-    return (
-      <Center className="hour-meter-asset-image hour-meter-asset-image--empty">
-        <Stack align="center" gap={4}>
-          <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
-          <Text size="xs" c="dimmed">Sin foto</Text>
-        </Stack>
-      </Center>
-    );
-  }
-
-  return (
-    <Box className="hour-meter-asset-image">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} onError={() => setBroken(true)} />
-    </Box>
-  );
-}
 
 export default function HourMeterPage() {
   const isMobile = useMediaQuery('(max-width: 48em)');
@@ -187,26 +166,25 @@ export default function HourMeterPage() {
         ) : visibleAssets.length ? (
           <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
             {visibleAssets.map((asset) => (
-              <Paper key={asset.id} withBorder radius="xl" p="lg">
-                <Stack gap="md">
-                  <OperatorAssetImage
-                    key={asset.imageUrl ?? 'no-image'}
-                    src={asset.imageUrl}
-                    alt={`Foto de ${assetDisplayName(asset)}`}
-                  />
-                  <Group justify="space-between" align="flex-start" wrap="nowrap">
-                    <div>
-                      <Text fw={900}>{assetDisplayName(asset)}</Text>
-                      <Text size="sm" c="dimmed">{asset.publicCode}</Text>
-                    </div>
-                    <Badge color="blue" variant="light">{asset.currentHourMeter} h</Badge>
-                  </Group>
-                  <Stack gap={4}>
-                    <Text size="xs" c="dimmed">Serial / motor</Text>
-                    <Text size="sm" fw={600}>{asset.serialOrEngine}</Text>
-                  </Stack>
-                  <Group grow gap="xs">
+              <SerialAssetCard
+                key={asset.id}
+                item={{
+                  assetId: asset.id,
+                  internalNumber: asset.internalNumber,
+                  serialOrEngine: asset.serialOrEngine,
+                  description: asset.description,
+                  skuName: asset.sku?.name,
+                  brand: asset.brand,
+                  model: asset.model,
+                  imageUrl: asset.imageUrl,
+                }}
+                display={{ showOwnerChip: false, showSerial: false, showCharge: false }}
+                compact
+                statusBadge={{ label: `${asset.currentHourMeter} h`, color: 'blue' }}
+                footer={
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
                     <Button
+                      fullWidth
                       leftSection={<IconGauge size={17} />}
                       aria-label={`Registrar horas de ${assetDisplayName(asset)}`}
                       onClick={() => setSelected(asset)}
@@ -214,6 +192,7 @@ export default function HourMeterPage() {
                       Registrar
                     </Button>
                     <Button
+                      fullWidth
                       variant="default"
                       leftSection={<IconHistory size={17} />}
                       aria-label={`Ver historial de ${assetDisplayName(asset)}`}
@@ -221,9 +200,9 @@ export default function HourMeterPage() {
                     >
                       Ver historial
                     </Button>
-                  </Group>
-                </Stack>
-              </Paper>
+                  </SimpleGrid>
+                }
+              />
             ))}
           </SimpleGrid>
         ) : (

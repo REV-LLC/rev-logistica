@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -37,6 +37,7 @@ import {
   IconPlus,
   IconSearch,
   IconUpload,
+  IconX,
 } from '@tabler/icons-react';
 import { setToken } from '@/lib/auth';
 import OwnerCreateModal, {
@@ -69,8 +70,27 @@ interface InventoryResponse {
   }[];
   serial: {
     assetId: string;
+    skuId?: string | null;
+    ownerWarehouseId?: string | null;
+    ownerWarehouseName?: string | null;
     serialOrEngine: string | null;
     description: string | null;
+    skuName?: string | null;
+    brand?: string | null;
+    model?: string | null;
+    chargeType?: 'DAY' | 'HOUR' | string | null;
+    minimumChargeHours?: number | string | null;
+    status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
+    location?: {
+      type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT';
+      name: string | null;
+    } | null;
+    internalNumber?: string | number | null;
+    assetFamily?: {
+      id?: string | null;
+      code?: string | null;
+      name?: string | null;
+    } | null;
     imageUrl?: string | null;
     imageFileObjectId: string | null;
     quantity: number;
@@ -102,6 +122,14 @@ type WarehouseStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 const MAX_OWNER_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
 const OWNER_LOGO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+
+function normalizeInventorySearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es');
+}
 
 function WarehouseIdentityMark({
   logoUrl,
@@ -190,6 +218,8 @@ export default function WarehouseInventoryPageClient({
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustResult, setAdjustResult] = useState<string | null>(null);
   const [adjustSearch, setAdjustSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+  const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
   const [warehousesError, setWarehousesError] = useState<string | null>(null);
@@ -763,6 +793,44 @@ export default function WarehouseInventoryPageClient({
       })
     : [];
 
+  const filteredSerialInventory = useMemo(() => {
+    const items = data?.serial ?? [];
+    const query = normalizeInventorySearch(deferredInventorySearch);
+    if (!query) return items;
+
+    return items.filter((item) =>
+      normalizeInventorySearch(
+        [
+          item.assetFamily?.name,
+          item.assetFamily?.code,
+          item.description,
+          item.skuName,
+          item.serialOrEngine,
+          item.brand,
+          item.model,
+          item.internalNumber,
+          item.skuId,
+        ]
+          .filter((value) => value != null && String(value).trim())
+          .join(' '),
+      ).includes(query),
+    );
+  }, [data, deferredInventorySearch]);
+  const filteredBulkInventory = useMemo(() => {
+    const items = data?.bulk ?? [];
+    const query = normalizeInventorySearch(deferredInventorySearch);
+    if (!query) return items;
+
+    return items.filter((item) =>
+      normalizeInventorySearch([item.skuName, item.skuId].filter(Boolean).join(' ')).includes(query),
+    );
+  }, [data, deferredInventorySearch]);
+  const showOwnInventorySearch = isOwnInventory;
+  const filteredInventoryCount =
+    inventoryView === 'BULK' ? filteredBulkInventory.length : filteredSerialInventory.length;
+  const totalInventoryCount = inventoryView === 'BULK' ? (data?.bulk.length ?? 0) : (data?.serial.length ?? 0);
+  const inventoryItemLabel = inventoryView === 'BULK' ? 'referencias' : 'equipos';
+
   const warehouseCards = useMemo(
     () =>
       warehouses.map((warehouse) => {
@@ -1212,7 +1280,7 @@ export default function WarehouseInventoryPageClient({
               <Group justify="space-between" align="center" wrap="wrap">
                 <div>
                   <Text fw={700}>
-                    {inventoryView === 'BULK' ? 'Materiales propios' : 'Equipos propios'}
+                    {inventoryView === 'BULK' ? 'Bulk propio' : 'Equipos propios'}
                   </Text>
                   <Text size="sm" c="dimmed">
                     {warehouses[0]
@@ -1244,9 +1312,62 @@ export default function WarehouseInventoryPageClient({
                       : 'Stock masivo y equipos únicos de la bodega seleccionada.'}
                   </Text>
                 </div>
+                {showOwnInventorySearch ? (
+                  <Stack gap={6}>
+                    <TextInput
+                      type="search"
+                      aria-label={inventoryView === 'BULK' ? 'Buscar inventario bulk' : 'Buscar equipos propios'}
+                      placeholder={
+                        inventoryView === 'BULK'
+                          ? 'Buscar por referencia o nombre'
+                          : 'Buscar por equipo, familia, serial o número interno'
+                      }
+                      leftSection={<IconSearch size={18} />}
+                      rightSection={
+                        inventorySearch ? (
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="sm"
+                            aria-label="Limpiar búsqueda de inventario"
+                            onClick={() => setInventorySearch('')}
+                          >
+                            <IconX size={16} />
+                          </ActionIcon>
+                        ) : null
+                      }
+                      value={inventorySearch}
+                      onChange={(event) => setInventorySearch(event.currentTarget.value)}
+                    />
+                    <Text size="sm" c="dimmed">
+                      {inventorySearch.trim()
+                        ? `${filteredInventoryCount} de ${totalInventoryCount} ${inventoryItemLabel}`
+                        : `${totalInventoryCount} ${inventoryItemLabel}`}
+                    </Text>
+                  </Stack>
+                ) : null}
+                {showOwnInventorySearch &&
+                inventorySearch.trim() &&
+                filteredInventoryCount === 0 ? (
+                  <Paper withBorder radius="md" p="xl">
+                    <Stack align="center" gap={6}>
+                      <Text fw={700}>
+                        {inventoryView === 'BULK' ? 'No encontramos referencias bulk' : 'No encontramos equipos'}
+                      </Text>
+                      <Text size="sm" c="dimmed" ta="center">
+                        {inventoryView === 'BULK'
+                          ? 'Prueba con otro nombre o referencia.'
+                          : 'Prueba con otra familia, referencia, serial o número interno.'}
+                      </Text>
+                      <Button variant="subtle" size="compact-sm" onClick={() => setInventorySearch('')}>
+                        Limpiar búsqueda
+                      </Button>
+                    </Stack>
+                  </Paper>
+                ) : (
                 <InventoryDisplay
-                  bulk={data.bulk}
-                  serial={data.serial}
+                  bulk={showOwnInventorySearch ? filteredBulkInventory : data.bulk}
+                  serial={showOwnInventorySearch ? filteredSerialInventory : data.serial}
                   onAdjust={openAdjust}
                   onAddStock={openAddStock}
                   onDeleteSerialAsset={deleteSerialAsset}
@@ -1255,6 +1376,7 @@ export default function WarehouseInventoryPageClient({
                   compactSerialCards={isOwnInventory && inventoryView === 'SERIAL'}
                   showWorksiteQuantities={!isOwnInventory}
                 />
+                )}
               </Stack>
             </Paper>
           ) : null}
