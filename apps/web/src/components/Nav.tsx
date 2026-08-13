@@ -471,6 +471,15 @@ export default function Nav({ onNavigate }: NavProps) {
           : currentRole === "OPERATOR"
             ? "orange"
             : "gray";
+  const userDisplayName =
+    currentSession?.name?.trim() ||
+    [currentSession?.firstName, currentSession?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    currentSession?.email ||
+    null;
+  const serviceDisplayName = serviceName.trim().toUpperCase();
 
   const handleLogout = () => {
     clearToken();
@@ -711,14 +720,14 @@ export default function Nav({ onNavigate }: NavProps) {
           >
             {currentRole ?? "SIN ROL"}
           </Badge>
-          {currentSession?.email ? (
+          {userDisplayName ? (
             <>
               <Text
                 size="10px"
                 c="dimmed"
                 ta="right"
                 lh={1.2}
-                title={currentSession.email}
+                title={userDisplayName}
                 w="100%"
                 style={{
                   overflow: "hidden",
@@ -726,7 +735,7 @@ export default function Nav({ onNavigate }: NavProps) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {currentSession.email}
+                {userDisplayName}
               </Text>
               <Text
                 size="10px"
@@ -734,7 +743,7 @@ export default function Nav({ onNavigate }: NavProps) {
                 c="dimmed"
                 ta="right"
                 lh={1.1}
-                title={serviceName}
+                title={serviceDisplayName}
                 w="100%"
                 style={{
                   overflow: "hidden",
@@ -742,7 +751,7 @@ export default function Nav({ onNavigate }: NavProps) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {serviceName}
+                {serviceDisplayName}
               </Text>
             </>
           ) : null}
