@@ -37,6 +37,7 @@ import {
   IconFilePlus,
   IconFileCertificate,
   IconGauge,
+  IconGasStation,
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
@@ -131,6 +132,12 @@ const sections: NavSection[] = [
         label: "Obras",
         icon: IconMap2,
         roles: ["DRIVER"],
+      },
+      {
+        href: "/fuel",
+        label: "Combustible",
+        icon: IconGasStation,
+        roles: ["ADMIN", "DRIVER", "OPERATOR"],
       },
       {
         href: "/notifications/deliveries",

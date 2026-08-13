@@ -10,6 +10,11 @@ import Nav from "@/components/Nav";
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
     {
+      prefix: "/fuel",
+      title: "Combustible",
+      subtitle: "Consumo operativo",
+    },
+    {
       prefix: "/transport/requests",
       title: "Solicitudes",
       subtitle: "Operacion diaria",

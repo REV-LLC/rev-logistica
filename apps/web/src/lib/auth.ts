@@ -95,7 +95,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/mobility-guides',
     '/inventory/provider-returns',
   ],
-  OPERATOR: ['/inventory/hour-meter'],
+  OPERATOR: ['/inventory/hour-meter', '/fuel'],
 };
 
 function isPathWithinPrefix(pathname: string, prefix: string) {
