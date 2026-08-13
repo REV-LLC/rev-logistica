@@ -1565,7 +1565,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           bulkKey,
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
-          quantity: 1,
+          quantity: sourceMode === 'on-site' ? item.quantity : 1,
           availableQuantity: item.quantity,
           ownerWarehouseId: item.ownerWarehouseId
         }

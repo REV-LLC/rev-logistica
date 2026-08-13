@@ -134,16 +134,31 @@ export default function RecordHoursModal({
                   </Text>
                 </div>
               </Group>
-              <FileButton
-                onChange={setEvidence}
-                accept="image/png,image/jpeg,image/webp"
-              >
-                {(props) => (
-                  <Button {...props} variant="light" leftSection={<IconCamera size={16} />}>
-                    {evidence ? 'Cambiar' : 'Adjuntar'}
-                  </Button>
-                )}
-              </FileButton>
+              <Group gap="xs" justify="flex-end">
+                <FileButton
+                  onChange={setEvidence}
+                  accept="image/*"
+                  capture="environment"
+                  inputProps={{ 'aria-label': 'Tomar foto de evidencia' }}
+                >
+                  {(props) => (
+                    <Button {...props} variant="filled" leftSection={<IconCamera size={16} />}>
+                      Tomar foto
+                    </Button>
+                  )}
+                </FileButton>
+                <FileButton
+                  onChange={setEvidence}
+                  accept="image/*"
+                  inputProps={{ 'aria-label': 'Elegir evidencia desde archivos' }}
+                >
+                  {(props) => (
+                    <Button {...props} variant="light" leftSection={<IconPhoto size={16} />}>
+                      Elegir archivo
+                    </Button>
+                  )}
+                </FileButton>
+              </Group>
             </Group>
           </Paper>
         ) : null}

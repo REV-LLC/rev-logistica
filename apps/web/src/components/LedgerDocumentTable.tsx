@@ -81,11 +81,6 @@ function getItemName(item: LedgerItem) {
   return skuName;
 }
 
-function getItemSecondaryLabel(item: LedgerItem) {
-  if (item.assetId) return item.asset?.serialOrEngine ?? item.assetId;
-  return null;
-}
-
 function getLocation(item: LedgerItem) {
   if (item.warehouse) return item.warehouse.name;
   if (item.customerWorksite) {
@@ -122,7 +117,6 @@ function getLocationSummary(group: LedgerDocumentGroup) {
 
 function ItemLink({ item }: { item: LedgerItem }) {
   const name = getItemName(item);
-  const secondaryLabel = getItemSecondaryLabel(item);
   const href = item.assetId
     ? `/inventory/ledger/asset/${item.assetId}`
     : item.skuId
@@ -140,11 +134,6 @@ function ItemLink({ item }: { item: LedgerItem }) {
           {name}
         </Text>
       )}
-      {secondaryLabel ? (
-        <Text size="xs" c="dimmed">
-          {secondaryLabel}
-        </Text>
-      ) : null}
     </div>
   );
 }

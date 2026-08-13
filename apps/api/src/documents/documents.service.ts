@@ -1428,14 +1428,26 @@ export class DocumentsService {
         },
         items: {
           include: {
-            sku: { select: { id: true, name: true } },
+            sku: {
+              select: {
+                id: true,
+                name: true,
+                assetFamily: { select: { id: true, name: true } },
+              },
+            },
             asset: {
               select: {
                 id: true,
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
-                sku: { select: { id: true, name: true } },
+                sku: {
+                  select: {
+                    id: true,
+                    name: true,
+                    assetFamily: { select: { id: true, name: true } },
+                  },
+                },
               },
             },
           },
@@ -1443,14 +1455,26 @@ export class DocumentsService {
         },
         ledger: {
           include: {
-            sku: { select: { id: true, name: true } },
+            sku: {
+              select: {
+                id: true,
+                name: true,
+                assetFamily: { select: { id: true, name: true } },
+              },
+            },
             asset: {
               select: {
                 id: true,
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
-                sku: { select: { id: true, name: true } },
+                sku: {
+                  select: {
+                    id: true,
+                    name: true,
+                    assetFamily: { select: { id: true, name: true } },
+                  },
+                },
               },
             },
             ownerWarehouse: {
