@@ -29,6 +29,17 @@ enum ChargeType {
   HOUR
 }
 
+enum AssetKind {
+  STANDARD
+  MOTOR
+}
+
+enum AssetMotorConfiguration {
+  NONE
+  FIXED
+  INTERCHANGEABLE
+}
+
 enum EmployeeRole {
   DRIVER
   HEAVY_MACHINERY_OPERATOR
@@ -217,10 +228,10 @@ model Customer {
   documentsEmail        String?
   documentsPhone        String?
   contactDirectory      Json?
-  updateToken            String?                        @unique
-  updateTokenExpiresAt   DateTime?
-  contactUpdatedAt       DateTime?
-  contactUpdatedBy       String?
+  updateToken           String?                       @unique
+  updateTokenExpiresAt  DateTime?
+  contactUpdatedAt      DateTime?
+  contactUpdatedBy      String?
   billingAddress        String?
   billingPhone          String?
   billingAlternatePhone String?
@@ -404,11 +415,11 @@ model CatalogOption {
 }
 
 model Asset {
-  id                 String   @id @default(uuid())
+  id                 String                  @id @default(uuid())
   skuId              String
-  publicCode         String   @unique
-  serialOrEngine     String?  @unique
-  registrationNumber String?  @unique
+  publicCode         String                  @unique
+  serialOrEngine     String?                 @unique
+  registrationNumber String?                 @unique
   description        String?
   brand              String?
   model              String?
@@ -417,16 +428,21 @@ model Asset {
   imageFileObjectId  String?
   internalNumber     Int
   weight             Decimal?
-  hourMeter          Decimal  @default(0) @db.Decimal(12, 2)
+  hourMeter          Decimal                 @default(0) @db.Decimal(12, 2)
   warehouseOwnerId   String
   warehouseCurrentId String?
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  active             Boolean                 @default(true)
+  kind               AssetKind               @default(STANDARD)
+  motorConfiguration AssetMotorConfiguration @default(NONE)
+  assignedMotorId    String?                 @unique
+  createdAt          DateTime                @default(now())
 
   sku              Sku         @relation(fields: [skuId], references: [id])
   warehouseOwner   Warehouse   @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
+  assignedMotor    Asset?      @relation("MixerAssignedMotor", fields: [assignedMotorId], references: [id], onDelete: SetNull)
+  assignedToMixer  Asset?      @relation("MixerAssignedMotor")
 
   documentItems        DocumentItem[]
   ledger               StockLedger[]

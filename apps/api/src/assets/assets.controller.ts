@@ -20,6 +20,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
+import { AssignAssetMotorDto } from './dto/assign-asset-motor.dto';
 import { AssetsService } from './assets.service';
 
 interface JwtPayload {
@@ -92,6 +93,22 @@ export class AssetsController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.assetsService.updateAsset(assetId, payload, request.user.sub);
+  }
+
+  @Patch(':assetId/assigned-motor')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  assignMotor(
+    @Param('assetId', new ParseUUIDPipe()) assetId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: AssignAssetMotorDto,
+  ) {
+    return this.assetsService.assignMotor(assetId, payload.motorId);
   }
 
   @Get(':assetId')

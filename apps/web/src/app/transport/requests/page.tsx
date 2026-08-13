@@ -49,6 +49,7 @@ import InventoryItemPickerModal, {
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
@@ -96,6 +97,7 @@ type SelectedItem = {
   ownerWarehouseId?: string | null;
   isDamaged?: boolean;
   damageDescription?: string;
+  associatedMixerId?: string;
 };
 
 type EvidencePhotoDraft = {
@@ -170,6 +172,9 @@ type RequestDocumentDetail = {
       id: string;
       serialOrEngine?: string | null;
       description?: string | null;
+      kind?: 'STANDARD' | 'MOTOR' | string | null;
+      assignedMotorId?: string | null;
+      assignedToMixer?: { id: string } | null;
       sku?: { id: string; name: string } | null;
     } | null;
   }>;
@@ -571,6 +576,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
+  const [pendingMixerQueue, setPendingMixerQueue] = useState<InventorySerial[]>([]);
+  const [assigningMotor, setAssigningMotor] = useState(false);
+  const [assignMotorError, setAssignMotorError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -684,6 +692,24 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     () => serialItems.filter((item) => !selectedSerialIds.has(item.assetId)),
     [serialItems, selectedSerialIds],
   );
+  const pickerSerialItems = useMemo(
+    () =>
+      docType === 'REMISSION'
+        ? availableSerialItems.filter((item) => item.kind !== 'MOTOR')
+        : availableSerialItems,
+    [availableSerialItems, docType],
+  );
+  const activePendingMixer = pendingMixerQueue[0] ?? null;
+  const availableMotorsForMixer = useMemo(() => {
+    if (!activePendingMixer) return [];
+    return serialItems.filter(
+      (item) =>
+        item.kind === 'MOTOR'
+        && item.quantity > 0
+        && (!item.assignedMixerId || item.assignedMixerId === activePendingMixer.assetId)
+        && !selectedSerialIds.has(item.assetId),
+    );
+  }, [activePendingMixer, selectedSerialIds, serialItems]);
   const onSiteItemOptions = useMemo(
     () => [
       ...availableSerialItems.map((item) => ({
@@ -1811,7 +1837,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     }
   };
 
-  const addSerialItem = (item: InventorySerial) => {
+  const appendSerialItem = (item: InventorySerial, associatedMixerId?: string) => {
     let added = false;
     setSelectedItems((prev) => {
       const exists = prev.find((entry) => entry.assetId === item.assetId && entry.type === 'serial');
@@ -1824,11 +1850,103 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           assetId: item.assetId,
           name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
-          ownerWarehouseId: item.ownerWarehouseId
+          ownerWarehouseId: item.ownerWarehouseId,
+          associatedMixerId,
         }
       ];
     });
     return added;
+  };
+
+  const addSerialItem = (item: InventorySerial) => {
+    if (
+      docType === 'REMISSION'
+      && item.motorConfiguration === 'INTERCHANGEABLE'
+      && item.kind !== 'MOTOR'
+    ) {
+      let queued = false;
+      setPendingMixerQueue((current) => {
+        const alreadyQueued = current.some((mixer) => mixer.assetId === item.assetId);
+        const alreadySelected = selectedSerialIds.has(item.assetId);
+        if (alreadyQueued || alreadySelected) return current;
+        queued = true;
+        return [...current, item];
+      });
+      return queued;
+    }
+    return appendSerialItem(item);
+  };
+
+  const cancelPendingMixer = () => {
+    if (assigningMotor) return;
+    setAssignMotorError(null);
+    setPendingMixerQueue((current) => current.slice(1));
+  };
+
+  const confirmMixerMotor = async (motor: InventorySerial) => {
+    if (!activePendingMixer) return;
+    setAssigningMotor(true);
+    setAssignMotorError(null);
+    try {
+      await api(`/assets/${activePendingMixer.assetId}/assigned-motor`, {
+        method: 'PATCH',
+        json: { motorId: motor.assetId },
+      });
+
+      setSelectedItems((current) => {
+        const withoutDuplicates = current.filter(
+          (item) => item.assetId !== activePendingMixer.assetId && item.assetId !== motor.assetId,
+        );
+        return [
+          ...withoutDuplicates,
+          {
+            type: 'serial',
+            assetId: activePendingMixer.assetId,
+            name: getSerialDisplayName(activePendingMixer),
+            serial: activePendingMixer.serialOrEngine,
+            ownerWarehouseId: activePendingMixer.ownerWarehouseId,
+          },
+          {
+            type: 'serial',
+            assetId: motor.assetId,
+            name: `${getSerialDisplayName(motor)} · motor asociado`,
+            serial: motor.serialOrEngine,
+            ownerWarehouseId: motor.ownerWarehouseId,
+            associatedMixerId: activePendingMixer.assetId,
+          },
+        ];
+      });
+      setSerialItems((current) =>
+        current.map((item) => {
+          if (
+            item.kind === 'MOTOR'
+            && item.assignedMixerId === activePendingMixer.assetId
+            && item.assetId !== motor.assetId
+          ) {
+            return { ...item, assignedMixerId: null };
+          }
+          if (item.assetId === motor.assetId) {
+            return { ...item, assignedMixerId: activePendingMixer.assetId };
+          }
+          if (item.assetId === activePendingMixer.assetId) {
+            return { ...item, assignedMotorId: motor.assetId };
+          }
+          return item;
+        }),
+      );
+      setItemsAddedNotice('Mezcladora y motor agregados al documento.');
+      setPendingMixerQueue((current) => current.slice(1));
+    } catch (err) {
+      setAssignMotorError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'No se pudo asignar el motor.',
+      );
+    } finally {
+      setAssigningMotor(false);
+    }
   };
 
   const addFreeItem = () => {
@@ -1916,7 +2034,17 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   };
 
   const removeSelected = (index: number) => {
-    setSelectedItems((prev) => prev.filter((_, i) => i !== index));
+    setSelectedItems((prev) => {
+      const removed = prev[index];
+      if (!removed) return prev;
+      const mixerId = removed.associatedMixerId ?? removed.assetId;
+      return prev.filter(
+        (item, itemIndex) =>
+          itemIndex !== index
+          && item.assetId !== mixerId
+          && item.associatedMixerId !== mixerId,
+      );
+    });
   };
 
   const resetGenerateForm = () => {
@@ -1927,6 +2055,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setAutosaveDraftId(null);
     setAutosaveReady(false);
     setAutosaveStatus('idle');
+    setPendingMixerQueue([]);
+    setAssignMotorError(null);
     setError(null);
     setConsecutive('');
     setCustomerId(null);
@@ -2038,6 +2168,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               'Serial',
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
+            associatedMixerId: item.asset?.assignedToMixer?.id,
             isDamaged: Boolean(item.conditionNote?.trim()),
             damageDescription: item.conditionNote ?? '',
           };
@@ -3864,7 +3995,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
         bulkItems={availableBulkItems}
-        serialItems={availableSerialItems}
+        serialItems={pickerSerialItems}
         selectedBulkKeys={selectedBulkKeys}
         selectedSerialIds={selectedSerialIds}
         onAddBulk={addBulkItem}
@@ -3877,6 +4008,16 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           useManualWarehouseCapture ? 'Use description capture in the main section.' : null
         }
         onItemAddedNotice={setItemsAddedNotice}
+      />
+
+      <MixerMotorSelectionModal
+        opened={Boolean(activePendingMixer)}
+        mixer={activePendingMixer}
+        motors={availableMotorsForMixer}
+        loading={assigningMotor}
+        error={assignMotorError}
+        onCancel={cancelPendingMixer}
+        onConfirm={confirmMixerMotor}
       />
 
       <Modal

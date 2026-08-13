@@ -350,6 +350,31 @@ export class DocumentsService {
     const items = await this.mapDocumentItemsToMovementItems(document.items);
 
     if (document.type === DocumentType.REMISSION) {
+      const assetIds = items
+        .map((item) => item.assetId)
+        .filter((value): value is string => Boolean(value));
+      if (assetIds.length) {
+        const assets = await this.prisma.asset.findMany({
+          where: { id: { in: assetIds } },
+          select: {
+            id: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            sku: { select: { name: true } },
+          },
+        });
+        const selectedAssetIds = new Set(assetIds);
+        const missingMotor = assets.find(
+          (asset) =>
+            asset.motorConfiguration === 'INTERCHANGEABLE'
+            && (!asset.assignedMotorId || !selectedAssetIds.has(asset.assignedMotorId)),
+        );
+        if (missingMotor) {
+          throw new BadRequestException(
+            `Selecciona el motor que saldrá con ${missingMotor.sku.name}`,
+          );
+        }
+      }
       if (!document.customerWorksiteId) {
         throw new BadRequestException('La remisión no tiene obra destino');
       }
@@ -1681,6 +1706,9 @@ export class DocumentsService {
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
+                kind: true,
+                assignedMotorId: true,
+                assignedToMixer: { select: { id: true } },
                 sku: { select: { id: true, name: true } },
               },
             },

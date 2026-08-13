@@ -24,6 +24,10 @@ export type SerialAssetCardItem = {
   internalNumber?: string | number | null;
   imageFileObjectId?: string | null;
   registrationNumber?: string | null;
+  kind?: 'STANDARD' | 'MOTOR' | string | null;
+  motorConfiguration?: 'NONE' | 'FIXED' | 'INTERCHANGEABLE' | string | null;
+  assignedMotorId?: string | null;
+  assignedMixerId?: string | null;
 };
 
 function getStatusColor(status?: string | null) {
