@@ -17,6 +17,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Tabs,
   Text,
@@ -48,6 +49,7 @@ import InventoryItemPickerModal, {
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -134,6 +136,7 @@ type RequestDocument = {
 type RequestDocumentDetail = {
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
+  status: string;
   consecutive: string | null;
   docDate: string;
   notes: string | null;
@@ -337,6 +340,71 @@ function extractUserObservations(notes: string | null) {
     .join(' | ');
 }
 
+function buildRequestNotes({
+  observations,
+  docDate,
+  docType,
+  deliveryMode,
+  vehicleId,
+  driverId,
+  dispatcherId,
+}: {
+  observations: string;
+  docDate: string;
+  docType: 'REMISSION' | 'RETURN';
+  deliveryMode: 'WAREHOUSE' | 'ON_SITE';
+  vehicleId: string | null;
+  driverId: string | null;
+  dispatcherId: string | null;
+}) {
+  return [
+    observations.trim() || null,
+    `Fecha documento: ${docDate}`,
+    docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
+    deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
+    docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
+      ? `Conductor: ${driverId}`
+      : null,
+    docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
+    deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
+}
+
+function buildRequestItems(items: SelectedItem[], requireOwner: boolean) {
+  return items.map((item) => {
+    if (requireOwner && !item.ownerWarehouseId) {
+      throw new Error(`Missing owner for item ${item.name}`);
+    }
+    const conditionNote =
+      item.isDamaged && item.damageDescription?.trim()
+        ? item.damageDescription.trim()
+        : undefined;
+    if (item.type === 'free') {
+      return {
+        requestedTag: item.requestedTag ?? item.name,
+        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+        conditionNote,
+      };
+    }
+    if (item.type === 'bulk') {
+      return {
+        skuId: item.skuId,
+        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+        conditionNote,
+      };
+    }
+    return {
+      assetId: item.assetId,
+      ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+      conditionNote,
+    };
+  });
+}
+
 function normalizeApiErrorMessages(error: ApiError) {
   const messages: string[] = [];
   if (typeof error.message === 'string' && error.message.trim()) {
@@ -430,7 +498,7 @@ function readFlowStateFromUrl() {
   };
 }
 
-function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
+function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep, draftId?: string | null) {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
   const isGenerateRoute = url.pathname.startsWith('/transport/generate');
@@ -441,9 +509,15 @@ function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
       url.searchParams.set('tab', 'generate');
     }
     url.searchParams.set('step', step);
+    if (draftId) {
+      url.searchParams.set('draft', draftId);
+    } else {
+      url.searchParams.delete('draft');
+    }
   } else {
     url.searchParams.delete('tab');
     url.searchParams.delete('step');
+    url.searchParams.delete('draft');
   }
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -466,6 +540,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [additionalRecipientPhones, setAdditionalRecipientPhones] = useState<string[]>([]);
   const [recipientPhoneDraft, setRecipientPhoneDraft] = useState('');
+  const [sendWhatsapp, setSendWhatsapp] = useState(true);
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
@@ -504,6 +579,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const [documentsRequest, setDocumentsRequest] = useState<RequestDocument | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [autosaveDraftId, setAutosaveDraftId] = useState<string | null>(null);
+  const [autosaveReady, setAutosaveReady] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'error'>('idle');
   const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveDocument, setResolveDocument] = useState<RequestDocumentDetail | null>(null);
@@ -536,12 +614,14 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
+  const autosaveCreatingRef = useRef(false);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
+  const shouldSendWhatsapp = !canDecide || sendWhatsapp;
   const canResolveInline = canDecide && Boolean(editingRequestId);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
@@ -663,6 +743,68 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     () => [...new Set([...defaultWhatsappPhones, ...additionalRecipientPhones])],
     [additionalRecipientPhones, defaultWhatsappPhones],
   );
+  const autosavePayload = useMemo(
+    () => ({
+      type: docType,
+      number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
+      warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
+      customerWorksiteId: customerWorksiteId || undefined,
+      notes: buildRequestNotes({
+        observations,
+        docDate,
+        docType,
+        deliveryMode,
+        vehicleId,
+        driverId,
+        dispatcherId,
+      }),
+      recipientPhones: shouldSendWhatsapp ? whatsappRecipientPhones : [],
+      receivedSignature: receivedSignature ?? '',
+      items: buildRequestItems(selectedItems, false),
+    }),
+    [
+      consecutive,
+      customerWorksiteId,
+      deliveryMode,
+      dispatcherId,
+      docDate,
+      docType,
+      driverId,
+      observations,
+      principalWarehouse?.id,
+      receivedSignature,
+      selectedItems,
+      shouldSendWhatsapp,
+      vehicleId,
+      warehouseId,
+      whatsappRecipientPhones,
+    ],
+  );
+
+  useEffect(() => {
+    if (!autosaveDraftId || !autosaveReady || editingRequestId || submitting) return;
+    if (!navigator.onLine) {
+      setAutosaveStatus('offline');
+      return;
+    }
+    let active = true;
+    const timeout = window.setTimeout(async () => {
+      setAutosaveStatus('saving');
+      try {
+        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+          method: 'PATCH',
+          json: autosavePayload,
+        });
+        if (active) setAutosaveStatus('saved');
+      } catch {
+        if (active) setAutosaveStatus('error');
+      }
+    }, 900);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [autosaveDraftId, autosavePayload, autosaveReady, editingRequestId, submitting]);
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
@@ -725,8 +867,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       skipNextFlowUrlSyncRef.current = false;
       return;
     }
-    pushFlowStateToUrl(fixedTab, generateStep);
-  }, [fixedTab, flowUrlReady, generateStep]);
+    pushFlowStateToUrl(fixedTab, generateStep, autosaveDraftId);
+  }, [autosaveDraftId, fixedTab, flowUrlReady, generateStep]);
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -1778,12 +1920,19 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
   };
 
   const resetGenerateForm = () => {
+    if (currentUserId) {
+      window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+    }
     setEditingRequestId(null);
+    setAutosaveDraftId(null);
+    setAutosaveReady(false);
+    setAutosaveStatus('idle');
     setError(null);
     setConsecutive('');
     setCustomerId(null);
     setAdditionalRecipientPhones([]);
     setRecipientPhoneDraft('');
+    setSendWhatsapp(true);
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
@@ -1806,8 +1955,8 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     clearAlternateSourceDocument();
   };
 
-  const editRequest = async (documentId: string) => {
-    if (mode === 'requests') {
+  const editRequest = async (documentId: string, autosaved = false) => {
+    if (mode === 'requests' && !autosaved) {
       router.push(`/transport/generate?edit=${documentId}`);
       return;
     }
@@ -1816,8 +1965,13 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     setSubmitResult(null);
     try {
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      if (autosaved && doc.status !== 'IN_PROGRESS') {
+        throw new Error('El formulario autoguardado ya fue enviado.');
+      }
       const parsed = parseNotes(doc.notes ?? null);
-      setEditingRequestId(doc.id);
+      setEditingRequestId(autosaved ? null : doc.id);
+      setAutosaveDraftId(autosaved ? doc.id : null);
+      setAutosaveReady(false);
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
@@ -1894,7 +2048,19 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       clearEvidencePhotos();
       setActiveTab('generate');
       setGenerateStep('info');
+      if (autosaved) {
+        if (currentUserId) {
+          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, doc.id);
+        }
+        window.setTimeout(() => {
+          setAutosaveReady(true);
+          setAutosaveStatus('saved');
+        }, 0);
+      }
     } catch (err) {
+      if (autosaved && currentUserId) {
+        window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+      }
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -1907,10 +2073,20 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
   useEffect(() => {
     if (mode !== 'generate' || typeof window === 'undefined') return;
-    const editId = new URLSearchParams(window.location.search).get('edit');
+    const params = new URLSearchParams(window.location.search);
+    const draftId =
+      params.get('draft') ??
+      (currentUserId
+        ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
+        : null);
+    if (draftId && autosaveDraftId !== draftId) {
+      void editRequest(draftId, true);
+      return;
+    }
+    const editId = params.get('edit');
     if (!editId || editingRequestId === editId) return;
     void editRequest(editId);
-  }, [editingRequestId, mode]);
+  }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -1933,24 +2109,26 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
-      const pendingRecipientPhone = recipientPhoneDraft
+      const pendingRecipientPhone = shouldSendWhatsapp && recipientPhoneDraft
         ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
         : null;
-      if (recipientPhoneDraft && !pendingRecipientPhone) {
+      if (shouldSendWhatsapp && recipientPhoneDraft && !pendingRecipientPhone) {
         throw new Error('El número adicional debe contener exactamente 10 dígitos.');
       }
-      const recipientPhones = [
-        ...new Set([
-          ...whatsappRecipientPhones,
-          ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
-        ]),
-      ];
-      if (!recipientPhones.length) {
+      const recipientPhones = shouldSendWhatsapp
+        ? [
+            ...new Set([
+              ...whatsappRecipientPhones,
+              ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
+            ]),
+          ]
+        : [];
+      if (shouldSendWhatsapp && !recipientPhones.length) {
         throw new Error(
           'El cliente y la obra no tienen teléfono. Agrega al menos un destinatario de WhatsApp.',
         );
       }
-      if (recipientPhones.length > 10) {
+      if (shouldSendWhatsapp && recipientPhones.length > 10) {
         throw new Error('Puedes enviar el documento a máximo 10 destinatarios de WhatsApp.');
       }
       if (!editingRequestId && !receivedSignature) {
@@ -1984,67 +2162,103 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
-        recipientPhones,
+        ...(shouldSendWhatsapp ? { recipientPhones } : {}),
+        ...(!editingRequestId ? { sendWhatsapp: shouldSendWhatsapp } : {}),
         receivedSignature:
           editingRequestId && !isAdminRole ? undefined : (receivedSignature ?? ''),
-        notes: [
-          observations.trim() || null,
-          `Fecha documento: ${docDate}`,
-          docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
-          docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
-            ? `Conductor: ${driverId}`
-            : null,
-          docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
-          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
-        ].filter(Boolean).join(' | ')
+        notes: buildRequestNotes({
+          observations,
+          docDate,
+          docType,
+          deliveryMode,
+          vehicleId,
+          driverId,
+          dispatcherId,
+        }),
       } as const;
 
-      const movementItems = selectedItems.map((item) => {
-        if (!item.ownerWarehouseId) {
-          throw new Error(`Missing owner for item ${item.name}`);
+      const movementItems = buildRequestItems(selectedItems, true);
+      if (!navigator.onLine) {
+        if (!autosaveDraftId) {
+          throw new Error(
+            'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
+          );
         }
-        if (item.type === 'free') {
-          return {
-            requestedTag: item.requestedTag ?? item.name,
-            quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-            ownerWarehouseId: item.ownerWarehouseId,
-            conditionNote:
-              docType === 'RETURN' && item.isDamaged
-                ? item.damageDescription?.trim()
-                : undefined,
-          };
+        if (evidencePhotos.length || alternateSourceDocument) {
+          throw new Error(
+            'Los archivos y fotografías todavía requieren conexión. Retíralos o envía el documento cuando vuelva la red.',
+          );
         }
-        return item.type === 'bulk'
-          ? {
-              skuId: item.skuId,
-              quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-              ownerWarehouseId: item.ownerWarehouseId,
-              conditionNote:
-                docType === 'RETURN' && item.isDamaged
-                  ? item.damageDescription?.trim()
-                  : undefined,
-            }
-          : {
-              assetId: item.assetId,
-              ownerWarehouseId: item.ownerWarehouseId,
-              conditionNote:
-                docType === 'RETURN' && item.isDamaged
-                  ? item.damageDescription?.trim()
-                  : undefined,
-            };
-      });
 
-      const created = await api<{ id: string }>(
-        editingRequestId ? `/documents/${editingRequestId}/request` : '/documents/requests',
-        {
-          method: editingRequestId ? 'PATCH' : 'POST',
-          json: {
+        const autosaveOperation = await enqueueOfflineOperation({
+          label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/request/autosave`,
+          method: 'PATCH',
+          body: {
+            ...autosavePayload,
             ...documentPayload,
+            sendWhatsapp: undefined,
             items: movementItems,
           },
-        },
-      );
+        });
+        const submitOperation = await enqueueOfflineOperation({
+          label: `Enviar solicitud ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/request/submit`,
+          body: { sendWhatsapp: shouldSendWhatsapp },
+          dependsOn: [autosaveOperation.id],
+        });
+        await enqueueOfflineOperation({
+          label: `Enviar correo ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/customer-email/draft`,
+          dependsOn: [submitOperation.id],
+        });
+        if (shouldSendWhatsapp) {
+          await enqueueOfflineOperation({
+            label: `Enviar WhatsApp ${autosaveDraftId.slice(0, 8)}`,
+            path: `/documents/${autosaveDraftId}/customer-messages/draft`,
+            dependsOn: [submitOperation.id],
+          });
+        }
+
+        resetGenerateForm();
+        setSubmitResult(
+          'Solicitud guardada en este dispositivo. Se sincronizará automáticamente al recuperar la conexión.',
+        );
+        setItemsModalOpen(false);
+        setWorksites([]);
+        return;
+      }
+
+      let created: { id: string };
+      if (autosaveDraftId) {
+        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+          method: 'PATCH',
+          json: {
+            ...autosavePayload,
+            ...documentPayload,
+            sendWhatsapp: undefined,
+            items: movementItems,
+          },
+        });
+        created = await api<{ id: string }>(
+          `/documents/${autosaveDraftId}/request/submit`,
+          {
+            method: 'POST',
+            json: { sendWhatsapp: shouldSendWhatsapp },
+          },
+        );
+      } else {
+        created = await api<{ id: string }>(
+          editingRequestId ? `/documents/${editingRequestId}/request` : '/documents/requests',
+          {
+            method: editingRequestId ? 'PATCH' : 'POST',
+            json: {
+              ...documentPayload,
+              items: movementItems,
+            },
+          },
+        );
+      }
       const successMessage = editingRequestId
         ? `Request updated (${created.id}).`
         : `Request sent as draft (${created.id}).`;
@@ -2057,9 +2271,11 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
           await api(`/documents/${created.id}/customer-email/draft`, {
             method: 'POST',
           });
-          await api(`/documents/${created.id}/customer-messages/draft`, {
-            method: 'POST',
-          });
+          if (shouldSendWhatsapp) {
+            await api(`/documents/${created.id}/customer-messages/draft`, {
+              method: 'POST',
+            });
+          }
         }
       } catch (uploadError) {
         const message =
@@ -2080,6 +2296,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
         router.push('/transport/requests');
       }
       router.refresh();
+      void syncOfflineOperations();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -2093,7 +2310,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
     }
   };
 
-  const goToItemsStep = () => {
+  const goToItemsStep = async () => {
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
@@ -2110,6 +2327,37 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
       setError('Revisa los campos obligatorios resaltados.');
       return;
     }
+    if (!editingRequestId && !autosaveDraftId) {
+      if (autosaveCreatingRef.current) return;
+      autosaveCreatingRef.current = true;
+      setAutosaveStatus('saving');
+      try {
+        const draft = await api<{ id: string; consecutive?: string | null }>(
+          '/documents/requests/autosave',
+          {
+            method: 'POST',
+            json: autosavePayload,
+          },
+        );
+        setAutosaveDraftId(draft.id);
+        if (currentUserId) {
+          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, draft.id);
+        }
+        setAutosaveReady(true);
+        setAutosaveStatus('saved');
+        if (draft.consecutive) setConsecutive(draft.consecutive);
+      } catch (err) {
+        setAutosaveStatus('error');
+        setError(
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : 'No se pudo iniciar el autoguardado.',
+        );
+        return;
+      } finally {
+        autosaveCreatingRef.current = false;
+      }
+    }
     setGenerateStep('items');
   };
 
@@ -2124,7 +2372,7 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
   const handleGenerateStepChange = (value: string | null) => {
     if (value === 'items') {
-      goToItemsStep();
+      void goToItemsStep();
       return;
     }
     if (value === 'sign') {
@@ -2455,9 +2703,27 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                         <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
                           {formatDocType(docType)}
                         </Badge>
-                        <Badge color={editingRequestId ? 'grape' : 'teal'} variant="light">
-                          {editingRequestId ? `Editando ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
+                        <Badge color={editingRequestId ? 'grape' : autosaveDraftId ? 'blue' : 'teal'} variant="light">
+                          {editingRequestId
+                            ? `Editando ${editingRequestId.slice(0, 8)}`
+                            : autosaveDraftId
+                              ? `Borrador ${autosaveDraftId.slice(0, 8)}`
+                              : 'Nueva solicitud'}
                         </Badge>
+                        {autosaveDraftId ? (
+                          <Badge
+                            color={autosaveStatus === 'error' ? 'red' : autosaveStatus === 'saving' || autosaveStatus === 'offline' ? 'yellow' : 'green'}
+                            variant="dot"
+                          >
+                            {autosaveStatus === 'saving'
+                              ? 'Guardando...'
+                              : autosaveStatus === 'offline'
+                                ? 'Cambios en dispositivo'
+                              : autosaveStatus === 'error'
+                                ? 'Error al guardar'
+                                : 'Guardado'}
+                          </Badge>
+                        ) : null}
                       </Group>
                       <Text fw={800} size="lg">
                         Generar documento
@@ -2466,9 +2732,9 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
                         Completa informacion, items y firma antes de enviar.
                       </Text>
                     </div>
-                    {editingRequestId ? (
+                    {editingRequestId || autosaveDraftId ? (
                       <Button variant="light" color="gray" onClick={resetGenerateForm}>
-                        Cancelar edicion
+                        {editingRequestId ? 'Cancelar edición' : 'Salir del borrador'}
                       </Button>
                     ) : null}
                   </Group>
@@ -3086,12 +3352,27 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
 
           <Paper withBorder radius="lg" p="md" mb="md">
             <Stack gap="sm">
-              <div>
-                <Text fw={700}>Destinatarios de WhatsApp</Text>
-                <Text size="sm" c="dimmed">
-                  El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
-                </Text>
-              </div>
+              <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                <div>
+                  <Text fw={700}>Destinatarios de WhatsApp</Text>
+                  <Text size="sm" c="dimmed">
+                    El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
+                  </Text>
+                </div>
+                {canDecide ? (
+                  <Switch
+                    checked={sendWhatsapp}
+                    onChange={(event) => {
+                      setSendWhatsapp(event.currentTarget.checked);
+                      setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+                    }}
+                    label="Enviar por WhatsApp"
+                  />
+                ) : null}
+              </Group>
+
+              {shouldSendWhatsapp ? (
+                <>
 
               {defaultWhatsappRecipients.map((recipient) => (
                 <Group key={recipient.key} justify="space-between" align="center" wrap="nowrap">
@@ -3153,6 +3434,12 @@ export function TransportRequestsWorkspace({ mode = 'requests' }: { mode?: Reque
               {generateFieldErrors.recipientPhones ? (
                 <Text size="xs" c="red">{generateFieldErrors.recipientPhones}</Text>
               ) : null}
+                </>
+              ) : (
+                <Alert color="gray" variant="light">
+                  El documento se creará sin exigir teléfonos ni enviar una copia por WhatsApp.
+                </Alert>
+              )}
             </Stack>
           </Paper>
 

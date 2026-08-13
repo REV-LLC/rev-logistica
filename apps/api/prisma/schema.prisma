@@ -53,6 +53,7 @@ enum DocumentType {
 }
 
 enum DocumentStatus {
+  IN_PROGRESS
   DRAFT
   CONFIRMED
   FAILED
@@ -94,6 +95,11 @@ enum TaskPriority {
   LOW
   MEDIUM
   HIGH
+}
+
+enum SyncOperationStatus {
+  PROCESSING
+  COMPLETED
 }
 
 enum NotificationChannel {
@@ -154,6 +160,23 @@ model User {
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
   notificationDeliveries        NotificationDelivery[]
   appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
+  syncOperations                SyncOperation[]
+}
+
+model SyncOperation {
+  id             String              @id @default(uuid())
+  idempotencyKey String
+  operation      String
+  status         SyncOperationStatus @default(PROCESSING)
+  response       Json?
+  createdBy      String
+  createdAt      DateTime            @default(now())
+  completedAt    DateTime?
+
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@unique([createdBy, idempotencyKey])
+  @@index([createdAt])
 }
 
 model AppSetting {

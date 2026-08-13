@@ -1,6 +1,7 @@
 'use client';
 
 import { MantineProvider, createTheme } from '@mantine/core';
+import OfflineManager from './OfflineManager';
 
 const theme = createTheme({
   fontFamily: 'Space Grotesk, sans-serif',
@@ -8,5 +9,10 @@ const theme = createTheme({
 });
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  return <MantineProvider theme={theme}>{children}</MantineProvider>;
+  return (
+    <MantineProvider theme={theme}>
+      {children}
+      <OfflineManager />
+    </MantineProvider>
+  );
 }

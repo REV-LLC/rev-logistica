@@ -1,8 +1,7 @@
+import { Type } from 'class-transformer';
 import {
-  ArrayMinSize,
   ArrayMaxSize,
   IsArray,
-  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -12,10 +11,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { DocumentType } from '@prisma/client';
 
-class CreateDocumentRequestItemDto {
+class AutosaveDocumentRequestItemDto {
   @IsOptional()
   @IsUUID()
   skuId?: string;
@@ -43,7 +41,7 @@ class CreateDocumentRequestItemDto {
   conditionNote?: string;
 }
 
-export class CreateDocumentRequestDto {
+export class AutosaveDocumentRequestDto {
   @IsEnum(DocumentType)
   type: DocumentType;
 
@@ -64,15 +62,7 @@ export class CreateDocumentRequestDto {
   notes?: string;
 
   @IsOptional()
-  @IsString()
-  @Matches(/^\d{10}$/, {
-    message: 'El teléfono debe contener exactamente 10 dígitos',
-  })
-  recipientPhone?: string;
-
-  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(10)
   @IsString({ each: true })
   @Matches(/^\d{10}$/, {
@@ -82,16 +72,12 @@ export class CreateDocumentRequestDto {
   recipientPhones?: string[];
 
   @IsOptional()
-  @IsBoolean()
-  sendWhatsapp?: boolean;
-
-  @IsOptional()
   @IsString()
   receivedSignature?: string;
 
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => CreateDocumentRequestItemDto)
-  items: CreateDocumentRequestItemDto[];
+  @Type(() => AutosaveDocumentRequestItemDto)
+  items?: AutosaveDocumentRequestItemDto[];
 }
