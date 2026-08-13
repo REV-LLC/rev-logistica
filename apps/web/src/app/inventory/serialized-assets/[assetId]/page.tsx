@@ -21,6 +21,7 @@ import {
   IconInfoCircle,
   IconMapPin,
   IconPencil,
+  IconTrash,
   IconTool,
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -144,6 +145,7 @@ export default function EditSerializedAssetPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [asset, setAsset] = useState<AssetResponse | null>(null);
@@ -441,6 +443,40 @@ export default function EditSerializedAssetPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!assetId || !asset) {
+      setError('No se encontro el equipo para eliminar.');
+      return;
+    }
+    const label = getSerialDisplayName({
+      assetId: asset.id,
+      skuName: asset.sku?.name,
+      brand,
+      model,
+      serialOrEngine: asset.serialOrEngine,
+    });
+    if (!window.confirm(`Eliminar activo ${label}?`)) return;
+
+    setDeleting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api(`/assets/${assetId}`, { method: 'DELETE' });
+      router.push('/inventory/warehouse');
+      router.refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error eliminando equipo');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleCancelEdit = () => {
     if (!asset) return;
     setBrand(asset.brand ?? '');
@@ -463,19 +499,31 @@ export default function EditSerializedAssetPage() {
           Volver
         </Button>
         {asset ? (
-          <ActionIcon
-            variant={editing ? 'filled' : 'light'}
-            color={editing ? 'blue' : 'gray'}
-            size="lg"
-            aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
-            onClick={() => {
-              setSuccess(null);
-              setError(null);
-              setEditing((prev) => !prev);
-            }}
-          >
-            <IconPencil size={18} />
-          </ActionIcon>
+          <Group gap="xs">
+            <ActionIcon
+              variant={editing ? 'filled' : 'light'}
+              color={editing ? 'blue' : 'gray'}
+              size="lg"
+              aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
+              onClick={() => {
+                setSuccess(null);
+                setError(null);
+                setEditing((prev) => !prev);
+              }}
+            >
+              <IconPencil size={18} />
+            </ActionIcon>
+            <ActionIcon
+              variant="light"
+              color="red"
+              size="lg"
+              aria-label="Eliminar equipo"
+              loading={deleting}
+              onClick={handleDelete}
+            >
+              <IconTrash size={18} />
+            </ActionIcon>
+          </Group>
         ) : null}
       </Group>
 
