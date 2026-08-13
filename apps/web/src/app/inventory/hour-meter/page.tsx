@@ -101,7 +101,7 @@ export default function HourMeterPage() {
     ? {
         type: 'ASSET',
         id: selected.id,
-        label: `${assetDisplayName(selected)} · ${selected.publicCode}`,
+        label: `${assetDisplayName(selected)} #${selected.internalNumber}`,
       }
     : null;
 
