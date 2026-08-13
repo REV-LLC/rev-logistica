@@ -18,6 +18,7 @@ import {
 } from './document-pdf.service';
 
 export const GENERATED_DOCUMENT_PDF = 'GENERATED_DOCUMENT_PDF';
+export const GENERATED_DOCUMENT_PDF_CATEGORY = 'GENERATED_DOCUMENT_PDF_V2';
 
 type StoredPdfSnapshot = {
   id: string;
@@ -74,7 +75,7 @@ export class DocumentPdfSnapshotService {
           entityType: 'DOCUMENT',
           entityId: documentId,
           fileType: GENERATED_DOCUMENT_PDF,
-          category: GENERATED_DOCUMENT_PDF,
+          category: GENERATED_DOCUMENT_PDF_CATEGORY,
           displayName: fileName,
           originalName: fileName,
           storageKey: publicUrl,
@@ -144,7 +145,11 @@ export class DocumentPdfSnapshotService {
 
   private getStored(documentId: string): Promise<StoredPdfSnapshot | null> {
     return this.prisma.fileObject.findFirst({
-      where: { documentId, fileType: GENERATED_DOCUMENT_PDF },
+      where: {
+        documentId,
+        fileType: GENERATED_DOCUMENT_PDF,
+        category: GENERATED_DOCUMENT_PDF_CATEGORY,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: this.snapshotSelect,
     });

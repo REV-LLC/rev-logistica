@@ -471,6 +471,14 @@ export default function Nav({ onNavigate }: NavProps) {
           : currentRole === "OPERATOR"
             ? "orange"
             : "gray";
+  const userDisplayName =
+    currentSession?.name?.trim() ||
+    [currentSession?.firstName, currentSession?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    currentSession?.email ||
+    null;
 
   const handleLogout = () => {
     clearToken();
@@ -711,40 +719,22 @@ export default function Nav({ onNavigate }: NavProps) {
           >
             {currentRole ?? "SIN ROL"}
           </Badge>
-          {currentSession?.email ? (
-            <>
-              <Text
-                size="10px"
-                c="dimmed"
-                ta="right"
-                lh={1.2}
-                title={currentSession.email}
-                w="100%"
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {currentSession.email}
-              </Text>
-              <Text
-                size="10px"
-                fw={700}
-                c="dimmed"
-                ta="right"
-                lh={1.1}
-                title={serviceName}
-                w="100%"
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {serviceName}
-              </Text>
-            </>
+          {userDisplayName ? (
+            <Text
+              size="10px"
+              c="dimmed"
+              ta="right"
+              lh={1.2}
+              title={userDisplayName}
+              w="100%"
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {userDisplayName}
+            </Text>
           ) : null}
         </Stack>
       </Group>

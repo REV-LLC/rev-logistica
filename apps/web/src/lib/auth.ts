@@ -18,6 +18,9 @@ export type JwtPayload = {
   sub?: string;
   identifier?: string;
   email?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   exp?: number;
   role?: AppRole;
 };

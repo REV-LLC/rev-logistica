@@ -125,6 +125,26 @@ describe('DocumentPdfService', () => {
     ).toBe('VIBROCOMPACTADOR GLOBALMEQ 1TN');
   });
 
+  it('prints the family before the reference for a lighting tower', () => {
+    expect(
+      buildPdfItemDescription({
+        quantity: 1,
+        requestedTag: null,
+        conditionNote: null,
+        sku: null,
+        asset: {
+          serialOrEngine: '12345',
+          description: null,
+          internalNumber: 6,
+          sku: {
+            name: 'WACKER LTN6',
+            assetFamily: { name: 'TORRE DE ILUMINACIÓN' },
+          },
+        },
+      }),
+    ).toBe('TORRE DE ILUMINACIÓN WACKER LTN6');
+  });
+
   it('does not repeat the family when it is already part of the reference', () => {
     expect(
       buildPdfItemDescription({
