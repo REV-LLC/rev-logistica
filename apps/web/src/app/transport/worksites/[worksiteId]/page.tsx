@@ -362,7 +362,11 @@ export default function ObraDetailPage() {
                 </Badge>
               </Group>
               {ledgerItems.length > 0 ? (
-                <LedgerTable items={ledgerItems} showItemIdentifiers={false} />
+                <LedgerTable
+                  items={ledgerItems}
+                  showItemIdentifiers={false}
+                  worksitePerspective
+                />
               ) : (
                 <Paper radius="lg" p="xl" bg="gray.0">
                   <Text fw={700}>No hay movimientos recientes para esta obra.</Text>
