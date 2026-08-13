@@ -1,4 +1,8 @@
-import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
+import {
+  DocumentPdfSnapshotService,
+  GENERATED_DOCUMENT_PDF,
+  GENERATED_DOCUMENT_PDF_CATEGORY,
+} from './document-pdf-snapshot.service';
 
 describe('DocumentPdfSnapshotService', () => {
   it('reuses the stored PDF without rendering it again', async () => {
@@ -26,5 +30,14 @@ describe('DocumentPdfSnapshotService', () => {
 
     await expect(service.getOrCreate('document-1')).resolves.toEqual(stored);
     expect(pdf.render).not.toHaveBeenCalled();
+    expect(prisma.fileObject.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          documentId: 'document-1',
+          fileType: GENERATED_DOCUMENT_PDF,
+          category: GENERATED_DOCUMENT_PDF_CATEGORY,
+        },
+      }),
+    );
   });
 });
