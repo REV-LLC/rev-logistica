@@ -26,6 +26,7 @@ import {
   IconPlus,
   IconSteeringWheel,
   IconTool,
+  IconTrash,
   IconTruck,
   IconUserCheck,
 } from '@tabler/icons-react';
@@ -275,6 +276,7 @@ export default function VehiclesPage() {
   const [formRecipients, setFormRecipients] = useState<NotificationRecipientInput[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
 
   const brandOptions = useMemo(
     () =>
@@ -415,6 +417,33 @@ export default function VehiclesPage() {
       setFormError(err instanceof Error ? err.message : 'No se pudo guardar');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteVehicle = async (vehicle: Vehicle) => {
+    const confirmed = window.confirm(
+      `¿Eliminar el vehículo ${vehicle.plate}? Esta acción no se puede deshacer.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingVehicleId(vehicle.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api(`/vehicles/${vehicle.id}`, { method: 'DELETE' });
+      setDetailsVehicle((current) => (current?.id === vehicle.id ? null : current));
+      setDocumentsVehicle((current) => (current?.id === vehicle.id ? null : current));
+      setMaintenanceVehicle((current) => (current?.id === vehicle.id ? null : current));
+      setAlertsVehicle((current) => (current?.id === vehicle.id ? null : current));
+      if (editing?.id === vehicle.id) {
+        closeEdit();
+      }
+      await loadVehicles();
+      setSuccess(`Vehículo ${vehicle.plate} eliminado.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar el vehículo');
+    } finally {
+      setDeletingVehicleId(null);
     }
   };
 
@@ -594,6 +623,15 @@ export default function VehiclesPage() {
                 label: `Editar ${vehicle.plate}`,
                 icon: <IconPencil size={16} />,
                 onClick: () => startEdit(vehicle),
+              },
+              {
+                key: 'delete',
+                label: `Eliminar ${vehicle.plate}`,
+                icon: <IconTrash size={16} />,
+                color: 'red',
+                loading: deletingVehicleId === vehicle.id,
+                disabled: deletingVehicleId !== null && deletingVehicleId !== vehicle.id,
+                onClick: () => void deleteVehicle(vehicle),
               },
             ]}
           />
