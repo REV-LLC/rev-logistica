@@ -21,7 +21,6 @@ import {
   IconBuilding,
   IconBuildingEstate,
   IconExternalLink,
-  IconMapPin,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -36,7 +35,7 @@ import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
-import OpenInMapsButton from '@/components/worksites/OpenInMapsButton';
+import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 
 type Customer = {
   id: string;
@@ -103,56 +102,6 @@ type CityOption = {
   label: string;
 };
 
-type AddressValidationResponse = {
-  inputAddress: string;
-  formattedAddress: string;
-  context: {
-    department: string | null;
-    city: string | null;
-  };
-  googleContext: {
-    department: string | null;
-    city: string | null;
-  };
-  placeId: string | null;
-  location: { lat: number; lng: number } | null;
-  verdict: {
-    inputGranularity: string | null;
-    validationGranularity: string | null;
-    geocodeGranularity: string | null;
-    hasInferredComponents: boolean;
-    hasReplacedComponents: boolean;
-    hasUnconfirmedComponents: boolean;
-  };
-};
-
-function getMapsQuery(addressValidation: AddressValidationResponse) {
-  if (addressValidation.location) {
-    return `${addressValidation.location.lat},${addressValidation.location.lng}`;
-  }
-  return addressValidation.formattedAddress;
-}
-
-function getGoogleMapsSearchUrl(addressValidation: AddressValidationResponse) {
-  const params = new URLSearchParams({
-    api: '1',
-    query: getMapsQuery(addressValidation),
-  });
-  if (addressValidation.placeId) {
-    params.set('query_place_id', addressValidation.placeId);
-  }
-  return `https://www.google.com/maps/search/?${params.toString()}`;
-}
-
-function getGoogleMapsPreviewUrl(addressValidation: AddressValidationResponse) {
-  const params = new URLSearchParams({
-    q: getMapsQuery(addressValidation),
-    z: '17',
-    output: 'embed',
-  });
-  return `https://www.google.com/maps?${params.toString()}`;
-}
-
 export default function WorksitesPage() {
   const searchParams = useSearchParams();
   const [worksites, setWorksites] = useState<WorksiteRow[]>([]);
@@ -164,9 +113,6 @@ export default function WorksitesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorksiteRow | null>(null);
   const [form, setForm] = useState<WorksiteForm>(emptyForm);
-  const [addressValidation, setAddressValidation] = useState<AddressValidationResponse | null>(null);
-  const [addressValidationError, setAddressValidationError] = useState<string | null>(null);
-  const [addressValidationLoading, setAddressValidationLoading] = useState(false);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [cities, setCities] = useState<CityOption[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
@@ -337,8 +283,6 @@ export default function WorksitesPage() {
     setEditing(null);
     setForm(emptyForm);
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
     setModalOpen(true);
   };
 
@@ -357,8 +301,6 @@ export default function WorksitesPage() {
       worksiteActive: row.worksite.active,
     });
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
     setModalOpen(true);
   };
 
@@ -367,49 +309,12 @@ export default function WorksitesPage() {
     setEditing(null);
     setForm(emptyForm);
     setCities([]);
-    setAddressValidation(null);
-    setAddressValidationError(null);
   };
 
   const selectedDepartmentName =
     departments.find((department) => department.value === form.department)?.label ??
     form.department ??
     '';
-
-  const validateAddressWithMaps = async () => {
-    const address = form.address.trim();
-    setAddressValidation(null);
-    setAddressValidationError(null);
-
-    if (!address) {
-      setAddressValidationError('Ingresa una direccion para revisarla con Maps.');
-      return;
-    }
-
-    setAddressValidationLoading(true);
-    try {
-      const result = await api<AddressValidationResponse>('/worksites/address/validate', {
-        method: 'POST',
-        json: {
-          address,
-          regionCode: 'CO',
-          department: selectedDepartmentName || undefined,
-          city: form.city || undefined,
-        },
-      });
-      setAddressValidation(result);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setAddressValidationError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setAddressValidationError(err.message);
-      } else {
-        setAddressValidationError('No se pudo revisar la direccion con Maps.');
-      }
-    } finally {
-      setAddressValidationLoading(false);
-    }
-  };
 
   const saveWorksite = async () => {
     setError(null);
@@ -766,8 +671,6 @@ export default function WorksitesPage() {
                   onChange={(value) => {
                     setForm((prev) => ({ ...prev, department: value, city: null }));
                     setCities([]);
-                    setAddressValidation(null);
-                    setAddressValidationError(null);
                     if (value) loadCities(value);
                   }}
                   searchable
@@ -780,11 +683,7 @@ export default function WorksitesPage() {
                   placeholder={form.department ? 'Opcional' : 'Selecciona departamento'}
                   data={cities}
                   value={form.city}
-                  onChange={(value) => {
-                    setForm((prev) => ({ ...prev, city: value }));
-                    setAddressValidation(null);
-                    setAddressValidationError(null);
-                  }}
+                  onChange={(value) => setForm((prev) => ({ ...prev, city: value }))}
                   searchable
                   clearable
                   disabled={!form.department || locationsLoading}
@@ -798,15 +697,12 @@ export default function WorksitesPage() {
                 </Alert>
               ) : null}
 
-              <TextInput
-                label="Dirección"
-                placeholder="Dirección o descripción de ubicación"
+              <WorksiteAddressField
                 value={form.address}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
+                department={selectedDepartmentName}
+                city={form.city}
+                onChange={(value) => {
                   setForm((prev) => ({ ...prev, address: value }));
-                  setAddressValidation(null);
-                  setAddressValidationError(null);
                 }}
               />
 
@@ -832,119 +728,6 @@ export default function WorksitesPage() {
                 />
               </SimpleGrid>
 
-              <Group justify="space-between" align="flex-start" gap="sm">
-                <Button
-                  variant="default"
-                  leftSection={<IconMapPin size={16} />}
-                  loading={addressValidationLoading}
-                  disabled={!form.address.trim()}
-                  onClick={validateAddressWithMaps}
-                >
-                  Revisar con Maps
-                </Button>
-                {addressValidation?.location ? (
-                  <Text size="xs" c="dimmed">
-                    {addressValidation.location.lat.toFixed(6)}, {addressValidation.location.lng.toFixed(6)}
-                  </Text>
-                ) : null}
-              </Group>
-
-              {addressValidationError ? (
-                <Alert color="yellow" variant="light" title="Maps no pudo normalizar la dirección">
-                  {addressValidationError}
-                </Alert>
-              ) : null}
-
-              {addressValidation ? (
-                <Alert
-                  color={addressValidation.verdict.hasUnconfirmedComponents ? 'yellow' : 'green'}
-                  variant="light"
-                  title={
-                    addressValidation.verdict.hasUnconfirmedComponents
-                      ? 'Maps encontró una sugerencia para confirmar'
-                      : 'Dirección normalizada por Maps'
-                  }
-                >
-                  <Stack gap="md">
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                      <div>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          Escrita
-                        </Text>
-                        <Text size="sm">{addressValidation.inputAddress}</Text>
-                        {addressValidation.context.city || addressValidation.context.department ? (
-                          <Text size="xs" c="dimmed" mt={4}>
-                            {[addressValidation.context.city, addressValidation.context.department, 'Colombia']
-                              .filter(Boolean)
-                              .join(', ')}
-                          </Text>
-                        ) : null}
-                      </div>
-                      <div>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          Sugerida por Maps
-                        </Text>
-                        <Text size="sm">{addressValidation.formattedAddress}</Text>
-                        {addressValidation.googleContext.city || addressValidation.googleContext.department ? (
-                          <Text size="xs" c="dimmed" mt={4}>
-                            {[addressValidation.googleContext.city, addressValidation.googleContext.department]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </Text>
-                        ) : null}
-                      </div>
-                    </SimpleGrid>
-
-                    <div
-                      style={{
-                        border: '1px solid var(--mantine-color-gray-3)',
-                        borderRadius: 8,
-                        height: 220,
-                        overflow: 'hidden',
-                        background: 'var(--mantine-color-gray-0)',
-                      }}
-                    >
-                      <iframe
-                        title="Vista previa de la ubicación"
-                        src={getGoogleMapsPreviewUrl(addressValidation)}
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        style={{ border: 0, width: '100%', height: '100%' }}
-                      />
-                    </div>
-
-                    <Group justify="flex-end">
-                      <Button
-                        size="xs"
-                        variant="default"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            address: addressValidation.inputAddress,
-                          }));
-                          setAddressValidation(null);
-                        }}
-                      >
-                        Conservar escrita
-                      </Button>
-                      <OpenInMapsButton href={getGoogleMapsSearchUrl(addressValidation)} />
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            address: addressValidation.formattedAddress,
-                          }));
-                          setAddressValidation(null);
-                        }}
-                      >
-                        Usar sugerida
-                      </Button>
-                    </Group>
-                  </Stack>
-                </Alert>
-              ) : null}
             </Stack>
           </Paper>
 

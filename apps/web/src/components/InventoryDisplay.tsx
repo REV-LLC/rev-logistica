@@ -89,6 +89,10 @@ type SerialItem = {
   chargeType?: 'DAY' | 'HOUR' | string | null;
   minimumChargeHours?: number | string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
+  location?: {
+    type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT';
+    name: string | null;
+  } | null;
   internalNumber?: string | number | null;
   assetFamily?: {
     id?: string | null;
@@ -177,6 +181,15 @@ export default function InventoryDisplay({
       numeric: true,
       sensitivity: 'base',
     });
+  };
+  const serialLocationLabel = (item: SerialItem) => {
+    if (item.location?.type === 'WORKSITE') {
+      return `En obra${item.location.name ? ` · ${item.location.name}` : ''}`;
+    }
+    if (item.location?.type === 'WAREHOUSE') {
+      return `En bodega${item.location.name ? ` · ${item.location.name}` : ''}`;
+    }
+    return 'En tránsito';
   };
   const bulkRowKey = (item: BulkItem) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
   const toggleBulkRow = (item: BulkItem) => {
@@ -541,42 +554,39 @@ export default function InventoryDisplay({
           </Title>
           <Stack gap="md">
             {serialFamilyGroups.map((group) => (
-              <Paper
+              <Stack
                 key={group.id}
-                withBorder
-                radius="md"
-                p={{ base: 'sm', sm: 'md' }}
+                gap="sm"
                 style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 420px' }}
               >
-                <Stack gap="sm">
-                  <Group justify="space-between" align="center" wrap="nowrap">
-                    <Text fw={800}>{group.name}</Text>
-                    <Badge color="green" variant="light" style={{ flexShrink: 0 }}>
-                      {group.items.length} activo{group.items.length === 1 ? '' : 's'}
-                    </Badge>
-                  </Group>
+                <Group justify="space-between" align="center" wrap="nowrap">
+                  <Text fw={800}>{group.name}</Text>
+                  <Badge color="green" variant="light" style={{ flexShrink: 0 }}>
+                    {group.items.length} activo{group.items.length === 1 ? '' : 's'}
+                  </Badge>
+                </Group>
 
-                  <SimpleGrid
-                    cols={{ base: 1, sm: 2, md: 3, xl: compactSerialCards ? 4 : 3 }}
-                    spacing="sm"
-                  >
-                    {group.items.map((item) => (
-                      <SerialAssetCard
-                        key={item.assetId}
-                        item={item}
-                        href={`/inventory/serialized-assets/${item.assetId}`}
-                        compact={compactSerialCards}
-                        isWorksiteView={isWorksiteView}
-                        display={{ showOwnerChip: isWorksiteView }}
-                        deleteLoading={deletingSerialAssetId === item.assetId}
-                        onDelete={
-                          onDeleteSerialAsset ? () => onDeleteSerialAsset(item) : undefined
-                        }
-                      />
-                    ))}
-                  </SimpleGrid>
-                </Stack>
-              </Paper>
+                <SimpleGrid
+                  cols={{ base: 1, sm: 2, md: 3, xl: compactSerialCards ? 4 : 3 }}
+                  spacing="sm"
+                >
+                  {group.items.map((item) => (
+                    <SerialAssetCard
+                      key={item.assetId}
+                      item={item}
+                      href={`/inventory/serialized-assets/${item.assetId}`}
+                      compact={compactSerialCards}
+                      isWorksiteView={isWorksiteView}
+                      display={{ showOwnerChip: isWorksiteView, showCharge: false }}
+                      additionalDetails={[{ label: 'Ubicación', value: serialLocationLabel(item) }]}
+                      deleteLoading={deletingSerialAssetId === item.assetId}
+                      onDelete={
+                        onDeleteSerialAsset ? () => onDeleteSerialAsset(item) : undefined
+                      }
+                    />
+                  ))}
+                </SimpleGrid>
+              </Stack>
             ))}
           </Stack>
         </section>

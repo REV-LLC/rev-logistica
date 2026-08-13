@@ -29,6 +29,17 @@ enum ChargeType {
   HOUR
 }
 
+enum AssetKind {
+  STANDARD
+  MOTOR
+}
+
+enum AssetMotorConfiguration {
+  NONE
+  FIXED
+  INTERCHANGEABLE
+}
+
 enum EmployeeRole {
   DRIVER
   HEAVY_MACHINERY_OPERATOR
@@ -53,6 +64,7 @@ enum DocumentType {
 }
 
 enum DocumentStatus {
+  IN_PROGRESS
   DRAFT
   CONFIRMED
   FAILED
@@ -94,6 +106,11 @@ enum TaskPriority {
   LOW
   MEDIUM
   HIGH
+}
+
+enum SyncOperationStatus {
+  PROCESSING
+  COMPLETED
 }
 
 enum NotificationChannel {
@@ -157,6 +174,23 @@ model User {
   worksiteFuelReceipts          WorksiteFuelReceipt[]   @relation("WorksiteFuelReceiptCreatedBy")
   assetFuelings                 AssetFueling[]          @relation("AssetFuelingCreatedBy")
   vehicleFuelings               VehicleFueling[]        @relation("VehicleFuelingCreatedBy")
+  syncOperations                SyncOperation[]
+}
+
+model SyncOperation {
+  id             String              @id @default(uuid())
+  idempotencyKey String
+  operation      String
+  status         SyncOperationStatus @default(PROCESSING)
+  response       Json?
+  createdBy      String
+  createdAt      DateTime            @default(now())
+  completedAt    DateTime?
+
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@unique([createdBy, idempotencyKey])
+  @@index([createdAt])
 }
 
 model AppSetting {
@@ -389,11 +423,11 @@ model CatalogOption {
 }
 
 model Asset {
-  id                 String   @id @default(uuid())
+  id                 String                  @id @default(uuid())
   skuId              String
-  publicCode         String   @unique
-  serialOrEngine     String?  @unique
-  registrationNumber String?  @unique
+  publicCode         String                  @unique
+  serialOrEngine     String?                 @unique
+  registrationNumber String?                 @unique
   description        String?
   brand              String?
   model              String?
@@ -402,16 +436,21 @@ model Asset {
   imageFileObjectId  String?
   internalNumber     Int
   weight             Decimal?
-  hourMeter          Decimal  @default(0) @db.Decimal(12, 2)
+  hourMeter          Decimal                 @default(0) @db.Decimal(12, 2)
   warehouseOwnerId   String
   warehouseCurrentId String?
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  active             Boolean                 @default(true)
+  kind               AssetKind               @default(STANDARD)
+  motorConfiguration AssetMotorConfiguration @default(NONE)
+  assignedMotorId    String?                 @unique
+  createdAt          DateTime                @default(now())
 
   sku              Sku         @relation(fields: [skuId], references: [id])
   warehouseOwner   Warehouse   @relation("OwnerWarehouse", fields: [warehouseOwnerId], references: [id])
   warehouseCurrent Warehouse?  @relation("CurrentWarehouse", fields: [warehouseCurrentId], references: [id])
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
+  assignedMotor    Asset?      @relation("MixerAssignedMotor", fields: [assignedMotorId], references: [id], onDelete: SetNull)
+  assignedToMixer  Asset?      @relation("MixerAssignedMotor")
 
   documentItems        DocumentItem[]
   ledger               StockLedger[]

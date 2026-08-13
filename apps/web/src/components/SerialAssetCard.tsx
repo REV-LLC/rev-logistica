@@ -1,8 +1,8 @@
 'use client';
 
-import { ActionIcon, Badge, Box, Button, Card, Group, Menu, Stack, Text } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Card, Center, Group, Menu, Stack, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconDotsVertical, IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconDotsVertical, IconPencil, IconPhotoOff, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ReactNode, useState } from 'react';
 import { getSerialDisplayName } from '@/lib/serial-assets';
@@ -24,6 +24,10 @@ export type SerialAssetCardItem = {
   internalNumber?: string | number | null;
   imageFileObjectId?: string | null;
   registrationNumber?: string | null;
+  kind?: 'STANDARD' | 'MOTOR' | string | null;
+  motorConfiguration?: 'NONE' | 'FIXED' | 'INTERCHANGEABLE' | string | null;
+  assignedMotorId?: string | null;
+  assignedMixerId?: string | null;
 };
 
 function getStatusColor(status?: string | null) {
@@ -104,6 +108,7 @@ export default function SerialAssetCard({
   const shouldShowOwnerChip = display?.showOwnerChip ?? isWorksiteView;
   const shouldShowSerial = display?.showSerial ?? true;
   const shouldShowCharge = display?.showCharge ?? true;
+  const hasFooterContent = Boolean(onAction || footer);
   const ownerChipLabel = display?.ownerChipLabel ?? item.ownerWarehouseName;
   const showMenu = Boolean(href || onDelete);
   const title = href ? (
@@ -139,14 +144,14 @@ export default function SerialAssetCard({
       tabIndex={onOpen ? 0 : undefined}
       style={{
         display: 'flex',
-        flexDirection: isMobile ? 'row' : 'column',
+        flexDirection: 'column',
         width: '100%',
         maxWidth: '100%',
         minWidth: 0,
         overflow: 'hidden',
-        minHeight: isMobile ? (compact ? 132 : 160) : compact ? 248 : 320,
-        height: '100%',
-        aspectRatio: isMobile || compact ? 'auto' : '1 / 1',
+        minHeight: isMobile || !hasFooterContent ? 'auto' : compact ? 248 : 320,
+        height: hasFooterContent ? '100%' : 'auto',
+        aspectRatio: isMobile || compact || !hasFooterContent ? 'auto' : '1 / 1',
         gap: isMobile ? (compact ? '0.625rem' : '0.75rem') : 0,
         cursor: onOpen ? 'pointer' : undefined,
       }}
@@ -154,29 +159,21 @@ export default function SerialAssetCard({
       <Box
         style={{
           flex: isMobile
-            ? compact
-              ? '0 0 clamp(76px, 22vw, 92px)'
-              : '0 0 clamp(112px, 32vw, 156px)'
+            ? '0 0 auto'
+            : !hasFooterContent
+              ? '0 0 auto'
             : compact
               ? '0 0 48%'
               : '0 0 62%',
-          width: isMobile
-            ? compact
-              ? 'clamp(76px, 22vw, 92px)'
-              : 'clamp(112px, 32vw, 156px)'
-            : '100%',
-          minWidth: isMobile
-            ? compact
-              ? 'clamp(76px, 22vw, 92px)'
-              : 'clamp(112px, 32vw, 156px)'
-            : undefined,
-          height: isMobile ? 'auto' : compact ? '48%' : '62%',
+          width: '100%',
+          minWidth: 0,
+          height: isMobile || !hasFooterContent ? 'auto' : compact ? '48%' : '62%',
+          aspectRatio: isMobile || !hasFooterContent ? '16 / 9' : undefined,
           background: '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderBottom: isMobile ? 'none' : '1px solid var(--mantine-color-gray-3)',
-          borderRight: isMobile ? '1px solid var(--mantine-color-gray-3)' : 'none',
+          borderBottom: '1px solid var(--mantine-color-gray-3)',
           borderRadius: isMobile ? 'calc(var(--mantine-radius-md) - 2px)' : 0,
           overflow: 'hidden',
         }}
@@ -190,9 +187,12 @@ export default function SerialAssetCard({
             style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#ffffff' }}
           />
         ) : (
-          <Text size="sm" c="dimmed" ta="center" px="sm">
-            {item.imageFileObjectId ? 'Imagen cargada' : 'Sin imagen'}
-          </Text>
+          <Center className="asset-card-image-placeholder">
+            <Stack align="center" gap={4}>
+              <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
+              <Text size="xs" c="dimmed">Sin foto</Text>
+            </Stack>
+          </Center>
         )}
       </Box>
 

@@ -38,6 +38,8 @@ import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { useClientTableData } from '@/components/tables/useClientTableData';
+import TableRowActions from '@/components/TableRowActions';
+import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -910,26 +912,24 @@ export default function CustomersPage() {
                   required
                 />
 
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                  <TextInput
-                    label="Alias de la obra"
-                    placeholder="Nombre corto o referencia interna"
-                    value={form.initialWorksiteAlias}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setForm((prev) => ({ ...prev, initialWorksiteAlias: value }));
-                    }}
-                  />
-                  <TextInput
-                    label="Direccion de la obra"
-                    placeholder="Ubicacion principal o direccion"
-                    value={form.initialWorksiteAddress}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setForm((prev) => ({ ...prev, initialWorksiteAddress: value }));
-                    }}
-                  />
-                </SimpleGrid>
+                <TextInput
+                  label="Alias de la obra"
+                  placeholder="Nombre corto o referencia interna"
+                  value={form.initialWorksiteAlias}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setForm((prev) => ({ ...prev, initialWorksiteAlias: value }));
+                  }}
+                />
+
+                <WorksiteAddressField
+                  label="Dirección de la obra"
+                  placeholder="Ubicación principal o dirección"
+                  value={form.initialWorksiteAddress}
+                  onChange={(value) => {
+                    setForm((prev) => ({ ...prev, initialWorksiteAddress: value }));
+                  }}
+                />
 
                 <Paper radius="md" p="sm" bg="gray.0">
                   <Group gap="xs" wrap="nowrap">

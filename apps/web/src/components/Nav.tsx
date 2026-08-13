@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Box,
@@ -14,7 +14,6 @@ import {
   ScrollArea,
   Stack,
   Text,
-  Tooltip,
 } from "@mantine/core";
 import {
   AppRole,
@@ -23,6 +22,7 @@ import {
   getCurrentUserSession,
 } from "@/lib/auth";
 import OfficeDraftBrowserNotifications from "@/components/OfficeDraftBrowserNotifications";
+import { api } from "@/lib/api";
 import {
   IconArrowsShuffle,
   IconBell,
@@ -165,7 +165,7 @@ const sections: NavSection[] = [
           },
           {
             href: "/inventory/warehouse?scope=own&view=bulk",
-            label: "Materiales",
+            label: "Bulk",
             icon: IconBox,
             roles: ["ADMIN", "OFFICE"],
             exact: true,
@@ -307,7 +307,7 @@ const toolLinks: NavLinkItem[] = [
 
 const prodDisabledRoutes = ["/transport/cost", "/billing/pre-invoice"];
 const isProduction = process.env.NODE_ENV === "production";
-const appVersion = process.env.NEXT_PUBLIC_APP_VERSION;
+const defaultServiceName = "finge";
 const mostUsedLinks = [
   "/transport/requests",
   "/inventory/warehouse?scope=allied",
@@ -361,10 +361,28 @@ export default function Nav({ onNavigate }: NavProps) {
   const router = useRouter();
   const currentRole = getCurrentUserRole();
   const currentSession = getCurrentUserSession();
+  const [serviceName, setServiceName] = useState(defaultServiceName);
   const [openedSections, setOpenedSections] = useState<Record<string, boolean>>(
     {},
   );
   const [openedLinks, setOpenedLinks] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let active = true;
+
+    api<{ serviceName: string }>("/settings/branding")
+      .then((branding) => {
+        const nextName = branding.serviceName.trim();
+        if (active && nextName) setServiceName(nextName);
+      })
+      .catch(() => {
+        // Keep the local fallback so navigation is never blocked by branding.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
   const canShowLink = (link: NavLinkItem) => {
     if (isProduction && prodDisabledRoutes.includes(link.href)) {
       return false;
@@ -665,7 +683,6 @@ export default function Nav({ onNavigate }: NavProps) {
           padding: "6px",
           borderRadius: 16,
           background: "rgba(255,255,255,0.72)",
-          border: "1px solid rgba(226,232,240,0.78)",
         }}
       >
         <Link
@@ -711,31 +728,22 @@ export default function Nav({ onNavigate }: NavProps) {
               >
                 {currentSession.email}
               </Text>
-              {appVersion ? (
-                <Tooltip
-                  label={appVersion}
-                  position="bottom-end"
-                  withArrow
-                  multiline
-                  maw={260}
-                  openDelay={250}
-                >
-                  <Text
-                    size="9px"
-                    c="dimmed"
-                    ta="right"
-                    lh={1.1}
-                    w="100%"
-                    style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {appVersion}
-                  </Text>
-                </Tooltip>
-              ) : null}
+              <Text
+                size="10px"
+                fw={700}
+                c="dimmed"
+                ta="right"
+                lh={1.1}
+                title={serviceName}
+                w="100%"
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {serviceName}
+              </Text>
             </>
           ) : null}
         </Stack>
@@ -786,6 +794,25 @@ export default function Nav({ onNavigate }: NavProps) {
           >
             Cerrar sesion
           </Button>
+          <Box
+            component="footer"
+            ta="center"
+            py={4}
+            style={{ opacity: 0.58, userSelect: "none" }}
+          >
+            <Text
+              size="11px"
+              fw={850}
+              tt="uppercase"
+              lh={1.1}
+              style={{ letterSpacing: "0.16em" }}
+            >
+              {serviceName}
+            </Text>
+            <Text size="9px" c="dimmed" lh={1.2} mt={2}>
+              Finanzas · Inventario · Gestión
+            </Text>
+          </Box>
         </Stack>
       </Box>
     </Stack>

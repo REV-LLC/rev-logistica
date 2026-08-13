@@ -17,6 +17,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Tabs,
   Text,
@@ -50,6 +51,8 @@ import InventoryItemPickerModal, {
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
+import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -96,6 +99,7 @@ type SelectedItem = {
   ownerWarehouseId?: string | null;
   isDamaged?: boolean;
   damageDescription?: string;
+  associatedMixerId?: string;
 };
 
 type EvidencePhotoDraft = {
@@ -136,6 +140,7 @@ type RequestDocument = {
 type RequestDocumentDetail = {
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
+  status: string;
   consecutive: string | null;
   docDate: string;
   notes: string | null;
@@ -169,6 +174,9 @@ type RequestDocumentDetail = {
       id: string;
       serialOrEngine?: string | null;
       description?: string | null;
+      kind?: 'STANDARD' | 'MOTOR' | string | null;
+      assignedMotorId?: string | null;
+      assignedToMixer?: { id: string } | null;
       sku?: { id: string; name: string } | null;
     } | null;
   }>;
@@ -294,11 +302,114 @@ function parseNotes(notes: string | null) {
   });
   return {
     deliveryMode: map.get('entrega') ?? '',
-    vehicleId: map.get('vehículo') ?? '',
+    vehicleId: map.get('vehículo') ?? map.get('vehiculo') ?? '',
     driverId: map.get('conductor') ?? '',
     receiverId: map.get('recibe') ?? '',
     dispatcherId: map.get('despachador') ?? '',
   };
+}
+
+const SYSTEM_NOTE_KEYS = new Set([
+  'fecha documento',
+  'fecha doc',
+  'fecha corte',
+  'document date',
+  'cutoff date',
+  'entrega',
+  'vehicle',
+  'vehiculo',
+  'conductor',
+  'driver',
+  'recibe',
+  'dispatcher',
+  'despachador',
+]);
+
+function normalizeNoteKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function extractUserObservations(notes: string | null) {
+  if (!notes) return '';
+  return notes
+    .split('|')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((part) => {
+      const separatorIndex = part.indexOf(':');
+      if (separatorIndex < 0) return true;
+      return !SYSTEM_NOTE_KEYS.has(normalizeNoteKey(part.slice(0, separatorIndex)));
+    })
+    .join(' | ');
+}
+
+function buildRequestNotes({
+  observations,
+  docDate,
+  docType,
+  deliveryMode,
+  vehicleId,
+  driverId,
+  dispatcherId,
+}: {
+  observations: string;
+  docDate: string;
+  docType: 'REMISSION' | 'RETURN';
+  deliveryMode: 'WAREHOUSE' | 'ON_SITE';
+  vehicleId: string | null;
+  driverId: string | null;
+  dispatcherId: string | null;
+}) {
+  return [
+    observations.trim() || null,
+    `Fecha documento: ${docDate}`,
+    docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
+    deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
+    docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
+      ? `Conductor: ${driverId}`
+      : null,
+    docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
+    deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
+}
+
+function buildRequestItems(items: SelectedItem[], requireOwner: boolean) {
+  return items.map((item) => {
+    if (requireOwner && !item.ownerWarehouseId) {
+      throw new Error(`Missing owner for item ${item.name}`);
+    }
+    const conditionNote =
+      item.isDamaged && item.damageDescription?.trim()
+        ? item.damageDescription.trim()
+        : undefined;
+    if (item.type === 'free') {
+      return {
+        requestedTag: item.requestedTag ?? item.name,
+        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+        conditionNote,
+      };
+    }
+    if (item.type === 'bulk') {
+      return {
+        skuId: item.skuId,
+        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+        conditionNote,
+      };
+    }
+    return {
+      assetId: item.assetId,
+      ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+      conditionNote,
+    };
+  });
 }
 
 function normalizeApiErrorMessages(error: ApiError) {
@@ -394,7 +505,7 @@ function readFlowStateFromUrl() {
   };
 }
 
-function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
+function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep, draftId?: string | null) {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
   const isGenerateRoute = url.pathname.startsWith('/transport/generate');
@@ -405,9 +516,15 @@ function pushFlowStateToUrl(tab: SolicitudesTab, step: GenerateStep) {
       url.searchParams.set('tab', 'generate');
     }
     url.searchParams.set('step', step);
+    if (draftId) {
+      url.searchParams.set('draft', draftId);
+    } else {
+      url.searchParams.delete('draft');
+    }
   } else {
     url.searchParams.delete('tab');
     url.searchParams.delete('step');
+    url.searchParams.delete('draft');
   }
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -430,10 +547,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [additionalRecipientPhones, setAdditionalRecipientPhones] = useState<string[]>([]);
   const [recipientPhoneDraft, setRecipientPhoneDraft] = useState('');
+  const [sendWhatsapp, setSendWhatsapp] = useState(true);
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [observations, setObservations] = useState('');
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [dispatcherId, setDispatcherId] = useState<string | null>(null);
@@ -459,6 +578,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
+  const [pendingMixerQueue, setPendingMixerQueue] = useState<InventorySerial[]>([]);
+  const [assigningMotor, setAssigningMotor] = useState(false);
+  const [assignMotorError, setAssignMotorError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -467,6 +589,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [documentsRequest, setDocumentsRequest] = useState<RequestDocument | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [autosaveDraftId, setAutosaveDraftId] = useState<string | null>(null);
+  const [autosaveReady, setAutosaveReady] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'error'>('idle');
   const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveDocument, setResolveDocument] = useState<RequestDocumentDetail | null>(null);
@@ -499,11 +624,14 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
+  const autosaveCreatingRef = useRef(false);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
+  const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
+  const shouldSendWhatsapp = !canDecide || sendWhatsapp;
   const canResolveInline = canDecide && Boolean(editingRequestId);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
@@ -566,6 +694,24 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     () => serialItems.filter((item) => !selectedSerialIds.has(item.assetId)),
     [serialItems, selectedSerialIds],
   );
+  const pickerSerialItems = useMemo(
+    () =>
+      docType === 'REMISSION'
+        ? availableSerialItems.filter((item) => item.kind !== 'MOTOR')
+        : availableSerialItems,
+    [availableSerialItems, docType],
+  );
+  const activePendingMixer = pendingMixerQueue[0] ?? null;
+  const availableMotorsForMixer = useMemo(() => {
+    if (!activePendingMixer) return [];
+    return serialItems.filter(
+      (item) =>
+        item.kind === 'MOTOR'
+        && item.quantity > 0
+        && (!item.assignedMixerId || item.assignedMixerId === activePendingMixer.assetId)
+        && !selectedSerialIds.has(item.assetId),
+    );
+  }, [activePendingMixer, selectedSerialIds, serialItems]);
   const onSiteItemOptions = useMemo(
     () => [
       ...availableSerialItems.map((item) => ({
@@ -625,6 +771,68 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     () => [...new Set([...defaultWhatsappPhones, ...additionalRecipientPhones])],
     [additionalRecipientPhones, defaultWhatsappPhones],
   );
+  const autosavePayload = useMemo(
+    () => ({
+      type: docType,
+      number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
+      warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
+      customerWorksiteId: customerWorksiteId || undefined,
+      notes: buildRequestNotes({
+        observations,
+        docDate,
+        docType,
+        deliveryMode,
+        vehicleId,
+        driverId,
+        dispatcherId,
+      }),
+      recipientPhones: shouldSendWhatsapp ? whatsappRecipientPhones : [],
+      receivedSignature: receivedSignature ?? '',
+      items: buildRequestItems(selectedItems, false),
+    }),
+    [
+      consecutive,
+      customerWorksiteId,
+      deliveryMode,
+      dispatcherId,
+      docDate,
+      docType,
+      driverId,
+      observations,
+      principalWarehouse?.id,
+      receivedSignature,
+      selectedItems,
+      shouldSendWhatsapp,
+      vehicleId,
+      warehouseId,
+      whatsappRecipientPhones,
+    ],
+  );
+
+  useEffect(() => {
+    if (!autosaveDraftId || !autosaveReady || editingRequestId || submitting) return;
+    if (!navigator.onLine) {
+      setAutosaveStatus('offline');
+      return;
+    }
+    let active = true;
+    const timeout = window.setTimeout(async () => {
+      setAutosaveStatus('saving');
+      try {
+        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+          method: 'PATCH',
+          json: autosavePayload,
+        });
+        if (active) setAutosaveStatus('saved');
+      } catch {
+        if (active) setAutosaveStatus('error');
+      }
+    }, 900);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [autosaveDraftId, autosavePayload, autosaveReady, editingRequestId, submitting]);
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
@@ -687,8 +895,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       skipNextFlowUrlSyncRef.current = false;
       return;
     }
-    pushFlowStateToUrl(fixedTab, generateStep);
-  }, [fixedTab, flowUrlReady, generateStep]);
+    pushFlowStateToUrl(fixedTab, generateStep, autosaveDraftId);
+  }, [autosaveDraftId, fixedTab, flowUrlReady, generateStep]);
 
   const ensureSignatureCanvas = (source?: string | null) => {
     const canvas = signatureCanvasRef.current;
@@ -1013,10 +1221,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   }, []);
 
   useEffect(() => {
-    if (!principalWarehouse?.id) return;
-    if (warehouseId !== principalWarehouse.id) {
-      setWarehouseId(principalWarehouse.id);
-    }
+    if (!principalWarehouse?.id || warehouseId) return;
+    setWarehouseId(principalWarehouse.id);
   }, [principalWarehouse?.id, warehouseId]);
 
   useEffect(() => {
@@ -1633,7 +1839,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
   };
 
-  const addSerialItem = (item: InventorySerial) => {
+  const appendSerialItem = (item: InventorySerial, associatedMixerId?: string) => {
     let added = false;
     setSelectedItems((prev) => {
       const exists = prev.find((entry) => entry.assetId === item.assetId && entry.type === 'serial');
@@ -1646,11 +1852,103 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           assetId: item.assetId,
           name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
-          ownerWarehouseId: item.ownerWarehouseId
+          ownerWarehouseId: item.ownerWarehouseId,
+          associatedMixerId,
         }
       ];
     });
     return added;
+  };
+
+  const addSerialItem = (item: InventorySerial) => {
+    if (
+      docType === 'REMISSION'
+      && item.motorConfiguration === 'INTERCHANGEABLE'
+      && item.kind !== 'MOTOR'
+    ) {
+      let queued = false;
+      setPendingMixerQueue((current) => {
+        const alreadyQueued = current.some((mixer) => mixer.assetId === item.assetId);
+        const alreadySelected = selectedSerialIds.has(item.assetId);
+        if (alreadyQueued || alreadySelected) return current;
+        queued = true;
+        return [...current, item];
+      });
+      return queued;
+    }
+    return appendSerialItem(item);
+  };
+
+  const cancelPendingMixer = () => {
+    if (assigningMotor) return;
+    setAssignMotorError(null);
+    setPendingMixerQueue((current) => current.slice(1));
+  };
+
+  const confirmMixerMotor = async (motor: InventorySerial) => {
+    if (!activePendingMixer) return;
+    setAssigningMotor(true);
+    setAssignMotorError(null);
+    try {
+      await api(`/assets/${activePendingMixer.assetId}/assigned-motor`, {
+        method: 'PATCH',
+        json: { motorId: motor.assetId },
+      });
+
+      setSelectedItems((current) => {
+        const withoutDuplicates = current.filter(
+          (item) => item.assetId !== activePendingMixer.assetId && item.assetId !== motor.assetId,
+        );
+        return [
+          ...withoutDuplicates,
+          {
+            type: 'serial',
+            assetId: activePendingMixer.assetId,
+            name: getSerialDisplayName(activePendingMixer),
+            serial: activePendingMixer.serialOrEngine,
+            ownerWarehouseId: activePendingMixer.ownerWarehouseId,
+          },
+          {
+            type: 'serial',
+            assetId: motor.assetId,
+            name: `${getSerialDisplayName(motor)} · motor asociado`,
+            serial: motor.serialOrEngine,
+            ownerWarehouseId: motor.ownerWarehouseId,
+            associatedMixerId: activePendingMixer.assetId,
+          },
+        ];
+      });
+      setSerialItems((current) =>
+        current.map((item) => {
+          if (
+            item.kind === 'MOTOR'
+            && item.assignedMixerId === activePendingMixer.assetId
+            && item.assetId !== motor.assetId
+          ) {
+            return { ...item, assignedMixerId: null };
+          }
+          if (item.assetId === motor.assetId) {
+            return { ...item, assignedMixerId: activePendingMixer.assetId };
+          }
+          if (item.assetId === activePendingMixer.assetId) {
+            return { ...item, assignedMotorId: motor.assetId };
+          }
+          return item;
+        }),
+      );
+      setItemsAddedNotice('Mezcladora y motor agregados al documento.');
+      setPendingMixerQueue((current) => current.slice(1));
+    } catch (err) {
+      setAssignMotorError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'No se pudo asignar el motor.',
+      );
+    } finally {
+      setAssigningMotor(false);
+    }
   };
 
   const addFreeItem = () => {
@@ -1722,21 +2020,56 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setSelectedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)));
   };
 
+  const updateSelectedOwner = (index: number, ownerWarehouseId: string | null) => {
+    setSelectedItems((prev) =>
+      prev.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        return {
+          ...item,
+          ownerWarehouseId,
+          ...(item.type === 'bulk' && item.skuId
+            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId }) }
+            : {}),
+        };
+      }),
+    );
+  };
+
   const removeSelected = (index: number) => {
-    setSelectedItems((prev) => prev.filter((_, i) => i !== index));
+    setSelectedItems((prev) => {
+      const removed = prev[index];
+      if (!removed) return prev;
+      const mixerId = removed.associatedMixerId ?? removed.assetId;
+      return prev.filter(
+        (item, itemIndex) =>
+          itemIndex !== index
+          && item.assetId !== mixerId
+          && item.associatedMixerId !== mixerId,
+      );
+    });
   };
 
   const resetGenerateForm = () => {
+    if (currentUserId) {
+      window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+    }
     setEditingRequestId(null);
+    setAutosaveDraftId(null);
+    setAutosaveReady(false);
+    setAutosaveStatus('idle');
+    setPendingMixerQueue([]);
+    setAssignMotorError(null);
     setError(null);
     setConsecutive('');
     setCustomerId(null);
     setAdditionalRecipientPhones([]);
     setRecipientPhoneDraft('');
+    setSendWhatsapp(true);
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
+    setObservations('');
     setVehicleId(null);
     setDriverId(null);
     setDispatcherId(null);
@@ -1754,8 +2087,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     clearAlternateSourceDocument();
   };
 
-  const editRequest = async (documentId: string) => {
-    if (mode === 'requests') {
+  const editRequest = async (documentId: string, autosaved = false) => {
+    if (mode === 'requests' && !autosaved) {
       router.push(`/transport/generate?edit=${documentId}`);
       return;
     }
@@ -1764,8 +2097,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setSubmitResult(null);
     try {
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      if (autosaved && doc.status !== 'IN_PROGRESS') {
+        throw new Error('El formulario autoguardado ya fue enviado.');
+      }
       const parsed = parseNotes(doc.notes ?? null);
-      setEditingRequestId(doc.id);
+      setEditingRequestId(autosaved ? null : doc.id);
+      setAutosaveDraftId(autosaved ? doc.id : null);
+      setAutosaveReady(false);
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
@@ -1784,6 +2122,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
+      setObservations(extractUserObservations(doc.notes ?? null));
       setVehicleId(parsed.vehicleId ?? null);
       setDriverId(parsed.receiverId || parsed.driverId || null);
       setDispatcherId(parsed.dispatcherId ?? null);
@@ -1831,6 +2170,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               'Serial',
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
+            associatedMixerId: item.asset?.assignedToMixer?.id,
             isDamaged: Boolean(item.conditionNote?.trim()),
             damageDescription: item.conditionNote ?? '',
           };
@@ -1841,7 +2181,19 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       clearEvidencePhotos();
       setActiveTab('generate');
       setGenerateStep('info');
+      if (autosaved) {
+        if (currentUserId) {
+          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, doc.id);
+        }
+        window.setTimeout(() => {
+          setAutosaveReady(true);
+          setAutosaveStatus('saved');
+        }, 0);
+      }
     } catch (err) {
+      if (autosaved && currentUserId) {
+        window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+      }
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -1854,10 +2206,20 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   useEffect(() => {
     if (mode !== 'generate' || typeof window === 'undefined') return;
-    const editId = new URLSearchParams(window.location.search).get('edit');
+    const params = new URLSearchParams(window.location.search);
+    const draftId =
+      params.get('draft') ??
+      (currentUserId
+        ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
+        : null);
+    if (draftId && autosaveDraftId !== draftId) {
+      void editRequest(draftId, true);
+      return;
+    }
+    const editId = params.get('edit');
     if (!editId || editingRequestId === editId) return;
     void editRequest(editId);
-  }, [editingRequestId, mode]);
+  }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -1880,24 +2242,26 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (!customerWorksiteId) {
         throw new Error('Selecciona la obra.');
       }
-      const pendingRecipientPhone = recipientPhoneDraft
+      const pendingRecipientPhone = shouldSendWhatsapp && recipientPhoneDraft
         ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
         : null;
-      if (recipientPhoneDraft && !pendingRecipientPhone) {
+      if (shouldSendWhatsapp && recipientPhoneDraft && !pendingRecipientPhone) {
         throw new Error('El número adicional debe contener exactamente 10 dígitos.');
       }
-      const recipientPhones = [
-        ...new Set([
-          ...whatsappRecipientPhones,
-          ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
-        ]),
-      ];
-      if (!recipientPhones.length) {
+      const recipientPhones = shouldSendWhatsapp
+        ? [
+            ...new Set([
+              ...whatsappRecipientPhones,
+              ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
+            ]),
+          ]
+        : [];
+      if (shouldSendWhatsapp && !recipientPhones.length) {
         throw new Error(
           'El cliente y la obra no tienen teléfono. Agrega al menos un destinatario de WhatsApp.',
         );
       }
-      if (recipientPhones.length > 10) {
+      if (shouldSendWhatsapp && recipientPhones.length > 10) {
         throw new Error('Puedes enviar el documento a máximo 10 destinatarios de WhatsApp.');
       }
       if (!editingRequestId && !receivedSignature) {
@@ -1931,65 +2295,103 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
-        recipientPhones,
-        receivedSignature: editingRequestId ? undefined : (receivedSignature ?? undefined),
-        notes: [
-          `Fecha documento: ${docDate}`,
-          docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
-          deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
-          docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
-            ? `Conductor: ${driverId}`
-            : null,
-          docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
-          deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null
-        ].filter(Boolean).join(' | ')
+        ...(shouldSendWhatsapp ? { recipientPhones } : {}),
+        ...(!editingRequestId ? { sendWhatsapp: shouldSendWhatsapp } : {}),
+        receivedSignature:
+          editingRequestId && !isAdminRole ? undefined : (receivedSignature ?? ''),
+        notes: buildRequestNotes({
+          observations,
+          docDate,
+          docType,
+          deliveryMode,
+          vehicleId,
+          driverId,
+          dispatcherId,
+        }),
       } as const;
 
-      const movementItems = selectedItems.map((item) => {
-        if (!item.ownerWarehouseId) {
-          throw new Error(`Missing owner for item ${item.name}`);
+      const movementItems = buildRequestItems(selectedItems, true);
+      if (!navigator.onLine) {
+        if (!autosaveDraftId) {
+          throw new Error(
+            'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
+          );
         }
-        if (item.type === 'free') {
-          return {
-            requestedTag: item.requestedTag ?? item.name,
-            quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-            ownerWarehouseId: item.ownerWarehouseId,
-            conditionNote:
-              docType === 'RETURN' && item.isDamaged
-                ? item.damageDescription?.trim()
-                : undefined,
-          };
+        if (evidencePhotos.length || alternateSourceDocument) {
+          throw new Error(
+            'Los archivos y fotografías todavía requieren conexión. Retíralos o envía el documento cuando vuelva la red.',
+          );
         }
-        return item.type === 'bulk'
-          ? {
-              skuId: item.skuId,
-              quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-              ownerWarehouseId: item.ownerWarehouseId,
-              conditionNote:
-                docType === 'RETURN' && item.isDamaged
-                  ? item.damageDescription?.trim()
-                  : undefined,
-            }
-          : {
-              assetId: item.assetId,
-              ownerWarehouseId: item.ownerWarehouseId,
-              conditionNote:
-                docType === 'RETURN' && item.isDamaged
-                  ? item.damageDescription?.trim()
-                  : undefined,
-            };
-      });
 
-      const created = await api<{ id: string }>(
-        editingRequestId ? `/documents/${editingRequestId}/request` : '/documents/requests',
-        {
-          method: editingRequestId ? 'PATCH' : 'POST',
-          json: {
+        const autosaveOperation = await enqueueOfflineOperation({
+          label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/request/autosave`,
+          method: 'PATCH',
+          body: {
+            ...autosavePayload,
             ...documentPayload,
+            sendWhatsapp: undefined,
             items: movementItems,
           },
-        },
-      );
+        });
+        const submitOperation = await enqueueOfflineOperation({
+          label: `Enviar solicitud ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/request/submit`,
+          body: { sendWhatsapp: shouldSendWhatsapp },
+          dependsOn: [autosaveOperation.id],
+        });
+        await enqueueOfflineOperation({
+          label: `Enviar correo ${autosaveDraftId.slice(0, 8)}`,
+          path: `/documents/${autosaveDraftId}/customer-email/draft`,
+          dependsOn: [submitOperation.id],
+        });
+        if (shouldSendWhatsapp) {
+          await enqueueOfflineOperation({
+            label: `Enviar WhatsApp ${autosaveDraftId.slice(0, 8)}`,
+            path: `/documents/${autosaveDraftId}/customer-messages/draft`,
+            dependsOn: [submitOperation.id],
+          });
+        }
+
+        resetGenerateForm();
+        setSubmitResult(
+          'Solicitud guardada en este dispositivo. Se sincronizará automáticamente al recuperar la conexión.',
+        );
+        setItemsModalOpen(false);
+        setWorksites([]);
+        return;
+      }
+
+      let created: { id: string };
+      if (autosaveDraftId) {
+        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+          method: 'PATCH',
+          json: {
+            ...autosavePayload,
+            ...documentPayload,
+            sendWhatsapp: undefined,
+            items: movementItems,
+          },
+        });
+        created = await api<{ id: string }>(
+          `/documents/${autosaveDraftId}/request/submit`,
+          {
+            method: 'POST',
+            json: { sendWhatsapp: shouldSendWhatsapp },
+          },
+        );
+      } else {
+        created = await api<{ id: string }>(
+          editingRequestId ? `/documents/${editingRequestId}/request` : '/documents/requests',
+          {
+            method: editingRequestId ? 'PATCH' : 'POST',
+            json: {
+              ...documentPayload,
+              items: movementItems,
+            },
+          },
+        );
+      }
       const successMessage = editingRequestId
         ? `Request updated (${created.id}).`
         : `Request sent as draft (${created.id}).`;
@@ -2002,9 +2404,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           await api(`/documents/${created.id}/customer-email/draft`, {
             method: 'POST',
           });
-          await api(`/documents/${created.id}/customer-messages/draft`, {
-            method: 'POST',
-          });
+          if (shouldSendWhatsapp) {
+            await api(`/documents/${created.id}/customer-messages/draft`, {
+              method: 'POST',
+            });
+          }
         }
       } catch (uploadError) {
         const message =
@@ -2025,6 +2429,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         router.push('/transport/requests');
       }
       router.refresh();
+      void syncOfflineOperations();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -2038,7 +2443,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
   };
 
-  const goToItemsStep = () => {
+  const goToItemsStep = async () => {
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
@@ -2055,6 +2460,37 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       setError('Revisa los campos obligatorios resaltados.');
       return;
     }
+    if (!editingRequestId && !autosaveDraftId) {
+      if (autosaveCreatingRef.current) return;
+      autosaveCreatingRef.current = true;
+      setAutosaveStatus('saving');
+      try {
+        const draft = await api<{ id: string; consecutive?: string | null }>(
+          '/documents/requests/autosave',
+          {
+            method: 'POST',
+            json: autosavePayload,
+          },
+        );
+        setAutosaveDraftId(draft.id);
+        if (currentUserId) {
+          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, draft.id);
+        }
+        setAutosaveReady(true);
+        setAutosaveStatus('saved');
+        if (draft.consecutive) setConsecutive(draft.consecutive);
+      } catch (err) {
+        setAutosaveStatus('error');
+        setError(
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : 'No se pudo iniciar el autoguardado.',
+        );
+        return;
+      } finally {
+        autosaveCreatingRef.current = false;
+      }
+    }
     setGenerateStep('items');
   };
 
@@ -2069,7 +2505,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const handleGenerateStepChange = (value: string | null) => {
     if (value === 'items') {
-      goToItemsStep();
+      void goToItemsStep();
       return;
     }
     if (value === 'sign') {
@@ -2108,6 +2544,33 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             required
           />
         ) : null}
+      </Stack>
+    );
+  };
+
+  const renderAdminItemFields = (item: SelectedItem, index: number) => {
+    if (!editingRequestId || !isAdminRole) return null;
+    return (
+      <Stack gap="xs" mt="xs">
+        {item.type === 'free' ? (
+          <TextInput
+            label="Referencia del item"
+            value={item.requestedTag ?? item.name}
+            onChange={(event) => {
+              const requestedTag = event.currentTarget.value;
+              updateSelected(index, { requestedTag, name: requestedTag });
+            }}
+          />
+        ) : null}
+        <WarehouseSelect
+          label="Bodega dueña del item"
+          value={item.ownerWarehouseId ?? null}
+          onChange={(value) => updateSelectedOwner(index, value)}
+          warehouses={warehouses}
+          clearable={false}
+          required
+          width="100%"
+        />
       </Stack>
     );
   };
@@ -2304,9 +2767,27 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
                           {formatDocType(docType)}
                         </Badge>
-                        <Badge color={editingRequestId ? 'grape' : 'teal'} variant="light">
-                          {editingRequestId ? `Editando ${editingRequestId.slice(0, 8)}` : 'Nueva solicitud'}
+                        <Badge color={editingRequestId ? 'grape' : autosaveDraftId ? 'blue' : 'teal'} variant="light">
+                          {editingRequestId
+                            ? `Editando ${editingRequestId.slice(0, 8)}`
+                            : autosaveDraftId
+                              ? `Borrador ${autosaveDraftId.slice(0, 8)}`
+                              : 'Nueva solicitud'}
                         </Badge>
+                        {autosaveDraftId ? (
+                          <Badge
+                            color={autosaveStatus === 'error' ? 'red' : autosaveStatus === 'saving' || autosaveStatus === 'offline' ? 'yellow' : 'green'}
+                            variant="dot"
+                          >
+                            {autosaveStatus === 'saving'
+                              ? 'Guardando...'
+                              : autosaveStatus === 'offline'
+                                ? 'Cambios en dispositivo'
+                              : autosaveStatus === 'error'
+                                ? 'Error al guardar'
+                                : 'Guardado'}
+                          </Badge>
+                        ) : null}
                       </Group>
                       <Text fw={800} size="lg">
                         Generar documento
@@ -2315,9 +2796,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         Completa informacion, items y firma antes de enviar.
                       </Text>
                     </div>
-                    {editingRequestId ? (
+                    {editingRequestId || autosaveDraftId ? (
                       <Button variant="light" color="gray" onClick={resetGenerateForm}>
-                        Cancelar edicion
+                        {editingRequestId ? 'Cancelar edición' : 'Salir del borrador'}
                       </Button>
                     ) : null}
                   </Group>
@@ -2400,6 +2881,31 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               error={generateFieldErrors.docDate}
             />
                     </SimpleGrid>
+                    {editingRequestId && isAdminRole ? (
+                      <WarehouseSelect
+                        label={docType === 'RETURN' ? 'Bodega destino' : 'Bodega del documento'}
+                        value={warehouseId}
+                        onChange={setWarehouseId}
+                        warehouses={warehouses}
+                        clearable={false}
+                        required
+                        width="100%"
+                      />
+                    ) : null}
+                    <Textarea
+                      label="Observaciones"
+                      description="Información adicional que aparecerá en el documento."
+                      placeholder={
+                        docType === 'RETURN'
+                          ? 'Ej. Equipos entregados sin novedades'
+                          : 'Ej. Entregar en la portería de la obra'
+                      }
+                      value={observations}
+                      onChange={(event) => setObservations(event.currentTarget.value)}
+                      minRows={3}
+                      maxRows={6}
+                      autosize
+                    />
                   </Stack>
                 </Paper>
 
@@ -2758,6 +3264,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         </Text>
                       )}
                       {renderDamageFields(item, index)}
+                      {renderAdminItemFields(item, index)}
                     </Table.Td>
                     <Table.Td>
                       {item.type === 'bulk' || item.type === 'free' ? (
@@ -2825,6 +3332,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                       <Text size="sm">Cantidad: 1</Text>
                     )}
                     {renderDamageFields(item, index)}
+                    {renderAdminItemFields(item, index)}
                     {canResolveInline && item.type === 'free' ? (
                       <Select
                         label="Resolver a SKU"
@@ -2908,12 +3416,27 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
           <Paper withBorder radius="lg" p="md" mb="md">
             <Stack gap="sm">
-              <div>
-                <Text fw={700}>Destinatarios de WhatsApp</Text>
-                <Text size="sm" c="dimmed">
-                  El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
-                </Text>
-              </div>
+              <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                <div>
+                  <Text fw={700}>Destinatarios de WhatsApp</Text>
+                  <Text size="sm" c="dimmed">
+                    El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
+                  </Text>
+                </div>
+                {canDecide ? (
+                  <Switch
+                    checked={sendWhatsapp}
+                    onChange={(event) => {
+                      setSendWhatsapp(event.currentTarget.checked);
+                      setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+                    }}
+                    label="Enviar por WhatsApp"
+                  />
+                ) : null}
+              </Group>
+
+              {shouldSendWhatsapp ? (
+                <>
 
               {defaultWhatsappRecipients.map((recipient) => (
                 <Group key={recipient.key} justify="space-between" align="center" wrap="nowrap">
@@ -2975,6 +3498,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               {generateFieldErrors.recipientPhones ? (
                 <Text size="xs" c="red">{generateFieldErrors.recipientPhones}</Text>
               ) : null}
+                </>
+              ) : (
+                <Alert color="gray" variant="light">
+                  El documento se creará sin exigir teléfonos ni enviar una copia por WhatsApp.
+                </Alert>
+              )}
             </Stack>
           </Paper>
 
@@ -3053,21 +3582,36 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               <Text size="sm" c="dimmed">
                 {receivedSignature ? 'Firma capturada' : 'Sin firma'}
               </Text>
-              {editingRequestId ? (
+              {editingRequestId && !isAdminRole ? (
                 <Text size="xs" c="dimmed">
                   Firma bloqueada durante la edicion
                 </Text>
               ) : (
-                <Button
-                  type="button"
-                  variant="light"
-                  onClick={() => {
-                    setSignatureDraft(receivedSignature);
-                    setSignatureModalOpen(true);
-                  }}
-                >
-                  Firmar
-                </Button>
+                <Group gap="xs">
+                  {editingRequestId && receivedSignature ? (
+                    <Button
+                      type="button"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => {
+                        setReceivedSignature(null);
+                        setSignatureDraft(null);
+                      }}
+                    >
+                      Eliminar firma
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="light"
+                    onClick={() => {
+                      setSignatureDraft(receivedSignature);
+                      setSignatureModalOpen(true);
+                    }}
+                  >
+                    {receivedSignature ? 'Cambiar firma' : 'Firmar'}
+                  </Button>
+                </Group>
               )}
             </Group>
             {receivedSignature ? (
@@ -3384,7 +3928,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
         bulkItems={availableBulkItems}
-        serialItems={availableSerialItems}
+        serialItems={pickerSerialItems}
         selectedBulkKeys={selectedBulkKeys}
         selectedSerialIds={selectedSerialIds}
         onAddBulk={addBulkItem}
@@ -3397,6 +3941,16 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           useManualWarehouseCapture ? 'Use description capture in the main section.' : null
         }
         onItemAddedNotice={setItemsAddedNotice}
+      />
+
+      <MixerMotorSelectionModal
+        opened={Boolean(activePendingMixer)}
+        mixer={activePendingMixer}
+        motors={availableMotorsForMixer}
+        loading={assigningMotor}
+        error={assignMotorError}
+        onCancel={cancelPendingMixer}
+        onConfirm={confirmMixerMotor}
       />
 
       <Modal

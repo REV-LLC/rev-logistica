@@ -367,6 +367,7 @@ export default function DocumentDetailPage() {
   const params = useParams<{ documentId: string }>();
   const documentId = params?.documentId;
   const userRole = useMemo(() => getCurrentUserRole(), []);
+  const isDriverRole = userRole === 'DRIVER';
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
 
   const [loading, setLoading] = useState(true);
@@ -1147,12 +1148,24 @@ export default function DocumentDetailPage() {
           size="lg"
           mb="sm"
           aria-label="Volver"
-          onClick={() => router.back()}
+          onClick={() => {
+            if (isDriverRole) {
+              router.push('/transport/requests');
+              return;
+            }
+            router.back();
+          }}
           className={styles.noPrint}
         >
           <IconArrowLeft size={18} />
         </ActionIcon>
-        <Paper shadow="sm" p="xl" radius="md" withBorder className={styles.noPrint}>
+        <Paper
+          shadow="sm"
+          p={{ base: 'md', sm: 'xl' }}
+          radius="md"
+          withBorder
+          className={styles.noPrint}
+        >
           <Group justify="space-between" className="mobile-stack">
             <div>
               <Title order={2}>{title}</Title>
@@ -1260,7 +1273,7 @@ export default function DocumentDetailPage() {
                         <Table.Th>Fecha de corte</Table.Th>
                         <Table.Th>Fecha real de devolución</Table.Th>
                         <Table.Th>Estado</Table.Th>
-                        <Table.Th ta="right">Acciones</Table.Th>
+                        {canDecide ? <Table.Th ta="right">Acciones</Table.Th> : null}
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -1285,19 +1298,21 @@ export default function DocumentDetailPage() {
                                 {formatBillingStatus(billingStatus)}
                               </Badge>
                             </Table.Td>
-                            <Table.Td>
-                              <TableRowActions
-                                actions={[
-                                  {
-                                    key: 'cutoff',
-                                    label: `Definir corte de ${describeItem(item)}`,
-                                    icon: <IconCalendar size={16} />,
-                                    color: 'blue',
-                                    onClick: () => openBillingModal(item),
-                                  },
-                                ]}
-                              />
-                            </Table.Td>
+                            {canDecide ? (
+                              <Table.Td>
+                                <TableRowActions
+                                  actions={[
+                                    {
+                                      key: 'cutoff',
+                                      label: `Definir corte de ${describeItem(item)}`,
+                                      icon: <IconCalendar size={16} />,
+                                      color: 'blue',
+                                      onClick: () => openBillingModal(item),
+                                    },
+                                  ]}
+                                />
+                              </Table.Td>
+                            ) : null}
                           </Table.Tr>
                         );
                       })}
@@ -1315,17 +1330,19 @@ export default function DocumentDetailPage() {
                         <Text fw={700} size="sm" className={styles.mobileItemName}>
                           {describeItem(item)}
                         </Text>
-                        <TableRowActions
-                          actions={[
-                            {
-                              key: 'cutoff',
-                              label: `Definir corte de ${describeItem(item)}`,
-                              icon: <IconCalendar size={16} />,
-                              color: 'blue',
-                              onClick: () => openBillingModal(item),
-                            },
-                          ]}
-                        />
+                        {canDecide ? (
+                          <TableRowActions
+                            actions={[
+                              {
+                                key: 'cutoff',
+                                label: `Definir corte de ${describeItem(item)}`,
+                                icon: <IconCalendar size={16} />,
+                                color: 'blue',
+                                onClick: () => openBillingModal(item),
+                              },
+                            ]}
+                          />
+                        ) : null}
                       </Group>
                       {item.conditionNote ? (
                         <Text size="xs" c="red" mt={4}>

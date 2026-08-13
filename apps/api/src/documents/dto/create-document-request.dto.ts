@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -79,6 +80,10 @@ export class CreateDocumentRequestDto {
     message: 'Cada teléfono debe contener exactamente 10 dígitos',
   })
   recipientPhones?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  sendWhatsapp?: boolean;
 
   @IsOptional()
   @IsString()
