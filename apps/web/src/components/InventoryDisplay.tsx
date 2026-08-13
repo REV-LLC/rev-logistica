@@ -1,19 +1,16 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Badge,
   Button,
-  Card,
   Group,
   Paper,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   Title,
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import {
   IconAlertTriangle,
   IconChevronDown,
@@ -21,11 +18,9 @@ import {
   IconMapPin,
 } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
 import { ownerColorById } from '@/lib/owner-color';
-
-const BULK_TABLE_MIN_WIDTH = 860;
-const bulkTableColumns = ['42%', '18%', '26%', '14%'];
-const bulkTableColumnsWithWorksites = ['32%', '14%', '22%', '14%', '18%'];
 
 type BulkItem = {
   skuId: string;
@@ -54,6 +49,32 @@ type BulkItem = {
     quantity: number;
   }>;
 };
+
+type GroupedBulkItem = {
+  skuId: string;
+  assetFamilyId: string | null;
+  name: string;
+  category: string;
+  chargeType: string | null;
+  minimumChargeHours: number | string | null;
+  owners: Array<{
+    ownerWarehouseId: string;
+    ownerWarehouseName: string;
+    quantity: number;
+  }>;
+  visibleOwners: Array<{
+    ownerWarehouseId: string;
+    ownerWarehouseName: string;
+    quantity: number;
+  }>;
+  hiddenOwnersCount: number;
+};
+
+type BulkDisplayRow = BulkItem | GroupedBulkItem;
+
+function getBulkDisplayName(item: BulkDisplayRow) {
+  return item.name ?? ('skuName' in item ? item.skuName : null) ?? '-';
+}
 
 type SerialItem = {
   assetId: string;
@@ -105,7 +126,6 @@ export default function InventoryDisplay({
   compactSerialCards?: boolean;
   showWorksiteQuantities?: boolean;
 }) {
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const [expandedBulkRows, setExpandedBulkRows] = useState<Set<string>>(() => new Set());
 
   const formatCharge = (chargeType?: string | null, minimumChargeHours?: number | string | null) => {
@@ -206,7 +226,7 @@ export default function InventoryDisplay({
     </Stack>
   );
 
-  const groupedBulk = useMemo(() => {
+  const groupedBulk = useMemo<GroupedBulkItem[] | null>(() => {
     if (!bulkOwnerStackMode) return null;
 
         const map = new Map<
@@ -276,7 +296,7 @@ export default function InventoryDisplay({
   }, [bulk, bulkOwnerStackMode]);
 
   const bulkFamilyGroups = useMemo(() => {
-    const rows = bulkOwnerStackMode && groupedBulk ? groupedBulk : bulk;
+    const rows: BulkDisplayRow[] = bulkOwnerStackMode && groupedBulk ? groupedBulk : bulk;
     const map = new Map<
       string,
       {
@@ -285,7 +305,7 @@ export default function InventoryDisplay({
         totalQuantity: number;
         totalWorksiteQuantity: number;
         itemCount: number;
-        items: typeof rows;
+        items: BulkDisplayRow[];
       }
     >();
 
@@ -306,7 +326,7 @@ export default function InventoryDisplay({
           totalQuantity,
           totalWorksiteQuantity: worksiteQuantity,
           itemCount: 1,
-          items: [item] as typeof rows,
+          items: [item],
         });
         return;
       }
@@ -314,11 +334,113 @@ export default function InventoryDisplay({
       current.totalQuantity += totalQuantity;
       current.totalWorksiteQuantity += worksiteQuantity;
       current.itemCount += 1;
-      current.items = [...current.items, item] as typeof rows;
+      current.items = [...current.items, item];
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [bulk, bulkOwnerStackMode, groupedBulk]);
+
+  const bulkColumns: DataTableColumn<BulkDisplayRow>[] = [
+    {
+      id: 'name',
+      header: 'Nombre',
+      ariaLabel: 'nombre',
+      width: showWorksiteQuantities ? '31%' : '38%',
+      sortValue: getBulkDisplayName,
+      mobile: { priority: 'primary' },
+      cell: (item) => <Text fw={600}>{getBulkDisplayName(item)}</Text>,
+    },
+    {
+      id: 'charge',
+      header: 'Cobro',
+      width: showWorksiteQuantities ? '14%' : '18%',
+      mobile: { label: 'Cobro', priority: 'detail' },
+      cell: (item) => formatCharge(item.chargeType, item.minimumChargeHours),
+    },
+    {
+      id: 'owner',
+      header: 'Bodega dueña',
+      width: showWorksiteQuantities ? '22%' : '27%',
+      mobile: { label: 'Bodega dueña', priority: 'detail' },
+      cell: (item) => 'owners' in item ? (
+        <Group gap={6} wrap="wrap">
+          {item.visibleOwners.map((owner) => (
+            <Badge
+              key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
+              color={ownerColorById(owner.ownerWarehouseId)}
+              variant="light"
+            >
+              {owner.ownerWarehouseName}
+            </Badge>
+          ))}
+          {item.hiddenOwnersCount > 0 ? (
+            <Badge color="green" variant="filled">+{item.hiddenOwnersCount} más</Badge>
+          ) : null}
+        </Group>
+      ) : <Text>{item.ownerWarehouseName ?? '-'}</Text>,
+    },
+    {
+      id: 'quantity',
+      header: 'Cantidad',
+      ariaLabel: 'cantidad',
+      width: showWorksiteQuantities ? '14%' : '17%',
+      align: 'right',
+      sortValue: (item) => 'owners' in item
+        ? item.owners.reduce((sum, owner) => sum + owner.quantity, 0)
+        : item.quantity,
+      mobile: { label: 'Cantidad', priority: 'detail' },
+      cell: (item) => 'owners' in item ? (
+        <Group gap={6} justify="flex-end" wrap="wrap">
+          {item.visibleOwners.map((owner) => (
+            <span key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}>
+              {quantityBadge(owner.quantity, ownerColorById(owner.ownerWarehouseId))}
+            </span>
+          ))}
+          {item.hiddenOwnersCount > 0 ? (
+            <Badge color="green" variant="light">+{item.hiddenOwnersCount} más</Badge>
+          ) : null}
+        </Group>
+      ) : isNegativeQuantity(item.quantity) ? (
+        <Group gap={6} justify="flex-end" wrap="nowrap">
+          <IconAlertTriangle size={16} stroke={2.5} color="var(--mantine-color-red-7)" />
+          <Text c="red" fw={700}>{item.quantity}</Text>
+        </Group>
+      ) : item.quantity,
+    },
+    ...(showWorksiteQuantities ? [{
+      id: 'worksiteQuantity',
+      header: 'En obra',
+      align: 'right' as const,
+      width: '19%',
+      mobile: { label: 'En obra', priority: 'detail' as const },
+      cell: (item: BulkDisplayRow) => {
+        if ('owners' in item) return '-';
+        const locations = item.worksiteLocations ?? [];
+        const expanded = expandedBulkRows.has(bulkRowKey(item));
+        return (
+          <Stack gap="xs" align="flex-end">
+            {locations.length ? (
+              <Button
+                size="compact-sm"
+                variant="subtle"
+                color="blue"
+                px={6}
+                rightSection={expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+                aria-label={`Ver ubicaciones de ${item.name ?? item.skuName ?? 'SKU'}`}
+                aria-expanded={expanded}
+                onClick={() => toggleBulkRow(item)}
+              >
+                {item.worksiteQuantity ?? 0}
+              </Button>
+            ) : <Text size="sm">{item.worksiteQuantity ?? 0}</Text>}
+            {expanded && locations.length ? (
+              <Paper withBorder radius="md" p="sm" miw={260}>{worksiteBreakdown(item)}</Paper>
+            ) : null}
+          </Stack>
+        );
+      },
+    }] : []),
+  ];
 
   const serialFamilyGroups = useMemo(() => {
     const map = new Map<
@@ -396,277 +518,15 @@ export default function InventoryDisplay({
                     </Group>
                   </Group>
 
-                  {!isMobile ? (
-                    <Table.ScrollContainer minWidth={BULK_TABLE_MIN_WIDTH}>
-                      <Table
-                        striped
-                        highlightOnHover
-                        style={{ minWidth: BULK_TABLE_MIN_WIDTH, tableLayout: 'fixed' }}
-                      >
-                        <colgroup>
-                          {(showWorksiteQuantities
-                            ? bulkTableColumnsWithWorksites
-                            : bulkTableColumns
-                          ).map((width, index) => (
-                            <col key={`${width}-${index}`} style={{ width }} />
-                          ))}
-                        </colgroup>
-                        <Table.Thead>
-                          <Table.Tr>
-                            <Table.Th>Nombre</Table.Th>
-                            <Table.Th>Cobro</Table.Th>
-                            <Table.Th>Bodega dueña</Table.Th>
-                            <Table.Th style={{ textAlign: 'right' }}>Cantidad</Table.Th>
-                            {showWorksiteQuantities ? (
-                              <Table.Th style={{ textAlign: 'right' }}>Cant. obra</Table.Th>
-                            ) : null}
-                          </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                          {group.items.map((item) =>
-                            'owners' in item ? (
-                              <Table.Tr key={item.skuId}>
-                                <Table.Td>
-                                  <Text truncate title={item.name}>
-                                    {item.name}
-                                  </Text>
-                                </Table.Td>
-                                <Table.Td>
-                                  {formatCharge(item.chargeType, item.minimumChargeHours)}
-                                </Table.Td>
-                                <Table.Td>
-                                  <Group gap={6} wrap="wrap">
-                                    {item.visibleOwners.map((owner) => (
-                                      <Badge
-                                        key={`${item.skuId}-owner-${owner.ownerWarehouseId}`}
-                                        color={ownerColorById(owner.ownerWarehouseId)}
-                                        variant="light"
-                                      >
-                                        {owner.ownerWarehouseName}
-                                      </Badge>
-                                    ))}
-                                    {item.hiddenOwnersCount > 0 ? (
-                                      <Badge color="green" variant="filled">
-                                        +{item.hiddenOwnersCount} mas
-                                      </Badge>
-                                    ) : null}
-                                  </Group>
-                                </Table.Td>
-                                <Table.Td>
-                                  <Group gap={6} justify="flex-end" wrap="wrap">
-                                    {item.visibleOwners.map((owner) => (
-                                      <Badge
-                                        key={`${item.skuId}-qty-${owner.ownerWarehouseId}`}
-                                        color={
-                                          isNegativeQuantity(owner.quantity)
-                                            ? 'red'
-                                            : ownerColorById(owner.ownerWarehouseId)
-                                        }
-                                        variant="filled"
-                                        leftSection={
-                                          isNegativeQuantity(owner.quantity) ? (
-                                            <IconAlertTriangle size={12} stroke={2.5} />
-                                          ) : undefined
-                                        }
-                                      >
-                                        {owner.quantity}
-                                      </Badge>
-                                    ))}
-                                    {item.hiddenOwnersCount > 0 ? (
-                                      <Badge color="green" variant="light">
-                                        +{item.hiddenOwnersCount} mas
-                                      </Badge>
-                                    ) : null}
-                                  </Group>
-                                </Table.Td>
-                                {showWorksiteQuantities ? (
-                                  <Table.Td style={{ textAlign: 'right' }}>-</Table.Td>
-                                ) : null}
-                              </Table.Tr>
-                            ) : (
-                              <Fragment key={bulkRowKey(item)}>
-                                <Table.Tr>
-                                  <Table.Td>
-                                    <Text truncate title={item.name ?? item.skuName ?? '-'}>
-                                      {item.name ?? item.skuName ?? '-'}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    {formatCharge(item.chargeType, item.minimumChargeHours)}
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Text truncate title={item.ownerWarehouseName ?? '-'}>
-                                      {item.ownerWarehouseName ?? '-'}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td style={{ textAlign: 'right' }}>
-                                    {isNegativeQuantity(item.quantity) ? (
-                                      <Group gap={6} justify="flex-end" wrap="nowrap">
-                                        <IconAlertTriangle
-                                          size={16}
-                                          stroke={2.5}
-                                          color="var(--mantine-color-red-7)"
-                                        />
-                                        <Text c="red" fw={700}>
-                                          {item.quantity}
-                                        </Text>
-                                      </Group>
-                                    ) : (
-                                      item.quantity
-                                    )}
-                                  </Table.Td>
-                                  {showWorksiteQuantities ? (
-                                    <Table.Td style={{ textAlign: 'right' }}>
-                                      {(item.worksiteLocations?.length ?? 0) > 0 ? (
-                                        <Button
-                                          size="compact-sm"
-                                          variant="subtle"
-                                          color="blue"
-                                          px={6}
-                                          rightSection={
-                                            expandedBulkRows.has(bulkRowKey(item))
-                                              ? <IconChevronUp size={14} />
-                                              : <IconChevronDown size={14} />
-                                          }
-                                          aria-label={`Ver ubicaciones de ${item.name ?? item.skuName ?? 'SKU'}`}
-                                          aria-expanded={expandedBulkRows.has(bulkRowKey(item))}
-                                          onClick={() => toggleBulkRow(item)}
-                                        >
-                                          {item.worksiteQuantity ?? 0}
-                                        </Button>
-                                      ) : (
-                                        item.worksiteQuantity ?? 0
-                                      )}
-                                    </Table.Td>
-                                  ) : null}
-                                </Table.Tr>
-                                {showWorksiteQuantities
-                                && expandedBulkRows.has(bulkRowKey(item))
-                                && (item.worksiteLocations?.length ?? 0) > 0 ? (
-                                  <Table.Tr bg="gray.0">
-                                    <Table.Td colSpan={5} py="sm">
-                                      {worksiteBreakdown(item)}
-                                    </Table.Td>
-                                  </Table.Tr>
-                                ) : null}
-                              </Fragment>
-                            ),
-                          )}
-                        </Table.Tbody>
-                      </Table>
-                    </Table.ScrollContainer>
-                  ) : (
-                    <Stack gap="sm">
-                      {group.items.map((item) =>
-                        'owners' in item ? (
-                          <Card key={item.skuId} withBorder padding="sm" radius="md">
-                            <Text fw={700}>{item.name}</Text>
-                            <Text size="xs" c="dimmed">
-                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-                            </Text>
-                            <Group mt="xs" gap={6} wrap="wrap">
-                              {item.visibleOwners.map((owner) => (
-                                <Badge
-                                  key={`${item.skuId}-owner-mobile-${owner.ownerWarehouseId}`}
-                                  color={ownerColorById(owner.ownerWarehouseId)}
-                                  variant="light"
-                                >
-                                  {owner.ownerWarehouseName}
-                                </Badge>
-                              ))}
-                              {item.hiddenOwnersCount > 0 ? (
-                                <Badge color="green" variant="filled">
-                                  +{item.hiddenOwnersCount} mas
-                                </Badge>
-                              ) : null}
-                            </Group>
-                            <Group mt={6} gap={6} wrap="wrap">
-                              {item.visibleOwners.map((owner) => (
-                                <span key={`${item.skuId}-qty-mobile-${owner.ownerWarehouseId}`}>
-                                  {quantityBadge(owner.quantity, ownerColorById(owner.ownerWarehouseId))}
-                                </span>
-                              ))}
-                              {item.hiddenOwnersCount > 0 ? (
-                                <Badge color="green" variant="light">
-                                  +{item.hiddenOwnersCount} mas
-                                </Badge>
-                              ) : null}
-                            </Group>
-                          </Card>
-                        ) : (
-                          <Card
-                            key={`${item.skuId}-${item.ownerWarehouseId ?? 'none'}`}
-                            withBorder
-                            padding="sm"
-                            radius="md"
-                          >
-                            <Text fw={700}>{item.name ?? item.skuName ?? 'SKU'}</Text>
-                            <Text size="xs" c="dimmed">
-                              Cobro: {formatCharge(item.chargeType, item.minimumChargeHours)}
-                            </Text>
-                            <Text mt="xs">
-                              <strong>En bodega:</strong>{' '}
-                              {isNegativeQuantity(item.quantity) ? (
-                                <Text span c="red" fw={700}>
-                                  <IconAlertTriangle
-                                    size={14}
-                                    stroke={2.5}
-                                    style={{ verticalAlign: 'text-bottom' }}
-                                  />{' '}
-                                  {item.quantity}
-                                </Text>
-                              ) : (
-                                item.quantity
-                              )}
-                            </Text>
-                            <Text size="sm">
-                              <strong>Bodega dueña:</strong> {item.ownerWarehouseName ?? '-'}
-                            </Text>
-                            {showWorksiteQuantities ? (
-                              <>
-                                <Group justify="space-between" mt={6}>
-                                  <Text size="sm" fw={700}>En obra</Text>
-                                  {(item.worksiteLocations?.length ?? 0) > 0 ? (
-                                    <Button
-                                      size="compact-sm"
-                                      variant="subtle"
-                                      color="blue"
-                                      rightSection={
-                                        expandedBulkRows.has(bulkRowKey(item))
-                                          ? <IconChevronUp size={14} />
-                                          : <IconChevronDown size={14} />
-                                      }
-                                      aria-label={`Ver ubicaciones de ${item.name ?? item.skuName ?? 'SKU'}`}
-                                      aria-expanded={expandedBulkRows.has(bulkRowKey(item))}
-                                      onClick={() => toggleBulkRow(item)}
-                                    >
-                                      {item.worksiteQuantity ?? 0}
-                                    </Button>
-                                  ) : (
-                                    <Text size="sm">{item.worksiteQuantity ?? 0}</Text>
-                                  )}
-                                </Group>
-                                {expandedBulkRows.has(bulkRowKey(item))
-                                && (item.worksiteLocations?.length ?? 0) > 0 ? (
-                                  <Paper
-                                    mt="xs"
-                                    pt="xs"
-                                    px={0}
-                                    radius={0}
-                                    style={{
-                                      borderTop: '1px solid var(--mantine-color-gray-2)',
-                                    }}
-                                  >
-                                    {worksiteBreakdown(item)}
-                                  </Paper>
-                                ) : null}
-                              </>
-                            ) : null}
-                          </Card>
-                        ),
-                      )}
-                    </Stack>
-                  )}
+                  <EntityDataTable
+                    rows={group.items}
+                    columns={bulkColumns}
+                    getRowId={(item) => 'owners' in item ? item.skuId : bulkRowKey(item)}
+                    tableMinWidth={showWorksiteQuantities ? 820 : 720}
+                    emptyState={{
+                      title: 'No hay stock en esta familia',
+                    }}
+                  />
                 </Stack>
               </Paper>
             ))}

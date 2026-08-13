@@ -13,13 +13,9 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   TextInput,
-  ThemeIcon,
-  Title,
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import {
   IconCalendarDue,
   IconBell,
@@ -35,7 +31,9 @@ import {
 } from '@tabler/icons-react';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
-import TableRowActions from '@/components/TableRowActions';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
+import { useClientTableData } from '@/components/tables/useClientTableData';
 import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import EntityNotificationManager from '@/components/notifications/EntityNotificationManager';
 import NotificationRecipientsEditor from '@/components/notifications/NotificationRecipientsEditor';
@@ -262,7 +260,6 @@ function VehicleDetails({
 }
 
 export default function VehiclesPage() {
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -421,6 +418,86 @@ export default function VehiclesPage() {
     }
   };
 
+  const vehicleColumns: DataTableColumn<Vehicle>[] = [
+    {
+      id: 'vehicle',
+      header: 'Vehiculo',
+      ariaLabel: 'vehículo',
+      width: '24%',
+      sortValue: (vehicle) => vehicle.plate,
+      mobile: { priority: 'primary' },
+      cell: (vehicle) => {
+        const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
+        return (
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <Stack gap={2}>
+              <Text fw={700}>{vehicle.plate}</Text>
+              <Text size="sm" c="dimmed">
+                {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
+              </Text>
+            </Stack>
+            <Badge hiddenFrom="md" color={soatStatus.color} variant="light">
+              SOAT {soatStatus.label}
+            </Badge>
+          </Group>
+        );
+      },
+    },
+    {
+      id: 'configuration',
+      header: 'Tipo / año / peso',
+      width: '24%',
+      mobile: { label: 'Configuración', priority: 'secondary' },
+      cell: (vehicle) => (
+        <Stack gap={2}>
+          <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
+          <Text size="xs" c="dimmed">Año: {vehicle.year ?? '-'}</Text>
+          <Text size="xs" c="dimmed">Peso: {formatCapacity(vehicle.capacity)}</Text>
+        </Stack>
+      ),
+    },
+    {
+      id: 'drivers',
+      header: 'Conductores',
+      width: '24%',
+      sortValue: (vehicle) => vehicle.drivers.length,
+      mobile: { label: 'Conductores', priority: 'detail' },
+      cell: (vehicle) => (
+        <Text size="sm">
+          {vehicle.drivers.length
+            ? vehicle.drivers.map((driver) => driver.name).join(', ')
+            : 'Sin conductores'}
+        </Text>
+      ),
+    },
+    {
+      id: 'documentation',
+      header: 'Documentacion',
+      width: '18%',
+      mobile: { label: 'Documentación', priority: 'detail' },
+      cell: (vehicle) => {
+        const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
+        const technoStatus = getDocumentStatus(daysUntil(vehicle.tecnomecanicaVigencia));
+        return (
+          <Stack gap="xs">
+            <Badge color={soatStatus.color} variant="light" style={{ width: 'fit-content' }}>
+              SOAT: {soatStatus.label}
+            </Badge>
+            <Badge color={technoStatus.color} variant="light" style={{ width: 'fit-content' }}>
+              Tecno: {technoStatus.label}
+            </Badge>
+          </Stack>
+        );
+      },
+    },
+  ];
+
+  const vehicleTable = useClientTableData({
+    rows: vehicles,
+    columns: vehicleColumns,
+    initialPageSize: 20,
+  });
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -483,181 +560,43 @@ export default function VehiclesPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          {loading ? (
-            <Paper radius="lg" p="xl" bg="gray.0">
-              <Text c="dimmed" ta="center">
-                Cargando...
-              </Text>
-            </Paper>
-          ) : isMobile ? (
-            <Stack gap="sm">
-              {vehicles.map((vehicle) => {
-                const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
-                return (
-                  <Paper key={vehicle.id} withBorder radius="lg" p="md">
-                    <Stack gap="md">
-                      <Group justify="space-between" align="flex-start">
-                        <div>
-                          <Text fw={700}>{vehicle.plate}</Text>
-                          <Text size="sm" c="dimmed">
-                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
-                          </Text>
-                        </div>
-                        <Badge color={soatStatus.color} variant="light">
-                          SOAT {soatStatus.label}
-                        </Badge>
-                      </Group>
-
-                      <SimpleGrid cols={2} spacing="sm">
-                        <div>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Año
-                          </Text>
-                          <Text size="sm">{vehicle.year ?? '-'}</Text>
-                        </div>
-                        <div>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Conductores
-                          </Text>
-                          <Text size="sm">{vehicle.drivers.length || 0}</Text>
-                        </div>
-                      </SimpleGrid>
-
-                      <Group grow>
-                        <Button
-                          variant="light"
-                          leftSection={<IconEye size={16} />}
-                          onClick={() => setDetailsVehicle(vehicle)}
-                        >
-                          Ver detalle
-                        </Button>
-                        <Button
-                          variant="light"
-                          leftSection={<IconFileDescription size={16} />}
-                          onClick={() => setDocumentsVehicle(vehicle)}
-                        >
-                          Documentos
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Paper>
-                );
-              })}
-
-              {!vehicles.length ? (
-                <Paper radius="lg" p="xl" bg="gray.0">
-                  <Stack align="center" gap="xs">
-                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                      <IconCar size={20} />
-                    </ThemeIcon>
-                    <Text fw={700}>No hay vehiculos registrados</Text>
-                    <Text size="sm" c="dimmed" ta="center">
-                      Crea un vehiculo para empezar.
-                    </Text>
-                  </Stack>
-                </Paper>
-              ) : null}
-            </Stack>
-          ) : (
-            <Table highlightOnHover verticalSpacing="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Vehiculo</Table.Th>
-                  <Table.Th>Tipo / año / peso</Table.Th>
-                  <Table.Th>Conductores</Table.Th>
-                  <Table.Th>Documentacion</Table.Th>
-                  <Table.Th ta="right">Acciones</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {vehicles.map((vehicle) => {
-                  const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
-                  const technoStatus = getDocumentStatus(daysUntil(vehicle.tecnomecanicaVigencia));
-                  return (
-                    <Table.Tr key={vehicle.id}>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700}>{vehicle.plate}</Text>
-                          <Text size="sm" c="dimmed">
-                            {formatVehicleIdentity(vehicle) || 'Sin marca, modelo o año'}
-                          </Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text size="sm">{vehicle.type ?? 'Sin tipo'}</Text>
-                          <Text size="xs" c="dimmed">
-                            Año: {vehicle.year ?? '-'}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            Peso (Toneladas): {formatCapacity(vehicle.capacity)}
-                          </Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">
-                          {vehicle.drivers.length
-                            ? vehicle.drivers.map((driver) => driver.name).join(', ')
-                            : 'Sin conductores'}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Stack gap="xs">
-                          <Badge color={soatStatus.color} variant="light" style={{ width: 'fit-content' }}>
-                            SOAT: {soatStatus.label}
-                          </Badge>
-                          <Badge color={technoStatus.color} variant="light" style={{ width: 'fit-content' }}>
-                            Tecno: {technoStatus.label}
-                          </Badge>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <TableRowActions
-                          actions={[
-                            {
-                              key: 'view',
-                              label: `Ver detalle de ${vehicle.plate}`,
-                              icon: <IconEye size={16} />,
-                              color: 'blue',
-                              onClick: () => setDetailsVehicle(vehicle),
-                            },
-                            {
-                              key: 'documents',
-                              label: `Documentos de ${vehicle.plate}`,
-                              icon: <IconFileDescription size={16} />,
-                              color: 'violet',
-                              onClick: () => setDocumentsVehicle(vehicle),
-                            },
-                            {
-                              key: 'edit',
-                              label: `Editar ${vehicle.plate}`,
-                              icon: <IconPencil size={16} />,
-                              onClick: () => startEdit(vehicle),
-                            },
-                          ]}
-                        />
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-                {!vehicles.length && (
-                  <Table.Tr>
-                    <Table.Td colSpan={5}>
-                      <Stack align="center" gap="xs" py="lg">
-                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                          <IconCar size={20} />
-                        </ThemeIcon>
-                        <Text fw={700}>No hay vehiculos registrados</Text>
-                        <Text size="sm" c="dimmed">
-                          Crea un vehiculo.
-                        </Text>
-                      </Stack>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          )}
+          <EntityDataTable
+            rows={vehicleTable.rows}
+            columns={vehicleColumns}
+            getRowId={(vehicle) => vehicle.id}
+            loading={loading}
+            sort={vehicleTable.sort}
+            onSortChange={vehicleTable.onSortChange}
+            pagination={vehicleTable.pagination}
+            onPageSizeChange={vehicleTable.onPageSizeChange}
+            emptyState={{
+              title: 'No hay vehiculos registrados',
+              description: 'Crea un vehiculo para empezar.',
+              icon: <IconCar size={20} />,
+            }}
+            actions={(vehicle) => [
+              {
+                key: 'view',
+                label: `Ver detalle de ${vehicle.plate}`,
+                icon: <IconEye size={16} />,
+                color: 'blue',
+                onClick: () => setDetailsVehicle(vehicle),
+              },
+              {
+                key: 'documents',
+                label: `Documentos de ${vehicle.plate}`,
+                icon: <IconFileDescription size={16} />,
+                color: 'violet',
+                onClick: () => setDocumentsVehicle(vehicle),
+              },
+              {
+                key: 'edit',
+                label: `Editar ${vehicle.plate}`,
+                icon: <IconPencil size={16} />,
+                onClick: () => startEdit(vehicle),
+              },
+            ]}
+          />
         </Paper>
       </Stack>
 

@@ -15,13 +15,11 @@ import {
   SimpleGrid,
   Stack,
   Switch,
-  Table,
   Text,
   TextInput,
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import {
   IconBuildingEstate,
   IconEye,
@@ -36,7 +34,10 @@ import {
   IconUsersGroup,
 } from '@tabler/icons-react';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
-import TableRowActions from '@/components/TableRowActions';
+import DataTableToolbar from '@/components/tables/DataTableToolbar';
+import EntityDataTable from '@/components/tables/EntityDataTable';
+import type { DataTableColumn } from '@/components/tables/table.types';
+import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
 
 type Customer = {
@@ -239,7 +240,6 @@ function CustomerDetails({
 }
 
 export default function CustomersPage() {
-  const useCardLayout = useMediaQuery('(max-width: 1100px)');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -486,6 +486,82 @@ export default function CustomersPage() {
     });
   }, [customers, search, statusFilter]);
 
+  const customerColumns: DataTableColumn<Customer>[] = [
+    {
+      id: 'name',
+      header: 'Cliente',
+      ariaLabel: 'cliente',
+      width: '20%',
+      sortValue: (customer) => customer.name,
+      mobile: { priority: 'primary' },
+      cell: (customer) => (
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div style={{ minWidth: 0 }}>
+            <Text fw={700} style={breakableTextStyle}>{customer.name}</Text>
+            <Text visibleFrom="md" size="sm" c="dimmed">
+              Cliente registrado
+            </Text>
+            <Text hiddenFrom="md" size="sm" c="dimmed" style={breakableTextStyle}>
+              {customer.nitOrId ?? 'Sin documento'}
+            </Text>
+          </div>
+          <Badge hiddenFrom="md" color={customer.active ? 'green' : 'gray'} variant="light">
+            {customer.active ? 'Activo' : 'Inactivo'}
+          </Badge>
+        </Group>
+      ),
+    },
+    {
+      id: 'identification',
+      header: 'Identificacion',
+      ariaLabel: 'identificación',
+      width: '14%',
+      sortValue: (customer) => customer.nitOrId,
+      mobile: false,
+      cell: (customer) => <Text style={breakableTextStyle}>{customer.nitOrId ?? '-'}</Text>,
+    },
+    {
+      id: 'contact',
+      header: 'Contacto',
+      width: '22%',
+      mobile: { label: 'Contacto', priority: 'secondary' },
+      cell: (customer) => (
+        <Stack gap={2}>
+          <Text size="sm" style={breakableTextStyle}>{customer.phone ?? 'Sin telefono'}</Text>
+          <Text size="xs" c="dimmed" style={breakableTextStyle}>{customer.email ?? 'Sin correo'}</Text>
+        </Stack>
+      ),
+    },
+    {
+      id: 'documentsEmail',
+      header: 'Correo documentos',
+      ariaLabel: 'correo de documentos',
+      width: '18%',
+      sortValue: (customer) => customer.documentsEmail,
+      mobile: { label: 'Correo documentos', priority: 'detail' },
+      cell: (customer) => <Text size="sm" style={breakableTextStyle}>{customer.documentsEmail ?? '-'}</Text>,
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      ariaLabel: 'estado',
+      width: '10%',
+      sortValue: (customer) => customer.active,
+      mobile: { priority: 'hidden' },
+      cell: (customer) => (
+        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
+          {customer.active ? 'Activo' : 'Inactivo'}
+        </Badge>
+      ),
+    },
+  ];
+
+  const customerTable = useClientTableData({
+    rows: filteredCustomers,
+    columns: customerColumns,
+    initialPageSize: 20,
+  });
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -523,247 +599,69 @@ export default function CustomersPage() {
         ) : null}
 
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <Group justify="space-between" align="flex-end" mb="md" gap="md" wrap="wrap">
-            <div>
-              <Text fw={800}>Directorio de clientes</Text>
-              <Text size="sm" c="dimmed">
-                {filteredCustomers.length} de {metrics.total} clientes visibles
-              </Text>
-            </div>
-            <Group gap="sm" w={useCardLayout ? '100%' : 'auto'} wrap="wrap">
-              <TextInput
-                value={search}
-                onChange={(event) => setSearch(event.currentTarget.value)}
-                placeholder="Buscar cliente, NIT, telefono o correo"
-                leftSection={<IconSearch size={16} />}
-                style={{ flex: '1 1 300px' }}
-              />
-              <Select
-                aria-label="Filtrar clientes por estado"
-                placeholder="Todos los estados"
-                clearable
-                value={statusFilter}
-                onChange={setStatusFilter}
-                data={[
-                  { value: 'active', label: 'Activos' },
-                  { value: 'inactive', label: 'Inactivos' },
-                ]}
-                w={170}
-              />
-            </Group>
-          </Group>
-          {useCardLayout ? (
-            <Stack gap="sm">
-              {!loading &&
-                filteredCustomers.map((customer) => (
-                  <Paper key={customer.id} withBorder radius="lg" p="md">
-                    <Stack gap="md">
-                      <Group justify="space-between" align="flex-start">
-                        <div style={{ minWidth: 0 }}>
-                          <Text fw={700} style={breakableTextStyle}>
-                            {customer.name}
-                          </Text>
-                          <Text size="sm" c="dimmed" style={breakableTextStyle}>
-                            {customer.nitOrId ?? 'Sin documento'}
-                          </Text>
-                        </div>
-                        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </Group>
-
-                      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                        <div style={{ minWidth: 0 }}>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Telefono
-                          </Text>
-                          <Text size="sm" style={breakableTextStyle}>
-                            {customer.phone ?? '-'}
-                          </Text>
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Correo documentos
-                          </Text>
-                          <Text size="sm" style={breakableTextStyle}>
-                            {customer.documentsEmail ?? '-'}
-                          </Text>
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Correo
-                          </Text>
-                          <Text size="sm" style={breakableTextStyle}>
-                            {customer.email ?? '-'}
-                          </Text>
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                            Estado
-                          </Text>
-                          <Text size="sm">{customer.active ? 'Operando' : 'Pausado'}</Text>
-                        </div>
-                      </SimpleGrid>
-
-                      <Group grow>
-                        <Button
-                          variant="light"
-                          leftSection={<IconEye size={16} />}
-                          onClick={() => void openDetails(customer)}
-                        >
-                          Ver detalle
-                        </Button>
-                        <Button
-                          variant="filled"
-                          color="blue"
-                          leftSection={<IconFileText size={16} />}
-                          onClick={() => setDocumentsCustomer(customer)}
-                        >
-                          Documentos
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Paper>
-                ))}
-
-              {!loading && filteredCustomers.length === 0 ? (
-                <Paper radius="lg" p="xl" bg="gray.0">
-                  <Stack align="center" gap="xs">
-                    <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                      <IconUsersGroup size={20} />
-                    </ThemeIcon>
-                    <Text fw={700}>{customers.length ? 'No hay resultados' : 'No hay clientes registrados'}</Text>
-                    <Text size="sm" c="dimmed" ta="center">
-                      {customers.length ? 'Ajusta la busqueda para ver mas clientes.' : 'Crea un nuevo cliente para empezar.'}
-                    </Text>
-                  </Stack>
-                </Paper>
-              ) : null}
-
-              {loading ? (
-                <Paper radius="lg" p="xl" bg="gray.0">
-                  <Text c="dimmed" ta="center">
-                    Cargando...
-                  </Text>
-                </Paper>
-              ) : null}
-            </Stack>
-          ) : (
-            <Table
-              highlightOnHover
-              verticalSpacing="md"
-              style={{ tableLayout: 'fixed', width: '100%' }}
-            >
-              <colgroup>
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '16%' }} />
-              </colgroup>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Cliente</Table.Th>
-                  <Table.Th>Identificacion</Table.Th>
-                  <Table.Th>Contacto</Table.Th>
-                  <Table.Th>Correo documentos</Table.Th>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th ta="right">Acciones</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {!loading &&
-                  filteredCustomers.map((customer) => (
-                    <Table.Tr key={customer.id}>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text fw={700} style={breakableTextStyle}>
-                            {customer.name}
-                          </Text>
-                          <Text size="sm" c="dimmed">
-                            Cliente registrado
-                          </Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td style={breakableTextStyle}>{customer.nitOrId ?? '-'}</Table.Td>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text size="sm" style={breakableTextStyle}>
-                            {customer.phone ?? 'Sin telefono'}
-                          </Text>
-                          <Text size="xs" c="dimmed" style={breakableTextStyle}>
-                            {customer.email ?? 'Sin correo'}
-                          </Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm" style={breakableTextStyle}>
-                          {customer.documentsEmail ?? '-'}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge color={customer.active ? 'green' : 'gray'} variant="light">
-                          {customer.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <TableRowActions
-                          actions={[
-                            {
-                              key: 'view',
-                              label: `Ver detalle de ${customer.name}`,
-                              icon: <IconEye size={16} />,
-                              color: 'blue',
-                              onClick: () => void openDetails(customer),
-                            },
-                            {
-                              key: 'documents',
-                              label: `Documentos de ${customer.name}`,
-                              icon: <IconFileText size={16} />,
-                              color: 'violet',
-                              onClick: () => setDocumentsCustomer(customer),
-                            },
-                            {
-                              key: 'edit',
-                              label: `Editar ${customer.name}`,
-                              icon: <IconPencil size={16} />,
-                              onClick: () => openEdit(customer),
-                            },
-                          ]}
-                        />
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-
-                {!loading && filteredCustomers.length === 0 && (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Stack align="center" gap="xs" py="lg">
-                        <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                          <IconUsersGroup size={20} />
-                        </ThemeIcon>
-                        <Text fw={700}>{customers.length ? 'No hay resultados' : 'No hay clientes para mostrar'}</Text>
-                        <Text size="sm" c="dimmed">
-                          {customers.length ? 'Ajusta la busqueda para ver mas clientes.' : 'Registra un nuevo cliente.'}
-                        </Text>
-                      </Stack>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-
-                {loading && (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Text c="dimmed" ta="center">
-                        Cargando...
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          )}
+          <DataTableToolbar
+            title="Directorio de clientes"
+            description={`${filteredCustomers.length} de ${metrics.total} clientes visibles`}
+          >
+            <TextInput
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              placeholder="Buscar cliente, NIT, telefono o correo"
+              leftSection={<IconSearch size={16} />}
+              style={{ flex: '1 1 300px' }}
+            />
+            <Select
+              aria-label="Filtrar clientes por estado"
+              placeholder="Todos los estados"
+              clearable
+              value={statusFilter}
+              onChange={setStatusFilter}
+              data={[
+                { value: 'active', label: 'Activos' },
+                { value: 'inactive', label: 'Inactivos' },
+              ]}
+              w={170}
+            />
+          </DataTableToolbar>
+          <EntityDataTable
+            rows={customerTable.rows}
+            columns={customerColumns}
+            getRowId={(customer) => customer.id}
+            loading={loading}
+            sort={customerTable.sort}
+            onSortChange={customerTable.onSortChange}
+            pagination={customerTable.pagination}
+            onPageSizeChange={customerTable.onPageSizeChange}
+            emptyState={{
+              title: customers.length ? 'No hay resultados' : 'No hay clientes registrados',
+              description: customers.length
+                ? 'Ajusta la busqueda para ver mas clientes.'
+                : 'Crea un nuevo cliente para empezar.',
+              icon: <IconUsersGroup size={20} />,
+            }}
+            actions={(customer) => [
+              {
+                key: 'view',
+                label: `Ver detalle de ${customer.name}`,
+                icon: <IconEye size={16} />,
+                color: 'blue',
+                onClick: () => void openDetails(customer),
+              },
+              {
+                key: 'documents',
+                label: `Documentos de ${customer.name}`,
+                icon: <IconFileText size={16} />,
+                color: 'violet',
+                onClick: () => setDocumentsCustomer(customer),
+              },
+              {
+                key: 'edit',
+                label: `Editar ${customer.name}`,
+                icon: <IconPencil size={16} />,
+                onClick: () => openEdit(customer),
+              },
+            ]}
+          />
         </Paper>
       </Stack>
 
