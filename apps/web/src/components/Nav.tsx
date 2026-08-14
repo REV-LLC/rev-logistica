@@ -55,6 +55,7 @@ type NavLinkItem = {
   icon: typeof IconClipboardList;
   roles: AppRole[];
   activePrefixes?: string[];
+  activeHrefs?: string[];
   exact?: boolean;
   children?: NavLinkItem[];
 };
@@ -161,7 +162,10 @@ const sections: NavSection[] = [
             label: "Equipos",
             icon: IconTools,
             roles: ["ADMIN", "OFFICE"],
-            exact: true,
+            activePrefixes: [
+              "/inventory/warehouse?scope=own&view=serial",
+              "/inventory/serialized-assets/",
+            ],
           },
           {
             href: "/inventory/warehouse?scope=own&view=bulk",
@@ -198,8 +202,8 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
             activePrefixes: [
               "/inventory/bulk-adjustments",
-              "/inventory/serialized-assets",
             ],
+            activeHrefs: ["/inventory/serialized-assets"],
           },
         ],
       },
@@ -414,6 +418,9 @@ export default function Nav({ onNavigate }: NavProps) {
       searchParams.size > 0
         ? `${pathname}?${searchParams.toString()}`
         : pathname;
+    if (link.activeHrefs?.includes(currentHref)) {
+      return true;
+    }
     if (link.exact) {
       return currentHref === link.href;
     }
