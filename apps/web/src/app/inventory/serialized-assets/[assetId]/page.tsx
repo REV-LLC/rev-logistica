@@ -80,13 +80,24 @@ type ProviderSkuPrice = {
 
 type AssetLedgerResponse = {
   items: Array<{
+    id: string;
     movementType?: string | null;
+    quantity?: number | string | null;
+    createdAt: string;
+    warehouse?: { id: string; name?: string | null } | null;
     customerWorksite?: {
       customer?: { name?: string | null } | null;
       worksite?: { name?: string | null } | null;
     } | null;
+    document?: {
+      id: string;
+      consecutive?: string | null;
+      type?: string | null;
+    } | null;
   }>;
 };
+
+type AssetLedgerItem = AssetLedgerResponse['items'][number];
 
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'GASOLINA' },
@@ -164,6 +175,7 @@ export default function EditSerializedAssetPage() {
   const [active, setActive] = useState(true);
   const [editing, setEditing] = useState(false);
   const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
+  const [recentMovements, setRecentMovements] = useState<AssetLedgerItem[]>([]);
 
   useEffect(() => {
     if (!assetId) return;
@@ -173,9 +185,13 @@ export default function EditSerializedAssetPage() {
       setLoading(true);
       setError(null);
       try {
-        const [assetData, warehouseData] = await Promise.all([
+        const [assetData, warehouseData, ledgerData] = await Promise.all([
           api<AssetResponse>(`/assets/${assetId}`),
           api<Warehouse[]>('/warehouses'),
+          api<AssetLedgerResponse>(
+            `/inventory/ledger?assetId=${encodeURIComponent(assetId)}&take=50`,
+            { method: 'GET' },
+          ),
         ]);
         const ownerWarehouse = warehouseData.find(
           (warehouse) => warehouse.id === assetData.warehouseOwnerId,
@@ -193,21 +209,13 @@ export default function EditSerializedAssetPage() {
         }
         let resolvedWorksiteLocation: string | null = null;
         if (!assetData.warehouseCurrentId) {
-          try {
-            const ledgerData = await api<AssetLedgerResponse>(
-              `/inventory/ledger?assetId=${encodeURIComponent(assetData.id)}&take=20`,
-              { method: 'GET' },
-            );
-            const onSiteRow =
-              ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
-              ledgerData.items.find((entry) => entry.customerWorksite);
-            if (onSiteRow?.customerWorksite) {
-              const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
-              const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
-              resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
-            }
-          } catch {
-            // ignore location lookup errors
+          const onSiteRow =
+            ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
+            ledgerData.items.find((entry) => entry.customerWorksite);
+          if (onSiteRow?.customerWorksite) {
+            const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
+            const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
+            resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
           }
         }
         const resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
@@ -224,6 +232,7 @@ export default function EditSerializedAssetPage() {
         setAssetImageFileObjectId(assetData.imageFileObjectId ?? null);
         setWarehouseCurrentId(assetData.warehouseCurrentId);
         setWorksiteLocationName(resolvedWorksiteLocation);
+        setRecentMovements(ledgerData.items);
         setActive(assetData.active);
       } catch (err) {
         if (!mounted) return;
@@ -600,6 +609,7 @@ export default function EditSerializedAssetPage() {
                 )}
 
                 <AssetMovementSummary
+                  movements={recentMovements}
                   warehouseCurrentId={warehouseCurrentId}
                   warehouseCurrentName={warehouseCurrentName}
                   worksiteLocationName={worksiteLocationName}
