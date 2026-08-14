@@ -9,6 +9,8 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
+  AssetKind,
+  AssetMotorConfiguration,
   ChargeType,
   DocumentType,
   MovementType,
@@ -38,6 +40,10 @@ import {
   LEDGER_MAX_TAKE,
 } from './dto/get-inventory-ledger.dto';
 import { GetInventorySummaryDto } from './dto/get-inventory-summary.dto';
+import {
+  getWorksiteQuantityDelta,
+  WORKSITE_BALANCE_MOVEMENT_TYPES,
+} from './worksite-ledger-balance';
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
 
@@ -73,6 +79,92 @@ export class InventoryService {
       keys.push(this.getOnSiteCacheKey(params.customerWorksiteId));
     }
     await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  }
+
+  private async createMotorAsset(
+    input: NonNullable<CreateSerializedAssetDto['newMotor']>,
+    ownerWarehouseId: string,
+    warehouseCurrentId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const family = await this.resolveAssetFamily(
+      { code: 'MOTORES', name: 'MOTORES' },
+      SkuControlType.SERIAL,
+      tx,
+    );
+    const fuelLabel = input.fuel === 'ELECTRICO' ? 'ELÉCTRICO' : 'GASOLINA';
+    const subfamily = await this.resolveAssetSubfamily(
+      { code: `MOTOR_${input.fuel}`, name: `MOTOR ${fuelLabel}` },
+      family.id,
+      tx,
+    );
+    const reference = [input.brand?.trim(), input.model?.trim()].filter(Boolean).join(' ')
+      || `MOTOR ${fuelLabel}`;
+    const sku = await this.resolveSku(
+      { name: reference, chargeType: ChargeType.DAY },
+      family.id,
+      tx,
+      subfamily.id,
+    );
+    const counter = await tx.assetInternalCounter.upsert({
+      where: {
+        ownerWarehouseId_assetSubfamilyId: {
+          ownerWarehouseId,
+          assetSubfamilyId: subfamily.id,
+        },
+      },
+      create: {
+        ownerWarehouseId,
+        assetSubfamilyId: subfamily.id,
+        nextNumber: 2,
+      },
+      update: { nextNumber: { increment: 1 } },
+      select: { nextNumber: true },
+    });
+    const internalNumber = counter.nextNumber - 1;
+    const motor = await tx.asset.create({
+      data: {
+        skuId: sku.id,
+        publicCode: this.buildAssetPublicCode(
+          family.code,
+          subfamily.code,
+          ownerWarehouseId,
+          internalNumber,
+        ),
+        internalNumber,
+        serialOrEngine: input.serialOrEngine?.trim() || null,
+        description: reference,
+        brand: input.brand?.trim() || null,
+        model: input.model?.trim() || null,
+        year: input.year ?? null,
+        fuel: input.fuel,
+        kind: AssetKind.MOTOR,
+        warehouseOwnerId: ownerWarehouseId,
+        warehouseCurrentId,
+        active: true,
+      },
+      select: {
+        id: true,
+        internalNumber: true,
+        skuId: true,
+        warehouseOwnerId: true,
+        warehouseCurrentId: true,
+      },
+    });
+    await tx.stockLedger.create({
+      data: {
+        movementType: MovementType.ADJUST,
+        warehouseId: warehouseCurrentId,
+        ownerWarehouseId,
+        customerWorksiteId: null,
+        skuId: null,
+        assetId: motor.id,
+        quantity: 1,
+        createdBy: userId,
+      },
+    });
+    return motor;
   }
 
   private async assertDocumentExists(
@@ -320,6 +412,57 @@ export class InventoryService {
         throw new NotFoundException('Current warehouse not found');
       }
 
+      const motorConfiguration =
+        payload.asset.motorConfiguration ?? AssetMotorConfiguration.NONE;
+      if (
+        motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE
+        && (payload.asset.assignedMotorId || payload.newMotor)
+      ) {
+        throw new BadRequestException(
+          'Solo los equipos con motor intercambiable pueden tener un motor asociado',
+        );
+      }
+      if (payload.asset.assignedMotorId && payload.newMotor) {
+        throw new BadRequestException(
+          'Selecciona un motor existente o crea uno nuevo, no ambos',
+        );
+      }
+
+      let assignedMotorId = payload.asset.assignedMotorId ?? null;
+      let createdMotor: {
+        id: string;
+        internalNumber: number;
+        skuId: string;
+        warehouseOwnerId: string;
+        warehouseCurrentId: string | null;
+      } | null = null;
+      if (assignedMotorId) {
+        const motor = await tx.asset.findFirst({
+          where: {
+            id: assignedMotorId,
+            kind: AssetKind.MOTOR,
+            active: true,
+            warehouseCurrentId: payload.warehouseCurrentId,
+            assignedToMixer: null,
+          },
+          select: { id: true },
+        });
+        if (!motor) {
+          throw new BadRequestException(
+            'El motor seleccionado no está disponible en la bodega actual',
+          );
+        }
+      } else if (payload.newMotor) {
+        createdMotor = await this.createMotorAsset(
+          payload.newMotor,
+          payload.ownerWarehouseId,
+          payload.warehouseCurrentId,
+          userId,
+          tx,
+        );
+        assignedMotorId = createdMotor.id;
+      }
+
       const serialOrEngine = payload.asset.serialOrEngine?.trim();
 
       const requestedInternalNumber =
@@ -412,6 +555,8 @@ export class InventoryService {
           warehouseOwnerId: payload.ownerWarehouseId,
           warehouseCurrentId: payload.warehouseCurrentId,
           active: payload.asset.active ?? true,
+          motorConfiguration,
+          assignedMotorId,
         },
         select: {
           id: true,
@@ -447,7 +592,7 @@ export class InventoryService {
         });
       }
 
-      return { asset, ledger, providerPrice };
+      return { asset, ledger, providerPrice, motor: createdMotor };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -1194,22 +1339,10 @@ export class InventoryService {
       const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
       const serialIds = [...serialAssetIds.values()];
       const sourceRows = await tx.stockLedger.groupBy({
-        by: ['skuId', 'assetId', 'ownerWarehouseId'],
+        by: ['skuId', 'assetId', 'ownerWarehouseId', 'movementType'],
         where: {
           customerWorksiteId: payload.customerWorksiteId,
-          warehouseId: null,
-          OR: [
-            ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
-            ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
-          ],
-        },
-        _sum: { quantity: true },
-      });
-      const alreadyReturned = await tx.stockLedger.groupBy({
-        by: ['skuId', 'assetId', 'ownerWarehouseId'],
-        where: {
-          customerWorksiteId: payload.customerWorksiteId,
-          movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+          movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
           OR: [
             ...(bulkSkuIds.length ? [{ skuId: { in: bulkSkuIds } }] : []),
             ...(serialIds.length ? [{ assetId: { in: serialIds } }] : []),
@@ -1219,8 +1352,15 @@ export class InventoryService {
       });
       const keyOf = (row: { skuId: string | null; assetId: string | null; ownerWarehouseId: string }) =>
         `${row.skuId ?? ''}:${row.assetId ?? ''}:${row.ownerWarehouseId}`;
-      const available = new Map(sourceRows.map((row) => [keyOf(row), Number(row._sum.quantity ?? 0)]));
-      alreadyReturned.forEach((row) => available.set(keyOf(row), (available.get(keyOf(row)) ?? 0) - Number(row._sum.quantity ?? 0)));
+      const available = new Map<string, number>();
+      sourceRows.forEach((row) => {
+        const key = keyOf(row);
+        const delta = getWorksiteQuantityDelta(
+          row.movementType,
+          Number(row._sum.quantity ?? 0),
+        );
+        available.set(key, (available.get(key) ?? 0) + delta);
+      });
 
       bulkGroups.forEach((item) => {
         const key = `${item.skuId}::${item.ownerWarehouseId}`;
@@ -1296,44 +1436,29 @@ export class InventoryService {
       const serialIds = [...serialAssetIds.values()];
 
       if (bulkSkuIds.length) {
-        const onSiteRows = await tx.stockLedger.groupBy({
-          by: ['skuId', 'ownerWarehouseId'],
+        const movementRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId', 'movementType'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            warehouseId: null,
+            movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
             skuId: { in: bulkSkuIds },
           },
           _sum: { quantity: true },
         });
-        const inRows = await tx.stockLedger.groupBy({
-          by: ['skuId', 'ownerWarehouseId'],
-          where: {
-            customerWorksiteId: payload.customerWorksiteId,
-            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
-            skuId: { in: bulkSkuIds },
-          },
-          _sum: { quantity: true },
+        const availableByGroup = new Map<string, number>();
+        movementRows.forEach((row) => {
+          const ownerWarehouseId = row.ownerWarehouseId ?? null;
+          const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
+          const delta = getWorksiteQuantityDelta(
+            row.movementType,
+            Number(row._sum.quantity ?? 0),
+          );
+          availableByGroup.set(key, (availableByGroup.get(key) ?? 0) + delta);
         });
-        const onSiteByGroup = new Map(
-          onSiteRows.map((row) => {
-            const ownerWarehouseId = row.ownerWarehouseId ?? null;
-            const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
-            return [key, Number(row._sum.quantity ?? 0)] as const;
-          }),
-        );
-        const returnedByGroup = new Map(
-          inRows.map((row) => {
-            const ownerWarehouseId = row.ownerWarehouseId ?? null;
-            const key = `${row.skuId as string}::${ownerWarehouseId ?? 'null'}`;
-            return [key, Number(row._sum.quantity ?? 0)] as const;
-          }),
-        );
 
         bulkGroups.forEach((group) => {
           const key = `${group.skuId}::${group.ownerWarehouseId ?? 'null'}`;
-          const onSite = onSiteByGroup.get(key) ?? 0;
-          const returned = returnedByGroup.get(key) ?? 0;
-          const net = onSite - returned;
+          const net = availableByGroup.get(key) ?? 0;
           if (net < group.quantity) {
             throw new BadRequestException(
               `Insufficient on-site stock for skuId ${group.skuId} at customer worksite`,
@@ -1343,35 +1468,27 @@ export class InventoryService {
       }
 
       if (serialIds.length) {
-        const onSiteRows = await tx.stockLedger.groupBy({
-          by: ['assetId'],
+        const movementRows = await tx.stockLedger.groupBy({
+          by: ['assetId', 'movementType'],
           where: {
             customerWorksiteId: payload.customerWorksiteId,
-            warehouseId: null,
+            movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
             assetId: { in: serialIds },
           },
           _sum: { quantity: true },
         });
-        const inRows = await tx.stockLedger.groupBy({
-          by: ['assetId'],
-          where: {
-            customerWorksiteId: payload.customerWorksiteId,
-            movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
-            assetId: { in: serialIds },
-          },
-          _sum: { quantity: true },
+        const availableByAsset = new Map<string, number>();
+        movementRows.forEach((row) => {
+          const assetId = row.assetId as string;
+          const delta = getWorksiteQuantityDelta(
+            row.movementType,
+            Number(row._sum.quantity ?? 0),
+          );
+          availableByAsset.set(assetId, (availableByAsset.get(assetId) ?? 0) + delta);
         });
-        const onSiteByAsset = new Map(
-          onSiteRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-        );
-        const returnedByAsset = new Map(
-          inRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-        );
 
         serialIds.forEach((assetId) => {
-          const onSite = onSiteByAsset.get(assetId) ?? 0;
-          const returned = returnedByAsset.get(assetId) ?? 0;
-          const net = onSite - returned;
+          const net = availableByAsset.get(assetId) ?? 0;
           if (net <= 0) {
             throw new BadRequestException(
               `Asset ${assetId} is not currently on-site for this customer worksite`,
@@ -1509,7 +1626,7 @@ export class InventoryService {
       where: {
         ownerWarehouseId: warehouseId,
         customerWorksiteId: { not: null },
-        movementType: { in: [MovementType.ON_SITE, MovementType.IN] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         skuId: { not: null },
       },
       _sum: { quantity: true },
@@ -1569,8 +1686,10 @@ export class InventoryService {
       const ownerWarehouseId = (row.ownerWarehouseId ?? warehouseId).toLowerCase();
       const key = `${skuId}::${ownerWarehouseId}`;
       const locations = worksiteQuantityBySkuAndOwner.get(key) ?? new Map<string, number>();
-      const signedQuantity = Number(row._sum.quantity ?? 0)
-        * (row.movementType === MovementType.ON_SITE ? 1 : -1);
+      const signedQuantity = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
       locations.set(
         row.customerWorksiteId,
         (locations.get(row.customerWorksiteId) ?? 0) + signedQuantity,
@@ -1680,7 +1799,11 @@ export class InventoryService {
             row.customerWorksite?.alias?.trim()
             || row.customerWorksite?.worksite.name
             || null;
-          if (row.movementType === MovementType.ON_SITE && worksiteName) {
+          if (
+            (row.movementType === MovementType.ON_SITE
+              || row.movementType === MovementType.OUT)
+            && worksiteName
+          ) {
             serialLocationByAssetId.set(key, { type: 'WORKSITE', name: worksiteName });
           } else if (
             (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
@@ -1709,6 +1832,10 @@ export class InventoryService {
             imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
+            kind: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -1831,6 +1958,11 @@ export class InventoryService {
               ? { type: 'WAREHOUSE' as const, name: warehouse.name }
               : { type: 'TRANSIT' as const, name: null }),
           internalNumber: asset?.internalNumber ?? null,
+          kind: asset?.kind ?? AssetKind.STANDARD,
+          motorConfiguration:
+            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
+          assignedMotorId: asset?.assignedMotorId ?? null,
+          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ?? null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId },
@@ -1880,68 +2012,41 @@ export class InventoryService {
       throw new NotFoundException('Customer worksite not found');
     }
 
-    const bulkOnSiteRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId', 'ownerWarehouseId'],
+    const bulkMovementRows = await this.prisma.stockLedger.groupBy({
+      by: ['skuId', 'ownerWarehouseId', 'movementType'],
       where: {
         customerWorksiteId,
-        warehouseId: null,
-        skuId: { not: null },
-      },
-      _sum: { quantity: true },
-    });
-    const bulkInRows = await this.prisma.stockLedger.groupBy({
-      by: ['skuId', 'ownerWarehouseId'],
-      where: {
-        customerWorksiteId,
-        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         skuId: { not: null },
       },
       _sum: { quantity: true },
     });
 
-    const serialOnSiteRows = await this.prisma.stockLedger.groupBy({
-      by: ['assetId'],
+    const serialMovementRows = await this.prisma.stockLedger.groupBy({
+      by: ['assetId', 'movementType'],
       where: {
         customerWorksiteId,
-        warehouseId: null,
-        assetId: { not: null },
-      },
-      _sum: { quantity: true },
-    });
-    const serialInRows = await this.prisma.stockLedger.groupBy({
-      by: ['assetId'],
-      where: {
-        customerWorksiteId,
-        movementType: { in: [MovementType.IN, MovementType.TRANSIT] },
+        movementType: { in: [...WORKSITE_BALANCE_MOVEMENT_TYPES] },
         assetId: { not: null },
       },
       _sum: { quantity: true },
     });
 
-    const bulkOnSiteByGroup = new Map<string, number>();
-    bulkOnSiteRows.forEach((row) => {
+    const bulkBalanceByGroup = new Map<string, number>();
+    bulkMovementRows.forEach((row) => {
       const skuId = row.skuId as string;
       const ownerWarehouseId = row.ownerWarehouseId as string;
       const key = `${skuId}::${ownerWarehouseId}`;
-      bulkOnSiteByGroup.set(key, Number(row._sum.quantity ?? 0));
+      const delta = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
+      bulkBalanceByGroup.set(key, (bulkBalanceByGroup.get(key) ?? 0) + delta);
     });
-    const bulkInByGroup = new Map<string, number>();
-    bulkInRows.forEach((row) => {
-      const skuId = row.skuId as string;
-      const ownerWarehouseId = row.ownerWarehouseId as string;
-      const key = `${skuId}::${ownerWarehouseId}`;
-      bulkInByGroup.set(key, Number(row._sum.quantity ?? 0));
+    const bulkNet = [...bulkBalanceByGroup.entries()].map(([key, quantity]) => {
+      const [skuId, ownerWarehouseId] = key.split('::');
+      return { skuId, ownerWarehouseId, quantity };
     });
-    const bulkNet = [...new Set([...bulkOnSiteByGroup.keys(), ...bulkInByGroup.keys()])].map(
-      (key) => {
-        const [skuId, ownerWarehouseId] = key.split('::');
-        return {
-          skuId,
-          ownerWarehouseId,
-          quantity: (bulkOnSiteByGroup.get(key) ?? 0) - (bulkInByGroup.get(key) ?? 0),
-        };
-      },
-    );
     const bulkNegative = bulkNet.filter((row) => row.quantity < 0);
     if (bulkNegative.length) {
       console.warn('On-site bulk negative quantity detected', {
@@ -1952,19 +2057,18 @@ export class InventoryService {
     }
     const bulkBase = bulkNet.filter((row) => row.quantity !== 0);
 
-    const serialOnSiteByAsset = new Map(
-      serialOnSiteRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const serialInByAsset = new Map(
-      serialInRows.map((row) => [row.assetId as string, Number(row._sum.quantity ?? 0)]),
-    );
-    const serialNet = [
-      ...new Set([...serialOnSiteByAsset.keys(), ...serialInByAsset.keys()]),
-    ].map((assetId) => ({
+    const serialBalanceByAsset = new Map<string, number>();
+    serialMovementRows.forEach((row) => {
+      const assetId = row.assetId as string;
+      const delta = getWorksiteQuantityDelta(
+        row.movementType,
+        Number(row._sum.quantity ?? 0),
+      );
+      serialBalanceByAsset.set(assetId, (serialBalanceByAsset.get(assetId) ?? 0) + delta);
+    });
+    const serialNet = [...serialBalanceByAsset.entries()].map(([assetId, quantity]) => ({
       assetId,
-      quantity:
-        (serialOnSiteByAsset.get(assetId) ?? 0) -
-        (serialInByAsset.get(assetId) ?? 0),
+      quantity,
     }));
     const serialNegative = serialNet.filter((row) => row.quantity < 0);
     if (serialNegative.length) {
@@ -2007,6 +2111,10 @@ export class InventoryService {
             imageFileObject: { select: { storageKey: true } },
             internalNumber: true,
             weight: true,
+            kind: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -2111,6 +2219,11 @@ export class InventoryService {
           model: asset?.model ?? null,
           status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
           internalNumber: asset?.internalNumber ?? null,
+          kind: asset?.kind ?? AssetKind.STANDARD,
+          motorConfiguration:
+            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
+          assignedMotorId: asset?.assignedMotorId ?? null,
+          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ? { code: sku.assetFamily.code, name: sku.assetFamily.name } : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },

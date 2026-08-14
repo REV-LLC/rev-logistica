@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { resolveJwtSecret } from './jwt-config';
 
 const resolveJwtExpiresIn = (value?: string): number | StringValue =>
   value
@@ -18,7 +19,7 @@ const resolveJwtExpiresIn = (value?: string): number | StringValue =>
   imports: [
     PrismaModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'change-me',
+      secret: resolveJwtSecret(),
       signOptions: {
         expiresIn: resolveJwtExpiresIn(process.env.JWT_EXPIRES_IN),
       },

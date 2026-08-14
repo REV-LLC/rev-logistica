@@ -52,13 +52,45 @@ function formatDate(value: string) {
   return date.toLocaleString('en-US');
 }
 
-function formatMovementType(item: LedgerItem) {
+function formatMovementType(item: LedgerItem, worksitePerspective: boolean) {
+  if (worksitePerspective) {
+    if (item.movementType === 'OUT' || item.movementType === 'ON_SITE') {
+      return 'Entrada a obra';
+    }
+    if (item.movementType === 'IN' || item.movementType === 'TRANSIT') {
+      return 'Salida de obra';
+    }
+  }
   if (item.movementType === 'ADJUST') {
     if (item.assetId && item.quantity > 0) return 'CREATION';
     return 'ADJUSTMENT';
   }
   if (item.movementType === 'ON_SITE') return 'En obra';
   return item.movementType;
+}
+
+function getDisplayQuantity(item: LedgerItem, worksitePerspective: boolean) {
+  if (!worksitePerspective) return item.quantity;
+  if (item.movementType === 'OUT') return -item.quantity;
+  if (item.movementType === 'IN' || item.movementType === 'TRANSIT') {
+    return -item.quantity;
+  }
+  return item.quantity;
+}
+
+function getDisplayLocation(item: LedgerItem, worksitePerspective: boolean) {
+  if (worksitePerspective && item.customerWorksite) {
+    return `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${
+      item.customerWorksite.worksite?.name ?? 'Obra'
+    }`;
+  }
+  if (item.warehouse) return item.warehouse.name;
+  if (item.customerWorksite) {
+    return `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${
+      item.customerWorksite.worksite?.name ?? 'Obra'
+    }`;
+  }
+  return '-';
 }
 
 function renderReference(item: LedgerItem) {
@@ -76,9 +108,11 @@ function renderReference(item: LedgerItem) {
 export default function LedgerTable({
   items,
   showItemIdentifiers = true,
+  worksitePerspective = false,
 }: {
   items: LedgerItem[];
   showItemIdentifiers?: boolean;
+  worksitePerspective?: boolean;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -128,18 +162,13 @@ export default function LedgerTable({
                   ? item.skuId
                   : null
               : null;
-            const location = item.warehouse
-              ? item.warehouse.name
-              : item.customerWorksite
-              ? `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${
-                  item.customerWorksite.worksite?.name ?? 'Obra'
-                }`
-              : '-';
+            const location = getDisplayLocation(item, worksitePerspective);
+            const displayQuantity = getDisplayQuantity(item, worksitePerspective);
             const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
             return (
               <Table.Tr key={item.id}>
                 <Table.Td>{formatDate(item.createdAt)}</Table.Td>
-                {!isMobile ? <Table.Td>{formatMovementType(item)}</Table.Td> : null}
+                {!isMobile ? <Table.Td>{formatMovementType(item, worksitePerspective)}</Table.Td> : null}
                 <Table.Td>
                   {item.assetId ? (
                     <Link href={`/inventory/ledger/asset/${item.assetId}`}>
@@ -163,7 +192,7 @@ export default function LedgerTable({
                     </Text>
                   ) : null}
                 </Table.Td>
-                <Table.Td style={{ textAlign: 'center' }}>{item.quantity}</Table.Td>
+                <Table.Td style={{ textAlign: 'center' }}>{displayQuantity}</Table.Td>
                 {isMobile ? (
                   <Table.Td>
                     <TableRowActions
@@ -195,20 +224,14 @@ export default function LedgerTable({
               <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
             </Text>
             <Text mt="xs">
-              <strong>Movement:</strong> {formatMovementType(detailsItem)}
+              <strong>Movement:</strong> {formatMovementType(detailsItem, worksitePerspective)}
             </Text>
             <Text mt="xs">
-              <strong>Cantidad:</strong> {detailsItem.quantity}
+              <strong>Cantidad:</strong> {getDisplayQuantity(detailsItem, worksitePerspective)}
             </Text>
             <Text mt="xs">
               <strong>Location:</strong>{' '}
-              {detailsItem.warehouse
-                ? detailsItem.warehouse.name
-                : detailsItem.customerWorksite
-                ? `${detailsItem.customerWorksite.customer?.name ?? 'Cliente'} / ${
-                    detailsItem.customerWorksite.worksite?.name ?? 'Obra'
-                  }`
-                : '-'}
+              {getDisplayLocation(detailsItem, worksitePerspective)}
             </Text>
             <Text mt="xs">
               <strong>Created by:</strong> {detailsItem.creator?.employee?.name ?? detailsItem.creator?.email ?? '-'}

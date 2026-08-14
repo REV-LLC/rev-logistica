@@ -7,17 +7,25 @@ import { Analytics } from '@vercel/analytics/next';
 export const metadata: Metadata = {
   title: 'Rev Logistica Backoffice',
   description: 'Backoffice UI for inventory operations.',
+  applicationName: 'REV Logística',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'REV Logística',
+  },
   icons: {
     icon: '/fiesta.svg',
     shortcut: '/fiesta.svg',
-    apple: '/fiesta.svg',
+    apple: '/pwa-192.png',
   },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover'
+  viewportFit: 'cover',
+  themeColor: '#1c7ed6',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

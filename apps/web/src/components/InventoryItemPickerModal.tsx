@@ -112,8 +112,30 @@ export default function InventoryItemPickerModal({
   }, [skuOptions]);
 
   const groupedRows = useMemo(() => {
+    const pickerBulkItems = (() => {
+      if (!isDriverRole || sourceMode !== 'on-site') return bulkItems;
+
+      const itemsBySku = new Map<string, InventoryItemPickerBulkItem[]>();
+      bulkItems.forEach((item) => {
+        const current = itemsBySku.get(item.skuId) ?? [];
+        current.push(item);
+        itemsBySku.set(item.skuId, current);
+      });
+
+      return Array.from(itemsBySku.values()).map((items) => {
+        const ownerIds = new Set(items.map((item) => item.ownerWarehouseId ?? 'none'));
+        if (ownerIds.size === 1) return items[0];
+        return {
+          skuId: items[0].skuId,
+          skuName: items[0].skuName,
+          ownerWarehouseId: null,
+          ownerWarehouseName: 'Bodega pendiente',
+          quantity: items.reduce((total, item) => total + Math.max(0, item.quantity), 0),
+        };
+      });
+    })();
     const rows: PickerRow[] = [
-      ...bulkItems.map((item) => {
+      ...pickerBulkItems.map((item) => {
         const skuMeta = skuMetaById.get(item.skuId);
         const key = `bulk:${buildBulkItemKey(item)}`;
         return {
@@ -150,7 +172,7 @@ export default function InventoryItemPickerModal({
       }
       return groups;
     }, []);
-  }, [bulkItems, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById]);
+  }, [bulkItems, isDriverRole, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById, sourceMode]);
 
   useEffect(() => {
     setSelectedRowKeys(new Set());
@@ -158,7 +180,7 @@ export default function InventoryItemPickerModal({
     setMobileSearchOpen(false);
   }, [opened, bulkItems, serialItems]);
 
-  const showOwnerWarehouse = !isDriverRole || sourceMode === 'on-site';
+  const showOwnerWarehouse = !isDriverRole;
 
   const filteredGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase('es');
@@ -486,8 +508,7 @@ export default function InventoryItemPickerModal({
                   </Stack>
                 </Paper>
 
-                <ScrollArea.Autosize
-                  mah="var(--picker-scroll-max-height)"
+                <ScrollArea
                   offsetScrollbars
                   type="auto"
                   className="inventory-picker-scroll"
@@ -654,7 +675,7 @@ export default function InventoryItemPickerModal({
                       </Paper>
                     )}
                   </Stack>
-                </ScrollArea.Autosize>
+                </ScrollArea>
               </>
             ) : (
               <Paper withBorder radius="lg" p="xl" className="inventory-picker-empty">

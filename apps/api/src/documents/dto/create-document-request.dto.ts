@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -13,6 +14,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DocumentType } from '@prisma/client';
+import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 class CreateDocumentRequestItemDto {
   @IsOptional()
@@ -64,7 +66,7 @@ export class CreateDocumentRequestDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{10}$/, {
+  @Matches(COLOMBIAN_PHONE_INPUT_PATTERN, {
     message: 'El teléfono debe contener exactamente 10 dígitos',
   })
   recipientPhone?: string;
@@ -74,11 +76,15 @@ export class CreateDocumentRequestDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(10)
   @IsString({ each: true })
-  @Matches(/^\d{10}$/, {
+  @Matches(COLOMBIAN_PHONE_INPUT_PATTERN, {
     each: true,
     message: 'Cada teléfono debe contener exactamente 10 dígitos',
   })
   recipientPhones?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  sendWhatsapp?: boolean;
 
   @IsOptional()
   @IsString()

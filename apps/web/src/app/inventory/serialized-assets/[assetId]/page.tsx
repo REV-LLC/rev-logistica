@@ -21,6 +21,7 @@ import {
   IconInfoCircle,
   IconMapPin,
   IconPencil,
+  IconTrash,
   IconTool,
 } from '@tabler/icons-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -79,13 +80,24 @@ type ProviderSkuPrice = {
 
 type AssetLedgerResponse = {
   items: Array<{
+    id: string;
     movementType?: string | null;
+    quantity?: number | string | null;
+    createdAt: string;
+    warehouse?: { id: string; name?: string | null } | null;
     customerWorksite?: {
       customer?: { name?: string | null } | null;
       worksite?: { name?: string | null } | null;
     } | null;
+    document?: {
+      id: string;
+      consecutive?: string | null;
+      type?: string | null;
+    } | null;
   }>;
 };
+
+type AssetLedgerItem = AssetLedgerResponse['items'][number];
 
 const FUEL_OPTIONS = [
   { value: 'GASOLINA', label: 'GASOLINA' },
@@ -144,6 +156,7 @@ export default function EditSerializedAssetPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [asset, setAsset] = useState<AssetResponse | null>(null);
@@ -162,6 +175,7 @@ export default function EditSerializedAssetPage() {
   const [active, setActive] = useState(true);
   const [editing, setEditing] = useState(false);
   const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
+  const [recentMovements, setRecentMovements] = useState<AssetLedgerItem[]>([]);
 
   useEffect(() => {
     if (!assetId) return;
@@ -171,9 +185,13 @@ export default function EditSerializedAssetPage() {
       setLoading(true);
       setError(null);
       try {
-        const [assetData, warehouseData] = await Promise.all([
+        const [assetData, warehouseData, ledgerData] = await Promise.all([
           api<AssetResponse>(`/assets/${assetId}`),
           api<Warehouse[]>('/warehouses'),
+          api<AssetLedgerResponse>(
+            `/inventory/ledger?assetId=${encodeURIComponent(assetId)}&take=50`,
+            { method: 'GET' },
+          ),
         ]);
         const ownerWarehouse = warehouseData.find(
           (warehouse) => warehouse.id === assetData.warehouseOwnerId,
@@ -191,21 +209,13 @@ export default function EditSerializedAssetPage() {
         }
         let resolvedWorksiteLocation: string | null = null;
         if (!assetData.warehouseCurrentId) {
-          try {
-            const ledgerData = await api<AssetLedgerResponse>(
-              `/inventory/ledger?assetId=${encodeURIComponent(assetData.id)}&take=20`,
-              { method: 'GET' },
-            );
-            const onSiteRow =
-              ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
-              ledgerData.items.find((entry) => entry.customerWorksite);
-            if (onSiteRow?.customerWorksite) {
-              const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
-              const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
-              resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
-            }
-          } catch {
-            // ignore location lookup errors
+          const onSiteRow =
+            ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
+            ledgerData.items.find((entry) => entry.customerWorksite);
+          if (onSiteRow?.customerWorksite) {
+            const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
+            const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
+            resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
           }
         }
         const resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
@@ -222,6 +232,7 @@ export default function EditSerializedAssetPage() {
         setAssetImageFileObjectId(assetData.imageFileObjectId ?? null);
         setWarehouseCurrentId(assetData.warehouseCurrentId);
         setWorksiteLocationName(resolvedWorksiteLocation);
+        setRecentMovements(ledgerData.items);
         setActive(assetData.active);
       } catch (err) {
         if (!mounted) return;
@@ -441,6 +452,40 @@ export default function EditSerializedAssetPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!assetId || !asset) {
+      setError('No se encontro el equipo para eliminar.');
+      return;
+    }
+    const label = getSerialDisplayName({
+      assetId: asset.id,
+      skuName: asset.sku?.name,
+      brand,
+      model,
+      serialOrEngine: asset.serialOrEngine,
+    });
+    if (!window.confirm(`Eliminar activo ${label}?`)) return;
+
+    setDeleting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api(`/assets/${assetId}`, { method: 'DELETE' });
+      router.push('/inventory/warehouse');
+      router.refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error eliminando equipo');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleCancelEdit = () => {
     if (!asset) return;
     setBrand(asset.brand ?? '');
@@ -463,19 +508,31 @@ export default function EditSerializedAssetPage() {
           Volver
         </Button>
         {asset ? (
-          <ActionIcon
-            variant={editing ? 'filled' : 'light'}
-            color={editing ? 'blue' : 'gray'}
-            size="lg"
-            aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
-            onClick={() => {
-              setSuccess(null);
-              setError(null);
-              setEditing((prev) => !prev);
-            }}
-          >
-            <IconPencil size={18} />
-          </ActionIcon>
+          <Group gap="xs">
+            <ActionIcon
+              variant={editing ? 'filled' : 'light'}
+              color={editing ? 'blue' : 'gray'}
+              size="lg"
+              aria-label={editing ? 'Cerrar edicion' : 'Editar equipo'}
+              onClick={() => {
+                setSuccess(null);
+                setError(null);
+                setEditing((prev) => !prev);
+              }}
+            >
+              <IconPencil size={18} />
+            </ActionIcon>
+            <ActionIcon
+              variant="light"
+              color="red"
+              size="lg"
+              aria-label="Eliminar equipo"
+              loading={deleting}
+              onClick={handleDelete}
+            >
+              <IconTrash size={18} />
+            </ActionIcon>
+          </Group>
         ) : null}
       </Group>
 
@@ -552,6 +609,7 @@ export default function EditSerializedAssetPage() {
                 )}
 
                 <AssetMovementSummary
+                  movements={recentMovements}
                   warehouseCurrentId={warehouseCurrentId}
                   warehouseCurrentName={warehouseCurrentName}
                   worksiteLocationName={worksiteLocationName}

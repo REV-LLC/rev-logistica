@@ -8,6 +8,7 @@ interface JwtPayload {
   sub: string;
   identifier: string;
   email: string;
+  name?: string;
   role: Role;
 }
 
@@ -35,10 +36,14 @@ export class AuthService {
 
     await this.assertPassword(password, user.passwordHash);
 
+    const employeeName = user.employee
+      ? `${user.employee.name} ${user.employee.lastName}`.trim()
+      : '';
     const payload: JwtPayload = {
       sub: user.id,
       identifier: user.email,
       email: user.email,
+      ...(employeeName ? { name: employeeName } : {}),
       role: user.role,
     };
 

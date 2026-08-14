@@ -16,6 +16,7 @@ export type SharedDocument = {
   type: string;
   status: string;
   consecutive: string | null;
+  createdAt: Date;
   docDate: Date;
   notes: string | null;
   customerWorksite: {
@@ -45,6 +46,25 @@ export type SharedDocument = {
 };
 
 type PdfItem = SharedDocument['items'][number];
+
+const colombiaDateFormatter = new Intl.DateTimeFormat('es-CO', {
+  timeZone: 'America/Bogota',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+const colombiaTimeFormatter = new Intl.DateTimeFormat('es-CO', {
+  timeZone: 'America/Bogota',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+});
+
+export function formatDocumentDateTime(docDate: Date, createdAt: Date) {
+  return `${colombiaDateFormatter.format(docDate)}, ${colombiaTimeFormatter.format(createdAt)}`;
+}
 
 export function buildPdfItemDescription(item: PdfItem) {
   const reference =
@@ -195,43 +215,41 @@ export class DocumentPdfService {
     logo: Buffer | null,
   ) {
     if (logo) {
-      pdf.image(logo, 36, 28, {
-        fit: [58, 58],
+      pdf.image(logo, 36, 20, {
+        fit: [87, 87],
         align: 'center',
         valign: 'center',
       });
     }
-    const textX = logo ? 108 : 36;
+    const textX = logo ? 137 : 36;
     pdf
       .font('Helvetica-Bold')
       .fontSize(18)
-      .text('RENTA EQUIPOS DEL VALLE S.A.S.', textX, 37, {
+      .text('RENTA EQUIPOS DEL VALLE S.A.S.', textX, 36, {
         width: 559 - textX,
       });
     pdf
       .font('Helvetica')
       .fontSize(8)
       .text(
-        'NIT 901.062.058-0 | Cra. 22 No. 5A-07 B/ Alameda | 310 533 2297',
+        'NIT 901.062.058-0\nCra. 22 No. 5A-07 B/ Alameda\n310 533 2297',
         textX,
-        63,
-        { width: 559 - textX },
+        61,
+        { width: 559 - textX, lineGap: 1.5 },
       );
-    pdf.y = 91;
+    pdf.y = 112;
     pdf.moveDown(0.8);
     pdf.moveTo(36, pdf.y).lineTo(559, pdf.y).lineWidth(1.2).stroke('#111111');
     pdf.moveDown(0.7);
-    pdf.font('Helvetica-Bold').fontSize(15).text(this.documentTitle(document));
+    pdf
+      .font('Helvetica-Bold')
+      .fontSize(15)
+      .text(this.documentTitle(document), 36, pdf.y, { width: 523 });
     pdf
       .font('Helvetica')
       .fontSize(9)
       .text(
-        `Fecha: ${new Intl.DateTimeFormat('es-CO', {
-          timeZone: 'America/Bogota',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        }).format(document.docDate)}`,
+        `Fecha: ${formatDocumentDateTime(document.docDate, document.createdAt)}`,
       );
     pdf.moveDown(0.8);
   }
@@ -320,18 +338,67 @@ export class DocumentPdfService {
   }
 
   private drawTerms(pdf: PDFKit.PDFDocument) {
-    this.ensureSpace(pdf, 180);
-    this.sectionTitle(pdf, 'TÉRMINOS Y CONDICIONES');
-    pdf.font('Helvetica').fontSize(7.2).lineGap(1.5);
-    TERMS.forEach((term) => {
-      if (pdf.y > 760) {
-        pdf.addPage();
-        this.sectionTitle(pdf, 'TÉRMINOS Y CONDICIONES · CONTINUACIÓN');
-        pdf.font('Helvetica').fontSize(7.2).lineGap(1.5);
-      }
-      pdf.text(term, { align: 'justify' }).moveDown(0.35);
+    const intro = TERMS[0];
+    const clauses = TERMS.slice(1);
+    const midpoint = Math.ceil(clauses.length / 2);
+    const columns = [clauses.slice(0, midpoint), clauses.slice(midpoint)];
+    const boxWidth = 523;
+    const innerPadding = 8;
+    const columnGap = 14;
+    const columnWidth = (boxWidth - innerPadding * 2 - columnGap) / 2;
+
+    pdf.font('Helvetica').fontSize(6.15).lineGap(0.35);
+    const introHeight = pdf.heightOfString(intro, {
+      width: boxWidth - innerPadding * 2,
+      align: 'justify',
     });
-    pdf.lineGap(0).moveDown(0.5);
+    const columnHeights = columns.map((terms) =>
+      terms.reduce(
+        (height, term) =>
+          height +
+          pdf.heightOfString(term, { width: columnWidth, align: 'justify' }) +
+          3,
+        0,
+      ),
+    );
+    const contentHeight = introHeight + 8 + Math.max(...columnHeights);
+    const boxHeight = contentHeight + innerPadding * 2;
+    const requiredHeight = 22 + boxHeight + 8;
+
+    if (pdf.y + requiredHeight + 105 > 790) pdf.addPage();
+    this.sectionTitle(pdf, 'TÉRMINOS Y CONDICIONES');
+    const boxY = pdf.y;
+    pdf
+      .roundedRect(36, boxY, boxWidth, boxHeight, 3)
+      .fillAndStroke('#f7f7f7', '#b8b8b8');
+    pdf
+      .fillColor('#262626')
+      .font('Helvetica')
+      .fontSize(6.15)
+      .lineGap(0.35)
+      .text(intro, 36 + innerPadding, boxY + innerPadding, {
+        width: boxWidth - innerPadding * 2,
+        align: 'justify',
+      });
+
+    const columnsY = boxY + innerPadding + introHeight + 8;
+    columns.forEach((terms, columnIndex) => {
+      const x = 36 + innerPadding + columnIndex * (columnWidth + columnGap);
+      let y = columnsY;
+      terms.forEach((term) => {
+        pdf
+          .font('Helvetica')
+          .fontSize(6.15)
+          .text(term, x, y, {
+            width: columnWidth,
+            align: 'justify',
+            lineGap: 0.35,
+          });
+        y = pdf.y + 3;
+      });
+    });
+    pdf.fillColor('#111111').lineGap(0);
+    pdf.y = boxY + boxHeight + 8;
   }
 
   private drawSignatures(

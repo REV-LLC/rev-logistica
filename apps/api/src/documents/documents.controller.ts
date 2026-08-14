@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  Headers,
   InternalServerErrorException,
   Patch,
   Param,
@@ -19,12 +21,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { ApplyDocumentItemsCutoffDto } from './dto/apply-document-items-cutoff.dto';
+import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateDocumentRequestDto } from './dto/create-document-request.dto';
 import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
 import { UpdateDocumentItemBillingDto } from './dto/update-document-item-billing.dto';
 import { UpdateDocumentRequestDto } from './dto/update-document-request.dto';
+import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
 import { DocumentsService } from './documents.service';
+import { IdempotencyService } from '../common/idempotency.service';
 
 interface JwtPayload {
   sub: string;
@@ -35,11 +40,14 @@ interface JwtPayload {
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMIN, Role.OFFICE)
-  createDocument(
+  async createDocument(
     @Body(
       new ValidationPipe({
         whitelist: true,
@@ -49,16 +57,22 @@ export class DocumentsController {
     )
     payload: CreateDocumentDto,
     @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.documentsService.createDocument({
-      ...payload,
-      createdBy: request.user.sub,
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: 'documents.create',
+      userId: request.user.sub,
+      run: () => this.documentsService.createDocument({
+        ...payload,
+        createdBy: request.user.sub,
+      }),
     });
   }
 
   @Post('requests')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
-  createRequest(
+  async createRequest(
     @Body(
       new ValidationPipe({
         whitelist: true,
@@ -68,6 +82,7 @@ export class DocumentsController {
     )
     payload: CreateDocumentRequestDto,
     @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const type =
       payload.type === DocumentType.REMISSION ||
@@ -79,10 +94,104 @@ export class DocumentsController {
         'Solo se permiten solicitudes de remisión o devolución',
       );
     }
-    return this.documentsService.createRequestDocument({
-      ...payload,
-      type,
-      createdBy: request.user.sub,
+    if (payload.sendWhatsapp === false && request.user.role === Role.DRIVER) {
+      throw new ForbiddenException(
+        'Solo administración y oficina pueden omitir el envío por WhatsApp',
+      );
+    }
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: 'documents.requests.create',
+      userId: request.user.sub,
+      run: () => this.documentsService.createRequestDocument({
+        ...payload,
+        type,
+        createdBy: request.user.sub,
+      }),
+    });
+  }
+
+  @Post('requests/autosave')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  async createAutosavedRequest(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: AutosaveDocumentRequestDto,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: 'documents.requests.autosave.create',
+      userId: request.user.sub,
+      run: () => this.documentsService.createAutosavedRequestDocument({
+        ...payload,
+        createdBy: request.user.sub,
+      }),
+    });
+  }
+
+  @Patch(':documentId/request/autosave')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  async updateAutosavedRequest(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: AutosaveDocumentRequestDto,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: `documents.requests.autosave.update:${documentId}`,
+      userId: request.user.sub,
+      run: () => this.documentsService.updateAutosavedRequestDocument(
+        documentId,
+        payload,
+        request.user,
+      ),
+    });
+  }
+
+  @Post(':documentId/request/submit')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  async submitAutosavedRequest(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: SubmitAutosavedDocumentRequestDto,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (payload.sendWhatsapp === false && request.user.role === Role.DRIVER) {
+      throw new ForbiddenException(
+        'Solo administración y oficina pueden omitir el envío por WhatsApp',
+      );
+    }
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: `documents.requests.autosave.submit:${documentId}`,
+      userId: request.user.sub,
+      run: () => this.documentsService.submitAutosavedRequestDocument(
+        documentId,
+        payload,
+        request.user,
+      ),
     });
   }
 
@@ -224,10 +333,17 @@ export class DocumentsController {
 
   @Post(':documentId/customer-email/draft')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
-  sendDraftCustomerEmail(
+  async sendDraftCustomerEmail(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.documentsService.sendDraftCustomerEmail(documentId);
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: `documents.customer-email.draft:${documentId}`,
+      userId: request.user.sub,
+      run: () => this.documentsService.sendDraftCustomerEmail(documentId),
+    });
   }
 
   @Post(':documentId/customer-email/final')
@@ -240,10 +356,17 @@ export class DocumentsController {
 
   @Post(':documentId/customer-messages/draft')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
-  sendDraftCustomerMessages(
+  async sendDraftCustomerMessages(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.documentsService.sendDraftCustomerMessages(documentId);
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: `documents.customer-messages.draft:${documentId}`,
+      userId: request.user.sub,
+      run: () => this.documentsService.sendDraftCustomerMessages(documentId),
+    });
   }
 
   @Get(':documentId')

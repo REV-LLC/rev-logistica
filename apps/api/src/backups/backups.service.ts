@@ -21,6 +21,9 @@ type BackupTable =
   | 'employees'
   | 'vehicles'
   | 'employeeVehicles'
+  | 'worksiteFuelReceipts'
+  | 'assetFuelings'
+  | 'vehicleFuelings'
   | 'fileObjects';
 
 type TableConfig = {
@@ -63,6 +66,9 @@ const TABLES: TableConfig[] = [
       },
     }),
   },
+  { key: 'worksiteFuelReceipts', label: 'Entradas de combustible a obra', delegate: 'worksiteFuelReceipt', orderBy: { createdAt: 'asc' } },
+  { key: 'assetFuelings', label: 'Abastecimientos de maquinaria', delegate: 'assetFueling', orderBy: { createdAt: 'asc' } },
+  { key: 'vehicleFuelings', label: 'Tanqueadas de vehiculos', delegate: 'vehicleFueling', orderBy: { createdAt: 'asc' } },
   { key: 'fileObjects', label: 'Archivos', delegate: 'fileObject', orderBy: { createdAt: 'asc' } },
 ];
 

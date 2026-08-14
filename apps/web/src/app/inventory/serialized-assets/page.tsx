@@ -71,6 +71,11 @@ type ProviderSkuPrice = {
 
 type Asset = {
   id: string;
+  internalNumber?: number | null;
+  serialOrEngine?: string | null;
+  warehouseCurrentId?: string | null;
+  kind?: 'STANDARD' | 'MOTOR';
+  assignedToMixer?: { id: string } | null;
   imageFileObjectId?: string | null;
   imageUrl?: string | null;
   brand?: string | null;
@@ -231,6 +236,15 @@ export default function CreateSerializedAssetPage() {
   const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
   const [copiedImageLabel, setCopiedImageLabel] = useState('');
   const [active, setActive] = useState(true);
+  const [motorConfiguration, setMotorConfiguration] = useState<
+    'NONE' | 'FIXED' | 'INTERCHANGEABLE'
+  >('NONE');
+  const [motorSource, setMotorSource] = useState<'NONE' | 'EXISTING' | 'NEW'>('NONE');
+  const [assignedMotorId, setAssignedMotorId] = useState<string | null>(null);
+  const [newMotorFuel, setNewMotorFuel] = useState<'ELECTRICO' | 'GASOLINA'>('GASOLINA');
+  const [newMotorSerial, setNewMotorSerial] = useState('');
+  const [newMotorBrand, setNewMotorBrand] = useState('');
+  const [newMotorModel, setNewMotorModel] = useState('');
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(null);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(
@@ -435,6 +449,30 @@ export default function CreateSerializedAssetPage() {
 
     return (selectedFamily?.name ?? familyName.trim()).trim();
   }, [familyName, selectedFamily?.name, skuBrand, skuById, skuModel, skuName, skuSuggestionId]);
+  const isMixerAsset = useMemo(
+    () =>
+      [selectedFamily?.name, selectedFamily?.code, selectedSubfamily?.name, resolvedSkuName]
+        .filter(Boolean)
+        .some((value) => uppercaseInputValue(String(value)).includes('MEZCLADOR')),
+    [resolvedSkuName, selectedFamily?.code, selectedFamily?.name, selectedSubfamily?.name],
+  );
+  const availableMotorOptions = useMemo(
+    () =>
+      assets
+        .filter(
+          (asset) =>
+            asset.kind === 'MOTOR'
+            && asset.warehouseCurrentId === warehouseCurrentId
+            && !asset.assignedToMixer,
+        )
+        .map((asset) => ({
+          value: asset.id,
+          label: `${[asset.brand, asset.model].filter(Boolean).join(' ') || asset.sku?.name || 'MOTOR'}${
+            asset.internalNumber ? ` #${asset.internalNumber}` : ''
+          }${asset.serialOrEngine ? ` · ${asset.serialOrEngine}` : ''}`,
+        })),
+    [assets, warehouseCurrentId],
+  );
   const hasTemplateData = Boolean(resolvedSkuName && skuUnit);
   const hasCommercialData =
     skuPrice !== '' &&
@@ -479,12 +517,26 @@ export default function CreateSerializedAssetPage() {
     setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
+    setMotorConfiguration('NONE');
+    setMotorSource('NONE');
+    setAssignedMotorId(null);
+    setNewMotorFuel('GASOLINA');
+    setNewMotorSerial('');
+    setNewMotorBrand('');
+    setNewMotorModel('');
     setSerialOrEngine('');
     setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
     setActive(true);
+    setMotorConfiguration('NONE');
+    setMotorSource('NONE');
+    setAssignedMotorId(null);
+    setNewMotorFuel('GASOLINA');
+    setNewMotorSerial('');
+    setNewMotorBrand('');
+    setNewMotorModel('');
     setOwnerWarehouseId(null);
     setWarehouseCurrentId(null);
     setManualInternalNumber('');
@@ -525,6 +577,13 @@ export default function CreateSerializedAssetPage() {
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
     setActive(true);
+    setMotorConfiguration('NONE');
+    setMotorSource('NONE');
+    setAssignedMotorId(null);
+    setNewMotorFuel('GASOLINA');
+    setNewMotorSerial('');
+    setNewMotorBrand('');
+    setNewMotorModel('');
     setManualInternalNumber('');
     setFamilyLocked(false);
     setAssetWorkflowStep('template');
@@ -667,6 +726,19 @@ export default function CreateSerializedAssetPage() {
       setValidationError('Ingresa el número interno de la bodega alterna.', manualInternalNumberRef);
       return;
     }
+    if (isMixerAsset && motorConfiguration === 'NONE') {
+      setValidationError('Selecciona el tipo de motor de la mezcladora.');
+      return;
+    }
+    if (
+      isMixerAsset
+      && motorConfiguration === 'INTERCHANGEABLE'
+      && motorSource === 'EXISTING'
+      && !assignedMotorId
+    ) {
+      setValidationError('Selecciona el motor que se asignará a la mezcladora.');
+      return;
+    }
     setAssetAttempted(false);
     setAssetWorkflowStep('review');
   };
@@ -792,6 +864,13 @@ export default function CreateSerializedAssetPage() {
           fuel: skuFuel || undefined,
           imageFileObjectId: assetImageFile ? undefined : copiedImageFileObjectId || undefined,
           active,
+          motorConfiguration: isMixerAsset ? motorConfiguration : 'NONE',
+          assignedMotorId:
+            isMixerAsset
+            && motorConfiguration === 'INTERCHANGEABLE'
+            && motorSource === 'EXISTING'
+              ? assignedMotorId || undefined
+              : undefined,
           internalNumber:
             isAlternateOwnerWarehouse && manualInternalNumber !== ''
               ? manualInternalNumber
@@ -802,6 +881,17 @@ export default function CreateSerializedAssetPage() {
         providerPrice:
           isAlternateOwnerWarehouse && providerPrice !== ''
             ? providerPrice
+            : undefined,
+        newMotor:
+          isMixerAsset
+          && motorConfiguration === 'INTERCHANGEABLE'
+          && motorSource === 'NEW'
+            ? {
+                fuel: newMotorFuel,
+                serialOrEngine: newMotorSerial.trim() || undefined,
+                brand: newMotorBrand.trim() || undefined,
+                model: newMotorModel.trim() || undefined,
+              }
             : undefined,
       };
 
@@ -1484,6 +1574,118 @@ export default function CreateSerializedAssetPage() {
                     placeholder="Solo si requiere guia de movilidad"
                     description="Los activos con este campo aparecen en Guias de movilidad."
                   />
+                  {isMixerAsset ? (
+                    <Paper withBorder radius="md" p="md">
+                      <Stack gap="md">
+                        <div>
+                          <Text fw={700}>Motor de la mezcladora</Text>
+                          <Text size="sm" c="dimmed">
+                            Define si el motor es fijo o si puede intercambiarse con motores del inventario.
+                          </Text>
+                        </div>
+                        <Select
+                          label="Tipo de motor"
+                          data={[
+                            { value: 'FIXED_ELECTRICO', label: 'Fijo eléctrico' },
+                            { value: 'FIXED_GASOLINA', label: 'Fijo a gasolina' },
+                            { value: 'INTERCHANGEABLE', label: 'Motor intercambiable' },
+                          ]}
+                          value={
+                            motorConfiguration === 'INTERCHANGEABLE'
+                              ? 'INTERCHANGEABLE'
+                              : motorConfiguration === 'FIXED'
+                                ? skuFuel === 'ELECTRICO'
+                                  ? 'FIXED_ELECTRICO'
+                                  : 'FIXED_GASOLINA'
+                                : null
+                          }
+                          onChange={(value) => {
+                            if (value === 'INTERCHANGEABLE') {
+                              setMotorConfiguration('INTERCHANGEABLE');
+                              setSkuFuel('');
+                            } else if (value === 'FIXED_ELECTRICO') {
+                              setMotorConfiguration('FIXED');
+                              setSkuFuel('ELECTRICO');
+                              setMotorSource('NONE');
+                              setAssignedMotorId(null);
+                            } else if (value === 'FIXED_GASOLINA') {
+                              setMotorConfiguration('FIXED');
+                              setSkuFuel('GASOLINA');
+                              setMotorSource('NONE');
+                              setAssignedMotorId(null);
+                            } else {
+                              setMotorConfiguration('NONE');
+                            }
+                          }}
+                          required
+                        />
+
+                        {motorConfiguration === 'INTERCHANGEABLE' ? (
+                          <>
+                            <Select
+                              label="Motor inicial"
+                              data={[
+                                { value: 'NONE', label: 'Crear mezcladora sin motor asignado' },
+                                { value: 'EXISTING', label: 'Asignar un motor disponible de bodega' },
+                                { value: 'NEW', label: 'La mezcladora viene con un motor nuevo' },
+                              ]}
+                              value={motorSource}
+                              onChange={(value) => {
+                                const source = (value ?? 'NONE') as 'NONE' | 'EXISTING' | 'NEW';
+                                setMotorSource(source);
+                                if (source !== 'EXISTING') setAssignedMotorId(null);
+                              }}
+                            />
+                            {motorSource === 'EXISTING' ? (
+                              <Select
+                                label="Motor disponible"
+                                placeholder="Buscar motor"
+                                data={availableMotorOptions}
+                                value={assignedMotorId}
+                                onChange={setAssignedMotorId}
+                                searchable
+                                nothingFoundMessage="No hay motores disponibles en esta bodega"
+                                required
+                              />
+                            ) : null}
+                            {motorSource === 'NEW' ? (
+                              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                                <Select
+                                  label="Combustible del motor nuevo"
+                                  data={[
+                                    { value: 'GASOLINA', label: 'Gasolina' },
+                                    { value: 'ELECTRICO', label: 'Eléctrico' },
+                                  ]}
+                                  value={newMotorFuel}
+                                  onChange={(value) =>
+                                    setNewMotorFuel(
+                                      value === 'ELECTRICO' ? 'ELECTRICO' : 'GASOLINA',
+                                    )
+                                  }
+                                  required
+                                />
+                                <UppercaseTextInput
+                                  label="Serial del motor"
+                                  value={newMotorSerial}
+                                  onChange={setNewMotorSerial}
+                                />
+                                <UppercaseTextInput
+                                  label="Marca del motor"
+                                  value={newMotorBrand}
+                                  onChange={setNewMotorBrand}
+                                />
+                                <UppercaseTextInput
+                                  label="Modelo del motor"
+                                  value={newMotorModel}
+                                  onChange={setNewMotorModel}
+                                />
+                              </SimpleGrid>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </Stack>
+                    </Paper>
+                  ) : null}
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" gap="md">
                       <div>

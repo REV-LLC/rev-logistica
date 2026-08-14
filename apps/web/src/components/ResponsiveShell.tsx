@@ -10,6 +10,11 @@ import Nav from "@/components/Nav";
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
     {
+      prefix: "/fuel",
+      title: "Combustible",
+      subtitle: "Consumo operativo",
+    },
+    {
       prefix: "/transport/requests",
       title: "Solicitudes",
       subtitle: "Operacion diaria",
@@ -99,6 +104,12 @@ function getHeaderCopy(
   inventoryScope: string | null,
   inventoryView: string | null,
 ) {
+  if (
+    pathname?.startsWith("/inventory/serialized-assets/")
+  ) {
+    return { title: "Equipos", subtitle: "Bodega propia" };
+  }
+
   if (
     pathname?.startsWith("/inventory/warehouse") &&
     inventoryScope === "own"

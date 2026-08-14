@@ -18,6 +18,9 @@ export type JwtPayload = {
   sub?: string;
   identifier?: string;
   email?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   exp?: number;
   role?: AppRole;
 };
@@ -96,7 +99,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/inventory/provider-returns',
     '/inventory/ledger/document',
   ],
-  OPERATOR: ['/inventory/hour-meter'],
+  OPERATOR: ['/inventory/hour-meter', '/fuel'],
 };
 
 function isPathWithinPrefix(pathname: string, prefix: string) {

@@ -131,6 +131,17 @@ export default function SerializedAssetComponentLab({
 
         {component === 'movement-summary' ? (
           <AssetMovementSummary
+            movements={emptyMovement ? [] : [
+              {
+                id: 'movement-1',
+                movementType: 'IN',
+                quantity: 1,
+                createdAt: '2026-08-14T14:30:00.000Z',
+                warehouse: { id: 'rev', name: 'REV' },
+                customerWorksite: null,
+                document: { id: 'document-1', consecutive: 'DV000001', type: 'RETURN' },
+              },
+            ]}
             warehouseCurrentId={emptyMovement ? null : 'rev'}
             warehouseCurrentName={emptyMovement ? '' : 'REV'}
             worksiteLocationName={null}

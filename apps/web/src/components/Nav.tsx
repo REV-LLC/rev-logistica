@@ -37,6 +37,7 @@ import {
   IconFilePlus,
   IconFileCertificate,
   IconGauge,
+  IconGasStation,
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
@@ -54,6 +55,7 @@ type NavLinkItem = {
   icon: typeof IconClipboardList;
   roles: AppRole[];
   activePrefixes?: string[];
+  activeHrefs?: string[];
   exact?: boolean;
   children?: NavLinkItem[];
 };
@@ -133,6 +135,12 @@ const sections: NavSection[] = [
         roles: ["DRIVER"],
       },
       {
+        href: "/fuel",
+        label: "Combustible",
+        icon: IconGasStation,
+        roles: ["ADMIN", "DRIVER", "OPERATOR"],
+      },
+      {
         href: "/notifications/deliveries",
         label: "Centro de notificaciones",
         icon: IconBell,
@@ -154,7 +162,10 @@ const sections: NavSection[] = [
             label: "Equipos",
             icon: IconTools,
             roles: ["ADMIN", "OFFICE"],
-            exact: true,
+            activePrefixes: [
+              "/inventory/warehouse?scope=own&view=serial",
+              "/inventory/serialized-assets/",
+            ],
           },
           {
             href: "/inventory/warehouse?scope=own&view=bulk",
@@ -191,8 +202,8 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
             activePrefixes: [
               "/inventory/bulk-adjustments",
-              "/inventory/serialized-assets",
             ],
+            activeHrefs: ["/inventory/serialized-assets"],
           },
         ],
       },
@@ -407,6 +418,9 @@ export default function Nav({ onNavigate }: NavProps) {
       searchParams.size > 0
         ? `${pathname}?${searchParams.toString()}`
         : pathname;
+    if (link.activeHrefs?.includes(currentHref)) {
+      return true;
+    }
     if (link.exact) {
       return currentHref === link.href;
     }
@@ -464,6 +478,14 @@ export default function Nav({ onNavigate }: NavProps) {
           : currentRole === "OPERATOR"
             ? "orange"
             : "gray";
+  const userDisplayName =
+    currentSession?.name?.trim() ||
+    [currentSession?.firstName, currentSession?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    currentSession?.email ||
+    null;
 
   const handleLogout = () => {
     clearToken();
@@ -704,40 +726,22 @@ export default function Nav({ onNavigate }: NavProps) {
           >
             {currentRole ?? "SIN ROL"}
           </Badge>
-          {currentSession?.email ? (
-            <>
-              <Text
-                size="10px"
-                c="dimmed"
-                ta="right"
-                lh={1.2}
-                title={currentSession.email}
-                w="100%"
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {currentSession.email}
-              </Text>
-              <Text
-                size="10px"
-                fw={700}
-                c="dimmed"
-                ta="right"
-                lh={1.1}
-                title={serviceName}
-                w="100%"
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {serviceName}
-              </Text>
-            </>
+          {userDisplayName ? (
+            <Text
+              size="10px"
+              c="dimmed"
+              ta="right"
+              lh={1.2}
+              title={userDisplayName}
+              w="100%"
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {userDisplayName}
+            </Text>
           ) : null}
         </Stack>
       </Group>

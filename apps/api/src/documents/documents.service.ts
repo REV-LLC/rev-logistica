@@ -19,6 +19,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
+import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
+import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -348,6 +350,31 @@ export class DocumentsService {
     const items = await this.mapDocumentItemsToMovementItems(document.items);
 
     if (document.type === DocumentType.REMISSION) {
+      const assetIds = items
+        .map((item) => item.assetId)
+        .filter((value): value is string => Boolean(value));
+      if (assetIds.length) {
+        const assets = await this.prisma.asset.findMany({
+          where: { id: { in: assetIds } },
+          select: {
+            id: true,
+            motorConfiguration: true,
+            assignedMotorId: true,
+            sku: { select: { name: true } },
+          },
+        });
+        const selectedAssetIds = new Set(assetIds);
+        const missingMotor = assets.find(
+          (asset) =>
+            asset.motorConfiguration === 'INTERCHANGEABLE'
+            && (!asset.assignedMotorId || !selectedAssetIds.has(asset.assignedMotorId)),
+        );
+        if (missingMotor) {
+          throw new BadRequestException(
+            `Selecciona el motor que saldrá con ${missingMotor.sku.name}`,
+          );
+        }
+      }
       if (!document.customerWorksiteId) {
         throw new BadRequestException('La remisión no tiene obra destino');
       }
@@ -591,6 +618,7 @@ export class DocumentsService {
     notes?: string;
     recipientPhone?: string;
     recipientPhones?: string[];
+    sendWhatsapp?: boolean;
     receivedSignature?: string;
     createdBy: string;
     items: Array<{
@@ -603,10 +631,13 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
-    const recipientPhones = this.normalizeDocumentRecipientPhones(
-      payload.recipientPhones,
-      payload.recipientPhone,
-    );
+    const recipientPhones =
+      payload.sendWhatsapp === false
+        ? []
+        : this.normalizeDocumentRecipientPhones(
+            payload.recipientPhones,
+            payload.recipientPhone,
+          );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -678,6 +709,246 @@ export class DocumentsService {
     }
 
     throw new BadRequestException('No se pudo generar consecutivo automático');
+  }
+
+  async createAutosavedRequestDocument(
+    payload: AutosaveDocumentRequestDto & { createdBy: string },
+  ) {
+    if (
+      payload.type !== DocumentType.REMISSION &&
+      payload.type !== DocumentType.RETURN
+    ) {
+      throw new BadRequestException(
+        'Solo se permiten solicitudes de remisión o devolución',
+      );
+    }
+    const recipientPhones = payload.recipientPhones?.length
+      ? this.normalizeDocumentRecipientPhones(payload.recipientPhones)
+      : [];
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const consecutive = await this.resolveConsecutive(
+            payload.type,
+            tx,
+            payload.number,
+          );
+          const documentDate =
+            this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
+          const document = await tx.document.create({
+            data: {
+              type: payload.type,
+              status: DocumentStatus.IN_PROGRESS,
+              consecutive,
+              warehouseId: payload.warehouseId ?? null,
+              customerWorksiteId: payload.customerWorksiteId ?? null,
+              docDate: documentDate,
+              notes: payload.notes ?? null,
+              recipientPhone: recipientPhones[0] ?? null,
+              recipientPhones,
+              createdBy: payload.createdBy,
+            },
+            select: { id: true, consecutive: true, status: true },
+          });
+
+          if (payload.items?.length) {
+            await tx.documentItem.createMany({
+              data: payload.items.map((item) => ({
+                documentId: document.id,
+                skuId: item.skuId ?? null,
+                assetId: item.assetId ?? null,
+                quantity: item.quantity ?? (item.skuId ? 1 : null),
+                requestedTag: item.requestedTag?.trim() || null,
+                condition: item.ownerWarehouseId ?? null,
+                conditionNote: item.conditionNote?.trim() || null,
+                billingCutoffDate:
+                  payload.type === DocumentType.RETURN ? documentDate : null,
+                billingStatus: this.getBillingStatus(
+                  payload.type === DocumentType.RETURN ? documentDate : null,
+                  null,
+                ),
+              })),
+            });
+          }
+
+          await this.saveReceivedSignature(
+            tx,
+            document.id,
+            payload.createdBy,
+            payload.receivedSignature,
+          );
+          return document;
+        });
+      } catch (error) {
+        if (this.isConsecutiveConflict(error) && !payload.number) continue;
+        if (this.isConsecutiveConflict(error)) {
+          throw new BadRequestException('El consecutivo ya existe');
+        }
+        throw error;
+      }
+    }
+
+    throw new BadRequestException('No se pudo generar consecutivo automático');
+  }
+
+  async updateAutosavedRequestDocument(
+    documentId: string,
+    payload: AutosaveDocumentRequestDto,
+    requester: { sub: string; role: Role },
+  ) {
+    const existing = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: {
+        id: true,
+        createdBy: true,
+        status: true,
+        type: true,
+        consecutive: true,
+        warehouseId: true,
+        customerWorksiteId: true,
+        notes: true,
+        recipientPhone: true,
+        recipientPhones: true,
+        docDate: true,
+      },
+    });
+    if (!existing) throw new NotFoundException('Document not found');
+    this.assertCanManageAutosavedRequest(existing, requester);
+    if (existing.status !== DocumentStatus.IN_PROGRESS) {
+      throw new BadRequestException('Este formulario ya fue enviado');
+    }
+
+    const nextType = payload.type ?? existing.type;
+    const recipientPhones = payload.recipientPhones
+      ? payload.recipientPhones.length
+        ? this.normalizeDocumentRecipientPhones(payload.recipientPhones)
+        : []
+      : existing.recipientPhones;
+    const nextNotes = payload.notes ?? existing.notes;
+    const nextDocDate =
+      this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
+
+    return this.prisma.$transaction(async (tx) => {
+      const consecutive =
+        payload.number !== undefined
+          ? await this.resolveConsecutive(nextType, tx, payload.number)
+          : existing.consecutive;
+      const updated = await tx.document.update({
+        where: { id: documentId },
+        data: {
+          type: nextType,
+          consecutive,
+          warehouseId: payload.warehouseId ?? existing.warehouseId,
+          customerWorksiteId:
+            payload.customerWorksiteId ?? existing.customerWorksiteId,
+          docDate: nextDocDate,
+          notes: nextNotes,
+          recipientPhone: recipientPhones[0] ?? null,
+          recipientPhones,
+          officeModifiedAt: new Date(),
+          officeModifiedBy: requester.sub,
+        },
+        select: { id: true, consecutive: true, status: true },
+      });
+
+      if (payload.items !== undefined) {
+        await tx.documentItem.deleteMany({ where: { documentId } });
+        if (payload.items.length) {
+          const cutoffDate =
+            nextType === DocumentType.RETURN ? nextDocDate : null;
+          await tx.documentItem.createMany({
+            data: payload.items.map((item) => ({
+              documentId,
+              skuId: item.skuId ?? null,
+              assetId: item.assetId ?? null,
+              quantity: item.quantity ?? (item.skuId ? 1 : null),
+              requestedTag: item.requestedTag?.trim() || null,
+              condition: item.ownerWarehouseId ?? null,
+              conditionNote: item.conditionNote?.trim() || null,
+              billingCutoffDate: cutoffDate,
+              billingStatus: this.getBillingStatus(cutoffDate, null),
+            })),
+          });
+        }
+      }
+
+      if (payload.receivedSignature !== undefined) {
+        await this.saveReceivedSignature(
+          tx,
+          documentId,
+          existing.createdBy,
+          payload.receivedSignature,
+        );
+      }
+      return updated;
+    });
+  }
+
+  async submitAutosavedRequestDocument(
+    documentId: string,
+    payload: SubmitAutosavedDocumentRequestDto,
+    requester: { sub: string; role: Role },
+  ) {
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: {
+        id: true,
+        createdBy: true,
+        status: true,
+        customerWorksiteId: true,
+        recipientPhone: true,
+        recipientPhones: true,
+        _count: { select: { items: true } },
+        files: {
+          where: { fileType: 'SIGNATURE_RECEIVED' },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+    this.assertCanManageAutosavedRequest(document, requester);
+    if (document.status !== DocumentStatus.IN_PROGRESS) {
+      throw new BadRequestException('Este formulario ya fue enviado');
+    }
+    if (!document.customerWorksiteId) {
+      throw new BadRequestException('Selecciona una obra');
+    }
+    if (!document._count.items) {
+      throw new BadRequestException('Selecciona al menos un item');
+    }
+    if (!document.files.length) {
+      throw new BadRequestException('Captura la firma antes de enviar');
+    }
+    if (payload.sendWhatsapp !== false) {
+      this.normalizeDocumentRecipientPhones(
+        document.recipientPhones,
+        document.recipientPhone ?? undefined,
+      );
+    }
+
+    const submitted = await this.prisma.document.update({
+      where: { id: documentId },
+      data: { status: DocumentStatus.DRAFT },
+      select: { id: true, consecutive: true, status: true },
+    });
+    await this.documentPdfSnapshots.refresh(documentId);
+    return submitted;
+  }
+
+  private assertCanManageAutosavedRequest(
+    document: { createdBy: string },
+    requester: { sub: string; role: Role },
+  ) {
+    if (
+      requester.role === Role.DRIVER &&
+      document.createdBy !== requester.sub
+    ) {
+      throw new ForbiddenException(
+        'Los conductores solo pueden editar sus propios formularios',
+      );
+    }
   }
 
   async updateRequestDocument(
@@ -1441,6 +1712,9 @@ export class DocumentsService {
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
+                kind: true,
+                assignedMotorId: true,
+                assignedToMixer: { select: { id: true } },
                 sku: {
                   select: {
                     id: true,
