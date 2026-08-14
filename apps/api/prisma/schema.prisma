@@ -242,6 +242,8 @@ model Customer {
   createdAt             DateTime                      @default(now())
 
   customerWorksites CustomerWorksite[]
+  fuelReceipts      WorksiteFuelReceipt[]
+  assetFuelings     AssetFueling[]
 
   @@unique([identityDocumentType, nitOrId])
 }
@@ -385,6 +387,7 @@ model Sku {
   assetSubfamily       AssetSubfamily?       @relation(fields: [assetSubfamilyId], references: [id])
   providerPrices       ProviderSkuPrice[]
   providerReceiptItems ProviderReceiptItem[]
+  fuelings             AssetFueling[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
@@ -1041,8 +1044,10 @@ model WorksiteFuelReceipt {
   createdBy    String
   createdAt    DateTime @default(now())
 
-  worksite Worksite @relation(fields: [worksiteId], references: [id])
-  creator  User     @relation("WorksiteFuelReceiptCreatedBy", fields: [createdBy], references: [id])
+  worksite   Worksite  @relation(fields: [worksiteId], references: [id])
+  creator    User      @relation("WorksiteFuelReceiptCreatedBy", fields: [createdBy], references: [id])
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
 
   @@index([worksiteId, receivedAt])
 }
@@ -1059,10 +1064,14 @@ model AssetFueling {
   createdBy          String
   createdAt          DateTime @default(now())
 
-  worksite Worksite  @relation(fields: [worksiteId], references: [id])
-  asset    Asset     @relation(fields: [assetId], references: [id])
-  operator Employee? @relation("AssetFuelingOperator", fields: [operatorEmployeeId], references: [id])
-  creator  User      @relation("AssetFuelingCreatedBy", fields: [createdBy], references: [id])
+  worksite   Worksite  @relation(fields: [worksiteId], references: [id])
+  asset      Asset     @relation(fields: [assetId], references: [id])
+  operator   Employee? @relation("AssetFuelingOperator", fields: [operatorEmployeeId], references: [id])
+  creator    User      @relation("AssetFuelingCreatedBy", fields: [createdBy], references: [id])
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+  sku        Sku?      @relation(fields: [skuId], references: [id])
+  skuId      String?
 
   @@index([worksiteId, fueledAt])
   @@index([assetId, fueledAt])
