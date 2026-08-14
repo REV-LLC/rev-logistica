@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DocumentType } from '@prisma/client';
+import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 class AutosaveDocumentRequestItemDto {
   @IsOptional()
@@ -65,7 +66,7 @@ export class AutosaveDocumentRequestDto {
   @IsArray()
   @ArrayMaxSize(10)
   @IsString({ each: true })
-  @Matches(/^\d{10}$/, {
+  @Matches(COLOMBIAN_PHONE_INPUT_PATTERN, {
     each: true,
     message: 'Cada teléfono debe contener exactamente 10 dígitos',
   })
