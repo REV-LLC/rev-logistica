@@ -105,6 +105,12 @@ function getHeaderCopy(
   inventoryView: string | null,
 ) {
   if (
+    pathname?.startsWith("/inventory/serialized-assets/")
+  ) {
+    return { title: "Equipos", subtitle: "Bodega propia" };
+  }
+
+  if (
     pathname?.startsWith("/inventory/warehouse") &&
     inventoryScope === "own"
   ) {

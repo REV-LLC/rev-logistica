@@ -625,6 +625,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
+  const restoringRequestRef = useRef<string | null>(null);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
@@ -2035,6 +2036,24 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     );
   };
 
+  const splitSelectedItem = (index: number) => {
+    setSelectedItems((current) => {
+      const item = current[index];
+      const quantity = Number(item?.quantity ?? 1);
+      if (!item || item.type === 'serial' || !Number.isFinite(quantity) || quantity <= 1) {
+        return current;
+      }
+      const next = [...current];
+      next.splice(
+        index,
+        1,
+        { ...item, quantity: 1 },
+        { ...item, quantity: quantity - 1, ownerWarehouseId: null },
+      );
+      return next;
+    });
+  };
+
   const removeSelected = (index: number) => {
     setSelectedItems((prev) => {
       const removed = prev[index];
@@ -2207,18 +2226,21 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   useEffect(() => {
     if (mode !== 'generate' || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    const draftId =
-      params.get('draft') ??
-      (currentUserId
-        ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
-        : null);
-    if (draftId && autosaveDraftId !== draftId) {
-      void editRequest(draftId, true);
-      return;
-    }
     const editId = params.get('edit');
-    if (!editId || editingRequestId === editId) return;
-    void editRequest(editId);
+    const explicitDraftId = params.get('draft');
+    const storedDraftId = currentUserId
+      ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
+      : null;
+    const draftId = explicitDraftId ?? (editId ? null : storedDraftId);
+    const target = editId ? `edit:${editId}` : draftId ? `draft:${draftId}` : null;
+    if (!target || restoringRequestRef.current === target) return;
+    if (editId && editingRequestId === editId) return;
+    if (draftId && autosaveDraftId === draftId) return;
+
+    restoringRequestRef.current = target;
+    void editRequest(editId ?? (draftId as string), !editId).finally(() => {
+      if (restoringRequestRef.current === target) restoringRequestRef.current = null;
+    });
   }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
 
   const handleSubmit = async () => {
@@ -2549,7 +2571,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   };
 
   const renderAdminItemFields = (item: SelectedItem, index: number) => {
-    if (!editingRequestId || !isAdminRole) return null;
+    if (!editingRequestId || !canDecide) return null;
     return (
       <Stack gap="xs" mt="xs">
         {item.type === 'free' ? (
@@ -2571,6 +2593,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           required
           width="100%"
         />
+        {item.type !== 'serial' && Number(item.quantity ?? 1) > 1 ? (
+          <Button size="xs" variant="light" onClick={() => splitSelectedItem(index)}>
+            Dividir cantidad entre bodegas
+          </Button>
+        ) : null}
       </Stack>
     );
   };
