@@ -105,6 +105,7 @@ export default function SerialAssetCard({
   const shouldShowSerial = display?.showSerial ?? true;
   const shouldShowCharge = display?.showCharge ?? true;
   const hasFooterContent = Boolean(onAction || footer);
+  const isContentSized = isMobile || compact || !hasFooterContent;
   const ownerChipLabel = display?.ownerChipLabel ?? item.ownerWarehouseName;
   const showMenu = Boolean(href || onDelete);
   const title = href ? (
@@ -145,26 +146,20 @@ export default function SerialAssetCard({
         maxWidth: '100%',
         minWidth: 0,
         overflow: 'hidden',
-        minHeight: isMobile || !hasFooterContent ? 'auto' : compact ? 248 : 320,
-        height: hasFooterContent ? '100%' : 'auto',
-        aspectRatio: isMobile || compact || !hasFooterContent ? 'auto' : '1 / 1',
+        minHeight: isContentSized ? 'auto' : 320,
+        height: hasFooterContent && !compact ? '100%' : 'auto',
+        aspectRatio: isContentSized ? 'auto' : '1 / 1',
         gap: isMobile ? (compact ? '0.625rem' : '0.75rem') : 0,
         cursor: onOpen ? 'pointer' : undefined,
       }}
     >
       <Box
         style={{
-          flex: isMobile
-            ? '0 0 auto'
-            : !hasFooterContent
-              ? '0 0 auto'
-            : compact
-              ? '0 0 48%'
-              : '0 0 62%',
+          flex: isContentSized ? '0 0 auto' : '0 0 62%',
           width: '100%',
           minWidth: 0,
-          height: isMobile || !hasFooterContent ? 'auto' : compact ? '48%' : '62%',
-          aspectRatio: isMobile || !hasFooterContent ? '16 / 9' : undefined,
+          height: isContentSized ? 'auto' : '62%',
+          aspectRatio: isContentSized ? '16 / 9' : undefined,
           background: '#ffffff',
           display: 'flex',
           alignItems: 'center',
