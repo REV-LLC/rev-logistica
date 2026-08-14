@@ -18,7 +18,7 @@ import {
 } from './document-pdf.service';
 
 export const GENERATED_DOCUMENT_PDF = 'GENERATED_DOCUMENT_PDF';
-export const GENERATED_DOCUMENT_PDF_CATEGORY = 'GENERATED_DOCUMENT_PDF_V2';
+export const GENERATED_DOCUMENT_PDF_CATEGORY = 'GENERATED_DOCUMENT_PDF_V3';
 
 type StoredPdfSnapshot = {
   id: string;
@@ -166,6 +166,7 @@ export class DocumentPdfSnapshotService {
         type: true,
         status: true,
         consecutive: true,
+        createdAt: true,
         docDate: true,
         notes: true,
         creator: {

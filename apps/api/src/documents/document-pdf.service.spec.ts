@@ -3,6 +3,7 @@ import {
   buildPdfItemDescription,
   buildPdfObservationText,
   DocumentPdfService,
+  formatDocumentDateTime,
 } from './document-pdf.service';
 
 describe('DocumentPdfService', () => {
@@ -10,6 +11,7 @@ describe('DocumentPdfService', () => {
     type: 'REMISSION',
     status: 'DRAFT',
     consecutive: 'RM000001',
+    createdAt: new Date('2026-08-03T14:57:00.000Z'),
     docDate: new Date('2026-08-03T12:00:00.000Z'),
     notes: 'Entregar en portería.',
     responsibles: {
@@ -39,6 +41,15 @@ describe('DocumentPdfService', () => {
   function pageCount(buffer: Buffer) {
     return buffer.toString('latin1').match(/\/Type \/Page\b/g)?.length ?? 0;
   }
+
+  it('combines the selected document day with the real creation time in Colombia', () => {
+    expect(
+      formatDocumentDateTime(
+        new Date('2026-08-14T12:00:00.000Z'),
+        new Date('2026-08-14T14:57:00.000Z'),
+      ).replaceAll('\u00a0', ' '),
+    ).toBe('14/08/2026, 9:57:00 a. m.');
+  });
 
   async function imageDataUrl(options: {
     width: number;

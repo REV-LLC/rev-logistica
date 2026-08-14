@@ -16,6 +16,7 @@ export type SharedDocument = {
   type: string;
   status: string;
   consecutive: string | null;
+  createdAt: Date;
   docDate: Date;
   notes: string | null;
   customerWorksite: {
@@ -45,6 +46,25 @@ export type SharedDocument = {
 };
 
 type PdfItem = SharedDocument['items'][number];
+
+const colombiaDateFormatter = new Intl.DateTimeFormat('es-CO', {
+  timeZone: 'America/Bogota',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+const colombiaTimeFormatter = new Intl.DateTimeFormat('es-CO', {
+  timeZone: 'America/Bogota',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+});
+
+export function formatDocumentDateTime(docDate: Date, createdAt: Date) {
+  return `${colombiaDateFormatter.format(docDate)}, ${colombiaTimeFormatter.format(createdAt)}`;
+}
 
 export function buildPdfItemDescription(item: PdfItem) {
   const reference =
@@ -226,12 +246,7 @@ export class DocumentPdfService {
       .font('Helvetica')
       .fontSize(9)
       .text(
-        `Fecha: ${new Intl.DateTimeFormat('es-CO', {
-          timeZone: 'America/Bogota',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        }).format(document.docDate)}`,
+        `Fecha: ${formatDocumentDateTime(document.docDate, document.createdAt)}`,
       );
     pdf.moveDown(0.8);
   }
