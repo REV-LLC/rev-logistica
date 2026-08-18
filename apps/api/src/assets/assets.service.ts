@@ -663,6 +663,10 @@ export class AssetsService {
       where: { id: assetId },
       select: {
         id: true,
+        skuId: true,
+        warehouseOwnerId: true,
+        warehouseCurrentId: true,
+        sku: { select: { assetSubfamilyId: true } },
         documentItems: { select: { id: true }, take: 1 },
         taskAssets: { select: { id: true }, take: 1 },
       },
@@ -680,7 +684,7 @@ export class AssetsService {
       throw new BadRequestException('No se puede eliminar un activo asociado a tareas');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const maintenanceItems = await tx.maintenanceItem.findMany({
         where: { plan: { assetId } }, select: { id: true },
       });
@@ -688,8 +692,59 @@ export class AssetsService {
         where: { entityType: 'MAINTENANCE_ITEM', entityId: { in: maintenanceItems.map((item) => item.id) } },
       });
       await tx.stockLedger.deleteMany({ where: { assetId } });
-      return tx.asset.delete({ where: { id: assetId } });
-    });
+      const deletedAsset = await tx.asset.delete({ where: { id: assetId } });
+
+      const remainingSkuAssets = await tx.asset.count({
+        where: { skuId: asset.skuId },
+      });
+      if (remainingSkuAssets === 0) {
+        const [ledgerCount, documentItemsCount, providerReceiptItemsCount] = await Promise.all([
+          tx.stockLedger.count({ where: { skuId: asset.skuId } }),
+          tx.documentItem.count({ where: { skuId: asset.skuId } }),
+          tx.providerReceiptItem.count({ where: { skuId: asset.skuId } }),
+        ]);
+
+        if (ledgerCount === 0 && documentItemsCount === 0 && providerReceiptItemsCount === 0) {
+          await tx.sku.delete({ where: { id: asset.skuId } });
+        }
+      }
+
+      const assetSubfamilyId = asset.sku.assetSubfamilyId;
+      if (assetSubfamilyId) {
+        const remainingSubfamilyAssets = await tx.asset.count({
+          where: {
+            warehouseOwnerId: asset.warehouseOwnerId,
+            sku: { assetSubfamilyId },
+          },
+        });
+
+        if (remainingSubfamilyAssets === 0) {
+          await tx.assetInternalCounter.deleteMany({
+            where: {
+              ownerWarehouseId: asset.warehouseOwnerId,
+              assetSubfamilyId,
+            },
+          });
+        }
+      }
+
+      return deletedAsset;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    const warehouseIds = new Set([
+      asset.warehouseOwnerId,
+      asset.warehouseCurrentId,
+    ].filter((warehouseId): warehouseId is string => Boolean(warehouseId)));
+    await Promise.all(Array.from(warehouseIds).flatMap((warehouseId) => {
+      const baseKey = `inventory:warehouse:${warehouseId}`;
+      return [
+        this.cacheManager.del(baseKey),
+        this.cacheManager.del(`${baseKey}:default`),
+        this.cacheManager.del(`${baseKey}:include-zero`),
+      ];
+    }));
+
+    return result;
   }
 
   async getAssetLocation(assetId: string) {

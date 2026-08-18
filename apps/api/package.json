@@ -13,6 +13,7 @@
     "import:warehouses": "ts-node scripts/import-warehouses.ts",
     "import:worksites": "ts-node scripts/import-worksites.ts",
     "cleanup:legal-names": "ts-node scripts/cleanup-legal-names.ts",
+    "cleanup:orphan-plants": "ts-node scripts/cleanup-orphan-plant-skus.ts",
     "consolidate:provider-gatos": "ts-node scripts/consolidate-provider-gatos.ts",
     "correct:conventional-scaffold-naves": "ts-node scripts/correct-conventional-scaffold-naves.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
