@@ -128,8 +128,7 @@ export default function ItemPickerComponentLabPage() {
         skuOptions={skuOptions}
         itemsAddedNotice={notice}
         onItemAddedNotice={setNotice}
-        isDriverRole={role === 'DRIVER'}
-        sourceMode={sourceMode}
+        showOwnerWarehouse={role !== 'DRIVER'}
       />
     </main>
   );
