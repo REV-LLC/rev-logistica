@@ -44,6 +44,11 @@ import {
   getWorksiteQuantityDelta,
   WORKSITE_BALANCE_MOVEMENT_TYPES,
 } from './worksite-ledger-balance';
+import {
+  projectInventoryForRequest,
+  type BulkInventoryRow,
+  type SerialInventoryRow,
+} from './request-inventory-projection';
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
 
@@ -1996,8 +2001,8 @@ export class InventoryService {
     const cacheKey = this.getOnSiteCacheKey(customerWorksiteId);
     const cached = await this.cacheManager.get<{
       customerWorksiteId: string;
-      bulk: unknown[];
-      serial: unknown[];
+      bulk: BulkInventoryRow[];
+      serial: SerialInventoryRow[];
     }>(cacheKey);
     if (cached) {
       return cached;
@@ -2142,7 +2147,7 @@ export class InventoryService {
             size: true,
             areaM2: true,
             unitWeight: true,
-            assetFamily: { select: { code: true, name: true, controlType: true } },
+            assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         })
       : [];
@@ -2175,6 +2180,7 @@ export class InventoryService {
           ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId.toLowerCase()) ?? null,
           skuName: sku?.name ?? null,
           category: sku?.assetFamily?.name ?? null,
+          assetFamilyId: sku?.assetFamily?.id ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
@@ -2224,7 +2230,9 @@ export class InventoryService {
             asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
           assignedMotorId: asset?.assignedMotorId ?? null,
           assignedMixerId: asset?.assignedToMixer?.id ?? null,
-          assetFamily: sku?.assetFamily ? { code: sku.assetFamily.code, name: sku.assetFamily.name } : null,
+          assetFamily: sku?.assetFamily
+            ? { id: sku.assetFamily.id, code: sku.assetFamily.code, name: sku.assetFamily.name }
+            : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },
           assetImageFileObjectId,
@@ -2251,6 +2259,14 @@ export class InventoryService {
     await this.cacheManager.set(cacheKey, result, ON_SITE_CACHE_TTL_SECONDS);
 
     return result;
+  }
+
+  async getOnSiteRequestInventory(customerWorksiteId: string, role: Role) {
+    const inventory = await this.getOnSiteInventory(customerWorksiteId);
+    return projectInventoryForRequest(
+      inventory,
+      role === Role.DRIVER ? 'DRIVER' : 'STAFF',
+    );
   }
 
   async getLedger(query: GetInventoryLedgerDto) {

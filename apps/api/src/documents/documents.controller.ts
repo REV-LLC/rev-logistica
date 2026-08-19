@@ -28,6 +28,7 @@ import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
 import { UpdateDocumentItemBillingDto } from './dto/update-document-item-billing.dto';
 import { UpdateDocumentRequestDto } from './dto/update-document-request.dto';
 import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
+import { ProviderRemissionRequirementsDto } from './dto/provider-remission-requirements.dto';
 import { DocumentsService } from './documents.service';
 import { IdempotencyService } from '../common/idempotency.service';
 
@@ -109,6 +110,24 @@ export class DocumentsController {
         createdBy: request.user.sub,
       }),
     });
+  }
+
+  @Post('requests/provider-remission-requirements')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  previewProviderRemissionRequirements(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: ProviderRemissionRequirementsDto,
+  ) {
+    return this.documentsService.previewProviderRemissionRequirements(
+      payload.type,
+      payload.items,
+    );
   }
 
   @Post('requests/autosave')
@@ -376,6 +395,18 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.documentsService.getDocument(documentId, {
+      role: request.user.role,
+      userId: request.user.sub,
+    });
+  }
+
+  @Get(':documentId/provider-remission-requirements')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getProviderRemissionRequirements(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.documentsService.getProviderRemissionRequirements(documentId, {
       role: request.user.role,
       userId: request.user.sub,
     });

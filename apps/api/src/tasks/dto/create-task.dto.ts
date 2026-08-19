@@ -1,5 +1,13 @@
-import { TaskPriority, TaskStatus } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { TaskPriority, TaskReminderUnit, TaskStatus } from '@prisma/client';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()
@@ -24,6 +32,15 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  reminderIntervalValue?: number;
+
+  @IsOptional()
+  @IsEnum(TaskReminderUnit)
+  reminderIntervalUnit?: TaskReminderUnit;
 
   @IsOptional()
   @IsUUID()

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Container,
+  FileInput,
   Group,
   Modal,
   Paper,
@@ -25,7 +27,13 @@ import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
-import { IconArrowLeft, IconBrandWhatsapp, IconCalendar, IconCopy } from '@tabler/icons-react';
+import {
+  IconArrowLeft,
+  IconBrandWhatsapp,
+  IconCalendar,
+  IconCamera,
+  IconCopy,
+} from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
 
 const PRINT_LINES_PER_PAGE = 20;
@@ -66,6 +74,7 @@ type DocumentDetail = {
     id: string;
     skuId?: string | null;
     assetId?: string | null;
+    componentParentAssetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;
     conditionNote?: string | null;
@@ -123,6 +132,25 @@ const getEmployeeFullName = (employee: EmployeeOption) =>
 type WarehouseOption = {
   id: string;
   name: string;
+};
+
+type ProviderRemissionRequirement = {
+  providerWarehouseId: string;
+  providerName: string;
+  itemCount: number;
+  quantity: number;
+  documentUploaded: boolean;
+};
+
+type ProviderRemissionRequirements = {
+  required: boolean;
+  providers: ProviderRemissionRequirement[];
+  missingProviders: ProviderRemissionRequirement[];
+};
+
+type ProviderRemissionDraft = {
+  file: File;
+  previewUrl: string;
 };
 
 type InventorySerial = {
@@ -409,6 +437,13 @@ export default function DocumentDetailPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [decisionLoading, setDecisionLoading] = useState<'APPROVE' | 'REJECT' | null>(null);
+  const [providerRemissionRequirements, setProviderRemissionRequirements] =
+    useState<ProviderRemissionRequirements | null>(null);
+  const [providerRemissionDrafts, setProviderRemissionDrafts] = useState<
+    Record<string, ProviderRemissionDraft>
+  >({});
+  const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
+  const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
   const [emailRetryLoading, setEmailRetryLoading] = useState(false);
   const [emailRetryMessage, setEmailRetryMessage] = useState<string | null>(null);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
@@ -433,6 +468,20 @@ export default function DocumentDetailPage() {
   const [printAudience, setPrintAudience] = useState<'internal' | 'customer'>('internal');
   const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
   const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
+  const providerRemissionDraftsRef = useRef<Record<string, ProviderRemissionDraft>>({});
+
+  useEffect(() => {
+    providerRemissionDraftsRef.current = providerRemissionDrafts;
+  }, [providerRemissionDrafts]);
+
+  useEffect(
+    () => () => {
+      Object.values(providerRemissionDraftsRef.current).forEach((draft) =>
+        URL.revokeObjectURL(draft.previewUrl),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!documentId) return;
@@ -956,20 +1005,126 @@ export default function DocumentDetailPage() {
     }
   };
 
+  const selectProviderRemission = (providerWarehouseId: string, file: File | null) => {
+    setProviderRemissionDrafts((current) => {
+      const previous = current[providerWarehouseId];
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      if (!file) {
+        const next = { ...current };
+        delete next[providerWarehouseId];
+        return next;
+      }
+      return {
+        ...current,
+        [providerWarehouseId]: {
+          file,
+          previewUrl: URL.createObjectURL(file),
+        },
+      };
+    });
+  };
+
+  const clearProviderRemissionModal = () => {
+    Object.values(providerRemissionDraftsRef.current).forEach((draft) =>
+      URL.revokeObjectURL(draft.previewUrl),
+    );
+    setProviderRemissionDrafts({});
+    setProviderRemissionRequirements(null);
+    setProviderRemissionError(null);
+  };
+
+  const missingProvidersFromError = (err: unknown) => {
+    if (!(err instanceof ApiError) || !err.data || typeof err.data !== 'object') {
+      return null;
+    }
+    const response = err.data as Record<string, unknown>;
+    const payload =
+      response.message && typeof response.message === 'object'
+        ? (response.message as Record<string, unknown>)
+        : response;
+    if (payload.code !== 'PROVIDER_REMISSION_REQUIRED' || !Array.isArray(payload.providers)) {
+      return null;
+    }
+    return payload.providers as ProviderRemissionRequirement[];
+  };
+
   const approveWithDecision = async (docId: string) => {
     setDecisionLoading('APPROVE');
     setError(null);
     try {
+      const requirements = await api<ProviderRemissionRequirements>(
+        `/documents/${docId}/provider-remission-requirements`,
+        { method: 'GET' },
+      );
+      if (requirements.missingProviders.length) {
+        setProviderRemissionRequirements(requirements);
+        setProviderRemissionError(null);
+        return false;
+      }
       await api(`/documents/${docId}/decision`, {
         method: 'POST',
         json: { action: 'APPROVE' },
       });
       await reloadDocumentOnly();
       router.refresh();
+      return true;
     } catch (err) {
+      const missingProviders = missingProvidersFromError(err);
+      if (missingProviders?.length) {
+        setProviderRemissionRequirements({
+          required: true,
+          providers: missingProviders,
+          missingProviders,
+        });
+        setProviderRemissionError(null);
+        return false;
+      }
       handleApprovalError(err);
+      return false;
     } finally {
       setDecisionLoading(null);
+    }
+  };
+
+  const uploadProviderRemissionsAndApprove = async () => {
+    if (!document?.id || !providerRemissionRequirements) return;
+    const missingFile = providerRemissionRequirements.missingProviders.find(
+      (provider) => !providerRemissionDrafts[provider.providerWarehouseId],
+    );
+    if (missingFile) {
+      setProviderRemissionError(`Adjunta la remisión física de ${missingFile.providerName}.`);
+      return;
+    }
+
+    setProviderRemissionUploading(true);
+    setProviderRemissionError(null);
+    try {
+      await Promise.all(
+        providerRemissionRequirements.missingProviders.map((provider) => {
+          const draft = providerRemissionDrafts[provider.providerWarehouseId];
+          const formData = new FormData();
+          formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
+          formData.append('displayName', `Remisión física de ${provider.providerName}`);
+          formData.append('providerWarehouseId', provider.providerWarehouseId);
+          formData.append('files', draft.file);
+          return api(`/files/entities/DOCUMENT/${document.id}`, {
+            method: 'POST',
+            body: formData,
+          });
+        }),
+      );
+      const approved = await approveWithDecision(document.id);
+      if (approved) clearProviderRemissionModal();
+    } catch (err) {
+      setProviderRemissionError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'No se pudieron subir las remisiones del proveedor.',
+      );
+    } finally {
+      setProviderRemissionUploading(false);
     }
   };
 
@@ -1096,6 +1251,7 @@ export default function DocumentDetailPage() {
         if (item.assetId) {
           return {
             assetId: item.assetId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             conditionNote: item.conditionNote ?? undefined,
           };
@@ -1105,6 +1261,7 @@ export default function DocumentDetailPage() {
           if (existingSku?.controlType === 'SERIAL') {
             return {
               assetId: resolveAssetByIndex[index],
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
               requestedTag: item.requestedTag ?? undefined,
               conditionNote: item.conditionNote ?? undefined,
@@ -1114,6 +1271,7 @@ export default function DocumentDetailPage() {
         if (item.skuId) {
           return {
             skuId: item.skuId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             quantity: Number(item.quantity ?? 1) || 1,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
@@ -1125,6 +1283,7 @@ export default function DocumentDetailPage() {
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
             assetId: resolveAssetByIndex[index],
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
             conditionNote: item.conditionNote ?? undefined,
@@ -1132,6 +1291,7 @@ export default function DocumentDetailPage() {
         }
         return {
           skuId: resolvedSkuId,
+          componentParentAssetId: item.componentParentAssetId ?? undefined,
           quantity: Number(item.quantity ?? 1) || 1,
           ownerWarehouseId,
           requestedTag: item.requestedTag ?? undefined,
@@ -1580,6 +1740,89 @@ export default function DocumentDetailPage() {
           ))
         ) : null}
       </Container>
+      <Modal
+        opened={Boolean(providerRemissionRequirements)}
+        onClose={() => {
+          if (!providerRemissionUploading) clearProviderRemissionModal();
+        }}
+        title="Remisión física requerida"
+        centered
+        size="lg"
+        closeOnClickOutside={!providerRemissionUploading}
+        closeOnEscape={!providerRemissionUploading}
+      >
+        <Stack gap="md">
+          <Alert color="orange" variant="light">
+            No puedes aprobar esta solicitud hasta adjuntar una remisión física por cada
+            proveedor pendiente.
+          </Alert>
+          {(providerRemissionRequirements?.missingProviders ?? []).map((provider) => {
+            const draft = providerRemissionDrafts[provider.providerWarehouseId];
+            return (
+              <Paper key={provider.providerWarehouseId} withBorder radius="md" p="md">
+                <Stack gap="sm">
+                  <div>
+                    <Text fw={700}>{provider.providerName}</Text>
+                    <Text size="sm" c="dimmed">
+                      Tienes {provider.quantity} item{provider.quantity === 1 ? '' : 's'} de este
+                      proveedor
+                      {provider.itemCount !== provider.quantity
+                        ? ` en ${provider.itemCount} línea${provider.itemCount === 1 ? '' : 's'}`
+                        : ''}
+                      .
+                    </Text>
+                  </div>
+                  <FileInput
+                    label={`Remisión física de ${provider.providerName}`}
+                    placeholder="Tomar o seleccionar foto"
+                    accept="image/png,image/jpeg,image/webp"
+                    capture="environment"
+                    clearable
+                    value={draft?.file ?? null}
+                    onChange={(file) =>
+                      selectProviderRemission(provider.providerWarehouseId, file)
+                    }
+                    leftSection={<IconCamera size={16} />}
+                  />
+                  {draft ? (
+                    <img
+                      src={draft.previewUrl}
+                      alt={`Remisión física de ${provider.providerName}`}
+                      style={{
+                        width: '100%',
+                        maxWidth: 360,
+                        aspectRatio: '4 / 3',
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : null}
+                </Stack>
+              </Paper>
+            );
+          })}
+          {providerRemissionError ? (
+            <Alert color="red" variant="light">
+              {providerRemissionError}
+            </Alert>
+          ) : null}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              disabled={providerRemissionUploading}
+              onClick={clearProviderRemissionModal}
+            >
+              Cancelar
+            </Button>
+            <Button
+              loading={providerRemissionUploading}
+              onClick={() => void uploadProviderRemissionsAndApprove()}
+            >
+              Subir y aprobar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal
         opened={billingModalOpen}
         onClose={() => {

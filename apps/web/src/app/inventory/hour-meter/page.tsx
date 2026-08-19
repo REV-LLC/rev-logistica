@@ -231,7 +231,7 @@ export default function HourMeterPage() {
       <Modal
         opened={Boolean(historyAsset)}
         onClose={closeHistory}
-        title={historyAsset ? `Historial de horas · ${assetDisplayName(historyAsset)}` : 'Historial de horas'}
+        title="Historial de horas"
         size="xl"
         fullScreen={isMobile}
         radius={isMobile ? 0 : 'md'}
@@ -240,9 +240,8 @@ export default function HourMeterPage() {
           {historyAsset ? (
             <Group justify="space-between" align="flex-start" wrap="wrap">
               <div>
-                <Text fw={800}>{historyAsset.publicCode}</Text>
-                <Text size="sm" c="dimmed">
-                  Serial / motor: {historyAsset.serialOrEngine}
+                <Text fw={800}>
+                  {assetDisplayName(historyAsset)} #{historyAsset.internalNumber}
                 </Text>
               </div>
               <Badge color="blue" variant="light">

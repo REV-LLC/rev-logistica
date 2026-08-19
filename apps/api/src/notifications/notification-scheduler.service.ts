@@ -10,8 +10,8 @@ export class NotificationSchedulerService implements OnModuleInit, OnModuleDestr
 
   onModuleInit() {
     if (process.env.NOTIFICATION_AUTO_DISPATCH?.trim().toLowerCase() === 'false') return;
-    const configured = Number(process.env.NOTIFICATION_DISPATCH_INTERVAL_MINUTES ?? 60);
-    const minutes = Number.isFinite(configured) && configured >= 1 ? configured : 60;
+    const configured = Number(process.env.NOTIFICATION_DISPATCH_INTERVAL_MINUTES ?? 1);
+    const minutes = Number.isFinite(configured) && configured >= 1 ? configured : 1;
     this.timer = setInterval(() => void this.dispatch(), minutes * 60 * 1000);
     this.timer.unref();
   }

@@ -9,7 +9,7 @@ import {
   getCurrentUserRole,
   getPostLoginDestination,
   getToken,
-  isLocalAuthBypassEnabled,
+  isAuthBypassEnabled,
   isTokenExpired,
   setToken,
 } from '@/lib/auth';
@@ -27,7 +27,7 @@ function LoginPageContent() {
   useEffect(() => {
     setIsMounted(true);
 
-    if (isLocalAuthBypassEnabled()) {
+    if (isAuthBypassEnabled()) {
       router.replace(getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()));
       return;
     }

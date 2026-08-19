@@ -9,7 +9,7 @@ import {
   getCurrentUserRole,
   getDefaultRouteForRole,
   getToken,
-  isLocalAuthBypassEnabled,
+  isAuthBypassEnabled,
   isTokenExpired,
   markSessionExpiredNotice,
 } from '@/lib/auth';
@@ -41,7 +41,7 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
 
   useEffect(() => {
     setForbidden(false);
-    if (isLocalAuthBypassEnabled()) {
+    if (isAuthBypassEnabled()) {
       setReady(true);
       return;
     }

@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
+import {
+  Prisma,
+  TaskPriority,
+  TaskReminderUnit,
+  TaskStatus,
+} from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -28,8 +33,22 @@ export class TasksService {
     }
   }
 
+  private assertValidReminderInterval(payload: {
+    reminderIntervalValue?: number | null;
+    reminderIntervalUnit?: TaskReminderUnit | null;
+  }) {
+    const hasValue = payload.reminderIntervalValue != null;
+    const hasUnit = payload.reminderIntervalUnit != null;
+    if (hasValue !== hasUnit) {
+      throw new BadRequestException(
+        'Reminder interval value and unit must be provided together',
+      );
+    }
+  }
+
   async createTask(payload: CreateTaskDto, createdByUserId: string) {
     this.assertSingleAssignee(payload);
+    this.assertValidReminderInterval(payload);
 
     const task = await this.prisma.task.create({
       data: {
@@ -39,6 +58,8 @@ export class TasksService {
         status: payload.status ?? TaskStatus.OPEN,
         priority: payload.priority ?? TaskPriority.MEDIUM,
         dueDate: this.toDateOrNull(payload.dueDate),
+        reminderIntervalValue: payload.reminderIntervalValue ?? null,
+        reminderIntervalUnit: payload.reminderIntervalUnit ?? null,
         createdByUserId,
         assignedToUserId: payload.assignedToUserId ?? null,
         assignedToEmployeeId: payload.assignedToEmployeeId ?? null,
@@ -125,6 +146,7 @@ export class TasksService {
 
   async updateTask(id: string, payload: UpdateTaskDto) {
     this.assertSingleAssignee(payload);
+    this.assertValidReminderInterval(payload);
 
     const existing = await this.prisma.task.findUnique({ where: { id } });
     if (!existing) {
@@ -137,6 +159,8 @@ export class TasksService {
       bulkItemName: payload.bulkItemName,
       status: payload.status,
       priority: payload.priority,
+      reminderIntervalValue: payload.reminderIntervalValue,
+      reminderIntervalUnit: payload.reminderIntervalUnit,
       assignedTo: payload.assignedToUserId
         ? { connect: { id: payload.assignedToUserId } }
         : payload.assignedToUserId === null

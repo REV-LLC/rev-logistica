@@ -521,6 +521,9 @@ export class NotificationsService {
     repeatEnabled: boolean,
     repeatHours: number,
   ) {
+    const recurringReminder = this.taskRecurringReminder(topic, task);
+    if (recurringReminder) return recurringReminder;
+
     const dueAt = task.dueDate as Date | null;
     const remainingHours = dueAt
       ? (dueAt.getTime() - Date.now()) / 3_600_000
@@ -557,6 +560,92 @@ export class NotificationsService {
       entity: { id: task.id, type: 'TASK', label: task.title },
       recipients: this.mapRecipients(topic.recipients),
     };
+  }
+
+  private taskRecurringReminder(topic: any, task: any) {
+    const value = Number(task.reminderIntervalValue);
+    const unit = task.reminderIntervalUnit as string | null;
+    if (!Number.isInteger(value) || value < 1 || !unit) return null;
+
+    const createdAt = new Date(task.createdAt);
+    const now = new Date();
+    let bucket = 0;
+    let occurrenceAt: Date;
+
+    if (unit === 'MONTHS') {
+      const elapsedMonths =
+        (now.getUTCFullYear() - createdAt.getUTCFullYear()) * 12 +
+        now.getUTCMonth() -
+        createdAt.getUTCMonth();
+      let completedMonths = Math.max(0, elapsedMonths);
+      if (this.addUtcMonths(createdAt, completedMonths) > now) completedMonths -= 1;
+      bucket = Math.max(0, Math.floor(completedMonths / value));
+      occurrenceAt = this.addUtcMonths(createdAt, Math.max(1, bucket) * value);
+    } else {
+      const unitMilliseconds: Record<string, number> = {
+        MINUTES: 60_000,
+        HOURS: 3_600_000,
+        DAYS: 86_400_000,
+        WEEKS: 7 * 86_400_000,
+      };
+      const intervalMilliseconds = unitMilliseconds[unit] * value;
+      if (!Number.isFinite(intervalMilliseconds)) return null;
+      bucket = Math.max(
+        0,
+        Math.floor((now.getTime() - createdAt.getTime()) / intervalMilliseconds),
+      );
+      occurrenceAt = new Date(
+        createdAt.getTime() + Math.max(1, bucket) * intervalMilliseconds,
+      );
+    }
+
+    const status: ReminderStatus = bucket >= 1 ? 'DUE' : 'UPCOMING';
+    const remainingHours =
+      status === 'UPCOMING'
+        ? (occurrenceAt.getTime() - now.getTime()) / 3_600_000
+        : 0;
+    const intervalLabel = this.taskReminderIntervalLabel(value, unit);
+    return {
+      topicId: topic.id,
+      entityType: topic.entityType,
+      entityId: task.id,
+      eventType: topic.eventType,
+      title: `Tarea: ${task.title}`,
+      message: `La tarea sigue pendiente. Recordatorio configurado ${intervalLabel}${task.dueDate ? `; vence el ${this.formatDate(task.dueDate)}` : ''}.`,
+      link: this.appLink('/tasks'),
+      status,
+      dueAt: occurrenceAt,
+      remainingHours,
+      unit: 'HOURS',
+      sortValue: remainingHours,
+      occurrenceKey: `repeat:${createdAt.toISOString()}:${bucket}`,
+      entity: { id: task.id, type: 'TASK', label: task.title },
+      recipients: this.mapRecipients(topic.recipients),
+    };
+  }
+
+  private addUtcMonths(date: Date, months: number) {
+    const result = new Date(date);
+    const originalDay = result.getUTCDate();
+    result.setUTCDate(1);
+    result.setUTCMonth(result.getUTCMonth() + months);
+    const lastDayOfTargetMonth = new Date(
+      Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    result.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
+    return result;
+  }
+
+  private taskReminderIntervalLabel(value: number, unit: string) {
+    const labels: Record<string, [string, string]> = {
+      MINUTES: ['minuto', 'minutos'],
+      HOURS: ['hora', 'horas'],
+      DAYS: ['día', 'días'],
+      WEEKS: ['semana', 'semanas'],
+      MONTHS: ['mes', 'meses'],
+    };
+    const [singular, plural] = labels[unit] ?? ['intervalo', 'intervalos'];
+    return `cada ${value} ${value === 1 ? singular : plural}`;
   }
 
   async dispatchNotifications() {

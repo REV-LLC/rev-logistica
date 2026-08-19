@@ -25,6 +25,10 @@ class AutosaveDocumentRequestItemDto {
 
   @IsOptional()
   @IsUUID()
+  componentParentAssetId?: string;
+
+  @IsOptional()
+  @IsUUID()
   ownerWarehouseId?: string;
 
   @IsOptional()

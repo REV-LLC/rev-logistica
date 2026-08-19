@@ -20,6 +20,7 @@ import {
   clearToken,
   getCurrentUserRole,
   getCurrentUserSession,
+  isAuthBypassEnabled,
 } from "@/lib/auth";
 import OfficeDraftBrowserNotifications from "@/components/OfficeDraftBrowserNotifications";
 import { api } from "@/lib/api";
@@ -283,6 +284,12 @@ const sections: NavSection[] = [
         icon: IconSettings,
         roles: ["ADMIN"],
       },
+      {
+        href: "/settings/asset-components",
+        label: "Componentes de equipos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];
@@ -363,6 +370,7 @@ export default function Nav({ onNavigate }: NavProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const authBypass = isAuthBypassEnabled();
   const currentRole = getCurrentUserRole();
   const currentSession = getCurrentUserSession();
   const [serviceName, setServiceName] = useState(defaultServiceName);
@@ -781,16 +789,18 @@ export default function Nav({ onNavigate }: NavProps) {
         <Divider mb="sm" color="rgba(226,232,240,0.8)" />
         <Stack gap="xs">
           <OfficeDraftBrowserNotifications />
-          <Button
-            variant="subtle"
-            color="red"
-            onClick={handleLogout}
-            size="sm"
-            fullWidth
-            styles={{ inner: { justifyContent: "flex-start" } }}
-          >
-            Cerrar sesion
-          </Button>
+          {!authBypass ? (
+            <Button
+              variant="subtle"
+              color="red"
+              onClick={handleLogout}
+              size="sm"
+              fullWidth
+              styles={{ inner: { justifyContent: "flex-start" } }}
+            >
+              Cerrar sesion
+            </Button>
+          ) : null}
           <Box
             component="footer"
             ta="center"

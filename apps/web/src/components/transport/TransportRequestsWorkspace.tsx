@@ -10,6 +10,7 @@ import {
   Checkbox,
   Container,
   Divider,
+  FileInput,
   Group,
   Modal,
   Paper,
@@ -52,10 +53,20 @@ import InventoryItemPickerModal, {
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
+import AssetComponentsSelectionModal, {
+  type AssetComponentOption,
+  type AssetComponentSelection,
+} from '@/components/AssetComponentsSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
+
+type RequestInventoryResponse = {
+  bulk: InventoryBulk[];
+  serial: InventorySerial[];
+  presentation: { showOwnerWarehouse: boolean };
+};
 
 type Employee = {
   id: string;
@@ -87,6 +98,7 @@ type Vehicle = { id: string; plate?: string | null; name?: string | null };
 type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
 type SelectedItem = {
+  selectionId: string;
   type: 'bulk' | 'serial' | 'free';
   bulkKey?: string;
   skuId?: string;
@@ -100,6 +112,7 @@ type SelectedItem = {
   isDamaged?: boolean;
   damageDescription?: string;
   associatedMixerId?: string;
+  componentParentAssetId?: string;
 };
 
 type EvidencePhotoDraft = {
@@ -108,9 +121,50 @@ type EvidencePhotoDraft = {
   previewUrl: string;
 };
 
+type ProviderRemissionRequirement = {
+  providerWarehouseId: string;
+  providerName: string;
+  itemCount: number;
+  quantity: number;
+  documentUploaded: boolean;
+};
+
+type ProviderRemissionRequirements = {
+  required: boolean;
+  providers: ProviderRemissionRequirement[];
+  missingProviders: ProviderRemissionRequirement[];
+};
+
+type ProviderRemissionModalState = {
+  mode: 'OPTIONAL' | 'REQUIRED';
+  requirements: ProviderRemissionRequirements;
+  documentId?: string;
+};
+
+const getMissingProvidersFromApprovalError = (
+  error: unknown,
+): ProviderRemissionRequirement[] | null => {
+  if (!(error instanceof ApiError) || !error.data || typeof error.data !== 'object') {
+    return null;
+  }
+
+  const response = error.data as Record<string, unknown>;
+  const payload =
+    response.message && typeof response.message === 'object'
+      ? (response.message as Record<string, unknown>)
+      : response;
+  if (payload.code !== 'PROVIDER_REMISSION_REQUIRED' || !Array.isArray(payload.providers)) {
+    return null;
+  }
+
+  return payload.providers as ProviderRemissionRequirement[];
+};
+
 const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_PHOTO_COUNT = 12;
 const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+
+const createSelectionId = () => globalThis.crypto.randomUUID();
 
 type GenerateFieldErrors = {
   customerId?: string;
@@ -164,6 +218,7 @@ type RequestDocumentDetail = {
     id: string;
     skuId?: string | null;
     assetId?: string | null;
+    componentParentAssetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;
     conditionNote?: string | null;
@@ -400,12 +455,14 @@ function buildRequestItems(items: SelectedItem[], requireOwner: boolean) {
       return {
         skuId: item.skuId,
         quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+        componentParentAssetId: item.componentParentAssetId,
         ownerWarehouseId: item.ownerWarehouseId ?? undefined,
         conditionNote,
       };
     }
     return {
       assetId: item.assetId,
+      componentParentAssetId: item.componentParentAssetId,
       ownerWarehouseId: item.ownerWarehouseId ?? undefined,
       conditionNote,
     };
@@ -565,12 +622,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
-  const [onSiteItemSelect, setOnSiteItemSelect] = useState<string | null>(null);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [showInventoryOwnerWarehouse, setShowInventoryOwnerWarehouse] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
   const [worksitesLoading, setWorksitesLoading] = useState(false);
@@ -579,6 +636,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [submitting, setSubmitting] = useState(false);
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
   const [pendingMixerQueue, setPendingMixerQueue] = useState<InventorySerial[]>([]);
+  const [componentParent, setComponentParent] = useState<InventorySerial | null>(null);
+  const [componentOptions, setComponentOptions] = useState<AssetComponentOption[]>([]);
+  const [componentOptionsLoading, setComponentOptionsLoading] = useState(false);
   const [assigningMotor, setAssigningMotor] = useState(false);
   const [assignMotorError, setAssignMotorError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
@@ -616,12 +676,21 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
   const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
-  const [alternateSourceDocument, setAlternateSourceDocument] = useState<EvidencePhotoDraft | null>(null);
+  const [providerRemissionDrafts, setProviderRemissionDrafts] = useState<
+    Record<string, EvidencePhotoDraft>
+  >({});
+  const [creationProviderRequirements, setCreationProviderRequirements] =
+    useState<ProviderRemissionRequirements | null>(null);
+  const [providerRemissionModal, setProviderRemissionModal] =
+    useState<ProviderRemissionModalState | null>(null);
+  const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
+  const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
+  const [checkingProviderRemissions, setCheckingProviderRemissions] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
-  const alternateSourceDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
+  const providerRemissionDraftsRef = useRef<Record<string, EvidencePhotoDraft>>({});
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
@@ -638,8 +707,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
   const isAlternateOwnerMode = sourceMode === 'warehouse' && sourceOwnerWarehouse?.type === 'ALLY';
   const useManualWarehouseCapture = sourceMode === 'warehouse' && isAlternateOwnerMode;
-  const requiresAlternateSourceDocument =
-    isDriverRole && docType === 'REMISSION' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
       warehouses.find((warehouse) => warehouse.type === 'OWN') ??
@@ -713,32 +780,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         && !selectedSerialIds.has(item.assetId),
     );
   }, [activePendingMixer, selectedSerialIds, serialItems]);
-  const onSiteItemOptions = useMemo(
-    () => [
-      ...availableSerialItems.map((item) => ({
-        value: `serial:${item.assetId}`,
-        label: getSerialDisplayName(item),
-        ownerWarehouseId: item.ownerWarehouseId ?? null,
-      })),
-      ...availableBulkItems.map((item) => ({
-        value: `bulk:${buildBulkKey(item)}`,
-        label: `${item.skuName ?? 'SKU'}`,
-        ownerWarehouseId: item.ownerWarehouseId ?? null,
-      })),
-    ],
-    [availableBulkItems, availableSerialItems],
-  );
-  const onSiteOwnerByValue = useMemo(() => {
-    const map = new Map<string, { ownerId: string | null; ownerName: string }>();
-    onSiteItemOptions.forEach((option) => {
-      const ownerId = option.ownerWarehouseId ?? null;
-      const ownerName = ownerId
-        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño'
-        : 'Sin dueño';
-      map.set(option.value, { ownerId, ownerName });
-    });
-    return map;
-  }, [onSiteItemOptions, warehouses]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
   const defaultWhatsappRecipients = useMemo(
@@ -1019,11 +1060,16 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   }, []);
 
   useEffect(() => {
-    const previewUrl = alternateSourceDocument?.previewUrl;
+    providerRemissionDraftsRef.current = providerRemissionDrafts;
+  }, [providerRemissionDrafts]);
+
+  useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      Object.values(providerRemissionDraftsRef.current).forEach((draft) =>
+        URL.revokeObjectURL(draft.previewUrl),
+      );
     };
-  }, [alternateSourceDocument?.previewUrl]);
+  }, []);
 
   const addEvidencePhotos = (fileList: FileList | null) => {
     if (!fileList?.length) return;
@@ -1125,45 +1171,73 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     });
   };
 
-  const selectAlternateSourceDocument = (fileList: FileList | null) => {
-    const file = fileList?.[0];
-    if (!file) return;
-    setError(null);
+  const selectProviderRemissionDocument = (
+    providerWarehouseId: string,
+    file: File | null,
+  ) => {
+    setProviderRemissionError(null);
+    if (!file) {
+      setProviderRemissionDrafts((current) => {
+        const existing = current[providerWarehouseId];
+        if (existing) URL.revokeObjectURL(existing.previewUrl);
+        const next = { ...current };
+        delete next[providerWarehouseId];
+        return next;
+      });
+      return;
+    }
     if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
-      setError('El documento de la bodega debe ser una foto PNG, WEBP o JPEG.');
+      setProviderRemissionError('La remisión debe ser una foto PNG, WEBP o JPEG.');
       return;
     }
     if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
-      setError('La foto del documento de la bodega debe pesar maximo 10 MB.');
+      setProviderRemissionError('Cada foto de remisión debe pesar máximo 10 MB.');
       return;
     }
-    setAlternateSourceDocument({
-      id: `${file.name}-${file.lastModified}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
+    setProviderRemissionDrafts((current) => {
+      const existing = current[providerWarehouseId];
+      if (existing) URL.revokeObjectURL(existing.previewUrl);
+      return {
+        ...current,
+        [providerWarehouseId]: {
+          id: `${providerWarehouseId}-${file.name}-${file.lastModified}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        },
+      };
     });
-    if (alternateSourceDocumentInputRef.current) {
-      alternateSourceDocumentInputRef.current.value = '';
-    }
   };
 
-  const clearAlternateSourceDocument = () => {
-    setAlternateSourceDocument(null);
-    if (alternateSourceDocumentInputRef.current) {
-      alternateSourceDocumentInputRef.current.value = '';
-    }
+  const clearProviderRemissionDocuments = () => {
+    setProviderRemissionDrafts((current) => {
+      Object.values(current).forEach((draft) => URL.revokeObjectURL(draft.previewUrl));
+      return {};
+    });
+    setCreationProviderRequirements(null);
+    setProviderRemissionModal(null);
+    setProviderRemissionError(null);
   };
 
-  const uploadAlternateSourceDocument = async (documentId: string) => {
-    if (!alternateSourceDocument) return;
-    const formData = new FormData();
-    formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
-    formData.append('displayName', 'Remisión física entregada por el proveedor');
-    formData.append('files', alternateSourceDocument.file);
-    await api(`/files/entities/DOCUMENT/${documentId}`, {
-      method: 'POST',
-      body: formData,
+  const uploadProviderRemissionDocuments = async (
+    documentId: string,
+    providers: ProviderRemissionRequirement[],
+  ) => {
+    const uploads = providers.flatMap((provider) => {
+      const draft = providerRemissionDrafts[provider.providerWarehouseId];
+      if (!draft) return [];
+      const formData = new FormData();
+      formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
+      formData.append('displayName', `Remisión física de ${provider.providerName}`);
+      formData.append('providerWarehouseId', provider.providerWarehouseId);
+      formData.append('files', draft.file);
+      return [
+        api(`/files/entities/DOCUMENT/${documentId}`, {
+          method: 'POST',
+          body: formData,
+        }),
+      ];
     });
+    await Promise.all(uploads);
   };
 
   const handleApprovalError = (err: unknown) => {
@@ -1345,12 +1419,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         );
       } else if (sourceMode === 'on-site') {
         if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
-        const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/on-site/${effectiveSourceWorksiteId}`,
+        const data = await api<RequestInventoryResponse>(
+          `/inventory/on-site/${effectiveSourceWorksiteId}/request-options`,
           { method: 'GET' }
         );
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
+        setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
       }
       if (openSelector && !useManualWarehouseCapture) {
         setItemsModalOpen(true);
@@ -1393,21 +1468,18 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     if (!effectiveSourceWorksiteId) {
       setBulkItems([]);
       setSerialItems([]);
-      setOnSiteItemSelect(null);
       return;
     }
     void loadInventory(false);
-    setOnSiteItemSelect(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode, effectiveSourceWorksiteId]);
 
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
-    setOnSiteItemSelect(null);
     setFreeTagInput('');
     setFreeInternalNumber('');
-    clearAlternateSourceDocument();
+    clearProviderRemissionDocuments();
     setItemsModalOpen(false);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
@@ -1658,15 +1730,84 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setDecidingId(documentId);
     setRequestsError(null);
     try {
+      const requirements = await api<ProviderRemissionRequirements>(
+        `/documents/${documentId}/provider-remission-requirements`,
+        { method: 'GET' },
+      );
+      if (requirements.missingProviders.length) {
+        setProviderRemissionModal({
+          mode: 'REQUIRED',
+          requirements,
+          documentId,
+        });
+        setProviderRemissionError(null);
+        return false;
+      }
       await api(`/documents/${documentId}/decision`, {
         method: 'POST',
         json: { action: 'APPROVE' },
       });
       await loadRequests();
+      return true;
     } catch (err) {
+      const missingProviders = getMissingProvidersFromApprovalError(err);
+      if (missingProviders?.length) {
+        setProviderRemissionModal({
+          mode: 'REQUIRED',
+          requirements: {
+            required: true,
+            providers: missingProviders,
+            missingProviders,
+          },
+          documentId,
+        });
+        setProviderRemissionError(null);
+        return false;
+      }
       handleApprovalError(err);
+      return false;
     } finally {
       setDecidingId(null);
+    }
+  };
+
+  const uploadMissingProviderRemissionsAndApprove = async () => {
+    if (
+      providerRemissionModal?.mode !== 'REQUIRED' ||
+      !providerRemissionModal.documentId
+    ) {
+      return;
+    }
+    const missingProviders = providerRemissionModal.requirements.missingProviders;
+    const missingFile = missingProviders.find(
+      (provider) => !providerRemissionDrafts[provider.providerWarehouseId],
+    );
+    if (missingFile) {
+      setProviderRemissionError(
+        `Adjunta la remisión física de ${missingFile.providerName}.`,
+      );
+      return;
+    }
+
+    setProviderRemissionUploading(true);
+    setProviderRemissionError(null);
+    try {
+      await uploadProviderRemissionDocuments(
+        providerRemissionModal.documentId,
+        missingProviders,
+      );
+      const approved = await approveWithDecision(providerRemissionModal.documentId);
+      if (approved) clearProviderRemissionDocuments();
+    } catch (err) {
+      setProviderRemissionError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'No se pudieron subir las remisiones del proveedor.',
+      );
+    } finally {
+      setProviderRemissionUploading(false);
     }
   };
 
@@ -1732,6 +1873,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'bulk',
           bulkKey,
           skuId: item.skuId,
@@ -1776,6 +1918,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         if (item.assetId) {
           return {
             assetId: item.assetId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             conditionNote: item.conditionNote ?? undefined,
           };
@@ -1785,6 +1928,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           if (existingSku?.controlType === 'SERIAL') {
             return {
               assetId: resolveAssetByIndex[index],
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
               requestedTag: item.requestedTag ?? undefined,
               conditionNote: item.conditionNote ?? undefined,
@@ -1794,6 +1938,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         if (item.skuId) {
           return {
             skuId: item.skuId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             quantity: Number(item.quantity ?? 1) || 1,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
@@ -1805,6 +1950,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
             assetId: resolveAssetByIndex[index],
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
             conditionNote: item.conditionNote ?? undefined,
@@ -1812,6 +1958,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         }
         return {
           skuId: resolvedSkuId,
+          componentParentAssetId: item.componentParentAssetId ?? undefined,
           quantity: Number(item.quantity ?? 1) || 1,
           ownerWarehouseId,
           requestedTag: item.requestedTag ?? undefined,
@@ -1849,6 +1996,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'serial',
           assetId: item.assetId,
           name: getSerialDisplayName(item),
@@ -1862,6 +2010,26 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   };
 
   const addSerialItem = (item: InventorySerial) => {
+    if (item.kind !== 'MOTOR') {
+      setComponentOptionsLoading(true);
+      api<{ components: AssetComponentOption[] }>(`/assets/${item.assetId}/component-options`)
+        .then((response) => {
+          if (response.components.length) {
+            setComponentParent(item);
+            setComponentOptions(response.components);
+            setItemsModalOpen(false);
+            return;
+          }
+          if (docType === 'REMISSION' && item.motorConfiguration === 'INTERCHANGEABLE') {
+            setPendingMixerQueue((current) => current.some((entry) => entry.assetId === item.assetId) ? current : [...current, item]);
+            return;
+          }
+          appendSerialItem(item);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron consultar los componentes.'))
+        .finally(() => setComponentOptionsLoading(false));
+      return true;
+    }
     if (
       docType === 'REMISSION'
       && item.motorConfiguration === 'INTERCHANGEABLE'
@@ -1878,6 +2046,66 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return queued;
     }
     return appendSerialItem(item);
+  };
+
+  const confirmAssetComponents = async (selections: AssetComponentSelection[]) => {
+    if (!componentParent) return;
+    const parent = componentParent;
+    const motor = selections.find(
+      (selection): selection is Extract<AssetComponentSelection, { type: 'serial' }> =>
+        selection.type === 'serial' && selection.item.kind === 'MOTOR',
+    );
+    if (docType === 'REMISSION' && parent.motorConfiguration === 'INTERCHANGEABLE' && motor) {
+      try {
+        await api(`/assets/${parent.assetId}/assigned-motor`, {
+          method: 'PATCH',
+          json: { motorId: motor.item.assetId },
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo asociar el motor.');
+        return;
+      }
+    }
+    setSelectedItems((current) => {
+      const selectedAssetIds = new Set(current.map((item) => item.assetId).filter(Boolean));
+      const additions: SelectedItem[] = [{
+        selectionId: createSelectionId(),
+        type: 'serial',
+        assetId: parent.assetId,
+        name: getSerialDisplayName(parent),
+        serial: parent.serialOrEngine,
+        ownerWarehouseId: parent.ownerWarehouseId,
+      }];
+      selections.forEach((selection) => {
+        if (selection.type === 'bulk') {
+          additions.push({
+            selectionId: createSelectionId(),
+            type: 'bulk',
+            bulkKey: buildBulkKey(selection.item),
+            skuId: selection.item.skuId,
+            name: `${selection.item.skuName ?? 'Componente'} · con ${getSerialDisplayName(parent)}`,
+            quantity: selection.quantity,
+            availableQuantity: selection.item.quantity,
+            ownerWarehouseId: selection.item.ownerWarehouseId,
+            componentParentAssetId: parent.assetId,
+          });
+        } else if (!selectedAssetIds.has(selection.item.assetId)) {
+          additions.push({
+            selectionId: createSelectionId(),
+            type: 'serial',
+            assetId: selection.item.assetId,
+            name: `${getSerialDisplayName(selection.item)} · con ${getSerialDisplayName(parent)}`,
+            serial: selection.item.serialOrEngine,
+            ownerWarehouseId: selection.item.ownerWarehouseId,
+            componentParentAssetId: parent.assetId,
+          });
+        }
+      });
+      return [...current.filter((item) => item.assetId !== parent.assetId), ...additions];
+    });
+    setItemsAddedNotice(`${getSerialDisplayName(parent)} y sus componentes fueron agregados.`);
+    setComponentParent(null);
+    setComponentOptions([]);
   };
 
   const cancelPendingMixer = () => {
@@ -1903,6 +2131,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         return [
           ...withoutDuplicates,
           {
+            selectionId: createSelectionId(),
             type: 'serial',
             assetId: activePendingMixer.assetId,
             name: getSerialDisplayName(activePendingMixer),
@@ -1910,6 +2139,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             ownerWarehouseId: activePendingMixer.ownerWarehouseId,
           },
           {
+            selectionId: createSelectionId(),
             type: 'serial',
             assetId: motor.assetId,
             name: `${getSerialDisplayName(motor)} · motor asociado`,
@@ -1978,6 +2208,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         return [
           ...prev,
           {
+            selectionId: createSelectionId(),
             type: 'free',
             name: requestedReference,
             requestedTag: requestedReference,
@@ -2003,6 +2234,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       prev.map((item, i) =>
         i === index
           ? {
+              selectionId: item.selectionId,
               type: 'bulk',
               bulkKey: buildBulkKey({ skuId, ownerWarehouseId: item.ownerWarehouseId ?? null }),
               skuId,
@@ -2048,22 +2280,42 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         index,
         1,
         { ...item, quantity: 1 },
-        { ...item, quantity: quantity - 1, ownerWarehouseId: null },
+        {
+          ...item,
+          selectionId: createSelectionId(),
+          quantity: quantity - 1,
+          ownerWarehouseId: null,
+        },
       );
       return next;
     });
   };
 
-  const removeSelected = (index: number) => {
-    setSelectedItems((prev) => {
-      const removed = prev[index];
-      if (!removed) return prev;
-      const mixerId = removed.associatedMixerId ?? removed.assetId;
-      return prev.filter(
-        (item, itemIndex) =>
-          itemIndex !== index
-          && item.assetId !== mixerId
-          && item.associatedMixerId !== mixerId,
+  const removeSelected = (selectionId: string) => {
+    setSelectedItems((current) => {
+      const removed = current.find((item) => item.selectionId === selectionId);
+      if (!removed) return current;
+
+      if (removed.assetId && current.some((item) => item.componentParentAssetId === removed.assetId)) {
+        return current.filter(
+          (item) => item.selectionId !== selectionId && item.componentParentAssetId !== removed.assetId,
+        );
+      }
+
+      const mixerAssetId = removed.associatedMixerId
+        ?? (removed.assetId && current.some((item) => item.associatedMixerId === removed.assetId)
+          ? removed.assetId
+          : null);
+
+      if (!mixerAssetId) {
+        return current.filter((item) => item.selectionId !== selectionId);
+      }
+
+      return current.filter(
+        (item) =>
+          item.selectionId !== selectionId
+          && item.assetId !== mixerAssetId
+          && item.associatedMixerId !== mixerAssetId,
       );
     });
   };
@@ -2103,7 +2355,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateStep('info');
     setReceivedSignature(null);
     clearEvidencePhotos();
-    clearAlternateSourceDocument();
+    clearProviderRemissionDocuments();
   };
 
   const editRequest = async (documentId: string, autosaved = false) => {
@@ -2154,10 +2406,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           const ownerWarehouseId = item.condition ?? null;
           if (!item.skuId && !item.assetId && item.requestedTag) {
             return {
+              selectionId: createSelectionId(),
               type: 'free' as const,
               name: item.requestedTag,
               requestedTag: item.requestedTag,
               quantity: Number(item.quantity ?? 1) || 1,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
               isDamaged: Boolean(item.conditionNote?.trim()),
               damageDescription: item.conditionNote ?? '',
@@ -2165,6 +2419,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           }
           if (item.skuId) {
             return {
+              selectionId: createSelectionId(),
               type: 'bulk' as const,
               bulkKey: buildBulkKey({
                 skuId: item.skuId,
@@ -2179,6 +2434,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             };
           }
           return {
+            selectionId: createSelectionId(),
             type: 'serial' as const,
             assetId: item.assetId ?? undefined,
             name:
@@ -2190,6 +2446,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
             associatedMixerId: item.asset?.assignedToMixer?.id,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             isDamaged: Boolean(item.conditionNote?.trim()),
             damageDescription: item.conditionNote ?? '',
           };
@@ -2289,9 +2546,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
       }
-      if (requiresAlternateSourceDocument && !alternateSourceDocument) {
-        throw new Error('Adjunta la foto del documento entregado por la bodega alterna.');
-      }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
         throw new Error('Selecciona la bodega para la devolucion.');
@@ -2339,7 +2593,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
           );
         }
-        if (evidencePhotos.length || alternateSourceDocument) {
+        if (evidencePhotos.length || Object.keys(providerRemissionDrafts).length) {
           throw new Error(
             'Los archivos y fotografías todavía requieren conexión. Retíralos o envía el documento cuando vuelva la red.',
           );
@@ -2420,7 +2674,10 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       try {
         await Promise.all([
           uploadEvidencePhotos(created.id),
-          uploadAlternateSourceDocument(created.id),
+          uploadProviderRemissionDocuments(
+            created.id,
+            creationProviderRequirements?.providers ?? [],
+          ),
         ]);
         if (!editingRequestId) {
           await api(`/documents/${created.id}/customer-email/draft`, {
@@ -2516,13 +2773,50 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateStep('items');
   };
 
-  const goToSignStep = () => {
+  const goToSignStep = async () => {
     setError(null);
     if (!selectedItems.length) {
       setError('Selecciona al menos un item.');
       return;
     }
-    setGenerateStep('sign');
+    if (docType !== 'REMISSION' || !navigator.onLine) {
+      setGenerateStep('sign');
+      return;
+    }
+
+    setCheckingProviderRemissions(true);
+    try {
+      const requirements = await api<ProviderRemissionRequirements>(
+        '/documents/requests/provider-remission-requirements',
+        {
+          method: 'POST',
+          json: {
+            type: docType,
+            items: selectedItems.map((item) => ({
+              ...(item.ownerWarehouseId
+                ? { ownerWarehouseId: item.ownerWarehouseId }
+                : {}),
+              quantity: item.type === 'serial' ? 1 : Number(item.quantity ?? 1) || 1,
+            })),
+          },
+        },
+      );
+      setCreationProviderRequirements(requirements);
+      if (requirements.missingProviders.length) {
+        setProviderRemissionModal({ mode: 'OPTIONAL', requirements });
+        setProviderRemissionError(null);
+        return;
+      }
+      setGenerateStep('sign');
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : 'No se pudo validar si los items requieren remisión de proveedor.',
+      );
+    } finally {
+      setCheckingProviderRemissions(false);
+    }
   };
 
   const handleGenerateStepChange = (value: string | null) => {
@@ -2531,7 +2825,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return;
     }
     if (value === 'sign') {
-      goToSignStep();
+      void goToSignStep();
       return;
     }
     setGenerateStep('info');
@@ -3166,7 +3460,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 onChange={(value) => {
                   setSourceOwnerWarehouseId(value);
                   const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
-                  if (nextWarehouse?.type !== 'ALLY') clearAlternateSourceDocument();
+                  if (nextWarehouse?.type !== 'ALLY') setCreationProviderRequirements(null);
                 }}
                 warehouses={warehouses}
                 clearable
@@ -3204,54 +3498,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 />
                 <Button onClick={addFreeItem}>Agregar item</Button>
               </Group>
-              {requiresAlternateSourceDocument ? (
-                <Paper withBorder radius="md" p="sm">
-                  <Stack gap="xs">
-                    <div>
-                      <Text fw={700}>Remisión física del proveedor *</Text>
-                      <Text size="sm" c="dimmed">
-                        Foto legible del documento entregado por el proveedor. Se guarda separada de las evidencias del cliente.
-                      </Text>
-                    </div>
-                    <input
-                      ref={alternateSourceDocumentInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      capture="environment"
-                      onChange={(event) => selectAlternateSourceDocument(event.currentTarget.files)}
-                      style={{ display: 'none' }}
-                    />
-                    <Group align="flex-start" wrap="wrap">
-                      <Button
-                        type="button"
-                        variant="light"
-                        leftSection={<IconCamera size={16} />}
-                        onClick={() => alternateSourceDocumentInputRef.current?.click()}
-                      >
-                        {alternateSourceDocument ? 'Cambiar foto' : 'Tomar / adjuntar foto'}
-                      </Button>
-                      {alternateSourceDocument ? (
-                        <Button type="button" variant="subtle" color="red" onClick={clearAlternateSourceDocument}>
-                          Quitar
-                        </Button>
-                      ) : null}
-                    </Group>
-                    {alternateSourceDocument ? (
-                      <img
-                        src={alternateSourceDocument.previewUrl}
-                        alt="Remisión física entregada por el proveedor"
-                        style={{
-                          width: '100%',
-                          maxWidth: 320,
-                          aspectRatio: '4 / 3',
-                          objectFit: 'cover',
-                          borderRadius: 8,
-                        }}
-                      />
-                    ) : null}
-                  </Stack>
-                </Paper>
-              ) : null}
             </Stack>
           ) : null}
 
@@ -3282,7 +3528,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               </Table.Thead>
               <Table.Tbody>
                 {selectedItems.map((item, index) => (
-                  <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
+                  <Table.Tr key={item.selectionId}>
                     <Table.Td>
                       <Text fw={600}>{item.name}</Text>
                       {item.serial && (
@@ -3318,7 +3564,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                           onChange={(value) => resolveFreeItemToSku(index, value)}
                         />
                       ) : null}
-                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
                         Quitar
                       </Button>
                     </Table.Td>
@@ -3330,7 +3576,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             <Stack mt="md" gap="sm">
               {selectedItems.map((item, index) => (
                 <Paper
-                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
+                  key={item.selectionId}
                   withBorder
                   radius="md"
                   p="sm"
@@ -3370,7 +3616,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         onChange={(value) => resolveFreeItemToSku(index, value)}
                       />
                     ) : null}
-                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
                       Quitar
                     </Button>
                   </Stack>
@@ -3383,7 +3629,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
               Volver a info
             </Button>
-            <Button onClick={goToSignStep}>Siguiente: Firma</Button>
+            <Button onClick={() => void goToSignStep()} loading={checkingProviderRemissions}>
+              Siguiente: Firma
+            </Button>
           </Group>
         </Paper>
         ) : null}
@@ -3536,9 +3784,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
           {isTabletOrMobile ? (
             <Stack gap="xs" mb="md">
-              {selectedItems.map((item, index) => (
+              {selectedItems.map((item) => (
                 <Paper
-                  key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}
+                  key={item.selectionId}
                   withBorder
                   radius="md"
                   p="sm"
@@ -3576,8 +3824,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {selectedItems.map((item, index) => (
-                  <Table.Tr key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}>
+                {selectedItems.map((item) => (
+                  <Table.Tr key={item.selectionId}>
                     <Table.Td>
                       <Text>{item.name}</Text>
                       {docType === 'RETURN' && item.isDamaged ? (
@@ -3749,6 +3997,139 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         ) : null}
         </Stack>
       </Container>
+
+      <Modal
+        opened={Boolean(providerRemissionModal)}
+        onClose={() => {
+          if (providerRemissionUploading) return;
+          setProviderRemissionModal(null);
+          setProviderRemissionError(null);
+        }}
+        title={
+          providerRemissionModal?.mode === 'REQUIRED'
+            ? 'Remisión física requerida'
+            : 'Remisiones de proveedores detectadas'
+        }
+        centered
+        size="lg"
+        closeOnClickOutside={!providerRemissionUploading}
+        closeOnEscape={!providerRemissionUploading}
+      >
+        <Stack gap="md">
+          <Alert
+            color={providerRemissionModal?.mode === 'REQUIRED' ? 'orange' : 'blue'}
+            variant="light"
+          >
+            {providerRemissionModal?.mode === 'REQUIRED'
+              ? 'No puedes aprobar esta solicitud hasta adjuntar una remisión física por cada proveedor pendiente.'
+              : 'Puedes adjuntar las remisiones ahora o continuar y dejar que Office las complete antes de aprobar.'}
+          </Alert>
+
+          {(providerRemissionModal?.requirements.missingProviders ?? []).map((provider) => {
+            const draft = providerRemissionDrafts[provider.providerWarehouseId];
+            return (
+              <Paper key={provider.providerWarehouseId} withBorder radius="md" p="md">
+                <Stack gap="sm">
+                  <div>
+                    <Text fw={700}>{provider.providerName}</Text>
+                    <Text size="sm" c="dimmed">
+                      Tienes {provider.quantity} item{provider.quantity === 1 ? '' : 's'} de este proveedor
+                      {provider.itemCount !== provider.quantity
+                        ? ` en ${provider.itemCount} línea${provider.itemCount === 1 ? '' : 's'}`
+                        : ''}.
+                    </Text>
+                  </div>
+                  <FileInput
+                    label={`Remisión física de ${provider.providerName}`}
+                    placeholder="Tomar o seleccionar foto"
+                    accept="image/png,image/jpeg,image/webp"
+                    capture="environment"
+                    clearable
+                    value={draft?.file ?? null}
+                    onChange={(file) =>
+                      selectProviderRemissionDocument(
+                        provider.providerWarehouseId,
+                        file,
+                      )
+                    }
+                    leftSection={<IconCamera size={16} />}
+                  />
+                  {draft ? (
+                    <img
+                      src={draft.previewUrl}
+                      alt={`Remisión física de ${provider.providerName}`}
+                      style={{
+                        width: '100%',
+                        maxWidth: 360,
+                        aspectRatio: '4 / 3',
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : null}
+                </Stack>
+              </Paper>
+            );
+          })}
+
+          {providerRemissionError ? (
+            <Alert color="red" variant="light">
+              {providerRemissionError}
+            </Alert>
+          ) : null}
+
+          <Group justify="flex-end" className="mobile-actions">
+            {providerRemissionModal?.mode === 'OPTIONAL' ? (
+              <>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                    setGenerateStep('sign');
+                  }}
+                >
+                  Omitir por ahora
+                </Button>
+                <Button
+                  disabled={
+                    !providerRemissionModal.requirements.missingProviders.some(
+                      (provider) =>
+                        Boolean(providerRemissionDrafts[provider.providerWarehouseId]),
+                    )
+                  }
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                    setGenerateStep('sign');
+                  }}
+                >
+                  Guardar fotos y continuar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="default"
+                  disabled={providerRemissionUploading}
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  loading={providerRemissionUploading}
+                  onClick={() => void uploadMissingProviderRemissionsAndApprove()}
+                >
+                  Subir y aprobar
+                </Button>
+              </>
+            )}
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={signatureModalOpen}
@@ -3962,8 +4343,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         onAddSerial={addSerialItem}
         skuOptions={skuOptions}
         itemsAddedNotice={itemsAddedNotice}
-        isDriverRole={isDriverRole}
-        sourceMode={sourceMode}
+        showOwnerWarehouse={
+          sourceMode === 'on-site' ? showInventoryOwnerWarehouse : !isDriverRole
+        }
         emptyStateText={
           useManualWarehouseCapture ? 'Use description capture in the main section.' : null
         }
@@ -3978,6 +4360,18 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         error={assignMotorError}
         onCancel={cancelPendingMixer}
         onConfirm={confirmMixerMotor}
+      />
+
+      <AssetComponentsSelectionModal
+        opened={Boolean(componentParent)}
+        parentName={componentParent ? getSerialDisplayName(componentParent) : ''}
+        options={componentOptions}
+        bulkItems={bulkItems}
+        serialItems={serialItems}
+        ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
+        restrictOwnerWarehouse={sourceMode === 'warehouse'}
+        onClose={() => { setComponentParent(null); setComponentOptions([]); }}
+        onConfirm={(selections) => void confirmAssetComponents(selections)}
       />
 
       <Modal

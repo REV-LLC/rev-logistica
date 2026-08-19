@@ -28,12 +28,14 @@ export type InventoryItemPickerBulkItem = {
   ownerWarehouseId: string | null;
   ownerWarehouseName?: string | null;
   quantity: number;
+  assetFamilyId?: string | null;
 };
 
 export type InventoryItemPickerSerialItem = SerialAssetCardItem & {
   quantity: number;
   skuId?: string | null;
   ownerWarehouseId: string | null;
+  assetFamily?: { id?: string; code: string; name: string } | null;
 };
 
 type InventoryItemPickerModalProps = {
@@ -48,8 +50,7 @@ type InventoryItemPickerModalProps = {
   onAddSerial: (item: InventoryItemPickerSerialItem) => boolean | void;
   skuOptions?: Array<{ id: string; name: string; category?: string | null }>;
   itemsAddedNotice?: string | null;
-  isDriverRole?: boolean;
-  sourceMode?: 'warehouse' | 'on-site';
+  showOwnerWarehouse?: boolean;
   emptyStateText?: string | null;
   onItemAddedNotice?: (message: string) => void;
 };
@@ -90,8 +91,7 @@ export default function InventoryItemPickerModal({
   onAddSerial,
   skuOptions = [],
   itemsAddedNotice,
-  isDriverRole = false,
-  sourceMode = 'warehouse',
+  showOwnerWarehouse = true,
   emptyStateText,
   onItemAddedNotice,
 }: InventoryItemPickerModalProps) {
@@ -112,30 +112,8 @@ export default function InventoryItemPickerModal({
   }, [skuOptions]);
 
   const groupedRows = useMemo(() => {
-    const pickerBulkItems = (() => {
-      if (!isDriverRole || sourceMode !== 'on-site') return bulkItems;
-
-      const itemsBySku = new Map<string, InventoryItemPickerBulkItem[]>();
-      bulkItems.forEach((item) => {
-        const current = itemsBySku.get(item.skuId) ?? [];
-        current.push(item);
-        itemsBySku.set(item.skuId, current);
-      });
-
-      return Array.from(itemsBySku.values()).map((items) => {
-        const ownerIds = new Set(items.map((item) => item.ownerWarehouseId ?? 'none'));
-        if (ownerIds.size === 1) return items[0];
-        return {
-          skuId: items[0].skuId,
-          skuName: items[0].skuName,
-          ownerWarehouseId: null,
-          ownerWarehouseName: 'Bodega pendiente',
-          quantity: items.reduce((total, item) => total + Math.max(0, item.quantity), 0),
-        };
-      });
-    })();
     const rows: PickerRow[] = [
-      ...pickerBulkItems.map((item) => {
+      ...bulkItems.map((item) => {
         const skuMeta = skuMetaById.get(item.skuId);
         const key = `bulk:${buildBulkItemKey(item)}`;
         return {
@@ -172,15 +150,13 @@ export default function InventoryItemPickerModal({
       }
       return groups;
     }, []);
-  }, [bulkItems, isDriverRole, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById, sourceMode]);
+  }, [bulkItems, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById]);
 
   useEffect(() => {
     setSelectedRowKeys(new Set());
     setSearchQuery('');
     setMobileSearchOpen(false);
   }, [opened, bulkItems, serialItems]);
-
-  const showOwnerWarehouse = !isDriverRole;
 
   const filteredGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase('es');
@@ -432,7 +408,7 @@ export default function InventoryItemPickerModal({
           <Text className="ui-text-body">
             Busca y selecciona los items que quieres agregar al documento.
           </Text>
-          {isDriverRole && sourceMode === 'warehouse' ? (
+          {!showOwnerWarehouse ? (
             <Text size="xs" c="dimmed" mt={4}>
               La selección muestra únicamente la información necesaria para el despacho.
             </Text>

@@ -108,6 +108,14 @@ enum TaskPriority {
   HIGH
 }
 
+enum TaskReminderUnit {
+  MINUTES
+  HOURS
+  DAYS
+  WEEKS
+  MONTHS
+}
+
 enum SyncOperationStatus {
   PROCESSING
   COMPLETED
@@ -242,8 +250,6 @@ model Customer {
   createdAt             DateTime                      @default(now())
 
   customerWorksites CustomerWorksite[]
-  fuelReceipts      WorksiteFuelReceipt[]
-  assetFuelings     AssetFueling[]
 
   @@unique([identityDocumentType, nitOrId])
 }
@@ -304,6 +310,7 @@ model Warehouse {
   legacyWarehouseReferences LegacyWarehouse[]
   providerMobilityGuides    ProviderMobilityGuide[]
   providerSkuPrices         ProviderSkuPrice[]
+  providerRemissionFiles    FileObject[]             @relation("ProviderRemissionWarehouse")
 }
 
 model LegacyWarehouse {
@@ -339,6 +346,28 @@ model AssetFamily {
 
   skus        Sku[]
   subfamilies AssetSubfamily[]
+  componentRules        AssetFamilyComponent[] @relation("ComponentRuleParent")
+  usedAsComponentInRules AssetFamilyComponent[] @relation("ComponentRuleComponent")
+}
+
+model AssetFamilyComponent {
+  id                      String   @id @default(uuid())
+  parentAssetFamilyId     String
+  componentAssetFamilyId  String
+  required                Boolean  @default(false)
+  minimumQuantity         Int      @default(0)
+  maximumQuantity         Int?
+  sortOrder                Int      @default(0)
+  active                   Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  parentAssetFamily    AssetFamily @relation("ComponentRuleParent", fields: [parentAssetFamilyId], references: [id], onDelete: Cascade)
+  componentAssetFamily AssetFamily @relation("ComponentRuleComponent", fields: [componentAssetFamilyId], references: [id], onDelete: Cascade)
+
+  @@unique([parentAssetFamilyId, componentAssetFamilyId])
+  @@index([componentAssetFamilyId])
+  @@index([parentAssetFamilyId, active, sortOrder])
 }
 
 model AssetSubfamily {
@@ -387,7 +416,6 @@ model Sku {
   assetSubfamily       AssetSubfamily?       @relation(fields: [assetSubfamilyId], references: [id])
   providerPrices       ProviderSkuPrice[]
   providerReceiptItems ProviderReceiptItem[]
-  fuelings             AssetFueling[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
@@ -460,6 +488,7 @@ model Asset {
   maintenancePlans     MaintenancePlan[]
   providerReceiptItems ProviderReceiptItem[]
   assetFuelings        AssetFueling[]
+  documentItemsAsParent DocumentItem[] @relation("DocumentItemComponentParentAsset")
 
   @@index([skuId])
   @@index([registrationNumber])
@@ -635,18 +664,20 @@ model NotificationDelivery {
 }
 
 model Task {
-  id                   String       @id @default(uuid())
-  title                String
-  description          String?
-  bulkItemName         String?
-  status               TaskStatus   @default(OPEN)
-  priority             TaskPriority @default(MEDIUM)
-  dueDate              DateTime?
-  createdByUserId      String
-  assignedToUserId     String?
-  assignedToEmployeeId String?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  id                    String            @id @default(uuid())
+  title                 String
+  description           String?
+  bulkItemName          String?
+  status                TaskStatus        @default(OPEN)
+  priority              TaskPriority      @default(MEDIUM)
+  dueDate               DateTime?
+  reminderIntervalValue Int?
+  reminderIntervalUnit  TaskReminderUnit?
+  createdByUserId       String
+  assignedToUserId      String?
+  assignedToEmployeeId  String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
@@ -803,6 +834,9 @@ model DocumentItem {
   // SERIAL
   assetId String?
 
+  // Optional grouping: this line accompanied a serialized parent asset.
+  componentParentAssetId String?
+
   condition          String?
   conditionNote      String?
   damageCostEstimate Decimal?
@@ -818,10 +852,12 @@ model DocumentItem {
   document Document @relation(fields: [documentId], references: [id])
   sku      Sku?     @relation(fields: [skuId], references: [id])
   asset    Asset?   @relation(fields: [assetId], references: [id])
+  componentParentAsset Asset? @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
 
   @@index([documentId])
   @@index([skuId])
   @@index([assetId])
+  @@index([componentParentAssetId])
   @@index([requestedTag])
 }
 
@@ -1044,10 +1080,8 @@ model WorksiteFuelReceipt {
   createdBy    String
   createdAt    DateTime @default(now())
 
-  worksite   Worksite  @relation(fields: [worksiteId], references: [id])
-  creator    User      @relation("WorksiteFuelReceiptCreatedBy", fields: [createdBy], references: [id])
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  customerId String?
+  worksite Worksite @relation(fields: [worksiteId], references: [id])
+  creator  User     @relation("WorksiteFuelReceiptCreatedBy", fields: [createdBy], references: [id])
 
   @@index([worksiteId, receivedAt])
 }
@@ -1064,14 +1098,10 @@ model AssetFueling {
   createdBy          String
   createdAt          DateTime @default(now())
 
-  worksite   Worksite  @relation(fields: [worksiteId], references: [id])
-  asset      Asset     @relation(fields: [assetId], references: [id])
-  operator   Employee? @relation("AssetFuelingOperator", fields: [operatorEmployeeId], references: [id])
-  creator    User      @relation("AssetFuelingCreatedBy", fields: [createdBy], references: [id])
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  customerId String?
-  sku        Sku?      @relation(fields: [skuId], references: [id])
-  skuId      String?
+  worksite Worksite  @relation(fields: [worksiteId], references: [id])
+  asset    Asset     @relation(fields: [assetId], references: [id])
+  operator Employee? @relation("AssetFuelingOperator", fields: [operatorEmployeeId], references: [id])
+  creator  User      @relation("AssetFuelingCreatedBy", fields: [createdBy], references: [id])
 
   @@index([worksiteId, fueledAt])
   @@index([assetId, fueledAt])
@@ -1129,24 +1159,26 @@ model EmployeeVehicle {
 }
 
 model FileObject {
-  id              String    @id @default(uuid())
-  documentId      String?
-  entityType      String?
-  entityId        String?
-  fileType        String // SIGNATURE | PHOTO | business document category
-  category        String?
-  displayName     String?
-  originalName    String?
-  storageKey      String
-  objectKey       String?
-  storageProvider String    @default("R2")
-  mimeType        String?
-  sizeBytes       Int?
-  expiresAt       DateTime?
-  createdAt       DateTime  @default(now())
-  createdBy       String
+  id                  String    @id @default(uuid())
+  documentId          String?
+  entityType          String?
+  entityId            String?
+  fileType            String // SIGNATURE | PHOTO | business document category
+  category            String?
+  displayName         String?
+  originalName        String?
+  storageKey          String
+  objectKey           String?
+  storageProvider     String    @default("R2")
+  mimeType            String?
+  sizeBytes           Int?
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
+  createdBy           String
+  providerWarehouseId String?
 
   document              Document?              @relation(fields: [documentId], references: [id])
+  providerWarehouse     Warehouse?             @relation("ProviderRemissionWarehouse", fields: [providerWarehouseId], references: [id], onDelete: SetNull)
   skuImages             Sku[]                  @relation("SkuImage")
   assetImages           Asset[]                @relation("AssetImage")
   mobilityGuide         MobilityGuide?
@@ -1156,5 +1188,6 @@ model FileObject {
   @@index([entityType, entityId])
   @@index([fileType])
   @@index([category])
+  @@index([providerWarehouseId, category, createdAt(sort: Desc)])
   @@index([expiresAt])
 }
