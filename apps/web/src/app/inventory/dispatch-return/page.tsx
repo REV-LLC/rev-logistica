@@ -929,7 +929,7 @@ export default function RemisionDevolucionPage() {
         selectedSerialIds={selectedSerialIds}
         onAddBulk={addBulkItem}
         onAddSerial={addSerialItem}
-        sourceMode={sourceMode}
+        showOwnerWarehouse
       />
     </main>
   );

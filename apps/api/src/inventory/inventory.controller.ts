@@ -242,6 +242,19 @@ export class InventoryController {
     return this.inventoryService.getOnSiteInventory(customerWorksiteId);
   }
 
+  @Get('on-site/:customerWorksiteId/request-options')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getOnSiteRequestInventory(
+    @Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.inventoryService.getOnSiteRequestInventory(
+      customerWorksiteId,
+      request.user.role,
+    );
+  }
+
   @Get('ledger')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OFFICE)

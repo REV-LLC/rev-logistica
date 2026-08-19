@@ -44,6 +44,11 @@ import {
   getWorksiteQuantityDelta,
   WORKSITE_BALANCE_MOVEMENT_TYPES,
 } from './worksite-ledger-balance';
+import {
+  projectInventoryForRequest,
+  type BulkInventoryRow,
+  type SerialInventoryRow,
+} from './request-inventory-projection';
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
 
@@ -1996,8 +2001,8 @@ export class InventoryService {
     const cacheKey = this.getOnSiteCacheKey(customerWorksiteId);
     const cached = await this.cacheManager.get<{
       customerWorksiteId: string;
-      bulk: unknown[];
-      serial: unknown[];
+      bulk: BulkInventoryRow[];
+      serial: SerialInventoryRow[];
     }>(cacheKey);
     if (cached) {
       return cached;
@@ -2251,6 +2256,14 @@ export class InventoryService {
     await this.cacheManager.set(cacheKey, result, ON_SITE_CACHE_TTL_SECONDS);
 
     return result;
+  }
+
+  async getOnSiteRequestInventory(customerWorksiteId: string, role: Role) {
+    const inventory = await this.getOnSiteInventory(customerWorksiteId);
+    return projectInventoryForRequest(
+      inventory,
+      role === Role.DRIVER ? 'DRIVER' : 'STAFF',
+    );
   }
 
   async getLedger(query: GetInventoryLedgerDto) {

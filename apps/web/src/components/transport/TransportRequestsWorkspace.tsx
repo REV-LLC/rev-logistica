@@ -57,6 +57,12 @@ import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-qu
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
 
+type RequestInventoryResponse = {
+  bulk: InventoryBulk[];
+  serial: InventorySerial[];
+  presentation: { showOwnerWarehouse: boolean };
+};
+
 type Employee = {
   id: string;
   name: string;
@@ -87,6 +93,7 @@ type Vehicle = { id: string; plate?: string | null; name?: string | null };
 type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
 type SelectedItem = {
+  selectionId: string;
   type: 'bulk' | 'serial' | 'free';
   bulkKey?: string;
   skuId?: string;
@@ -111,6 +118,8 @@ type EvidencePhotoDraft = {
 const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_PHOTO_COUNT = 12;
 const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+
+const createSelectionId = () => globalThis.crypto.randomUUID();
 
 type GenerateFieldErrors = {
   customerId?: string;
@@ -565,12 +574,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
-  const [onSiteItemSelect, setOnSiteItemSelect] = useState<string | null>(null);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [showInventoryOwnerWarehouse, setShowInventoryOwnerWarehouse] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
   const [worksitesLoading, setWorksitesLoading] = useState(false);
@@ -713,32 +722,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         && !selectedSerialIds.has(item.assetId),
     );
   }, [activePendingMixer, selectedSerialIds, serialItems]);
-  const onSiteItemOptions = useMemo(
-    () => [
-      ...availableSerialItems.map((item) => ({
-        value: `serial:${item.assetId}`,
-        label: getSerialDisplayName(item),
-        ownerWarehouseId: item.ownerWarehouseId ?? null,
-      })),
-      ...availableBulkItems.map((item) => ({
-        value: `bulk:${buildBulkKey(item)}`,
-        label: `${item.skuName ?? 'SKU'}`,
-        ownerWarehouseId: item.ownerWarehouseId ?? null,
-      })),
-    ],
-    [availableBulkItems, availableSerialItems],
-  );
-  const onSiteOwnerByValue = useMemo(() => {
-    const map = new Map<string, { ownerId: string | null; ownerName: string }>();
-    onSiteItemOptions.forEach((option) => {
-      const ownerId = option.ownerWarehouseId ?? null;
-      const ownerName = ownerId
-        ? warehouses.find((warehouse) => warehouse.id === ownerId)?.name ?? 'Sin dueño'
-        : 'Sin dueño';
-      map.set(option.value, { ownerId, ownerName });
-    });
-    return map;
-  }, [onSiteItemOptions, warehouses]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
   const defaultWhatsappRecipients = useMemo(
@@ -1345,12 +1328,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         );
       } else if (sourceMode === 'on-site') {
         if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
-        const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/on-site/${effectiveSourceWorksiteId}`,
+        const data = await api<RequestInventoryResponse>(
+          `/inventory/on-site/${effectiveSourceWorksiteId}/request-options`,
           { method: 'GET' }
         );
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
+        setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
       }
       if (openSelector && !useManualWarehouseCapture) {
         setItemsModalOpen(true);
@@ -1393,18 +1377,15 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     if (!effectiveSourceWorksiteId) {
       setBulkItems([]);
       setSerialItems([]);
-      setOnSiteItemSelect(null);
       return;
     }
     void loadInventory(false);
-    setOnSiteItemSelect(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode, effectiveSourceWorksiteId]);
 
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
-    setOnSiteItemSelect(null);
     setFreeTagInput('');
     setFreeInternalNumber('');
     clearAlternateSourceDocument();
@@ -1732,6 +1713,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'bulk',
           bulkKey,
           skuId: item.skuId,
@@ -1849,6 +1831,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'serial',
           assetId: item.assetId,
           name: getSerialDisplayName(item),
@@ -1903,6 +1886,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         return [
           ...withoutDuplicates,
           {
+            selectionId: createSelectionId(),
             type: 'serial',
             assetId: activePendingMixer.assetId,
             name: getSerialDisplayName(activePendingMixer),
@@ -1910,6 +1894,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             ownerWarehouseId: activePendingMixer.ownerWarehouseId,
           },
           {
+            selectionId: createSelectionId(),
             type: 'serial',
             assetId: motor.assetId,
             name: `${getSerialDisplayName(motor)} · motor asociado`,
@@ -1978,6 +1963,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         return [
           ...prev,
           {
+            selectionId: createSelectionId(),
             type: 'free',
             name: requestedReference,
             requestedTag: requestedReference,
@@ -2003,6 +1989,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       prev.map((item, i) =>
         i === index
           ? {
+              selectionId: item.selectionId,
               type: 'bulk',
               bulkKey: buildBulkKey({ skuId, ownerWarehouseId: item.ownerWarehouseId ?? null }),
               skuId,
@@ -2048,22 +2035,36 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         index,
         1,
         { ...item, quantity: 1 },
-        { ...item, quantity: quantity - 1, ownerWarehouseId: null },
+        {
+          ...item,
+          selectionId: createSelectionId(),
+          quantity: quantity - 1,
+          ownerWarehouseId: null,
+        },
       );
       return next;
     });
   };
 
-  const removeSelected = (index: number) => {
-    setSelectedItems((prev) => {
-      const removed = prev[index];
-      if (!removed) return prev;
-      const mixerId = removed.associatedMixerId ?? removed.assetId;
-      return prev.filter(
-        (item, itemIndex) =>
-          itemIndex !== index
-          && item.assetId !== mixerId
-          && item.associatedMixerId !== mixerId,
+  const removeSelected = (selectionId: string) => {
+    setSelectedItems((current) => {
+      const removed = current.find((item) => item.selectionId === selectionId);
+      if (!removed) return current;
+
+      const mixerAssetId = removed.associatedMixerId
+        ?? (removed.assetId && current.some((item) => item.associatedMixerId === removed.assetId)
+          ? removed.assetId
+          : null);
+
+      if (!mixerAssetId) {
+        return current.filter((item) => item.selectionId !== selectionId);
+      }
+
+      return current.filter(
+        (item) =>
+          item.selectionId !== selectionId
+          && item.assetId !== mixerAssetId
+          && item.associatedMixerId !== mixerAssetId,
       );
     });
   };
@@ -2154,6 +2155,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           const ownerWarehouseId = item.condition ?? null;
           if (!item.skuId && !item.assetId && item.requestedTag) {
             return {
+              selectionId: createSelectionId(),
               type: 'free' as const,
               name: item.requestedTag,
               requestedTag: item.requestedTag,
@@ -2165,6 +2167,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           }
           if (item.skuId) {
             return {
+              selectionId: createSelectionId(),
               type: 'bulk' as const,
               bulkKey: buildBulkKey({
                 skuId: item.skuId,
@@ -2179,6 +2182,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             };
           }
           return {
+            selectionId: createSelectionId(),
             type: 'serial' as const,
             assetId: item.assetId ?? undefined,
             name:
@@ -3282,7 +3286,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               </Table.Thead>
               <Table.Tbody>
                 {selectedItems.map((item, index) => (
-                  <Table.Tr key={`${item.type}-${item.skuId ?? item.assetId}-${index}`}>
+                  <Table.Tr key={item.selectionId}>
                     <Table.Td>
                       <Text fw={600}>{item.name}</Text>
                       {item.serial && (
@@ -3318,7 +3322,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                           onChange={(value) => resolveFreeItemToSku(index, value)}
                         />
                       ) : null}
-                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
                         Quitar
                       </Button>
                     </Table.Td>
@@ -3330,7 +3334,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             <Stack mt="md" gap="sm">
               {selectedItems.map((item, index) => (
                 <Paper
-                  key={`${item.type}-${item.bulkKey ?? item.skuId ?? item.assetId}-${index}`}
+                  key={item.selectionId}
                   withBorder
                   radius="md"
                   p="sm"
@@ -3370,7 +3374,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         onChange={(value) => resolveFreeItemToSku(index, value)}
                       />
                     ) : null}
-                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(index)}>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
                       Quitar
                     </Button>
                   </Stack>
@@ -3536,9 +3540,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
           {isTabletOrMobile ? (
             <Stack gap="xs" mb="md">
-              {selectedItems.map((item, index) => (
+              {selectedItems.map((item) => (
                 <Paper
-                  key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}
+                  key={item.selectionId}
                   withBorder
                   radius="md"
                   p="sm"
@@ -3576,8 +3580,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {selectedItems.map((item, index) => (
-                  <Table.Tr key={`sign-item-${item.type}-${item.skuId ?? item.assetId ?? item.name}-${index}`}>
+                {selectedItems.map((item) => (
+                  <Table.Tr key={item.selectionId}>
                     <Table.Td>
                       <Text>{item.name}</Text>
                       {docType === 'RETURN' && item.isDamaged ? (
@@ -3962,8 +3966,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         onAddSerial={addSerialItem}
         skuOptions={skuOptions}
         itemsAddedNotice={itemsAddedNotice}
-        isDriverRole={isDriverRole}
-        sourceMode={sourceMode}
+        showOwnerWarehouse={
+          sourceMode === 'on-site' ? showInventoryOwnerWarehouse : !isDriverRole
+        }
         emptyStateText={
           useManualWarehouseCapture ? 'Use description capture in the main section.' : null
         }
