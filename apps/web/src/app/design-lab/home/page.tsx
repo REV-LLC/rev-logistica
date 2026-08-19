@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Badge, Button, Group, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import {
   IconArrowRight,
@@ -170,7 +170,7 @@ const roleMeta: Record<Role, { name: string; userName: string; description: stri
   operator: { name: 'Operator', userName: 'Andrés', description: 'Registra y reporta rápidamente desde tu equipo asignado.' },
 };
 
-export default function DesignLabHomePage() {
+function DesignLabHomeContent() {
   const [role, setRole] = useState<Role>('admin');
   const [dayGreeting, setDayGreeting] = useState('Hola');
   const meta = roleMeta[role];
@@ -210,5 +210,13 @@ export default function DesignLabHomePage() {
         {role === 'operator' ? <OperatorHome /> : null}
       </main>
     </ResponsiveShell>
+  );
+}
+
+export default function DesignLabHomePage() {
+  return (
+    <Suspense fallback={null}>
+      <DesignLabHomeContent />
+    </Suspense>
   );
 }
