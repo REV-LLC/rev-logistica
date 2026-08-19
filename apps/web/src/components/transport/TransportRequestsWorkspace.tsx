@@ -51,6 +51,10 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import {
+  buildInventoryStockShortageMessage,
+  extractInventoryStockShortages,
+} from '@/lib/inventory-stock-errors';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import AssetComponentsSelectionModal, {
@@ -1334,8 +1338,30 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return;
     }
 
-    const hasStockError = messages.some((message) => /insufficient stock/i.test(message));
+    const stockShortages = extractInventoryStockShortages(err.data);
+    const hasStockError =
+      stockShortages.length > 0 ||
+      messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      if (stockShortages.length > 0) {
+        const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
+        setAdjustWarningOwnerWarehouseId(firstOwnerId);
+        setAdjustWarningMessage(
+          buildInventoryStockShortageMessage(
+            stockShortages,
+            (skuId) =>
+              skuOptions.find((entry) => entry.id === skuId)?.name ??
+              `SKU ${skuId.slice(0, 8)}`,
+            (warehouseId) =>
+              warehouses.find(
+                (warehouse) => warehouse.id.toLowerCase() === warehouseId.toLowerCase(),
+              )?.name ?? 'bodega sin identificar',
+          ),
+        );
+        setAdjustWarningModalOpen(true);
+        setRequestsError(null);
+        return;
+      }
       const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
       const ownerId = extractOwnerWarehouseIdFromMessage(messageWithOwner);
       const ownerName = ownerId
@@ -1351,7 +1377,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `Primero ajusta la bodega "${warehouseLabel}" antes de hacer movimientos.${missingItemsBlock}`,
+        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);

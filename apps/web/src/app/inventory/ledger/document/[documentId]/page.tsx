@@ -25,6 +25,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import {
+  buildInventoryStockShortageMessage,
+  extractInventoryStockShortages,
+} from '@/lib/inventory-stock-errors';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
 import {
@@ -893,13 +897,35 @@ export default function DocumentDetailPage() {
     );
     if (hasAssetUnavailableError) {
       setError(
-        'Cannot approve: the equipment is not available in the source warehouse. Check if it is on site or select/load the correct equipment before approving.',
+        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Revisa si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
       );
       return;
     }
 
-    const hasStockError = messages.some((message) => /insufficient stock/i.test(message));
+    const stockShortages = extractInventoryStockShortages(err.data);
+    const hasStockError =
+      stockShortages.length > 0 ||
+      messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      if (stockShortages.length > 0) {
+        const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
+        setAdjustWarningOwnerWarehouseId(firstOwnerId);
+        setAdjustWarningMessage(
+          buildInventoryStockShortageMessage(
+            stockShortages,
+            (skuId) =>
+              skuOptions.find((entry) => entry.id === skuId)?.name ??
+              `SKU ${skuId.slice(0, 8)}`,
+            (warehouseId) =>
+              warehouses.find(
+                (warehouse) => warehouse.id.toLowerCase() === warehouseId.toLowerCase(),
+              )?.name ?? 'bodega sin identificar',
+          ),
+        );
+        setAdjustWarningModalOpen(true);
+        setError(null);
+        return;
+      }
       const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
       const ownerId = extractOwnerWarehouseIdFromMessage(messageWithOwner);
       const ownerName = ownerId
@@ -909,13 +935,13 @@ export default function DocumentDetailPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'the alternate warehouse';
+      const warehouseLabel = ownerName ?? 'la bodega alterna';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `First adjust "${warehouseLabel}" warehouse before making movements.${missingItemsBlock}`,
+        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setError(null);
@@ -1359,7 +1385,7 @@ export default function DocumentDetailPage() {
       return !resolveAssetByIndex[index];
     });
     if (serialMissingAsset.length > 0) {
-      setError('Missing selected or created equipment for one or more serial tags.');
+      setError('Falta seleccionar o crear el equipo para uno o más tags seriales.');
       return;
     }
 
@@ -2048,7 +2074,8 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-            {adjustWarningMessage ?? 'First adjust warehouse stock before making movements.'}
+            {adjustWarningMessage ??
+              'Primero ajusta el stock de la bodega antes de hacer movimientos.'}
           </Text>
           <Group justify="flex-end">
             <Button
