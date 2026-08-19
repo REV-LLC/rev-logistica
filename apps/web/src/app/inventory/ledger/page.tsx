@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
+  Badge,
   Button,
   Container,
   Group,
@@ -17,6 +18,7 @@ import {
 } from '@mantine/core';
 import { IconArrowRight, IconChevronDown, IconFilter, IconSearch } from '@tabler/icons-react';
 import type { LedgerItem } from '@/components/LedgerTable';
+import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import {
   groupLedgerItemsByDocument,
   type LedgerDocumentGroup,
@@ -90,13 +92,13 @@ function movementSummary(group: LedgerDocumentGroup) {
   return Array.from(new Set(group.items.map(movementLabel))).join(' / ');
 }
 
-function movementTone(group: LedgerDocumentGroup) {
-  const type = group.items[0]?.movementType;
-  if (type === 'IN') return 'entry';
-  if (type === 'OUT') return 'exit';
-  if (type === 'TRANSIT') return 'transit';
-  if (type === 'ON_SITE') return 'onsite';
-  return 'adjustment';
+function movementColor(label: string) {
+  if (label === 'ENTRADA') return 'green';
+  if (label === 'SALIDA') return 'blue';
+  if (label === 'EN TRÁNSITO') return 'yellow';
+  if (label === 'EN OBRA') return 'teal';
+  if (label === 'CREACIÓN') return 'violet';
+  return 'gray';
 }
 
 function itemName(item: LedgerItem) {
@@ -248,6 +250,7 @@ export default function LedgerPage() {
         </header>
 
         <div className={styles.filterRail}>
+          <DataTableToolbar mb={0} controlsStyle={{ flex: '1 1 100%' }}>
           <TextInput
             aria-label="Buscar documento, ítem o serial"
             placeholder="Buscar documento, ítem o serial"
@@ -255,28 +258,31 @@ export default function LedgerPage() {
             onChange={(event) => setSearch(event.currentTarget.value)}
             leftSection={<IconSearch size={17} />}
             className={styles.search}
+            style={{ flex: '1 1 240px' }}
           />
           <Select
-            label="Movimiento"
+            aria-label="Filtrar por movimiento"
             value={filters.movementType || 'ALL'}
             onChange={(value) => updateAndFetch({ ...filters, movementType: value === 'ALL' ? '' : value ?? '' })}
-            data={[{ value: 'ALL', label: 'Todos' }, ...MOVEMENT_TYPES.map((value) => ({ value, label: value === 'OUT' ? 'Salida' : value === 'IN' ? 'Entrada' : value === 'TRANSIT' ? 'En tránsito' : value === 'ON_SITE' ? 'En obra' : 'Ajuste' }))]}
+            data={[{ value: 'ALL', label: 'Todos los movimientos' }, ...MOVEMENT_TYPES.map((value) => ({ value, label: value === 'OUT' ? 'Salida' : value === 'IN' ? 'Entrada' : value === 'TRANSIT' ? 'En tránsito' : value === 'ON_SITE' ? 'En obra' : 'Ajuste' }))]}
             allowDeselect={false}
+            style={{ flex: '1 1 150px' }}
           />
           <Select
-            label="Ubicación"
+            aria-label="Filtrar por ubicación"
             value={locationValue || 'ALL'}
             onChange={(value) => {
               const [kind, id] = (value === 'ALL' ? '' : value ?? '').split(':');
               updateAndFetch({ ...filters, warehouseId: kind === 'warehouse' ? id : '', customerWorksiteId: kind === 'worksite' ? id : '' });
             }}
             data={[
-              { value: 'ALL', label: 'Todas' },
+              { value: 'ALL', label: 'Todas las ubicaciones' },
               ...warehouses.map((row) => ({ value: `warehouse:${row.id}`, label: row.name })),
               ...worksites.map((row) => ({ value: `worksite:${row.id}`, label: row.alias || `${row.customer.name} / ${row.worksite.name}` })),
             ]}
             searchable
             allowDeselect={false}
+            style={{ flex: '1 1 170px' }}
           />
           <Select
             aria-label="Rango de fechas"
@@ -284,8 +290,10 @@ export default function LedgerPage() {
             onChange={handleDateRange}
             data={[{ value: '7', label: 'Últimos 7 días' }, { value: '30', label: 'Últimos 30 días' }, { value: '90', label: 'Últimos 90 días' }, { value: 'all', label: 'Todo el historial' }]}
             allowDeselect={false}
+            style={{ flex: '1 1 145px' }}
           />
           <Button variant="subtle" color="gray" leftSection={<IconFilter size={16} />} onClick={() => setFiltersOpen(true)}>Más filtros</Button>
+          </DataTableToolbar>
         </div>
 
         {error ? <Alert color="red" variant="light" title="No se pudo consultar el historial" mb="lg">{error}</Alert> : null}
@@ -304,7 +312,11 @@ export default function LedgerPage() {
             return (
               <Link key={group.key} href={href} className={styles.tableRow} aria-label={`Abrir documento ${group.reference}`}>
                 <strong>{group.reference}</strong>
-                <span className={styles.movement} data-tone={movementTone(group)}><i />{movementSummary(group)}</span>
+                <span className={styles.movement}>
+                  {movementSummary(group).split(' / ').map((label) => (
+                    <Badge key={label} color={movementColor(label)} variant="light" size="sm">{label}</Badge>
+                  ))}
+                </span>
                 <span>{itemsSummary(group)}</span>
                 <span>{locationSummary(group)}</span>
                 <span>{requester(group)}</span>
