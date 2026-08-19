@@ -1,395 +1,339 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { api, ApiError } from '@/lib/api';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import type { LedgerItem } from '@/components/LedgerTable';
-import LedgerDocumentTable, {
-  groupLedgerItemsByDocument,
-} from '@/components/LedgerDocumentTable';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
-  ActionIcon,
   Button,
   Container,
   Group,
   Modal,
-  Paper,
   Select,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
-  ThemeIcon,
 } from '@mantine/core';
+import { IconArrowRight, IconChevronDown, IconFilter, IconSearch } from '@tabler/icons-react';
+import type { LedgerItem } from '@/components/LedgerTable';
 import {
-  IconArrowsShuffle,
-  IconChecklist,
-  IconFilter,
-} from '@tabler/icons-react';
+  groupLedgerItemsByDocument,
+  type LedgerDocumentGroup,
+} from '@/components/LedgerDocumentTable';
+import { api, ApiError } from '@/lib/api';
+import styles from './ledger.module.css';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
 const DEFAULT_TAKE = 30;
 const FILTER_OPTIONS_TAKE = 200;
 
-type LedgerResponse = {
-  items: LedgerItem[];
-  nextCursor: string | null;
+type Filters = {
+  warehouseId: string;
+  customerWorksiteId: string;
+  movementType: string;
+  skuId: string;
+  assetId: string;
+  from: string;
+  to: string;
 };
 
-type WarehouseOption = {
-  id: string;
-  name: string;
-};
-
+type LedgerResponse = { items: LedgerItem[]; nextCursor: string | null };
+type WarehouseOption = { id: string; name: string };
 type WorksiteOption = {
   id: string;
   alias: string | null;
-  customer: {
-    id: string;
-    name: string;
-  };
-  worksite: {
-    id: string;
-    name: string;
-  };
+  customer: { id: string; name: string };
+  worksite: { id: string; name: string };
 };
+type SkuOption = { id: string; name: string };
+type AssetOption = { id: string; serialOrEngine: string | null; description: string | null };
 
-type SkuOption = {
-  id: string;
-  name: string;
-};
+function dateInputDaysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 16);
+}
 
-type AssetOption = {
-  id: string;
-  serialOrEngine: string | null;
-  description: string | null;
-};
-
-export default function LedgerPage() {
-  const router = useRouter();
-  const [filters, setFilters] = useState({
+function createInitialFilters(): Filters {
+  return {
     warehouseId: '',
     customerWorksiteId: '',
     movementType: '',
     skuId: '',
     assetId: '',
-    from: '',
+    from: dateInputDaysAgo(30),
     to: '',
+  };
+}
+
+function buildQuery(filters: Filters, cursor?: string | null) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
   });
+  params.set('take', String(DEFAULT_TAKE));
+  if (cursor) params.set('cursor', cursor);
+  return params.toString();
+}
+
+function movementLabel(item: LedgerItem) {
+  if (item.movementType === 'ADJUST') return item.assetId && item.quantity > 0 ? 'CREACIÓN' : 'AJUSTE';
+  if (item.movementType === 'OUT') return 'SALIDA';
+  if (item.movementType === 'IN') return 'ENTRADA';
+  if (item.movementType === 'TRANSIT') return 'EN TRÁNSITO';
+  if (item.movementType === 'ON_SITE') return 'EN OBRA';
+  return item.movementType;
+}
+
+function movementSummary(group: LedgerDocumentGroup) {
+  return Array.from(new Set(group.items.map(movementLabel))).join(' / ');
+}
+
+function movementTone(group: LedgerDocumentGroup) {
+  const type = group.items[0]?.movementType;
+  if (type === 'IN') return 'entry';
+  if (type === 'OUT') return 'exit';
+  if (type === 'TRANSIT') return 'transit';
+  if (type === 'ON_SITE') return 'onsite';
+  return 'adjustment';
+}
+
+function itemName(item: LedgerItem) {
+  return item.asset?.description ?? item.sku?.name ?? item.asset?.sku?.name ?? item.skuId ?? 'Ítem';
+}
+
+function itemsSummary(group: LedgerDocumentGroup) {
+  const names = Array.from(new Set(group.items.map(itemName)));
+  const visible = names.slice(0, 2).join(', ');
+  return `${group.items.length} · ${visible}${names.length > 2 ? ` +${names.length - 2}` : ''}`;
+}
+
+function locationName(item: LedgerItem) {
+  if (item.warehouse) return item.warehouse.name;
+  if (item.customerWorksite) {
+    return `${item.customerWorksite.customer?.name ?? 'Cliente'} / ${item.customerWorksite.worksite?.name ?? 'Obra'}`;
+  }
+  return 'Sin ubicación';
+}
+
+function locationSummary(group: LedgerDocumentGroup) {
+  const locations = Array.from(new Set(group.items.map(locationName)));
+  return locations.length > 1 ? locations.join(' → ') : locations[0];
+}
+
+function requester(group: LedgerDocumentGroup) {
+  const creator = group.items[0]?.document?.creator;
+  if (creator?.employee) return `${creator.employee.name} ${creator.employee.lastName ?? ''}`.trim();
+  return creator?.email ?? group.items[0]?.creator?.employee?.name ?? group.items[0]?.creator?.email ?? 'Sin responsable';
+}
+
+function formattedDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function searchableText(group: LedgerDocumentGroup) {
+  return [
+    group.reference,
+    group.documentType,
+    movementSummary(group),
+    locationSummary(group),
+    requester(group),
+    ...group.items.flatMap((item) => [itemName(item), item.asset?.serialOrEngine, item.skuId, item.assetId]),
+  ].filter(Boolean).join(' ').toLocaleLowerCase('es');
+}
+
+export default function LedgerPage() {
+  const router = useRouter();
+  const [filters, setFilters] = useState<Filters>(createInitialFilters);
+  const [search, setSearch] = useState('');
+  const [dateRange, setDateRange] = useState('30');
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
-  const [filtersLoading, setFiltersLoading] = useState(false);
+  const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [worksites, setWorksites] = useState<WorksiteOption[]>([]);
   const [skus, setSkus] = useState<SkuOption[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
 
-  const buildQuery = (cursor?: string | null) => {
-    const params = new URLSearchParams();
-    if (filters.warehouseId) params.set('warehouseId', filters.warehouseId);
-    if (filters.customerWorksiteId) params.set('customerWorksiteId', filters.customerWorksiteId);
-    if (filters.movementType) params.set('movementType', filters.movementType);
-    if (filters.skuId) params.set('skuId', filters.skuId);
-    if (filters.assetId) params.set('assetId', filters.assetId);
-    if (filters.from) params.set('from', filters.from);
-    if (filters.to) params.set('to', filters.to);
-    params.set('take', String(DEFAULT_TAKE));
-    if (cursor) params.set('cursor', cursor);
-    return params.toString();
-  };
-
-  const fetchLedger = async (options?: { append?: boolean }) => {
+  const fetchLedger = async (options?: { append?: boolean; filtersOverride?: Filters }) => {
+    const activeFilters = options?.filtersOverride ?? filters;
     setLoading(true);
     setError(null);
     setUnauthorized(false);
-
-    const cursor = options?.append ? nextCursor : null;
-    const query = buildQuery(cursor);
-
     try {
-      const response = await api<LedgerResponse>(
-        `/inventory/ledger${query ? `?${query}` : ''}`,
-        { method: 'GET' },
-      );
-      setItems((prev) => (options?.append ? [...prev, ...response.items] : response.items));
+      const cursor = options?.append ? nextCursor : null;
+      const response = await api<LedgerResponse>(`/inventory/ledger?${buildQuery(activeFilters, cursor)}`, { method: 'GET' });
+      setItems((current) => (options?.append ? [...current, ...response.items] : response.items));
       setNextCursor(response.nextCursor);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setUnauthorized(true);
-        return;
-      }
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
       } else {
-        setError('Unexpected error.');
+        setError(err instanceof Error ? err.message : 'No se pudo consultar el historial.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const loadFilterOptions = async () => {
-    setFiltersLoading(true);
-    try {
-      const [warehousesData, worksitesData, skusData, assetsData] = await Promise.all([
-        api<WarehouseOption[]>('/warehouses', { method: 'GET' }),
-        api<WorksiteOption[]>('/worksites', { method: 'GET' }),
-        api<SkuOption[]>('/skus', { method: 'GET' }),
-        api<AssetOption[]>(`/assets?take=${FILTER_OPTIONS_TAKE}`, { method: 'GET' }),
-      ]);
-      setWarehouses(warehousesData);
-      setWorksites(worksitesData);
-      setSkus(skusData);
-      setAssets(assetsData);
-    } catch {
-      setWarehouses([]);
-      setWorksites([]);
-      setSkus([]);
-      setAssets([]);
-    } finally {
-      setFiltersLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchLedger();
-    loadFilterOptions();
+    const initialFilters = createInitialFilters();
+    setFilters(initialFilters);
+    void fetchLedger({ filtersOverride: initialFilters });
+    void Promise.all([
+      api<WarehouseOption[]>('/warehouses'),
+      api<WorksiteOption[]>('/worksites'),
+      api<SkuOption[]>('/skus'),
+      api<AssetOption[]>(`/assets?take=${FILTER_OPTIONS_TAKE}`),
+    ]).then(([warehouseRows, worksiteRows, skuRows, assetRows]) => {
+      setWarehouses(warehouseRows);
+      setWorksites(worksiteRows);
+      setSkus(skuRows);
+      setAssets(assetRows);
+    }).catch(() => undefined).finally(() => setFiltersLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const hasActiveFilters = Object.values(filters).some(Boolean);
-  const activeFiltersCount = Object.values(filters).filter(Boolean).length;
-  const documentGroups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
+  const groups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
+  const visibleGroups = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('es');
+    return query ? groups.filter((group) => searchableText(group).includes(query)) : groups;
+  }, [groups, search]);
+  const visibleMovements = visibleGroups.reduce((total, group) => total + group.items.length, 0);
 
-  const clearFilters = () => {
-    setFilters({
-      warehouseId: '',
-      customerWorksiteId: '',
-      movementType: '',
-      skuId: '',
-      assetId: '',
-      from: '',
-      to: '',
-    });
+  const locationValue = filters.warehouseId
+    ? `warehouse:${filters.warehouseId}`
+    : filters.customerWorksiteId
+      ? `worksite:${filters.customerWorksiteId}`
+      : '';
+
+  const updateAndFetch = (next: Filters) => {
+    setFilters(next);
     setItems([]);
     setNextCursor(null);
+    void fetchLedger({ filtersOverride: next });
+  };
+
+  const handleDateRange = (value: string | null) => {
+    const nextValue = value ?? 'all';
+    setDateRange(nextValue);
+    const next = { ...filters, from: nextValue === 'all' ? '' : dateInputDaysAgo(Number(nextValue)), to: '' };
+    updateAndFetch(next);
+  };
+
+  const clearFilters = () => {
+    const next: Filters = { warehouseId: '', customerWorksiteId: '', movementType: '', skuId: '', assetId: '', from: '', to: '' };
+    setDateRange('all');
+    setSearch('');
+    updateAndFetch(next);
   };
 
   if (unauthorized) {
-    return (
-      <main>
-        <Container size="md" py="xl">
-          <Paper shadow="sm" p="xl" radius="md" withBorder>
-            <Text c="red" fw={600}>
-              No autorizado.
-            </Text>
-            <Button mt="md" onClick={() => router.replace('/login')}>
-              Ir a login
-            </Button>
-          </Paper>
-        </Container>
-      </main>
-    );
+    return <main><Container size="md" py="xl"><Text c="red" fw={600}>No autorizado.</Text><Button mt="md" onClick={() => router.replace('/login')}>Ir a login</Button></Container></main>;
   }
 
   return (
-    <main>
-      <Container size="xl" py="xl">
-        <Stack gap="lg">
-          <PageHeaderCard
-            title="Historial de movimientos"
-            description="Revisa entradas, salidas, movimientos en transito y ajustes de inventario con filtros combinados."
-            icon={<IconArrowsShuffle size={20} />}
-            iconColor="blue"
-            accentColor="rgba(59,130,246,0.12)"
-            aside={
-              <ActionIcon
-                variant={hasActiveFilters ? 'filled' : 'light'}
-                color={hasActiveFilters ? 'blue' : 'gray'}
-                size="lg"
-                radius="xl"
-                aria-label={hasActiveFilters ? `Filtros activos (${activeFiltersCount})` : 'Abrir filtros'}
-                onClick={() => setFiltersOpen(true)}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-            }
-          >
-            {items.length > 0 ? (
-              <Stack gap="md">
-                <Group justify="space-between" align="flex-start" className="mobile-stack">
-                  <div>
-                    <Text fw={700}>Resultados</Text>
-                    <Text size="sm" c="dimmed">
-                      {documentGroups.length} documento
-                      {documentGroups.length === 1 ? '' : 's'} con {items.length} movimiento
-                      {items.length === 1 ? '' : 's'} cargado{items.length === 1 ? '' : 's'}.
-                    </Text>
-                  </div>
-                  {hasActiveFilters ? (
-                    <Text size="sm" c="dimmed">
-                      {activeFiltersCount} filtro{activeFiltersCount === 1 ? '' : 's'} activo
-                      {activeFiltersCount === 1 ? '' : 's'}
-                    </Text>
-                  ) : null}
-                </Group>
-                <LedgerDocumentTable groups={documentGroups} />
-                <Group>
-                  <Button
-                    variant="light"
-                    disabled={!nextCursor}
-                    loading={loading}
-                    onClick={() => fetchLedger({ append: true })}
-                  >
-                    {nextCursor ? 'Cargar mas' : 'No hay mas resultados'}
-                  </Button>
-                </Group>
-              </Stack>
-            ) : loading ? (
-              <Text size="sm" c="dimmed">
-                Cargando movimientos...
-              </Text>
-            ) : (
-              <Stack align="center" gap="xs" py="md">
-                <ThemeIcon color="gray" variant="light" size={40} radius="xl">
-                  <IconChecklist size={20} />
-                </ThemeIcon>
-                <Text fw={700}>No hay movimientos para mostrar</Text>
-                <Text size="sm" c="dimmed" ta="center">
-                  Adjust filters or run a new search to review another part of the history.
-                </Text>
-              </Stack>
-            )}
-          </PageHeaderCard>
+    <main className={styles.page}>
+      <Container size="xl" py={{ base: 'lg', md: 40 }}>
+        <header className={styles.header}>
+          <Text component="h1">Historial de movimientos</Text>
+          <Text>Revisa entradas, salidas, movimientos en tránsito y ajustes de inventario.</Text>
+        </header>
 
-          {error ? (
-            <Alert color="red" variant="light" title="No se pudo consultar el ledger">
-              {error}
-            </Alert>
-          ) : null}
+        <div className={styles.filterRail}>
+          <TextInput
+            aria-label="Buscar documento, ítem o serial"
+            placeholder="Buscar documento, ítem o serial"
+            value={search}
+            onChange={(event) => setSearch(event.currentTarget.value)}
+            leftSection={<IconSearch size={17} />}
+            className={styles.search}
+          />
+          <Select
+            label="Movimiento"
+            value={filters.movementType || 'ALL'}
+            onChange={(value) => updateAndFetch({ ...filters, movementType: value === 'ALL' ? '' : value ?? '' })}
+            data={[{ value: 'ALL', label: 'Todos' }, ...MOVEMENT_TYPES.map((value) => ({ value, label: value === 'OUT' ? 'Salida' : value === 'IN' ? 'Entrada' : value === 'TRANSIT' ? 'En tránsito' : value === 'ON_SITE' ? 'En obra' : 'Ajuste' }))]}
+            allowDeselect={false}
+          />
+          <Select
+            label="Ubicación"
+            value={locationValue || 'ALL'}
+            onChange={(value) => {
+              const [kind, id] = (value === 'ALL' ? '' : value ?? '').split(':');
+              updateAndFetch({ ...filters, warehouseId: kind === 'warehouse' ? id : '', customerWorksiteId: kind === 'worksite' ? id : '' });
+            }}
+            data={[
+              { value: 'ALL', label: 'Todas' },
+              ...warehouses.map((row) => ({ value: `warehouse:${row.id}`, label: row.name })),
+              ...worksites.map((row) => ({ value: `worksite:${row.id}`, label: row.alias || `${row.customer.name} / ${row.worksite.name}` })),
+            ]}
+            searchable
+            allowDeselect={false}
+          />
+          <Select
+            aria-label="Rango de fechas"
+            value={dateRange}
+            onChange={handleDateRange}
+            data={[{ value: '7', label: 'Últimos 7 días' }, { value: '30', label: 'Últimos 30 días' }, { value: '90', label: 'Últimos 90 días' }, { value: 'all', label: 'Todo el historial' }]}
+            allowDeselect={false}
+          />
+          <Button variant="subtle" color="gray" leftSection={<IconFilter size={16} />} onClick={() => setFiltersOpen(true)}>Más filtros</Button>
+        </div>
 
-          <Modal
-            opened={filtersOpen}
-            onClose={() => setFiltersOpen(false)}
-            title="Filtros de busqueda"
-            size="xl"
-            centered
-          >
-            <Stack gap="md">
-              <div>
-                <Text fw={700}>Adjust the query</Text>
-                <Text size="sm" c="dimmed">
-                  Combine location, worksite, movement type, and date range to isolate the history you need.
-                </Text>
-              </div>
+        {error ? <Alert color="red" variant="light" title="No se pudo consultar el historial" mb="lg">{error}</Alert> : null}
 
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-                <Select
-                  label="Bodega"
-                  value={filters.warehouseId}
-                  onChange={(value) => setFilters((prev) => ({ ...prev, warehouseId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando bodegas...' : 'Todos'}
-                  data={warehouses.map((warehouse) => ({
-                    value: warehouse.id,
-                    label: warehouse.name,
-                  }))}
-                  searchable
-                  clearable
-                />
-                <Select
-                  label="Obra"
-                  value={filters.customerWorksiteId}
-                  onChange={(value) =>
-                    setFilters((prev) => ({ ...prev, customerWorksiteId: value ?? '' }))
-                  }
-                  placeholder={filtersLoading ? 'Cargando obras...' : 'Todos'}
-                  data={worksites.map((row) => ({
-                    value: row.id,
-                    label: `${row.customer.name} / ${row.worksite.name}${row.alias ? ` (${row.alias})` : ''}`,
-                  }))}
-                  searchable
-                  clearable
-                />
-                <Select
-                  label="Movement type"
-                  value={filters.movementType}
-                  onChange={(value) =>
-                    setFilters((prev) => ({ ...prev, movementType: value ?? '' }))
-                  }
-                  clearable
-                  placeholder="Todos"
-                  data={MOVEMENT_TYPES.map((t) => ({ value: t, label: t }))}
-                />
-                <Select
-                  label="SKU"
-                  value={filters.skuId}
-                  onChange={(value) => setFilters((prev) => ({ ...prev, skuId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando SKUs...' : 'Todos'}
-                  data={skus.map((sku) => ({
-                    value: sku.id,
-                    label: sku.name,
-                  }))}
-                  searchable
-                  clearable
-                />
-                <Select
-                  label="Asset"
-                  value={filters.assetId}
-                  onChange={(value) => setFilters((prev) => ({ ...prev, assetId: value ?? '' }))}
-                  placeholder={filtersLoading ? 'Cargando activos...' : 'Todos'}
-                  data={assets.map((asset) => ({
-                    value: asset.id,
-                    label: asset.description || asset.serialOrEngine || asset.id,
-                  }))}
-                  searchable
-                  clearable
-                />
-                <div />
-                <TextInput
-                  label="From"
-                  type="datetime-local"
-                  value={filters.from}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
-                />
-                <TextInput
-                  label="To"
-                  type="datetime-local"
-                  value={filters.to}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
-                />
-              </SimpleGrid>
+        <Group justify="space-between" className={styles.resultsBar}>
+          <Text>{visibleGroups.length} documento{visibleGroups.length === 1 ? '' : 's'} · {visibleMovements} movimiento{visibleMovements === 1 ? '' : 's'}</Text>
+          <Text>Orden: más recientes <IconChevronDown size={14} /></Text>
+        </Group>
 
-              <Group justify="space-between" className="mobile-actions">
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  onClick={clearFilters}
-                  disabled={!hasActiveFilters}
-                >
-                  Limpiar filtros
-                </Button>
-                <Button
-                  onClick={async () => {
-                    await fetchLedger();
-                    setFiltersOpen(false);
-                  }}
-                  loading={loading}
-                >
-                  Buscar movimientos
-                </Button>
-              </Group>
-            </Stack>
-          </Modal>
+        <div className={styles.tableWrap} aria-busy={loading}>
+          <div className={styles.tableHeader}>
+            <span>Documento</span><span>Movimiento</span><span>Ítems</span><span>Ubicación</span><span>Solicitado por</span><span>Fecha</span><span />
+          </div>
+          {visibleGroups.map((group) => {
+            const href = group.documentId ? `/inventory/ledger/document/${group.documentId}` : '#';
+            return (
+              <Link key={group.key} href={href} className={styles.tableRow} aria-label={`Abrir documento ${group.reference}`}>
+                <strong>{group.reference}</strong>
+                <span className={styles.movement} data-tone={movementTone(group)}><i />{movementSummary(group)}</span>
+                <span>{itemsSummary(group)}</span>
+                <span>{locationSummary(group)}</span>
+                <span>{requester(group)}</span>
+                <span>{formattedDate(group.items[0].createdAt)}</span>
+                <IconArrowRight size={17} />
+              </Link>
+            );
+          })}
+          {!loading && visibleGroups.length === 0 ? <div className={styles.empty}><strong>No hay movimientos para mostrar</strong><span>Prueba otra búsqueda o cambia los filtros.</span></div> : null}
+        </div>
 
-        </Stack>
+        <Button variant="subtle" className={styles.loadMore} disabled={!nextCursor} loading={loading} onClick={() => fetchLedger({ append: true })}>
+          {nextCursor ? 'Cargar más movimientos' : loading ? 'Cargando movimientos' : 'No hay más resultados'}
+        </Button>
+
+        <Modal opened={filtersOpen} onClose={() => setFiltersOpen(false)} title="Más filtros" size="lg" centered>
+          <Stack gap="md">
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <Select label="SKU" value={filters.skuId} onChange={(value) => setFilters((current) => ({ ...current, skuId: value ?? '' }))} data={skus.map((row) => ({ value: row.id, label: row.name }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
+              <Select label="Equipo" value={filters.assetId} onChange={(value) => setFilters((current) => ({ ...current, assetId: value ?? '' }))} data={assets.map((row) => ({ value: row.id, label: row.description || row.serialOrEngine || row.id }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
+              <TextInput label="Desde" type="datetime-local" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.currentTarget.value }))} />
+              <TextInput label="Hasta" type="datetime-local" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.currentTarget.value }))} />
+            </SimpleGrid>
+            <Group justify="space-between">
+              <Button variant="subtle" color="gray" onClick={clearFilters}>Limpiar filtros</Button>
+              <Button onClick={() => { updateAndFetch(filters); setFiltersOpen(false); }} loading={loading}>Aplicar filtros</Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Container>
     </main>
   );
