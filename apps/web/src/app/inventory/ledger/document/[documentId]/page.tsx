@@ -35,6 +35,8 @@ import {
   IconCopy,
 } from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
+import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
+import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPickerModal';
 
 const PRINT_LINES_PER_PAGE = 20;
 
@@ -173,6 +175,22 @@ type SkuOption = {
 };
 
 type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
+
+type RecoverableApprovalError = {
+  code?: string;
+  recovery?: {
+    type?: string;
+    mixerAssetId?: string;
+    ownerWarehouseId?: string | null;
+  };
+};
+
+type MixerMotorRecovery = {
+  document: DocumentDetail;
+  mixer: InventoryItemPickerSerialItem;
+  motors: InventoryItemPickerSerialItem[];
+  ownerWarehouseId: string;
+};
 
 type CreateSerializedAssetResponse = {
   asset: {
@@ -444,6 +462,9 @@ export default function DocumentDetailPage() {
   >({});
   const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
   const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
+  const [motorRecovery, setMotorRecovery] = useState<MixerMotorRecovery | null>(null);
+  const [motorRecoveryLoading, setMotorRecoveryLoading] = useState(false);
+  const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
   const [emailRetryLoading, setEmailRetryLoading] = useState(false);
   const [emailRetryMessage, setEmailRetryMessage] = useState<string | null>(null);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
@@ -804,6 +825,48 @@ export default function DocumentDetailPage() {
   };
 
 
+  const openMixerMotorRecovery = async (
+    documentId: string,
+    recovery: NonNullable<RecoverableApprovalError['recovery']>,
+  ) => {
+    if (!recovery.mixerAssetId) return;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      const doc = await api<DocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      const mixerItem = doc.items.find((item) => item.assetId === recovery.mixerAssetId);
+      const ownerWarehouseId = recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
+      if (!mixerItem?.asset || !ownerWarehouseId) {
+        throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
+      }
+      const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(
+        `/inventory/warehouse/${ownerWarehouseId}`,
+        { method: 'GET' },
+      );
+      const mixer: InventoryItemPickerSerialItem = {
+        assetId: mixerItem.asset.id,
+        skuId: mixerItem.skuId ?? mixerItem.asset.sku?.id ?? null,
+        skuName: mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
+        description: mixerItem.asset.description ?? null,
+        serialOrEngine: mixerItem.asset.serialOrEngine ?? null,
+        internalNumber: mixerItem.asset.internalNumber ?? null,
+        quantity: 1,
+        ownerWarehouseId,
+      };
+      const motors = (inventory.serial ?? []).filter(
+        (item) => item.kind === 'MOTOR'
+          && item.ownerWarehouseId === ownerWarehouseId
+          && (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
+      );
+      setMotorRecovery({ document: doc, mixer, motors, ownerWarehouseId });
+      setError(null);
+    } catch (recoveryError) {
+      setError(recoveryError instanceof Error ? recoveryError.message : 'No se pudieron cargar los motores disponibles.');
+    } finally {
+      setMotorRecoveryLoading(false);
+    }
+  };
+
   const handleApprovalError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
       if (err instanceof Error) {
@@ -811,6 +874,16 @@ export default function DocumentDetailPage() {
       } else {
         setError('Error al procesar solicitud');
       }
+      return;
+    }
+
+    const recoverable = err.data as RecoverableApprovalError | null | undefined;
+    if (
+      document?.id
+      && recoverable?.code === 'MISSING_MIXER_MOTOR'
+      && recoverable.recovery?.type === 'SELECT_MIXER_MOTOR'
+    ) {
+      void openMixerMotorRecovery(document.id, recoverable.recovery);
       return;
     }
 
@@ -850,6 +923,53 @@ export default function DocumentDetailPage() {
     }
 
     setError(`${err.status}: ${err.message}`);
+  };
+
+  const confirmRecoveredMixerMotor = async (motor: InventoryItemPickerSerialItem) => {
+    if (!motorRecovery) return;
+    const { document: doc, mixer, ownerWarehouseId } = motorRecovery;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      await api(`/assets/${mixer.assetId}/assigned-motor`, {
+        method: 'PATCH',
+        json: { motorId: motor.assetId },
+      });
+      await api(`/documents/${doc.id}/request`, {
+        method: 'PATCH',
+        json: {
+          type: doc.type,
+          number: doc.consecutive ?? undefined,
+          warehouseId: doc.warehouse?.id ?? undefined,
+          customerWorksiteId: doc.customerWorksite?.id ?? undefined,
+          notes: doc.notes ?? undefined,
+          recipientPhone: doc.recipientPhone ?? undefined,
+          items: [
+            ...doc.items.filter((item) => item.assetId !== motor.assetId).map((item) => ({
+              skuId: item.assetId ? undefined : item.skuId ?? undefined,
+              assetId: item.assetId ?? undefined,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              quantity: item.assetId ? undefined : Number(item.quantity ?? 1) || 1,
+              ownerWarehouseId: item.condition ?? undefined,
+              requestedTag: item.requestedTag ?? undefined,
+              conditionNote: item.conditionNote ?? undefined,
+            })),
+            { assetId: motor.assetId, componentParentAssetId: mixer.assetId, ownerWarehouseId },
+          ],
+        },
+      });
+      setMotorRecovery(null);
+      await api(`/documents/${doc.id}/decision`, {
+        method: 'POST',
+        json: { action: 'APPROVE' },
+      });
+      await reloadDocumentOnly();
+      router.refresh();
+    } catch (recoveryError) {
+      setMotorRecoveryError(recoveryError instanceof Error ? recoveryError.message : 'No se pudo guardar el motor seleccionado.');
+    } finally {
+      setMotorRecoveryLoading(false);
+    }
   };
 
   const closeResolveModal = () => {
@@ -2139,6 +2259,20 @@ export default function DocumentDetailPage() {
           </Group>
         </Stack>
       </Modal>
+      <MixerMotorSelectionModal
+        opened={Boolean(motorRecovery)}
+        mixer={motorRecovery?.mixer ?? null}
+        motors={motorRecovery?.motors ?? []}
+        loading={motorRecoveryLoading}
+        error={motorRecoveryError}
+        onCancel={() => {
+          if (!motorRecoveryLoading) {
+            setMotorRecovery(null);
+            setMotorRecoveryError(null);
+          }
+        }}
+        onConfirm={(motor) => void confirmRecoveredMixerMotor(motor)}
+      />
     </main>
   );
 }

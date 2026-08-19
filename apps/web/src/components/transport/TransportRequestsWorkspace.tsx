@@ -237,6 +237,22 @@ type RequestDocumentDetail = {
   }>;
 };
 
+type MixerMotorRecovery = {
+  document: RequestDocumentDetail;
+  mixer: InventorySerial;
+  motors: InventorySerial[];
+  ownerWarehouseId: string;
+};
+
+type RecoverableApprovalError = {
+  code?: string;
+  recovery?: {
+    type?: string;
+    mixerAssetId?: string;
+    ownerWarehouseId?: string | null;
+  };
+};
+
 type SkuOption = {
   id: string;
   name: string;
@@ -641,6 +657,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [componentOptionsLoading, setComponentOptionsLoading] = useState(false);
   const [assigningMotor, setAssigningMotor] = useState(false);
   const [assignMotorError, setAssignMotorError] = useState<string | null>(null);
+  const [motorRecovery, setMotorRecovery] = useState<MixerMotorRecovery | null>(null);
+  const [motorRecoveryLoading, setMotorRecoveryLoading] = useState(false);
+  const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -1240,13 +1259,67 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     await Promise.all(uploads);
   };
 
-  const handleApprovalError = (err: unknown) => {
+  const openMixerMotorRecovery = async (
+    documentId: string,
+    recovery: NonNullable<RecoverableApprovalError['recovery']>,
+  ) => {
+    if (!recovery.mixerAssetId) return false;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      const mixerItem = doc.items.find((item) => item.assetId === recovery.mixerAssetId);
+      const ownerWarehouseId = recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
+      if (!mixerItem?.asset || !ownerWarehouseId) {
+        throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
+      }
+      const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+        method: 'GET',
+      });
+      const mixer: InventorySerial = {
+        assetId: mixerItem.asset.id,
+        skuId: mixerItem.skuId ?? mixerItem.asset.sku?.id ?? null,
+        skuName: mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
+        description: mixerItem.asset.description ?? null,
+        serialOrEngine: mixerItem.asset.serialOrEngine ?? null,
+        internalNumber: null,
+        quantity: 1,
+        ownerWarehouseId,
+        assignedMotorId: mixerItem.asset.assignedMotorId ?? null,
+      };
+      const motors = (inventory.serial ?? []).filter(
+        (item) => item.kind === 'MOTOR'
+          && item.ownerWarehouseId === ownerWarehouseId
+          && (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
+      );
+      setMotorRecovery({ document: doc, mixer, motors, ownerWarehouseId });
+      setRequestsError(null);
+      return true;
+    } catch (error) {
+      setRequestsError(error instanceof Error ? error.message : 'No se pudieron cargar los motores disponibles.');
+      return false;
+    } finally {
+      setMotorRecoveryLoading(false);
+    }
+  };
+
+  const handleApprovalError = (err: unknown, documentId?: string) => {
     if (!(err instanceof ApiError)) {
       if (err instanceof Error) {
         setRequestsError(err.message);
       } else {
         setRequestsError('Error procesando la solicitud');
       }
+      return;
+    }
+
+    const recoverable = err.data as RecoverableApprovalError | null | undefined;
+    if (
+      documentId
+      && recoverable?.code === 'MISSING_MIXER_MOTOR'
+      && recoverable.recovery?.type === 'SELECT_MIXER_MOTOR'
+    ) {
+      void openMixerMotorRecovery(documentId, recoverable.recovery);
       return;
     }
 
@@ -1764,7 +1837,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         setProviderRemissionError(null);
         return false;
       }
-      handleApprovalError(err);
+      handleApprovalError(err, documentId);
       return false;
     } finally {
       setDecidingId(null);
@@ -1808,6 +1881,53 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       );
     } finally {
       setProviderRemissionUploading(false);
+    }
+  };
+
+  const confirmRecoveredMixerMotor = async (motor: InventorySerial) => {
+    if (!motorRecovery) return;
+    const { document: doc, mixer, ownerWarehouseId } = motorRecovery;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      await api(`/assets/${mixer.assetId}/assigned-motor`, {
+        method: 'PATCH',
+        json: { motorId: motor.assetId },
+      });
+      const existingItems = doc.items.filter((item) => item.assetId !== motor.assetId);
+      await api(`/documents/${doc.id}/request`, {
+        method: 'PATCH',
+        json: {
+          type: doc.type,
+          number: doc.consecutive ?? undefined,
+          warehouseId: doc.warehouse?.id ?? undefined,
+          customerWorksiteId: doc.customerWorksite?.id ?? undefined,
+          notes: doc.notes ?? undefined,
+          recipientPhones: doc.recipientPhones?.length ? doc.recipientPhones : undefined,
+          items: [
+            ...existingItems.map((item) => ({
+              skuId: item.assetId ? undefined : item.skuId ?? undefined,
+              assetId: item.assetId ?? undefined,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              quantity: item.assetId ? undefined : Number(item.quantity ?? 1) || 1,
+              ownerWarehouseId: item.condition ?? undefined,
+              requestedTag: item.requestedTag ?? undefined,
+              conditionNote: item.conditionNote ?? undefined,
+            })),
+            {
+              assetId: motor.assetId,
+              componentParentAssetId: mixer.assetId,
+              ownerWarehouseId,
+            },
+          ],
+        },
+      });
+      setMotorRecovery(null);
+      await approveWithDecision(doc.id);
+    } catch (error) {
+      setMotorRecoveryError(error instanceof Error ? error.message : 'No se pudo guardar el motor seleccionado.');
+    } finally {
+      setMotorRecoveryLoading(false);
     }
   };
 
@@ -4360,6 +4480,21 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         error={assignMotorError}
         onCancel={cancelPendingMixer}
         onConfirm={confirmMixerMotor}
+      />
+
+      <MixerMotorSelectionModal
+        opened={Boolean(motorRecovery)}
+        mixer={motorRecovery?.mixer ?? null}
+        motors={motorRecovery?.motors ?? []}
+        loading={motorRecoveryLoading}
+        error={motorRecoveryError}
+        onCancel={() => {
+          if (!motorRecoveryLoading) {
+            setMotorRecovery(null);
+            setMotorRecoveryError(null);
+          }
+        }}
+        onConfirm={(motor) => void confirmRecoveredMixerMotor(motor)}
       />
 
       <AssetComponentsSelectionModal
