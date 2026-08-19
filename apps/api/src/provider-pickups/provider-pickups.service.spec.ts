@@ -108,6 +108,26 @@ describe('ProviderPickupsService', () => {
     );
     expect(Number(movements[0].quantity)).toBe(-3);
     expect(Number(movements[1].quantity)).toBe(3);
+    expect(tx.stockLedger.groupBy).toHaveBeenCalledWith({
+      by: ['skuId', 'assetId'],
+      where: {
+        warehouseId: providerId,
+        ownerWarehouseId: providerId,
+        OR: [
+          {
+            skuId: {
+              in: ['44444444-4444-4444-8444-444444444444'],
+            },
+          },
+          {
+            assetId: {
+              in: ['55555555-5555-4555-8555-555555555555'],
+            },
+          },
+        ],
+      },
+      _sum: { quantity: true },
+    });
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { warehouseCurrentId: destinationId },

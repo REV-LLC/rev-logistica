@@ -15,6 +15,7 @@ import {
   WarehouseType,
 } from '@prisma/client';
 import type { Cache } from 'cache-manager';
+import { physicalWarehouseLedgerWhere } from '../inventory/warehouse-stock-balance';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProviderPickupDto } from './dto/create-provider-pickup.dto';
 
@@ -70,9 +71,8 @@ export class ProviderPickupsService {
     const rows = await this.prisma.stockLedger.groupBy({
       by: ['skuId', 'assetId'],
       where: {
-        warehouseId: provider.id,
+        ...physicalWarehouseLedgerWhere(provider.id),
         ownerWarehouseId: provider.id,
-        customerWorksiteId: null,
       },
       _sum: { quantity: true },
     });
@@ -418,9 +418,8 @@ export class ProviderPickupsService {
       tx.stockLedger.groupBy({
         by: ['skuId', 'assetId'],
         where: {
-          warehouseId: providerWarehouseId,
+          ...physicalWarehouseLedgerWhere(providerWarehouseId),
           ownerWarehouseId: providerWarehouseId,
-          customerWorksiteId: null,
           OR: [
             ...(skuIds.length ? [{ skuId: { in: skuIds } }] : []),
             ...(assetIds.length ? [{ assetId: { in: assetIds } }] : []),
