@@ -52,12 +52,33 @@ import {
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
 
+type InventoryStockShortage = {
+  skuId: string;
+  ownerWarehouseId: string;
+  requestedQuantity: number;
+  availableQuantity: number;
+  missingQuantity: number;
+  existsInWarehouse: boolean;
+};
+
 @Injectable()
 export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+
+  private throwInsufficientStock(shortages: InventoryStockShortage[]): never {
+    const totalMissingQuantity = shortages.reduce(
+      (total, shortage) => total + shortage.missingQuantity,
+      0,
+    );
+    throw new BadRequestException({
+      code: 'INSUFFICIENT_STOCK',
+      message: `Stock insuficiente para ${shortages.length} ítem(es). Faltan ${totalMissingQuantity} unidad(es) en total.`,
+      shortages,
+    });
+  }
 
   private getWarehouseCacheKey(warehouseId: string) {
     return `inventory:warehouse:${warehouseId}`;
@@ -964,15 +985,20 @@ export class InventoryService {
           }),
         );
 
-        bulkGroups.forEach((group) => {
+        const shortages = bulkGroups.flatMap((group) => {
           const key = `${group.skuId}::${group.ownerWarehouseId ?? 'null'}`;
           const available = availableByGroup.get(key) ?? 0;
-          if (available < group.quantity) {
-            throw new BadRequestException(
-              `Insufficient stock for skuId ${group.skuId}${group.ownerWarehouseId ? ` ownerWarehouse ${group.ownerWarehouseId}` : ''}`,
-            );
-          }
+          if (available >= group.quantity) return [];
+          return [{
+            skuId: group.skuId,
+            ownerWarehouseId: group.ownerWarehouseId,
+            requestedQuantity: group.quantity,
+            availableQuantity: available,
+            missingQuantity: group.quantity - available,
+            existsInWarehouse: availableByGroup.has(key),
+          }];
         });
+        if (shortages.length) this.throwInsufficientStock(shortages);
       }
 
       if (serialIds.length) {
@@ -1140,10 +1166,12 @@ export class InventoryService {
         });
 
         const availableByGroup = new Map<string, number>();
+        const existingWarehouseKeys = new Set<string>();
         warehouseRows.forEach((row) => {
           if (!row.skuId || !row.ownerWarehouseId || !row.warehouseId) return;
           if (row.ownerWarehouseId !== row.warehouseId) return;
           const key = `${row.skuId}::${row.ownerWarehouseId}`;
+          existingWarehouseKeys.add(key);
           availableByGroup.set(key, Number(row._sum.quantity ?? 0));
         });
         onSiteRows.forEach((row) => {
@@ -1159,15 +1187,20 @@ export class InventoryService {
           availableByGroup.set(key, current + Number(row._sum.quantity ?? 0));
         });
 
-        bulkGroups.forEach((group) => {
+        const shortages = bulkGroups.flatMap((group) => {
           const key = `${group.skuId}::${group.ownerWarehouseId}`;
           const available = availableByGroup.get(key) ?? 0;
-          if (available < group.quantity) {
-            throw new BadRequestException(
-              `Insufficient stock for skuId ${group.skuId} ownerWarehouse ${group.ownerWarehouseId}`,
-            );
-          }
+          if (available >= group.quantity) return [];
+          return [{
+            skuId: group.skuId,
+            ownerWarehouseId: group.ownerWarehouseId,
+            requestedQuantity: group.quantity,
+            availableQuantity: available,
+            missingQuantity: group.quantity - available,
+            existsInWarehouse: existingWarehouseKeys.has(key),
+          }];
         });
+        if (shortages.length) this.throwInsufficientStock(shortages);
       }
 
       const assets = serialIds.length

@@ -94,6 +94,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
   WAREHOUSE: new Set(['GUIA_MOVILIDAD_PROVEEDOR', 'OTRO']),
   ASSET: new Set([
     'PHOTO',
+    'TARJETA_PROPIEDAD',
     'FICHA_TECNICA',
     'MANTENIMIENTO',
     'MANUAL',
@@ -209,8 +210,21 @@ export class FilesService {
       where: {
         entityType,
         entityId,
-        fileType: { not: GENERATED_DOCUMENT_PDF },
+        fileType: {
+          notIn:
+            entityType === 'ASSET'
+              ? [GENERATED_DOCUMENT_PDF, HOUR_METER_EVIDENCE_CATEGORY]
+              : [GENERATED_DOCUMENT_PDF],
+        },
         id: hourEvidenceIds.length ? { notIn: hourEvidenceIds } : undefined,
+        ...(entityType === 'ASSET'
+          ? {
+              OR: [
+                { category: null },
+                { category: { not: HOUR_METER_EVIDENCE_CATEGORY } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: this.fileSelect,
@@ -558,10 +572,11 @@ export class FilesService {
       if (
         document.type !== DocumentType.REMISSION &&
         document.type !== DocumentType.RETURN &&
-        document.type !== DocumentType.PROVIDER_RECEIPT
+        document.type !== DocumentType.PROVIDER_RECEIPT &&
+        document.type !== DocumentType.PROVIDER_PICKUP
       ) {
         throw new BadRequestException(
-          'Files are only available for remissions and returns',
+          'Files are not available for this document type',
         );
       }
       if (user.role === Role.DRIVER && document.createdBy !== user.id) {

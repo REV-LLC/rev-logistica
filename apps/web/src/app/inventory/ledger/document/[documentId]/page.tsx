@@ -25,6 +25,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import {
+  buildInventoryStockShortageMessage,
+  extractInventoryStockShortages,
+} from '@/lib/inventory-stock-errors';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
 import {
@@ -35,6 +39,8 @@ import {
   IconCopy,
 } from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
+import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
+import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPickerModal';
 
 const PRINT_LINES_PER_PAGE = 20;
 
@@ -173,6 +179,22 @@ type SkuOption = {
 };
 
 type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
+
+type RecoverableApprovalError = {
+  code?: string;
+  recovery?: {
+    type?: string;
+    mixerAssetId?: string;
+    ownerWarehouseId?: string | null;
+  };
+};
+
+type MixerMotorRecovery = {
+  document: DocumentDetail;
+  mixer: InventoryItemPickerSerialItem;
+  motors: InventoryItemPickerSerialItem[];
+  ownerWarehouseId: string;
+};
 
 type CreateSerializedAssetResponse = {
   asset: {
@@ -444,6 +466,9 @@ export default function DocumentDetailPage() {
   >({});
   const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
   const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
+  const [motorRecovery, setMotorRecovery] = useState<MixerMotorRecovery | null>(null);
+  const [motorRecoveryLoading, setMotorRecoveryLoading] = useState(false);
+  const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
   const [emailRetryLoading, setEmailRetryLoading] = useState(false);
   const [emailRetryMessage, setEmailRetryMessage] = useState<string | null>(null);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
@@ -804,6 +829,48 @@ export default function DocumentDetailPage() {
   };
 
 
+  const openMixerMotorRecovery = async (
+    documentId: string,
+    recovery: NonNullable<RecoverableApprovalError['recovery']>,
+  ) => {
+    if (!recovery.mixerAssetId) return;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      const doc = await api<DocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      const mixerItem = doc.items.find((item) => item.assetId === recovery.mixerAssetId);
+      const ownerWarehouseId = recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
+      if (!mixerItem?.asset || !ownerWarehouseId) {
+        throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
+      }
+      const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(
+        `/inventory/warehouse/${ownerWarehouseId}`,
+        { method: 'GET' },
+      );
+      const mixer: InventoryItemPickerSerialItem = {
+        assetId: mixerItem.asset.id,
+        skuId: mixerItem.skuId ?? mixerItem.asset.sku?.id ?? null,
+        skuName: mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
+        description: mixerItem.asset.description ?? null,
+        serialOrEngine: mixerItem.asset.serialOrEngine ?? null,
+        internalNumber: mixerItem.asset.internalNumber ?? null,
+        quantity: 1,
+        ownerWarehouseId,
+      };
+      const motors = (inventory.serial ?? []).filter(
+        (item) => item.kind === 'MOTOR'
+          && item.ownerWarehouseId === ownerWarehouseId
+          && (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
+      );
+      setMotorRecovery({ document: doc, mixer, motors, ownerWarehouseId });
+      setError(null);
+    } catch (recoveryError) {
+      setError(recoveryError instanceof Error ? recoveryError.message : 'No se pudieron cargar los motores disponibles.');
+    } finally {
+      setMotorRecoveryLoading(false);
+    }
+  };
+
   const handleApprovalError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
       if (err instanceof Error) {
@@ -814,19 +881,51 @@ export default function DocumentDetailPage() {
       return;
     }
 
+    const recoverable = err.data as RecoverableApprovalError | null | undefined;
+    if (
+      document?.id
+      && recoverable?.code === 'MISSING_MIXER_MOTOR'
+      && recoverable.recovery?.type === 'SELECT_MIXER_MOTOR'
+    ) {
+      void openMixerMotorRecovery(document.id, recoverable.recovery);
+      return;
+    }
+
     const messages = normalizeApiErrorMessages(err);
     const hasAssetUnavailableError = messages.some((message) =>
       /asset\s+[0-9a-f-]{36}\s+is not available in owner warehouse/i.test(message),
     );
     if (hasAssetUnavailableError) {
       setError(
-        'Cannot approve: the equipment is not available in the source warehouse. Check if it is on site or select/load the correct equipment before approving.',
+        'No se puede aprobar: el equipo no está disponible en la bodega de origen. Revisa si está en obra o selecciona/carga el equipo correcto antes de aprobar.',
       );
       return;
     }
 
-    const hasStockError = messages.some((message) => /insufficient stock/i.test(message));
+    const stockShortages = extractInventoryStockShortages(err.data);
+    const hasStockError =
+      stockShortages.length > 0 ||
+      messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      if (stockShortages.length > 0) {
+        const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
+        setAdjustWarningOwnerWarehouseId(firstOwnerId);
+        setAdjustWarningMessage(
+          buildInventoryStockShortageMessage(
+            stockShortages,
+            (skuId) =>
+              skuOptions.find((entry) => entry.id === skuId)?.name ??
+              `SKU ${skuId.slice(0, 8)}`,
+            (warehouseId) =>
+              warehouses.find(
+                (warehouse) => warehouse.id.toLowerCase() === warehouseId.toLowerCase(),
+              )?.name ?? 'bodega sin identificar',
+          ),
+        );
+        setAdjustWarningModalOpen(true);
+        setError(null);
+        return;
+      }
       const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
       const ownerId = extractOwnerWarehouseIdFromMessage(messageWithOwner);
       const ownerName = ownerId
@@ -836,13 +935,13 @@ export default function DocumentDetailPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'the alternate warehouse';
+      const warehouseLabel = ownerName ?? 'la bodega alterna';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `First adjust "${warehouseLabel}" warehouse before making movements.${missingItemsBlock}`,
+        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setError(null);
@@ -850,6 +949,53 @@ export default function DocumentDetailPage() {
     }
 
     setError(`${err.status}: ${err.message}`);
+  };
+
+  const confirmRecoveredMixerMotor = async (motor: InventoryItemPickerSerialItem) => {
+    if (!motorRecovery) return;
+    const { document: doc, mixer, ownerWarehouseId } = motorRecovery;
+    setMotorRecoveryLoading(true);
+    setMotorRecoveryError(null);
+    try {
+      await api(`/assets/${mixer.assetId}/assigned-motor`, {
+        method: 'PATCH',
+        json: { motorId: motor.assetId },
+      });
+      await api(`/documents/${doc.id}/request`, {
+        method: 'PATCH',
+        json: {
+          type: doc.type,
+          number: doc.consecutive ?? undefined,
+          warehouseId: doc.warehouse?.id ?? undefined,
+          customerWorksiteId: doc.customerWorksite?.id ?? undefined,
+          notes: doc.notes ?? undefined,
+          recipientPhone: doc.recipientPhone ?? undefined,
+          items: [
+            ...doc.items.filter((item) => item.assetId !== motor.assetId).map((item) => ({
+              skuId: item.assetId ? undefined : item.skuId ?? undefined,
+              assetId: item.assetId ?? undefined,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              quantity: item.assetId ? undefined : Number(item.quantity ?? 1) || 1,
+              ownerWarehouseId: item.condition ?? undefined,
+              requestedTag: item.requestedTag ?? undefined,
+              conditionNote: item.conditionNote ?? undefined,
+            })),
+            { assetId: motor.assetId, componentParentAssetId: mixer.assetId, ownerWarehouseId },
+          ],
+        },
+      });
+      setMotorRecovery(null);
+      await api(`/documents/${doc.id}/decision`, {
+        method: 'POST',
+        json: { action: 'APPROVE' },
+      });
+      await reloadDocumentOnly();
+      router.refresh();
+    } catch (recoveryError) {
+      setMotorRecoveryError(recoveryError instanceof Error ? recoveryError.message : 'No se pudo guardar el motor seleccionado.');
+    } finally {
+      setMotorRecoveryLoading(false);
+    }
   };
 
   const closeResolveModal = () => {
@@ -1239,7 +1385,7 @@ export default function DocumentDetailPage() {
       return !resolveAssetByIndex[index];
     });
     if (serialMissingAsset.length > 0) {
-      setError('Missing selected or created equipment for one or more serial tags.');
+      setError('Falta seleccionar o crear el equipo para uno o más tags seriales.');
       return;
     }
 
@@ -1928,7 +2074,8 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-            {adjustWarningMessage ?? 'First adjust warehouse stock before making movements.'}
+            {adjustWarningMessage ??
+              'Primero ajusta el stock de la bodega antes de hacer movimientos.'}
           </Text>
           <Group justify="flex-end">
             <Button
@@ -2139,6 +2286,20 @@ export default function DocumentDetailPage() {
           </Group>
         </Stack>
       </Modal>
+      <MixerMotorSelectionModal
+        opened={Boolean(motorRecovery)}
+        mixer={motorRecovery?.mixer ?? null}
+        motors={motorRecovery?.motors ?? []}
+        loading={motorRecoveryLoading}
+        error={motorRecoveryError}
+        onCancel={() => {
+          if (!motorRecoveryLoading) {
+            setMotorRecovery(null);
+            setMotorRecoveryError(null);
+          }
+        }}
+        onConfirm={(motor) => void confirmRecoveredMixerMotor(motor)}
+      />
     </main>
   );
 }

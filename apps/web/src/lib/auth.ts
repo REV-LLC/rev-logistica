@@ -93,12 +93,13 @@ export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
   ADMIN: '/',
   OFFICE: '/',
-  DRIVER: '/transport/generate',
-  OPERATOR: '/inventory/hour-meter',
+  DRIVER: '/',
+  OPERATOR: '/',
 };
 
 const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
   DRIVER: [
+    '/',
     '/transport/generate',
     '/transport/requests',
     '/transport/driver-worksites',
@@ -106,7 +107,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/inventory/provider-returns',
     '/inventory/ledger/document',
   ],
-  OPERATOR: ['/inventory/hour-meter', '/fuel'],
+  OPERATOR: ['/', '/inventory/hour-meter', '/fuel'],
 };
 
 function isPathWithinPrefix(pathname: string, prefix: string) {

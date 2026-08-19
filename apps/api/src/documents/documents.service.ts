@@ -377,9 +377,20 @@ export class DocumentsService {
             && (!asset.assignedMotorId || !selectedAssetIds.has(asset.assignedMotorId)),
         );
         if (missingMotor) {
-          throw new BadRequestException(
-            `Selecciona el motor que saldrá con ${missingMotor.sku.name}`,
+          const parentItem = document.items.find(
+            (item) => item.assetId === missingMotor.id,
           );
+          throw new BadRequestException({
+            code: 'MISSING_MIXER_MOTOR',
+            message: `Selecciona el motor que saldrá con ${missingMotor.sku.name}`,
+            recovery: {
+              type: 'SELECT_MIXER_MOTOR',
+              documentId: document.id,
+              mixerAssetId: missingMotor.id,
+              mixerName: missingMotor.sku.name,
+              ownerWarehouseId: parentItem?.condition ?? null,
+            },
+          });
         }
       }
       if (!document.customerWorksiteId) {

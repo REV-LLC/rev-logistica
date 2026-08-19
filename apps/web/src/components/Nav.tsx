@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
   Box,
@@ -99,6 +99,12 @@ const sections: NavSection[] = [
             href: "/inventory/provider-returns",
             label: "Entregas a proveedor",
             icon: IconBuildingWarehouse,
+            roles: ["ADMIN", "OFFICE", "DRIVER"],
+          },
+          {
+            href: "/inventory/provider-pickups",
+            label: "Recogidas en proveedor",
+            icon: IconArrowsShuffle,
             roles: ["ADMIN", "OFFICE", "DRIVER"],
           },
         ],
@@ -378,6 +384,49 @@ export default function Nav({ onNavigate }: NavProps) {
     {},
   );
   const [openedLinks, setOpenedLinks] = useState<Record<string, boolean>>({});
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const expandableItemRefs = useRef(new Map<string, HTMLDivElement>());
+
+  const registerExpandableItem = useCallback(
+    (key: string, node: HTMLDivElement | null) => {
+      if (node) {
+        expandableItemRefs.current.set(key, node);
+      } else {
+        expandableItemRefs.current.delete(key);
+      }
+    },
+    [],
+  );
+
+  const revealExpandedItem = useCallback((key: string) => {
+    const viewport = scrollViewportRef.current;
+    const item = expandableItemRefs.current.get(key);
+    if (!viewport || !item) return;
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const visibilityMargin = 8;
+
+    if (itemRect.bottom > viewportRect.bottom - visibilityMargin) {
+      viewport.scrollTo({
+        top:
+          viewport.scrollTop +
+          itemRect.bottom -
+          viewportRect.bottom +
+          visibilityMargin,
+        behavior: "smooth",
+      });
+    } else if (itemRect.top < viewportRect.top + visibilityMargin) {
+      viewport.scrollTo({
+        top:
+          viewport.scrollTop +
+          itemRect.top -
+          viewportRect.top -
+          visibilityMargin,
+        behavior: "smooth",
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -508,12 +557,19 @@ export default function Nav({ onNavigate }: NavProps) {
     const isExpanded = openedLinks[link.href] ?? isActive;
 
     if (hasChildren) {
+      const expandableKey = `link:${link.href}`;
+
       return (
-        <Stack key={link.href} gap={0}>
+        <Stack
+          key={link.href}
+          ref={(node) => registerExpandableItem(expandableKey, node)}
+          gap={0}
+        >
           <NavLink
             component="button"
             label={link.label}
             active={isActive}
+            aria-expanded={isExpanded}
             styles={{
               root: {
                 borderRadius: 14,
@@ -562,7 +618,12 @@ export default function Nav({ onNavigate }: NavProps) {
               }))
             }
           />
-          <Collapse in={isExpanded}>
+          <Collapse
+            in={isExpanded}
+            onTransitionEnd={() => {
+              if (isExpanded) revealExpandedItem(expandableKey);
+            }}
+          >
             <Box
               ml={22}
               pl={8}
@@ -625,13 +686,19 @@ export default function Nav({ onNavigate }: NavProps) {
     const isExpanded =
       openedSections[section.title] ??
       (isActive || defaultExpandedSections.has(section.title));
+    const expandableKey = `section:${section.title}`;
 
     return (
-      <Stack key={section.title} gap={2}>
+      <Stack
+        key={section.title}
+        ref={(node) => registerExpandableItem(expandableKey, node)}
+        gap={2}
+      >
         <NavLink
           component="button"
           label={section.title}
           active={isActive}
+          aria-expanded={isExpanded}
           onClick={() =>
             setOpenedSections((current) => ({
               ...current,
@@ -678,7 +745,12 @@ export default function Nav({ onNavigate }: NavProps) {
             />
           }
         />
-        <Collapse in={isExpanded}>
+        <Collapse
+          in={isExpanded}
+          onTransitionEnd={() => {
+            if (isExpanded) revealExpandedItem(expandableKey);
+          }}
+        >
           <Stack gap={0} pl={18} pt={2}>
             {section.links.map(renderNavItem)}
           </Stack>
@@ -755,6 +827,7 @@ export default function Nav({ onNavigate }: NavProps) {
       </Group>
       <Divider color="rgba(226,232,240,0.8)" />
       <ScrollArea
+        viewportRef={scrollViewportRef}
         type="auto"
         offsetScrollbars
         scrollbarSize={6}

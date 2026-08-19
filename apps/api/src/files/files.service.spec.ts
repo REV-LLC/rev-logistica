@@ -23,6 +23,19 @@ describe('FilesService categories', () => {
     });
   });
 
+  it('acepta la tarjeta de propiedad como documento de activos', () => {
+    expect(service.getCategories('ASSET')).toContainEqual({
+      value: 'TARJETA_PROPIEDAD',
+      label: 'Tarjeta Propiedad',
+    });
+  });
+
+  it('no ofrece evidencia de horómetro como documento general del activo', () => {
+    expect(service.getCategories('ASSET')).not.toContainEqual(
+      expect.objectContaining({ value: 'EVIDENCIA_HOROMETRO' }),
+    );
+  });
+
   it('acepta la categoría de guías para proveedores', () => {
     expect(service.getCategories('WAREHOUSE')).toContainEqual({
       value: 'GUIA_MOVILIDAD_PROVEEDOR',
@@ -52,6 +65,53 @@ describe('FilesService categories', () => {
   it('devuelve en español los errores de categorías inválidas', () => {
     expect(() => service.getCategories('TIPO_DESCONOCIDO')).toThrow(
       'El tipo de entidad del archivo no es válido',
+    );
+  });
+});
+
+describe('FilesService asset documents', () => {
+  const assetFindUnique = jest.fn();
+  const hourReadingFindMany = jest.fn();
+  const fileFindMany = jest.fn();
+  const service = new FilesService(
+    {
+      asset: { findUnique: assetFindUnique },
+      assetHourReading: { findMany: hourReadingFindMany },
+      fileObject: { findMany: fileFindMany },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+
+  beforeEach(() => {
+    assetFindUnique.mockReset().mockResolvedValue({ id: 'asset-1' });
+    hourReadingFindMany.mockReset().mockResolvedValue([
+      { evidenceFileObjectId: 'hour-evidence-1' },
+    ]);
+    fileFindMany.mockReset().mockResolvedValue([]);
+  });
+
+  it('excluye las evidencias de horómetro del listado de documentos', async () => {
+    await service.listEntityFiles('ASSET', 'asset-1', {
+      id: 'admin-1',
+      role: Role.ADMIN,
+    });
+
+    expect(fileFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          entityType: 'ASSET',
+          entityId: 'asset-1',
+          fileType: {
+            notIn: ['GENERATED_DOCUMENT_PDF', 'EVIDENCIA_HOROMETRO'],
+          },
+          id: { notIn: ['hour-evidence-1'] },
+          OR: [
+            { category: null },
+            { category: { not: 'EVIDENCIA_HOROMETRO' } },
+          ],
+        }),
+      }),
     );
   });
 });
