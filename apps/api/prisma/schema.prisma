@@ -61,6 +61,7 @@ enum DocumentType {
   ADJUSTMENT
   CUTOVER
   PROVIDER_RECEIPT
+  PROVIDER_PICKUP
 }
 
 enum DocumentStatus {
@@ -303,7 +304,8 @@ model Warehouse {
   assetsCurrent             Asset[]                  @relation("CurrentWarehouse")
   ledger                    StockLedger[]
   ledgerOwned               StockLedger[]            @relation("LedgerOwnerWarehouse")
-  documents                 Document[]
+  documents                 Document[]               @relation("DocumentWarehouse")
+  providerPickupDocuments   Document[]               @relation("ProviderPickupSourceWarehouse")
   ownerCompany              Owner                    @relation(fields: [ownerCompanyId], references: [id])
   internalCounters          AssetInternalCounter[]
   inventorySnapshotEntries  InventorySnapshotEntry[]
@@ -416,6 +418,7 @@ model Sku {
   assetSubfamily       AssetSubfamily?       @relation(fields: [assetSubfamilyId], references: [id])
   providerPrices       ProviderSkuPrice[]
   providerReceiptItems ProviderReceiptItem[]
+  providerPickupItems  ProviderPickupItem[]
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
@@ -487,6 +490,7 @@ model Asset {
   hourReadings         AssetHourReading[]
   maintenancePlans     MaintenancePlan[]
   providerReceiptItems ProviderReceiptItem[]
+  providerPickupItems  ProviderPickupItem[]
   assetFuelings        AssetFueling[]
   documentItemsAsParent DocumentItem[] @relation("DocumentItemComponentParentAsset")
 
@@ -712,6 +716,7 @@ model Document {
   consecutive        String?        @unique
   customerWorksiteId String?
   warehouseId        String?
+  providerWarehouseId String?
   createdBy          String
   docDate            DateTime       @default(now())
   notes              String?
@@ -744,7 +749,8 @@ model Document {
   customerFinalEmailedAt DateTime?
 
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
-  warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
+  warehouse        Warehouse?        @relation("DocumentWarehouse", fields: [warehouseId], references: [id])
+  providerWarehouse Warehouse?       @relation("ProviderPickupSourceWarehouse", fields: [providerWarehouseId], references: [id])
   creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
   items                      DocumentItem[]
@@ -754,8 +760,27 @@ model Document {
   emailDeliveries            DocumentEmailDelivery[]
   providerReceiptItems       ProviderReceiptItem[]     @relation("ProviderReceiptDocument")
   providerReceiptSourceItems ProviderReceiptItem[]     @relation("ProviderReceiptSourceDocument")
+  providerPickupItems        ProviderPickupItem[]
 
   @@index([providerSourceDocumentId])
+  @@index([providerWarehouseId])
+}
+
+model ProviderPickupItem {
+  id         String   @id @default(uuid())
+  documentId String
+  skuId      String?
+  assetId    String?
+  quantity   Decimal
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sku      Sku?     @relation(fields: [skuId], references: [id])
+  asset    Asset?   @relation(fields: [assetId], references: [id])
+
+  @@index([documentId])
+  @@index([skuId])
+  @@index([assetId])
 }
 
 model ProviderReceiptItem {

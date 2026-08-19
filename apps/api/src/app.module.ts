@@ -33,6 +33,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
 import { ProviderReturnsModule } from './provider-returns/provider-returns.module';
+import { ProviderPickupsModule } from './provider-pickups/provider-pickups.module';
 import { FuelModule } from './fuel/fuel.module';
 
 @Module({
@@ -70,6 +71,7 @@ import { FuelModule } from './fuel/fuel.module';
     NotificationsModule,
     MobilityGuidesModule,
     ProviderReturnsModule,
+    ProviderPickupsModule,
     FuelModule,
   ],
   controllers: [AppController],

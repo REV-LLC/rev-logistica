@@ -101,6 +101,12 @@ const sections: NavSection[] = [
             icon: IconBuildingWarehouse,
             roles: ["ADMIN", "OFFICE", "DRIVER"],
           },
+          {
+            href: "/inventory/provider-pickups",
+            label: "Recogidas en proveedor",
+            icon: IconArrowsShuffle,
+            roles: ["ADMIN", "OFFICE", "DRIVER"],
+          },
         ],
       },
       {
