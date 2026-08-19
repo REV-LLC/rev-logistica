@@ -248,6 +248,7 @@ export class DocumentsService {
       displayName?: string | null;
       sizeBytes?: number | null;
       expiresAt?: Date | null;
+      providerWarehouseId?: string | null;
     }>;
   }) {
     const chunks = this.chunkItems(
@@ -309,6 +310,7 @@ export class DocumentsService {
                   sizeBytes: file.sizeBytes ?? null,
                   expiresAt: file.expiresAt ?? null,
                   createdBy: document.createdBy,
+                  providerWarehouseId: file.providerWarehouseId ?? null,
                 })),
               });
             }
@@ -1616,6 +1618,93 @@ export class DocumentsService {
     );
   }
 
+  private async buildProviderRemissionRequirements(
+    document: {
+      type: DocumentType;
+      items: Array<{ condition: string | null; quantity: Prisma.Decimal | number | null }>;
+      files: Array<{ category: string | null; providerWarehouseId: string | null }>;
+    },
+  ) {
+    if (document.type !== DocumentType.REMISSION) {
+      return { required: false, providers: [], missingProviders: [] };
+    }
+
+    const itemSummaryByOwner = new Map<string, { itemCount: number; quantity: number }>();
+    document.items.forEach((item) => {
+      const ownerWarehouseId = item.condition?.trim();
+      if (!ownerWarehouseId) return;
+      const current = itemSummaryByOwner.get(ownerWarehouseId) ?? {
+        itemCount: 0,
+        quantity: 0,
+      };
+      current.itemCount += 1;
+      current.quantity += Math.max(0, Number(item.quantity ?? 1) || 1);
+      itemSummaryByOwner.set(ownerWarehouseId, current);
+    });
+
+    const ownerWarehouseIds = [...itemSummaryByOwner.keys()];
+    const providerWarehouses = ownerWarehouseIds.length
+      ? await this.prisma.warehouse.findMany({
+          where: { id: { in: ownerWarehouseIds }, type: 'ALLY' },
+          select: { id: true, name: true },
+        })
+      : [];
+    const uploadedProviderIds = new Set(
+      document.files
+        .filter((file) => file.category === 'COMPROBANTE_SALIDA_PROVEEDOR')
+        .flatMap((file) =>
+          file.providerWarehouseId ? [file.providerWarehouseId] : [],
+        ),
+    );
+    const providers = providerWarehouses.map((provider) => ({
+      providerWarehouseId: provider.id,
+      providerName: provider.name,
+      ...(itemSummaryByOwner.get(provider.id) ?? { itemCount: 0, quantity: 0 }),
+      documentUploaded: uploadedProviderIds.has(provider.id),
+    }));
+
+    return {
+      required: providers.length > 0,
+      providers,
+      missingProviders: providers.filter((provider) => !provider.documentUploaded),
+    };
+  }
+
+  async previewProviderRemissionRequirements(
+    type: DocumentType,
+    items: Array<{ ownerWarehouseId?: string; quantity?: number }>,
+  ) {
+    return this.buildProviderRemissionRequirements({
+      type,
+      items: items.map((item) => ({
+        condition: item.ownerWarehouseId ?? null,
+        quantity: item.quantity ?? 1,
+      })),
+      files: [],
+    });
+  }
+
+  async getProviderRemissionRequirements(
+    documentId: string,
+    requester: { role: Role; userId: string },
+  ) {
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: {
+        type: true,
+        createdBy: true,
+        items: { select: { condition: true, quantity: true } },
+        files: {
+          where: { category: 'COMPROBANTE_SALIDA_PROVEEDOR' },
+          select: { category: true, providerWarehouseId: true },
+        },
+      },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+    assertCanViewDocument(document, requester);
+    return this.buildProviderRemissionRequirements(document);
+  }
+
   async approveRequestDocument(documentId: string, userId: string) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
@@ -1643,6 +1732,7 @@ export class DocumentsService {
             objectKey: true,
             mimeType: true,
             sizeBytes: true,
+            providerWarehouseId: true,
             expiresAt: true,
             createdAt: true,
           },
@@ -1668,28 +1758,16 @@ export class DocumentsService {
     }
 
     if (document.type === DocumentType.REMISSION) {
-      const ownerWarehouseIds = [
-        ...new Set(
-          document.items
-            .map((item) => item.condition?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ];
-      const providerOwner = ownerWarehouseIds.length
-        ? await this.prisma.warehouse.findFirst({
-            where: { id: { in: ownerWarehouseIds }, type: 'ALLY' },
-            select: { id: true },
-          })
-        : null;
-      if (
-        providerOwner &&
-        !document.files.some(
-          (file) => file.category === 'COMPROBANTE_SALIDA_PROVEEDOR',
-        )
-      ) {
-        throw new BadRequestException(
-          'La remisión incluye equipos de proveedor y requiere la foto de la remisión física entregada por el proveedor',
-        );
+      const requirements = await this.buildProviderRemissionRequirements(document);
+      if (requirements.missingProviders.length) {
+        throw new BadRequestException({
+          code: 'PROVIDER_REMISSION_REQUIRED',
+          message:
+            requirements.missingProviders.length === 1
+              ? `La remisión incluye equipos de ${requirements.missingProviders[0].providerName} y requiere la foto de la remisión física entregada por ese proveedor`
+              : 'La remisión requiere una foto de la remisión física por cada proveedor incluido',
+          providers: requirements.missingProviders,
+        });
       }
     }
 

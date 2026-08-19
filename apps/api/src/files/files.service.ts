@@ -151,6 +151,38 @@ export class FilesService {
       }));
   }
 
+  async listProviderRemissions(providerWarehouseId: string) {
+    const provider = await this.prisma.warehouse.findUnique({
+      where: { id: providerWarehouseId },
+      select: { id: true, name: true, type: true, active: true },
+    });
+    if (!provider || provider.type !== 'ALLY') {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
+
+    const files = await this.prisma.fileObject.findMany({
+      where: {
+        providerWarehouseId,
+        category: 'COMPROBANTE_SALIDA_PROVEEDOR',
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        ...this.fileSelect,
+        document: {
+          select: {
+            id: true,
+            consecutive: true,
+            type: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    return { provider, files };
+  }
+
   async listEntityFiles(
     entityTypeInput: string,
     entityId: string,
@@ -193,6 +225,7 @@ export class FilesService {
       category?: string;
       displayName?: string;
       expiresAt?: string;
+      providerWarehouseId?: string;
     },
     user: { id: string; role: Role },
   ) {
@@ -209,6 +242,10 @@ export class FilesService {
     }
 
     const category = this.normalizeCategory(entityType, payload.category);
+    const providerWarehouseId = await this.resolveProviderWarehouseId(
+      category,
+      payload.providerWarehouseId,
+    );
     const expiresAt = this.parseOptionalDate(payload.expiresAt, 'expiresAt');
     files.forEach((file) => this.validateFile(file));
 
@@ -231,6 +268,7 @@ export class FilesService {
       expiresAt: Date | null;
       createdAt: Date;
       createdBy: string;
+      providerWarehouseId: string | null;
     }> = [];
     for (const file of files) {
       const extension =
@@ -248,6 +286,7 @@ export class FilesService {
             category,
             entityType,
             entityId,
+            ...(providerWarehouseId ? { providerWarehouseId } : {}),
           },
         }),
       );
@@ -269,6 +308,7 @@ export class FilesService {
           sizeBytes: file.size,
           expiresAt,
           createdBy: user.id,
+          providerWarehouseId,
         },
         select: this.fileSelect,
       });
@@ -424,7 +464,33 @@ export class FilesService {
     expiresAt: true,
     createdAt: true,
     createdBy: true,
+    providerWarehouseId: true,
   } as const;
+
+  private async resolveProviderWarehouseId(
+    category: string,
+    value?: string,
+  ) {
+    const providerWarehouseId = value?.trim() || null;
+    if (category !== 'COMPROBANTE_SALIDA_PROVEEDOR') {
+      return null;
+    }
+    if (!providerWarehouseId) {
+      throw new BadRequestException(
+        'La remisión física debe estar asociada a un proveedor',
+      );
+    }
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id: providerWarehouseId },
+      select: { id: true, type: true },
+    });
+    if (!warehouse || warehouse.type !== 'ALLY') {
+      throw new BadRequestException(
+        'La bodega asociada a la remisión física debe ser de tipo ALLY',
+      );
+    }
+    return warehouse.id;
+  }
 
   private normalizeEntityType(value: string): FileEntityType {
     const normalized = value.trim().toUpperCase() as FileEntityType;

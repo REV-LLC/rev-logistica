@@ -11,6 +11,7 @@ import {
   Group,
   Loader,
   Modal,
+  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -39,6 +40,7 @@ import { api } from '@/lib/api';
 
 type TaskStatus = 'OPEN' | 'DOING' | 'DONE';
 type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH';
+type TaskReminderUnit = 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS';
 
 type Task = {
   id: string;
@@ -46,6 +48,8 @@ type Task = {
   description?: string | null;
   priority?: TaskPriority | null;
   dueDate?: string | null;
+  reminderIntervalValue?: number | null;
+  reminderIntervalUnit?: TaskReminderUnit | null;
   status?: TaskStatus | null;
   assignedToUserId?: string | null;
   assignedToEmployeeId?: string | null;
@@ -99,6 +103,14 @@ const priorityOptions = [
   { value: 'LOW', label: 'Baja' },
   { value: 'MEDIUM', label: 'Media' },
   { value: 'HIGH', label: 'Alta' },
+];
+
+const reminderUnitOptions = [
+  { value: 'MINUTES', label: 'Minutos' },
+  { value: 'HOURS', label: 'Horas' },
+  { value: 'DAYS', label: 'Días' },
+  { value: 'WEEKS', label: 'Semanas' },
+  { value: 'MONTHS', label: 'Meses' },
 ];
 
 const statusFilterOptions = [{ value: 'ALL', label: 'Todas' }, ...statusOptions];
@@ -185,6 +197,9 @@ export default function TasksPage() {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('MEDIUM');
   const [dueDate, setDueDate] = useState('');
+  const [reminderIntervalValue, setReminderIntervalValue] = useState<number | ''>(1);
+  const [reminderIntervalUnit, setReminderIntervalUnit] =
+    useState<TaskReminderUnit>('DAYS');
   const [assignedToUserId, setAssignedToUserId] = useState<string | null>(null);
   const [assignedToEmployeeId, setAssignedToEmployeeId] = useState<string | null>(null);
 
@@ -307,6 +322,8 @@ export default function TasksPage() {
     setDescription('');
     setPriority('MEDIUM');
     setDueDate('');
+    setReminderIntervalValue(1);
+    setReminderIntervalUnit('DAYS');
     setAssignedToUserId(null);
     setAssignedToEmployeeId(null);
   };
@@ -319,7 +336,7 @@ export default function TasksPage() {
   const closeCreate = () => setCreating(false);
 
   const handleCreate = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || reminderIntervalValue === '') return;
     setSaving(true);
     setError(null);
     try {
@@ -330,6 +347,8 @@ export default function TasksPage() {
           description: description.trim() || undefined,
           priority,
           dueDate: dueDate || undefined,
+          reminderIntervalValue,
+          reminderIntervalUnit,
           assignedToUserId: assignedToUserId || undefined,
           assignedToEmployeeId: assignedToEmployeeId || undefined,
         },
@@ -700,6 +719,33 @@ export default function TasksPage() {
                 <Select label="Prioridad" value={priority} onChange={(value) => setPriority((value as TaskPriority) || 'MEDIUM')} data={priorityOptions} />
                 <TextInput label="Vence" type="date" value={dueDate} onChange={(event) => setDueDate(event.currentTarget.value)} />
               </SimpleGrid>
+              <div>
+                <Text fw={600} size="sm">Frecuencia del recordatorio por WhatsApp</Text>
+                <Text size="xs" c="dimmed">
+                  Mientras el pendiente siga abierto, se enviará un recordatorio con este intervalo.
+                </Text>
+              </div>
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <NumberInput
+                  label="Recordar cada"
+                  value={reminderIntervalValue}
+                  onChange={(value) =>
+                    setReminderIntervalValue(typeof value === 'number' ? value : '')
+                  }
+                  min={1}
+                  allowDecimal={false}
+                  required
+                />
+                <Select
+                  label="Unidad"
+                  value={reminderIntervalUnit}
+                  onChange={(value) =>
+                    setReminderIntervalUnit((value as TaskReminderUnit) || 'DAYS')
+                  }
+                  data={reminderUnitOptions}
+                  allowDeselect={false}
+                />
+              </SimpleGrid>
             </Stack>
           </Paper>
 
@@ -738,7 +784,11 @@ export default function TasksPage() {
             <Button variant="light" onClick={closeCreate} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleCreate} loading={saving} disabled={!title.trim()}>
+            <Button
+              onClick={handleCreate}
+              loading={saving}
+              disabled={!title.trim() || reminderIntervalValue === ''}
+            >
               Guardar
             </Button>
           </Group>

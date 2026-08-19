@@ -394,6 +394,49 @@ describe('NotificationsService', () => {
     ]);
   });
 
+  it('builds a new WhatsApp occurrence for every configured task interval', async () => {
+    const createdAt = new Date(Date.now() - 130 * 60 * 1000);
+    const topic = {
+      id: 'topic-recurring-task',
+      entityType: 'TASK',
+      entityId: 'task-recurring',
+      eventType: 'TASK_DUE',
+      recipients: [],
+    };
+    const prisma = {
+      notificationTopic: { findMany: jest.fn().mockResolvedValue([topic]) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([]) },
+      maintenanceItem: { findMany: jest.fn().mockResolvedValue([]) },
+      task: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'task-recurring',
+            title: 'Llamar al proveedor',
+            dueDate: null,
+            status: 'OPEN',
+            createdAt,
+            reminderIntervalValue: 1,
+            reminderIntervalUnit: 'HOURS',
+          },
+        ]),
+      },
+    };
+    const service = new NotificationsService(
+      prisma as any,
+      {} as any,
+      settings as any,
+    );
+
+    await expect(service.listReminders()).resolves.toEqual([
+      expect.objectContaining({
+        topicId: 'topic-recurring-task',
+        status: 'DUE',
+        occurrenceKey: `repeat:${createdAt.toISOString()}:2`,
+        message: expect.stringContaining('cada 1 hora'),
+      }),
+    ]);
+  });
+
   it('calculates daily asset maintenance from calendar dates', async () => {
     const baselineDate = new Date();
     baselineDate.setUTCHours(0, 0, 0, 0);

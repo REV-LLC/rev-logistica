@@ -108,6 +108,14 @@ enum TaskPriority {
   HIGH
 }
 
+enum TaskReminderUnit {
+  MINUTES
+  HOURS
+  DAYS
+  WEEKS
+  MONTHS
+}
+
 enum SyncOperationStatus {
   PROCESSING
   COMPLETED
@@ -302,6 +310,7 @@ model Warehouse {
   legacyWarehouseReferences LegacyWarehouse[]
   providerMobilityGuides    ProviderMobilityGuide[]
   providerSkuPrices         ProviderSkuPrice[]
+  providerRemissionFiles    FileObject[]             @relation("ProviderRemissionWarehouse")
 }
 
 model LegacyWarehouse {
@@ -655,18 +664,20 @@ model NotificationDelivery {
 }
 
 model Task {
-  id                   String       @id @default(uuid())
-  title                String
-  description          String?
-  bulkItemName         String?
-  status               TaskStatus   @default(OPEN)
-  priority             TaskPriority @default(MEDIUM)
-  dueDate              DateTime?
-  createdByUserId      String
-  assignedToUserId     String?
-  assignedToEmployeeId String?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  id                    String            @id @default(uuid())
+  title                 String
+  description           String?
+  bulkItemName          String?
+  status                TaskStatus        @default(OPEN)
+  priority              TaskPriority      @default(MEDIUM)
+  dueDate               DateTime?
+  reminderIntervalValue Int?
+  reminderIntervalUnit  TaskReminderUnit?
+  createdByUserId       String
+  assignedToUserId      String?
+  assignedToEmployeeId  String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
@@ -1148,24 +1159,26 @@ model EmployeeVehicle {
 }
 
 model FileObject {
-  id              String    @id @default(uuid())
-  documentId      String?
-  entityType      String?
-  entityId        String?
-  fileType        String // SIGNATURE | PHOTO | business document category
-  category        String?
-  displayName     String?
-  originalName    String?
-  storageKey      String
-  objectKey       String?
-  storageProvider String    @default("R2")
-  mimeType        String?
-  sizeBytes       Int?
-  expiresAt       DateTime?
-  createdAt       DateTime  @default(now())
-  createdBy       String
+  id                  String    @id @default(uuid())
+  documentId          String?
+  entityType          String?
+  entityId            String?
+  fileType            String // SIGNATURE | PHOTO | business document category
+  category            String?
+  displayName         String?
+  originalName        String?
+  storageKey          String
+  objectKey           String?
+  storageProvider     String    @default("R2")
+  mimeType            String?
+  sizeBytes           Int?
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
+  createdBy           String
+  providerWarehouseId String?
 
   document              Document?              @relation(fields: [documentId], references: [id])
+  providerWarehouse     Warehouse?             @relation("ProviderRemissionWarehouse", fields: [providerWarehouseId], references: [id], onDelete: SetNull)
   skuImages             Sku[]                  @relation("SkuImage")
   assetImages           Asset[]                @relation("AssetImage")
   mobilityGuide         MobilityGuide?
@@ -1175,5 +1188,6 @@ model FileObject {
   @@index([entityType, entityId])
   @@index([fileType])
   @@index([category])
+  @@index([providerWarehouseId, category, createdAt(sort: Desc)])
   @@index([expiresAt])
 }

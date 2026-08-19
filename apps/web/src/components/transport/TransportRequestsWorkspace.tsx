@@ -10,6 +10,7 @@ import {
   Checkbox,
   Container,
   Divider,
+  FileInput,
   Group,
   Modal,
   Paper,
@@ -118,6 +119,45 @@ type EvidencePhotoDraft = {
   id: string;
   file: File;
   previewUrl: string;
+};
+
+type ProviderRemissionRequirement = {
+  providerWarehouseId: string;
+  providerName: string;
+  itemCount: number;
+  quantity: number;
+  documentUploaded: boolean;
+};
+
+type ProviderRemissionRequirements = {
+  required: boolean;
+  providers: ProviderRemissionRequirement[];
+  missingProviders: ProviderRemissionRequirement[];
+};
+
+type ProviderRemissionModalState = {
+  mode: 'OPTIONAL' | 'REQUIRED';
+  requirements: ProviderRemissionRequirements;
+  documentId?: string;
+};
+
+const getMissingProvidersFromApprovalError = (
+  error: unknown,
+): ProviderRemissionRequirement[] | null => {
+  if (!(error instanceof ApiError) || !error.data || typeof error.data !== 'object') {
+    return null;
+  }
+
+  const response = error.data as Record<string, unknown>;
+  const payload =
+    response.message && typeof response.message === 'object'
+      ? (response.message as Record<string, unknown>)
+      : response;
+  if (payload.code !== 'PROVIDER_REMISSION_REQUIRED' || !Array.isArray(payload.providers)) {
+    return null;
+  }
+
+  return payload.providers as ProviderRemissionRequirement[];
 };
 
 const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
@@ -636,12 +676,21 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
   const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
-  const [alternateSourceDocument, setAlternateSourceDocument] = useState<EvidencePhotoDraft | null>(null);
+  const [providerRemissionDrafts, setProviderRemissionDrafts] = useState<
+    Record<string, EvidencePhotoDraft>
+  >({});
+  const [creationProviderRequirements, setCreationProviderRequirements] =
+    useState<ProviderRemissionRequirements | null>(null);
+  const [providerRemissionModal, setProviderRemissionModal] =
+    useState<ProviderRemissionModalState | null>(null);
+  const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
+  const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
+  const [checkingProviderRemissions, setCheckingProviderRemissions] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
-  const alternateSourceDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
+  const providerRemissionDraftsRef = useRef<Record<string, EvidencePhotoDraft>>({});
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
@@ -658,8 +707,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const sourceOwnerWarehouse = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId) ?? null;
   const isAlternateOwnerMode = sourceMode === 'warehouse' && sourceOwnerWarehouse?.type === 'ALLY';
   const useManualWarehouseCapture = sourceMode === 'warehouse' && isAlternateOwnerMode;
-  const requiresAlternateSourceDocument =
-    isDriverRole && docType === 'REMISSION' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
       warehouses.find((warehouse) => warehouse.type === 'OWN') ??
@@ -1013,11 +1060,16 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   }, []);
 
   useEffect(() => {
-    const previewUrl = alternateSourceDocument?.previewUrl;
+    providerRemissionDraftsRef.current = providerRemissionDrafts;
+  }, [providerRemissionDrafts]);
+
+  useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      Object.values(providerRemissionDraftsRef.current).forEach((draft) =>
+        URL.revokeObjectURL(draft.previewUrl),
+      );
     };
-  }, [alternateSourceDocument?.previewUrl]);
+  }, []);
 
   const addEvidencePhotos = (fileList: FileList | null) => {
     if (!fileList?.length) return;
@@ -1119,45 +1171,73 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     });
   };
 
-  const selectAlternateSourceDocument = (fileList: FileList | null) => {
-    const file = fileList?.[0];
-    if (!file) return;
-    setError(null);
+  const selectProviderRemissionDocument = (
+    providerWarehouseId: string,
+    file: File | null,
+  ) => {
+    setProviderRemissionError(null);
+    if (!file) {
+      setProviderRemissionDrafts((current) => {
+        const existing = current[providerWarehouseId];
+        if (existing) URL.revokeObjectURL(existing.previewUrl);
+        const next = { ...current };
+        delete next[providerWarehouseId];
+        return next;
+      });
+      return;
+    }
     if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
-      setError('El documento de la bodega debe ser una foto PNG, WEBP o JPEG.');
+      setProviderRemissionError('La remisión debe ser una foto PNG, WEBP o JPEG.');
       return;
     }
     if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
-      setError('La foto del documento de la bodega debe pesar maximo 10 MB.');
+      setProviderRemissionError('Cada foto de remisión debe pesar máximo 10 MB.');
       return;
     }
-    setAlternateSourceDocument({
-      id: `${file.name}-${file.lastModified}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
+    setProviderRemissionDrafts((current) => {
+      const existing = current[providerWarehouseId];
+      if (existing) URL.revokeObjectURL(existing.previewUrl);
+      return {
+        ...current,
+        [providerWarehouseId]: {
+          id: `${providerWarehouseId}-${file.name}-${file.lastModified}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        },
+      };
     });
-    if (alternateSourceDocumentInputRef.current) {
-      alternateSourceDocumentInputRef.current.value = '';
-    }
   };
 
-  const clearAlternateSourceDocument = () => {
-    setAlternateSourceDocument(null);
-    if (alternateSourceDocumentInputRef.current) {
-      alternateSourceDocumentInputRef.current.value = '';
-    }
+  const clearProviderRemissionDocuments = () => {
+    setProviderRemissionDrafts((current) => {
+      Object.values(current).forEach((draft) => URL.revokeObjectURL(draft.previewUrl));
+      return {};
+    });
+    setCreationProviderRequirements(null);
+    setProviderRemissionModal(null);
+    setProviderRemissionError(null);
   };
 
-  const uploadAlternateSourceDocument = async (documentId: string) => {
-    if (!alternateSourceDocument) return;
-    const formData = new FormData();
-    formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
-    formData.append('displayName', 'Remisión física entregada por el proveedor');
-    formData.append('files', alternateSourceDocument.file);
-    await api(`/files/entities/DOCUMENT/${documentId}`, {
-      method: 'POST',
-      body: formData,
+  const uploadProviderRemissionDocuments = async (
+    documentId: string,
+    providers: ProviderRemissionRequirement[],
+  ) => {
+    const uploads = providers.flatMap((provider) => {
+      const draft = providerRemissionDrafts[provider.providerWarehouseId];
+      if (!draft) return [];
+      const formData = new FormData();
+      formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
+      formData.append('displayName', `Remisión física de ${provider.providerName}`);
+      formData.append('providerWarehouseId', provider.providerWarehouseId);
+      formData.append('files', draft.file);
+      return [
+        api(`/files/entities/DOCUMENT/${documentId}`, {
+          method: 'POST',
+          body: formData,
+        }),
+      ];
     });
+    await Promise.all(uploads);
   };
 
   const handleApprovalError = (err: unknown) => {
@@ -1399,7 +1479,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setSerialItems([]);
     setFreeTagInput('');
     setFreeInternalNumber('');
-    clearAlternateSourceDocument();
+    clearProviderRemissionDocuments();
     setItemsModalOpen(false);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
@@ -1650,15 +1730,84 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setDecidingId(documentId);
     setRequestsError(null);
     try {
+      const requirements = await api<ProviderRemissionRequirements>(
+        `/documents/${documentId}/provider-remission-requirements`,
+        { method: 'GET' },
+      );
+      if (requirements.missingProviders.length) {
+        setProviderRemissionModal({
+          mode: 'REQUIRED',
+          requirements,
+          documentId,
+        });
+        setProviderRemissionError(null);
+        return false;
+      }
       await api(`/documents/${documentId}/decision`, {
         method: 'POST',
         json: { action: 'APPROVE' },
       });
       await loadRequests();
+      return true;
     } catch (err) {
+      const missingProviders = getMissingProvidersFromApprovalError(err);
+      if (missingProviders?.length) {
+        setProviderRemissionModal({
+          mode: 'REQUIRED',
+          requirements: {
+            required: true,
+            providers: missingProviders,
+            missingProviders,
+          },
+          documentId,
+        });
+        setProviderRemissionError(null);
+        return false;
+      }
       handleApprovalError(err);
+      return false;
     } finally {
       setDecidingId(null);
+    }
+  };
+
+  const uploadMissingProviderRemissionsAndApprove = async () => {
+    if (
+      providerRemissionModal?.mode !== 'REQUIRED' ||
+      !providerRemissionModal.documentId
+    ) {
+      return;
+    }
+    const missingProviders = providerRemissionModal.requirements.missingProviders;
+    const missingFile = missingProviders.find(
+      (provider) => !providerRemissionDrafts[provider.providerWarehouseId],
+    );
+    if (missingFile) {
+      setProviderRemissionError(
+        `Adjunta la remisión física de ${missingFile.providerName}.`,
+      );
+      return;
+    }
+
+    setProviderRemissionUploading(true);
+    setProviderRemissionError(null);
+    try {
+      await uploadProviderRemissionDocuments(
+        providerRemissionModal.documentId,
+        missingProviders,
+      );
+      const approved = await approveWithDecision(providerRemissionModal.documentId);
+      if (approved) clearProviderRemissionDocuments();
+    } catch (err) {
+      setProviderRemissionError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'No se pudieron subir las remisiones del proveedor.',
+      );
+    } finally {
+      setProviderRemissionUploading(false);
     }
   };
 
@@ -2206,7 +2355,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateStep('info');
     setReceivedSignature(null);
     clearEvidencePhotos();
-    clearAlternateSourceDocument();
+    clearProviderRemissionDocuments();
   };
 
   const editRequest = async (documentId: string, autosaved = false) => {
@@ -2397,9 +2546,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (!editingRequestId && !receivedSignature) {
         throw new Error('Captura la firma del cliente antes de enviar.');
       }
-      if (requiresAlternateSourceDocument && !alternateSourceDocument) {
-        throw new Error('Adjunta la foto del documento entregado por la bodega alterna.');
-      }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
       if (docType === 'RETURN' && !effectiveWarehouseId) {
         throw new Error('Selecciona la bodega para la devolucion.');
@@ -2447,7 +2593,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
           );
         }
-        if (evidencePhotos.length || alternateSourceDocument) {
+        if (evidencePhotos.length || Object.keys(providerRemissionDrafts).length) {
           throw new Error(
             'Los archivos y fotografías todavía requieren conexión. Retíralos o envía el documento cuando vuelva la red.',
           );
@@ -2528,7 +2674,10 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       try {
         await Promise.all([
           uploadEvidencePhotos(created.id),
-          uploadAlternateSourceDocument(created.id),
+          uploadProviderRemissionDocuments(
+            created.id,
+            creationProviderRequirements?.providers ?? [],
+          ),
         ]);
         if (!editingRequestId) {
           await api(`/documents/${created.id}/customer-email/draft`, {
@@ -2624,13 +2773,50 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateStep('items');
   };
 
-  const goToSignStep = () => {
+  const goToSignStep = async () => {
     setError(null);
     if (!selectedItems.length) {
       setError('Selecciona al menos un item.');
       return;
     }
-    setGenerateStep('sign');
+    if (docType !== 'REMISSION' || !navigator.onLine) {
+      setGenerateStep('sign');
+      return;
+    }
+
+    setCheckingProviderRemissions(true);
+    try {
+      const requirements = await api<ProviderRemissionRequirements>(
+        '/documents/requests/provider-remission-requirements',
+        {
+          method: 'POST',
+          json: {
+            type: docType,
+            items: selectedItems.map((item) => ({
+              ...(item.ownerWarehouseId
+                ? { ownerWarehouseId: item.ownerWarehouseId }
+                : {}),
+              quantity: item.type === 'serial' ? 1 : Number(item.quantity ?? 1) || 1,
+            })),
+          },
+        },
+      );
+      setCreationProviderRequirements(requirements);
+      if (requirements.missingProviders.length) {
+        setProviderRemissionModal({ mode: 'OPTIONAL', requirements });
+        setProviderRemissionError(null);
+        return;
+      }
+      setGenerateStep('sign');
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : 'No se pudo validar si los items requieren remisión de proveedor.',
+      );
+    } finally {
+      setCheckingProviderRemissions(false);
+    }
   };
 
   const handleGenerateStepChange = (value: string | null) => {
@@ -2639,7 +2825,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return;
     }
     if (value === 'sign') {
-      goToSignStep();
+      void goToSignStep();
       return;
     }
     setGenerateStep('info');
@@ -3274,7 +3460,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 onChange={(value) => {
                   setSourceOwnerWarehouseId(value);
                   const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
-                  if (nextWarehouse?.type !== 'ALLY') clearAlternateSourceDocument();
+                  if (nextWarehouse?.type !== 'ALLY') setCreationProviderRequirements(null);
                 }}
                 warehouses={warehouses}
                 clearable
@@ -3312,54 +3498,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 />
                 <Button onClick={addFreeItem}>Agregar item</Button>
               </Group>
-              {requiresAlternateSourceDocument ? (
-                <Paper withBorder radius="md" p="sm">
-                  <Stack gap="xs">
-                    <div>
-                      <Text fw={700}>Remisión física del proveedor *</Text>
-                      <Text size="sm" c="dimmed">
-                        Foto legible del documento entregado por el proveedor. Se guarda separada de las evidencias del cliente.
-                      </Text>
-                    </div>
-                    <input
-                      ref={alternateSourceDocumentInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      capture="environment"
-                      onChange={(event) => selectAlternateSourceDocument(event.currentTarget.files)}
-                      style={{ display: 'none' }}
-                    />
-                    <Group align="flex-start" wrap="wrap">
-                      <Button
-                        type="button"
-                        variant="light"
-                        leftSection={<IconCamera size={16} />}
-                        onClick={() => alternateSourceDocumentInputRef.current?.click()}
-                      >
-                        {alternateSourceDocument ? 'Cambiar foto' : 'Tomar / adjuntar foto'}
-                      </Button>
-                      {alternateSourceDocument ? (
-                        <Button type="button" variant="subtle" color="red" onClick={clearAlternateSourceDocument}>
-                          Quitar
-                        </Button>
-                      ) : null}
-                    </Group>
-                    {alternateSourceDocument ? (
-                      <img
-                        src={alternateSourceDocument.previewUrl}
-                        alt="Remisión física entregada por el proveedor"
-                        style={{
-                          width: '100%',
-                          maxWidth: 320,
-                          aspectRatio: '4 / 3',
-                          objectFit: 'cover',
-                          borderRadius: 8,
-                        }}
-                      />
-                    ) : null}
-                  </Stack>
-                </Paper>
-              ) : null}
             </Stack>
           ) : null}
 
@@ -3491,7 +3629,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
               Volver a info
             </Button>
-            <Button onClick={goToSignStep}>Siguiente: Firma</Button>
+            <Button onClick={() => void goToSignStep()} loading={checkingProviderRemissions}>
+              Siguiente: Firma
+            </Button>
           </Group>
         </Paper>
         ) : null}
@@ -3857,6 +3997,139 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         ) : null}
         </Stack>
       </Container>
+
+      <Modal
+        opened={Boolean(providerRemissionModal)}
+        onClose={() => {
+          if (providerRemissionUploading) return;
+          setProviderRemissionModal(null);
+          setProviderRemissionError(null);
+        }}
+        title={
+          providerRemissionModal?.mode === 'REQUIRED'
+            ? 'Remisión física requerida'
+            : 'Remisiones de proveedores detectadas'
+        }
+        centered
+        size="lg"
+        closeOnClickOutside={!providerRemissionUploading}
+        closeOnEscape={!providerRemissionUploading}
+      >
+        <Stack gap="md">
+          <Alert
+            color={providerRemissionModal?.mode === 'REQUIRED' ? 'orange' : 'blue'}
+            variant="light"
+          >
+            {providerRemissionModal?.mode === 'REQUIRED'
+              ? 'No puedes aprobar esta solicitud hasta adjuntar una remisión física por cada proveedor pendiente.'
+              : 'Puedes adjuntar las remisiones ahora o continuar y dejar que Office las complete antes de aprobar.'}
+          </Alert>
+
+          {(providerRemissionModal?.requirements.missingProviders ?? []).map((provider) => {
+            const draft = providerRemissionDrafts[provider.providerWarehouseId];
+            return (
+              <Paper key={provider.providerWarehouseId} withBorder radius="md" p="md">
+                <Stack gap="sm">
+                  <div>
+                    <Text fw={700}>{provider.providerName}</Text>
+                    <Text size="sm" c="dimmed">
+                      Tienes {provider.quantity} item{provider.quantity === 1 ? '' : 's'} de este proveedor
+                      {provider.itemCount !== provider.quantity
+                        ? ` en ${provider.itemCount} línea${provider.itemCount === 1 ? '' : 's'}`
+                        : ''}.
+                    </Text>
+                  </div>
+                  <FileInput
+                    label={`Remisión física de ${provider.providerName}`}
+                    placeholder="Tomar o seleccionar foto"
+                    accept="image/png,image/jpeg,image/webp"
+                    capture="environment"
+                    clearable
+                    value={draft?.file ?? null}
+                    onChange={(file) =>
+                      selectProviderRemissionDocument(
+                        provider.providerWarehouseId,
+                        file,
+                      )
+                    }
+                    leftSection={<IconCamera size={16} />}
+                  />
+                  {draft ? (
+                    <img
+                      src={draft.previewUrl}
+                      alt={`Remisión física de ${provider.providerName}`}
+                      style={{
+                        width: '100%',
+                        maxWidth: 360,
+                        aspectRatio: '4 / 3',
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : null}
+                </Stack>
+              </Paper>
+            );
+          })}
+
+          {providerRemissionError ? (
+            <Alert color="red" variant="light">
+              {providerRemissionError}
+            </Alert>
+          ) : null}
+
+          <Group justify="flex-end" className="mobile-actions">
+            {providerRemissionModal?.mode === 'OPTIONAL' ? (
+              <>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                    setGenerateStep('sign');
+                  }}
+                >
+                  Omitir por ahora
+                </Button>
+                <Button
+                  disabled={
+                    !providerRemissionModal.requirements.missingProviders.some(
+                      (provider) =>
+                        Boolean(providerRemissionDrafts[provider.providerWarehouseId]),
+                    )
+                  }
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                    setGenerateStep('sign');
+                  }}
+                >
+                  Guardar fotos y continuar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="default"
+                  disabled={providerRemissionUploading}
+                  onClick={() => {
+                    setProviderRemissionModal(null);
+                    setProviderRemissionError(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  loading={providerRemissionUploading}
+                  onClick={() => void uploadMissingProviderRemissionsAndApprove()}
+                >
+                  Subir y aprobar
+                </Button>
+              </>
+            )}
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={signatureModalOpen}

@@ -4,14 +4,21 @@ const LOCAL_BYPASS_PAYLOAD =
   'eyJzdWIiOiJsb2NhbC1hdXRoLWJ5cGFzcyIsImVtYWlsIjoidXNlcjFAZHVtbXkubG9jYWwiLCJyb2xlIjoiQURNSU4ifQ';
 const LOCAL_BYPASS_TOKEN = `local.${LOCAL_BYPASS_PAYLOAD}.bypass`;
 
-export function isLocalAuthBypassEnabled() {
-  return (
+export function isAuthBypassEnabled() {
+  const deploymentEnvironment = process.env.NEXT_PUBLIC_DEPLOYMENT_ENV?.trim().toLowerCase();
+  if (deploymentEnvironment === 'production') return false;
+
+  const localBypass =
     process.env.NODE_ENV !== 'production' &&
     (
       process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true' ||
       process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS === 'true'
-    )
-  );
+    );
+  const deployedBypass =
+    Boolean(deploymentEnvironment)
+    && process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true';
+
+  return localBypass || deployedBypass;
 }
 
 export type JwtPayload = {
@@ -40,7 +47,7 @@ function parseJwtPayload(token: string): JwtPayload | null {
 }
 
 export function getToken() {
-  if (isLocalAuthBypassEnabled()) return LOCAL_BYPASS_TOKEN;
+  if (isAuthBypassEnabled()) return LOCAL_BYPASS_TOKEN;
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -126,7 +133,7 @@ export function getPostLoginDestination(requestedPath: string | null, role: AppR
 }
 
 export function getCurrentUserRole(): AppRole | null {
-  if (isLocalAuthBypassEnabled()) return 'ADMIN';
+  if (isAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
   if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR') return role;
@@ -134,8 +141,12 @@ export function getCurrentUserRole(): AppRole | null {
 }
 
 export function getCurrentUserSession(): JwtPayload | null {
-  if (isLocalAuthBypassEnabled()) {
-    return { email: 'user1@dummy.local', role: 'ADMIN' };
+  if (isAuthBypassEnabled()) {
+    return {
+      name: 'Entorno de prueba',
+      email: 'staging-auth-bypass@rev.invalid',
+      role: 'ADMIN',
+    };
   }
   return getTokenPayload();
 }

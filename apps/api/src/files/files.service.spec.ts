@@ -1,5 +1,10 @@
 import { ForbiddenException } from '@nestjs/common';
-import { DocumentStatus, DocumentType, Role } from '@prisma/client';
+import {
+  DocumentStatus,
+  DocumentType,
+  Role,
+  WarehouseType,
+} from '@prisma/client';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from './files.service';
@@ -47,6 +52,73 @@ describe('FilesService categories', () => {
   it('devuelve en español los errores de categorías inválidas', () => {
     expect(() => service.getCategories('TIPO_DESCONOCIDO')).toThrow(
       'El tipo de entidad del archivo no es válido',
+    );
+  });
+});
+
+describe('FilesService provider remission links', () => {
+  const warehouseFindUnique = jest.fn();
+  const fileFindMany = jest.fn();
+  const service = new FilesService(
+    {
+      warehouse: { findUnique: warehouseFindUnique },
+      fileObject: { findMany: fileFindMany },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+  const resolveProviderWarehouseId = (value?: string) =>
+    (
+      service as unknown as {
+        resolveProviderWarehouseId: (
+          category: string,
+          value?: string,
+        ) => Promise<string | null>;
+      }
+    ).resolveProviderWarehouseId('COMPROBANTE_SALIDA_PROVEEDOR', value);
+
+  beforeEach(() => {
+    warehouseFindUnique.mockReset();
+    fileFindMany.mockReset();
+  });
+
+  it('requires a provider for a physical provider remission', async () => {
+    await expect(resolveProviderWarehouseId()).rejects.toThrow(
+      'La remisión física debe estar asociada a un proveedor',
+    );
+  });
+
+  it('accepts only ALLY warehouses as providers', async () => {
+    warehouseFindUnique.mockResolvedValue({
+      id: 'warehouse-own',
+      type: WarehouseType.OWN,
+    });
+
+    await expect(resolveProviderWarehouseId('warehouse-own')).rejects.toThrow(
+      'debe ser de tipo ALLY',
+    );
+  });
+
+  it('lists remissions linked to one provider', async () => {
+    warehouseFindUnique.mockResolvedValue({
+      id: 'provider-1',
+      name: 'Proveedor 1',
+      type: WarehouseType.ALLY,
+      active: true,
+    });
+    fileFindMany.mockResolvedValue([{ id: 'file-1' }]);
+
+    await expect(service.listProviderRemissions('provider-1')).resolves.toEqual({
+      provider: expect.objectContaining({ id: 'provider-1' }),
+      files: [{ id: 'file-1' }],
+    });
+    expect(fileFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          providerWarehouseId: 'provider-1',
+          category: 'COMPROBANTE_SALIDA_PROVEEDOR',
+        },
+      }),
     );
   });
 });

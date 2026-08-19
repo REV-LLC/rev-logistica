@@ -41,6 +41,14 @@ export class FilesController {
     return this.filesService.getCategories(entityType);
   }
 
+  @Get('provider-warehouses/:providerWarehouseId/remissions')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  listProviderRemissions(
+    @Param('providerWarehouseId', new ParseUUIDPipe()) providerWarehouseId: string,
+  ) {
+    return this.filesService.listProviderRemissions(providerWarehouseId);
+  }
+
   @Get('entities/:entityType/:entityId')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   listEntityFiles(
@@ -65,7 +73,12 @@ export class FilesController {
   uploadEntityFiles(
     @Param('entityType') entityType: string,
     @Param('entityId', new ParseUUIDPipe()) entityId: string,
-    @Body() body: { category?: string; displayName?: string; expiresAt?: string },
+    @Body() body: {
+      category?: string;
+      displayName?: string;
+      expiresAt?: string;
+      providerWarehouseId?: string;
+    },
     @UploadedFiles() files: UploadedBusinessFile[] | undefined,
     @Req() request: Request & { user: JwtPayload },
   ) {
