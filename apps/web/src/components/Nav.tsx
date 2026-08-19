@@ -283,6 +283,12 @@ const sections: NavSection[] = [
         icon: IconSettings,
         roles: ["ADMIN"],
       },
+      {
+        href: "/settings/asset-components",
+        label: "Componentes de equipos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];

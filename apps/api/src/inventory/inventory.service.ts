@@ -2147,7 +2147,7 @@ export class InventoryService {
             size: true,
             areaM2: true,
             unitWeight: true,
-            assetFamily: { select: { code: true, name: true, controlType: true } },
+            assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
           },
         })
       : [];
@@ -2180,6 +2180,7 @@ export class InventoryService {
           ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId.toLowerCase()) ?? null,
           skuName: sku?.name ?? null,
           category: sku?.assetFamily?.name ?? null,
+          assetFamilyId: sku?.assetFamily?.id ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
@@ -2229,7 +2230,9 @@ export class InventoryService {
             asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
           assignedMotorId: asset?.assignedMotorId ?? null,
           assignedMixerId: asset?.assignedToMixer?.id ?? null,
-          assetFamily: sku?.assetFamily ? { code: sku.assetFamily.code, name: sku.assetFamily.name } : null,
+          assetFamily: sku?.assetFamily
+            ? { id: sku.assetFamily.id, code: sku.assetFamily.code, name: sku.assetFamily.name }
+            : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },
           assetImageFileObjectId,

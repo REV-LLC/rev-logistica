@@ -186,6 +186,158 @@ export class AssetsService {
     });
   }
 
+  private componentRuleSelect() {
+    return {
+      id: true,
+      parentAssetFamilyId: true,
+      componentAssetFamilyId: true,
+      required: true,
+      minimumQuantity: true,
+      maximumQuantity: true,
+      sortOrder: true,
+      active: true,
+      parentAssetFamily: {
+        select: { id: true, code: true, name: true, controlType: true },
+      },
+      componentAssetFamily: {
+        select: { id: true, code: true, name: true, controlType: true },
+      },
+    } as const;
+  }
+
+  listAssetFamilyComponents() {
+    return this.prisma.assetFamilyComponent.findMany({
+      select: this.componentRuleSelect(),
+      orderBy: [
+        { parentAssetFamily: { name: 'asc' } },
+        { sortOrder: 'asc' },
+        { componentAssetFamily: { name: 'asc' } },
+      ],
+    });
+  }
+
+  private validateComponentQuantities(payload: {
+    required?: boolean;
+    minimumQuantity?: number;
+    maximumQuantity?: number | null;
+  }) {
+    const minimum = payload.minimumQuantity ?? (payload.required ? 1 : 0);
+    if (payload.maximumQuantity != null && payload.maximumQuantity < minimum) {
+      throw new BadRequestException(
+        'maximumQuantity must be greater than or equal to minimumQuantity',
+      );
+    }
+    return minimum;
+  }
+
+  async createAssetFamilyComponent(
+    parentAssetFamilyId: string,
+    payload: {
+      componentAssetFamilyId: string;
+      required?: boolean;
+      minimumQuantity?: number;
+      maximumQuantity?: number | null;
+      sortOrder?: number;
+      active?: boolean;
+    },
+  ) {
+    if (parentAssetFamilyId === payload.componentAssetFamilyId) {
+      throw new BadRequestException('A family cannot be its own component');
+    }
+    const familyCount = await this.prisma.assetFamily.count({
+      where: { id: { in: [parentAssetFamilyId, payload.componentAssetFamilyId] } },
+    });
+    if (familyCount !== 2) {
+      throw new NotFoundException('Parent or component asset family not found');
+    }
+    const minimumQuantity = this.validateComponentQuantities(payload);
+    try {
+      return await this.prisma.assetFamilyComponent.create({
+        data: { ...payload, parentAssetFamilyId, minimumQuantity },
+        select: this.componentRuleSelect(),
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('This component relationship already exists');
+      }
+      throw error;
+    }
+  }
+
+  async updateAssetFamilyComponent(
+    componentRuleId: string,
+    payload: {
+      componentAssetFamilyId: string;
+      required?: boolean;
+      minimumQuantity?: number;
+      maximumQuantity?: number | null;
+      sortOrder?: number;
+      active?: boolean;
+    },
+  ) {
+    const existing = await this.prisma.assetFamilyComponent.findUnique({
+      where: { id: componentRuleId },
+    });
+    if (!existing) throw new NotFoundException('Component relationship not found');
+    if (existing.parentAssetFamilyId === payload.componentAssetFamilyId) {
+      throw new BadRequestException('A family cannot be its own component');
+    }
+    const minimumQuantity = this.validateComponentQuantities({
+      ...payload,
+      minimumQuantity: payload.minimumQuantity ?? existing.minimumQuantity,
+      maximumQuantity:
+        payload.maximumQuantity === undefined
+          ? existing.maximumQuantity
+          : payload.maximumQuantity,
+    });
+    return this.prisma.assetFamilyComponent.update({
+      where: { id: componentRuleId },
+      data: { ...payload, minimumQuantity },
+      select: this.componentRuleSelect(),
+    });
+  }
+
+  async deleteAssetFamilyComponent(componentRuleId: string) {
+    const result = await this.prisma.assetFamilyComponent.deleteMany({
+      where: { id: componentRuleId },
+    });
+    if (!result.count) throw new NotFoundException('Component relationship not found');
+    return { deleted: true };
+  }
+
+  async getAssetComponentOptions(assetId: string) {
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      select: {
+        id: true,
+        sku: {
+          select: {
+            assetFamilyId: true,
+            assetFamily: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!asset) throw new NotFoundException('Asset not found');
+    const components = await this.prisma.assetFamilyComponent.findMany({
+      where: { parentAssetFamilyId: asset.sku.assetFamilyId, active: true },
+      select: this.componentRuleSelect(),
+      orderBy: [{ sortOrder: 'asc' }, { componentAssetFamily: { name: 'asc' } }],
+    });
+    return {
+      assetId: asset.id,
+      assetFamily: asset.sku.assetFamily,
+      components: components.map((rule) => ({
+        id: rule.id,
+        family: rule.componentAssetFamily,
+        required: rule.required,
+        minimumQuantity: rule.minimumQuantity,
+        maximumQuantity: rule.maximumQuantity,
+        sortOrder: rule.sortOrder,
+      })),
+    };
+  }
+
   async createAssetSubfamily(
     assetFamilyId: string,
     payload: { name: string; code?: string },

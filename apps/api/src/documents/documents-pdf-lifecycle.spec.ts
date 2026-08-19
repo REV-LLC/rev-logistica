@@ -87,6 +87,18 @@ describe('DocumentsService PDF lifecycle', () => {
       warehouse: {
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      asset: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'asset-1',
+            motorConfiguration: 'NONE',
+            assignedMotorId: null,
+            sku: { name: 'Equipo', assetFamilyId: 'family-1' },
+          },
+        ]),
+      },
+      sku: { findMany: jest.fn().mockResolvedValue([]) },
+      assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const inventory = {
       moveOut: jest.fn().mockResolvedValue({ ok: true }),

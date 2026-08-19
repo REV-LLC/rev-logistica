@@ -26,6 +26,10 @@ class UpdateDocumentRequestItemDto {
 
   @IsOptional()
   @IsUUID()
+  componentParentAssetId?: string;
+
+  @IsOptional()
+  @IsUUID()
   ownerWarehouseId?: string;
 
   @IsOptional()

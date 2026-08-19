@@ -123,6 +123,12 @@ export class AssetsController {
     return this.assetsService.getAssetLocation(assetId);
   }
 
+  @Get(':assetId/component-options')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getComponentOptions(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
+    return this.assetsService.getAssetComponentOptions(assetId);
+  }
+
   @Delete(':assetId')
   @Roles(Role.ADMIN, Role.OFFICE)
   deleteAsset(@Param('assetId', new ParseUUIDPipe()) assetId: string) {

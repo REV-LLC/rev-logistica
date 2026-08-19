@@ -66,6 +66,7 @@ type DocumentDetail = {
     id: string;
     skuId?: string | null;
     assetId?: string | null;
+    componentParentAssetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;
     conditionNote?: string | null;
@@ -1096,6 +1097,7 @@ export default function DocumentDetailPage() {
         if (item.assetId) {
           return {
             assetId: item.assetId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             conditionNote: item.conditionNote ?? undefined,
           };
@@ -1105,6 +1107,7 @@ export default function DocumentDetailPage() {
           if (existingSku?.controlType === 'SERIAL') {
             return {
               assetId: resolveAssetByIndex[index],
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
               requestedTag: item.requestedTag ?? undefined,
               conditionNote: item.conditionNote ?? undefined,
@@ -1114,6 +1117,7 @@ export default function DocumentDetailPage() {
         if (item.skuId) {
           return {
             skuId: item.skuId,
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             quantity: Number(item.quantity ?? 1) || 1,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
@@ -1125,6 +1129,7 @@ export default function DocumentDetailPage() {
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
             assetId: resolveAssetByIndex[index],
+            componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
             conditionNote: item.conditionNote ?? undefined,
@@ -1132,6 +1137,7 @@ export default function DocumentDetailPage() {
         }
         return {
           skuId: resolvedSkuId,
+          componentParentAssetId: item.componentParentAssetId ?? undefined,
           quantity: Number(item.quantity ?? 1) || 1,
           ownerWarehouseId,
           requestedTag: item.requestedTag ?? undefined,

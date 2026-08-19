@@ -28,12 +28,14 @@ export type InventoryItemPickerBulkItem = {
   ownerWarehouseId: string | null;
   ownerWarehouseName?: string | null;
   quantity: number;
+  assetFamilyId?: string | null;
 };
 
 export type InventoryItemPickerSerialItem = SerialAssetCardItem & {
   quantity: number;
   skuId?: string | null;
   ownerWarehouseId: string | null;
+  assetFamily?: { id?: string; code: string; name: string } | null;
 };
 
 type InventoryItemPickerModalProps = {

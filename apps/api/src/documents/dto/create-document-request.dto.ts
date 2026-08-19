@@ -27,6 +27,10 @@ class CreateDocumentRequestItemDto {
 
   @IsOptional()
   @IsUUID()
+  componentParentAssetId?: string;
+
+  @IsOptional()
+  @IsUUID()
   ownerWarehouseId?: string;
 
   @IsOptional()

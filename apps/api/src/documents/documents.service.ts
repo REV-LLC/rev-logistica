@@ -177,6 +177,7 @@ export class DocumentsService {
     items: Array<{
       skuId: string | null;
       assetId: string | null;
+      componentParentAssetId?: string | null;
       quantity: Prisma.Decimal | null;
       requestedTag: string | null;
       condition: string | null;
@@ -194,6 +195,7 @@ export class DocumentsService {
       documentId,
       skuId: item.skuId ?? null,
       assetId: item.assetId ?? null,
+      componentParentAssetId: item.componentParentAssetId ?? null,
       quantity: item.quantity ?? (item.skuId ? 1 : null),
       requestedTag: item.requestedTag?.trim() || null,
       condition: item.condition?.trim() || null,
@@ -224,6 +226,7 @@ export class DocumentsService {
       id: string;
       skuId: string | null;
       assetId: string | null;
+      componentParentAssetId: string | null;
       quantity: Prisma.Decimal | null;
       requestedTag: string | null;
       condition: string | null;
@@ -340,6 +343,7 @@ export class DocumentsService {
       items: Array<{
         skuId: string | null;
         assetId: string | null;
+        componentParentAssetId: string | null;
         quantity: Prisma.Decimal | null;
         condition: string | null;
         requestedTag?: string | null;
@@ -348,6 +352,7 @@ export class DocumentsService {
     userId: string,
   ) {
     const items = await this.mapDocumentItemsToMovementItems(document.items);
+    await this.validateDocumentComponentRelations(document.items);
 
     if (document.type === DocumentType.REMISSION) {
       const assetIds = items
@@ -624,6 +629,7 @@ export class DocumentsService {
     items: Array<{
       skuId?: string;
       assetId?: string;
+      componentParentAssetId?: string;
       ownerWarehouseId?: string;
       quantity?: number;
       requestedTag?: string;
@@ -672,6 +678,7 @@ export class DocumentsService {
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
                 condition: item.ownerWarehouseId ?? null,
@@ -758,6 +765,7 @@ export class DocumentsService {
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
                 condition: item.ownerWarehouseId ?? null,
@@ -862,6 +870,7 @@ export class DocumentsService {
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
               condition: item.ownerWarehouseId ?? null,
@@ -965,6 +974,7 @@ export class DocumentsService {
       items: Array<{
         skuId?: string;
         assetId?: string;
+        componentParentAssetId?: string;
         ownerWarehouseId?: string;
         quantity?: number;
         requestedTag?: string;
@@ -1067,6 +1077,7 @@ export class DocumentsService {
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
               condition: item.ownerWarehouseId ?? null,
@@ -1346,6 +1357,128 @@ export class DocumentsService {
     const [, modeRaw = ''] = entry.split(':');
     const mode = modeRaw.trim().toUpperCase();
     return mode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE';
+  }
+
+  private async validateDocumentComponentRelations(
+    items: Array<{
+      skuId: string | null;
+      assetId: string | null;
+      componentParentAssetId?: string | null;
+      quantity: Prisma.Decimal | null;
+    }>,
+  ) {
+    const componentItems = items.filter((item) => item.componentParentAssetId);
+    const selectedAssetIds = new Set(
+      items
+        .map((item) => item.assetId)
+        .filter((value): value is string => Boolean(value)),
+    );
+    if (!selectedAssetIds.size) return;
+    const parentIds = [
+      ...new Set(componentItems.map((item) => item.componentParentAssetId as string)),
+    ];
+    const missingParent = parentIds.find((id) => !selectedAssetIds.has(id));
+    if (missingParent) {
+      throw new BadRequestException(
+        'Todo componente debe referenciar un equipo principal incluido en el documento',
+      );
+    }
+
+    const childAssetIds = componentItems
+      .map((item) => item.assetId)
+      .filter((value): value is string => Boolean(value));
+    const directSkuIds = componentItems
+      .map((item) => item.skuId)
+      .filter((value): value is string => Boolean(value));
+    const [assets, skus] = await Promise.all([
+      this.prisma.asset.findMany({
+        where: { id: { in: [...new Set([...selectedAssetIds, ...parentIds, ...childAssetIds])] } },
+        select: { id: true, sku: { select: { assetFamilyId: true } } },
+      }),
+      this.prisma.sku.findMany({
+        where: { id: { in: [...new Set(directSkuIds)] } },
+        select: { id: true, assetFamilyId: true },
+      }),
+    ]);
+    const assetFamilyByAssetId = new Map(
+      assets.map((asset) => [asset.id, asset.sku.assetFamilyId]),
+    );
+    const familyBySkuId = new Map(skus.map((sku) => [sku.id, sku.assetFamilyId]));
+    const pairs = componentItems.map((item) => {
+      const parentFamilyId = assetFamilyByAssetId.get(item.componentParentAssetId as string);
+      const componentFamilyId = item.assetId
+        ? assetFamilyByAssetId.get(item.assetId)
+        : item.skuId
+          ? familyBySkuId.get(item.skuId)
+          : undefined;
+      if (!parentFamilyId || !componentFamilyId) {
+        throw new BadRequestException('No se pudo resolver la familia de un componente');
+      }
+      return { item, parentFamilyId, componentFamilyId };
+    });
+
+    const selectedParentFamilyIds = [
+      ...new Set(
+        [...selectedAssetIds]
+          .map((assetId) => assetFamilyByAssetId.get(assetId))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const rules = await this.prisma.assetFamilyComponent.findMany({
+      where: {
+        active: true,
+        parentAssetFamilyId: { in: selectedParentFamilyIds },
+      },
+    });
+    const ruleByPair = new Map(
+      rules.map((rule) => [
+        `${rule.parentAssetFamilyId}:${rule.componentAssetFamilyId}`,
+        rule,
+      ]),
+    );
+    const quantities = new Map<string, number>();
+    pairs.forEach(({ item, parentFamilyId, componentFamilyId }) => {
+      const ruleKey = `${parentFamilyId}:${componentFamilyId}`;
+      if (!ruleByPair.has(ruleKey)) {
+        throw new BadRequestException(
+          'Uno de los componentes no está permitido para la familia del equipo principal',
+        );
+      }
+      const quantity = item.assetId ? 1 : Number(item.quantity ?? 0);
+      const totalKey = `${item.componentParentAssetId}:${componentFamilyId}`;
+      quantities.set(totalKey, (quantities.get(totalKey) ?? 0) + quantity);
+    });
+    quantities.forEach((quantity, key) => {
+      const [, componentFamilyId] = key.split(':');
+      const parentAssetId = key.slice(0, -(componentFamilyId.length + 1));
+      const parentFamilyId = assetFamilyByAssetId.get(parentAssetId);
+      const rule = ruleByPair.get(`${parentFamilyId}:${componentFamilyId}`);
+      if (!rule) return;
+      if (quantity < rule.minimumQuantity) {
+        throw new BadRequestException(
+          `La cantidad del componente debe ser al menos ${rule.minimumQuantity}`,
+        );
+      }
+      if (rule.maximumQuantity != null && quantity > rule.maximumQuantity) {
+        throw new BadRequestException(
+          `La cantidad del componente no puede superar ${rule.maximumQuantity}`,
+        );
+      }
+    });
+    selectedAssetIds.forEach((assetId) => {
+      const parentFamilyId = assetFamilyByAssetId.get(assetId);
+      if (!parentFamilyId) return;
+      rules
+        .filter((rule) => rule.parentAssetFamilyId === parentFamilyId && rule.required)
+        .forEach((rule) => {
+          const quantity = quantities.get(`${assetId}:${rule.componentAssetFamilyId}`) ?? 0;
+          if (quantity < rule.minimumQuantity) {
+            throw new BadRequestException(
+              `El equipo requiere al menos ${rule.minimumQuantity} componente(s) de ${rule.componentAssetFamilyId}`,
+            );
+          }
+        });
+    });
   }
 
   private async mapDocumentItemsToMovementItems(
