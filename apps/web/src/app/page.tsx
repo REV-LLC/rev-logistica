@@ -8,7 +8,7 @@ import {
   IconTruck,
 } from '@tabler/icons-react';
 import ResponsiveShell from '@/components/ResponsiveShell';
-import styles from './design-lab/home/home-preview.module.css';
+import styles from './home-preview.module.css';
 
 type Role = 'admin' | 'office' | 'driver' | 'operator';
 
