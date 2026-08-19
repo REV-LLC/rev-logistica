@@ -44,6 +44,7 @@ import {
   getWorksiteQuantityDelta,
   WORKSITE_BALANCE_MOVEMENT_TYPES,
 } from './worksite-ledger-balance';
+import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
 import {
   projectInventoryForRequest,
   type BulkInventoryRow,
@@ -760,9 +761,9 @@ export class InventoryService {
       const currentRows = await tx.stockLedger.groupBy({
         by: ['skuId'],
         where: {
+          ...physicalWarehouseLedgerWhere(payload.warehouseId),
           skuId: payload.skuId,
           ownerWarehouseId: payload.ownerWarehouseId,
-          warehouseId: payload.warehouseId,
         },
         _sum: { quantity: true },
       });
@@ -971,8 +972,7 @@ export class InventoryService {
         const bulkRows = await tx.stockLedger.groupBy({
           by: ['skuId', 'ownerWarehouseId'],
           where: {
-            warehouseId: payload.warehouseId,
-            customerWorksiteId: null,
+            ...physicalWarehouseLedgerWhere(payload.warehouseId),
             skuId: { in: bulkSkuIds },
           },
           _sum: { quantity: true },
@@ -1005,8 +1005,7 @@ export class InventoryService {
         const serialRows = await tx.stockLedger.groupBy({
           by: ['assetId'],
           where: {
-            warehouseId: payload.warehouseId,
-            customerWorksiteId: null,
+            ...physicalWarehouseLedgerWhere(payload.warehouseId),
             assetId: { in: serialIds },
           },
           _sum: { quantity: true },
@@ -1645,7 +1644,7 @@ export class InventoryService {
     const bulkRows = await this.prisma.stockLedger.groupBy({
       by: ['skuId', 'ownerWarehouseId'],
       where: {
-        warehouseId,
+        ...physicalWarehouseLedgerWhere(warehouseId),
         skuId: { not: null },
       },
       _sum: { quantity: true },
@@ -1673,7 +1672,7 @@ export class InventoryService {
     const serialRows = await this.prisma.stockLedger.groupBy({
       by: ['assetId'],
       where: {
-        warehouseId,
+        ...physicalWarehouseLedgerWhere(warehouseId),
         assetId: { not: null },
       },
       _sum: { quantity: true },
