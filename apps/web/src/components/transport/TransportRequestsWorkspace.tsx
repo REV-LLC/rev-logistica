@@ -442,13 +442,13 @@ function buildRequestNotes({
   return [
     observations.trim() || null,
     `Fecha documento: ${docDate}`,
-    docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
+    `Entrega: ${deliveryMode}`,
     deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
-    docType === 'REMISSION' && deliveryMode === 'ON_SITE' && driverId
-      ? `Conductor: ${driverId}`
-      : null,
+    deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
     docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
-    deliveryMode === 'WAREHOUSE' && dispatcherId ? `Despachador: ${dispatcherId}` : null,
+    docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && dispatcherId
+      ? `Despachador: ${dispatcherId}`
+      : null,
   ]
     .filter(Boolean)
     .join(' | ');
@@ -2703,7 +2703,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         throw new Error('Tu usuario no esta vinculado a un empleado conductor.');
       }
       if (docType === 'RETURN' && !driverId) {
-        throw new Error('Selecciona el empleado de REV que recibe la devolución.');
+        throw new Error(
+          deliveryMode === 'ON_SITE'
+            ? 'Selecciona el conductor responsable de recoger la devolución.'
+            : 'Selecciona el empleado de REV que recibe la devolución.',
+        );
       }
       const damagedWithoutDescription = selectedItems.find(
         (item) => item.isDamaged && !item.damageDescription?.trim(),
@@ -2878,7 +2882,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       nextFieldErrors.driverId = 'Selecciona el conductor.';
     }
     if (docType === 'RETURN' && !driverId) {
-      nextFieldErrors.driverId = 'Selecciona quién recibe la devolución.';
+      nextFieldErrors.driverId = deliveryMode === 'ON_SITE'
+        ? 'Selecciona quién recoge la devolución.'
+        : 'Selecciona quién recibe la devolución.';
     }
     setGenerateFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -3376,30 +3382,45 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                   </Stack>
                 </Paper>
 
-              {docType === 'REMISSION' && (
-                <Paper withBorder radius="lg" p="md">
+              <Paper withBorder radius="lg" p="md">
                   <Stack gap="sm">
-                    <Text fw={800}>Modo de entrega</Text>
+                    <Text fw={800}>
+                      {docType === 'REMISSION' ? 'Modo de entrega' : 'Modo de devolución'}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      {docType === 'REMISSION'
+                        ? 'Indica si el cliente retira en bodega o REV transporta los equipos a la obra.'
+                        : 'Indica si el cliente entrega los equipos en bodega o REV los recoge en la obra.'}
+                    </Text>
                     <Radio.Group
                       value={deliveryMode}
                       onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
-                      label="Entrega"
+                      label={docType === 'REMISSION' ? 'Entrega' : 'Devolución'}
                     >
                       <Group mt="xs">
-                        <Radio value="WAREHOUSE" label="Despacho desde bodega" />
-                        <Radio value="ON_SITE" label="Entrega en obra" />
+                        <Radio
+                          value="WAREHOUSE"
+                          label={docType === 'REMISSION'
+                            ? 'Despacho desde bodega'
+                            : 'Cliente entrega en bodega'}
+                        />
+                        <Radio
+                          value="ON_SITE"
+                          label={docType === 'REMISSION' ? 'Entrega en obra' : 'Recogida en obra'}
+                        />
                       </Group>
                     </Radio.Group>
                   </Stack>
                 </Paper>
-              )}
 
                 <Paper withBorder radius="lg" p="md">
                   <Stack gap="md">
                     <div>
                       <Text fw={800}>Cliente, obra y responsables</Text>
                       <Text size="sm" c="dimmed">
-                        Selecciona el destino y quien responde por el despacho.
+                        {docType === 'REMISSION'
+                          ? 'Selecciona el destino y quién responde por el despacho.'
+                          : 'Selecciona el origen y quién recibe o recoge la devolución.'}
                       </Text>
                     </div>
                     <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -3434,17 +3455,27 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 error={generateFieldErrors.customerWorksiteId}
               />
             )}
-            {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
+            {deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
+                  label={helpLabel(
+                    'Vehículo',
+                    docType === 'REMISSION'
+                      ? 'Vehiculo que transporta el despacho a obra.'
+                      : 'Vehiculo que recoge la devolución en la obra.',
+                  )}
                   value={vehicleId ?? ''}
                   onChange={(event) => setVehicleId(event.currentTarget.value || null)}
                   data={[{ value: '', label: 'Seleccionar vehiculo' }, ...vehicleOptions]}
                 />
               ) : (
                 <Select
-                  label={helpLabel('Vehiculo', 'Vehiculo que transporta el despacho a obra.')}
+                  label={helpLabel(
+                    'Vehículo',
+                    docType === 'REMISSION'
+                      ? 'Vehiculo que transporta el despacho a obra.'
+                      : 'Vehiculo que recoge la devolución en la obra.',
+                  )}
                   value={vehicleId}
                   onChange={(value) => setVehicleId(value)}
                   data={vehicleOptions}
@@ -3453,10 +3484,15 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 />
               )
             )}
-            {docType === 'REMISSION' && deliveryMode === 'ON_SITE' && (
+            {deliveryMode === 'ON_SITE' && (
               isMobile ? (
                 <NativeSelect
-                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
+                  label={helpLabel(
+                    'Conductor',
+                    docType === 'REMISSION'
+                      ? 'Persona responsable del transporte del despacho.'
+                      : 'Persona responsable de recoger la devolución en la obra.',
+                  )}
                   value={driverId ?? ''}
                   onChange={(event) => {
                     setDriverId(event.currentTarget.value || null);
@@ -3468,7 +3504,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 />
               ) : (
                 <Select
-                  label={helpLabel('Conductor', 'Persona responsable del transporte del despacho.')}
+                  label={helpLabel(
+                    'Conductor',
+                    docType === 'REMISSION'
+                      ? 'Persona responsable del transporte del despacho.'
+                      : 'Persona responsable de recoger la devolución en la obra.',
+                  )}
                   value={driverId}
                   onChange={(value) => {
                     setDriverId(value);
@@ -3482,7 +3523,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 />
               )
             )}
-            {docType === 'RETURN' && (
+            {docType === 'RETURN' && deliveryMode === 'WAREHOUSE' && (
               isMobile ? (
                 <NativeSelect
                   label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.', true)}
@@ -3585,13 +3626,17 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 <Text size="sm" fw={700}>{docDate || '-'}</Text>
               </div>
               <div>
-                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Entrega</Text>
+                <Text size="xs" fw={800} c="dimmed" tt="uppercase">
+                  {docType === 'REMISSION' ? 'Entrega' : 'Devolución'}
+                </Text>
                 <Text size="sm" fw={700}>
                   {docType === 'REMISSION'
                     ? deliveryMode === 'ON_SITE'
                       ? `En obra (${selectedDriver?.name ?? '-'})`
                       : `Bodega (${selectedDispatcher?.name ?? '-'})`
-                    : 'Devolucion'}
+                    : deliveryMode === 'ON_SITE'
+                      ? `Recogida en obra (${selectedDriver?.name ?? '-'})`
+                      : `Cliente entrega en bodega (${selectedDriver?.name ?? '-'})`}
                 </Text>
               </div>
             </SimpleGrid>
