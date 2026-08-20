@@ -218,7 +218,7 @@ export default function WarehouseInventoryPageClient({
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustResult, setAdjustResult] = useState<string | null>(null);
   const [adjustSearch, setAdjustSearch] = useState('');
-  const [inventorySearch, setInventorySearch] = useState('');
+  const inventorySearch = isOwnInventory ? (searchParams.get('q') ?? '') : '';
   const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
@@ -259,6 +259,21 @@ export default function WarehouseInventoryPageClient({
   const [emptyInventoryOpen, setEmptyInventoryOpen] = useState(false);
   const [emptyInventoryWarehouseName, setEmptyInventoryWarehouseName] = useState<string>('');
   const [addStockOpen, setAddStockOpen] = useState(false);
+
+  const setInventorySearch = (value: string) => {
+    const nextParams = new URLSearchParams(window.location.search);
+    if (value) {
+      nextParams.set('q', value);
+    } else {
+      nextParams.delete('q');
+    }
+    const query = nextParams.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}`,
+    );
+  };
 
   const ownerOptions = useMemo(() => {
     const ownersFromWarehouses = new Map<string, string>();
