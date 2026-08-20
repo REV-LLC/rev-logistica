@@ -136,6 +136,67 @@ describe('DocumentsService PDF lifecycle', () => {
     expect(emails.sendFinalIfNeeded).toHaveBeenCalledWith(document.id);
   });
 
+  it('does not ask a motor asset to select another motor during approval', async () => {
+    const document = {
+      id: 'document-corrupted-motor-1',
+      type: DocumentType.REMISSION,
+      status: DocumentStatus.DRAFT,
+      warehouseId: 'warehouse-1',
+      customerWorksiteId: 'customer-worksite-1',
+      docDate: new Date('2026-08-20T12:00:00.000Z'),
+      notes: 'Entrega: WAREHOUSE',
+      items: [
+        {
+          skuId: null,
+          assetId: 'motor-1',
+          componentParentAssetId: null,
+          quantity: null,
+          condition: 'warehouse-1',
+          requestedTag: null,
+        },
+      ],
+      files: [],
+    };
+    const prisma = {
+      document: {
+        findUnique: jest.fn().mockResolvedValue(document),
+        update: jest.fn().mockResolvedValue({
+          id: document.id,
+          status: DocumentStatus.CONFIRMED,
+          consecutive: 'RM019259',
+        }),
+      },
+      warehouse: { findMany: jest.fn().mockResolvedValue([]) },
+      asset: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'motor-1',
+            kind: 'MOTOR',
+            motorConfiguration: 'INTERCHANGEABLE',
+            assignedMotorId: null,
+            sku: { name: 'MOTOR GASOLINA', assetFamilyId: 'motor-family' },
+          },
+        ]),
+      },
+      sku: { findMany: jest.fn().mockResolvedValue([]) },
+      assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const inventory = { moveOut: jest.fn().mockResolvedValue({ ok: true }) };
+    const emails = { sendFinalIfNeeded: jest.fn().mockResolvedValue(undefined) };
+    const service = new DocumentsService(
+      prisma as never,
+      inventory as never,
+      emails as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.approveRequestDocument(document.id, 'office-1'),
+    ).resolves.toMatchObject({ status: DocumentStatus.CONFIRMED });
+    expect(inventory.moveOut).toHaveBeenCalled();
+  });
+
   it('requires a remission linked to every provider before approval', async () => {
     const document = {
       id: 'document-provider-1',
