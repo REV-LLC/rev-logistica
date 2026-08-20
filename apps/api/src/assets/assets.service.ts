@@ -748,6 +748,7 @@ export class AssetsService {
           where: { id: assetId },
           select: {
             id: true,
+            kind: true,
             motorConfiguration: true,
             warehouseCurrentId: true,
           },
@@ -765,6 +766,9 @@ export class AssetsService {
       ]);
 
       if (!mixer) throw new NotFoundException('Mezcladora no encontrada');
+      if (mixer.kind === AssetKind.MOTOR) {
+        throw new BadRequestException('Un motor no puede tener otro motor asociado');
+      }
       if (mixer.motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE) {
         throw new BadRequestException('Este equipo no usa motor intercambiable');
       }

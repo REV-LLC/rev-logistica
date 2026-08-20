@@ -441,9 +441,18 @@ export class InventoryService {
 
       const motorConfiguration =
         payload.asset.motorConfiguration ?? AssetMotorConfiguration.NONE;
+      const hasMotorAssociation = Boolean(payload.asset.assignedMotorId || payload.newMotor);
+      if (
+        assetFamily.code !== 'MEZCLADORA'
+        && (motorConfiguration !== AssetMotorConfiguration.NONE || hasMotorAssociation)
+      ) {
+        throw new BadRequestException(
+          'Solo los activos de la familia MEZCLADORA pueden configurar un motor',
+        );
+      }
       if (
         motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE
-        && (payload.asset.assignedMotorId || payload.newMotor)
+        && hasMotorAssociation
       ) {
         throw new BadRequestException(
           'Solo los equipos con motor intercambiable pueden tener un motor asociado',
