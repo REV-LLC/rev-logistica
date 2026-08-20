@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AssetKind,
   DocumentItemBillingStatus,
   DocumentStatus,
   DocumentType,
@@ -365,6 +366,7 @@ export class DocumentsService {
           where: { id: { in: assetIds } },
           select: {
             id: true,
+            kind: true,
             motorConfiguration: true,
             assignedMotorId: true,
             sku: { select: { name: true } },
@@ -373,7 +375,8 @@ export class DocumentsService {
         const selectedAssetIds = new Set(assetIds);
         const missingMotor = assets.find(
           (asset) =>
-            asset.motorConfiguration === 'INTERCHANGEABLE'
+            asset.kind !== AssetKind.MOTOR
+            && asset.motorConfiguration === 'INTERCHANGEABLE'
             && (!asset.assignedMotorId || !selectedAssetIds.has(asset.assignedMotorId)),
         );
         if (missingMotor) {
