@@ -218,7 +218,8 @@ export default function WarehouseInventoryPageClient({
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustResult, setAdjustResult] = useState<string | null>(null);
   const [adjustSearch, setAdjustSearch] = useState('');
-  const inventorySearch = isOwnInventory ? (searchParams.get('q') ?? '') : '';
+  const inventorySearchParam = isOwnInventory ? (searchParams.get('q') ?? '') : '';
+  const [inventorySearch, setInventorySearchState] = useState(inventorySearchParam);
   const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
@@ -260,7 +261,12 @@ export default function WarehouseInventoryPageClient({
   const [emptyInventoryWarehouseName, setEmptyInventoryWarehouseName] = useState<string>('');
   const [addStockOpen, setAddStockOpen] = useState(false);
 
+  useEffect(() => {
+    setInventorySearchState(inventorySearchParam);
+  }, [inventorySearchParam]);
+
   const setInventorySearch = (value: string) => {
+    setInventorySearchState(value);
     const nextParams = new URLSearchParams(window.location.search);
     if (value) {
       nextParams.set('q', value);
