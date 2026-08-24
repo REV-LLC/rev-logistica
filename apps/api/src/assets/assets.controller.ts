@@ -21,6 +21,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { AssignAssetMotorDto } from './dto/assign-asset-motor.dto';
+import { DeleteAssetDto } from './dto/delete-asset.dto';
 import { AssetsService } from './assets.service';
 
 interface JwtPayload {
@@ -131,7 +132,12 @@ export class AssetsController {
 
   @Delete(':assetId')
   @Roles(Role.ADMIN, Role.OFFICE)
-  deleteAsset(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
-    return this.assetsService.deleteAsset(assetId);
+  deleteAsset(
+    @Param('assetId', new ParseUUIDPipe()) assetId: string,
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+    payload: DeleteAssetDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.assetsService.deleteAsset(assetId, payload.reason, request.user.sub);
   }
 }

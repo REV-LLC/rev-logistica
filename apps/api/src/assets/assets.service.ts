@@ -49,7 +49,7 @@ export class AssetsService {
   }
 
   async listAssets(params: { serial?: string; search?: string; take?: number; skip?: number }) {
-    const where: Prisma.AssetWhereInput = {};
+    const where: Prisma.AssetWhereInput = { deletedAt: null };
 
     if (params.serial) {
       where.serialOrEngine = params.serial;
@@ -90,6 +90,9 @@ export class AssetsService {
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
+        deletedAt: true,
+        deletionReason: true,
+        deletedByUserId: true,
         kind: true,
         motorConfiguration: true,
         assignedMotorId: true,
@@ -396,6 +399,16 @@ export class AssetsService {
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
+        deletedAt: true,
+        deletionReason: true,
+        deletedByUserId: true,
+        deletedBy: {
+          select: {
+            id: true,
+            email: true,
+            employee: { select: { name: true, lastName: true } },
+          },
+        },
         kind: true,
         motorConfiguration: true,
         assignedMotorId: true,
@@ -814,13 +827,16 @@ export class AssetsService {
     return result;
   }
 
-  async deleteAsset(assetId: string) {
+  async deleteAsset(assetId: string, reason: string, userId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
       select: {
         id: true,
-        documentItems: { select: { id: true }, take: 1 },
-        taskAssets: { select: { id: true }, take: 1 },
+        active: true,
+        deletedAt: true,
+        warehouseCurrentId: true,
+        assignedMotorId: true,
+        assignedToMixer: { select: { id: true } },
       },
     });
 
@@ -828,24 +844,70 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
-    if (asset.documentItems.length > 0) {
-      throw new BadRequestException('No se puede eliminar un activo usado en documentos');
+    if (asset.deletedAt) {
+      throw new BadRequestException('El equipo ya fue eliminado');
+    }
+    if (!asset.warehouseCurrentId) {
+      throw new BadRequestException(
+        'El equipo debe estar devuelto a una bodega antes de eliminarlo',
+      );
     }
 
-    if (asset.taskAssets.length > 0) {
-      throw new BadRequestException('No se puede eliminar un activo asociado a tareas');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
+    const normalizedReason = reason.trim();
+    const result = await this.prisma.$transaction(async (tx) => {
       const maintenanceItems = await tx.maintenanceItem.findMany({
-        where: { plan: { assetId } }, select: { id: true },
+        where: { plan: { assetId } },
+        select: { id: true },
       });
-      await tx.notificationTopic.deleteMany({
-        where: { entityType: 'MAINTENANCE_ITEM', entityId: { in: maintenanceItems.map((item) => item.id) } },
+      await tx.maintenancePlan.updateMany({
+        where: { assetId, active: true },
+        data: { active: false },
       });
-      await tx.stockLedger.deleteMany({ where: { assetId } });
-      return tx.asset.delete({ where: { id: assetId } });
+      if (maintenanceItems.length) {
+        await tx.notificationTopic.updateMany({
+          where: {
+            entityType: 'MAINTENANCE_ITEM',
+            entityId: { in: maintenanceItems.map((item) => item.id) },
+          },
+          data: { active: false },
+        });
+      }
+      if (asset.assignedMotorId) {
+        await tx.asset.update({ where: { id: asset.id }, data: { assignedMotorId: null } });
+      }
+      if (asset.assignedToMixer) {
+        await tx.asset.update({
+          where: { id: asset.assignedToMixer.id },
+          data: { assignedMotorId: null },
+        });
+      }
+      return tx.asset.update({
+        where: { id: assetId },
+        data: {
+          active: false,
+          deletedAt: new Date(),
+          deletedByUserId: userId,
+          deletionReason: normalizedReason,
+          warehouseCurrentId: null,
+        },
+        select: {
+          id: true,
+          active: true,
+          deletedAt: true,
+          deletedByUserId: true,
+          deletionReason: true,
+        },
+      });
     });
+    if (asset.warehouseCurrentId) {
+      const baseKey = `inventory:warehouse:${asset.warehouseCurrentId}`;
+      await Promise.all([
+        this.cacheManager.del(baseKey),
+        this.cacheManager.del(`${baseKey}:default`),
+        this.cacheManager.del(`${baseKey}:include-zero`),
+      ]);
+    }
+    return result;
   }
 
   async getAssetLocation(assetId: string) {
