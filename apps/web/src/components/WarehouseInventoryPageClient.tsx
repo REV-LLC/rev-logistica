@@ -1395,6 +1395,7 @@ export default function WarehouseInventoryPageClient({
                   deletingSerialAssetId={deletingSerialAssetId}
                   viewFilter={isOwnInventory ? inventoryView : 'ALL'}
                   compactSerialCards={isOwnInventory && inventoryView === 'SERIAL'}
+                  showSerialOwnerChip={isOwnInventory}
                   showWorksiteQuantities={!isOwnInventory}
                 />
                 )}

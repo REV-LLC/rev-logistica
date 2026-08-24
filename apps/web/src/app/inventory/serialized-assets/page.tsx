@@ -138,6 +138,14 @@ const BASE_BRAND_OPTIONS = [
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
 
+const normalizeEquipmentIdentity = (value: string) =>
+  value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const stripReferenceParts = (reference: string, parts: Array<string | number | null | undefined>) => {
@@ -263,6 +271,7 @@ export default function CreateSerializedAssetPage() {
 
   const familySelectRef = useRef<HTMLInputElement>(null);
   const familyNameRef = useRef<HTMLInputElement>(null);
+  const skuBrandRef = useRef<HTMLInputElement>(null);
   const serialOrEngineRef = useRef<HTMLInputElement>(null);
   const ownerWarehouseRef = useRef<HTMLInputElement>(null);
   const warehouseCurrentRef = useRef<HTMLInputElement>(null);
@@ -431,6 +440,12 @@ export default function CreateSerializedAssetPage() {
   }));
   const selectedSubfamily = selectedFamily?.subfamilies.find(
     (subfamily) => subfamily.id === subfamilyId,
+  );
+  const effectiveFamilyName = (selectedFamily?.name ?? familyName).trim();
+  const brandMatchesFamily = Boolean(
+    skuBrand.trim()
+    && effectiveFamilyName
+    && normalizeEquipmentIdentity(skuBrand) === normalizeEquipmentIdentity(effectiveFamilyName),
   );
   const selectedCurrentWarehouse = useMemo(
     () =>
@@ -689,6 +704,13 @@ export default function CreateSerializedAssetPage() {
   const goToCommercialStep = () => {
     setError(null);
     setTemplateAttempted(true);
+    if (brandMatchesFamily) {
+      setValidationError(
+        'La marca no puede tener el mismo nombre que la familia del equipo.',
+        skuBrandRef,
+      );
+      return;
+    }
     if (!resolvedSkuName) {
       setValidationError('Ingresa marca/modelo o confirma una familia.');
       return;
@@ -785,6 +807,14 @@ export default function CreateSerializedAssetPage() {
 
     if (!resolvedSkuName) {
       setValidationError('Ingresa marca/modelo o confirma una familia.');
+      return;
+    }
+
+    if (brandMatchesFamily) {
+      setValidationError(
+        'La marca no puede tener el mismo nombre que la familia del equipo.',
+        skuBrandRef,
+      );
       return;
     }
 
@@ -1331,12 +1361,18 @@ export default function CreateSerializedAssetPage() {
 
                   <Group grow className="mobile-stack">
                     <Autocomplete
+                      ref={skuBrandRef}
                       label="Marca"
                       name="skuBrand"
                       value={skuBrand}
                       data={brandOptions}
                       onChange={(value) => setSkuBrand(uppercaseInputValue(value))}
                       placeholder="Selecciona o escribe una marca"
+                      error={
+                        brandMatchesFamily
+                          ? 'Usa una marca real o deja este campo vacío.'
+                          : undefined
+                      }
                       clearable
                     />
                     <UppercaseTextInput
