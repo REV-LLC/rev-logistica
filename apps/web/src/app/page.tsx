@@ -11,7 +11,7 @@ import { getCurrentUserRole, getCurrentUserSession, type AppRole } from '@/lib/a
 import styles from './home.module.css';
 
 type Vehicle = { id: string; plate: string; soatVigencia?: string | null; tecnomecanicaVigencia?: string | null; active?: boolean };
-type Task = { id: string; title: string; description?: string | null; dueDate?: string | null; status?: 'OPEN' | 'DOING' | 'DONE' | null; priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null; assignedToUserId?: string | null };
+type Task = { id: string; title: string; description?: string | null; dueDate?: string | null; status?: 'OPEN' | 'DOING' | 'DONE' | 'DELETED' | null; priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null; assignedToUserId?: string | null };
 type RequestDocument = { id: string; consecutive: string | null; type?: string | null; createdAt: string; status?: string | null };
 type NotificationReminder = { topicId: string; eventType: string; title: string; message: string; status: 'UPCOMING' | 'DUE' | 'OVERDUE'; unit: 'HOURS' | 'DAYS'; remainingHours?: number; remainingDays?: number; entity: { id: string; type: 'ASSET' | 'VEHICLE'; label: string } };
 type PendingVehicle = { id: string; plate: string; document: 'SOAT' | 'Tecnomecánica'; days: number };
@@ -52,11 +52,45 @@ function relativeDate(value?: string | null) {
   return `En ${days} días`;
 }
 
+function compactHourDuration(value: number) {
+  const totalMinutes = Math.max(0, Math.round(Math.abs(value) * 60));
+  if (totalMinutes === 0) return null;
+
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return [
+      `${days} ${days === 1 ? 'día' : 'días'}`,
+      hours > 0 ? `${hours} h` : null,
+    ].filter(Boolean).join(' ');
+  }
+
+  return [
+    hours > 0 ? `${hours} h` : null,
+    minutes > 0 ? `${minutes} min` : null,
+  ].filter(Boolean).join(' ');
+}
+
 function reminderMeta(reminder: NotificationReminder) {
-  const amount = reminder.unit === 'HOURS' ? reminder.remainingHours : reminder.remainingDays;
-  const unit = reminder.unit === 'HOURS' ? 'h' : 'días';
-  if (reminder.status === 'OVERDUE') return `Vencido · ${Math.abs(amount ?? 0)} ${unit}`;
-  return `${amount ?? 0} ${unit} restantes`;
+  if (reminder.unit === 'HOURS') {
+    const remainingHours = reminder.remainingHours ?? 0;
+    const duration = Number.isFinite(remainingHours)
+      ? compactHourDuration(remainingHours)
+      : null;
+    if (!duration) return reminder.status === 'OVERDUE' ? 'Vencido' : 'Ahora';
+    return reminder.status === 'OVERDUE'
+      ? `Vencido · ${duration}`
+      : `${duration} restantes`;
+  }
+
+  const remainingDays = Math.abs(Math.round(reminder.remainingDays ?? 0));
+  if (remainingDays === 0) return reminder.status === 'OVERDUE' ? 'Vencido' : 'Hoy';
+  const dayLabel = remainingDays === 1 ? 'día' : 'días';
+  return reminder.status === 'OVERDUE'
+    ? `Vencido · ${remainingDays} ${dayLabel}`
+    : `${remainingDays} ${dayLabel} restantes`;
 }
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
@@ -110,7 +144,10 @@ export default function HomePage() {
     if (technicalDays !== null && technicalDays <= 30) documents.push({ id: vehicle.id, plate: vehicle.plate, document: 'Tecnomecánica', days: technicalDays });
     return documents;
   }).sort((a, b) => a.days - b.days), [vehicles]);
-  const activeTasks = useMemo(() => tasks.filter((task) => task.status !== 'DONE'), [tasks]);
+  const activeTasks = useMemo(
+    () => tasks.filter((task) => task.status !== 'DONE' && task.status !== 'DELETED'),
+    [tasks],
+  );
   const myTasks = useMemo(() => session?.sub ? activeTasks.filter((task) => task.assignedToUserId === session.sub) : activeTasks, [activeTasks, session?.sub]);
   const overdue = notifications.filter((item) => item.status === 'OVERDUE');
   const due = notifications.filter((item) => item.status === 'DUE');

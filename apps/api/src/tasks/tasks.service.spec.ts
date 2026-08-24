@@ -98,23 +98,48 @@ describe('TasksService assignment notifications', () => {
     expect(prisma.task.create).not.toHaveBeenCalled();
   });
 
-  it('removes asset links before deleting a task', async () => {
-    const tx = {
-      taskAsset: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
-      task: { delete: jest.fn().mockResolvedValue(assignedTask) },
-    };
+  it('excludes completed and deleted tasks from the active list', async () => {
     const prisma = {
-      task: { findUnique: jest.fn().mockResolvedValue({ id: assignedTask.id }) },
-      $transaction: jest.fn((operation) => operation(tx)),
+      task: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const service = new TasksService(prisma as never, { syncTaskNotification: jest.fn() } as never);
+    const service = new TasksService(
+      prisma as never,
+      { syncTaskNotification: jest.fn() } as never,
+    );
+
+    await service.listTasks({});
+
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: { notIn: [TaskStatus.DONE, TaskStatus.DELETED] },
+        },
+      }),
+    );
+  });
+
+  it('marks an existing task as deleted without removing it', async () => {
+    const prisma = {
+      task: {
+        findUnique: jest.fn().mockResolvedValue({ id: assignedTask.id }),
+        update: jest.fn().mockResolvedValue({
+          ...assignedTask,
+          status: TaskStatus.DELETED,
+        }),
+      },
+    };
+    const notifications = { syncTaskNotification: jest.fn().mockResolvedValue({ skipped: 1 }) };
+    const service = new TasksService(prisma as never, notifications as never);
 
     await expect(service.deleteTask(assignedTask.id)).resolves.toEqual({ deleted: true });
 
-    expect(tx.taskAsset.deleteMany).toHaveBeenCalledWith({ where: { taskId: assignedTask.id } });
-    expect(tx.task.delete).toHaveBeenCalledWith({ where: { id: assignedTask.id } });
-    expect(tx.taskAsset.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
-      tx.task.delete.mock.invocationCallOrder[0],
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: assignedTask.id },
+      data: { status: TaskStatus.DELETED },
+    });
+    expect(notifications.syncTaskNotification).toHaveBeenCalledWith(
+      assignedTask.id,
+      'UPDATED',
     );
   });
 });

@@ -38,7 +38,6 @@ import {
   IconFilePlus,
   IconFileCertificate,
   IconGauge,
-  IconGasStation,
   IconHome,
   IconRulerMeasure,
   IconMap2,
@@ -58,6 +57,10 @@ type NavLinkItem = {
   roles: AppRole[];
   activePrefixes?: string[];
   activeHrefs?: string[];
+  activeRoutes?: Array<{
+    pathnamePrefix: string;
+    searchParam: { key: string; value: string };
+  }>;
   exact?: boolean;
   children?: NavLinkItem[];
 };
@@ -128,12 +131,6 @@ const sections: NavSection[] = [
             icon: IconBuilding,
             roles: ["ADMIN", "OFFICE"],
           },
-          {
-            href: "/tasks",
-            label: "Pendientes",
-            icon: IconChecklist,
-            roles: ["ADMIN", "OFFICE"],
-          },
         ],
       },
       {
@@ -143,15 +140,15 @@ const sections: NavSection[] = [
         roles: ["DRIVER"],
       },
       {
-        href: "/fuel",
-        label: "Combustible",
-        icon: IconGasStation,
-        roles: ["ADMIN", "DRIVER", "OPERATOR"],
-      },
-      {
         href: "/notifications/deliveries",
         label: "Notificaciones",
         icon: IconBell,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
+        href: "/tasks",
+        label: "Pendientes",
+        icon: IconChecklist,
         roles: ["ADMIN", "OFFICE"],
       },
     ],
@@ -172,7 +169,12 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
             activePrefixes: [
               "/inventory/warehouse?scope=own&view=serial",
-              "/inventory/serialized-assets/",
+            ],
+            activeRoutes: [
+              {
+                pathnamePrefix: "/inventory/serialized-assets/",
+                searchParam: { key: "scope", value: "own" },
+              },
             ],
           },
           {
@@ -196,6 +198,12 @@ const sections: NavSection[] = [
             icon: IconBuildingWarehouse,
             roles: ["ADMIN", "OFFICE"],
             exact: true,
+            activeRoutes: [
+              {
+                pathnamePrefix: "/inventory/serialized-assets/",
+                searchParam: { key: "scope", value: "allied" },
+              },
+            ],
           },
           {
             href: "/inventory/bulk-adjustments",
@@ -236,6 +244,12 @@ const sections: NavSection[] = [
             href: "/customers",
             label: "Clientes",
             icon: IconUsers,
+            roles: ["ADMIN", "OFFICE"],
+          },
+          {
+            href: "/providers",
+            label: "Proveedores",
+            icon: IconBuildingWarehouse,
             roles: ["ADMIN", "OFFICE"],
           },
           {
@@ -464,6 +478,15 @@ export default function Nav({ onNavigate }: NavProps) {
 
     const currentHref = routeKey;
     if (link.activeHrefs?.includes(currentHref)) {
+      return true;
+    }
+    if (
+      link.activeRoutes?.some(
+        (route) =>
+          pathname?.startsWith(route.pathnamePrefix)
+          && searchParams.get(route.searchParam.key) === route.searchParam.value,
+      )
+    ) {
       return true;
     }
     if (link.exact) {

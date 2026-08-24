@@ -19,6 +19,11 @@ enum WarehouseType {
   ALLY
 }
 
+enum OwnerCategory {
+  INTERNAL
+  PROVIDER
+}
+
 enum SkuControlType {
   BULK
   SERIAL
@@ -101,6 +106,7 @@ enum TaskStatus {
   OPEN
   DOING
   DONE
+  DELETED
 }
 
 enum TaskPriority {
@@ -490,7 +496,6 @@ model Asset {
 
   documentItems         DocumentItem[]
   ledger                StockLedger[]
-  taskAssets            TaskAsset[]
   mobilityGuides        MobilityGuide[]
   hourReadings          AssetHourReading[]
   maintenancePlans      MaintenancePlan[]
@@ -693,26 +698,11 @@ model Task {
   createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
   assignedToEmployee Employee?   @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
-  assets             TaskAsset[]
-
   @@index([createdByUserId])
   @@index([assignedToUserId])
   @@index([assignedToEmployeeId])
   @@index([status])
   @@index([priority])
-}
-
-model TaskAsset {
-  id        String   @id @default(uuid())
-  taskId    String
-  assetId   String
-  createdAt DateTime @default(now())
-
-  task  Task  @relation(fields: [taskId], references: [id])
-  asset Asset @relation(fields: [assetId], references: [id])
-
-  @@unique([taskId, assetId])
-  @@index([assetId])
 }
 
 model Document {
@@ -1052,15 +1042,16 @@ model AssetInternalCounter {
 }
 
 model Owner {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   name      String
   nitOrId   String?
   phone     String?
   email     String?
   logoUrl   String?
   logoKey   String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  category  OwnerCategory @default(PROVIDER)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
 
   warehouses Warehouse[]
 }

@@ -909,7 +909,6 @@ async function main() {
               select: {
                 hourReadings: true,
                 maintenancePlans: true,
-                taskAssets: true,
                 documentItems: true,
                 mobilityGuides: true,
               },
@@ -950,7 +949,6 @@ async function main() {
             !asset.imageFileObjectId &&
             asset._count.hourReadings === 0 &&
             asset._count.maintenancePlans === 0 &&
-            asset._count.taskAssets === 0 &&
             asset._count.documentItems === 0 &&
             asset._count.mobilityGuides === 0;
           let existing = target.candidateAssetId

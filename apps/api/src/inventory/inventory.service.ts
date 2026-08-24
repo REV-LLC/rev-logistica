@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Inject,
   InternalServerErrorException,
   Injectable,
@@ -403,6 +404,7 @@ export class InventoryService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
+        this.assertBrandDiffersFromFamily(payload.asset.brand, assetFamily.name);
         const assetSubfamily = await this.resolveAssetSubfamily(
           payload.subfamily,
           assetFamily.id,
@@ -631,6 +633,9 @@ export class InventoryService {
       return { asset, ledger, providerPrice, motor: createdMotor };
       });
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           const targets = Array.isArray(error.meta?.target)
@@ -1916,7 +1921,12 @@ export class InventoryService {
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id.toLowerCase(), sku]));
-    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouseIds = [
+      ...new Set([
+        ...bulkBase.map((row) => row.ownerWarehouseId),
+        ...assets.map((asset) => asset.warehouseOwnerId),
+      ]),
+    ];
     const ownerWarehouses = ownerWarehouseIds.length
       ? await this.prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
@@ -2194,7 +2204,12 @@ export class InventoryService {
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id, sku]));
-    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouseIds = [
+      ...new Set([
+        ...bulkBase.map((row) => row.ownerWarehouseId),
+        ...assets.map((asset) => asset.warehouseOwnerId),
+      ]),
+    ];
     const ownerWarehouses = ownerWarehouseIds.length
       ? await this.prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
@@ -2746,7 +2761,7 @@ export class InventoryService {
     if (input.id) {
       const existing = await tx.assetFamily.findUnique({
         where: { id: input.id },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       if (!existing) {
         throw new NotFoundException('Asset family not found');
@@ -2767,7 +2782,7 @@ export class InventoryService {
     if (code) {
       const existingByCode = await tx.assetFamily.findUnique({
         where: { code },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       if (existingByCode) {
         if (existingByCode.controlType !== controlType) {
@@ -2798,7 +2813,7 @@ export class InventoryService {
           name: name ?? code!,
           controlType,
         },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       return created;
     } catch (error) {
@@ -2807,7 +2822,7 @@ export class InventoryService {
         if (code) {
           const concurrentByCode = await tx.assetFamily.findUnique({
             where: { code },
-            select: { id: true, code: true, controlType: true },
+            select: { id: true, code: true, name: true, controlType: true },
           });
           if (concurrentByCode) {
             if (concurrentByCode.controlType !== controlType) {
@@ -2834,6 +2849,18 @@ export class InventoryService {
         throw new BadRequestException('Asset family code already exists');
       }
       throw error;
+    }
+  }
+
+  private assertBrandDiffersFromFamily(brand: string | undefined, familyName: string) {
+    const normalizedBrand = brand ? normalizeAssetFamilyIdentity(brand) : '';
+    if (
+      normalizedBrand
+      && normalizedBrand === normalizeAssetFamilyIdentity(familyName)
+    ) {
+      throw new BadRequestException(
+        'La marca no puede tener el mismo nombre que la familia del equipo',
+      );
     }
   }
 

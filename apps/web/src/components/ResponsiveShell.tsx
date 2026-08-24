@@ -100,6 +100,11 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Ajustes",
     },
     {
+      prefix: "/providers",
+      title: "Proveedores",
+      subtitle: "Datos y bodegas",
+    },
+    {
       prefix: "/billing/pre-invoice",
       title: "Prefactura",
       subtitle: "Resumen del periodo",
@@ -117,7 +122,9 @@ function getHeaderCopy(
   if (
     pathname?.startsWith("/inventory/serialized-assets/")
   ) {
-    return { title: "Equipos", subtitle: "Bodega propia" };
+    return inventoryScope === "allied"
+      ? { title: "Equipos", subtitle: "Bodega proveedora" }
+      : { title: "Equipos", subtitle: "Bodega propia" };
   }
 
   if (

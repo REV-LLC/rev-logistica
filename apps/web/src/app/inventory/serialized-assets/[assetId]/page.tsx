@@ -261,6 +261,23 @@ export default function EditSerializedAssetPage() {
     };
   }, [assetId]);
 
+  useEffect(() => {
+    if (!assetId || !asset) return;
+    const ownerWarehouseType = warehouses.find(
+      (warehouse) => warehouse.id === asset.warehouseOwnerId,
+    )?.type;
+    if (!ownerWarehouseType) return;
+
+    const expectedScope = ownerWarehouseType === 'ALLY' ? 'allied' : 'own';
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('scope') === expectedScope) return;
+
+    query.set('scope', expectedScope);
+    router.replace(`/inventory/serialized-assets/${assetId}?${query.toString()}`, {
+      scroll: false,
+    });
+  }, [asset, assetId, router, warehouses]);
+
   const warehouseOptions = useMemo(
     () => warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
     [warehouses],
