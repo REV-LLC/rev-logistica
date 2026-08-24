@@ -115,6 +115,8 @@ export default function InventoryDisplay({
   isWorksiteView = false,
   serialSectionTitle = 'EQUIPOS UNICOS',
   compactSerialCards = false,
+  showSerialOwnerChip = false,
+  serialAssetScope,
   showWorksiteQuantities = false,
 }: {
   bulk: BulkItem[];
@@ -128,6 +130,8 @@ export default function InventoryDisplay({
   isWorksiteView?: boolean;
   serialSectionTitle?: string;
   compactSerialCards?: boolean;
+  showSerialOwnerChip?: boolean;
+  serialAssetScope?: 'own' | 'allied';
   showWorksiteQuantities?: boolean;
 }) {
   const [expandedBulkRows, setExpandedBulkRows] = useState<Set<string>>(() => new Set());
@@ -574,10 +578,16 @@ export default function InventoryDisplay({
                     <SerialAssetCard
                       key={item.assetId}
                       item={item}
-                      href={`/inventory/serialized-assets/${item.assetId}`}
+                      href={
+                        `/inventory/serialized-assets/${item.assetId}`
+                        + (serialAssetScope ? `?scope=${serialAssetScope}` : '')
+                      }
                       compact={compactSerialCards}
                       isWorksiteView={isWorksiteView}
-                      display={{ showOwnerChip: isWorksiteView, showCharge: false }}
+                      display={{
+                        showOwnerChip: isWorksiteView || showSerialOwnerChip,
+                        showCharge: false,
+                      }}
                       additionalDetails={[{ label: 'Ubicación', value: serialLocationLabel(item) }]}
                       deleteLoading={deletingSerialAssetId === item.assetId}
                       onDelete={
