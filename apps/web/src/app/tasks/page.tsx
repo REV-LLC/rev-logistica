@@ -2,14 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
-  Center,
   Container,
   Group,
-  Loader,
   Modal,
   NumberInput,
   Paper,
@@ -22,6 +19,7 @@ import {
 } from '@mantine/core';
 import {
   IconBrandWhatsapp,
+  IconCircleCheck,
   IconChecklist,
   IconClock,
   IconPackage,
@@ -38,7 +36,8 @@ import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { api } from '@/lib/api';
 
-type TaskStatus = 'OPEN' | 'DOING' | 'DONE';
+type TaskStatus = 'OPEN' | 'DOING' | 'DONE' | 'DELETED';
+type ActiveTaskStatus = 'OPEN' | 'DOING';
 type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH';
 type TaskReminderUnit = 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS';
 
@@ -85,18 +84,11 @@ type Employee = {
   } | null;
 };
 
-type Asset = {
-  id: string;
-  serial?: string | null;
-  name?: string | null;
-};
-
 type AssigneeOptionValue = `user:${string}` | `employee:${string}`;
 
 const statusOptions = [
   { value: 'OPEN', label: 'Abierta' },
   { value: 'DOING', label: 'En curso' },
-  { value: 'DONE', label: 'Hecha' },
 ];
 
 const priorityOptions = [
@@ -114,6 +106,10 @@ const reminderUnitOptions = [
 ];
 
 const statusFilterOptions = [{ value: 'ALL', label: 'Todas' }, ...statusOptions];
+
+function isActiveTask(task: Task) {
+  return task.status !== 'DONE' && task.status !== 'DELETED';
+}
 
 function formatDate(value?: string | null) {
   if (!value) return '-';
@@ -189,7 +185,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | TaskStatus>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | ActiveTaskStatus>('ALL');
 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -207,16 +203,9 @@ export default function TasksPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [assigneesLoading, setAssigneesLoading] = useState(false);
 
-  const [assetsModalOpen, setAssetsModalOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
-  const [taskAssets, setTaskAssets] = useState<Asset[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(false);
-  const [assetSearchMode, setAssetSearchMode] = useState<'serial' | 'search'>('serial');
-  const [assetQuery, setAssetQuery] = useState('');
-  const [assetResults, setAssetResults] = useState<Asset[]>([]);
-  const [assetSearching, setAssetSearching] = useState(false);
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -269,7 +258,7 @@ export default function TasksPage() {
       setError(null);
       try {
         const data = await api<Task[]>('/tasks');
-        if (mounted) setTasks(data);
+        if (mounted) setTasks(data.filter(isActiveTask));
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : 'No se pudieron cargar pendientes');
       } finally {
@@ -285,10 +274,9 @@ export default function TasksPage() {
   const metrics = useMemo(() => {
     const openCount = tasks.filter((task) => (task.status ?? 'OPEN') === 'OPEN').length;
     const doingCount = tasks.filter((task) => task.status === 'DOING').length;
-    const doneCount = tasks.filter((task) => task.status === 'DONE').length;
     const assignedCount = tasks.filter((task) => task.assignedToUserId || task.assignedToEmployeeId).length;
     const dueSoonCount = tasks.filter((task) => {
-      if (!task.dueDate || task.status === 'DONE') return false;
+      if (!task.dueDate) return false;
       const date = new Date(task.dueDate);
       if (Number.isNaN(date.getTime())) return false;
       const now = new Date();
@@ -301,7 +289,6 @@ export default function TasksPage() {
       total: tasks.length,
       openCount,
       doingCount,
-      doneCount,
       assignedCount,
       dueSoonCount,
     };
@@ -356,7 +343,7 @@ export default function TasksPage() {
       closeCreate();
       resetForm();
       const data = await api<Task[]>('/tasks');
-      setTasks(data);
+      setTasks(data.filter(isActiveTask));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el pendiente');
     } finally {
@@ -399,73 +386,6 @@ export default function TasksPage() {
     }
   };
 
-  const openAssetsModal = async (task: Task) => {
-    setSelectedTask(task);
-    setAssetsModalOpen(true);
-    setAssetQuery('');
-    setAssetResults([]);
-    await loadTaskAssets(task.id);
-  };
-
-  const closeAssetsModal = () => {
-    setAssetsModalOpen(false);
-    setSelectedTask(null);
-    setTaskAssets([]);
-    setAssetResults([]);
-    setAssetQuery('');
-  };
-
-  const loadTaskAssets = async (taskId: string) => {
-    setAssetsLoading(true);
-    try {
-      const data = await api<Asset[]>(`/tasks/${taskId}/assets`);
-      setTaskAssets(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron cargar activos');
-    } finally {
-      setAssetsLoading(false);
-    }
-  };
-
-  const searchAssets = async () => {
-    if (!assetQuery.trim()) return;
-    setAssetSearching(true);
-    try {
-      const param = assetSearchMode === 'serial' ? 'serial' : 'search';
-      const data = await api<Asset[]>(`/assets?${param}=${encodeURIComponent(assetQuery.trim())}`);
-      setAssetResults(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron buscar activos');
-    } finally {
-      setAssetSearching(false);
-    }
-  };
-
-  const addAssetToTask = async (assetId: string) => {
-    if (!selectedTask) return;
-    try {
-      await api(`/tasks/${selectedTask.id}/assets`, {
-        method: 'POST',
-        json: { assetId },
-      });
-      await loadTaskAssets(selectedTask.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo vincular el activo');
-    }
-  };
-
-  const removeAssetFromTask = async (assetId: string) => {
-    if (!selectedTask) return;
-    try {
-      await api(`/tasks/${selectedTask.id}/assets/${assetId}`, {
-        method: 'DELETE',
-      });
-      await loadTaskAssets(selectedTask.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo quitar el activo');
-    }
-  };
-
   const deleteTask = async () => {
     if (!taskToDelete) return;
     setDeletingTask(true);
@@ -473,12 +393,27 @@ export default function TasksPage() {
     try {
       await api(`/tasks/${taskToDelete.id}`, { method: 'DELETE' });
       setTasks((current) => current.filter((task) => task.id !== taskToDelete.id));
-      if (selectedTask?.id === taskToDelete.id) closeAssetsModal();
       setTaskToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo eliminar el pendiente');
     } finally {
       setDeletingTask(false);
+    }
+  };
+
+  const completeTask = async (task: Task) => {
+    setCompletingTaskId(task.id);
+    setError(null);
+    try {
+      await api(`/tasks/${task.id}`, {
+        method: 'PATCH',
+        json: { status: 'DONE' },
+      });
+      setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar el pendiente');
+    } finally {
+      setCompletingTaskId(null);
     }
   };
 
@@ -573,7 +508,7 @@ export default function TasksPage() {
         <Select
           aria-label={`Estado de ${task.title}`}
           value={task.status ?? 'OPEN'}
-          onChange={(value) => updateTask(task.id, { status: (value as TaskStatus) || 'OPEN' })}
+          onChange={(value) => updateTask(task.id, { status: (value as ActiveTaskStatus) || 'OPEN' })}
           data={statusOptions}
           size="xs"
           allowDeselect={false}
@@ -604,7 +539,7 @@ export default function TasksPage() {
             <StatCard
               label="Por vencer"
               value={String(metrics.dueSoonCount)}
-              hint={`${metrics.assignedCount} asignadas · ${metrics.doneCount} hechas`}
+              hint={`${metrics.assignedCount} asignadas`}
               color="green"
               icon={<IconUserCheck size={20} />}
             />
@@ -640,7 +575,7 @@ export default function TasksPage() {
               <Select
                 aria-label="Filtrar por estado"
                 value={statusFilter}
-                onChange={(value) => setStatusFilter((value as 'ALL' | TaskStatus) ?? 'ALL')}
+                onChange={(value) => setStatusFilter((value as 'ALL' | ActiveTaskStatus) ?? 'ALL')}
                 data={statusFilterOptions}
                 allowDeselect={false}
               />
@@ -670,17 +605,20 @@ export default function TasksPage() {
               }}
               actions={(task) => [
                 {
-                  key: 'assets',
-                  label: `Gestionar activos de ${task.title}`,
-                  icon: <IconPackage size={16} />,
-                  color: 'blue',
-                  onClick: () => openAssetsModal(task),
+                  key: 'complete',
+                  label: `Completar ${task.title}`,
+                  icon: <IconCircleCheck size={16} />,
+                  color: 'green',
+                  loading: completingTaskId === task.id,
+                  disabled: deletingTask || (completingTaskId !== null && completingTaskId !== task.id),
+                  onClick: () => void completeTask(task),
                 },
                 {
                   key: 'delete',
                   label: `Eliminar ${task.title}`,
                   icon: <IconTrash size={16} />,
                   color: 'red',
+                  disabled: completingTaskId !== null,
                   onClick: () => setTaskToDelete(task),
                 },
               ]}
@@ -808,7 +746,7 @@ export default function TasksPage() {
           <div>
             <Text fw={700}>¿Eliminar “{taskToDelete?.title}”?</Text>
             <Text size="sm" c="dimmed" mt={4}>
-              También se quitarán los activos vinculados a esta tarea. Esta acción no se puede deshacer.
+              La tarea saldrá del listado activo y quedará registrada con estado Eliminado.
             </Text>
           </div>
           <Group justify="flex-end" className="mobile-actions">
@@ -822,95 +760,6 @@ export default function TasksPage() {
         </Stack>
       </Modal>
 
-      <Modal opened={assetsModalOpen} onClose={closeAssetsModal} title={selectedTask ? `Seriales - ${selectedTask.title}` : 'Seriales'} centered size="lg">
-        <Stack gap="md">
-          <Paper withBorder radius="md" p="md">
-            <Stack gap="sm">
-              <Group justify="space-between" align="center">
-                <div>
-                  <Text fw={700}>Activos vinculados</Text>
-                  <Text size="sm" c="dimmed">
-                    Equipos relacionados con esta tarea para facilitar su seguimiento.
-                  </Text>
-                </div>
-                <Badge color="gray" variant="light">
-                  {taskAssets.length} activo{taskAssets.length === 1 ? '' : 's'}
-                </Badge>
-              </Group>
-              {assetsLoading ? (
-                <Center py="sm">
-                  <Loader size="sm" />
-                </Center>
-              ) : (
-                <Stack gap="sm">
-                  {taskAssets.map((asset) => (
-                    <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
-                      <Group justify="space-between" align="center" wrap="nowrap">
-                        <Text size="sm" fw={600}>
-                          {asset.serial || asset.name || asset.id}
-                        </Text>
-                        <ActionIcon variant="light" color="red" aria-label="Quitar activo" onClick={() => removeAssetFromTask(asset.id)}>
-                          <IconTrash size={14} />
-                        </ActionIcon>
-                      </Group>
-                    </Paper>
-                  ))}
-                  {!taskAssets.length && (
-                    <Text size="sm" c="dimmed">
-                      Sin activos vinculados.
-                    </Text>
-                  )}
-                </Stack>
-              )}
-            </Stack>
-          </Paper>
-
-          <Paper withBorder radius="md" p="md">
-            <Stack gap="md">
-              <div>
-                <Text fw={700}>Buscar activo</Text>
-                <Text size="sm" c="dimmed">
-                  Busca por serial o nombre y agregalo al pendiente si pertenece a la obra.
-                </Text>
-              </div>
-              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-                <Select
-                  label="Modo"
-                  value={assetSearchMode}
-                  onChange={(value) => setAssetSearchMode((value as 'serial' | 'search') || 'serial')}
-                  data={[
-                    { value: 'serial', label: 'SERIAL' },
-                    { value: 'search', label: 'NOMBRE' },
-                  ]}
-                />
-                <TextInput label="Buscar" value={assetQuery} onChange={(event) => setAssetQuery(event.currentTarget.value)} />
-                <Button mt={{ base: 0, sm: 25 }} leftSection={<IconSearch size={14} />} onClick={searchAssets} loading={assetSearching}>
-                  Buscar
-                </Button>
-              </SimpleGrid>
-              <Stack gap="sm">
-                {assetResults.map((asset) => (
-                  <Paper key={asset.id} withBorder radius="md" p="sm" bg="gray.0">
-                    <Group justify="space-between" align="center" wrap="nowrap">
-                      <Text size="sm" fw={600}>
-                        {asset.serial || asset.name || asset.id}
-                      </Text>
-                      <Button size="xs" variant="light" onClick={() => addAssetToTask(asset.id)}>
-                        Agregar
-                      </Button>
-                    </Group>
-                  </Paper>
-                ))}
-                {!assetResults.length && (
-                  <Text size="sm" c="dimmed">
-                    Sin resultados.
-                  </Text>
-                )}
-              </Stack>
-            </Stack>
-          </Paper>
-        </Stack>
-      </Modal>
     </Container>
   );
 }

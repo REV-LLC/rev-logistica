@@ -113,6 +113,7 @@ type Warehouse = {
 type Owner = {
   id: string;
   name: string;
+  category?: 'INTERNAL' | 'PROVIDER';
   active: boolean;
   logoUrl?: string | null;
   logoKey?: string | null;
@@ -290,10 +291,12 @@ export default function WarehouseInventoryPageClient({
       }
     });
 
-    const optionsFromOwners = owners.map((owner) => ({
+    const optionsFromOwners = owners
+      .filter((owner) => isOwnInventory || owner.category !== 'INTERNAL')
+      .map((owner) => ({
       value: owner.id,
       label: owner.active ? owner.name : `${owner.name} (inactivo)`,
-    }));
+      }));
 
     if (optionsFromOwners.length > 0) {
       return optionsFromOwners;
@@ -303,7 +306,7 @@ export default function WarehouseInventoryPageClient({
       value: id,
       label: name,
     }));
-  }, [owners, warehouses]);
+  }, [isOwnInventory, owners, warehouses]);
 
   const ownerById = useMemo(() => {
     return new Map(owners.map((owner) => [owner.id, owner]));
@@ -1399,6 +1402,7 @@ export default function WarehouseInventoryPageClient({
                   viewFilter={isOwnInventory ? inventoryView : 'ALL'}
                   compactSerialCards={isOwnInventory && inventoryView === 'SERIAL'}
                   showSerialOwnerChip={isOwnInventory}
+                  serialAssetScope={isOwnInventory ? 'own' : 'allied'}
                   showWorksiteQuantities={!isOwnInventory}
                 />
                 )}
