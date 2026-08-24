@@ -783,12 +783,15 @@ export default function WarehouseInventoryPageClient({
 
   const deleteSerialAsset = async (item: InventoryResponse['serial'][number]) => {
     const label = item.serialOrEngine ?? item.description ?? 'este equipo';
-    if (!window.confirm(`Eliminar activo ${label}?`)) return;
+    const reason = window.prompt(
+      `Eliminar activo ${label}? El historial se conservará. Escribe el motivo:`,
+    )?.trim();
+    if (!reason) return;
 
     setDeletingSerialAssetId(item.assetId);
     setError(null);
     try {
-      await api(`/assets/${item.assetId}`, { method: 'DELETE' });
+      await api(`/assets/${item.assetId}`, { method: 'DELETE', json: { reason } });
       await handleFetch(data?.warehouseId ?? warehouseId);
     } catch (err) {
       if (err instanceof ApiError) {

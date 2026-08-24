@@ -127,9 +127,14 @@ function ItemLink({ item }: { item: LedgerItem }) {
   return (
     <div>
       {href ? (
-        <Text component={Link} href={href} fw={600} size="sm" c="inherit">
-          {name}
-        </Text>
+        <div>
+          <Text component={Link} href={href} fw={600} size="sm" c="inherit">
+            {name}
+          </Text>
+          {item.asset?.deletedAt ? (
+            <Badge size="xs" color="red" variant="light">Equipo eliminado</Badge>
+          ) : null}
+        </div>
       ) : (
         <Text fw={600} size="sm">
           {name}
