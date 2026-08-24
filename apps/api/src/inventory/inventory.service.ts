@@ -329,7 +329,7 @@ export class InventoryService {
     ];
     const assets = serialAssetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: serialAssetIds } },
+          where: { id: { in: serialAssetIds }, active: true, deletedAt: null },
           select: { id: true, warehouseOwnerId: true },
         })
       : [];
@@ -1033,7 +1033,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1213,7 +1213,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1416,7 +1416,7 @@ export class InventoryService {
       });
 
       const assets = serialIds.length
-        ? await tx.asset.findMany({ where: { id: { in: serialIds } }, select: { id: true, warehouseOwnerId: true } })
+        ? await tx.asset.findMany({ where: { id: { in: serialIds }, active: true, deletedAt: null }, select: { id: true, warehouseOwnerId: true } })
         : [];
       const assetOwner = new Map(assets.map((asset) => [asset.id, asset.warehouseOwnerId]));
       serialIds.forEach((assetId) => {
@@ -1545,7 +1545,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1865,7 +1865,7 @@ export class InventoryService {
 
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: assetIds } },
+          where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -1974,6 +1974,7 @@ export class InventoryService {
       .sort((a, b) => (a.skuName ?? '').localeCompare(b.skuName ?? ''));
 
     const serial = serialBase
+      .filter((row) => assetsById.has(row.assetId))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;
@@ -2144,7 +2145,7 @@ export class InventoryService {
 
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: assetIds } },
+          where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -2241,6 +2242,7 @@ export class InventoryService {
       .sort((a, b) => (a.skuName ?? '').localeCompare(b.skuName ?? ''));
 
     const serial = serialBase
+      .filter((row) => assetsById.has(row.assetId))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;
@@ -2364,6 +2366,8 @@ export class InventoryService {
             id: true,
             serialOrEngine: true,
             description: true,
+            deletedAt: true,
+            deletionReason: true,
             sku: { select: { id: true, name: true } },
           },
         },
@@ -2547,7 +2551,7 @@ export class InventoryService {
 
     const assets = serialAssetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: serialAssetIds } },
+          where: { id: { in: serialAssetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -2589,6 +2593,7 @@ export class InventoryService {
       .filter((row) => row.initialQuantity !== 0 || row.onSiteQuantity !== 0);
 
     const serial = serialAssetIds
+      .filter((assetId) => assetsById.has(assetId))
       .map((assetId) => {
         const initialQuantity = serialInitialByAsset.get(assetId) ?? 0;
         const onSiteQuantity =
