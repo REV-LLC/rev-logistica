@@ -70,6 +70,16 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Trazabilidad",
     },
     {
+      prefix: "/inventory/provider-pickups",
+      title: "Recogidas en proveedor",
+      subtitle: "Traslados a bodega REV",
+    },
+    {
+      prefix: "/inventory/provider-returns",
+      title: "Entregas a proveedor",
+      subtitle: "Devoluciones a bodega aliada",
+    },
+    {
       prefix: "/inventory/scaffold-modulations",
       title: "Modulaciones",
       subtitle: "Andamio certificado",

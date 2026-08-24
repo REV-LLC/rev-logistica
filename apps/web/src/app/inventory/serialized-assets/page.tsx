@@ -135,6 +135,7 @@ const BASE_BRAND_OPTIONS = [
   'MAKITA',
   'WACKER NEUSON',
 ];
+const MIXER_FAMILY_CODE = 'MEZCLADORA';
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
 
@@ -464,13 +465,9 @@ export default function CreateSerializedAssetPage() {
 
     return (selectedFamily?.name ?? familyName.trim()).trim();
   }, [familyName, selectedFamily?.name, skuBrand, skuById, skuModel, skuName, skuSuggestionId]);
-  const isMixerAsset = useMemo(
-    () =>
-      [selectedFamily?.name, selectedFamily?.code, selectedSubfamily?.name, resolvedSkuName]
-        .filter(Boolean)
-        .some((value) => uppercaseInputValue(String(value)).includes('MEZCLADOR')),
-    [resolvedSkuName, selectedFamily?.code, selectedFamily?.name, selectedSubfamily?.name],
-  );
+  const isMixerAsset = selectedFamily
+    ? uppercaseInputValue(selectedFamily.code) === MIXER_FAMILY_CODE
+    : uppercaseInputValue(familyCode.trim()) === MIXER_FAMILY_CODE;
   const availableMotorOptions = useMemo(
     () =>
       assets

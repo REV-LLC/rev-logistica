@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "audit:warehouse-stock-balance": "ts-node scripts/audit-warehouse-stock-balance.ts",
     "import:cervino": "ts-node scripts/import-cervino.ts",
     "import:customers": "ts-node scripts/import-customers.ts",
     "import:inventory-snapshot": "ts-node scripts/import-inventory-snapshot.ts",

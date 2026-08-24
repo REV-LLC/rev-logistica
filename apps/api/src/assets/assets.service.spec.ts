@@ -34,6 +34,7 @@ describe('AssetsService motor assignment', () => {
         findUnique: jest.fn()
           .mockResolvedValueOnce({
             id: 'mixer-1',
+            kind: 'STANDARD',
             motorConfiguration: 'INTERCHANGEABLE',
             warehouseCurrentId: 'warehouse-1',
           })
@@ -71,6 +72,7 @@ describe('AssetsService motor assignment', () => {
         findUnique: jest.fn()
           .mockResolvedValueOnce({
             id: 'mixer-1',
+            kind: 'STANDARD',
             motorConfiguration: 'INTERCHANGEABLE',
             warehouseCurrentId: 'warehouse-1',
           })
@@ -89,6 +91,34 @@ describe('AssetsService motor assignment', () => {
 
     await expect(service.assignMotor('mixer-1', 'motor-1'))
       .rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.asset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning a motor to another motor even with corrupted configuration', async () => {
+    const tx = {
+      asset: {
+        findUnique: jest.fn()
+          .mockResolvedValueOnce({
+            id: 'motor-parent',
+            kind: 'MOTOR',
+            motorConfiguration: 'INTERCHANGEABLE',
+            warehouseCurrentId: 'warehouse-1',
+          })
+          .mockResolvedValueOnce({
+            id: 'motor-child',
+            kind: 'MOTOR',
+            active: true,
+            warehouseCurrentId: 'warehouse-1',
+            assignedToMixer: null,
+          }),
+        update: jest.fn(),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
+    const service = new AssetsService(prisma as any, { del: jest.fn() } as any);
+
+    await expect(service.assignMotor('motor-parent', 'motor-child'))
+      .rejects.toThrow('Un motor no puede tener otro motor asociado');
     expect(tx.asset.update).not.toHaveBeenCalled();
   });
 });

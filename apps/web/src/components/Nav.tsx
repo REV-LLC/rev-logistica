@@ -39,6 +39,7 @@ import {
   IconFileCertificate,
   IconGauge,
   IconGasStation,
+  IconHome,
   IconRulerMeasure,
   IconMap2,
   IconReceipt,
@@ -101,11 +102,17 @@ const sections: NavSection[] = [
             icon: IconBuildingWarehouse,
             roles: ["ADMIN", "OFFICE", "DRIVER"],
           },
+          {
+            href: "/inventory/provider-pickups",
+            label: "Recogidas en proveedor",
+            icon: IconArrowsShuffle,
+            roles: ["ADMIN", "OFFICE", "DRIVER"],
+          },
         ],
       },
       {
         href: "/transport/vehicles",
-        label: "Logística",
+        label: "Flota y obras",
         icon: IconTruck,
         roles: ["ADMIN", "OFFICE"],
         children: [
@@ -143,7 +150,7 @@ const sections: NavSection[] = [
       },
       {
         href: "/notifications/deliveries",
-        label: "Centro de notificaciones",
+        label: "Notificaciones",
         icon: IconBell,
         roles: ["ADMIN", "OFFICE"],
       },
@@ -154,7 +161,7 @@ const sections: NavSection[] = [
     links: [
       {
         href: "/inventory/warehouse?scope=own",
-        label: "Inventario propio",
+        label: "Existencias",
         icon: IconBox,
         roles: ["ADMIN", "OFFICE"],
         children: [
@@ -170,7 +177,7 @@ const sections: NavSection[] = [
           },
           {
             href: "/inventory/warehouse?scope=own&view=bulk",
-            label: "Bulk",
+            label: "Materiales y consumibles",
             icon: IconBox,
             roles: ["ADMIN", "OFFICE"],
             exact: true,
@@ -179,7 +186,7 @@ const sections: NavSection[] = [
       },
       {
         href: "/inventory/warehouse?scope=allied",
-        label: "Bodegas y stock",
+        label: "Bodegas",
         icon: IconBuildingWarehouse,
         roles: ["ADMIN", "OFFICE"],
         children: [
@@ -189,12 +196,6 @@ const sections: NavSection[] = [
             icon: IconBuildingWarehouse,
             roles: ["ADMIN", "OFFICE"],
             exact: true,
-          },
-          {
-            href: "/inventory/ledger",
-            label: "Movimientos",
-            icon: IconArrowsShuffle,
-            roles: ["ADMIN", "OFFICE"],
           },
           {
             href: "/inventory/bulk-adjustments",
@@ -209,27 +210,25 @@ const sections: NavSection[] = [
         ],
       },
       {
+        href: "/inventory/ledger",
+        label: "Movimientos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/inventory/hour-meter",
-        label: "Mantenimiento",
+        label: "Horómetros",
         icon: IconGauge,
         roles: ["ADMIN", "OFFICE", "OPERATOR"],
-        children: [
-          {
-            href: "/inventory/hour-meter",
-            label: "Registrar horómetro",
-            icon: IconGauge,
-            roles: ["ADMIN", "OFFICE", "OPERATOR"],
-          },
-        ],
       },
     ],
   },
   {
-    title: "Administración",
+    title: "Gestión",
     links: [
       {
         href: "/customers",
-        label: "Comercial",
+        label: "Clientes y facturación",
         icon: IconUsers,
         roles: ["ADMIN", "OFFICE"],
         children: [
@@ -254,18 +253,11 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/employees",
-        label: "Equipo",
+        href: "/employees/empleado-card",
+        label: "Empleados",
         icon: IconUser,
         roles: ["ADMIN", "OFFICE"],
-        children: [
-          {
-            href: "/employees/empleado-card",
-            label: "Empleados",
-            icon: IconUser,
-            roles: ["ADMIN", "OFFICE"],
-          },
-        ],
+        activePrefixes: ["/employees"],
       },
     ],
   },
@@ -319,16 +311,14 @@ const toolLinks: NavLinkItem[] = [
 const prodDisabledRoutes = ["/transport/cost", "/billing/pre-invoice"];
 const isProduction = process.env.NODE_ENV === "production";
 const defaultServiceName = "finge";
-const mostUsedLinks = [
-  "/transport/requests",
-  "/inventory/warehouse?scope=allied",
-  "/inventory/ledger",
-];
-const defaultExpandedSections = new Set([
-  "Operación",
-  "Inventario",
-  "Administración",
-]);
+const homeLink: NavLinkItem = {
+  href: "/",
+  label: "Inicio",
+  icon: IconHome,
+  roles: ["ADMIN", "OFFICE", "DRIVER", "OPERATOR"],
+  exact: true,
+};
+const defaultExpandedSections = new Set(["Operación"]);
 
 type NavProps = {
   onNavigate?: () => void;
@@ -374,10 +364,22 @@ export default function Nav({ onNavigate }: NavProps) {
   const currentRole = getCurrentUserRole();
   const currentSession = getCurrentUserSession();
   const [serviceName, setServiceName] = useState(defaultServiceName);
-  const [openedSections, setOpenedSections] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [openedLinks, setOpenedLinks] = useState<Record<string, boolean>>({});
+  const [sectionAccordion, setSectionAccordion] = useState<{
+    routeKey: string;
+    title: string | null;
+  } | null>(null);
+  const [linkAccordion, setLinkAccordion] = useState<{
+    routeKey: string;
+    href: string | null;
+  } | null>(null);
+  const currentSearch = searchParams.toString();
+  const routeKey = currentSearch ? `${pathname}?${currentSearch}` : pathname;
+  const openedLinkHref =
+    linkAccordion?.routeKey === routeKey ? linkAccordion.href : undefined;
+  const openedSectionTitle =
+    sectionAccordion?.routeKey === routeKey
+      ? sectionAccordion.title
+      : undefined;
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const expandableItemRefs = useRef(new Map<string, HTMLDivElement>());
 
@@ -455,20 +457,12 @@ export default function Nav({ onNavigate }: NavProps) {
 
     return children.length ? { ...link, children } : null;
   };
-  const flattenLinks = (links: NavLinkItem[]): NavLinkItem[] =>
-    links.flatMap((link) => [
-      link,
-      ...(link.children ? flattenLinks(link.children) : []),
-    ]);
   const isLinkActive = (link: NavLinkItem) => {
     if (link.children?.some(isLinkActive)) {
       return true;
     }
 
-    const currentHref =
-      searchParams.size > 0
-        ? `${pathname}?${searchParams.toString()}`
-        : pathname;
+    const currentHref = routeKey;
     if (link.activeHrefs?.includes(currentHref)) {
       return true;
     }
@@ -506,19 +500,9 @@ export default function Nav({ onNavigate }: NavProps) {
     ...(visibleToolSection ? [visibleToolSection] : []),
     ...(visibleSettingsSection ? [visibleSettingsSection] : []),
   ];
-  const allVisibleLinks = flattenLinks(
-    orderedSections.flatMap((section) => section.links),
+  const hasActiveSection = orderedSections.some((section) =>
+    section.links.some(isLinkActive),
   );
-  const quickLinks = mostUsedLinks
-    .map((href) =>
-      allVisibleLinks.find((link) => link.href === href && !link.children),
-    )
-    .filter(
-      (link, index, list): link is NavLinkItem =>
-        Boolean(link) &&
-        list.findIndex((item) => item?.href === link?.href) === index,
-    )
-    .slice(0, 3);
   const roleColor =
     currentRole === "ADMIN"
       ? "red"
@@ -548,7 +532,8 @@ export default function Nav({ onNavigate }: NavProps) {
     const Icon = link.icon;
     const isActive = isLinkActive(link);
     const hasChildren = Boolean(link.children?.length);
-    const isExpanded = openedLinks[link.href] ?? isActive;
+    const isExpanded =
+      openedLinkHref === undefined ? isActive : openedLinkHref === link.href;
 
     if (hasChildren) {
       const expandableKey = `link:${link.href}`;
@@ -606,10 +591,10 @@ export default function Nav({ onNavigate }: NavProps) {
               />
             }
             onClick={() =>
-              setOpenedLinks((current) => ({
-                ...current,
-                [link.href]: !isExpanded,
-              }))
+              setLinkAccordion({
+                routeKey,
+                href: isExpanded ? null : link.href,
+              })
             }
           />
           <Collapse
@@ -678,8 +663,10 @@ export default function Nav({ onNavigate }: NavProps) {
   const renderSection = (section: NavSection) => {
     const isActive = section.links.some(isLinkActive);
     const isExpanded =
-      openedSections[section.title] ??
-      (isActive || defaultExpandedSections.has(section.title));
+      openedSectionTitle === undefined
+        ? isActive ||
+          (!hasActiveSection && defaultExpandedSections.has(section.title))
+        : openedSectionTitle === section.title;
     const expandableKey = `section:${section.title}`;
 
     return (
@@ -694,10 +681,10 @@ export default function Nav({ onNavigate }: NavProps) {
           active={isActive}
           aria-expanded={isExpanded}
           onClick={() =>
-            setOpenedSections((current) => ({
-              ...current,
-              [section.title]: !isExpanded,
-            }))
+            setSectionAccordion({
+              routeKey,
+              title: isExpanded ? null : section.title,
+            })
           }
           styles={{
             root: {
@@ -833,21 +820,8 @@ export default function Nav({ onNavigate }: NavProps) {
         }}
       >
         <Stack gap="md" pr={4}>
-          {quickLinks.length > 0 ? (
-            <Stack gap={4}>
-              <Text
-                size="10px"
-                fw={800}
-                c="dimmed"
-                tt="uppercase"
-                px="xs"
-                lh={1.2}
-                style={{ letterSpacing: "0.06em" }}
-              >
-                Mas usado
-              </Text>
-              <Stack gap={0}>{quickLinks.map(renderNavItem)}</Stack>
-            </Stack>
+          {canShowLink(homeLink) ? (
+            <Stack gap={0}>{renderNavItem(homeLink)}</Stack>
           ) : null}
           {orderedSections.map(renderSection)}
         </Stack>

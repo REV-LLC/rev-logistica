@@ -572,10 +572,11 @@ export class FilesService {
       if (
         document.type !== DocumentType.REMISSION &&
         document.type !== DocumentType.RETURN &&
-        document.type !== DocumentType.PROVIDER_RECEIPT
+        document.type !== DocumentType.PROVIDER_RECEIPT &&
+        document.type !== DocumentType.PROVIDER_PICKUP
       ) {
         throw new BadRequestException(
-          'Files are only available for remissions and returns',
+          'Files are not available for this document type',
         );
       }
       if (user.role === Role.DRIVER && document.createdBy !== user.id) {
