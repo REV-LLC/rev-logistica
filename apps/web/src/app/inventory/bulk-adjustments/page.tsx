@@ -245,6 +245,17 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'GANCHO DE SEGURIDAD',
 ];
 
+const CANONICAL_JACK_REFERENCES: Record<
+  string,
+  { name: string; lengthMeters: number }
+> = {
+  GATO_EXTRA_CORTO: { name: 'GATO EXTRA CORTO (1.00 M)', lengthMeters: 1 },
+  GATO_CORTO: { name: 'GATO CORTO (2.00 M)', lengthMeters: 2 },
+  GATO_MEDIANO: { name: 'GATO MEDIANO (3.00 M)', lengthMeters: 3 },
+  GATO_LARGO: { name: 'GATO LARGO (4.00 M)', lengthMeters: 4 },
+  GATO_EXTRA_LARGO: { name: 'GATO EXTRA LARGO (6.00 M)', lengthMeters: 6 },
+};
+
 const formatMeasure = (value: number) => value.toFixed(2);
 const formatMeterMeasure = (value: string) => {
   const parsed = Number(value.trim().replace(/M(?:T|TS)?$/i, '').replace(',', '.'));
@@ -669,6 +680,12 @@ export default function AddBulkStockPage() {
     catalogGroupOptions(groupKey, fallback).map((option) => option.value);
   const typeOptions = bulkFamilies.map((family) => ({ value: family.id, label: family.name }));
   const selectedFamily = bulkFamilies.find((family) => family.id === itemTypeSelection) ?? null;
+  const selectedSubfamily = selectedFamily?.subfamilies.find(
+    (subfamily) => subfamily.id === selectedSubfamilyId,
+  );
+  const canonicalJackReference = selectedSubfamily
+    ? CANONICAL_JACK_REFERENCES[selectedSubfamily.code] ?? null
+    : null;
   const selectedFamilyCode = selectedFamily?.code.toUpperCase() ?? '';
   const selectedFamilyKey = toUpperInput(selectedFamily?.name ?? '').replace(/\s+/g, '_');
   const subfamilyOptions = (selectedFamily?.subfamilies ?? []).map((subfamily) => ({
@@ -796,21 +813,25 @@ export default function AddBulkStockPage() {
       };
     }
 
-    if (!selectedFamily || !genericSkuName.trim()) {
+    if (!selectedFamily || (!canonicalJackReference && !genericSkuName.trim())) {
       return null;
     }
+    const resolvedGenericName = canonicalJackReference?.name ?? genericSkuName.trim();
+    const resolvedGenericLength =
+      canonicalJackReference?.lengthMeters ??
+      (genericLengthMeters === '' ? undefined : Number(genericLengthMeters));
     const legacyResolvedName =
       certifiedScaffoldNeedsMeasure && certifiedScaffoldMeasure
-        ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
+        ? `${resolvedGenericName} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
         : conventionalScaffoldNeedsMeasure && certifiedScaffoldMeasure
-          ? `${genericSkuName.trim()} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
-        : genericSkuName.trim();
+          ? `${resolvedGenericName} (${formatMeterMeasure(certifiedScaffoldMeasure)})`
+        : resolvedGenericName;
     const compatibleReferenceName = genericCompatibilityLb
       ? `${legacyResolvedName} (${genericCompatibilityLb} LB)`
       : legacyResolvedName;
     const normalizedReference = normalizeBulkReference(
       compatibleReferenceName,
-      genericLengthMeters === '' ? undefined : Number(genericLengthMeters),
+      resolvedGenericLength,
     );
     const existingCanonicalSku = globalBulkSkus.find(
       (sku) =>
@@ -871,6 +892,7 @@ export default function AddBulkStockPage() {
     genericWeightUnit,
     selectedFamily,
     selectedSubfamilyId,
+    canonicalJackReference,
     globalBulkSkus,
     itemType,
     isItemConfigured,
@@ -1296,7 +1318,7 @@ export default function AddBulkStockPage() {
         setError('Selecciona una familia');
         return;
       }
-      if (!genericSkuName.trim()) {
+      if (!canonicalJackReference && !genericSkuName.trim()) {
         setError('Enter the SKU name for the generic item');
         return;
       }
@@ -2196,7 +2218,19 @@ export default function AddBulkStockPage() {
                   {itemType === 'GENERIC' ? (
                       <Paper radius="md" p="md" bg="gray.0">
                         <Stack gap="md">
-                          {isCertifiedScaffold ? (
+                          {canonicalJackReference ? (
+                            <Paper withBorder radius="md" p="md" bg="green.0">
+                              <Stack gap={4}>
+                                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                                  Referencia estandarizada
+                                </Text>
+                                <Text fw={700}>{canonicalJackReference.name}</Text>
+                                <Text size="xs" c="dimmed">
+                                  La medida representa la altura máxima aproximada de esta clase de gato.
+                                </Text>
+                              </Stack>
+                            </Paper>
+                          ) : isCertifiedScaffold ? (
                             <>
                               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                                 <Select

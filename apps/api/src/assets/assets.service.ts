@@ -9,6 +9,10 @@ import {
   SkuControlType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  getCanonicalJackReference,
+  isJackIdentity,
+} from '../inventory/jack-catalog';
 
 @Injectable()
 export class AssetsService {
@@ -347,15 +351,25 @@ export class AssetsService {
   ) {
     const assetFamily = await this.prisma.assetFamily.findUnique({
       where: { id: assetFamilyId },
-      select: { id: true, controlType: true },
+      select: { id: true, code: true, controlType: true },
     });
     if (!assetFamily) {
       throw new NotFoundException('Asset family not found');
     }
-    const name = payload.name.trim().toUpperCase();
-    const code = this.buildAssetSubfamilyCode(payload.code ?? name);
+    let name = payload.name.trim().toUpperCase();
+    let code = this.buildAssetSubfamilyCode(payload.code ?? name);
     if (!name || !code) {
       throw new BadRequestException('Asset subfamily name is required');
+    }
+    if (assetFamily.code === 'ENCOFRADO' && (isJackIdentity(name) || isJackIdentity(code))) {
+      const canonicalJack = getCanonicalJackReference(code) ?? getCanonicalJackReference(name);
+      if (!canonicalJack) {
+        throw new BadRequestException(
+          'Subfamilia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+        );
+      }
+      name = canonicalJack.subfamilyName;
+      code = canonicalJack.subfamilyCode;
     }
 
     try {
