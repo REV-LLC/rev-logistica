@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   getCanonicalJackReference,
+  isCanonicalJackSubfamily,
   isJackIdentity,
 } from '../inventory/jack-catalog';
 
@@ -361,15 +362,20 @@ export class AssetsService {
     if (!name || !code) {
       throw new BadRequestException('Asset subfamily name is required');
     }
-    if (assetFamily.code === 'ENCOFRADO' && (isJackIdentity(name) || isJackIdentity(code))) {
-      const canonicalJack = getCanonicalJackReference(code) ?? getCanonicalJackReference(name);
-      if (!canonicalJack) {
+    if (
+      assetFamily.code === 'ENCOFRADO' &&
+      (isJackIdentity(name) ||
+        isJackIdentity(code) ||
+        getCanonicalJackReference(name) ||
+        getCanonicalJackReference(code))
+    ) {
+      if (!isCanonicalJackSubfamily(code) && !isCanonicalJackSubfamily(name)) {
         throw new BadRequestException(
-          'Subfamilia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+          'La subfamilia válida es GATO. Extra corto, corto, mediano, largo y extra largo son referencias.',
         );
       }
-      name = canonicalJack.subfamilyName;
-      code = canonicalJack.subfamilyCode;
+      name = 'GATO';
+      code = 'GATO';
     }
 
     try {
