@@ -245,16 +245,13 @@ const DEFAULT_CERTIFIED_SCAFFOLD_PARTS_WITHOUT_MEASURE = [
   'GANCHO DE SEGURIDAD',
 ];
 
-const CANONICAL_JACK_REFERENCES: Record<
-  string,
-  { name: string; lengthMeters: number }
-> = {
-  GATO_EXTRA_CORTO: { name: 'GATO EXTRA CORTO (1.00 M)', lengthMeters: 1 },
-  GATO_CORTO: { name: 'GATO CORTO (2.00 M)', lengthMeters: 2 },
-  GATO_MEDIANO: { name: 'GATO MEDIANO (3.00 M)', lengthMeters: 3 },
-  GATO_LARGO: { name: 'GATO LARGO (4.00 M)', lengthMeters: 4 },
-  GATO_EXTRA_LARGO: { name: 'GATO EXTRA LARGO (6.00 M)', lengthMeters: 6 },
-};
+const CANONICAL_JACK_REFERENCES = [
+  { reference: 'EXTRA CORTO', name: 'GATO EXTRA CORTO (1.00 M)', lengthMeters: 1 },
+  { reference: 'CORTO', name: 'GATO CORTO (2.00 M)', lengthMeters: 2 },
+  { reference: 'MEDIANO', name: 'GATO MEDIANO (3.00 M)', lengthMeters: 3 },
+  { reference: 'LARGO', name: 'GATO LARGO (4.00 M)', lengthMeters: 4 },
+  { reference: 'EXTRA LARGO', name: 'GATO EXTRA LARGO (6.00 M)', lengthMeters: 6 },
+] as const;
 
 const formatMeasure = (value: number) => value.toFixed(2);
 const formatMeterMeasure = (value: string) => {
@@ -683,8 +680,9 @@ export default function AddBulkStockPage() {
   const selectedSubfamily = selectedFamily?.subfamilies.find(
     (subfamily) => subfamily.id === selectedSubfamilyId,
   );
-  const canonicalJackReference = selectedSubfamily
-    ? CANONICAL_JACK_REFERENCES[selectedSubfamily.code] ?? null
+  const isJackSubfamily = selectedSubfamily?.code === 'GATO';
+  const canonicalJackReference = isJackSubfamily
+    ? CANONICAL_JACK_REFERENCES.find((reference) => reference.name === genericSkuName) ?? null
     : null;
   const selectedFamilyCode = selectedFamily?.code.toUpperCase() ?? '';
   const selectedFamilyKey = toUpperInput(selectedFamily?.name ?? '').replace(/\s+/g, '_');
@@ -813,7 +811,11 @@ export default function AddBulkStockPage() {
       };
     }
 
-    if (!selectedFamily || (!canonicalJackReference && !genericSkuName.trim())) {
+    if (
+      !selectedFamily ||
+      (isJackSubfamily && !canonicalJackReference) ||
+      (!isJackSubfamily && !genericSkuName.trim())
+    ) {
       return null;
     }
     const resolvedGenericName = canonicalJackReference?.name ?? genericSkuName.trim();
@@ -892,6 +894,7 @@ export default function AddBulkStockPage() {
     genericWeightUnit,
     selectedFamily,
     selectedSubfamilyId,
+    isJackSubfamily,
     canonicalJackReference,
     globalBulkSkus,
     itemType,
@@ -1318,7 +1321,11 @@ export default function AddBulkStockPage() {
         setError('Selecciona una familia');
         return;
       }
-      if (!canonicalJackReference && !genericSkuName.trim()) {
+      if (isJackSubfamily && !canonicalJackReference) {
+        setError('Selecciona la referencia del gato');
+        return;
+      }
+      if (!isJackSubfamily && !genericSkuName.trim()) {
         setError('Enter the SKU name for the generic item');
         return;
       }
@@ -1945,6 +1952,8 @@ export default function AddBulkStockPage() {
                           value={selectedSubfamilyId}
                           onChange={(value) => {
                             setSelectedSubfamilyId(value);
+                            setGenericSkuName('');
+                            setGenericLengthMeters('');
                             setIsItemConfigured(false);
                           }}
                           placeholder="Sin subfamilia"
@@ -2218,13 +2227,27 @@ export default function AddBulkStockPage() {
                   {itemType === 'GENERIC' ? (
                       <Paper radius="md" p="md" bg="gray.0">
                         <Stack gap="md">
-                          {canonicalJackReference ? (
+                          {isJackSubfamily ? (
                             <Paper withBorder radius="md" p="md" bg="green.0">
-                              <Stack gap={4}>
+                              <Stack gap="sm">
                                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                                  Referencia estandarizada
+                                  Referencia de gato
                                 </Text>
-                                <Text fw={700}>{canonicalJackReference.name}</Text>
+                                <Select
+                                  label="Referencia"
+                                  data={CANONICAL_JACK_REFERENCES.map((reference) => ({
+                                    value: reference.name,
+                                    label: `${reference.reference} · ${reference.lengthMeters.toFixed(2)} M`,
+                                  }))}
+                                  value={genericSkuName || null}
+                                  onChange={(value) => {
+                                    setGenericSkuName(value ?? '');
+                                    setGenericLengthMeters('');
+                                    setIsItemConfigured(false);
+                                  }}
+                                  placeholder="Seleccionar referencia"
+                                  required
+                                />
                                 <Text size="xs" c="dimmed">
                                   La medida representa la altura máxima aproximada de esta clase de gato.
                                 </Text>

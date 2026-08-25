@@ -36,6 +36,7 @@ import { normalizeAssetFamilyIdentity } from './asset-family-normalization';
 import {
   type CanonicalJackReference,
   getCanonicalJackReference,
+  isCanonicalJackSubfamily,
   isJackIdentity,
 } from './jack-catalog';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
@@ -2716,20 +2717,24 @@ export class InventoryService {
 
     let name = input?.name?.trim().toUpperCase() || 'ESTÁNDAR';
     let code = this.buildAssetFamilyCode(input?.code ?? name);
-    if (isJackIdentity(name) || isJackIdentity(code)) {
+    if (
+      isJackIdentity(name) ||
+      isJackIdentity(code) ||
+      getCanonicalJackReference(name) ||
+      getCanonicalJackReference(code)
+    ) {
       const family = await tx.assetFamily.findUnique({
         where: { id: assetFamilyId },
         select: { code: true },
       });
       if (family?.code === 'ENCOFRADO') {
-        const canonicalJack = getCanonicalJackReference(code) ?? getCanonicalJackReference(name);
-        if (!canonicalJack) {
+        if (!isCanonicalJackSubfamily(code) && !isCanonicalJackSubfamily(name)) {
           throw new BadRequestException(
-            'Subfamilia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+            'La subfamilia válida es GATO. Extra corto, corto, mediano, largo y extra largo son referencias.',
           );
         }
-        name = canonicalJack.subfamilyName;
-        code = canonicalJack.subfamilyCode;
+        name = 'GATO';
+        code = 'GATO';
       }
     }
     const existing = await tx.assetSubfamily.findUnique({
@@ -3034,23 +3039,32 @@ export class InventoryService {
         },
       });
       if (subfamily?.assetFamily.code === 'ENCOFRADO') {
-        canonicalJack = getCanonicalJackReference(subfamily.code);
-        if (!canonicalJack && (isJackIdentity(subfamily.code) || isJackIdentity(subfamily.name))) {
+        if (isCanonicalJackSubfamily(subfamily.code) || isCanonicalJackSubfamily(subfamily.name)) {
+          canonicalJack = getCanonicalJackReference(input.name);
+          if (!canonicalJack) {
+            throw new BadRequestException(
+              'Referencia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+            );
+          }
+        } else if (isJackIdentity(subfamily.code) || isJackIdentity(subfamily.name)) {
           throw new BadRequestException(
-            'Subfamilia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+            'La subfamilia válida es GATO. Extra corto, corto, mediano, largo y extra largo son referencias.',
           );
         }
       }
     }
 
-    if (!canonicalJack && isJackIdentity(input.name)) {
+    if (
+      !canonicalJack &&
+      (isJackIdentity(input.name) || getCanonicalJackReference(input.name))
+    ) {
       const family = await tx.assetFamily.findUnique({
         where: { id: assetFamilyId },
         select: { code: true },
       });
       if (family?.code === 'ENCOFRADO') {
         throw new BadRequestException(
-          'Selecciona una de las cinco subfamilias de gato antes de crear la referencia.',
+          'Selecciona la subfamilia GATO antes de crear una referencia de gato.',
         );
       }
     }
