@@ -72,6 +72,20 @@ const emptyForm: ProviderForm = {
   active: true,
 };
 
+const providerLogoStyles = {
+  root: { flexShrink: 0 },
+  image: {
+    backgroundColor: 'var(--mantine-color-white)',
+    objectFit: 'contain' as const,
+    padding: 4,
+  },
+};
+
+const providerLogoImageProps = {
+  decoding: 'async' as const,
+  loading: 'lazy' as const,
+};
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) return `${error.status}: ${error.message}`;
   if (error instanceof Error) return error.message;
@@ -238,15 +252,26 @@ export default function ProvidersPage() {
       id: 'provider',
       header: 'Proveedor',
       ariaLabel: 'proveedor',
-      width: '32%',
+      width: '38%',
       sortValue: (provider) => provider.name,
       mobile: { priority: 'primary' },
       cell: (provider) => (
         <Group gap="sm" wrap="nowrap">
-          <Avatar src={provider.logoUrl} name={provider.name} color="yellow" radius="md" />
+          <Avatar
+            src={provider.logoUrl}
+            alt={`Logo de ${provider.name}`}
+            name={provider.name}
+            color="yellow"
+            radius="md"
+            size={64}
+            imageProps={providerLogoImageProps}
+            styles={providerLogoStyles}
+          />
           <div style={{ minWidth: 0 }}>
             <Text fw={700} lineClamp={1}>{provider.name}</Text>
-            <Text size="xs" c="dimmed">{provider.nitOrId || 'Sin identificación'}</Text>
+            <Text size="xs" c="dimmed">
+              {provider.nitOrId ? `NIT: ${provider.nitOrId}` : 'Sin NIT'}
+            </Text>
           </div>
         </Group>
       ),
@@ -255,29 +280,22 @@ export default function ProvidersPage() {
       id: 'contact',
       header: 'Contacto',
       ariaLabel: 'contacto',
-      width: '30%',
+      width: '38%',
       sortValue: (provider) => provider.email ?? provider.phone ?? '',
       mobile: { label: 'Contacto', priority: 'detail' },
       cell: (provider) => (
-        <Stack gap={2}>
-          <Text size="sm">{provider.phone || '-'}</Text>
-          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
-            {provider.email || 'Sin correo'}
-          </Text>
+        <Stack gap={4}>
+          <Group gap={6} wrap="nowrap">
+            <IconPhone size={14} color="var(--mantine-color-dimmed)" aria-hidden="true" />
+            <Text size="sm">{provider.phone || 'Sin teléfono'}</Text>
+          </Group>
+          <Group gap={6} wrap="nowrap" align="flex-start">
+            <IconMail size={14} color="var(--mantine-color-dimmed)" aria-hidden="true" style={{ marginTop: 2, flexShrink: 0 }} />
+            <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+              {provider.email || 'Sin correo'}
+            </Text>
+          </Group>
         </Stack>
-      ),
-    },
-    {
-      id: 'warehouses',
-      header: 'Bodegas',
-      ariaLabel: 'bodegas',
-      width: '14%',
-      sortValue: (provider) => warehousesByProvider.get(provider.id)?.length ?? 0,
-      mobile: { label: 'Bodegas', priority: 'detail' },
-      cell: (provider) => (
-        <Badge color="blue" variant="light">
-          {warehousesByProvider.get(provider.id)?.length ?? 0}
-        </Badge>
       ),
     },
     {
