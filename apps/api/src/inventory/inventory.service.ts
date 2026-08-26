@@ -33,6 +33,12 @@ import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
 import { normalizeAssetFamilyIdentity } from './asset-family-normalization';
+import {
+  type CanonicalJackReference,
+  getCanonicalJackReference,
+  isCanonicalJackSubfamily,
+  isJackIdentity,
+} from './jack-catalog';
 import { ArchiveBulkSkuDto } from './dto/archive-bulk-sku.dto';
 import { DeleteBulkStockDto } from './dto/delete-bulk-stock.dto';
 import {
@@ -2709,8 +2715,28 @@ export class InventoryService {
       return existing;
     }
 
-    const name = input?.name?.trim().toUpperCase() || 'ESTÁNDAR';
-    const code = this.buildAssetFamilyCode(input?.code ?? name);
+    let name = input?.name?.trim().toUpperCase() || 'ESTÁNDAR';
+    let code = this.buildAssetFamilyCode(input?.code ?? name);
+    if (
+      isJackIdentity(name) ||
+      isJackIdentity(code) ||
+      getCanonicalJackReference(name) ||
+      getCanonicalJackReference(code)
+    ) {
+      const family = await tx.assetFamily.findUnique({
+        where: { id: assetFamilyId },
+        select: { code: true },
+      });
+      if (family?.code === 'ENCOFRADO') {
+        if (!isCanonicalJackSubfamily(code) && !isCanonicalJackSubfamily(name)) {
+          throw new BadRequestException(
+            'La subfamilia válida es GATO. Extra corto, corto, mediano, largo y extra largo son referencias.',
+          );
+        }
+        name = 'GATO';
+        code = 'GATO';
+      }
+    }
     const existing = await tx.assetSubfamily.findUnique({
       where: { assetFamilyId_code: { assetFamilyId, code } },
       select: { id: true, assetFamilyId: true, code: true, active: true },
@@ -3002,7 +3028,56 @@ export class InventoryService {
       return this.resolveSku(input, assetFamilyId, tx, assetSubfamilyId);
     }
 
-    const normalizedInput = normalizeBulkSkuInput(input);
+    let canonicalJack: CanonicalJackReference | null = null;
+    if (assetSubfamilyId) {
+      const subfamily = await tx.assetSubfamily.findUnique({
+        where: { id: assetSubfamilyId },
+        select: {
+          code: true,
+          name: true,
+          assetFamily: { select: { code: true } },
+        },
+      });
+      if (subfamily?.assetFamily.code === 'ENCOFRADO') {
+        if (isCanonicalJackSubfamily(subfamily.code) || isCanonicalJackSubfamily(subfamily.name)) {
+          canonicalJack = getCanonicalJackReference(input.name);
+          if (!canonicalJack) {
+            throw new BadRequestException(
+              'Referencia de gato no permitida. Usa extra corto, corto, mediano, largo o extra largo.',
+            );
+          }
+        } else if (isJackIdentity(subfamily.code) || isJackIdentity(subfamily.name)) {
+          throw new BadRequestException(
+            'La subfamilia válida es GATO. Extra corto, corto, mediano, largo y extra largo son referencias.',
+          );
+        }
+      }
+    }
+
+    if (
+      !canonicalJack &&
+      (isJackIdentity(input.name) || getCanonicalJackReference(input.name))
+    ) {
+      const family = await tx.assetFamily.findUnique({
+        where: { id: assetFamilyId },
+        select: { code: true },
+      });
+      if (family?.code === 'ENCOFRADO') {
+        throw new BadRequestException(
+          'Selecciona la subfamilia GATO antes de crear una referencia de gato.',
+        );
+      }
+    }
+
+    const normalizedInput = normalizeBulkSkuInput(
+      canonicalJack
+        ? {
+            ...input,
+            name: canonicalJack.skuName,
+            lengthMeters: canonicalJack.lengthMeters,
+          }
+        : input,
+    );
     const canonicalName = bulkSkuCanonicalKey(normalizedInput);
     if (!canonicalName) {
       throw new BadRequestException('Sku name is required');
