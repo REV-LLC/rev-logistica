@@ -8,6 +8,7 @@ import {
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from './files.service';
+import sharp from 'sharp';
 
 describe('FilesService categories', () => {
   const service = new FilesService(
@@ -69,6 +70,38 @@ describe('FilesService categories', () => {
   });
 });
 
+describe('FilesService image thumbnails', () => {
+  const service = new FilesService({} as never, {} as never, {} as never);
+  const createThumbnail = (buffer: Buffer) =>
+    (
+      service as unknown as {
+        createImageThumbnail: (value: Buffer) => Promise<Buffer>;
+      }
+    ).createImageThumbnail(buffer);
+
+  it('creates a small preview without replacing the original photo', async () => {
+    const buffer = await sharp({
+      create: {
+        width: 3000,
+        height: 2400,
+        channels: 3,
+        background: { r: 120, g: 80, b: 40 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const thumbnail = await createThumbnail(buffer);
+    const metadata = await sharp(thumbnail).metadata();
+
+    expect(thumbnail.length).toBeLessThan(buffer.length);
+    expect(metadata.format).toBe('webp');
+    expect(
+      Math.max(metadata.width ?? 0, metadata.height ?? 0),
+    ).toBeLessThanOrEqual(480);
+  });
+});
+
 describe('FilesService asset documents', () => {
   const assetFindUnique = jest.fn();
   const hourReadingFindMany = jest.fn();
@@ -85,9 +118,9 @@ describe('FilesService asset documents', () => {
 
   beforeEach(() => {
     assetFindUnique.mockReset().mockResolvedValue({ id: 'asset-1' });
-    hourReadingFindMany.mockReset().mockResolvedValue([
-      { evidenceFileObjectId: 'hour-evidence-1' },
-    ]);
+    hourReadingFindMany
+      .mockReset()
+      .mockResolvedValue([{ evidenceFileObjectId: 'hour-evidence-1' }]);
     fileFindMany.mockReset().mockResolvedValue([]);
   });
 
@@ -168,10 +201,12 @@ describe('FilesService provider remission links', () => {
     });
     fileFindMany.mockResolvedValue([{ id: 'file-1' }]);
 
-    await expect(service.listProviderRemissions('provider-1')).resolves.toEqual({
-      provider: expect.objectContaining({ id: 'provider-1' }),
-      files: [{ id: 'file-1' }],
-    });
+    await expect(service.listProviderRemissions('provider-1')).resolves.toEqual(
+      {
+        provider: expect.objectContaining({ id: 'provider-1' }),
+        files: [{ id: 'file-1' }],
+      },
+    );
     expect(fileFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {

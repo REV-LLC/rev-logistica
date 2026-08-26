@@ -1,4 +1,9 @@
-import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import {
   BadRequestException,
   Injectable,
@@ -7,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { EmployeeRole, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import sharp from 'sharp';
 import type { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,7 +24,12 @@ export type EmployeePhotoFile = {
 };
 
 const MAX_PROFILE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_PROFILE_PHOTO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+const ALLOWED_PROFILE_PHOTO_MIME_TYPES = new Set([
+  'image/png',
+  'image/webp',
+  'image/jpeg',
+]);
+const PROFILE_PHOTO_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 @Injectable()
 export class EmployeesService {
@@ -48,7 +59,14 @@ export class EmployeesService {
         vehicles: {
           select: {
             vehicle: {
-              select: { id: true, plate: true, brand: true, model: true, type: true, active: true },
+              select: {
+                id: true,
+                plate: true,
+                brand: true,
+                model: true,
+                type: true,
+                active: true,
+              },
             },
           },
         },
@@ -83,20 +101,36 @@ export class EmployeesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         let createdUserId: string | null = null;
-        const normalizedLoginIdentifier = (payload.loginIdentifier ?? payload.loginEmail)?.trim().toLowerCase();
+        const normalizedLoginIdentifier = (
+          payload.loginIdentifier ?? payload.loginEmail
+        )
+          ?.trim()
+          .toLowerCase();
         const wantsLogin = Boolean(
-          normalizedLoginIdentifier || payload.loginPassword || payload.loginRole || payload.loginActive !== undefined,
+          normalizedLoginIdentifier ||
+          payload.loginPassword ||
+          payload.loginRole ||
+          payload.loginActive !== undefined,
         );
 
         if (wantsLogin) {
           if (!normalizedLoginIdentifier) {
-            throw new BadRequestException('El usuario o correo de acceso es obligatorio');
+            throw new BadRequestException(
+              'El usuario o correo de acceso es obligatorio',
+            );
           }
           if (!payload.loginPassword?.trim()) {
-            throw new BadRequestException('La contraseña de acceso es obligatoria');
+            throw new BadRequestException(
+              'La contraseña de acceso es obligatoria',
+            );
           }
-          const userRole = payload.loginRole ?? this.mapEmployeeRoleToUserRole(payload.role as EmployeeRole);
-          const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+          const userRole =
+            payload.loginRole ??
+            this.mapEmployeeRoleToUserRole(payload.role as EmployeeRole);
+          const passwordHash = await bcrypt.hash(
+            payload.loginPassword.trim(),
+            10,
+          );
           const user = await tx.user.create({
             data: {
               email: normalizedLoginIdentifier,
@@ -171,9 +205,14 @@ export class EmployeesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const nextEmployeeRole = (payload.role as EmployeeRole | undefined) ?? employee.role;
+        const nextEmployeeRole =
+          (payload.role as EmployeeRole | undefined) ?? employee.role;
 
-        const normalizedLoginIdentifier = (payload.loginIdentifier ?? payload.loginEmail)?.trim().toLowerCase();
+        const normalizedLoginIdentifier = (
+          payload.loginIdentifier ?? payload.loginEmail
+        )
+          ?.trim()
+          .toLowerCase();
         const wantsLogin =
           payload.loginEnabled === true ||
           normalizedLoginIdentifier !== undefined ||
@@ -189,11 +228,16 @@ export class EmployeesService {
         } else if (wantsLogin) {
           if (employee.userId) {
             const data: Prisma.UserUpdateInput = {};
-            if (normalizedLoginIdentifier) data.email = normalizedLoginIdentifier;
+            if (normalizedLoginIdentifier)
+              data.email = normalizedLoginIdentifier;
             if (payload.loginRole) data.role = payload.loginRole;
-            if (payload.loginActive !== undefined) data.active = payload.loginActive;
+            if (payload.loginActive !== undefined)
+              data.active = payload.loginActive;
             if (payload.loginPassword?.trim()) {
-              data.passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+              data.passwordHash = await bcrypt.hash(
+                payload.loginPassword.trim(),
+                10,
+              );
             }
             if (Object.keys(data).length) {
               await tx.user.update({
@@ -203,13 +247,22 @@ export class EmployeesService {
             }
           } else {
             if (!normalizedLoginIdentifier) {
-              throw new BadRequestException('El usuario o correo de acceso es obligatorio');
+              throw new BadRequestException(
+                'El usuario o correo de acceso es obligatorio',
+              );
             }
             if (!payload.loginPassword?.trim()) {
-              throw new BadRequestException('La contraseña de acceso es obligatoria');
+              throw new BadRequestException(
+                'La contraseña de acceso es obligatoria',
+              );
             }
-            const userRole = payload.loginRole ?? this.mapEmployeeRoleToUserRole(nextEmployeeRole);
-            const passwordHash = await bcrypt.hash(payload.loginPassword.trim(), 10);
+            const userRole =
+              payload.loginRole ??
+              this.mapEmployeeRoleToUserRole(nextEmployeeRole);
+            const passwordHash = await bcrypt.hash(
+              payload.loginPassword.trim(),
+              10,
+            );
             const user = await tx.user.create({
               data: {
                 email: normalizedLoginIdentifier,
@@ -266,7 +319,7 @@ export class EmployeesService {
     });
   }
 
-  async getEmployeePhoto(employeeId: string) {
+  async getEmployeePhoto(employeeId: string, thumbnail = false) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: { id: true },
@@ -277,7 +330,13 @@ export class EmployeesService {
 
     const config = this.getR2Config();
     const s3 = this.createR2Client(config);
-    const keys = [`employees/${employeeId}/profile`, `employees/${employeeId}/profile.webp`];
+    const originalKeys = [
+      `employees/${employeeId}/profile`,
+      `employees/${employeeId}/profile.webp`,
+    ];
+    const keys = thumbnail
+      ? [`employees/${employeeId}/profile.thumbnail.webp`, ...originalKeys]
+      : originalKeys;
 
     for (const key of keys) {
       try {
@@ -325,13 +384,29 @@ export class EmployeesService {
 
     const config = this.getR2Config();
     const key = `employees/${employeeId}/profile`;
+    const thumbnail = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: 320, height: 320, fit: 'cover', position: 'attention' })
+      .webp({ quality: 76, effort: 4 })
+      .toBuffer();
 
-    await this.createR2Client(config).send(
+    const client = this.createR2Client(config);
+    await client.send(
       new PutObjectCommand({
         Bucket: config.bucket,
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
+        CacheControl: PROFILE_PHOTO_CACHE_CONTROL,
+      }),
+    );
+    await client.send(
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: `${key}.thumbnail.webp`,
+        Body: thumbnail,
+        ContentType: 'image/webp',
+        CacheControl: PROFILE_PHOTO_CACHE_CONTROL,
       }),
     );
 
@@ -340,7 +415,9 @@ export class EmployeesService {
 
   private async assertVehiclesExist(vehicleIds: string[]) {
     const unique = [...new Set(vehicleIds)];
-    const count = await this.prisma.vehicle.count({ where: { id: { in: unique } } });
+    const count = await this.prisma.vehicle.count({
+      where: { id: { in: unique } },
+    });
     if (count !== unique.length) {
       throw new BadRequestException('One or more vehicleIds are invalid');
     }
@@ -348,7 +425,11 @@ export class EmployeesService {
 
   private mapEmployeeRoleToUserRole(role: EmployeeRole): Role {
     if (role === 'DRIVER') return Role.DRIVER;
-    if (role === 'HEAVY_MACHINERY_OPERATOR' || role === 'MACHINIST' || role === 'MECHANIC') {
+    if (
+      role === 'HEAVY_MACHINERY_OPERATOR' ||
+      role === 'MACHINIST' ||
+      role === 'MECHANIC'
+    ) {
       return Role.OPERATOR;
     }
     return Role.OFFICE;
@@ -394,7 +475,9 @@ export class EmployeesService {
       throw new BadRequestException('Profile photo file is empty');
     }
     if (!this.hasExpectedImageSignature(file.buffer, file.mimetype)) {
-      throw new BadRequestException('Profile photo content does not match the declared image type');
+      throw new BadRequestException(
+        'Profile photo content does not match the declared image type',
+      );
     }
   }
 
@@ -427,7 +510,10 @@ export class EmployeesService {
   }
 
   private rethrowConstraint(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       throw new BadRequestException('El email de acceso ya está en uso');
     }
     throw error;

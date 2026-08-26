@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -43,9 +44,13 @@ export class EmployeesController {
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
   async getEmployeePhoto(
     @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
+    @Query('variant') variant: string | undefined,
     @Res() response: Response,
   ) {
-    const photo = await this.employeesService.getEmployeePhoto(employeeId);
+    const photo = await this.employeesService.getEmployeePhoto(
+      employeeId,
+      variant === 'thumbnail',
+    );
     response.setHeader('Content-Type', photo.contentType);
     response.setHeader('Cache-Control', 'private, max-age=14400');
     if (photo.contentLength !== undefined) {
