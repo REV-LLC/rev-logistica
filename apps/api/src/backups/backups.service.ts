@@ -13,7 +13,6 @@ type BackupTable =
   | 'skus'
   | 'assets'
   | 'tasks'
-  | 'taskAssets'
   | 'documents'
   | 'documentItems'
   | 'stockLedger'
@@ -47,7 +46,6 @@ const TABLES: TableConfig[] = [
   { key: 'skus', label: 'Referencias', delegate: 'sku', orderBy: { createdAt: 'asc' } },
   { key: 'assets', label: 'Equipos serializados', delegate: 'asset', orderBy: { createdAt: 'asc' } },
   { key: 'tasks', label: 'Pendientes', delegate: 'task', orderBy: { createdAt: 'asc' } },
-  { key: 'taskAssets', label: 'Activos en pendientes', delegate: 'taskAsset', orderBy: { createdAt: 'asc' } },
   { key: 'documents', label: 'Documentos', delegate: 'document', orderBy: { createdAt: 'asc' } },
   { key: 'documentItems', label: 'Items de documentos', delegate: 'documentItem', orderBy: { createdAt: 'asc' } },
   { key: 'stockLedger', label: 'Movimientos de inventario', delegate: 'stockLedger', orderBy: { createdAt: 'asc' } },

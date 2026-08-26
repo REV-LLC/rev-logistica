@@ -111,40 +111,4 @@ export class TasksController {
     return this.tasksService.deleteTask(id);
   }
 
-  @Get(':id/assets')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
-  listTaskAssets(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.tasksService.listTaskAssets(id);
-  }
-
-  @Post(':id/assets')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
-  addTaskAsset(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    )
-    payload: { assetId: string },
-  ) {
-    if (!payload?.assetId) {
-      throw new BadRequestException('assetId is required');
-    }
-    return this.tasksService.addTaskAsset(id, payload.assetId);
-  }
-
-  @Delete(':id/assets/:assetId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE)
-  removeTaskAsset(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Param('assetId', new ParseUUIDPipe()) assetId: string,
-  ) {
-    return this.tasksService.removeTaskAsset(id, assetId);
-  }
 }

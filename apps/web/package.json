@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
+    "test": "node --test src/components/transport/*.test.mjs",
     "start": "next start",
     "lint": "next lint"
   },

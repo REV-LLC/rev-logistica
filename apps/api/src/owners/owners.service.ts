@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
+import { UpdateOwnerDto } from './dto/update-owner.dto';
 
 export type OwnerLogoFile = {
   buffer: Buffer;
@@ -22,6 +23,11 @@ const OWNER_SELECT = {
   active: true,
   logoUrl: true,
   logoKey: true,
+  category: true,
+  nitOrId: true,
+  phone: true,
+  email: true,
+  createdAt: true,
 } as const;
 
 const MAX_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
@@ -63,6 +69,42 @@ export class OwnersService {
     });
   }
 
+  async updateOwner(ownerId: string, payload: UpdateOwnerDto) {
+    const owner = await this.prisma.owner.findUnique({
+      where: { id: ownerId },
+      select: { id: true },
+    });
+    if (!owner) {
+      throw new NotFoundException('Owner not found');
+    }
+
+    const name = payload.name?.trim();
+    if (payload.name !== undefined && !name) {
+      throw new BadRequestException('Owner name is required');
+    }
+
+    return this.prisma.owner.update({
+      where: { id: ownerId },
+      data: {
+        name: name ?? undefined,
+        nitOrId:
+          payload.nitOrId === undefined
+            ? undefined
+            : this.normalizeOptionalString(payload.nitOrId) ?? null,
+        phone:
+          payload.phone === undefined
+            ? undefined
+            : this.normalizeOptionalString(payload.phone) ?? null,
+        email:
+          payload.email === undefined
+            ? undefined
+            : this.normalizeOptionalString(payload.email) ?? null,
+        active: payload.active,
+      },
+      select: OWNER_SELECT,
+    });
+  }
+
   async uploadLogo(ownerId: string, file?: OwnerLogoFile) {
     if (!file) {
       throw new BadRequestException('Logo file is required');
@@ -95,6 +137,7 @@ export class OwnersService {
         Key: logoKey,
         Body: file.buffer,
         ContentType: file.mimetype,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 
@@ -121,7 +164,7 @@ export class OwnersService {
     }
   }
 
-  private normalizeOptionalString(value?: string) {
+  private normalizeOptionalString(value?: string | null) {
     const normalized = value?.trim();
     return normalized ? normalized : undefined;
   }

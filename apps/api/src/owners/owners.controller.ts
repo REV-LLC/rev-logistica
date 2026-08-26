@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateOwnerDto } from './dto/create-owner.dto';
+import { UpdateOwnerDto } from './dto/update-owner.dto';
 import { OwnersService } from './owners.service';
 import type { OwnerLogoFile } from './owners.service';
 
@@ -45,6 +47,21 @@ export class OwnersController {
     payload: CreateOwnerDto,
   ) {
     return this.ownersService.createOwner(payload);
+  }
+
+  @Patch(':ownerId')
+  updateOwner(
+    @Param('ownerId', new ParseUUIDPipe()) ownerId: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    payload: UpdateOwnerDto,
+  ) {
+    return this.ownersService.updateOwner(ownerId, payload);
   }
 
   @Post(':ownerId/logo')

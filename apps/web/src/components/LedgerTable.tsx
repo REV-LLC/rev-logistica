@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Card, Modal, Table, Text } from '@mantine/core';
+import { Badge, Card, Modal, Table, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconEye } from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
@@ -31,6 +31,8 @@ export type LedgerItem = {
     id: string;
     serialOrEngine?: string | null;
     description?: string | null;
+    deletedAt?: string | null;
+    deletionReason?: string | null;
     sku?: { id: string; name: string } | null;
   } | null;
   warehouse?: { id: string; name: string } | null;
@@ -186,6 +188,9 @@ export default function LedgerTable({
                       {secondaryLabel}
                     </Text>
                   )}
+                  {item.asset?.deletedAt ? (
+                    <Badge size="xs" color="red" variant="light">Equipo eliminado</Badge>
+                  ) : null}
                   {item.assetId ? (
                     <Text size="xs">
                       <Link href={`/inventory/serialized-assets/${item.assetId}`}>View equipment</Link>
@@ -243,6 +248,12 @@ export default function LedgerTable({
               <Text mt="xs">
                 <strong>Equipment:</strong>{' '}
                 <Link href={`/inventory/serialized-assets/${detailsItem.assetId}`}>Abrir ficha del equipo</Link>
+              </Text>
+            ) : null}
+            {detailsItem.asset?.deletedAt ? (
+              <Text mt="xs" c="red">
+                <strong>Estado:</strong> Equipo eliminado
+                {detailsItem.asset.deletionReason ? ` · ${detailsItem.asset.deletionReason}` : ''}
               </Text>
             ) : null}
           </>

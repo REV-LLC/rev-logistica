@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Inject,
   InternalServerErrorException,
   Injectable,
@@ -329,7 +330,7 @@ export class InventoryService {
     ];
     const assets = serialAssetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: serialAssetIds } },
+          where: { id: { in: serialAssetIds }, active: true, deletedAt: null },
           select: { id: true, warehouseOwnerId: true },
         })
       : [];
@@ -403,6 +404,7 @@ export class InventoryService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
+        this.assertBrandDiffersFromFamily(payload.asset.brand, assetFamily.name);
         const assetSubfamily = await this.resolveAssetSubfamily(
           payload.subfamily,
           assetFamily.id,
@@ -631,6 +633,9 @@ export class InventoryService {
       return { asset, ledger, providerPrice, motor: createdMotor };
       });
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           const targets = Array.isArray(error.meta?.target)
@@ -1033,7 +1038,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1213,7 +1218,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1416,7 +1421,7 @@ export class InventoryService {
       });
 
       const assets = serialIds.length
-        ? await tx.asset.findMany({ where: { id: { in: serialIds } }, select: { id: true, warehouseOwnerId: true } })
+        ? await tx.asset.findMany({ where: { id: { in: serialIds }, active: true, deletedAt: null }, select: { id: true, warehouseOwnerId: true } })
         : [];
       const assetOwner = new Map(assets.map((asset) => [asset.id, asset.warehouseOwnerId]));
       serialIds.forEach((assetId) => {
@@ -1545,7 +1550,7 @@ export class InventoryService {
 
       const assets = serialIds.length
         ? await tx.asset.findMany({
-            where: { id: { in: serialIds } },
+            where: { id: { in: serialIds }, active: true, deletedAt: null },
             select: { id: true, warehouseOwnerId: true },
           })
         : [];
@@ -1865,7 +1870,7 @@ export class InventoryService {
 
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: assetIds } },
+          where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -1916,7 +1921,12 @@ export class InventoryService {
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id.toLowerCase(), sku]));
-    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouseIds = [
+      ...new Set([
+        ...bulkBase.map((row) => row.ownerWarehouseId),
+        ...assets.map((asset) => asset.warehouseOwnerId),
+      ]),
+    ];
     const ownerWarehouses = ownerWarehouseIds.length
       ? await this.prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
@@ -1974,6 +1984,7 @@ export class InventoryService {
       .sort((a, b) => (a.skuName ?? '').localeCompare(b.skuName ?? ''));
 
     const serial = serialBase
+      .filter((row) => assetsById.has(row.assetId))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;
@@ -2144,7 +2155,7 @@ export class InventoryService {
 
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: assetIds } },
+          where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -2193,7 +2204,12 @@ export class InventoryService {
         })
       : [];
     const skusById = new Map(skus.map((sku) => [sku.id, sku]));
-    const ownerWarehouseIds = [...new Set(bulkBase.map((row) => row.ownerWarehouseId))];
+    const ownerWarehouseIds = [
+      ...new Set([
+        ...bulkBase.map((row) => row.ownerWarehouseId),
+        ...assets.map((asset) => asset.warehouseOwnerId),
+      ]),
+    ];
     const ownerWarehouses = ownerWarehouseIds.length
       ? await this.prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
@@ -2241,6 +2257,7 @@ export class InventoryService {
       .sort((a, b) => (a.skuName ?? '').localeCompare(b.skuName ?? ''));
 
     const serial = serialBase
+      .filter((row) => assetsById.has(row.assetId))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;
@@ -2364,6 +2381,8 @@ export class InventoryService {
             id: true,
             serialOrEngine: true,
             description: true,
+            deletedAt: true,
+            deletionReason: true,
             sku: { select: { id: true, name: true } },
           },
         },
@@ -2547,7 +2566,7 @@ export class InventoryService {
 
     const assets = serialAssetIds.length
       ? await this.prisma.asset.findMany({
-          where: { id: { in: serialAssetIds } },
+          where: { id: { in: serialAssetIds }, active: true, deletedAt: null },
           select: {
             id: true,
             serialOrEngine: true,
@@ -2589,6 +2608,7 @@ export class InventoryService {
       .filter((row) => row.initialQuantity !== 0 || row.onSiteQuantity !== 0);
 
     const serial = serialAssetIds
+      .filter((assetId) => assetsById.has(assetId))
       .map((assetId) => {
         const initialQuantity = serialInitialByAsset.get(assetId) ?? 0;
         const onSiteQuantity =
@@ -2741,7 +2761,7 @@ export class InventoryService {
     if (input.id) {
       const existing = await tx.assetFamily.findUnique({
         where: { id: input.id },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       if (!existing) {
         throw new NotFoundException('Asset family not found');
@@ -2762,7 +2782,7 @@ export class InventoryService {
     if (code) {
       const existingByCode = await tx.assetFamily.findUnique({
         where: { code },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       if (existingByCode) {
         if (existingByCode.controlType !== controlType) {
@@ -2793,7 +2813,7 @@ export class InventoryService {
           name: name ?? code!,
           controlType,
         },
-        select: { id: true, code: true, controlType: true },
+        select: { id: true, code: true, name: true, controlType: true },
       });
       return created;
     } catch (error) {
@@ -2802,7 +2822,7 @@ export class InventoryService {
         if (code) {
           const concurrentByCode = await tx.assetFamily.findUnique({
             where: { code },
-            select: { id: true, code: true, controlType: true },
+            select: { id: true, code: true, name: true, controlType: true },
           });
           if (concurrentByCode) {
             if (concurrentByCode.controlType !== controlType) {
@@ -2829,6 +2849,18 @@ export class InventoryService {
         throw new BadRequestException('Asset family code already exists');
       }
       throw error;
+    }
+  }
+
+  private assertBrandDiffersFromFamily(brand: string | undefined, familyName: string) {
+    const normalizedBrand = brand ? normalizeAssetFamilyIdentity(brand) : '';
+    if (
+      normalizedBrand
+      && normalizedBrand === normalizeAssetFamilyIdentity(familyName)
+    ) {
+      throw new BadRequestException(
+        'La marca no puede tener el mismo nombre que la familia del equipo',
+      );
     }
   }
 

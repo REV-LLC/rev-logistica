@@ -48,6 +48,13 @@ type AssetResponse = {
   imageFileObjectId?: string | null;
   imageUrl?: string | null;
   active: boolean;
+  deletedAt?: string | null;
+  deletionReason?: string | null;
+  deletedBy?: {
+    id: string;
+    email: string;
+    employee?: { name: string; lastName?: string | null } | null;
+  } | null;
   sku?: {
     id: string;
     name: string | null;
@@ -253,6 +260,23 @@ export default function EditSerializedAssetPage() {
       mounted = false;
     };
   }, [assetId]);
+
+  useEffect(() => {
+    if (!assetId || !asset) return;
+    const ownerWarehouseType = warehouses.find(
+      (warehouse) => warehouse.id === asset.warehouseOwnerId,
+    )?.type;
+    if (!ownerWarehouseType) return;
+
+    const expectedScope = ownerWarehouseType === 'ALLY' ? 'allied' : 'own';
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('scope') === expectedScope) return;
+
+    query.set('scope', expectedScope);
+    router.replace(`/inventory/serialized-assets/${assetId}?${query.toString()}`, {
+      scroll: false,
+    });
+  }, [asset, assetId, router, warehouses]);
 
   const warehouseOptions = useMemo(
     () => warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
@@ -464,15 +488,20 @@ export default function EditSerializedAssetPage() {
       model,
       serialOrEngine: asset.serialOrEngine,
     });
-    if (!window.confirm(`Eliminar activo ${label}?`)) return;
+    const reason = window.prompt(
+      `Eliminar activo ${label}? El historial se conservará. Escribe el motivo:`,
+    )?.trim();
+    if (!reason) return;
 
     setDeleting(true);
     setError(null);
     setSuccess(null);
     try {
-      await api(`/assets/${assetId}`, { method: 'DELETE' });
-      router.push('/inventory/warehouse');
-      router.refresh();
+      await api(`/assets/${assetId}`, { method: 'DELETE', json: { reason } });
+      const refreshed = await api<AssetResponse>(`/assets/${assetId}`);
+      setAsset(refreshed);
+      setEditing(false);
+      setSuccess('Equipo eliminado. Su historial permanece disponible.');
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -507,7 +536,7 @@ export default function EditSerializedAssetPage() {
         <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.back()}>
           Volver
         </Button>
-        {asset ? (
+        {asset && !asset.deletedAt ? (
           <Group gap="xs">
             <ActionIcon
               variant={editing ? 'filled' : 'light'}
@@ -545,6 +574,21 @@ export default function EditSerializedAssetPage() {
       {error ? (
         <Alert color="red" variant="light" mb="md">
           {error}
+        </Alert>
+      ) : null}
+
+      {asset?.deletedAt ? (
+        <Alert color="red" variant="light" mb="md" title="Equipo eliminado">
+          <Stack gap={4}>
+            <Text size="sm">
+              Este equipo fue eliminado el {new Date(asset.deletedAt).toLocaleString('es-CO')} por{' '}
+              {asset.deletedBy?.employee
+                ? `${asset.deletedBy.employee.name} ${asset.deletedBy.employee.lastName ?? ''}`.trim()
+                : asset.deletedBy?.email ?? 'un usuario no disponible'}.
+            </Text>
+            <Text size="sm"><strong>Motivo:</strong> {asset.deletionReason ?? 'Sin motivo registrado'}</Text>
+            <Text size="xs" c="dimmed">La ficha, documentos y movimientos se conservan únicamente para consulta histórica.</Text>
+          </Stack>
         </Alert>
       ) : null}
 

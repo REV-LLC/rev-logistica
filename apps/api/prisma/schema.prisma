@@ -19,6 +19,11 @@ enum WarehouseType {
   ALLY
 }
 
+enum OwnerCategory {
+  INTERNAL
+  PROVIDER
+}
+
 enum SkuControlType {
   BULK
   SERIAL
@@ -101,6 +106,7 @@ enum TaskStatus {
   OPEN
   DOING
   DONE
+  DELETED
 }
 
 enum TaskPriority {
@@ -179,6 +185,7 @@ model User {
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
   notificationDeliveries        NotificationDelivery[]
+  assetsDeleted                 Asset[]                 @relation("AssetDeletedBy")
   appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
   worksiteFuelReceipts          WorksiteFuelReceipt[]   @relation("WorksiteFuelReceiptCreatedBy")
   assetFuelings                 AssetFueling[]          @relation("AssetFuelingCreatedBy")
@@ -346,23 +353,23 @@ model AssetFamily {
   controlType SkuControlType
   createdAt   DateTime       @default(now())
 
-  skus        Sku[]
-  subfamilies AssetSubfamily[]
-  componentRules        AssetFamilyComponent[] @relation("ComponentRuleParent")
+  skus                   Sku[]
+  subfamilies            AssetSubfamily[]
+  componentRules         AssetFamilyComponent[] @relation("ComponentRuleParent")
   usedAsComponentInRules AssetFamilyComponent[] @relation("ComponentRuleComponent")
 }
 
 model AssetFamilyComponent {
-  id                      String   @id @default(uuid())
-  parentAssetFamilyId     String
-  componentAssetFamilyId  String
-  required                Boolean  @default(false)
-  minimumQuantity         Int      @default(0)
-  maximumQuantity         Int?
-  sortOrder                Int      @default(0)
-  active                   Boolean  @default(true)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  parentAssetFamilyId    String
+  componentAssetFamilyId String
+  required               Boolean  @default(false)
+  minimumQuantity        Int      @default(0)
+  maximumQuantity        Int?
+  sortOrder              Int      @default(0)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   parentAssetFamily    AssetFamily @relation("ComponentRuleParent", fields: [parentAssetFamilyId], references: [id], onDelete: Cascade)
   componentAssetFamily AssetFamily @relation("ComponentRuleComponent", fields: [componentAssetFamilyId], references: [id], onDelete: Cascade)
@@ -471,6 +478,9 @@ model Asset {
   warehouseOwnerId   String
   warehouseCurrentId String?
   active             Boolean                 @default(true)
+  deletedAt          DateTime?
+  deletedByUserId    String?
+  deletionReason     String?
   kind               AssetKind               @default(STANDARD)
   motorConfiguration AssetMotorConfiguration @default(NONE)
   assignedMotorId    String?                 @unique
@@ -482,20 +492,22 @@ model Asset {
   imageFileObject  FileObject? @relation("AssetImage", fields: [imageFileObjectId], references: [id])
   assignedMotor    Asset?      @relation("MixerAssignedMotor", fields: [assignedMotorId], references: [id], onDelete: SetNull)
   assignedToMixer  Asset?      @relation("MixerAssignedMotor")
+  deletedBy        User?       @relation("AssetDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
 
-  documentItems        DocumentItem[]
-  ledger               StockLedger[]
-  taskAssets           TaskAsset[]
-  mobilityGuides       MobilityGuide[]
-  hourReadings         AssetHourReading[]
-  maintenancePlans     MaintenancePlan[]
-  providerReceiptItems ProviderReceiptItem[]
-  providerPickupItems  ProviderPickupItem[]
-  assetFuelings        AssetFueling[]
-  documentItemsAsParent DocumentItem[] @relation("DocumentItemComponentParentAsset")
+  documentItems         DocumentItem[]
+  ledger                StockLedger[]
+  mobilityGuides        MobilityGuide[]
+  hourReadings          AssetHourReading[]
+  maintenancePlans      MaintenancePlan[]
+  providerReceiptItems  ProviderReceiptItem[]
+  providerPickupItems   ProviderPickupItem[]
+  assetFuelings         AssetFueling[]
+  documentItemsAsParent DocumentItem[]        @relation("DocumentItemComponentParentAsset")
 
   @@index([skuId])
   @@index([registrationNumber])
+  @@index([deletedAt])
+  @@index([deletedByUserId])
 }
 
 model ProviderMobilityGuide {
@@ -686,8 +698,6 @@ model Task {
   createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
   assignedToEmployee Employee?   @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
-  assets             TaskAsset[]
-
   @@index([createdByUserId])
   @@index([assignedToUserId])
   @@index([assignedToEmployeeId])
@@ -695,33 +705,20 @@ model Task {
   @@index([priority])
 }
 
-model TaskAsset {
-  id        String   @id @default(uuid())
-  taskId    String
-  assetId   String
-  createdAt DateTime @default(now())
-
-  task  Task  @relation(fields: [taskId], references: [id])
-  asset Asset @relation(fields: [assetId], references: [id])
-
-  @@unique([taskId, assetId])
-  @@index([assetId])
-}
-
 model Document {
-  id                 String         @id @default(uuid())
-  shareToken         String         @unique @default(uuid())
-  type               DocumentType
-  status             DocumentStatus @default(DRAFT)
-  consecutive        String?        @unique
-  customerWorksiteId String?
-  warehouseId        String?
+  id                  String         @id @default(uuid())
+  shareToken          String         @unique @default(uuid())
+  type                DocumentType
+  status              DocumentStatus @default(DRAFT)
+  consecutive         String?        @unique
+  customerWorksiteId  String?
+  warehouseId         String?
   providerWarehouseId String?
-  createdBy          String
-  docDate            DateTime       @default(now())
-  notes              String?
-  recipientPhone     String?
-  recipientPhones    String[]       @default([])
+  createdBy           String
+  docDate             DateTime       @default(now())
+  notes               String?
+  recipientPhone      String?
+  recipientPhones     String[]       @default([])
 
   // Failed fields
   failedReason         String?
@@ -748,10 +745,10 @@ model Document {
   customerDraftEmailedAt DateTime?
   customerFinalEmailedAt DateTime?
 
-  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
-  warehouse        Warehouse?        @relation("DocumentWarehouse", fields: [warehouseId], references: [id])
-  providerWarehouse Warehouse?       @relation("ProviderPickupSourceWarehouse", fields: [providerWarehouseId], references: [id])
-  creator          User              @relation("CreatedBy", fields: [createdBy], references: [id])
+  customerWorksite  CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id])
+  warehouse         Warehouse?        @relation("DocumentWarehouse", fields: [warehouseId], references: [id])
+  providerWarehouse Warehouse?        @relation("ProviderPickupSourceWarehouse", fields: [providerWarehouseId], references: [id])
+  creator           User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
   items                      DocumentItem[]
   ledger                     StockLedger[]
@@ -874,10 +871,10 @@ model DocumentItem {
 
   createdAt DateTime @default(now())
 
-  document Document @relation(fields: [documentId], references: [id])
-  sku      Sku?     @relation(fields: [skuId], references: [id])
-  asset    Asset?   @relation(fields: [assetId], references: [id])
-  componentParentAsset Asset? @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
+  document             Document @relation(fields: [documentId], references: [id])
+  sku                  Sku?     @relation(fields: [skuId], references: [id])
+  asset                Asset?   @relation(fields: [assetId], references: [id])
+  componentParentAsset Asset?   @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
 
   @@index([documentId])
   @@index([skuId])
@@ -1045,15 +1042,16 @@ model AssetInternalCounter {
 }
 
 model Owner {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   name      String
   nitOrId   String?
   phone     String?
   email     String?
   logoUrl   String?
   logoKey   String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  category  OwnerCategory @default(PROVIDER)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
 
   warehouses Warehouse[]
 }

@@ -7,6 +7,7 @@ import {
   NotificationChannel,
   NotificationDeliveryStatus,
   Prisma,
+  TaskStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
@@ -26,6 +27,10 @@ import {
 
 type DbClient = PrismaService | Prisma.TransactionClient;
 type ReminderStatus = 'UPCOMING' | 'DUE' | 'OVERDUE';
+const TERMINAL_TASK_STATUSES = new Set<TaskStatus>([
+  TaskStatus.DONE,
+  TaskStatus.DELETED,
+]);
 
 @Injectable()
 export class NotificationsService {
@@ -55,17 +60,18 @@ export class NotificationsService {
       entityId: task.id,
       eventType: NOTIFICATION_EVENT.TASK_DUE,
     };
+    const taskIsTerminal = TERMINAL_TASK_STATUSES.has(task.status);
     const topic = await this.prisma.notificationTopic.upsert({
       where: { entityType_entityId_eventType: topicKey },
-      create: { ...topicKey, active: task.status !== 'DONE' && Boolean(user) },
-      update: { active: task.status !== 'DONE' && Boolean(user) },
+      create: { ...topicKey, active: !taskIsTerminal && Boolean(user) },
+      update: { active: !taskIsTerminal && Boolean(user) },
     });
     await this.replaceRecipients(
       topic.id,
       user ? [{ userId: user.id, whatsappEnabled: true }] : [],
       this.prisma,
     );
-    if (task.status === 'DONE') return { sent: 0, skipped: 1 };
+    if (taskIsTerminal) return { sent: 0, skipped: 1 };
 
     const shouldNotify =
       reason === 'CREATED' || reason === 'REASSIGNED'
@@ -470,7 +476,7 @@ export class NotificationsService {
         ? this.prisma.task.findMany({
             where: {
               id: { in: taskTopics.map((topic) => topic.entityId) },
-              status: { not: 'DONE' },
+              status: { notIn: [...TERMINAL_TASK_STATUSES] },
             },
           })
         : Promise.resolve([]),
