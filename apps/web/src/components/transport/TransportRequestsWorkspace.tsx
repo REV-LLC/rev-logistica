@@ -82,6 +82,10 @@ import { validateOfflineFileDrafts } from '@/components/transport/file-drafts';
 import { useRequestInventory } from '@/components/transport/use-request-inventory';
 import { useRequestAssetSelection } from '@/components/transport/use-request-asset-selection';
 import {
+  type Employee,
+  useRequestCatalogs,
+} from '@/components/transport/use-request-catalogs';
+import {
   addBulkSelection,
   addFreeSelection,
   addSerialSelection,
@@ -102,34 +106,8 @@ import {
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
 
-type Employee = {
-  id: string;
-  name: string;
-  lastName?: string | null;
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    active: boolean;
-  } | null;
-};
 const getEmployeeFullName = (employee: Pick<Employee, 'name' | 'lastName'>) =>
   `${employee.name} ${employee.lastName ?? ''}`.trim();
-
-type Customer = { id: string; name: string; phone?: string | null };
-type CustomerWorksite = {
-  id: string;
-  alias: string | null;
-  worksite: {
-    id: string;
-    name: string;
-    address: string | null;
-    phone?: string | null;
-  };
-};
-
-type Vehicle = { id: string; plate?: string | null; name?: string | null };
-type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
 type SelectedItem = RequestSelectedItem;
 
@@ -212,8 +190,6 @@ type CreateSerializedAssetResponse = {
     warehouseCurrentId: string;
   };
 };
-const WAREHOUSES_CACHE_KEY = 'requests.warehouses.v1';
-
 function formatDocType(value: string) {
   return value === 'REMISSION' ? 'RM' : value === 'RETURN' ? 'DV' : value;
 }
@@ -285,26 +261,6 @@ function extractSkuIdsFromMessages(messages: string[]) {
     }
   });
   return [...ids];
-}
-
-function readJsonCache<T>(key: string): T | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-function writeJsonCache(key: string, value: unknown) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
 }
 
 type SolicitudesTab = 'list' | 'generate';
@@ -390,12 +346,15 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
-  const [worksitesLoading, setWorksitesLoading] = useState(false);
+  const {
+    employees,
+    vehicles,
+    warehouses,
+    customers,
+    worksites,
+    worksitesLoading,
+    clearWorksites,
+  } = useRequestCatalogs(customerId);
   const [error, setError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -817,13 +776,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   };
 
   useEffect(() => {
-    const cachedWarehouses = readJsonCache<{ items?: Warehouse[] }>(WAREHOUSES_CACHE_KEY);
-    if (cachedWarehouses?.items?.length) {
-      setWarehouses(cachedWarehouses.items);
-    }
-  }, []);
-
-  useEffect(() => {
     if (!principalWarehouse?.id || warehouseId) return;
     setWarehouseId(principalWarehouse.id);
   }, [principalWarehouse?.id, warehouseId]);
@@ -833,81 +785,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     markWarehouseHandled(principalWarehouse.id);
     setSourceOwnerWarehouseId(principalWarehouse.id);
   }, [markWarehouseHandled, principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const [emps, vehs, whs] = await Promise.all([
-          api<Employee[]>('/employees', { method: 'GET' }),
-          api<Vehicle[]>('/vehicles', { method: 'GET' }),
-          api<Warehouse[]>('/warehouses', { method: 'GET' }),
-        ]);
-        if (!mounted) return;
-        setEmployees(emps);
-        setVehicles(vehs);
-        setWarehouses(whs);
-        writeJsonCache(WAREHOUSES_CACHE_KEY, {
-          items: whs,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch (err) {
-        if (!mounted) return;
-        const cachedWarehouses = readJsonCache<{ items?: Warehouse[] }>(WAREHOUSES_CACHE_KEY);
-        if (cachedWarehouses?.items?.length) {
-          setWarehouses(cachedWarehouses.items);
-        }
-      }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadCustomers = async () => {
-      try {
-        const data = await api<Customer[]>('/customers', { method: 'GET' });
-        if (!mounted) return;
-        setCustomers(data);
-      } catch {
-        if (!mounted) return;
-      }
-    };
-    loadCustomers();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadWorksites = async () => {
-      if (!customerId) {
-        setWorksites([]);
-        return;
-      }
-      setWorksitesLoading(true);
-      try {
-        const data = await api<CustomerWorksite[]>(
-          `/customers/${customerId}/worksites`,
-          { method: 'GET' }
-        );
-        if (!mounted) return;
-        setWorksites(data);
-      } catch {
-        if (!mounted) return;
-      } finally {
-        if (mounted) setWorksitesLoading(false);
-      }
-    };
-    loadWorksites();
-    return () => {
-      mounted = false;
-    };
-  }, [customerId]);
 
   useEffect(() => {
     if (!isDriverRole || !currentUserId) return;
@@ -1550,7 +1427,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           'Solicitud guardada en este dispositivo. Se sincronizará automáticamente al recuperar la conexión.',
         );
         setItemsModalOpen(false);
-        setWorksites([]);
+        clearWorksites();
         return;
       }
 
@@ -1612,7 +1489,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       resetGenerateForm();
       setSubmitResult(successMessage);
       setItemsModalOpen(false);
-      setWorksites([]);
+      clearWorksites();
       setActiveTab(fixedTab);
       await loadRequests();
       if (mode === 'generate') {
