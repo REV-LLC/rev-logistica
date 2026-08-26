@@ -32,19 +32,11 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import {
   IconCamera,
-  IconCheck,
-  IconEye,
-  IconFileDescription,
-  IconPencil,
   IconTrash,
-  IconX,
 } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
-import DataTableToolbar from '@/components/tables/DataTableToolbar';
-import EntityDataTable from '@/components/tables/EntityDataTable';
-import type { DataTableColumn } from '@/components/tables/table.types';
 import { ownerColorById } from '@/lib/owner-color';
 import InventoryItemPickerModal, {
   type InventoryItemPickerBulkItem,
@@ -63,6 +55,39 @@ import AssetComponentsSelectionModal, {
 } from '@/components/AssetComponentsSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 import { buildRequestItems } from '@/components/transport/request-items';
+import {
+  normalizeLocalWhatsappPhone,
+  validateRequestSubmission,
+} from '@/components/transport/request-submission';
+import {
+  buildAutosavePayload,
+  buildDocumentPayload,
+  buildDraftPersistencePayload,
+} from '@/components/transport/request-payload';
+import { useRequestAutosave } from '@/components/transport/use-request-autosave';
+import { getRequestDraftStorageKey } from '@/components/transport/request-draft';
+import { useRequestDraftRestoration } from '@/components/transport/use-request-draft-restoration';
+import { useRequestsList } from '@/components/transport/use-requests-list';
+import { useRequestApproval } from '@/components/transport/use-request-approval';
+import {
+  buildInitialResolveState,
+  buildResolvedItemsPayload,
+  isResolvePendingItem,
+  parseInternalNumberFromTag,
+  validateApprovalResolution,
+} from '@/components/transport/approval-resolution';
+import ApprovalResolutionModal from '@/components/transport/ApprovalResolutionModal';
+import CreateSerializedAssetModal, {
+  type CreateSerializedAssetValues,
+} from '@/components/inventory/CreateSerializedAssetModal';
+import RequestsListPanel, {
+  type RequestDocument,
+} from '@/components/transport/RequestsListPanel';
+import {
+  classifyApprovalRecovery,
+  type ApprovalRecovery,
+  type ProviderRemissionRequirement,
+} from '@/components/transport/approval-errors';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -126,14 +151,6 @@ type EvidencePhotoDraft = {
   previewUrl: string;
 };
 
-type ProviderRemissionRequirement = {
-  providerWarehouseId: string;
-  providerName: string;
-  itemCount: number;
-  quantity: number;
-  documentUploaded: boolean;
-};
-
 type ProviderRemissionRequirements = {
   required: boolean;
   providers: ProviderRemissionRequirement[];
@@ -144,25 +161,6 @@ type ProviderRemissionModalState = {
   mode: 'OPTIONAL' | 'REQUIRED';
   requirements: ProviderRemissionRequirements;
   documentId?: string;
-};
-
-const getMissingProvidersFromApprovalError = (
-  error: unknown,
-): ProviderRemissionRequirement[] | null => {
-  if (!(error instanceof ApiError) || !error.data || typeof error.data !== 'object') {
-    return null;
-  }
-
-  const response = error.data as Record<string, unknown>;
-  const payload =
-    response.message && typeof response.message === 'object'
-      ? (response.message as Record<string, unknown>)
-      : response;
-  if (payload.code !== 'PROVIDER_REMISSION_REQUIRED' || !Array.isArray(payload.providers)) {
-    return null;
-  }
-
-  return payload.providers as ProviderRemissionRequirement[];
 };
 
 const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
@@ -177,23 +175,6 @@ type GenerateFieldErrors = {
   customerWorksiteId?: string;
   recipientPhones?: string;
   driverId?: string;
-};
-
-type RequestDocument = {
-  id: string;
-  type: 'REMISSION' | 'RETURN' | string;
-  status: string;
-  consecutive: string | null;
-  createdAt: string;
-  docDate: string;
-  creator?: { id: string; name: string | null; email: string | null } | null;
-  customerWorksite?: {
-    id: string;
-    alias: string | null;
-    customer?: { id: string; name: string } | null;
-    worksite?: { id: string; name: string } | null;
-  } | null;
-  _count?: { items: number };
 };
 
 type RequestDocumentDetail = {
@@ -249,15 +230,6 @@ type MixerMotorRecovery = {
   ownerWarehouseId: string;
 };
 
-type RecoverableApprovalError = {
-  code?: string;
-  recovery?: {
-    type?: string;
-    mixerAssetId?: string;
-    ownerWarehouseId?: string | null;
-  };
-};
-
 type SkuOption = {
   id: string;
   name: string;
@@ -285,19 +257,6 @@ const WAREHOUSES_CACHE_KEY = 'requests.warehouses.v1';
 const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
   `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
 
-const normalizeTagBase = (value?: string | null) =>
-  (value ?? '')
-    .replace(/#\s*\d+\s*$/i, '')
-    .trim()
-    .toUpperCase();
-
-const parseInternalNumberFromTag = (value?: string | null) => {
-  const match = (value ?? '').match(/#\s*(\d+)\s*$/i);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
 const helpLabel = (label: string, help: string, required = false) => (
   <Group gap={6} align="center">
     <Text span>{label}</Text>
@@ -314,20 +273,8 @@ const helpLabel = (label: string, help: string, required = false) => (
   </Group>
 );
 
-function withDocPrefix(value: string, docType: 'REMISSION' | 'RETURN') {
-  const prefix = docType === 'REMISSION' ? 'RM' : 'DV';
-  const cleaned = value.trim().replace(/^(RM|DV)[\s\-_]*/i, '');
-  return `${prefix}${cleaned}`;
-}
-
 function formatDocType(value: string) {
   return value === 'REMISSION' ? 'RM' : value === 'RETURN' ? 'DV' : value;
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('es-CO');
 }
 
 function getTodayDateInput() {
@@ -339,16 +286,6 @@ function getTodayDateInput() {
   }).format(new Date());
 }
 
-function requestTypeColor(type: string) {
-  return type === 'REMISSION' ? 'green' : type === 'RETURN' ? 'red' : 'gray';
-}
-
-const FUEL_OPTIONS = [
-  { value: 'GASOLINA', label: 'Gasolina' },
-  { value: 'DIESEL', label: 'Diesel' },
-  { value: 'ELECTRICO', label: 'Electrico' },
-];
-
 function normalizeQuantityInput(value: string | number, fallback = 1) {
   if (typeof value === 'number') {
     return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -357,14 +294,6 @@ function normalizeQuantityInput(value: string | number, fallback = 1) {
   if (!trimmed) return fallback;
   const parsed = Number(trimmed.replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function normalizeLocalWhatsappPhone(value?: string | null) {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, '');
-  if (/^\d{10}$/.test(digits)) return digits;
-  if (/^57\d{10}$/.test(digits)) return digits.slice(2);
-  return null;
 }
 
 function parseNotes(notes: string | null) {
@@ -420,38 +349,6 @@ function extractUserObservations(notes: string | null) {
       if (separatorIndex < 0) return true;
       return !SYSTEM_NOTE_KEYS.has(normalizeNoteKey(part.slice(0, separatorIndex)));
     })
-    .join(' | ');
-}
-
-function buildRequestNotes({
-  observations,
-  docDate,
-  docType,
-  deliveryMode,
-  vehicleId,
-  driverId,
-  dispatcherId,
-}: {
-  observations: string;
-  docDate: string;
-  docType: 'REMISSION' | 'RETURN';
-  deliveryMode: 'WAREHOUSE' | 'ON_SITE';
-  vehicleId: string | null;
-  driverId: string | null;
-  dispatcherId: string | null;
-}) {
-  return [
-    observations.trim() || null,
-    `Fecha documento: ${docDate}`,
-    `Entrega: ${deliveryMode}`,
-    deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
-    deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,
-    docType === 'RETURN' && driverId ? `Recibe: ${driverId}` : null,
-    docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && dispatcherId
-      ? `Despachador: ${dispatcherId}`
-      : null,
-  ]
-    .filter(Boolean)
     .join(' | ');
 }
 
@@ -644,15 +541,10 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
-  const [requestsLoading, setRequestsLoading] = useState(false);
-  const [requestsError, setRequestsError] = useState<string | null>(null);
-  const [requests, setRequests] = useState<RequestDocument[]>([]);
   const [documentsRequest, setDocumentsRequest] = useState<RequestDocument | null>(null);
-  const [decidingId, setDecidingId] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [autosaveDraftId, setAutosaveDraftId] = useState<string | null>(null);
   const [autosaveReady, setAutosaveReady] = useState(false);
-  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'error'>('idle');
   const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveDocument, setResolveDocument] = useState<RequestDocumentDetail | null>(null);
@@ -662,14 +554,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [resolvingApprove, setResolvingApprove] = useState(false);
   const [createSerialOpen, setCreateSerialOpen] = useState(false);
   const [createSerialIndex, setCreateSerialIndex] = useState<number | null>(null);
-  const [createSerialSerialOrEngine, setCreateSerialSerialOrEngine] = useState('');
-  const [createSerialInternalNumber, setCreateSerialInternalNumber] = useState<number | ''>('');
-  const [createSerialBrand, setCreateSerialBrand] = useState('');
-  const [createSerialModel, setCreateSerialModel] = useState('');
-  const [createSerialYear, setCreateSerialYear] = useState<number | ''>('');
-  const [createSerialFuel, setCreateSerialFuel] = useState<string | null>(null);
-  const [createSerialSaving, setCreateSerialSaving] = useState(false);
-  const [createSerialError, setCreateSerialError] = useState<string | null>(null);
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
@@ -695,13 +579,19 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const skipNextFlowUrlSyncRef = useRef(false);
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
-  const restoringRequestRef = useRef<string | null>(null);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
+  const {
+    requests,
+    loading: requestsLoading,
+    error: requestsError,
+    setError: setRequestsError,
+    reload: loadRequests,
+  } = useRequestsList(mode === 'requests');
   const shouldSendWhatsapp = !canDecide || sendWhatsapp;
   const canResolveInline = canDecide && Boolean(editingRequestId);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
@@ -815,22 +705,19 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     [additionalRecipientPhones, defaultWhatsappPhones],
   );
   const autosavePayload = useMemo(
-    () => ({
-      type: docType,
-      number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
-      warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
-      customerWorksiteId: customerWorksiteId || undefined,
-      notes: buildRequestNotes({
-        observations,
-        docDate,
-        docType,
-        deliveryMode,
-        vehicleId,
-        driverId,
-        dispatcherId,
-      }),
+    () => buildAutosavePayload({
+      docType,
+      consecutive,
+      warehouseId: warehouseId ?? principalWarehouse?.id ?? null,
+      customerWorksiteId,
+      observations,
+      docDate,
+      deliveryMode,
+      vehicleId,
+      driverId,
+      dispatcherId,
       recipientPhones: shouldSendWhatsapp ? whatsappRecipientPhones : [],
-      receivedSignature: receivedSignature ?? '',
+      receivedSignature,
       items: buildRequestItems(selectedItems),
     }),
     [
@@ -851,31 +738,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       whatsappRecipientPhones,
     ],
   );
-
-  useEffect(() => {
-    if (!autosaveDraftId || !autosaveReady || editingRequestId || submitting) return;
-    if (!navigator.onLine) {
-      setAutosaveStatus('offline');
-      return;
-    }
-    let active = true;
-    const timeout = window.setTimeout(async () => {
-      setAutosaveStatus('saving');
-      try {
-        await api(`/documents/${autosaveDraftId}/request/autosave`, {
-          method: 'PATCH',
-          json: autosavePayload,
-        });
-        if (active) setAutosaveStatus('saved');
-      } catch {
-        if (active) setAutosaveStatus('error');
-      }
-    }, 900);
-    return () => {
-      active = false;
-      window.clearTimeout(timeout);
-    };
-  }, [autosaveDraftId, autosavePayload, autosaveReady, editingRequestId, submitting]);
+  const { status: autosaveStatus, setStatus: setAutosaveStatus } = useRequestAutosave({
+    draftId: autosaveDraftId,
+    payload: autosavePayload,
+    ready: autosaveReady,
+    editing: Boolean(editingRequestId),
+    submitting,
+  });
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null;
   const selectedDriver = employees.find((employee) => employee.id === driverId) ?? null;
   const selectedDispatcher = employees.find((employee) => employee.id === dispatcherId) ?? null;
@@ -889,33 +758,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.alias ??
     worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.worksite.name ??
     '-';
-  const isResolvePendingItem = (item: RequestDocumentDetail['items'][number]) => {
-    const hasTag = Boolean(item.requestedTag?.trim());
-    if (!item.skuId && !item.assetId) {
-      return hasTag;
-    }
-    if (item.skuId && !item.assetId) {
-      const skuType = skuOptions.find((sku) => sku.id === item.skuId)?.controlType;
-      return skuType === 'SERIAL';
-    }
-    return false;
-  };
-  const getResolveSkuOptions = (ownerWarehouseId?: string | null) => {
-    if (!ownerWarehouseId) return [];
-    const inventory = resolveInventoryByOwner[ownerWarehouseId];
-    if (!inventory) return [];
-    const availableSkuIds = new Set<string>();
-    inventory.bulk.forEach((item) => {
-      if (item.quantity > 0) availableSkuIds.add(item.skuId);
-    });
-    inventory.serial.forEach((item) => {
-      if (item.skuId) availableSkuIds.add(item.skuId);
-    });
-    return skuOptions
-      .filter((sku) => availableSkuIds.has(sku.id))
-      .map((sku) => ({ value: sku.id, label: sku.name }));
-  };
-
   useEffect(() => {
     const applyUrlState = () => {
       const { tab, step } = readFlowStateFromUrl();
@@ -1243,7 +1085,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const openMixerMotorRecovery = async (
     documentId: string,
-    recovery: NonNullable<RecoverableApprovalError['recovery']>,
+    recovery: Extract<ApprovalRecovery, { type: 'mixer-motor-required' }>,
   ) => {
     if (!recovery.mixerAssetId) return false;
     setMotorRecoveryLoading(true);
@@ -1295,13 +1137,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return;
     }
 
-    const recoverable = err.data as RecoverableApprovalError | null | undefined;
-    if (
-      documentId
-      && recoverable?.code === 'MISSING_MIXER_MOTOR'
-      && recoverable.recovery?.type === 'SELECT_MIXER_MOTOR'
-    ) {
-      void openMixerMotorRecovery(documentId, recoverable.recovery);
+    const recovery = classifyApprovalRecovery(err.data);
+    if (documentId && recovery?.type === 'mixer-motor-required') {
+      void openMixerMotorRecovery(documentId, recovery);
       return;
     }
 
@@ -1571,31 +1409,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     return () => window.clearTimeout(timeout);
   }, [itemsAddedNotice]);
 
-  const loadRequests = async () => {
-    setRequestsLoading(true);
-    setRequestsError(null);
-    try {
-      const data = await api<RequestDocument[]>('/documents?status=DRAFT&take=200', {
-        method: 'GET',
-      });
-      setRequests(data.filter((doc) => doc.type === 'REMISSION' || doc.type === 'RETURN'));
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setRequestsError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setRequestsError(err.message);
-      } else {
-        setRequestsError('Error cargando solicitudes');
-      }
-    } finally {
-      setRequestsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadRequests();
-  }, []);
-
   useEffect(() => {
     let mounted = true;
     const loadSkuOptions = async () => {
@@ -1662,89 +1475,27 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
   };
 
-  const buildInitialResolveState = (
-    doc: RequestDocumentDetail,
-    inventoriesByOwner: ResolveInventoryByOwner,
-  ) => {
-    const skuByNormalizedName = new Map<string, SkuOption>();
-    skuOptions.forEach((sku) => skuByNormalizedName.set(sku.name.trim().toUpperCase(), sku));
-    const initialSkuMap: Record<number, string> = {};
-    const initialAssetMap: Record<number, string> = {};
-
-    doc.items.forEach((item, index) => {
-      if (item.assetId) return;
-      const normalizedTag = normalizeTagBase(item.requestedTag);
-      const matchedSku = item.skuId
-        ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
-        : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
-      if (!matchedSku) return;
-
-      const ownerWarehouseId = item.condition?.trim();
-      if (!ownerWarehouseId) return;
-      const inventory = inventoriesByOwner[ownerWarehouseId];
-      const skuIsAvailable = Boolean(
-        inventory?.bulk.some((bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0) ||
-          inventory?.serial.some((serial) => serial.skuId === matchedSku.id),
-      );
-      if (!skuIsAvailable) return;
-
-      initialSkuMap[index] = matchedSku.id;
-
-      if (matchedSku.controlType !== 'SERIAL') return;
-      const serialCandidates =
-        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
-      const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
-      if (internalFromTag == null) return;
-      const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
-      if (exactAsset) {
-        initialAssetMap[index] = exactAsset.assetId;
-      }
-    });
-
-    return { initialSkuMap, initialAssetMap };
-  };
-
   const openCreateSerialForRow = (index: number) => {
     const row = resolveDocument?.items[index];
     if (!row) return;
-    const internal = parseInternalNumberFromTag(row.requestedTag);
     setCreateSerialIndex(index);
-    setCreateSerialSerialOrEngine('');
-    setCreateSerialInternalNumber(internal ?? '');
-    setCreateSerialBrand('');
-    setCreateSerialModel('');
-    setCreateSerialYear('');
-    setCreateSerialFuel(null);
-    setCreateSerialError(null);
     setCreateSerialOpen(true);
   };
 
-  const createMissingSerialFromResolve = async () => {
+  const createMissingSerialFromResolve = async (values: CreateSerializedAssetValues) => {
     if (!resolveDocument || createSerialIndex == null) return;
     const row = resolveDocument.items[createSerialIndex];
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('The line has no owner warehouse.');
-      return;
+      throw new Error('La línea no tiene una bodega propietaria.');
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
     const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
     if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      setCreateSerialError('Selecciona primero un SKU serializado.');
-      return;
-    }
-    if (!createSerialSerialOrEngine.trim()) {
-      setCreateSerialError('El serial/motor es obligatorio.');
-      return;
-    }
-    if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
-      setCreateSerialError('Invalid internal number.');
-      return;
+      throw new Error('Selecciona primero un SKU serializado.');
     }
 
-    setCreateSerialSaving(true);
-    setCreateSerialError(null);
     try {
       const response = await api<CreateSerializedAssetResponse>('/inventory/serialized-assets', {
         method: 'POST',
@@ -1752,12 +1503,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           family: { id: selectedSku.assetFamilyId },
           sku: { id: selectedSku.id },
           asset: {
-            serialOrEngine: createSerialSerialOrEngine.trim(),
-            internalNumber: Number(createSerialInternalNumber),
-            brand: createSerialBrand.trim() || undefined,
-            model: createSerialModel.trim() || undefined,
-            year: createSerialYear === '' ? undefined : createSerialYear,
-            fuel: createSerialFuel ?? undefined,
+            ...values,
             active: true,
           },
           ownerWarehouseId,
@@ -1785,68 +1531,32 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       }));
       setCreateSerialOpen(false);
       setCreateSerialIndex(null);
-      setCreateSerialBrand('');
-      setCreateSerialModel('');
-      setCreateSerialYear('');
-      setCreateSerialFuel(null);
       setItemsAddedNotice('Equipo creado y asignado al tag.');
     } catch (err) {
       if (err instanceof ApiError) {
-        setCreateSerialError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setCreateSerialError(err.message);
-      } else {
-        setCreateSerialError('Error creando equipo.');
+        throw new Error(`${err.status}: ${err.message}`);
       }
-    } finally {
-      setCreateSerialSaving(false);
+      if (err instanceof Error) throw err;
+      throw new Error('Error creando equipo.');
     }
   };
 
-  const approveWithDecision = async (documentId: string) => {
-    setDecidingId(documentId);
-    setRequestsError(null);
-    try {
-      const requirements = await api<ProviderRemissionRequirements>(
-        `/documents/${documentId}/provider-remission-requirements`,
-        { method: 'GET' },
-      );
-      if (requirements.missingProviders.length) {
-        setProviderRemissionModal({
-          mode: 'REQUIRED',
-          requirements,
-          documentId,
-        });
-        setProviderRemissionError(null);
-        return false;
-      }
-      await api(`/documents/${documentId}/decision`, {
-        method: 'POST',
-        json: { action: 'APPROVE' },
+  const {
+    decidingId,
+    approve: approveWithDecision,
+    reject: rejectWithDecision,
+  } = useRequestApproval({
+    onReload: loadRequests,
+    onError: handleApprovalError,
+    onProviderRemissionRequired: (documentId, requirements) => {
+      setProviderRemissionModal({
+        mode: 'REQUIRED',
+        requirements,
+        documentId,
       });
-      await loadRequests();
-      return true;
-    } catch (err) {
-      const missingProviders = getMissingProvidersFromApprovalError(err);
-      if (missingProviders?.length) {
-        setProviderRemissionModal({
-          mode: 'REQUIRED',
-          requirements: {
-            required: true,
-            providers: missingProviders,
-            missingProviders,
-          },
-          documentId,
-        });
-        setProviderRemissionError(null);
-        return false;
-      }
-      handleApprovalError(err, documentId);
-      return false;
-    } finally {
-      setDecidingId(null);
-    }
-  };
+      setProviderRemissionError(null);
+    },
+  });
 
   const uploadMissingProviderRemissionsAndApprove = async () => {
     if (
@@ -1939,19 +1649,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     if (action === 'REJECT') {
       const reason = window.prompt('Motivo de rechazo (opcional):') ?? undefined;
       if (!window.confirm('¿Rechazar esta solicitud?')) return;
-      setDecidingId(documentId);
       setRequestsError(null);
-      try {
-        await api(`/documents/${documentId}/decision`, {
-          method: 'POST',
-          json: { action, reason },
-        });
-        await loadRequests();
-      } catch (err) {
-        handleApprovalError(err);
-      } finally {
-        setDecidingId(null);
-      }
+      await rejectWithDecision(documentId, reason);
       return;
     }
 
@@ -1959,14 +1658,18 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
       const unresolved = doc.items
         .map((item, index) => ({ item, index }))
-        .filter(({ item }) => isResolvePendingItem(item));
+        .filter(({ item }) => isResolvePendingItem(item, skuOptions));
 
       if (unresolved.length > 0) {
         const ownerIds = unresolved
           .map(({ item }) => item.condition?.trim() ?? '')
           .filter((value): value is string => Boolean(value));
         const inventoriesByOwner = await loadResolveInventories(ownerIds);
-        const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
+        const { initialSkuMap, initialAssetMap } = buildInitialResolveState(
+          doc.items,
+          inventoriesByOwner,
+          skuOptions,
+        );
 
         setResolveDocument(doc);
         setResolveInventoryByOwner(inventoriesByOwner);
@@ -2013,82 +1716,26 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const resolveAndApprove = async () => {
     if (!resolveDocument) return;
-    const unresolved = resolveDocument.items
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => isResolvePendingItem(item));
-
-    const missing = unresolved.filter(({ index }) => !resolveSkuByIndex[index]);
-    if (missing.length > 0) {
-      setRequestsError('Resuelve todos los tags pendientes antes de aprobar.');
-      return;
-    }
-
-    const serialMissingAsset = unresolved.filter(({ item, index }) => {
-      const skuId = resolveSkuByIndex[index];
-      const sku = skuOptions.find((entry) => entry.id === skuId);
-      if (sku?.controlType !== 'SERIAL') return false;
-      return !resolveAssetByIndex[index];
-    });
-    if (serialMissingAsset.length > 0) {
-      setRequestsError('Falta seleccionar o crear equipo para uno o mas tags seriales.');
+    const resolutionError = validateApprovalResolution(
+      resolveDocument.items,
+      resolveSkuByIndex,
+      resolveAssetByIndex,
+      skuOptions,
+    );
+    if (resolutionError) {
+      setRequestsError(resolutionError);
       return;
     }
 
     setResolvingApprove(true);
     setRequestsError(null);
     try {
-      const itemsPayload = resolveDocument.items.map((item, index) => {
-        const ownerWarehouseId = item.condition ?? undefined;
-        if (item.assetId) {
-          return {
-            assetId: item.assetId,
-            componentParentAssetId: item.componentParentAssetId ?? undefined,
-            ownerWarehouseId,
-            conditionNote: item.conditionNote ?? undefined,
-          };
-        }
-        if (item.skuId && !item.assetId) {
-          const existingSku = skuOptions.find((entry) => entry.id === item.skuId);
-          if (existingSku?.controlType === 'SERIAL') {
-            return {
-              assetId: resolveAssetByIndex[index],
-              componentParentAssetId: item.componentParentAssetId ?? undefined,
-              ownerWarehouseId,
-              requestedTag: item.requestedTag ?? undefined,
-              conditionNote: item.conditionNote ?? undefined,
-            };
-          }
-        }
-        if (item.skuId) {
-          return {
-            skuId: item.skuId,
-            componentParentAssetId: item.componentParentAssetId ?? undefined,
-            quantity: Number(item.quantity ?? 1) || 1,
-            ownerWarehouseId,
-            requestedTag: item.requestedTag ?? undefined,
-            conditionNote: item.conditionNote ?? undefined,
-          };
-        }
-        const resolvedSkuId = resolveSkuByIndex[index];
-        const resolvedSku = skuOptions.find((entry) => entry.id === resolvedSkuId);
-        if (resolvedSku?.controlType === 'SERIAL') {
-          return {
-            assetId: resolveAssetByIndex[index],
-            componentParentAssetId: item.componentParentAssetId ?? undefined,
-            ownerWarehouseId,
-            requestedTag: item.requestedTag ?? undefined,
-            conditionNote: item.conditionNote ?? undefined,
-          };
-        }
-        return {
-          skuId: resolvedSkuId,
-          componentParentAssetId: item.componentParentAssetId ?? undefined,
-          quantity: Number(item.quantity ?? 1) || 1,
-          ownerWarehouseId,
-          requestedTag: item.requestedTag ?? undefined,
-          conditionNote: item.conditionNote ?? undefined,
-        };
-      });
+      const itemsPayload = buildResolvedItemsPayload(
+        resolveDocument.items,
+        resolveSkuByIndex,
+        resolveAssetByIndex,
+        skuOptions,
+      );
 
       await api(`/documents/${resolveDocument.id}/request`, {
         method: 'PATCH',
@@ -2446,7 +2093,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   const resetGenerateForm = () => {
     if (currentUserId) {
-      window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+      window.localStorage.removeItem(getRequestDraftStorageKey(currentUserId));
     }
     setEditingRequestId(null);
     setAutosaveDraftId(null);
@@ -2583,7 +2230,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       setGenerateStep('info');
       if (autosaved) {
         if (currentUserId) {
-          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, doc.id);
+          window.localStorage.setItem(getRequestDraftStorageKey(currentUserId), doc.id);
         }
         window.setTimeout(() => {
           setAutosaveReady(true);
@@ -2592,7 +2239,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       }
     } catch (err) {
       if (autosaved && currentUserId) {
-        window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
+        window.localStorage.removeItem(getRequestDraftStorageKey(currentUserId));
       }
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -2604,53 +2251,22 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
   };
 
-  useEffect(() => {
-    if (mode !== 'generate' || typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const editId = params.get('edit');
-    const explicitDraftId = params.get('draft');
-    const storedDraftId = currentUserId
-      ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
-      : null;
-    const draftId = explicitDraftId ?? (editId ? null : storedDraftId);
-    const target = editId ? `edit:${editId}` : draftId ? `draft:${draftId}` : null;
-    if (!target || restoringRequestRef.current === target) return;
-    if (editId && editingRequestId === editId) return;
-    if (draftId && autosaveDraftId === draftId) return;
-
-    restoringRequestRef.current = target;
-    void editRequest(editId ?? (draftId as string), !editId).finally(() => {
-      if (restoringRequestRef.current === target) restoringRequestRef.current = null;
-    });
-  }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
+  useRequestDraftRestoration({
+    enabled: mode === 'generate',
+    currentUserId,
+    editingRequestId,
+    autosaveDraftId,
+    onRestore: editRequest,
+  });
 
   const handleSubmit = async () => {
     setSubmitting(true);
     setSubmitResult(null);
     setError(null);
     try {
-      if (!docDate || !customerId) {
-        throw new Error('Completa los campos requeridos.');
-      }
-      if (!selectedItems.length) {
-        throw new Error('Selecciona al menos un item.');
-      }
-      if (
-        selectedItems.some(
-          (item) => item.type === 'bulk' && item.availableQuantity != null && item.availableQuantity < 0,
-        )
-      ) {
-        throw new Error('Algunos items tienen alertas de inventario negativo. Ajusta stock antes de crear el documento.');
-      }
-      if (!customerWorksiteId) {
-        throw new Error('Selecciona la obra.');
-      }
       const pendingRecipientPhone = shouldSendWhatsapp && recipientPhoneDraft
         ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
         : null;
-      if (shouldSendWhatsapp && recipientPhoneDraft && !pendingRecipientPhone) {
-        throw new Error('El número adicional debe contener exactamente 10 dígitos.');
-      }
       const recipientPhones = shouldSendWhatsapp
         ? [
             ...new Set([
@@ -2659,62 +2275,49 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             ]),
           ]
         : [];
-      if (shouldSendWhatsapp && !recipientPhones.length) {
-        throw new Error(
-          'El cliente y la obra no tienen teléfono. Agrega al menos un destinatario de WhatsApp.',
-        );
-      }
-      if (shouldSendWhatsapp && recipientPhones.length > 10) {
-        throw new Error('Puedes enviar el documento a máximo 10 destinatarios de WhatsApp.');
-      }
-      if (!editingRequestId && !receivedSignature) {
-        throw new Error('Captura la firma del cliente antes de enviar.');
-      }
       const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
-      if (docType === 'RETURN' && !effectiveWarehouseId) {
-        throw new Error('Selecciona la bodega para la devolucion.');
-      }
-      if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !effectiveWarehouseId) {
-        throw new Error('Selecciona la bodega de despacho.');
-      }
-      if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
-        throw new Error('Tu usuario no esta vinculado a un empleado conductor.');
-      }
-      if (docType === 'RETURN' && !driverId) {
-        throw new Error(
-          deliveryMode === 'ON_SITE'
-            ? 'Selecciona el conductor responsable de recoger la devolución.'
-            : 'Selecciona el empleado de REV que recibe la devolución.',
-        );
-      }
-      const damagedWithoutDescription = selectedItems.find(
-        (item) => item.isDamaged && !item.damageDescription?.trim(),
+      const submissionError = validateRequestSubmission({
+        docType,
+        deliveryMode,
+        docDate,
+        customerId,
+        customerWorksiteId,
+        selectedItems,
+        shouldSendWhatsapp,
+        recipientPhoneDraft,
+        recipientPhones,
+        editingRequestId,
+        receivedSignature,
+        effectiveWarehouseId,
+        isDriverRole,
+        driverId,
+      });
+      if (submissionError) throw new Error(submissionError);
+
+      const payloadSource = {
+        docType,
+        consecutive,
+        warehouseId: effectiveWarehouseId,
+        customerWorksiteId,
+        observations,
+        docDate,
+        deliveryMode,
+        vehicleId,
+        driverId,
+        dispatcherId,
+        recipientPhones,
+        receivedSignature,
+        items: buildRequestItems(selectedItems),
+      };
+      const documentPayload = buildDocumentPayload(payloadSource, {
+        shouldSendWhatsapp,
+        editingRequestId,
+        isAdminRole,
+      });
+      const persistencePayload = buildDraftPersistencePayload(
+        buildAutosavePayload(payloadSource),
+        documentPayload,
       );
-      if (docType === 'RETURN' && damagedWithoutDescription) {
-        throw new Error(`Describe el daño de ${damagedWithoutDescription.name}.`);
-      }
-
-      const documentPayload = {
-        type: docType,
-        number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
-        warehouseId: effectiveWarehouseId ?? undefined,
-        customerWorksiteId: customerWorksiteId || undefined,
-        ...(shouldSendWhatsapp ? { recipientPhones } : {}),
-        ...(!editingRequestId ? { sendWhatsapp: shouldSendWhatsapp } : {}),
-        receivedSignature:
-          editingRequestId && !isAdminRole ? undefined : (receivedSignature ?? ''),
-        notes: buildRequestNotes({
-          observations,
-          docDate,
-          docType,
-          deliveryMode,
-          vehicleId,
-          driverId,
-          dispatcherId,
-        }),
-      } as const;
-
-      const movementItems = buildRequestItems(selectedItems);
       if (!navigator.onLine) {
         if (!autosaveDraftId) {
           throw new Error(
@@ -2731,12 +2334,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
           path: `/documents/${autosaveDraftId}/request/autosave`,
           method: 'PATCH',
-          body: {
-            ...autosavePayload,
-            ...documentPayload,
-            sendWhatsapp: undefined,
-            items: movementItems,
-          },
+          body: persistencePayload,
         });
         const submitOperation = await enqueueOfflineOperation({
           label: `Enviar solicitud ${autosaveDraftId.slice(0, 8)}`,
@@ -2770,12 +2368,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (autosaveDraftId) {
         await api(`/documents/${autosaveDraftId}/request/autosave`, {
           method: 'PATCH',
-          json: {
-            ...autosavePayload,
-            ...documentPayload,
-            sendWhatsapp: undefined,
-            items: movementItems,
-          },
+          json: persistencePayload,
         });
         created = await api<{ id: string }>(
           `/documents/${autosaveDraftId}/request/submit`,
@@ -2791,7 +2384,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             method: editingRequestId ? 'PATCH' : 'POST',
             json: {
               ...documentPayload,
-              items: movementItems,
+              items: persistencePayload.items,
             },
           },
         );
@@ -2877,7 +2470,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         );
         setAutosaveDraftId(draft.id);
         if (currentUserId) {
-          window.localStorage.setItem(`rev:transport-draft:${currentUserId}`, draft.id);
+          window.localStorage.setItem(getRequestDraftStorageKey(currentUserId), draft.id);
         }
         setAutosaveReady(true);
         setAutosaveStatus('saved');
@@ -3038,69 +2631,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     : isDriverRole
       ? 'Consulta tus borradores y anexa fotografías que hayan quedado pendientes.'
       : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
-  const requestColumns: DataTableColumn<RequestDocument>[] = [
-    {
-      id: 'consecutive',
-      header: 'Solicitud',
-      width: '15%',
-      mobile: { priority: 'primary' },
-      cell: (row) => (
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <div>
-            <Text fw={700}>{row.consecutive ?? 'Sin consecutivo'}</Text>
-            <Badge mt={4} size="sm" variant="light" color={requestTypeColor(row.type)}>
-              {formatDocType(row.type)}
-            </Badge>
-          </div>
-          <Badge hiddenFrom="md" color="yellow" variant="light">{row.status}</Badge>
-        </Group>
-      ),
-    },
-    {
-      id: 'customer',
-      header: 'Cliente / Obra',
-      width: '22%',
-      mobile: { label: 'Cliente / obra', priority: 'detail' },
-      cell: (row) => (
-        <div>
-          <Text size="sm">{row.customerWorksite?.customer?.name ?? '-'}</Text>
-          <Text size="xs" c="dimmed">
-            {row.customerWorksite?.alias ?? row.customerWorksite?.worksite?.name ?? '-'}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      id: 'items',
-      header: 'Ítems',
-      width: '8%',
-      align: 'center',
-      mobile: { label: 'Ítems', priority: 'detail' },
-      cell: (row) => row._count?.items ?? 0,
-    },
-    {
-      id: 'creator',
-      header: 'Creado por',
-      width: '19%',
-      mobile: { label: 'Creado por', priority: 'detail' },
-      cell: (row) => row.creator?.name ?? row.creator?.email ?? '-',
-    },
-    {
-      id: 'createdAt',
-      header: 'Fecha',
-      width: '19%',
-      mobile: { label: 'Fecha', priority: 'detail' },
-      cell: (row) => formatDateTime(row.createdAt),
-    },
-    {
-      id: 'status',
-      header: 'Estado',
-      width: '10%',
-      mobile: false,
-      cell: (row) => <Badge color="yellow" variant="light">{row.status}</Badge>,
-    },
-  ];
-
   return (
     <main>
       <Container size="xl" py="xl">
@@ -3126,81 +2656,20 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             <Tabs value={activeTab} variant="pills">
 
             <Tabs.Panel value="list" pt="md">
-              <DataTableToolbar
-                title={isDriverRole ? 'Mis borradores' : 'Solicitudes en borrador'}
-                description={
-                  isDriverRole
-                    ? 'Abre un borrador para consultar y anexar fotografías.'
-                    : 'Revisa solicitudes pendientes, abre detalles o decide aprobacion y rechazo.'
-                }
-                mb="sm"
-              >
-                <Button variant="light" onClick={loadRequests} loading={requestsLoading}>
-                  Refrescar
-                </Button>
-              </DataTableToolbar>
-              {requestsError ? (
-                <Text c="red" mb="sm">
-                  {requestsError}
-                </Text>
-              ) : null}
-              {submitResult ? (
-                <Alert color="green" variant="light" mb="sm" withCloseButton onClose={() => setSubmitResult(null)}>
-                  {submitResult}
-                </Alert>
-              ) : null}
-              <EntityDataTable
-                rows={requests}
-                columns={requestColumns}
-                getRowId={(row) => row.id}
+              <RequestsListPanel
+                requests={requests}
                 loading={requestsLoading}
-                tableMinWidth={980}
-                emptyState={{
-                  title: 'No hay solicitudes en borrador',
-                  description: 'Las nuevas solicitudes pendientes aparecerán aquí.',
-                }}
-                actions={(row) => [
-                  {
-                    key: 'view',
-                    label: `Ver ${row.consecutive ?? 'solicitud'}`,
-                    icon: <IconEye size={16} />,
-                    color: 'blue',
-                    href: `/inventory/ledger/document/${row.id}`,
-                  },
-                  {
-                    key: 'documents',
-                    label: isDriverRole
-                      ? `Anexar fotos a ${row.consecutive ?? 'la solicitud'}`
-                      : `Documentos de ${row.consecutive ?? 'la solicitud'}`,
-                    icon: <IconFileDescription size={16} />,
-                    color: 'violet',
-                    onClick: () => setDocumentsRequest(row),
-                  },
-                  ...(canDecide ? [
-                    {
-                      key: 'edit',
-                      label: `Editar ${row.consecutive ?? 'solicitud'}`,
-                      icon: <IconPencil size={16} />,
-                      onClick: () => editRequest(row.id),
-                    },
-                    {
-                      key: 'approve',
-                      label: `Aprobar ${row.consecutive ?? 'solicitud'}`,
-                      icon: <IconCheck size={16} />,
-                      color: 'green',
-                      loading: decidingId === row.id,
-                      onClick: () => decideRequest(row.id, 'APPROVE'),
-                    },
-                    {
-                      key: 'reject',
-                      label: `Rechazar ${row.consecutive ?? 'solicitud'}`,
-                      icon: <IconX size={16} />,
-                      color: 'red',
-                      loading: decidingId === row.id,
-                      onClick: () => decideRequest(row.id, 'REJECT'),
-                    },
-                  ] : []),
-                ]}
+                error={requestsError}
+                successMessage={submitResult}
+                isDriverRole={isDriverRole}
+                canDecide={canDecide}
+                decidingId={decidingId}
+                onRefresh={() => void loadRequests()}
+                onDismissSuccess={() => setSubmitResult(null)}
+                onOpenDocuments={setDocumentsRequest}
+                onEdit={(documentId) => void editRequest(documentId)}
+                onApprove={(documentId) => void decideRequest(documentId, 'APPROVE')}
+                onReject={(documentId) => void decideRequest(documentId, 'REJECT')}
               />
             </Tabs.Panel>
 
@@ -4373,121 +3842,26 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         </Stack>
       </Modal>
 
-      <Modal
+      <ApprovalResolutionModal
         opened={resolveModalOpen}
+        items={resolveDocument?.items ?? []}
+        skuOptions={skuOptions}
+        inventoriesByOwner={resolveInventoryByOwner}
+        warehouses={warehouses}
+        skuByIndex={resolveSkuByIndex}
+        assetByIndex={resolveAssetByIndex}
+        resolving={resolvingApprove}
         onClose={closeResolveModal}
-        title="Resolver tags antes de aprobar"
-        centered
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Masivo resuelve por SKU. Serializado resuelve por equipo especifico (interno #).
-          </Text>
-          {(resolveDocument?.items ?? [])
-            .map((item, index) => ({ item, index }))
-            .filter(({ item }) => isResolvePendingItem(item))
-            .map(({ item, index }) => (
-              <Paper key={`${item.requestedTag}-${index}`} withBorder p="sm" radius="md">
-                <Stack gap={6}>
-                  <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
-                  <Text size="xs" c="dimmed">
-                    Cantidad: {Number(item.quantity ?? 1) || 1}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
-                  </Text>
-                  <Select
-                    label="Equipo"
-                    placeholder="Buscar equipo de esta bodega"
-                    searchable
-                    data={getResolveSkuOptions(item.condition)}
-                    value={resolveSkuByIndex[index] ?? null}
-                    nothingFoundMessage="Esta bodega no tiene equipos disponibles"
-                    onChange={(value) => {
-                      setResolveSkuByIndex((prev) => ({
-                        ...prev,
-                        [index]: value ?? '',
-                      }));
-                      setResolveAssetByIndex((prev) => ({
-                        ...prev,
-                        [index]: '',
-                      }));
-                    }}
-                  />
-                  {(() => {
-                    const selectedSkuId = resolveSkuByIndex[index];
-                    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
-                    if (selectedSku?.controlType !== 'SERIAL') return null;
-                    const ownerWarehouseId = item.condition?.trim() ?? '';
-                    const inventory = resolveInventoryByOwner[ownerWarehouseId]?.serial ?? [];
-                    const expectedInternal = parseInternalNumberFromTag(item.requestedTag);
-                    const serialOptions = inventory
-                      .filter(
-                        (serial) =>
-                          serial.skuId === selectedSku.id,
-                      )
-                      .map((serial) => ({
-                        value: serial.assetId,
-                        label: getSerialDisplayName(serial),
-                      }));
-                    const hasExpected = expectedInternal == null
-                      ? false
-                      : inventory.some(
-                          (serial) =>
-                            serial.skuId === selectedSku.id &&
-                            serial.internalNumber === expectedInternal,
-                        );
-                    return (
-                      <Stack gap={6}>
-                        <Select
-                          label="Equipo serial"
-                          placeholder="Seleccionar equipo"
-                          searchable
-                          data={serialOptions}
-                          value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No hay equipo para este SKU en esa bodega"
-                          onChange={(value) =>
-                            setResolveAssetByIndex((prev) => ({
-                              ...prev,
-                              [index]: value ?? '',
-                            }))
-                          }
-                        />
-                        {expectedInternal != null && !hasExpected ? (
-                          <Text size="xs" c="orange.7">
-                            El tag solicita #{expectedInternal}, pero no existe en esa bodega.
-                          </Text>
-                        ) : null}
-                        {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
-                          <Button
-                            size="xs"
-                            variant="light"
-                            onClick={() => openCreateSerialForRow(index)}
-                          >
-                            Crear equipo faltante
-                          </Button>
-                        ) : null}
-                      </Stack>
-                    );
-                  })()}
-                </Stack>
-              </Paper>
-            ))}
-
-          <Group justify="flex-end" className="mobile-actions">
-            <Button
-              variant="default"
-              onClick={closeResolveModal}
-              disabled={resolvingApprove}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={resolveAndApprove} loading={resolvingApprove}>
-              Resolver y aprobar
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        onSkuChange={(index, skuId) => {
+          setResolveSkuByIndex((current) => ({ ...current, [index]: skuId }));
+          setResolveAssetByIndex((current) => ({ ...current, [index]: '' }));
+        }}
+        onAssetChange={(index, assetId) => {
+          setResolveAssetByIndex((current) => ({ ...current, [index]: assetId }));
+        }}
+        onCreateSerial={openCreateSerialForRow}
+        onApprove={() => void resolveAndApprove()}
+      />
 
       <InventoryItemPickerModal
         opened={
@@ -4581,88 +3955,21 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         ) : null}
       </Modal>
 
-      <Modal
-        opened={createSerialOpen}
-        onClose={() => {
-          if (createSerialSaving) return;
-          setCreateSerialOpen(false);
-          setCreateSerialIndex(null);
-          setCreateSerialError(null);
-          setCreateSerialBrand('');
-          setCreateSerialModel('');
-          setCreateSerialYear('');
-          setCreateSerialFuel(null);
-        }}
-        title="Crear equipo serializado faltante"
-        centered
-      >
-        <Stack gap="sm">
-          {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
-          <TextInput
-            label="Serial / motor"
-            value={createSerialSerialOrEngine}
-            onChange={(event) => setCreateSerialSerialOrEngine(event.currentTarget.value)}
-            required
-          />
-          <NumberInput
-            label="Internal number"
-            value={createSerialInternalNumber}
-            onChange={(value) =>
-              setCreateSerialInternalNumber(typeof value === 'number' ? value : '')
-            }
-            min={1}
-            required
-          />
-          <Group grow>
-            <TextInput
-              label="Marca (opcional)"
-              value={createSerialBrand}
-              onChange={(event) => setCreateSerialBrand(event.currentTarget.value)}
-            />
-            <TextInput
-              label="Modelo (opcional)"
-              value={createSerialModel}
-              onChange={(event) => setCreateSerialModel(event.currentTarget.value)}
-            />
-          </Group>
-          <Group grow>
-            <NumberInput
-              label="Year (optional)"
-              value={createSerialYear}
-              onChange={(value) => setCreateSerialYear(typeof value === 'number' ? value : '')}
-              min={1900}
-              max={2100}
-            />
-            <Select
-              label="Combustible (opcional)"
-              data={FUEL_OPTIONS}
-              value={createSerialFuel}
-              onChange={(value) => setCreateSerialFuel(value)}
-              clearable
-            />
-          </Group>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => {
-                if (createSerialSaving) return;
-                setCreateSerialOpen(false);
-                setCreateSerialIndex(null);
-                setCreateSerialError(null);
-                setCreateSerialBrand('');
-                setCreateSerialModel('');
-                setCreateSerialYear('');
-                setCreateSerialFuel(null);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={createMissingSerialFromResolve} loading={createSerialSaving}>
-              Crear y usar
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      {createSerialOpen && createSerialIndex != null ? (
+        <CreateSerializedAssetModal
+          opened
+          initialInternalNumber={parseInternalNumberFromTag(
+            resolveDocument?.items[createSerialIndex]?.requestedTag,
+          )}
+          title="Crear equipo serializado faltante"
+          submitLabel="Crear y usar"
+          onClose={() => {
+            setCreateSerialOpen(false);
+            setCreateSerialIndex(null);
+          }}
+          onSubmit={createMissingSerialFromResolve}
+        />
+      ) : null}
     </main>
   );
 }
