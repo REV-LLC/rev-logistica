@@ -22,7 +22,19 @@ export default function OfflineManager() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      if (process.env.NODE_ENV === 'development') {
+        navigator.serviceWorker.getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .then(() => caches.keys())
+          .then((keys) => Promise.all(
+            keys
+              .filter((key) => key.startsWith('rev-logistica-shell-'))
+              .map((key) => caches.delete(key)),
+          ))
+          .catch(() => undefined);
+      } else {
+        navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      }
     }
     const handleOnline = () => {
       refresh();
