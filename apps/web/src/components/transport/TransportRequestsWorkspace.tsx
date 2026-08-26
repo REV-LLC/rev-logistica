@@ -1,39 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
   Badge,
   Button,
-  Checkbox,
   Container,
-  Divider,
-  FileInput,
   Group,
   Modal,
   Paper,
-  Radio,
-  Select,
   SimpleGrid,
   Stack,
-  Switch,
-  Table,
   Tabs,
   Text,
-  TextInput,
   Title,
-  NumberInput,
-  NativeSelect,
-  Textarea,
-  Tooltip
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import {
-  IconCamera,
-  IconTrash,
-} from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
@@ -47,12 +31,8 @@ import {
   buildInventoryStockShortageMessage,
   extractInventoryStockShortages,
 } from '@/lib/inventory-stock-errors';
-import WarehouseSelect from '@/components/WarehouseSelect';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
-import AssetComponentsSelectionModal, {
-  type AssetComponentOption,
-  type AssetComponentSelection,
-} from '@/components/AssetComponentsSelectionModal';
+import AssetComponentsSelectionModal from '@/components/AssetComponentsSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 import { buildRequestItems } from '@/components/transport/request-items';
 import {
@@ -80,23 +60,47 @@ import ApprovalResolutionModal from '@/components/transport/ApprovalResolutionMo
 import CreateSerializedAssetModal, {
   type CreateSerializedAssetValues,
 } from '@/components/inventory/CreateSerializedAssetModal';
+import { mapDocumentToRequestForm } from '@/components/transport/request-form-mapping';
+import SignatureCaptureModal from '@/components/SignatureCaptureModal';
+import EvidencePhotosPanel from '@/components/transport/EvidencePhotosPanel';
+import RequestItemsSummary from '@/components/transport/RequestItemsSummary';
+import RequestItemsStep, {
+  type RequestSelectedItem,
+} from '@/components/transport/RequestItemsStep';
+import RequestInfoStep, {
+  type RequestInfoErrors,
+} from '@/components/transport/RequestInfoStep';
+import RequestSignaturePanel from '@/components/transport/RequestSignaturePanel';
+import WhatsappRecipientsPanel from '@/components/transport/WhatsappRecipientsPanel';
+import ProviderRemissionsModal, {
+  type ProviderRemissionModalState,
+  type ProviderRemissionRequirements,
+} from '@/components/transport/ProviderRemissionsModal';
+import { useEvidencePhotos } from '@/components/transport/use-evidence-photos';
+import { useProviderRemissions } from '@/components/transport/use-provider-remissions';
+import { validateOfflineFileDrafts } from '@/components/transport/file-drafts';
+import { useRequestInventory } from '@/components/transport/use-request-inventory';
+import { useRequestAssetSelection } from '@/components/transport/use-request-asset-selection';
+import {
+  addBulkSelection,
+  addFreeSelection,
+  addSerialSelection,
+  removeSelection,
+  resolveFreeSelection,
+  splitSelection,
+  updateSelection,
+  updateSelectionOwner,
+} from '@/components/transport/request-item-selection';
 import RequestsListPanel, {
   type RequestDocument,
 } from '@/components/transport/RequestsListPanel';
 import {
   classifyApprovalRecovery,
   type ApprovalRecovery,
-  type ProviderRemissionRequirement,
 } from '@/components/transport/approval-errors';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
-
-type RequestInventoryResponse = {
-  bulk: InventoryBulk[];
-  serial: InventorySerial[];
-  presentation: { showOwnerWarehouse: boolean };
-};
 
 type Employee = {
   id: string;
@@ -127,55 +131,11 @@ type CustomerWorksite = {
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
 type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
-type SelectedItem = {
-  selectionId: string;
-  type: 'bulk' | 'serial' | 'free';
-  bulkKey?: string;
-  skuId?: string;
-  assetId?: string;
-  name: string;
-  requestedTag?: string;
-  serial?: string | null;
-  quantity?: number;
-  availableQuantity?: number;
-  ownerWarehouseId?: string | null;
-  isDamaged?: boolean;
-  damageDescription?: string;
-  associatedMixerId?: string;
-  componentParentAssetId?: string;
-};
-
-type EvidencePhotoDraft = {
-  id: string;
-  file: File;
-  previewUrl: string;
-};
-
-type ProviderRemissionRequirements = {
-  required: boolean;
-  providers: ProviderRemissionRequirement[];
-  missingProviders: ProviderRemissionRequirement[];
-};
-
-type ProviderRemissionModalState = {
-  mode: 'OPTIONAL' | 'REQUIRED';
-  requirements: ProviderRemissionRequirements;
-  documentId?: string;
-};
-
-const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
-const MAX_EVIDENCE_PHOTO_COUNT = 12;
-const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+type SelectedItem = RequestSelectedItem;
 
 const createSelectionId = () => globalThis.crypto.randomUUID();
 
-type GenerateFieldErrors = {
-  customerId?: string;
-  docDate?: string;
-  customerWorksiteId?: string;
-  recipientPhones?: string;
-  driverId?: string;
-};
+type GenerateFieldErrors = RequestInfoErrors;
 
 type RequestDocumentDetail = {
   id: string;
@@ -254,25 +214,6 @@ type CreateSerializedAssetResponse = {
 };
 const WAREHOUSES_CACHE_KEY = 'requests.warehouses.v1';
 
-const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
-  `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
-
-const helpLabel = (label: string, help: string, required = false) => (
-  <Group gap={6} align="center">
-    <Text span>{label}</Text>
-    {required ? (
-      <Text span c="red" fw={700}>
-        *
-      </Text>
-    ) : null}
-    <Tooltip label={help} multiline w={280} withArrow>
-      <Text span c="dimmed" fw={700} style={{ cursor: 'help' }}>
-        ?
-      </Text>
-    </Tooltip>
-  </Group>
-);
-
 function formatDocType(value: string) {
   return value === 'REMISSION' ? 'RM' : value === 'RETURN' ? 'DV' : value;
 }
@@ -284,72 +225,6 @@ function getTodayDateInput() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-}
-
-function normalizeQuantityInput(value: string | number, fallback = 1) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : fallback;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) return fallback;
-  const parsed = Number(trimmed.replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseNotes(notes: string | null) {
-  if (!notes) return {};
-  const parts = notes.split('|').map((value) => value.trim());
-  const map = new Map<string, string>();
-  parts.forEach((part) => {
-    const [k, ...rest] = part.split(':');
-    if (!k || rest.length === 0) return;
-    map.set(k.trim().toLowerCase(), rest.join(':').trim());
-  });
-  return {
-    deliveryMode: map.get('entrega') ?? '',
-    vehicleId: map.get('vehículo') ?? map.get('vehiculo') ?? '',
-    driverId: map.get('conductor') ?? '',
-    receiverId: map.get('recibe') ?? '',
-    dispatcherId: map.get('despachador') ?? '',
-  };
-}
-
-const SYSTEM_NOTE_KEYS = new Set([
-  'fecha documento',
-  'fecha doc',
-  'fecha corte',
-  'document date',
-  'cutoff date',
-  'entrega',
-  'vehicle',
-  'vehiculo',
-  'conductor',
-  'driver',
-  'recibe',
-  'dispatcher',
-  'despachador',
-]);
-
-function normalizeNoteKey(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function extractUserObservations(notes: string | null) {
-  if (!notes) return '';
-  return notes
-    .split('|')
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .filter((part) => {
-      const separatorIndex = part.indexOf(':');
-      if (separatorIndex < 0) return true;
-      return !SYSTEM_NOTE_KEYS.has(normalizeNoteKey(part.slice(0, separatorIndex)));
-    })
-    .join(' | ');
 }
 
 function normalizeApiErrorMessages(error: ApiError) {
@@ -512,30 +387,18 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [sourceOwnerWarehouseId, setSourceOwnerWarehouseId] = useState<string | null>(null);
   const [sourceWorksiteId, setSourceWorksiteId] = useState<string | null>(null);
 
-  const [bulkItems, setBulkItems] = useState<InventoryBulk[]>([]);
-  const [serialItems, setSerialItems] = useState<InventorySerial[]>([]);
-
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
-  const [loadingInventory, setLoadingInventory] = useState(false);
   const [freeTagInput, setFreeTagInput] = useState('');
   const [freeInternalNumber, setFreeInternalNumber] = useState<number | ''>('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [showInventoryOwnerWarehouse, setShowInventoryOwnerWarehouse] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
   const [worksitesLoading, setWorksitesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [itemsModalOpen, setItemsModalOpen] = useState(false);
-  const [pendingMixerQueue, setPendingMixerQueue] = useState<InventorySerial[]>([]);
-  const [componentParent, setComponentParent] = useState<InventorySerial | null>(null);
-  const [componentOptions, setComponentOptions] = useState<AssetComponentOption[]>([]);
-  const [componentOptionsLoading, setComponentOptionsLoading] = useState(false);
-  const [assigningMotor, setAssigningMotor] = useState(false);
-  const [assignMotorError, setAssignMotorError] = useState<string | null>(null);
   const [motorRecovery, setMotorRecovery] = useState<MixerMotorRecovery | null>(null);
   const [motorRecoveryLoading, setMotorRecoveryLoading] = useState(false);
   const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
@@ -559,25 +422,29 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
   const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
-  const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
-  const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
-  const [providerRemissionDrafts, setProviderRemissionDrafts] = useState<
-    Record<string, EvidencePhotoDraft>
-  >({});
+  const {
+    photos: evidencePhotos,
+    error: evidencePhotosError,
+    add: addEvidencePhotos,
+    remove: removeEvidencePhoto,
+    clear: clearEvidencePhotos,
+    upload: uploadEvidencePhotos,
+  } = useEvidencePhotos();
+  const {
+    drafts: providerRemissionDrafts,
+    error: providerRemissionError,
+    setError: setProviderRemissionError,
+    select: selectProviderRemissionDocument,
+    clear: clearProviderRemissionDrafts,
+    upload: uploadProviderRemissionDocuments,
+  } = useProviderRemissions();
   const [creationProviderRequirements, setCreationProviderRequirements] =
     useState<ProviderRemissionRequirements | null>(null);
   const [providerRemissionModal, setProviderRemissionModal] =
     useState<ProviderRemissionModalState | null>(null);
-  const [providerRemissionError, setProviderRemissionError] = useState<string | null>(null);
   const [providerRemissionUploading, setProviderRemissionUploading] = useState(false);
   const [checkingProviderRemissions, setCheckingProviderRemissions] = useState(false);
-  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const signatureDrawingRef = useRef(false);
-  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
-  const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
-  const providerRemissionDraftsRef = useRef<Record<string, EvidencePhotoDraft>>({});
   const skipNextFlowUrlSyncRef = useRef(false);
-  const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
@@ -618,24 +485,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     value: employee.id,
     label: getEmployeeFullName(employee),
   }));
-  const selectedBulkKeys = useMemo(
-    () =>
-      new Set(
-        selectedItems
-          .filter((item) => item.type === 'bulk' && item.bulkKey)
-          .map((item) => item.bulkKey as string),
-      ),
-    [selectedItems],
-  );
-  const selectedSerialIds = useMemo(
-    () =>
-      new Set(
-        selectedItems
-          .filter((item) => item.type === 'serial' && item.assetId)
-          .map((item) => item.assetId as string),
-      ),
-    [selectedItems],
-  );
   const selectedItemsTotalQuantity = useMemo(
     () =>
       selectedItems.reduce((total, item) => {
@@ -645,32 +494,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       }, 0),
     [selectedItems],
   );
-  const availableBulkItems = useMemo(
-    () => bulkItems.filter((item) => !selectedBulkKeys.has(buildBulkKey(item))),
-    [bulkItems, selectedBulkKeys],
-  );
-  const availableSerialItems = useMemo(
-    () => serialItems.filter((item) => !selectedSerialIds.has(item.assetId)),
-    [serialItems, selectedSerialIds],
-  );
-  const pickerSerialItems = useMemo(
-    () =>
-      docType === 'REMISSION'
-        ? availableSerialItems.filter((item) => item.kind !== 'MOTOR')
-        : availableSerialItems,
-    [availableSerialItems, docType],
-  );
-  const activePendingMixer = pendingMixerQueue[0] ?? null;
-  const availableMotorsForMixer = useMemo(() => {
-    if (!activePendingMixer) return [];
-    return serialItems.filter(
-      (item) =>
-        item.kind === 'MOTOR'
-        && item.quantity > 0
-        && (!item.assignedMixerId || item.assignedMixerId === activePendingMixer.assetId)
-        && !selectedSerialIds.has(item.assetId),
-    );
-  }, [activePendingMixer, selectedSerialIds, serialItems]);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const selectedWorksite = worksites.find((worksite) => worksite.id === customerWorksiteId) ?? null;
   const defaultWhatsappRecipients = useMemo(
@@ -754,6 +577,58 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.name ?? '-';
   const effectiveSourceWorksiteId =
     sourceMode === 'on-site' ? customerWorksiteId || sourceWorksiteId || null : sourceWorksiteId;
+  const {
+    bulkItems,
+    serialItems,
+    setBulkItems,
+    setSerialItems,
+    loading: loadingInventory,
+    selectorOpen: itemsModalOpen,
+    setSelectorOpen: setItemsModalOpen,
+    showOwnerWarehouse: showInventoryOwnerWarehouse,
+    availableBulkItems,
+    pickerSerialItems,
+    selectedBulkKeys,
+    selectedSerialIds,
+    load: loadInventory,
+    clear: clearInventory,
+    markWarehouseHandled,
+  } = useRequestInventory({
+    active: activeTab === 'generate' && generateStep === 'items',
+    documentType: docType,
+    sourceMode,
+    sourceOwnerWarehouseId,
+    sourceWorksiteId: effectiveSourceWorksiteId,
+    warehouses,
+    manualCapture: useManualWarehouseCapture,
+    selectedItems,
+    setError,
+  });
+  const {
+    componentParent,
+    componentOptions,
+    componentOptionsLoading,
+    activePendingMixer,
+    availableMotors: availableMotorsForMixer,
+    assigningMotor,
+    assignMotorError,
+    addSerial: addSerialItem,
+    confirmComponents: confirmAssetComponents,
+    closeComponents: closeAssetComponents,
+    cancelPendingMixer,
+    confirmMixerMotor,
+    reset: resetAssetSelection,
+  } = useRequestAssetSelection({
+    documentType: docType,
+    serialItems,
+    selectedSerialIds,
+    setSerialItems,
+    setSelectedItems,
+    setSelectorOpen: setItemsModalOpen,
+    setError,
+    setItemsAddedNotice,
+    createSelectionId,
+  });
   const sourceWorksiteName =
     worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.alias ??
     worksites.find((worksite) => worksite.id === effectiveSourceWorksiteId)?.worksite.name ??
@@ -782,194 +657,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
     pushFlowStateToUrl(fixedTab, generateStep, autosaveDraftId);
   }, [autosaveDraftId, fixedTab, flowUrlReady, generateStep]);
-
-  const ensureSignatureCanvas = (source?: string | null) => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const targetWidth = Math.max(1, Math.floor(rect.width * ratio));
-    const targetHeight = Math.max(1, Math.floor(rect.height * ratio));
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      const context = canvas.getContext('2d');
-      if (!context) return canvas;
-      context.scale(ratio, ratio);
-      context.lineWidth = 2;
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      context.strokeStyle = '#111';
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, rect.width, rect.height);
-      const previous = source ?? null;
-      if (previous) {
-        const image = new Image();
-        image.onload = () => {
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          ctx.drawImage(image, 0, 0, rect.width, rect.height);
-        };
-        image.src = previous;
-      }
-    }
-    return canvas;
-  };
-
-  const getCanvasPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-  };
-
-  const beginSignature = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    const canvas = ensureSignatureCanvas();
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    const point = getCanvasPoint(event);
-    if (!context || !point) return;
-    signatureDrawingRef.current = true;
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-    canvas.setPointerCapture(event.pointerId);
-  };
-
-  const moveSignature = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!signatureDrawingRef.current) return;
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    const point = getCanvasPoint(event);
-    if (!context || !point) return;
-    context.lineTo(point.x, point.y);
-    context.stroke();
-  };
-
-  const endSignature = () => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    signatureDrawingRef.current = false;
-    setSignatureDraft(canvas.toDataURL('image/png'));
-  };
-
-  const clearSignature = () => {
-    const canvas = ensureSignatureCanvas(null);
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    const rect = canvas.getBoundingClientRect();
-    context.clearRect(0, 0, rect.width, rect.height);
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, rect.width, rect.height);
-    setSignatureDraft(null);
-  };
-
-  useEffect(() => {
-    if (!signatureModalOpen) return;
-    const frame = window.requestAnimationFrame(() => {
-      const canvas = ensureSignatureCanvas();
-      if (!canvas) return;
-      const context = canvas.getContext('2d');
-      if (!context) return;
-      const rect = canvas.getBoundingClientRect();
-      context.clearRect(0, 0, rect.width, rect.height);
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, rect.width, rect.height);
-      const source = signatureDraft ?? receivedSignature;
-      if (!source) return;
-      const image = new Image();
-      image.onload = () => {
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(image, 0, 0, rect.width, rect.height);
-      };
-      image.src = source;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [signatureModalOpen, signatureDraft, receivedSignature]);
-
-  useEffect(() => {
-    evidencePhotosRef.current = evidencePhotos;
-  }, [evidencePhotos]);
-
-  useEffect(() => {
-    return () => {
-      evidencePhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-    };
-  }, []);
-
-  useEffect(() => {
-    providerRemissionDraftsRef.current = providerRemissionDrafts;
-  }, [providerRemissionDrafts]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(providerRemissionDraftsRef.current).forEach((draft) =>
-        URL.revokeObjectURL(draft.previewUrl),
-      );
-    };
-  }, []);
-
-  const addEvidencePhotos = (fileList: FileList | null) => {
-    if (!fileList?.length) return;
-    setError(null);
-    const nextPhotos: EvidencePhotoDraft[] = [];
-    Array.from(fileList).forEach((file) => {
-      if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
-        setError('Las evidencias deben ser fotos PNG, WEBP o JPEG.');
-        return;
-      }
-      if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
-        setError('Cada foto de evidencia debe pesar maximo 10 MB.');
-        return;
-      }
-      nextPhotos.push({
-        id: `${file.name}-${file.lastModified}-${Date.now()}-${Math.random()}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      });
-    });
-    if (!nextPhotos.length) return;
-
-    const availableSlots = MAX_EVIDENCE_PHOTO_COUNT - evidencePhotos.length;
-    if (availableSlots <= 0) {
-      nextPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-      setError(`Puedes adjuntar maximo ${MAX_EVIDENCE_PHOTO_COUNT} fotos por solicitud.`);
-      return;
-    }
-
-    const accepted = nextPhotos.slice(0, availableSlots);
-    nextPhotos.slice(availableSlots).forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-    if (accepted.length < nextPhotos.length) {
-      setError(`Solo se agregaron ${accepted.length} fotos. El maximo es ${MAX_EVIDENCE_PHOTO_COUNT}.`);
-    }
-    setEvidencePhotos((prev) => [...prev, ...accepted]);
-    if (evidenceInputRef.current) {
-      evidenceInputRef.current.value = '';
-    }
-  };
-
-  const removeEvidencePhoto = (photoId: string) => {
-    setEvidencePhotos((prev) => {
-      const photo = prev.find((entry) => entry.id === photoId);
-      if (photo) URL.revokeObjectURL(photo.previewUrl);
-      return prev.filter((entry) => entry.id !== photoId);
-    });
-  };
-
-  const clearEvidencePhotos = () => {
-    setEvidencePhotos((prev) => {
-      prev.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-      return [];
-    });
-    if (evidenceInputRef.current) {
-      evidenceInputRef.current.value = '';
-    }
-  };
 
   const addWhatsappRecipient = () => {
     const phone = normalizeLocalWhatsappPhone(recipientPhoneDraft);
@@ -1002,85 +689,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
   };
 
-  const uploadEvidencePhotos = async (documentId: string) => {
-    if (!evidencePhotos.length) return;
-    const formData = new FormData();
-    evidencePhotos.forEach((photo) => {
-      formData.append('photos', photo.file);
-    });
-    await api(`/files/documents/${documentId}/evidence`, {
-      method: 'POST',
-      body: formData,
-    });
-  };
-
-  const selectProviderRemissionDocument = (
-    providerWarehouseId: string,
-    file: File | null,
-  ) => {
-    setProviderRemissionError(null);
-    if (!file) {
-      setProviderRemissionDrafts((current) => {
-        const existing = current[providerWarehouseId];
-        if (existing) URL.revokeObjectURL(existing.previewUrl);
-        const next = { ...current };
-        delete next[providerWarehouseId];
-        return next;
-      });
-      return;
-    }
-    if (!ALLOWED_EVIDENCE_PHOTO_TYPES.has(file.type)) {
-      setProviderRemissionError('La remisión debe ser una foto PNG, WEBP o JPEG.');
-      return;
-    }
-    if (file.size > MAX_EVIDENCE_PHOTO_SIZE_BYTES) {
-      setProviderRemissionError('Cada foto de remisión debe pesar máximo 10 MB.');
-      return;
-    }
-    setProviderRemissionDrafts((current) => {
-      const existing = current[providerWarehouseId];
-      if (existing) URL.revokeObjectURL(existing.previewUrl);
-      return {
-        ...current,
-        [providerWarehouseId]: {
-          id: `${providerWarehouseId}-${file.name}-${file.lastModified}`,
-          file,
-          previewUrl: URL.createObjectURL(file),
-        },
-      };
-    });
-  };
-
   const clearProviderRemissionDocuments = () => {
-    setProviderRemissionDrafts((current) => {
-      Object.values(current).forEach((draft) => URL.revokeObjectURL(draft.previewUrl));
-      return {};
-    });
+    clearProviderRemissionDrafts();
     setCreationProviderRequirements(null);
     setProviderRemissionModal(null);
     setProviderRemissionError(null);
-  };
-
-  const uploadProviderRemissionDocuments = async (
-    documentId: string,
-    providers: ProviderRemissionRequirement[],
-  ) => {
-    const uploads = providers.flatMap((provider) => {
-      const draft = providerRemissionDrafts[provider.providerWarehouseId];
-      if (!draft) return [];
-      const formData = new FormData();
-      formData.append('category', 'COMPROBANTE_SALIDA_PROVEEDOR');
-      formData.append('displayName', `Remisión física de ${provider.providerName}`);
-      formData.append('providerWarehouseId', provider.providerWarehouseId);
-      formData.append('files', draft.file);
-      return [
-        api(`/files/entities/DOCUMENT/${documentId}`, {
-          method: 'POST',
-          body: formData,
-        }),
-      ];
-    });
-    await Promise.all(uploads);
   };
 
   const openMixerMotorRecovery = async (
@@ -1217,9 +830,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
   useEffect(() => {
     if (sourceMode !== 'warehouse' || !principalWarehouse?.id || sourceOwnerWarehouseId) return;
-    lastAutoOpenedWarehouseRef.current = principalWarehouse.id;
+    markWarehouseHandled(principalWarehouse.id);
     setSourceOwnerWarehouseId(principalWarehouse.id);
-  }, [principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
+  }, [markWarehouseHandled, principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
 
   useEffect(() => {
     let mounted = true;
@@ -1312,90 +925,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
   }, [currentUserId, dispatcherId, employees, isDriverRole]);
 
-  const loadInventory = async (openSelector = true) => {
-    setLoadingInventory(true);
-    setError(null);
-    try {
-      if (sourceMode === 'warehouse') {
-        if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
-        const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
-        if (selectedOwner?.type === 'ALLY') {
-          throw new Error('Para bodega alterna, usa captura libre de tags.');
-        }
-        const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/warehouse/${sourceOwnerWarehouseId}`,
-          { method: 'GET' }
-        );
-        setBulkItems(
-          data.bulk.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
-        );
-        setSerialItems(
-          data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
-        );
-      } else if (sourceMode === 'on-site') {
-        if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
-        const data = await api<RequestInventoryResponse>(
-          `/inventory/on-site/${effectiveSourceWorksiteId}/request-options`,
-          { method: 'GET' }
-        );
-        setBulkItems(data.bulk);
-        setSerialItems(data.serial);
-        setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
-      }
-      if (openSelector && !useManualWarehouseCapture) {
-        setItemsModalOpen(true);
-      }
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error loading inventory');
-      }
-    } finally {
-      setLoadingInventory(false);
-    }
-  };
-
   useEffect(() => {
-    if (activeTab !== 'generate' || generateStep !== 'items') {
-      setItemsModalOpen(false);
-      return;
-    }
-    if (sourceMode !== 'warehouse') return;
-    if (!sourceOwnerWarehouseId) {
-      lastAutoOpenedWarehouseRef.current = null;
-      return;
-    }
-    const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
-    if (selectedOwner?.type === 'ALLY') {
-      lastAutoOpenedWarehouseRef.current = null;
-      return;
-    }
-    if (lastAutoOpenedWarehouseRef.current === sourceOwnerWarehouseId) return;
-    lastAutoOpenedWarehouseRef.current = sourceOwnerWarehouseId;
-    void loadInventory(true);
-  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, warehouses]);
-
-  useEffect(() => {
-    if (sourceMode !== 'on-site') return;
-    if (!effectiveSourceWorksiteId) {
-      setBulkItems([]);
-      setSerialItems([]);
-      return;
-    }
-    void loadInventory(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceMode, effectiveSourceWorksiteId]);
-
-  useEffect(() => {
-    setBulkItems([]);
-    setSerialItems([]);
+    clearInventory();
     setFreeTagInput('');
     setFreeInternalNumber('');
     clearProviderRemissionDocuments();
-    setItemsModalOpen(false);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
@@ -1691,25 +1225,16 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       setError('Este item tiene alerta de inventario negativo. Ajusta stock antes de usarlo en un documento.');
       return false;
     }
-    const bulkKey = buildBulkKey(item);
     let added = false;
     setSelectedItems((prev) => {
-      const exists = prev.find((entry) => entry.type === 'bulk' && entry.bulkKey === bulkKey);
-      if (exists) return prev;
-      added = true;
-      return [
-        ...prev,
-        {
-          selectionId: createSelectionId(),
-          type: 'bulk',
-          bulkKey,
-          skuId: item.skuId,
-          name: item.skuName ?? item.skuId,
-          quantity: sourceMode === 'on-site' ? item.quantity : 1,
-          availableQuantity: item.quantity,
-          ownerWarehouseId: item.ownerWarehouseId
-        }
-      ];
+      const next = addBulkSelection({
+        items: prev,
+        inventoryItem: item,
+        sourceMode,
+        createSelectionId,
+      });
+      added = next !== prev;
+      return next;
     });
     return added;
   };
@@ -1758,201 +1283,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     }
   };
 
-  const appendSerialItem = (item: InventorySerial, associatedMixerId?: string) => {
-    let added = false;
-    setSelectedItems((prev) => {
-      const exists = prev.find((entry) => entry.assetId === item.assetId && entry.type === 'serial');
-      if (exists) return prev;
-      added = true;
-      return [
-        ...prev,
-        {
-          selectionId: createSelectionId(),
-          type: 'serial',
-          assetId: item.assetId,
-          name: getSerialDisplayName(item),
-          serial: item.serialOrEngine,
-          ownerWarehouseId: item.ownerWarehouseId,
-          associatedMixerId,
-        }
-      ];
-    });
-    return added;
-  };
-
-  const addSerialItem = (item: InventorySerial) => {
-    if (item.kind !== 'MOTOR') {
-      setComponentOptionsLoading(true);
-      api<{ components: AssetComponentOption[] }>(`/assets/${item.assetId}/component-options`)
-        .then((response) => {
-          if (response.components.length) {
-            setComponentParent(item);
-            setComponentOptions(response.components);
-            setItemsModalOpen(false);
-            return;
-          }
-          if (docType === 'REMISSION' && item.motorConfiguration === 'INTERCHANGEABLE') {
-            setPendingMixerQueue((current) => current.some((entry) => entry.assetId === item.assetId) ? current : [...current, item]);
-            return;
-          }
-          appendSerialItem(item);
-        })
-        .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron consultar los componentes.'))
-        .finally(() => setComponentOptionsLoading(false));
-      return true;
-    }
-    if (
-      docType === 'REMISSION'
-      && item.motorConfiguration === 'INTERCHANGEABLE'
-      && item.kind !== 'MOTOR'
-    ) {
-      let queued = false;
-      setPendingMixerQueue((current) => {
-        const alreadyQueued = current.some((mixer) => mixer.assetId === item.assetId);
-        const alreadySelected = selectedSerialIds.has(item.assetId);
-        if (alreadyQueued || alreadySelected) return current;
-        queued = true;
-        return [...current, item];
-      });
-      return queued;
-    }
-    return appendSerialItem(item);
-  };
-
-  const confirmAssetComponents = async (selections: AssetComponentSelection[]) => {
-    if (!componentParent) return;
-    const parent = componentParent;
-    const motor = selections.find(
-      (selection): selection is Extract<AssetComponentSelection, { type: 'serial' }> =>
-        selection.type === 'serial' && selection.item.kind === 'MOTOR',
-    );
-    if (docType === 'REMISSION' && parent.motorConfiguration === 'INTERCHANGEABLE' && motor) {
-      try {
-        await api(`/assets/${parent.assetId}/assigned-motor`, {
-          method: 'PATCH',
-          json: { motorId: motor.item.assetId },
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo asociar el motor.');
-        return;
-      }
-    }
-    setSelectedItems((current) => {
-      const selectedAssetIds = new Set(current.map((item) => item.assetId).filter(Boolean));
-      const additions: SelectedItem[] = [{
-        selectionId: createSelectionId(),
-        type: 'serial',
-        assetId: parent.assetId,
-        name: getSerialDisplayName(parent),
-        serial: parent.serialOrEngine,
-        ownerWarehouseId: parent.ownerWarehouseId,
-      }];
-      selections.forEach((selection) => {
-        if (selection.type === 'bulk') {
-          additions.push({
-            selectionId: createSelectionId(),
-            type: 'bulk',
-            bulkKey: buildBulkKey(selection.item),
-            skuId: selection.item.skuId,
-            name: `${selection.item.skuName ?? 'Componente'} · con ${getSerialDisplayName(parent)}`,
-            quantity: selection.quantity,
-            availableQuantity: selection.item.quantity,
-            ownerWarehouseId: selection.item.ownerWarehouseId,
-            componentParentAssetId: parent.assetId,
-          });
-        } else if (!selectedAssetIds.has(selection.item.assetId)) {
-          additions.push({
-            selectionId: createSelectionId(),
-            type: 'serial',
-            assetId: selection.item.assetId,
-            name: `${getSerialDisplayName(selection.item)} · con ${getSerialDisplayName(parent)}`,
-            serial: selection.item.serialOrEngine,
-            ownerWarehouseId: selection.item.ownerWarehouseId,
-            componentParentAssetId: parent.assetId,
-          });
-        }
-      });
-      return [...current.filter((item) => item.assetId !== parent.assetId), ...additions];
-    });
-    setItemsAddedNotice(`${getSerialDisplayName(parent)} y sus componentes fueron agregados.`);
-    setComponentParent(null);
-    setComponentOptions([]);
-  };
-
-  const cancelPendingMixer = () => {
-    if (assigningMotor) return;
-    setAssignMotorError(null);
-    setPendingMixerQueue((current) => current.slice(1));
-  };
-
-  const confirmMixerMotor = async (motor: InventorySerial) => {
-    if (!activePendingMixer) return;
-    setAssigningMotor(true);
-    setAssignMotorError(null);
-    try {
-      await api(`/assets/${activePendingMixer.assetId}/assigned-motor`, {
-        method: 'PATCH',
-        json: { motorId: motor.assetId },
-      });
-
-      setSelectedItems((current) => {
-        const withoutDuplicates = current.filter(
-          (item) => item.assetId !== activePendingMixer.assetId && item.assetId !== motor.assetId,
-        );
-        return [
-          ...withoutDuplicates,
-          {
-            selectionId: createSelectionId(),
-            type: 'serial',
-            assetId: activePendingMixer.assetId,
-            name: getSerialDisplayName(activePendingMixer),
-            serial: activePendingMixer.serialOrEngine,
-            ownerWarehouseId: activePendingMixer.ownerWarehouseId,
-          },
-          {
-            selectionId: createSelectionId(),
-            type: 'serial',
-            assetId: motor.assetId,
-            name: `${getSerialDisplayName(motor)} · motor asociado`,
-            serial: motor.serialOrEngine,
-            ownerWarehouseId: motor.ownerWarehouseId,
-            associatedMixerId: activePendingMixer.assetId,
-          },
-        ];
-      });
-      setSerialItems((current) =>
-        current.map((item) => {
-          if (
-            item.kind === 'MOTOR'
-            && item.assignedMixerId === activePendingMixer.assetId
-            && item.assetId !== motor.assetId
-          ) {
-            return { ...item, assignedMixerId: null };
-          }
-          if (item.assetId === motor.assetId) {
-            return { ...item, assignedMixerId: activePendingMixer.assetId };
-          }
-          if (item.assetId === activePendingMixer.assetId) {
-            return { ...item, assignedMotorId: motor.assetId };
-          }
-          return item;
-        }),
-      );
-      setItemsAddedNotice('Mezcladora y motor agregados al documento.');
-      setPendingMixerQueue((current) => current.slice(1));
-    } catch (err) {
-      setAssignMotorError(
-        err instanceof ApiError
-          ? `${err.status}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : 'No se pudo asignar el motor.',
-      );
-    } finally {
-      setAssigningMotor(false);
-    }
-  };
-
   const addFreeItem = () => {
     const tag = freeTagInput.trim().toUpperCase();
     if (!tag) {
@@ -1969,25 +1299,14 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       const internal = typeof freeInternalNumber === 'number' ? freeInternalNumber : null;
       const requestedReference = internal ? `${tag} #${internal}` : tag;
       setError(null);
-      setSelectedItems((prev) => {
-        const exists = prev.some(
-          (item) =>
-            item.ownerWarehouseId === sourceOwnerWarehouseId &&
-            (item.requestedTag ?? item.name).toUpperCase() === requestedReference,
-        );
-        if (exists) return prev;
-        return [
-          ...prev,
-          {
-            selectionId: createSelectionId(),
-            type: 'free',
-            name: requestedReference,
-            requestedTag: requestedReference,
-            quantity: 1,
-            ownerWarehouseId: sourceOwnerWarehouseId,
-          },
-        ];
-      });
+      setSelectedItems((prev) =>
+        addFreeSelection({
+          items: prev,
+          requestedReference,
+          ownerWarehouseId: sourceOwnerWarehouseId,
+          createSelectionId,
+        }),
+      );
       setFreeTagInput('');
       setFreeInternalNumber('');
       setItemsAddedNotice(`${requestedReference} agregado a la lista.`);
@@ -2002,93 +1321,24 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     const sku = skuOptions.find((entry) => entry.id === skuId);
     if (!sku) return;
     setSelectedItems((prev) =>
-      prev.map((item, i) =>
-        i === index
-          ? {
-              selectionId: item.selectionId,
-              type: 'bulk',
-              bulkKey: buildBulkKey({ skuId, ownerWarehouseId: item.ownerWarehouseId ?? null }),
-              skuId,
-              name: sku.name,
-              quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-              ownerWarehouseId: item.ownerWarehouseId,
-              isDamaged: item.isDamaged,
-              damageDescription: item.damageDescription,
-            }
-          : item,
-      ),
+      resolveFreeSelection({ items: prev, index, skuId, skuName: sku.name }),
     );
   };
 
   const updateSelected = (index: number, updates: Partial<SelectedItem>) => {
-    setSelectedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)));
+    setSelectedItems((prev) => updateSelection(prev, index, updates));
   };
 
   const updateSelectedOwner = (index: number, ownerWarehouseId: string | null) => {
-    setSelectedItems((prev) =>
-      prev.map((item, itemIndex) => {
-        if (itemIndex !== index) return item;
-        return {
-          ...item,
-          ownerWarehouseId,
-          ...(item.type === 'bulk' && item.skuId
-            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId }) }
-            : {}),
-        };
-      }),
-    );
+    setSelectedItems((prev) => updateSelectionOwner(prev, index, ownerWarehouseId));
   };
 
   const splitSelectedItem = (index: number) => {
-    setSelectedItems((current) => {
-      const item = current[index];
-      const quantity = Number(item?.quantity ?? 1);
-      if (!item || item.type === 'serial' || !Number.isFinite(quantity) || quantity <= 1) {
-        return current;
-      }
-      const next = [...current];
-      next.splice(
-        index,
-        1,
-        { ...item, quantity: 1 },
-        {
-          ...item,
-          selectionId: createSelectionId(),
-          quantity: quantity - 1,
-          ownerWarehouseId: null,
-        },
-      );
-      return next;
-    });
+    setSelectedItems((current) => splitSelection(current, index, createSelectionId));
   };
 
   const removeSelected = (selectionId: string) => {
-    setSelectedItems((current) => {
-      const removed = current.find((item) => item.selectionId === selectionId);
-      if (!removed) return current;
-
-      if (removed.assetId && current.some((item) => item.componentParentAssetId === removed.assetId)) {
-        return current.filter(
-          (item) => item.selectionId !== selectionId && item.componentParentAssetId !== removed.assetId,
-        );
-      }
-
-      const mixerAssetId = removed.associatedMixerId
-        ?? (removed.assetId && current.some((item) => item.associatedMixerId === removed.assetId)
-          ? removed.assetId
-          : null);
-
-      if (!mixerAssetId) {
-        return current.filter((item) => item.selectionId !== selectionId);
-      }
-
-      return current.filter(
-        (item) =>
-          item.selectionId !== selectionId
-          && item.assetId !== mixerAssetId
-          && item.associatedMixerId !== mixerAssetId,
-      );
-    });
+    setSelectedItems((current) => removeSelection(current, selectionId));
   };
 
   const resetGenerateForm = () => {
@@ -2099,8 +1349,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setAutosaveDraftId(null);
     setAutosaveReady(false);
     setAutosaveStatus('idle');
-    setPendingMixerQueue([]);
-    setAssignMotorError(null);
+    resetAssetSelection();
     setError(null);
     setConsecutive('');
     setCustomerId(null);
@@ -2117,8 +1366,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setDispatcherId(null);
     setSourceOwnerWarehouseId(null);
     setSourceWorksiteId(null);
-    setBulkItems([]);
-    setSerialItems([]);
+    clearInventory();
     setSelectedItems([]);
     setFreeTagInput('');
     setFreeInternalNumber('');
@@ -2142,89 +1390,31 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (autosaved && doc.status !== 'IN_PROGRESS') {
         throw new Error('El formulario autoguardado ya fue enviado.');
       }
-      const parsed = parseNotes(doc.notes ?? null);
+      const form = mapDocumentToRequestForm(doc, {
+        createSelectionId,
+        normalizePhone: normalizeLocalWhatsappPhone,
+      });
       setEditingRequestId(autosaved ? null : doc.id);
       setAutosaveDraftId(autosaved ? doc.id : null);
       setAutosaveReady(false);
-      setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
-      setConsecutive(doc.consecutive ?? '');
-      setCustomerId(doc.customerWorksite?.customer?.id ?? null);
-      setAdditionalRecipientPhones(
-        (doc.recipientPhones?.length
-          ? doc.recipientPhones
-          : doc.recipientPhone
-            ? [doc.recipientPhone]
-            : []
-        )
-          .map((phone) => normalizeLocalWhatsappPhone(phone))
-          .filter((phone): phone is string => Boolean(phone)),
-      );
+      setDocType(form.docType);
+      setConsecutive(form.consecutive);
+      setCustomerId(form.customerId);
+      setAdditionalRecipientPhones(form.additionalRecipientPhones);
       setRecipientPhoneDraft('');
-      setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
-      setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
-      setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
-      setWarehouseId(doc.warehouse?.id ?? null);
-      setObservations(extractUserObservations(doc.notes ?? null));
-      setVehicleId(parsed.vehicleId ?? null);
-      setDriverId(parsed.receiverId || parsed.driverId || null);
-      setDispatcherId(parsed.dispatcherId ?? null);
+      setDocDate(form.docDate);
+      setDeliveryMode(form.deliveryMode);
+      setCustomerWorksiteId(form.customerWorksiteId);
+      setWarehouseId(form.warehouseId);
+      setObservations(form.observations);
+      setVehicleId(form.vehicleId);
+      setDriverId(form.driverId);
+      setDispatcherId(form.dispatcherId);
       setSourceOwnerWarehouseId(null);
       setSourceWorksiteId(null);
-      setBulkItems([]);
-      setSerialItems([]);
-      setSelectedItems(
-        doc.items.map((item) => {
-          const ownerWarehouseId = item.condition ?? null;
-          if (!item.skuId && !item.assetId && item.requestedTag) {
-            return {
-              selectionId: createSelectionId(),
-              type: 'free' as const,
-              name: item.requestedTag,
-              requestedTag: item.requestedTag,
-              quantity: Number(item.quantity ?? 1) || 1,
-              componentParentAssetId: item.componentParentAssetId ?? undefined,
-              ownerWarehouseId,
-              isDamaged: Boolean(item.conditionNote?.trim()),
-              damageDescription: item.conditionNote ?? '',
-            };
-          }
-          if (item.skuId) {
-            return {
-              selectionId: createSelectionId(),
-              type: 'bulk' as const,
-              bulkKey: buildBulkKey({
-                skuId: item.skuId,
-                ownerWarehouseId,
-              }),
-              skuId: item.skuId,
-              name: item.sku?.name ?? item.skuId,
-              quantity: Number(item.quantity ?? 1) || 1,
-              ownerWarehouseId,
-              isDamaged: Boolean(item.conditionNote?.trim()),
-              damageDescription: item.conditionNote ?? '',
-            };
-          }
-          return {
-            selectionId: createSelectionId(),
-            type: 'serial' as const,
-            assetId: item.assetId ?? undefined,
-            name:
-              item.asset?.description ??
-              item.asset?.sku?.name ??
-              item.asset?.serialOrEngine ??
-              item.assetId ??
-              'Serial',
-            serial: item.asset?.serialOrEngine ?? null,
-            ownerWarehouseId,
-            associatedMixerId: item.asset?.assignedToMixer?.id,
-            componentParentAssetId: item.componentParentAssetId ?? undefined,
-            isDamaged: Boolean(item.conditionNote?.trim()),
-            damageDescription: item.conditionNote ?? '',
-          };
-        }),
-      );
-      const savedSignature = doc.files?.find((file) => file.fileType === 'SIGNATURE_RECEIVED')?.storageKey ?? null;
-      setReceivedSignature(savedSignature);
+      clearInventory();
+      setSelectedItems(form.selectedItems);
+      setReceivedSignature(form.receivedSignature);
       clearEvidencePhotos();
       setActiveTab('generate');
       setGenerateStep('info');
@@ -2324,11 +1514,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
           );
         }
-        if (evidencePhotos.length || Object.keys(providerRemissionDrafts).length) {
-          throw new Error(
-            'Los archivos y fotografías todavía requieren conexión. Retíralos o envía el documento cuando vuelva la red.',
-          );
-        }
+        const offlineFilesError = validateOfflineFileDrafts({
+          evidencePhotoCount: evidencePhotos.length,
+          providerRemissionCount: Object.keys(providerRemissionDrafts).length,
+        });
+        if (offlineFilesError) throw new Error(offlineFilesError);
 
         const autosaveOperation = await enqueueOfflineOperation({
           label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
@@ -2548,71 +1738,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setGenerateStep('info');
   };
 
-  const renderDamageFields = (item: SelectedItem, index: number) => {
-    if (docType !== 'RETURN') return null;
-    return (
-      <Stack gap={6} mt="xs">
-        <Checkbox
-          label="Entra averiado"
-          checked={Boolean(item.isDamaged)}
-          onChange={(event) =>
-            updateSelected(index, {
-              isDamaged: event.currentTarget.checked,
-              damageDescription: event.currentTarget.checked ? item.damageDescription ?? '' : '',
-            })
-          }
-        />
-        {item.isDamaged ? (
-          <Textarea
-            label="Descripcion del daño"
-            placeholder="Describe el daño reportado al recibir el equipo"
-            value={item.damageDescription ?? ''}
-            onChange={(event) =>
-              updateSelected(index, {
-                damageDescription: event.currentTarget.value,
-              })
-            }
-            minRows={2}
-            autosize
-            required
-          />
-        ) : null}
-      </Stack>
-    );
-  };
-
-  const renderAdminItemFields = (item: SelectedItem, index: number) => {
-    if (!editingRequestId || !canDecide) return null;
-    return (
-      <Stack gap="xs" mt="xs">
-        {item.type === 'free' ? (
-          <TextInput
-            label="Referencia del item"
-            value={item.requestedTag ?? item.name}
-            onChange={(event) => {
-              const requestedTag = event.currentTarget.value;
-              updateSelected(index, { requestedTag, name: requestedTag });
-            }}
-          />
-        ) : null}
-        <WarehouseSelect
-          label="Bodega dueña del item"
-          value={item.ownerWarehouseId ?? null}
-          onChange={(value) => updateSelectedOwner(index, value)}
-          warehouses={warehouses}
-          clearable={false}
-          required
-          width="100%"
-        />
-        {item.type !== 'serial' && Number(item.quantity ?? 1) > 1 ? (
-          <Button size="xs" variant="light" onClick={() => splitSelectedItem(index)}>
-            Dividir cantidad entre bodegas
-          </Button>
-        ) : null}
-      </Stack>
-    );
-  };
-
   const renderGenerateError = () =>
     error ? (
       <Alert color="red" variant="light" mb="md" withCloseButton onClose={() => setError(null)}>
@@ -2726,546 +1851,124 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                   </Tabs>
               </Stack>
               {generateStep === 'info' ? (
-                <>
-              {renderGenerateError()}
-              <Stack gap="md">
-                <Paper withBorder radius="lg" p="md" bg="gray.0">
-                  <Stack gap="md">
-                    <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-                      <div>
-                        <Text fw={800}>Documento</Text>
-                        <Text size="sm" c="dimmed">
-                          Define el tipo, consecutivo y fecha base del movimiento.
-                        </Text>
-                      </div>
-                      <Badge color={docType === 'REMISSION' ? 'blue' : 'orange'} variant="light">
-                        {formatDocType(docType)}
-                      </Badge>
-                    </Group>
-
-                    <Radio.Group
-                      value={docType}
-                      onChange={(value) => setDocType(value as 'REMISSION' | 'RETURN')}
-                      label="Tipo"
-                    >
-                      <Group mt="xs">
-                        <Radio value="REMISSION" label="Despacho" />
-                        <Radio value="RETURN" label="Devolucion" />
-                      </Group>
-                    </Radio.Group>
-
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            {!isDriverRole ? (
-              <TextInput
-                label={helpLabel('Consecutivo (opcional)', 'Si queda vacio, oficina puede asignarlo en la confirmacion.')}
-                withAsterisk={false}
-                value={consecutive}
-                onChange={(event) => setConsecutive(event.target.value)}
-              />
-            ) : null}
-            <Select
-              label="Razón social"
-              value={customerId}
-              onChange={(value) => {
-                setCustomerId(value);
-                setCustomerWorksiteId('');
-                setGenerateFieldErrors((prev) => ({ ...prev, customerId: undefined, customerWorksiteId: undefined }));
-              }}
-              data={customers.map((customer) => ({
-                value: customer.id,
-                label: customer.name,
-              }))}
-              searchable
-              clearable
-              required
-              placeholder="Buscar cliente"
-              nothingFoundMessage="No se encontraron clientes"
-              error={generateFieldErrors.customerId}
-            />
-            <TextInput
-              label={helpLabel('Fecha', 'Fecha del documento de despacho o devolucion.', true)}
-              withAsterisk={false}
-              type="date"
-              value={docDate}
-              onChange={(event) => {
-                setDocDate(event.target.value);
-                setGenerateFieldErrors((prev) => ({ ...prev, docDate: undefined }));
-              }}
-              required
-              error={generateFieldErrors.docDate}
-            />
-                    </SimpleGrid>
-                    {editingRequestId && isAdminRole ? (
-                      <WarehouseSelect
-                        label={docType === 'RETURN' ? 'Bodega destino' : 'Bodega del documento'}
-                        value={warehouseId}
-                        onChange={setWarehouseId}
-                        warehouses={warehouses}
-                        clearable={false}
-                        required
-                        width="100%"
-                      />
-                    ) : null}
-                    <Textarea
-                      label="Observaciones"
-                      description="Información adicional que aparecerá en el documento."
-                      placeholder={
-                        docType === 'RETURN'
-                          ? 'Ej. Equipos entregados sin novedades'
-                          : 'Ej. Entregar en la portería de la obra'
-                      }
-                      value={observations}
-                      onChange={(event) => setObservations(event.currentTarget.value)}
-                      minRows={3}
-                      maxRows={6}
-                      autosize
-                    />
-                  </Stack>
-                </Paper>
-
-              <Paper withBorder radius="lg" p="md">
-                  <Stack gap="sm">
-                    <Text fw={800}>
-                      {docType === 'REMISSION' ? 'Modo de entrega' : 'Modo de devolución'}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      {docType === 'REMISSION'
-                        ? 'Indica si el cliente retira en bodega o REV transporta los equipos a la obra.'
-                        : 'Indica si el cliente entrega los equipos en bodega o REV los recoge en la obra.'}
-                    </Text>
-                    <Radio.Group
-                      value={deliveryMode}
-                      onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
-                      label={docType === 'REMISSION' ? 'Entrega' : 'Devolución'}
-                    >
-                      <Group mt="xs">
-                        <Radio
-                          value="WAREHOUSE"
-                          label={docType === 'REMISSION'
-                            ? 'Despacho desde bodega'
-                            : 'Cliente entrega en bodega'}
-                        />
-                        <Radio
-                          value="ON_SITE"
-                          label={docType === 'REMISSION' ? 'Entrega en obra' : 'Recogida en obra'}
-                        />
-                      </Group>
-                    </Radio.Group>
-                  </Stack>
-                </Paper>
-
-                <Paper withBorder radius="lg" p="md">
-                  <Stack gap="md">
-                    <div>
-                      <Text fw={800}>Cliente, obra y responsables</Text>
-                      <Text size="sm" c="dimmed">
-                        {docType === 'REMISSION'
-                          ? 'Selecciona el destino y quién responde por el despacho.'
-                          : 'Selecciona el origen y quién recibe o recoge la devolución.'}
-                      </Text>
-                    </div>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            {isMobile ? (
-              <NativeSelect
-                label={helpLabel('Obra', 'Obra destino del movimiento.')}
-                value={customerWorksiteId}
-                onChange={(event) => {
-                  setCustomerWorksiteId(event.currentTarget.value);
-                  setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
-                }}
-                data={[
-                  { value: '', label: customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente' },
-                  ...worksiteOptions,
-                ]}
-                disabled={!customerId || worksitesLoading}
-                error={generateFieldErrors.customerWorksiteId}
-              />
-            ) : (
-              <Select
-                label={helpLabel('Obra', 'Obra destino del movimiento.')}
-                value={customerWorksiteId}
-                onChange={(value) => {
-                  setCustomerWorksiteId(value ?? '');
-                  setGenerateFieldErrors((prev) => ({ ...prev, customerWorksiteId: undefined }));
-                }}
-                data={worksiteOptions}
-                searchable
-                clearable
-                placeholder={customerId ? 'Seleccionar obra' : 'Selecciona primero un cliente'}
-                disabled={!customerId || worksitesLoading}
-                error={generateFieldErrors.customerWorksiteId}
-              />
-            )}
-            {deliveryMode === 'ON_SITE' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel(
-                    'Vehículo',
-                    docType === 'REMISSION'
-                      ? 'Vehiculo que transporta el despacho a obra.'
-                      : 'Vehiculo que recoge la devolución en la obra.',
-                  )}
-                  value={vehicleId ?? ''}
-                  onChange={(event) => setVehicleId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Seleccionar vehiculo' }, ...vehicleOptions]}
-                />
-              ) : (
-                <Select
-                  label={helpLabel(
-                    'Vehículo',
-                    docType === 'REMISSION'
-                      ? 'Vehiculo que transporta el despacho a obra.'
-                      : 'Vehiculo que recoge la devolución en la obra.',
-                  )}
-                  value={vehicleId}
-                  onChange={(value) => setVehicleId(value)}
-                  data={vehicleOptions}
-                  searchable
-                  clearable
-                />
-              )
-            )}
-            {deliveryMode === 'ON_SITE' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel(
-                    'Conductor',
-                    docType === 'REMISSION'
-                      ? 'Persona responsable del transporte del despacho.'
-                      : 'Persona responsable de recoger la devolución en la obra.',
-                  )}
-                  value={driverId ?? ''}
-                  onChange={(event) => {
-                    setDriverId(event.currentTarget.value || null);
-                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
+                <RequestInfoStep
+                  documentType={docType}
+                  consecutive={consecutive}
+                  customerId={customerId}
+                  documentDate={docDate}
+                  warehouseId={warehouseId}
+                  observations={observations}
+                  deliveryMode={deliveryMode}
+                  worksiteId={customerWorksiteId}
+                  vehicleId={vehicleId}
+                  driverId={driverId}
+                  dispatcherId={dispatcherId}
+                  customerOptions={customers.map((customer) => ({
+                    value: customer.id,
+                    label: customer.name,
+                  }))}
+                  worksiteOptions={worksiteOptions}
+                  vehicleOptions={vehicleOptions}
+                  employeeOptions={employeeOptions}
+                  warehouses={warehouses}
+                  errors={generateFieldErrors}
+                  error={error}
+                  editing={Boolean(editingRequestId)}
+                  isAdmin={isAdminRole}
+                  isDriver={isDriverRole}
+                  isMobile={isMobile}
+                  worksitesLoading={worksitesLoading}
+                  onDismissError={() => setError(null)}
+                  onDocumentTypeChange={setDocType}
+                  onConsecutiveChange={setConsecutive}
+                  onCustomerChange={(value) => {
+                    setCustomerId(value);
+                    setCustomerWorksiteId('');
+                    setGenerateFieldErrors((prev) => ({
+                      ...prev,
+                      customerId: undefined,
+                      customerWorksiteId: undefined,
+                    }));
                   }}
-                  data={[{ value: '', label: 'Seleccionar conductor' }, ...employeeOptions]}
-                  disabled={isDriverRole}
-                  error={generateFieldErrors.driverId}
-                />
-              ) : (
-                <Select
-                  label={helpLabel(
-                    'Conductor',
-                    docType === 'REMISSION'
-                      ? 'Persona responsable del transporte del despacho.'
-                      : 'Persona responsable de recoger la devolución en la obra.',
-                  )}
-                  value={driverId}
-                  onChange={(value) => {
+                  onDocumentDateChange={(value) => {
+                    setDocDate(value);
+                    setGenerateFieldErrors((prev) => ({ ...prev, docDate: undefined }));
+                  }}
+                  onWarehouseChange={setWarehouseId}
+                  onObservationsChange={setObservations}
+                  onDeliveryModeChange={setDeliveryMode}
+                  onWorksiteChange={(value) => {
+                    setCustomerWorksiteId(value);
+                    setGenerateFieldErrors((prev) => ({
+                      ...prev,
+                      customerWorksiteId: undefined,
+                    }));
+                  }}
+                  onVehicleChange={setVehicleId}
+                  onDriverChange={(value) => {
                     setDriverId(value);
                     setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
                   }}
-                  data={employeeOptions}
-                  searchable
-                  clearable
-                  disabled={isDriverRole}
-                  error={generateFieldErrors.driverId}
+                  onDispatcherChange={setDispatcherId}
+                  onNext={() => void goToItemsStep()}
                 />
-              )
-            )}
-            {docType === 'RETURN' && deliveryMode === 'WAREHOUSE' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.', true)}
-                  withAsterisk={false}
-                  value={driverId ?? ''}
-                  onChange={(event) => {
-                    setDriverId(event.currentTarget.value || null);
-                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
-                  }}
-                  data={[{ value: '', label: 'Seleccionar empleado' }, ...employeeOptions]}
-                  disabled={isDriverRole}
-                  error={generateFieldErrors.driverId}
-                  required
-                />
-              ) : (
-                <Select
-                  label={helpLabel('Recibido por', 'Empleado de REV que recibe la devolución.', true)}
-                  withAsterisk={false}
-                  value={driverId}
-                  onChange={(value) => {
-                    setDriverId(value);
-                    setGenerateFieldErrors((prev) => ({ ...prev, driverId: undefined }));
-                  }}
-                  data={employeeOptions}
-                  searchable
-                  clearable
-                  disabled={isDriverRole}
-                  error={generateFieldErrors.driverId}
-                  required
-                  placeholder="Buscar empleado"
-                />
-              )
-            )}
-            {docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && (
-              isMobile ? (
-                <NativeSelect
-                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
-                  value={dispatcherId ?? ''}
-                  onChange={(event) => setDispatcherId(event.currentTarget.value || null)}
-                  data={[{ value: '', label: 'Seleccionar despachador' }, ...employeeOptions]}
-                  disabled={isDriverRole}
-                />
-              ) : (
-                <Select
-                  label={helpLabel('Despachador', 'Empleado que entrega material desde bodega.')}
-                  value={dispatcherId}
-                  onChange={(value) => setDispatcherId(value)}
-                  data={employeeOptions}
-                  searchable
-                  clearable
-                  disabled={isDriverRole}
-                />
-              )
-            )}
-                    </SimpleGrid>
-                  </Stack>
-                </Paper>
-              </Stack>
-              <Group mt="md" justify="flex-end" className="mobile-actions">
-                <Button onClick={goToItemsStep}>Siguiente: Items</Button>
-              </Group>
-                </>
               ) : null}
             </Tabs.Panel>
           </Tabs>
           </Paper>
 
         {activeTab === 'generate' && generateStep === 'items' ? (
-        <Paper shadow="sm" p={{ base: 'md', md: 'xl' }} radius="xl" withBorder mt="lg">
-          <Group justify="space-between" align="center" mb="sm">
-            <div>
-              <Group gap="xs" mb={4}>
-                <Badge color="teal" variant="light">Paso 2</Badge>
-                <Badge color={sourceMode === 'warehouse' ? 'blue' : 'orange'} variant="light">
-                  {sourceMode === 'warehouse' ? 'Desde bodega' : 'Desde obra'}
-                </Badge>
-              </Group>
-              <Title order={4}>Items del documento</Title>
-              <Text size="sm" c="dimmed">
-                Agrega equipos, cantidades y condiciones para construir el documento.
-              </Text>
-            </div>
-            <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
-              Volver a info
-            </Button>
-          </Group>
-          {renderGenerateError()}
-          <Paper withBorder radius="lg" p="md" bg="teal.0" mb="md">
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
-              <div>
-                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Cliente</Text>
-                <Text size="sm" fw={700}>{selectedCustomer?.name ?? '-'}</Text>
-              </div>
-              <div>
-                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Obra</Text>
-                <Text size="sm" fw={700}>{selectedWorksiteLabel}</Text>
-              </div>
-              <div>
-                <Text size="xs" fw={800} c="dimmed" tt="uppercase">Fecha</Text>
-                <Text size="sm" fw={700}>{docDate || '-'}</Text>
-              </div>
-              <div>
-                <Text size="xs" fw={800} c="dimmed" tt="uppercase">
-                  {docType === 'REMISSION' ? 'Entrega' : 'Devolución'}
-                </Text>
-                <Text size="sm" fw={700}>
-                  {docType === 'REMISSION'
-                    ? deliveryMode === 'ON_SITE'
-                      ? `En obra (${selectedDriver?.name ?? '-'})`
-                      : `Bodega (${selectedDispatcher?.name ?? '-'})`
-                    : deliveryMode === 'ON_SITE'
-                      ? `Recogida en obra (${selectedDriver?.name ?? '-'})`
-                      : `Cliente entrega en bodega (${selectedDriver?.name ?? '-'})`}
-                </Text>
-              </div>
-            </SimpleGrid>
-          </Paper>
-          <Text c="dimmed">Agregar los equipos y su origen.</Text>
-
-          <Group mt="md" align="flex-end" wrap="wrap">
-            {sourceMode === 'warehouse' && (
-              <WarehouseSelect
-                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
-                value={sourceOwnerWarehouseId}
-                onChange={(value) => {
-                  setSourceOwnerWarehouseId(value);
-                  const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
-                  if (nextWarehouse?.type !== 'ALLY') setCreationProviderRequirements(null);
-                }}
-                warehouses={warehouses}
-                clearable
-                placeholder="Buscar origen"
-                width={isMobile ? '100%' : 320}
-              />
-            )}
-            {useManualWarehouseCapture ? null : (
-              <Button onClick={() => void loadInventory()} loading={loadingInventory}>
-                Cargar items
-              </Button>
-            )}
-          </Group>
-
-          {useManualWarehouseCapture ? (
-            <Stack mt="md" gap="sm">
-              <Group align="flex-end" wrap="wrap">
-                <TextInput
-                  label="Referencia"
-                  placeholder="Escribe la referencia entregada"
-                  value={freeTagInput}
-                  onChange={(value) => {
-                    setFreeTagInput(value.currentTarget.value);
-                    setError(null);
-                  }}
-                  w={isMobile ? '100%' : 320}
-                />
-                <NumberInput
-                  label="N° interno (opcional)"
-                  min={1}
-                  allowDecimal={false}
-                  value={freeInternalNumber}
-                  onChange={(value) => setFreeInternalNumber(typeof value === 'number' ? value : '')}
-                  w={isMobile ? '100%' : 190}
-                />
-                <Button onClick={addFreeItem}>Agregar item</Button>
-              </Group>
-            </Stack>
-          ) : null}
-
-          <Divider my="md" />
-
-          {useManualWarehouseCapture ? null : (
-            <Text size="sm" c="dimmed">
-              Pulsa "Cargar items" para abrir el selector de items.
-            </Text>
-          )}
-          <Divider my="md" />
-
-          <Title order={4}>Seleccionados</Title>
-          {selectedItems.length === 0 ? (
-            <Paper radius="lg" p="lg" bg="gray.0" mt="md">
-              <Text fw={700}>No hay equipos agregados</Text>
-              <Text size="sm" c="dimmed" mt={4}>
-                Carga items desde el origen o agrega manualmente para continuar con la firma.
-              </Text>
-            </Paper>
-          ) : !isTabletOrMobile ? (
-            <Table striped highlightOnHover mt="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Desc.</Table.Th>
-                  <Table.Th style={{ width: 120, textAlign: 'center' }}>Cantidad</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {selectedItems.map((item, index) => (
-                  <Table.Tr key={item.selectionId}>
-                    <Table.Td>
-                      <Text fw={600}>{item.name}</Text>
-                      {item.serial && (
-                        <Text size="xs" c="dimmed">
-                          {item.serial}
-                        </Text>
-                      )}
-                      {renderDamageFields(item, index)}
-                      {renderAdminItemFields(item, index)}
-                    </Table.Td>
-                    <Table.Td>
-                      {item.type === 'bulk' || item.type === 'free' ? (
-                        <NumberInput
-                          min={1}
-                          value={item.quantity ?? 1}
-                          onChange={(value) =>
-                            updateSelected(index, {
-                              quantity: normalizeQuantityInput(value, item.quantity ?? 1)
-                            })
-                          }
-                        />
-                      ) : (
-                        <Text>1</Text>
-                      )}
-                      {canResolveInline && item.type === 'free' ? (
-                        <Select
-                          mt="xs"
-                          label="Resolver a SKU"
-                          placeholder="Seleccionar SKU"
-                          searchable
-                          clearable
-                          data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
-                          onChange={(value) => resolveFreeItemToSku(index, value)}
-                        />
-                      ) : null}
-                      <Button size="xs" mt="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
-                        Quitar
-                      </Button>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          ) : (
-            <Stack mt="md" gap="sm">
-              {selectedItems.map((item, index) => (
-                <Paper
-                  key={item.selectionId}
-                  withBorder
-                  radius="md"
-                  p="sm"
-                >
-                  <Stack gap="xs">
-                    <div>
-                      <Text fw={600}>{item.name}</Text>
-                      {item.serial ? (
-                        <Text size="xs" c="dimmed">
-                          {item.serial}
-                        </Text>
-                      ) : null}
-                    </div>
-                    {item.type === 'bulk' || item.type === 'free' ? (
-                      <NumberInput
-                        label="Cantidad"
-                        min={1}
-                        value={item.quantity ?? 1}
-                        onChange={(value) =>
-                          updateSelected(index, {
-                            quantity: normalizeQuantityInput(value, item.quantity ?? 1),
-                          })
-                        }
-                      />
-                    ) : (
-                      <Text size="sm">Cantidad: 1</Text>
-                    )}
-                    {renderDamageFields(item, index)}
-                    {renderAdminItemFields(item, index)}
-                    {canResolveInline && item.type === 'free' ? (
-                      <Select
-                        label="Resolver a SKU"
-                        placeholder="Seleccionar SKU"
-                        searchable
-                        clearable
-                        data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
-                        onChange={(value) => resolveFreeItemToSku(index, value)}
-                      />
-                    ) : null}
-                    <Button size="xs" variant="subtle" color="red" onClick={() => removeSelected(item.selectionId)}>
-                      Quitar
-                    </Button>
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          )}
-
-          <Group mt="md" justify="space-between" className="mobile-actions">
-            <Button variant="light" color="gray" onClick={() => setGenerateStep('info')}>
-              Volver a info
-            </Button>
-            <Button onClick={() => void goToSignStep()} loading={checkingProviderRemissions}>
-              Siguiente: Firma
-            </Button>
-          </Group>
-        </Paper>
+          <RequestItemsStep
+            documentType={docType}
+            sourceMode={sourceMode}
+            customerName={selectedCustomer?.name ?? '-'}
+            worksiteLabel={selectedWorksiteLabel}
+            documentDate={docDate}
+            deliverySummary={
+              docType === 'REMISSION'
+                ? deliveryMode === 'ON_SITE'
+                  ? `En obra (${selectedDriver?.name ?? '-'})`
+                  : `Bodega (${selectedDispatcher?.name ?? '-'})`
+                : deliveryMode === 'ON_SITE'
+                  ? `Recogida en obra (${selectedDriver?.name ?? '-'})`
+                  : `Cliente entrega en bodega (${selectedDriver?.name ?? '-'})`
+            }
+            error={error}
+            isMobile={isMobile}
+            isTabletOrMobile={isTabletOrMobile}
+            sourceOwnerWarehouseId={sourceOwnerWarehouseId}
+            warehouses={warehouses}
+            manualCapture={useManualWarehouseCapture}
+            loadingInventory={loadingInventory}
+            freeTagInput={freeTagInput}
+            freeInternalNumber={freeInternalNumber}
+            items={selectedItems}
+            editing={Boolean(editingRequestId)}
+            canDecide={canDecide}
+            canResolveInline={canResolveInline}
+            skuOptions={skuOptions}
+            checkingProviderRemissions={checkingProviderRemissions}
+            onDismissError={() => setError(null)}
+            onBack={() => setGenerateStep('info')}
+            onNext={() => void goToSignStep()}
+            onSourceOwnerChange={(value) => {
+              setSourceOwnerWarehouseId(value);
+              const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
+              if (nextWarehouse?.type !== 'ALLY') setCreationProviderRequirements(null);
+            }}
+            onLoadInventory={() => void loadInventory()}
+            onFreeTagChange={(value) => {
+              setFreeTagInput(value);
+              setError(null);
+            }}
+            onFreeInternalNumberChange={setFreeInternalNumber}
+            onAddFreeItem={addFreeItem}
+            onUpdateItem={updateSelected}
+            onUpdateOwner={updateSelectedOwner}
+            onSplitItem={splitSelectedItem}
+            onResolveFreeItem={resolveFreeItemToSku}
+            onRemoveItem={removeSelected}
+          />
         ) : null}
 
         {activeTab === 'generate' && generateStep === 'sign' ? (
@@ -3321,298 +2024,49 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             </SimpleGrid>
           </Paper>
 
-          <Paper withBorder radius="lg" p="md" mb="md">
-            <Stack gap="sm">
-              <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-                <div>
-                  <Text fw={700}>Destinatarios de WhatsApp</Text>
-                  <Text size="sm" c="dimmed">
-                    El encargado de obra y el cliente se agregan automáticamente. Puedes sumar otros números.
-                  </Text>
-                </div>
-                {canDecide ? (
-                  <Switch
-                    checked={sendWhatsapp}
-                    onChange={(event) => {
-                      setSendWhatsapp(event.currentTarget.checked);
-                      setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
-                    }}
-                    label="Enviar por WhatsApp"
-                  />
-                ) : null}
-              </Group>
+          <WhatsappRecipientsPanel
+            canDecide={canDecide}
+            enabled={shouldSendWhatsapp}
+            sendWhatsapp={sendWhatsapp}
+            defaultRecipients={defaultWhatsappRecipients}
+            additionalPhones={manualWhatsappPhones}
+            phoneDraft={recipientPhoneDraft}
+            error={generateFieldErrors.recipientPhones ?? null}
+            onEnabledChange={(enabled) => {
+              setSendWhatsapp(enabled);
+              setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+            }}
+            onPhoneDraftChange={(phone) => {
+              setRecipientPhoneDraft(phone);
+              setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
+            }}
+            onAdd={addWhatsappRecipient}
+            onRemove={removeWhatsappRecipient}
+          />
 
-              {shouldSendWhatsapp ? (
-                <>
+          <RequestItemsSummary
+            compact={isTabletOrMobile}
+            documentType={docType}
+            items={selectedItems}
+            totalQuantity={selectedItemsTotalQuantity}
+          />
 
-              {defaultWhatsappRecipients.map((recipient) => (
-                <Group key={recipient.key} justify="space-between" align="center" wrap="nowrap">
-                  <div>
-                    <Text size="sm" fw={700}>{recipient.label}</Text>
-                    <Text size="xs" c="dimmed">Destinatario predeterminado</Text>
-                  </div>
-                  {recipient.phone ? (
-                    <Badge color="green" variant="light">+57 {recipient.phone}</Badge>
-                  ) : (
-                    <Badge color="gray" variant="light">Sin teléfono registrado</Badge>
-                  )}
-                </Group>
-              ))}
+          <RequestSignaturePanel
+            label={customerSignatureLabel}
+            signature={receivedSignature}
+            editing={Boolean(editingRequestId)}
+            signatureLocked={Boolean(editingRequestId && !isAdminRole)}
+            onRemove={() => setReceivedSignature(null)}
+            onOpenCapture={() => setSignatureModalOpen(true)}
+          />
 
-              {manualWhatsappPhones.map((phone, index) => (
-                <Group key={phone} justify="space-between" align="center" wrap="nowrap">
-                  <div>
-                    <Text size="sm" fw={700}>Destinatario adicional {index + 1}</Text>
-                    <Text size="xs" c="dimmed">+57 {phone}</Text>
-                  </div>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    onClick={() => removeWhatsappRecipient(phone)}
-                  >
-                    Quitar
-                  </Button>
-                </Group>
-              ))}
-
-              <Group align="flex-end" wrap="wrap">
-                <TextInput
-                  label="Agregar otro número"
-                  description="Escribe únicamente los 10 dígitos; el sistema agrega +57."
-                  leftSection="+57"
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={recipientPhoneDraft}
-                  onChange={(event) => {
-                    setRecipientPhoneDraft(event.currentTarget.value.replace(/\D/g, '').slice(0, 10));
-                    setGenerateFieldErrors((prev) => ({ ...prev, recipientPhones: undefined }));
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      addWhatsappRecipient();
-                    }
-                  }}
-                  placeholder="3001234567"
-                  style={{ flex: '1 1 260px' }}
-                />
-                <Button type="button" variant="light" onClick={addWhatsappRecipient}>
-                  Agregar
-                </Button>
-              </Group>
-              {generateFieldErrors.recipientPhones ? (
-                <Text size="xs" c="red">{generateFieldErrors.recipientPhones}</Text>
-              ) : null}
-                </>
-              ) : (
-                <Alert color="gray" variant="light">
-                  El documento se creará sin exigir teléfonos ni enviar una copia por WhatsApp.
-                </Alert>
-              )}
-            </Stack>
-          </Paper>
-
-          {isTabletOrMobile ? (
-            <Stack gap="xs" mb="md">
-              {selectedItems.map((item) => (
-                <Paper
-                  key={item.selectionId}
-                  withBorder
-                  radius="md"
-                  p="sm"
-                >
-                  <Group justify="space-between" align="flex-start" wrap="nowrap">
-                    <div style={{ minWidth: 0 }}>
-                      <Text fw={600} style={{ overflowWrap: 'anywhere' }}>
-                        {item.name}
-                      </Text>
-                      {docType === 'RETURN' && item.isDamaged ? (
-                        <Text size="xs" c="red" style={{ overflowWrap: 'anywhere' }}>
-                          Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
-                        </Text>
-                      ) : null}
-                    </div>
-                    <Text fw={800} ta="right" style={{ flex: '0 0 auto' }}>
-                      {item.type === 'serial' ? 1 : item.quantity ?? 1}
-                    </Text>
-                  </Group>
-                </Paper>
-              ))}
-              <Paper withBorder radius="md" p="sm" bg="gray.0">
-                <Group justify="space-between" wrap="nowrap">
-                  <Text fw={800}>Total</Text>
-                  <Text fw={900}>{selectedItemsTotalQuantity}</Text>
-                </Group>
-              </Paper>
-            </Stack>
-          ) : (
-            <Table striped highlightOnHover mb="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Item</Table.Th>
-                  <Table.Th style={{ width: 110, textAlign: 'center' }}>Cantidad</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {selectedItems.map((item) => (
-                  <Table.Tr key={item.selectionId}>
-                    <Table.Td>
-                      <Text>{item.name}</Text>
-                      {docType === 'RETURN' && item.isDamaged ? (
-                        <Text size="xs" c="red">
-                          Dañado: {item.damageDescription?.trim() || 'Sin descripcion'}
-                        </Text>
-                      ) : null}
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: 'center' }}>
-                      {item.type === 'serial' ? 1 : item.quantity ?? 1}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-                <Table.Tr>
-                  <Table.Td>
-                    <Text fw={800}>Total</Text>
-                  </Table.Td>
-                  <Table.Td style={{ textAlign: 'center' }}>
-                    <Text fw={800}>{selectedItemsTotalQuantity}</Text>
-                  </Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-            </Table>
-          )}
-
-          <Stack gap="xs">
-            <Text fw={600}>{customerSignatureLabel}</Text>
-            <Group justify="space-between" align="center">
-              <Text size="sm" c="dimmed">
-                {receivedSignature ? 'Firma capturada' : 'Sin firma'}
-              </Text>
-              {editingRequestId && !isAdminRole ? (
-                <Text size="xs" c="dimmed">
-                  Firma bloqueada durante la edicion
-                </Text>
-              ) : (
-                <Group gap="xs">
-                  {editingRequestId && receivedSignature ? (
-                    <Button
-                      type="button"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => {
-                        setReceivedSignature(null);
-                        setSignatureDraft(null);
-                      }}
-                    >
-                      Eliminar firma
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="light"
-                    onClick={() => {
-                      setSignatureDraft(receivedSignature);
-                      setSignatureModalOpen(true);
-                    }}
-                  >
-                    {receivedSignature ? 'Cambiar firma' : 'Firmar'}
-                  </Button>
-                </Group>
-              )}
-            </Group>
-            {receivedSignature ? (
-              <img
-                src={receivedSignature}
-                alt={customerSignatureLabel}
-                style={{
-                  width: '100%',
-                  maxWidth: 420,
-                  height: 110,
-                  objectFit: 'contain',
-                  border: '1px solid var(--mantine-color-gray-4)',
-                  borderRadius: 8,
-                  background: '#fff',
-                }}
-              />
-            ) : null}
-          </Stack>
-
-          <Paper withBorder radius="lg" p="md" mt="md">
-            <Stack gap="sm">
-              <Group justify="space-between" align="center" className="mobile-stack">
-                <div>
-                  <Text fw={700}>Evidencias fotograficas</Text>
-                  <Text size="sm" c="dimmed">
-                    Toma fotos desde la tablet o adjunta imagenes antes de enviar.
-                  </Text>
-                </div>
-                <Group gap="xs">
-                  <Button
-                    type="button"
-                    variant="light"
-                    leftSection={<IconCamera size={16} />}
-                    onClick={() => evidenceInputRef.current?.click()}
-                  >
-                    Tomar / adjuntar
-                  </Button>
-                  {evidencePhotos.length ? (
-                    <Button type="button" variant="subtle" color="red" onClick={clearEvidencePhotos}>
-                      Limpiar
-                    </Button>
-                  ) : null}
-                </Group>
-              </Group>
-              <input
-                ref={evidenceInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                capture="environment"
-                multiple
-                onChange={(event) => addEvidencePhotos(event.currentTarget.files)}
-                style={{ display: 'none' }}
-              />
-              {evidencePhotos.length ? (
-                <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm">
-                  {evidencePhotos.map((photo) => (
-                    <Paper key={photo.id} withBorder radius="md" p={6}>
-                      <div style={{ position: 'relative' }}>
-                        <img
-                          src={photo.previewUrl}
-                          alt="Vista previa de evidencia"
-                          style={{
-                            width: '100%',
-                            aspectRatio: '4 / 3',
-                            objectFit: 'cover',
-                            borderRadius: 6,
-                            display: 'block',
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="xs"
-                          color="red"
-                          variant="filled"
-                          leftSection={<IconTrash size={12} />}
-                          onClick={() => removeEvidencePhoto(photo.id)}
-                          style={{ position: 'absolute', top: 6, right: 6 }}
-                        >
-                          Quitar
-                        </Button>
-                      </div>
-                      <Text size="xs" c="dimmed" mt={4} truncate>
-                        {photo.file.name}
-                      </Text>
-                    </Paper>
-                  ))}
-                </SimpleGrid>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  Sin fotos adjuntas.
-                </Text>
-              )}
-            </Stack>
-          </Paper>
+          <EvidencePhotosPanel
+            photos={evidencePhotos}
+            error={evidencePhotosError}
+            onAdd={addEvidencePhotos}
+            onRemove={removeEvidencePhoto}
+            onClear={clearEvidencePhotos}
+          />
 
           {submitResult && (
             <Text c="green" mt="sm">
@@ -3630,182 +2084,37 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         </Stack>
       </Container>
 
-      <Modal
-        opened={Boolean(providerRemissionModal)}
+      <ProviderRemissionsModal
+        state={providerRemissionModal}
+        drafts={providerRemissionDrafts}
+        error={providerRemissionError}
+        uploading={providerRemissionUploading}
+        onSelect={selectProviderRemissionDocument}
         onClose={() => {
           if (providerRemissionUploading) return;
           setProviderRemissionModal(null);
           setProviderRemissionError(null);
         }}
-        title={
-          providerRemissionModal?.mode === 'REQUIRED'
-            ? 'Remisión física requerida'
-            : 'Remisiones de proveedores detectadas'
-        }
-        centered
-        size="lg"
-        closeOnClickOutside={!providerRemissionUploading}
-        closeOnEscape={!providerRemissionUploading}
-      >
-        <Stack gap="md">
-          <Alert
-            color={providerRemissionModal?.mode === 'REQUIRED' ? 'orange' : 'blue'}
-            variant="light"
-          >
-            {providerRemissionModal?.mode === 'REQUIRED'
-              ? 'No puedes aprobar esta solicitud hasta adjuntar una remisión física por cada proveedor pendiente.'
-              : 'Puedes adjuntar las remisiones ahora o continuar y dejar que Office las complete antes de aprobar.'}
-          </Alert>
+        onContinue={() => {
+          setProviderRemissionModal(null);
+          setProviderRemissionError(null);
+          setGenerateStep('sign');
+        }}
+        onSubmit={() => void uploadMissingProviderRemissionsAndApprove()}
+      />
 
-          {(providerRemissionModal?.requirements.missingProviders ?? []).map((provider) => {
-            const draft = providerRemissionDrafts[provider.providerWarehouseId];
-            return (
-              <Paper key={provider.providerWarehouseId} withBorder radius="md" p="md">
-                <Stack gap="sm">
-                  <div>
-                    <Text fw={700}>{provider.providerName}</Text>
-                    <Text size="sm" c="dimmed">
-                      Tienes {provider.quantity} item{provider.quantity === 1 ? '' : 's'} de este proveedor
-                      {provider.itemCount !== provider.quantity
-                        ? ` en ${provider.itemCount} línea${provider.itemCount === 1 ? '' : 's'}`
-                        : ''}.
-                    </Text>
-                  </div>
-                  <FileInput
-                    label={`Remisión física de ${provider.providerName}`}
-                    placeholder="Tomar o seleccionar foto"
-                    accept="image/png,image/jpeg,image/webp"
-                    capture="environment"
-                    clearable
-                    value={draft?.file ?? null}
-                    onChange={(file) =>
-                      selectProviderRemissionDocument(
-                        provider.providerWarehouseId,
-                        file,
-                      )
-                    }
-                    leftSection={<IconCamera size={16} />}
-                  />
-                  {draft ? (
-                    <img
-                      src={draft.previewUrl}
-                      alt={`Remisión física de ${provider.providerName}`}
-                      style={{
-                        width: '100%',
-                        maxWidth: 360,
-                        aspectRatio: '4 / 3',
-                        objectFit: 'cover',
-                        borderRadius: 8,
-                      }}
-                    />
-                  ) : null}
-                </Stack>
-              </Paper>
-            );
-          })}
-
-          {providerRemissionError ? (
-            <Alert color="red" variant="light">
-              {providerRemissionError}
-            </Alert>
-          ) : null}
-
-          <Group justify="flex-end" className="mobile-actions">
-            {providerRemissionModal?.mode === 'OPTIONAL' ? (
-              <>
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setProviderRemissionModal(null);
-                    setProviderRemissionError(null);
-                    setGenerateStep('sign');
-                  }}
-                >
-                  Omitir por ahora
-                </Button>
-                <Button
-                  disabled={
-                    !providerRemissionModal.requirements.missingProviders.some(
-                      (provider) =>
-                        Boolean(providerRemissionDrafts[provider.providerWarehouseId]),
-                    )
-                  }
-                  onClick={() => {
-                    setProviderRemissionModal(null);
-                    setProviderRemissionError(null);
-                    setGenerateStep('sign');
-                  }}
-                >
-                  Guardar fotos y continuar
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="default"
-                  disabled={providerRemissionUploading}
-                  onClick={() => {
-                    setProviderRemissionModal(null);
-                    setProviderRemissionError(null);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  loading={providerRemissionUploading}
-                  onClick={() => void uploadMissingProviderRemissionsAndApprove()}
-                >
-                  Subir y aprobar
-                </Button>
-              </>
-            )}
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
-        opened={signatureModalOpen}
-        onClose={() => setSignatureModalOpen(false)}
-        title={customerSignatureLabel}
-        centered
-      >
-        <Stack gap="md">
-          <canvas
-            ref={signatureCanvasRef}
-            onPointerDown={beginSignature}
-            onPointerMove={moveSignature}
-            onPointerUp={endSignature}
-            onPointerCancel={endSignature}
-            onPointerLeave={endSignature}
-            style={{
-              width: '100%',
-              height: 180,
-              border: '1px solid var(--mantine-color-gray-4)',
-              borderRadius: 8,
-              background: '#fff',
-              touchAction: 'none',
-            }}
-          />
-          <Group justify="space-between" className="mobile-actions">
-            <Button variant="default" onClick={clearSignature}>
-              Limpiar
-            </Button>
-            <Group>
-              <Button variant="default" onClick={() => setSignatureModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  setReceivedSignature(signatureDraft ?? null);
-                  setSignatureModalOpen(false);
-                }}
-              >
-                Confirmar y guardar
-              </Button>
-            </Group>
-          </Group>
-        </Stack>
-      </Modal>
+      {signatureModalOpen ? (
+        <SignatureCaptureModal
+          opened
+          title={customerSignatureLabel}
+          value={receivedSignature}
+          onClose={() => setSignatureModalOpen(false)}
+          onConfirm={(signature) => {
+            setReceivedSignature(signature);
+            setSignatureModalOpen(false);
+          }}
+        />
+      ) : null}
 
       <Modal
         opened={adjustWarningModalOpen}
@@ -3922,7 +2231,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         serialItems={serialItems}
         ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
         restrictOwnerWarehouse={sourceMode === 'warehouse'}
-        onClose={() => { setComponentParent(null); setComponentOptions([]); }}
+        onClose={closeAssetComponents}
         onConfirm={(selections) => void confirmAssetComponents(selections)}
       />
 
