@@ -62,6 +62,7 @@ import AssetComponentsSelectionModal, {
   type AssetComponentSelection,
 } from '@/components/AssetComponentsSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
+import { buildRequestItems } from '@/components/transport/request-items';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -454,41 +455,6 @@ function buildRequestNotes({
     .join(' | ');
 }
 
-function buildRequestItems(items: SelectedItem[], requireOwner: boolean) {
-  return items.map((item) => {
-    if (requireOwner && !item.ownerWarehouseId) {
-      throw new Error(`Missing owner for item ${item.name}`);
-    }
-    const conditionNote =
-      item.isDamaged && item.damageDescription?.trim()
-        ? item.damageDescription.trim()
-        : undefined;
-    if (item.type === 'free') {
-      return {
-        requestedTag: item.requestedTag ?? item.name,
-        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
-        conditionNote,
-      };
-    }
-    if (item.type === 'bulk') {
-      return {
-        skuId: item.skuId,
-        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-        componentParentAssetId: item.componentParentAssetId,
-        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
-        conditionNote,
-      };
-    }
-    return {
-      assetId: item.assetId,
-      componentParentAssetId: item.componentParentAssetId,
-      ownerWarehouseId: item.ownerWarehouseId ?? undefined,
-      conditionNote,
-    };
-  });
-}
-
 function normalizeApiErrorMessages(error: ApiError) {
   const messages: string[] = [];
   if (typeof error.message === 'string' && error.message.trim()) {
@@ -517,6 +483,18 @@ function normalizeApiErrorMessages(error: ApiError) {
     }
   }
   return [...new Set(messages)];
+}
+
+function formatTransportError(error: unknown, fallback: string) {
+  const message = error instanceof ApiError
+    ? (normalizeApiErrorMessages(error)[0] ?? '')
+    : error instanceof Error
+      ? error.message.trim()
+      : '';
+  const technicalEnglishMessage =
+    /\b(missing|required|not found|not available|request failed|failed to|invalid|unknown error)\b/i;
+  const visibleMessage = !message || technicalEnglishMessage.test(message) ? fallback : message;
+  return error instanceof ApiError ? `${error.status}: ${visibleMessage}` : visibleMessage;
 }
 
 function extractOwnerWarehouseIdFromMessage(message: string) {
@@ -853,7 +831,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       }),
       recipientPhones: shouldSendWhatsapp ? whatsappRecipientPhones : [],
       receivedSignature: receivedSignature ?? '',
-      items: buildRequestItems(selectedItems, false),
+      items: buildRequestItems(selectedItems),
     }),
     [
       consecutive,
@@ -2736,7 +2714,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         }),
       } as const;
 
-      const movementItems = buildRequestItems(selectedItems, true);
+      const movementItems = buildRequestItems(selectedItems);
       if (!navigator.onLine) {
         if (!autosaveDraftId) {
           throw new Error(
@@ -2819,8 +2797,8 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         );
       }
       const successMessage = editingRequestId
-        ? `Request updated (${created.id}).`
-        : `Request sent as draft (${created.id}).`;
+        ? `Solicitud actualizada (${created.id}).`
+        : `Solicitud enviada como borrador (${created.id}).`;
       try {
         await Promise.all([
           uploadEvidencePhotos(created.id),
@@ -2840,13 +2818,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           }
         }
       } catch (uploadError) {
-        const message =
-          uploadError instanceof ApiError
-            ? `${uploadError.status}: ${uploadError.message}`
-            : uploadError instanceof Error
-              ? uploadError.message
-              : 'No se pudieron subir los archivos.';
-        throw new Error(`La solicitud se guardo (${created.id}), pero fallaron los archivos: ${message}`);
+        const message = formatTransportError(
+          uploadError,
+          'No se pudieron subir los archivos.',
+        );
+        throw new Error(
+          `La solicitud se guardó (${created.id}), pero fallaron los archivos: ${message}`,
+        );
       }
       resetGenerateForm();
       setSubmitResult(successMessage);
@@ -2860,13 +2838,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       router.refresh();
       void syncOfflineOperations();
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error enviando la solicitud.');
-      }
+      setError(formatTransportError(err, 'No se pudo enviar la solicitud.'));
     } finally {
       setSubmitting(false);
     }
