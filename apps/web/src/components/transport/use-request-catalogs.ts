@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import type { SkuOption } from '@/components/transport/request-document-types';
 
 export type Employee = {
   id: string;
@@ -65,6 +66,7 @@ export function useRequestCatalogs(customerId: string | null) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
   const [worksites, setWorksites] = useState<CustomerWorksite[]>([]);
   const [worksitesLoading, setWorksitesLoading] = useState(false);
 
@@ -99,9 +101,18 @@ export function useRequestCatalogs(customerId: string | null) {
   useEffect(() => {
     let active = true;
 
-    void api<unknown>('/customers', { method: 'GET' })
-      .then((data) => {
-        if (active) setCustomers(asList<Customer>(data));
+    void Promise.allSettled([
+      api<unknown>('/customers', { method: 'GET' }),
+      api<unknown>('/skus', { method: 'GET' }),
+    ])
+      .then(([customerResult, skuResult]) => {
+        if (!active) return;
+        if (customerResult.status === 'fulfilled') {
+          setCustomers(asList<Customer>(customerResult.value));
+        }
+        if (skuResult.status === 'fulfilled') {
+          setSkuOptions(asList<SkuOption>(skuResult.value));
+        }
       })
       .catch(() => undefined);
 
@@ -142,6 +153,7 @@ export function useRequestCatalogs(customerId: string | null) {
     vehicles,
     warehouses,
     customers,
+    skuOptions,
     worksites,
     worksitesLoading,
     clearWorksites,

@@ -27,39 +27,19 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
 import { getSerialDisplayName } from '@/lib/serial-assets';
-import {
-  buildInventoryStockShortageMessage,
-  extractInventoryStockShortages,
-} from '@/lib/inventory-stock-errors';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import AssetComponentsSelectionModal from '@/components/AssetComponentsSelectionModal';
-import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
+import { syncOfflineOperations } from '@/lib/offline-queue';
 import { buildRequestItems } from '@/components/transport/request-items';
-import {
-  normalizeLocalWhatsappPhone,
-  validateRequestSubmission,
-} from '@/components/transport/request-submission';
-import {
-  buildAutosavePayload,
-  buildDocumentPayload,
-  buildDraftPersistencePayload,
-} from '@/components/transport/request-payload';
+import { normalizeLocalWhatsappPhone } from '@/components/transport/request-submission';
+import { buildAutosavePayload } from '@/components/transport/request-payload';
 import { useRequestAutosave } from '@/components/transport/use-request-autosave';
 import { getRequestDraftStorageKey } from '@/components/transport/request-draft';
 import { useRequestDraftRestoration } from '@/components/transport/use-request-draft-restoration';
 import { useRequestsList } from '@/components/transport/use-requests-list';
-import { useRequestApproval } from '@/components/transport/use-request-approval';
-import {
-  buildInitialResolveState,
-  buildResolvedItemsPayload,
-  isResolvePendingItem,
-  parseInternalNumberFromTag,
-  validateApprovalResolution,
-} from '@/components/transport/approval-resolution';
+import { parseInternalNumberFromTag } from '@/components/transport/approval-resolution';
 import ApprovalResolutionModal from '@/components/transport/ApprovalResolutionModal';
-import CreateSerializedAssetModal, {
-  type CreateSerializedAssetValues,
-} from '@/components/inventory/CreateSerializedAssetModal';
+import CreateSerializedAssetModal from '@/components/inventory/CreateSerializedAssetModal';
 import { mapDocumentToRequestForm } from '@/components/transport/request-form-mapping';
 import SignatureCaptureModal from '@/components/SignatureCaptureModal';
 import EvidencePhotosPanel from '@/components/transport/EvidencePhotosPanel';
@@ -78,13 +58,18 @@ import ProviderRemissionsModal, {
 } from '@/components/transport/ProviderRemissionsModal';
 import { useEvidencePhotos } from '@/components/transport/use-evidence-photos';
 import { useProviderRemissions } from '@/components/transport/use-provider-remissions';
-import { validateOfflineFileDrafts } from '@/components/transport/file-drafts';
 import { useRequestInventory } from '@/components/transport/use-request-inventory';
 import { useRequestAssetSelection } from '@/components/transport/use-request-asset-selection';
 import {
   type Employee,
   useRequestCatalogs,
 } from '@/components/transport/use-request-catalogs';
+import type {
+  RequestDocumentDetail,
+} from '@/components/transport/request-document-types';
+import { formatTransportError } from '@/components/transport/transport-errors';
+import { useRequestApprovalWorkflow } from '@/components/transport/use-request-approval-workflow';
+import { submitRequestWorkflow } from '@/components/transport/request-submission-workflow';
 import {
   addBulkSelection,
   addFreeSelection,
@@ -98,10 +83,6 @@ import {
 import RequestsListPanel, {
   type RequestDocument,
 } from '@/components/transport/RequestsListPanel';
-import {
-  classifyApprovalRecovery,
-  type ApprovalRecovery,
-} from '@/components/transport/approval-errors';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -115,81 +96,6 @@ const createSelectionId = () => globalThis.crypto.randomUUID();
 
 type GenerateFieldErrors = RequestInfoErrors;
 
-type RequestDocumentDetail = {
-  id: string;
-  type: 'REMISSION' | 'RETURN' | string;
-  status: string;
-  consecutive: string | null;
-  docDate: string;
-  notes: string | null;
-  recipientPhone?: string | null;
-  recipientPhones?: string[];
-  warehouse?: { id: string; name: string } | null;
-  customerWorksite?: {
-    id: string;
-    alias: string | null;
-    customer?: { id: string; name: string } | null;
-    worksite?: { id: string; name: string } | null;
-  } | null;
-  files?: Array<{
-    id: string;
-    fileType: string;
-    storageKey: string;
-    mimeType?: string | null;
-    createdAt: string;
-  }>;
-  items: Array<{
-    id: string;
-    skuId?: string | null;
-    assetId?: string | null;
-    componentParentAssetId?: string | null;
-    quantity?: string | number | null;
-    condition?: string | null;
-    conditionNote?: string | null;
-    requestedTag?: string | null;
-    billingCutoffDate?: string | null;
-    sku?: { id: string; name: string } | null;
-    asset?: {
-      id: string;
-      serialOrEngine?: string | null;
-      description?: string | null;
-      kind?: 'STANDARD' | 'MOTOR' | string | null;
-      assignedMotorId?: string | null;
-      assignedToMixer?: { id: string } | null;
-      sku?: { id: string; name: string } | null;
-    } | null;
-  }>;
-};
-
-type MixerMotorRecovery = {
-  document: RequestDocumentDetail;
-  mixer: InventorySerial;
-  motors: InventorySerial[];
-  ownerWarehouseId: string;
-};
-
-type SkuOption = {
-  id: string;
-  name: string;
-  assetFamilyId: string;
-  controlType: 'BULK' | 'SERIAL';
-  category?: string | null;
-};
-
-type ResolveInventoryByOwner = Record<
-  string,
-  { bulk: InventoryBulk[]; serial: InventorySerial[] }
->;
-
-type CreateSerializedAssetResponse = {
-  asset: {
-    id: string;
-    internalNumber: number;
-    skuId: string;
-    warehouseOwnerId: string;
-    warehouseCurrentId: string;
-  };
-};
 function formatDocType(value: string) {
   return value === 'REMISSION' ? 'RM' : value === 'RETURN' ? 'DV' : value;
 }
@@ -201,66 +107,6 @@ function getTodayDateInput() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-}
-
-function normalizeApiErrorMessages(error: ApiError) {
-  const messages: string[] = [];
-  if (typeof error.message === 'string' && error.message.trim()) {
-    messages.push(error.message.trim());
-  }
-  const data = error.data as
-    | { message?: string | string[]; error?: string }
-    | string
-    | null
-    | undefined;
-  if (typeof data === 'string' && data.trim()) {
-    messages.push(data.trim());
-  } else if (data && typeof data === 'object') {
-    if (typeof data.error === 'string' && data.error.trim()) {
-      messages.push(data.error.trim());
-    }
-    const apiMessage = data.message;
-    if (Array.isArray(apiMessage)) {
-      apiMessage.forEach((entry) => {
-        if (typeof entry === 'string' && entry.trim()) {
-          messages.push(entry.trim());
-        }
-      });
-    } else if (typeof apiMessage === 'string' && apiMessage.trim()) {
-      messages.push(apiMessage.trim());
-    }
-  }
-  return [...new Set(messages)];
-}
-
-function formatTransportError(error: unknown, fallback: string) {
-  const message = error instanceof ApiError
-    ? (normalizeApiErrorMessages(error)[0] ?? '')
-    : error instanceof Error
-      ? error.message.trim()
-      : '';
-  const technicalEnglishMessage =
-    /\b(missing|required|not found|not available|request failed|failed to|invalid|unknown error)\b/i;
-  const visibleMessage = !message || technicalEnglishMessage.test(message) ? fallback : message;
-  return error instanceof ApiError ? `${error.status}: ${visibleMessage}` : visibleMessage;
-}
-
-function extractOwnerWarehouseIdFromMessage(message: string) {
-  const match = message.match(/ownerWarehouse(?:Id)?\s+([0-9a-fA-F-]{36})/i);
-  return match?.[1] ?? null;
-}
-
-function extractSkuIdsFromMessages(messages: string[]) {
-  const ids = new Set<string>();
-  messages.forEach((message) => {
-    const regex = /skuId\s+([0-9a-fA-F-]{36})/gi;
-    let match = regex.exec(message);
-    while (match) {
-      ids.add(match[1]);
-      match = regex.exec(message);
-    }
-  });
-  return [...ids];
 }
 
 type SolicitudesTab = 'list' | 'generate';
@@ -351,6 +197,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     vehicles,
     warehouses,
     customers,
+    skuOptions,
     worksites,
     worksitesLoading,
     clearWorksites,
@@ -358,27 +205,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [error, setError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [motorRecovery, setMotorRecovery] = useState<MixerMotorRecovery | null>(null);
-  const [motorRecoveryLoading, setMotorRecoveryLoading] = useState(false);
-  const [motorRecoveryError, setMotorRecoveryError] = useState<string | null>(null);
   const [generateFieldErrors, setGenerateFieldErrors] = useState<GenerateFieldErrors>({});
   const [itemsAddedNotice, setItemsAddedNotice] = useState<string | null>(null);
   const [documentsRequest, setDocumentsRequest] = useState<RequestDocument | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [autosaveDraftId, setAutosaveDraftId] = useState<string | null>(null);
   const [autosaveReady, setAutosaveReady] = useState(false);
-  const [skuOptions, setSkuOptions] = useState<SkuOption[]>([]);
-  const [resolveModalOpen, setResolveModalOpen] = useState(false);
-  const [resolveDocument, setResolveDocument] = useState<RequestDocumentDetail | null>(null);
-  const [resolveSkuByIndex, setResolveSkuByIndex] = useState<Record<number, string>>({});
-  const [resolveAssetByIndex, setResolveAssetByIndex] = useState<Record<number, string>>({});
-  const [resolveInventoryByOwner, setResolveInventoryByOwner] = useState<ResolveInventoryByOwner>({});
-  const [resolvingApprove, setResolvingApprove] = useState(false);
-  const [createSerialOpen, setCreateSerialOpen] = useState(false);
-  const [createSerialIndex, setCreateSerialIndex] = useState<number | null>(null);
-  const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
-  const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
-  const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
   const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const {
@@ -655,125 +487,18 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setProviderRemissionError(null);
   };
 
-  const openMixerMotorRecovery = async (
-    documentId: string,
-    recovery: Extract<ApprovalRecovery, { type: 'mixer-motor-required' }>,
-  ) => {
-    if (!recovery.mixerAssetId) return false;
-    setMotorRecoveryLoading(true);
-    setMotorRecoveryError(null);
-    try {
-      const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
-      const mixerItem = doc.items.find((item) => item.assetId === recovery.mixerAssetId);
-      const ownerWarehouseId = recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
-      if (!mixerItem?.asset || !ownerWarehouseId) {
-        throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
-      }
-      const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
-        method: 'GET',
-      });
-      const mixer: InventorySerial = {
-        assetId: mixerItem.asset.id,
-        skuId: mixerItem.skuId ?? mixerItem.asset.sku?.id ?? null,
-        skuName: mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
-        description: mixerItem.asset.description ?? null,
-        serialOrEngine: mixerItem.asset.serialOrEngine ?? null,
-        internalNumber: null,
-        quantity: 1,
-        ownerWarehouseId,
-        assignedMotorId: mixerItem.asset.assignedMotorId ?? null,
-      };
-      const motors = (inventory.serial ?? []).filter(
-        (item) => item.kind === 'MOTOR'
-          && item.ownerWarehouseId === ownerWarehouseId
-          && (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
-      );
-      setMotorRecovery({ document: doc, mixer, motors, ownerWarehouseId });
-      setRequestsError(null);
-      return true;
-    } catch (error) {
-      setRequestsError(error instanceof Error ? error.message : 'No se pudieron cargar los motores disponibles.');
-      return false;
-    } finally {
-      setMotorRecoveryLoading(false);
-    }
-  };
-
-  const handleApprovalError = (err: unknown, documentId?: string) => {
-    if (!(err instanceof ApiError)) {
-      if (err instanceof Error) {
-        setRequestsError(err.message);
-      } else {
-        setRequestsError('Error procesando la solicitud');
-      }
-      return;
-    }
-
-    const recovery = classifyApprovalRecovery(err.data);
-    if (documentId && recovery?.type === 'mixer-motor-required') {
-      void openMixerMotorRecovery(documentId, recovery);
-      return;
-    }
-
-    const messages = normalizeApiErrorMessages(err);
-    const hasAssetUnavailableError = messages.some((message) =>
-      /asset\s+[0-9a-f-]{36}\s+is not available in owner warehouse/i.test(message),
-    );
-    if (hasAssetUnavailableError) {
-      setRequestsError(
-        'No se puede aprobar: el equipo no esta disponible en la bodega de origen. Revisa si esta en obra o selecciona/carga el equipo correcto antes de aprobar.',
-      );
-      return;
-    }
-
-    const stockShortages = extractInventoryStockShortages(err.data);
-    const hasStockError =
-      stockShortages.length > 0 ||
-      messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
-    if (hasStockError && canDecide) {
-      if (stockShortages.length > 0) {
-        const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
-        setAdjustWarningOwnerWarehouseId(firstOwnerId);
-        setAdjustWarningMessage(
-          buildInventoryStockShortageMessage(
-            stockShortages,
-            (skuId) =>
-              skuOptions.find((entry) => entry.id === skuId)?.name ??
-              `SKU ${skuId.slice(0, 8)}`,
-            (warehouseId) =>
-              warehouses.find(
-                (warehouse) => warehouse.id.toLowerCase() === warehouseId.toLowerCase(),
-              )?.name ?? 'bodega sin identificar',
-          ),
-        );
-        setAdjustWarningModalOpen(true);
-        setRequestsError(null);
-        return;
-      }
-      const messageWithOwner = messages.find((message) => /ownerWarehouse/i.test(message)) ?? messages[0] ?? '';
-      const ownerId = extractOwnerWarehouseIdFromMessage(messageWithOwner);
-      const ownerName = ownerId
-        ? warehouses.find((warehouse) => warehouse.id.toLowerCase() === ownerId.toLowerCase())?.name
-        : null;
-      const missingSkuLabels = extractSkuIdsFromMessages(messages).map((skuId) => {
-        const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
-        return skuName ?? `SKU ${skuId.slice(0, 8)}`;
-      });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
-      const missingItemsBlock = missingSkuLabels.length
-        ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
-        : '';
-      setAdjustWarningOwnerWarehouseId(ownerId ?? null);
-      setAdjustWarningMessage(
-        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
-      );
-      setAdjustWarningModalOpen(true);
-      setRequestsError(null);
-      return;
-    }
-
-    setRequestsError(`${err.status}: ${err.message}`);
-  };
+  const approvalWorkflow = useRequestApprovalWorkflow({
+    canDecide,
+    warehouses,
+    skuOptions,
+    setRequestsError,
+    onReload: loadRequests,
+    onItemsAddedNotice: setItemsAddedNotice,
+    onProviderRemissionRequired: (documentId, requirements) => {
+      setProviderRemissionModal({ mode: 'REQUIRED', requirements, documentId });
+      setProviderRemissionError(null);
+    },
+  });
 
   useEffect(() => {
     if (!principalWarehouse?.id || warehouseId) return;
@@ -820,155 +545,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     return () => window.clearTimeout(timeout);
   }, [itemsAddedNotice]);
 
-  useEffect(() => {
-    let mounted = true;
-    const loadSkuOptions = async () => {
-      try {
-        const data = await api<
-          Array<{
-            id: string;
-            name: string;
-            assetFamilyId: string;
-            controlType: 'BULK' | 'SERIAL';
-            category?: string | null;
-          }>
-        >('/skus', { method: 'GET' });
-        if (!mounted) return;
-        setSkuOptions(
-          data.map((item) => ({
-            id: item.id,
-            name: item.name,
-            assetFamilyId: item.assetFamilyId,
-            controlType: item.controlType,
-            category: item.category ?? null,
-          })),
-        );
-      } catch {
-        if (!mounted) return;
-      }
-    };
-    loadSkuOptions();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const closeResolveModal = () => {
-    if (resolvingApprove) return;
-    setResolveModalOpen(false);
-    setResolveDocument(null);
-    setResolveSkuByIndex({});
-    setResolveAssetByIndex({});
-    setResolveInventoryByOwner({});
-  };
-
-  const loadResolveInventories = async (ownerIds: string[]) => {
-    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
-    if (!uniqueOwnerIds.length) return {};
-    const loadedEntries = await Promise.all(
-      uniqueOwnerIds.map(async (ownerId) => {
-        try {
-          const inventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
-            method: 'GET',
-          });
-          return [
-            ownerId,
-            {
-              bulk: (inventory.bulk ?? []).filter((item) => item.ownerWarehouseId === ownerId),
-              serial: (inventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerId),
-            },
-          ] as const;
-        } catch {
-          return [ownerId, { bulk: [], serial: [] }] as const;
-        }
-      }),
-    );
-    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
-  };
-
-  const openCreateSerialForRow = (index: number) => {
-    const row = resolveDocument?.items[index];
-    if (!row) return;
-    setCreateSerialIndex(index);
-    setCreateSerialOpen(true);
-  };
-
-  const createMissingSerialFromResolve = async (values: CreateSerializedAssetValues) => {
-    if (!resolveDocument || createSerialIndex == null) return;
-    const row = resolveDocument.items[createSerialIndex];
-    if (!row) return;
-    const ownerWarehouseId = row.condition?.trim();
-    if (!ownerWarehouseId) {
-      throw new Error('La línea no tiene una bodega propietaria.');
-    }
-    const selectedSkuId = resolveSkuByIndex[createSerialIndex];
-    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
-    if (!selectedSku || selectedSku.controlType !== 'SERIAL') {
-      throw new Error('Selecciona primero un SKU serializado.');
-    }
-
-    try {
-      const response = await api<CreateSerializedAssetResponse>('/inventory/serialized-assets', {
-        method: 'POST',
-        json: {
-          family: { id: selectedSku.assetFamilyId },
-          sku: { id: selectedSku.id },
-          asset: {
-            ...values,
-            active: true,
-          },
-          ownerWarehouseId,
-          warehouseCurrentId: ownerWarehouseId,
-        },
-      });
-
-      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
-        method: 'GET',
-      });
-      setResolveInventoryByOwner((prev) => ({
-        ...prev,
-        [ownerWarehouseId]: {
-          bulk: (refreshedInventory.bulk ?? []).filter(
-            (item) => item.ownerWarehouseId === ownerWarehouseId,
-          ),
-          serial: (refreshedInventory.serial ?? []).filter(
-            (item) => item.ownerWarehouseId === ownerWarehouseId,
-          ),
-        },
-      }));
-      setResolveAssetByIndex((prev) => ({
-        ...prev,
-        [createSerialIndex]: response.asset.id,
-      }));
-      setCreateSerialOpen(false);
-      setCreateSerialIndex(null);
-      setItemsAddedNotice('Equipo creado y asignado al tag.');
-    } catch (err) {
-      if (err instanceof ApiError) {
-        throw new Error(`${err.status}: ${err.message}`);
-      }
-      if (err instanceof Error) throw err;
-      throw new Error('Error creando equipo.');
-    }
-  };
-
-  const {
-    decidingId,
-    approve: approveWithDecision,
-    reject: rejectWithDecision,
-  } = useRequestApproval({
-    onReload: loadRequests,
-    onError: handleApprovalError,
-    onProviderRemissionRequired: (documentId, requirements) => {
-      setProviderRemissionModal({
-        mode: 'REQUIRED',
-        requirements,
-        documentId,
-      });
-      setProviderRemissionError(null);
-    },
-  });
-
   const uploadMissingProviderRemissionsAndApprove = async () => {
     if (
       providerRemissionModal?.mode !== 'REQUIRED' ||
@@ -994,7 +570,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         providerRemissionModal.documentId,
         missingProviders,
       );
-      const approved = await approveWithDecision(providerRemissionModal.documentId);
+      const approved = await approvalWorkflow.approve(providerRemissionModal.documentId);
       if (approved) clearProviderRemissionDocuments();
     } catch (err) {
       setProviderRemissionError(
@@ -1006,94 +582,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       );
     } finally {
       setProviderRemissionUploading(false);
-    }
-  };
-
-  const confirmRecoveredMixerMotor = async (motor: InventorySerial) => {
-    if (!motorRecovery) return;
-    const { document: doc, mixer, ownerWarehouseId } = motorRecovery;
-    setMotorRecoveryLoading(true);
-    setMotorRecoveryError(null);
-    try {
-      await api(`/assets/${mixer.assetId}/assigned-motor`, {
-        method: 'PATCH',
-        json: { motorId: motor.assetId },
-      });
-      const existingItems = doc.items.filter((item) => item.assetId !== motor.assetId);
-      await api(`/documents/${doc.id}/request`, {
-        method: 'PATCH',
-        json: {
-          type: doc.type,
-          number: doc.consecutive ?? undefined,
-          warehouseId: doc.warehouse?.id ?? undefined,
-          customerWorksiteId: doc.customerWorksite?.id ?? undefined,
-          notes: doc.notes ?? undefined,
-          recipientPhones: doc.recipientPhones?.length ? doc.recipientPhones : undefined,
-          items: [
-            ...existingItems.map((item) => ({
-              skuId: item.assetId ? undefined : item.skuId ?? undefined,
-              assetId: item.assetId ?? undefined,
-              componentParentAssetId: item.componentParentAssetId ?? undefined,
-              quantity: item.assetId ? undefined : Number(item.quantity ?? 1) || 1,
-              ownerWarehouseId: item.condition ?? undefined,
-              requestedTag: item.requestedTag ?? undefined,
-              conditionNote: item.conditionNote ?? undefined,
-            })),
-            {
-              assetId: motor.assetId,
-              componentParentAssetId: mixer.assetId,
-              ownerWarehouseId,
-            },
-          ],
-        },
-      });
-      setMotorRecovery(null);
-      await approveWithDecision(doc.id);
-    } catch (error) {
-      setMotorRecoveryError(error instanceof Error ? error.message : 'No se pudo guardar el motor seleccionado.');
-    } finally {
-      setMotorRecoveryLoading(false);
-    }
-  };
-
-  const decideRequest = async (documentId: string, action: 'APPROVE' | 'REJECT') => {
-    if (action === 'REJECT') {
-      const reason = window.prompt('Motivo de rechazo (opcional):') ?? undefined;
-      if (!window.confirm('¿Rechazar esta solicitud?')) return;
-      setRequestsError(null);
-      await rejectWithDecision(documentId, reason);
-      return;
-    }
-
-    try {
-      const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
-      const unresolved = doc.items
-        .map((item, index) => ({ item, index }))
-        .filter(({ item }) => isResolvePendingItem(item, skuOptions));
-
-      if (unresolved.length > 0) {
-        const ownerIds = unresolved
-          .map(({ item }) => item.condition?.trim() ?? '')
-          .filter((value): value is string => Boolean(value));
-        const inventoriesByOwner = await loadResolveInventories(ownerIds);
-        const { initialSkuMap, initialAssetMap } = buildInitialResolveState(
-          doc.items,
-          inventoriesByOwner,
-          skuOptions,
-        );
-
-        setResolveDocument(doc);
-        setResolveInventoryByOwner(inventoriesByOwner);
-        setResolveSkuByIndex(initialSkuMap);
-        setResolveAssetByIndex(initialAssetMap);
-        setResolveModalOpen(true);
-        return;
-      }
-
-      if (!window.confirm('¿Aprobar esta solicitud y ejecutar el movimiento de inventario?')) return;
-      await approveWithDecision(documentId);
-    } catch (err) {
-      handleApprovalError(err);
     }
   };
 
@@ -1114,50 +602,6 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       return next;
     });
     return added;
-  };
-
-  const resolveAndApprove = async () => {
-    if (!resolveDocument) return;
-    const resolutionError = validateApprovalResolution(
-      resolveDocument.items,
-      resolveSkuByIndex,
-      resolveAssetByIndex,
-      skuOptions,
-    );
-    if (resolutionError) {
-      setRequestsError(resolutionError);
-      return;
-    }
-
-    setResolvingApprove(true);
-    setRequestsError(null);
-    try {
-      const itemsPayload = buildResolvedItemsPayload(
-        resolveDocument.items,
-        resolveSkuByIndex,
-        resolveAssetByIndex,
-        skuOptions,
-      );
-
-      await api(`/documents/${resolveDocument.id}/request`, {
-        method: 'PATCH',
-        json: {
-          type: resolveDocument.type,
-          number: resolveDocument.consecutive ?? undefined,
-          warehouseId: resolveDocument.warehouse?.id ?? undefined,
-          customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
-          notes: resolveDocument.notes ?? undefined,
-          items: itemsPayload,
-        },
-      });
-
-      await approveWithDecision(resolveDocument.id);
-      closeResolveModal();
-    } catch (err) {
-      handleApprovalError(err);
-    } finally {
-      setResolvingApprove(false);
-    }
   };
 
   const addFreeItem = () => {
@@ -1331,165 +775,39 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setSubmitResult(null);
     setError(null);
     try {
-      const pendingRecipientPhone = shouldSendWhatsapp && recipientPhoneDraft
-        ? normalizeLocalWhatsappPhone(recipientPhoneDraft)
-        : null;
-      const recipientPhones = shouldSendWhatsapp
-        ? [
-            ...new Set([
-              ...whatsappRecipientPhones,
-              ...(pendingRecipientPhone ? [pendingRecipientPhone] : []),
-            ]),
-          ]
-        : [];
-      const effectiveWarehouseId = warehouseId ?? principalWarehouse?.id ?? null;
-      const submissionError = validateRequestSubmission({
-        docType,
-        deliveryMode,
-        docDate,
+      const result = await submitRequestWorkflow({
+        documentType: docType,
+        consecutive,
+        warehouseId,
+        principalWarehouseId: principalWarehouse?.id ?? null,
         customerId,
         customerWorksiteId,
-        selectedItems,
-        shouldSendWhatsapp,
-        recipientPhoneDraft,
-        recipientPhones,
-        editingRequestId,
-        receivedSignature,
-        effectiveWarehouseId,
-        isDriverRole,
-        driverId,
-      });
-      if (submissionError) throw new Error(submissionError);
-
-      const payloadSource = {
-        docType,
-        consecutive,
-        warehouseId: effectiveWarehouseId,
-        customerWorksiteId,
         observations,
-        docDate,
+        documentDate: docDate,
         deliveryMode,
         vehicleId,
         driverId,
         dispatcherId,
-        recipientPhones,
-        receivedSignature,
-        items: buildRequestItems(selectedItems),
-      };
-      const documentPayload = buildDocumentPayload(payloadSource, {
+        selectedItems,
         shouldSendWhatsapp,
+        recipientPhoneDraft,
+        recipientPhones: whatsappRecipientPhones,
+        receivedSignature,
         editingRequestId,
-        isAdminRole,
+        autosaveDraftId,
+        isAdmin: isAdminRole,
+        isDriver: isDriverRole,
+        evidencePhotoCount: evidencePhotos.length,
+        providerRemissionCount: Object.keys(providerRemissionDrafts).length,
+        providerRequirements: creationProviderRequirements,
+        uploadEvidencePhotos,
+        uploadProviderRemissions: uploadProviderRemissionDocuments,
       });
-      const persistencePayload = buildDraftPersistencePayload(
-        buildAutosavePayload(payloadSource),
-        documentPayload,
-      );
-      if (!navigator.onLine) {
-        if (!autosaveDraftId) {
-          throw new Error(
-            'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
-          );
-        }
-        const offlineFilesError = validateOfflineFileDrafts({
-          evidencePhotoCount: evidencePhotos.length,
-          providerRemissionCount: Object.keys(providerRemissionDrafts).length,
-        });
-        if (offlineFilesError) throw new Error(offlineFilesError);
-
-        const autosaveOperation = await enqueueOfflineOperation({
-          label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
-          path: `/documents/${autosaveDraftId}/request/autosave`,
-          method: 'PATCH',
-          body: persistencePayload,
-        });
-        const submitOperation = await enqueueOfflineOperation({
-          label: `Enviar solicitud ${autosaveDraftId.slice(0, 8)}`,
-          path: `/documents/${autosaveDraftId}/request/submit`,
-          body: { sendWhatsapp: shouldSendWhatsapp },
-          dependsOn: [autosaveOperation.id],
-        });
-        await enqueueOfflineOperation({
-          label: `Enviar correo ${autosaveDraftId.slice(0, 8)}`,
-          path: `/documents/${autosaveDraftId}/customer-email/draft`,
-          dependsOn: [submitOperation.id],
-        });
-        if (shouldSendWhatsapp) {
-          await enqueueOfflineOperation({
-            label: `Enviar WhatsApp ${autosaveDraftId.slice(0, 8)}`,
-            path: `/documents/${autosaveDraftId}/customer-messages/draft`,
-            dependsOn: [submitOperation.id],
-          });
-        }
-
-        resetGenerateForm();
-        setSubmitResult(
-          'Solicitud guardada en este dispositivo. Se sincronizará automáticamente al recuperar la conexión.',
-        );
-        setItemsModalOpen(false);
-        clearWorksites();
-        return;
-      }
-
-      let created: { id: string };
-      if (autosaveDraftId) {
-        await api(`/documents/${autosaveDraftId}/request/autosave`, {
-          method: 'PATCH',
-          json: persistencePayload,
-        });
-        created = await api<{ id: string }>(
-          `/documents/${autosaveDraftId}/request/submit`,
-          {
-            method: 'POST',
-            json: { sendWhatsapp: shouldSendWhatsapp },
-          },
-        );
-      } else {
-        created = await api<{ id: string }>(
-          editingRequestId ? `/documents/${editingRequestId}/request` : '/documents/requests',
-          {
-            method: editingRequestId ? 'PATCH' : 'POST',
-            json: {
-              ...documentPayload,
-              items: persistencePayload.items,
-            },
-          },
-        );
-      }
-      const successMessage = editingRequestId
-        ? `Solicitud actualizada (${created.id}).`
-        : `Solicitud enviada como borrador (${created.id}).`;
-      try {
-        await Promise.all([
-          uploadEvidencePhotos(created.id),
-          uploadProviderRemissionDocuments(
-            created.id,
-            creationProviderRequirements?.providers ?? [],
-          ),
-        ]);
-        if (!editingRequestId) {
-          await api(`/documents/${created.id}/customer-email/draft`, {
-            method: 'POST',
-          });
-          if (shouldSendWhatsapp) {
-            await api(`/documents/${created.id}/customer-messages/draft`, {
-              method: 'POST',
-            });
-          }
-        }
-      } catch (uploadError) {
-        const message = formatTransportError(
-          uploadError,
-          'No se pudieron subir los archivos.',
-        );
-        throw new Error(
-          `La solicitud se guardó (${created.id}), pero fallaron los archivos: ${message}`,
-        );
-      }
       resetGenerateForm();
-      setSubmitResult(successMessage);
+      setSubmitResult(result.message);
       setItemsModalOpen(false);
       clearWorksites();
+      if (result.offline) return;
       setActiveTab(fixedTab);
       await loadRequests();
       if (mode === 'generate') {
@@ -1665,13 +983,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 successMessage={submitResult}
                 isDriverRole={isDriverRole}
                 canDecide={canDecide}
-                decidingId={decidingId}
+                decidingId={approvalWorkflow.decidingId}
                 onRefresh={() => void loadRequests()}
                 onDismissSuccess={() => setSubmitResult(null)}
                 onOpenDocuments={setDocumentsRequest}
                 onEdit={(documentId) => void editRequest(documentId)}
-                onApprove={(documentId) => void decideRequest(documentId, 'APPROVE')}
-                onReject={(documentId) => void decideRequest(documentId, 'REJECT')}
+                onApprove={(documentId) => void approvalWorkflow.decideRequest(documentId, 'APPROVE')}
+                onReject={(documentId) => void approvalWorkflow.decideRequest(documentId, 'REJECT')}
               />
             </Tabs.Panel>
 
@@ -1994,32 +1312,29 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       ) : null}
 
       <Modal
-        opened={adjustWarningModalOpen}
-        onClose={() => {
-          setAdjustWarningModalOpen(false);
-          setAdjustWarningOwnerWarehouseId(null);
-        }}
+        opened={approvalWorkflow.adjustWarning.message !== null}
+        onClose={approvalWorkflow.adjustWarning.dismiss}
         title="Ajuste requerido"
         centered
       >
         <Stack gap="md">
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-            {adjustWarningMessage ??
+            {approvalWorkflow.adjustWarning.message ??
               'Primero ajusta el stock de bodega antes de hacer movimientos.'}
           </Text>
           <Group justify="flex-end">
             <Button
               onClick={() => {
-                setAdjustWarningModalOpen(false);
+                const ownerWarehouseId = approvalWorkflow.adjustWarning.ownerWarehouseId;
+                approvalWorkflow.adjustWarning.dismiss();
                 const params = new URLSearchParams();
-                if (adjustWarningOwnerWarehouseId) {
-                  params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
-                  params.set('warehouseId', adjustWarningOwnerWarehouseId);
+                if (ownerWarehouseId) {
+                  params.set('ownerWarehouseId', ownerWarehouseId);
+                  params.set('warehouseId', ownerWarehouseId);
                 }
                 router.push(
                   `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
                 );
-                setAdjustWarningOwnerWarehouseId(null);
               }}
             >
               Entendido
@@ -2029,24 +1344,19 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       </Modal>
 
       <ApprovalResolutionModal
-        opened={resolveModalOpen}
-        items={resolveDocument?.items ?? []}
+        opened={approvalWorkflow.resolution.opened}
+        items={approvalWorkflow.resolution.document?.items ?? []}
         skuOptions={skuOptions}
-        inventoriesByOwner={resolveInventoryByOwner}
+        inventoriesByOwner={approvalWorkflow.resolution.inventoriesByOwner}
         warehouses={warehouses}
-        skuByIndex={resolveSkuByIndex}
-        assetByIndex={resolveAssetByIndex}
-        resolving={resolvingApprove}
-        onClose={closeResolveModal}
-        onSkuChange={(index, skuId) => {
-          setResolveSkuByIndex((current) => ({ ...current, [index]: skuId }));
-          setResolveAssetByIndex((current) => ({ ...current, [index]: '' }));
-        }}
-        onAssetChange={(index, assetId) => {
-          setResolveAssetByIndex((current) => ({ ...current, [index]: assetId }));
-        }}
-        onCreateSerial={openCreateSerialForRow}
-        onApprove={() => void resolveAndApprove()}
+        skuByIndex={approvalWorkflow.resolution.skuByIndex}
+        assetByIndex={approvalWorkflow.resolution.assetByIndex}
+        resolving={approvalWorkflow.resolution.resolving}
+        onClose={approvalWorkflow.resolution.close}
+        onSkuChange={approvalWorkflow.resolution.changeSku}
+        onAssetChange={approvalWorkflow.resolution.changeAsset}
+        onCreateSerial={approvalWorkflow.createSerial.open}
+        onApprove={() => void approvalWorkflow.resolution.approve()}
       />
 
       <InventoryItemPickerModal
@@ -2086,18 +1396,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       />
 
       <MixerMotorSelectionModal
-        opened={Boolean(motorRecovery)}
-        mixer={motorRecovery?.mixer ?? null}
-        motors={motorRecovery?.motors ?? []}
-        loading={motorRecoveryLoading}
-        error={motorRecoveryError}
-        onCancel={() => {
-          if (!motorRecoveryLoading) {
-            setMotorRecovery(null);
-            setMotorRecoveryError(null);
-          }
-        }}
-        onConfirm={(motor) => void confirmRecoveredMixerMotor(motor)}
+        opened={Boolean(approvalWorkflow.motorRecovery.value)}
+        mixer={approvalWorkflow.motorRecovery.value?.mixer ?? null}
+        motors={approvalWorkflow.motorRecovery.value?.motors ?? []}
+        loading={approvalWorkflow.motorRecovery.loading}
+        error={approvalWorkflow.motorRecovery.error}
+        onCancel={approvalWorkflow.motorRecovery.cancel}
+        onConfirm={(motor) => void approvalWorkflow.motorRecovery.confirm(motor)}
       />
 
       <AssetComponentsSelectionModal
@@ -2141,19 +1446,19 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         ) : null}
       </Modal>
 
-      {createSerialOpen && createSerialIndex != null ? (
+      {approvalWorkflow.createSerial.index != null ? (
         <CreateSerializedAssetModal
           opened
           initialInternalNumber={parseInternalNumberFromTag(
-            resolveDocument?.items[createSerialIndex]?.requestedTag,
+            approvalWorkflow.resolution.document?.items[approvalWorkflow.createSerial.index]
+              ?.requestedTag,
           )}
           title="Crear equipo serializado faltante"
           submitLabel="Crear y usar"
           onClose={() => {
-            setCreateSerialOpen(false);
-            setCreateSerialIndex(null);
+            approvalWorkflow.createSerial.close();
           }}
-          onSubmit={createMissingSerialFromResolve}
+          onSubmit={approvalWorkflow.createSerial.submit}
         />
       ) : null}
     </main>
