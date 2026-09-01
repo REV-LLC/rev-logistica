@@ -104,6 +104,15 @@ type AssetLedgerResponse = {
   }>;
 };
 
+type AssetLocationResponse = {
+  locationType: 'WAREHOUSE' | 'CUSTOMER_WORKSITE' | 'IN_TRANSIT' | 'UNKNOWN';
+  warehouse?: { id: string; name?: string | null } | null;
+  customerWorksite?: {
+    customer?: { name?: string | null } | null;
+    worksite?: { name?: string | null } | null;
+  } | null;
+};
+
 type AssetLedgerItem = AssetLedgerResponse['items'][number];
 
 const FUEL_OPTIONS = [
@@ -192,13 +201,14 @@ export default function EditSerializedAssetPage() {
       setLoading(true);
       setError(null);
       try {
-        const [assetData, warehouseData, ledgerData] = await Promise.all([
+        const [assetData, warehouseData, ledgerData, locationData] = await Promise.all([
           api<AssetResponse>(`/assets/${assetId}`),
           api<Warehouse[]>('/warehouses'),
           api<AssetLedgerResponse>(
             `/inventory/ledger?assetId=${encodeURIComponent(assetId)}&take=50`,
             { method: 'GET' },
           ),
+          api<AssetLocationResponse>(`/assets/${assetId}/location`),
         ]);
         const ownerWarehouse = warehouseData.find(
           (warehouse) => warehouse.id === assetData.warehouseOwnerId,
@@ -215,15 +225,10 @@ export default function EditSerializedAssetPage() {
           resolvedProviderPrice = rows[0] ? Number(rows[0].price) : null;
         }
         let resolvedWorksiteLocation: string | null = null;
-        if (!assetData.warehouseCurrentId) {
-          const onSiteRow =
-            ledgerData.items.find((entry) => entry.movementType === 'ON_SITE' && entry.customerWorksite) ??
-            ledgerData.items.find((entry) => entry.customerWorksite);
-          if (onSiteRow?.customerWorksite) {
-            const customerName = onSiteRow.customerWorksite.customer?.name?.trim() ?? '';
-            const worksiteName = onSiteRow.customerWorksite.worksite?.name?.trim() ?? '';
-            resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
-          }
+        if (locationData.locationType === 'CUSTOMER_WORKSITE' && locationData.customerWorksite) {
+          const customerName = locationData.customerWorksite.customer?.name?.trim() ?? '';
+          const worksiteName = locationData.customerWorksite.worksite?.name?.trim() ?? '';
+          resolvedWorksiteLocation = [customerName, worksiteName].filter(Boolean).join(' / ') || null;
         }
         const resolvedImageUrl = assetData.imageUrl ?? assetData.sku?.imageUrl ?? '';
         if (!mounted) return;
