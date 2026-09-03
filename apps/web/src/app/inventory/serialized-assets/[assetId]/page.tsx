@@ -91,6 +91,7 @@ type AssetLedgerResponse = {
     movementType?: string | null;
     quantity?: number | string | null;
     createdAt: string;
+    effectiveAt?: string;
     warehouse?: { id: string; name?: string | null } | null;
     customerWorksite?: {
       customer?: { name?: string | null } | null;

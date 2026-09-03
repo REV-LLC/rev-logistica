@@ -227,7 +227,9 @@ export default function RemisionDevolucionPage() {
           data.bulk.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
         setSerialItems(
-          data.serial.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
+          data.serial.filter(
+            (item) => item.ownerWarehouseId === sourceOwnerWarehouseId && item.quantity === 1,
+          ),
         );
       } else if (sourceMode === 'on-site') {
         if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
@@ -236,7 +238,7 @@ export default function RemisionDevolucionPage() {
           { method: 'GET' }
         );
         setBulkItems(data.bulk);
-        setSerialItems(data.serial);
+        setSerialItems(data.serial.filter((item) => item.quantity === 1));
       }
       setItemsModalOpen(true);
     } catch (err) {
@@ -255,12 +257,19 @@ export default function RemisionDevolucionPage() {
   useEffect(() => {
     setBulkItems([]);
     setSerialItems([]);
+    setSelectedItems([]);
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
       setSourceOwnerWarehouseId(null);
     }
   }, [docType]);
+
+  useEffect(() => {
+    setBulkItems([]);
+    setSerialItems([]);
+    setSelectedItems([]);
+  }, [sourceOwnerWarehouseId, sourceWorksiteId]);
 
   useEffect(() => {
     evidencePhotosRef.current = evidencePhotos;
@@ -368,6 +377,10 @@ export default function RemisionDevolucionPage() {
   };
 
   const addSerialItem = (item: InventorySerial) => {
+    if (item.quantity !== 1) {
+      setError('El equipo no está disponible. Actualiza el inventario antes de seleccionarlo.');
+      return;
+    }
     setSelectedItems((prev) => {
       const exists = prev.find((entry) => entry.assetId === item.assetId && entry.type === 'serial');
       if (exists) return prev;
@@ -412,6 +425,18 @@ export default function RemisionDevolucionPage() {
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
+      }
+      const availableSerialIds = new Set(
+        serialItems.filter((item) => item.quantity === 1).map((item) => item.assetId),
+      );
+      if (
+        selectedItems.some(
+          (item) =>
+            item.type === 'serial'
+            && (!item.assetId || !availableSerialIds.has(item.assetId)),
+        )
+      ) {
+        throw new Error('Uno de los equipos seleccionados ya no está disponible. Recarga el inventario.');
       }
       if (
         selectedItems.some(

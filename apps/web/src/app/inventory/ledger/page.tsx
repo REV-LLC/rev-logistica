@@ -320,7 +320,7 @@ export default function LedgerPage() {
                 <span>{itemsSummary(group)}</span>
                 <span>{locationSummary(group)}</span>
                 <span>{requester(group)}</span>
-                <span>{formattedDate(group.items[0].createdAt)}</span>
+                <span>{formattedDate(group.items[0].effectiveAt)}</span>
                 <IconArrowRight size={17} />
               </Link>
             );

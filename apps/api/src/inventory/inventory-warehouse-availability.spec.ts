@@ -1,4 +1,4 @@
-import { MovementType } from '@prisma/client';
+import { DocumentType, MovementType } from '@prisma/client';
 import { InventoryService } from './inventory.service';
 
 describe('InventoryService warehouse availability', () => {
@@ -8,7 +8,16 @@ describe('InventoryService warehouse availability', () => {
   const skuId = '44444444-4444-4444-8444-444444444444';
   const assetId = '55555555-5555-4555-8555-555555555555';
 
-  function createService(groupBy: jest.Mock) {
+  function createService(
+    groupBy: jest.Mock,
+    latestMovement = {
+      assetId,
+      movementType: MovementType.ADJUST,
+      warehouseId,
+      customerWorksiteId: null,
+      effectiveAt: new Date('2026-08-01T12:00:00.000Z'),
+    },
+  ) {
     const create = jest.fn().mockResolvedValue({ id: 'ledger-1' });
     const tx = {
       warehouse: {
@@ -17,7 +26,18 @@ describe('InventoryService warehouse availability', () => {
       customerWorksite: {
         findUnique: jest.fn().mockResolvedValue({ id: worksiteId }),
       },
-      stockLedger: { groupBy, create },
+      document: {
+        findUnique: jest.fn().mockResolvedValue({
+          type: DocumentType.REMISSION,
+          docDate: new Date('2026-08-01T12:00:00.000Z'),
+        }),
+      },
+      stockLedger: {
+        groupBy,
+        create,
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([latestMovement]),
+      },
       asset: {
         findMany: jest
           .fn()
@@ -26,6 +46,7 @@ describe('InventoryService warehouse availability', () => {
           ]),
         update: jest.fn().mockResolvedValue({ id: assetId }),
       },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: assetId }]),
     };
     const prisma = {
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
@@ -66,7 +87,7 @@ describe('InventoryService warehouse availability', () => {
       _sum: { quantity: true },
     });
     expect(create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         movementType: MovementType.OUT,
         warehouseId,
         customerWorksiteId: worksiteId,
@@ -76,15 +97,17 @@ describe('InventoryService warehouse availability', () => {
         assetId: null,
         ownerWarehouseId,
         quantity: -8,
+        effectiveAt: expect.any(Date),
         createdBy: 'user-1',
-      },
+      }),
     });
   });
 
   it('counts returned serial equipment in the physical warehouse balance', async () => {
     const groupBy = jest
       .fn()
-      .mockResolvedValue([{ assetId, _sum: { quantity: 1 } }]);
+      .mockResolvedValueOnce([{ assetId, _sum: { quantity: 1 } }])
+      .mockResolvedValueOnce([]);
     const { service, create } = createService(groupBy);
 
     await expect(
@@ -98,13 +121,13 @@ describe('InventoryService warehouse availability', () => {
       ),
     ).resolves.toMatchObject({ count: 1 });
 
-    expect(groupBy).toHaveBeenCalledWith({
+    expect(groupBy).toHaveBeenNthCalledWith(1, {
       by: ['assetId'],
       where: { warehouseId, assetId: { in: [assetId] } },
       _sum: { quantity: true },
     });
     expect(create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         movementType: MovementType.OUT,
         warehouseId,
         customerWorksiteId: worksiteId,
@@ -114,8 +137,9 @@ describe('InventoryService warehouse availability', () => {
         assetId,
         ownerWarehouseId,
         quantity: -1,
+        effectiveAt: expect.any(Date),
         createdBy: 'user-1',
-      },
+      }),
     });
   });
 
@@ -140,6 +164,55 @@ describe('InventoryService warehouse availability', () => {
       by: ['skuId', 'ownerWarehouseId'],
       where: { warehouseId, skuId: { in: [skuId] } },
       _sum: { quantity: true },
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects serial movement when the global ledger location is another worksite', async () => {
+    const groupBy = jest.fn();
+    const { service, create } = createService(groupBy, {
+      assetId,
+      movementType: MovementType.ON_SITE,
+      warehouseId: null,
+      customerWorksiteId: '66666666-6666-4666-8666-666666666666',
+      effectiveAt: new Date('2026-08-01T12:00:00.000Z'),
+    });
+
+    await expect(
+      service.moveOut(
+        {
+          warehouseId,
+          customerWorksiteId: worksiteId,
+          items: [{ assetId, ownerWarehouseId }],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'ASSET_LOCATION_CONFLICT' }) });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a backdated document when a later asset movement exists', async () => {
+    const groupBy = jest.fn();
+    const { service, create } = createService(groupBy, {
+      assetId,
+      movementType: MovementType.ADJUST,
+      warehouseId,
+      customerWorksiteId: null,
+      effectiveAt: new Date('2026-08-02T12:00:00.000Z'),
+    });
+
+    await expect(
+      service.moveOut(
+        {
+          warehouseId,
+          customerWorksiteId: worksiteId,
+          documentId: '77777777-7777-4777-8777-777777777777',
+          items: [{ assetId, ownerWarehouseId }],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'RETROACTIVE_INVENTORY_MOVEMENT' }),
     });
     expect(create).not.toHaveBeenCalled();
   });
