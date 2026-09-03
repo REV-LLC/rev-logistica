@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import {
   Group,
   Pagination,
@@ -36,6 +36,8 @@ type EntityDataTableProps<T> = {
   onPageSizeChange?: (pageSize: number) => void;
   pageSizeOptions?: number[];
   tableMinWidth?: number;
+  isRowExpanded?: (row: T) => boolean;
+  renderExpandedRow?: (row: T) => ReactNode;
 };
 
 const fallbackEmptyIcon = <IconInbox size={20} />;
@@ -57,6 +59,8 @@ export default function EntityDataTable<T>({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50],
   tableMinWidth = 760,
+  isRowExpanded,
+  renderExpandedRow,
 }: EntityDataTableProps<T>) {
   const visibleMobileColumns = columns.filter((column) => getMobilePriority(column) !== 'hidden');
   const primaryMobileColumns = visibleMobileColumns.filter(
@@ -141,6 +145,7 @@ export default function EntityDataTable<T>({
                 </SimpleGrid>
               ) : null}
               {actions ? <TableRowActions actions={actions(row)} /> : null}
+              {renderExpandedRow && isRowExpanded?.(row) ? renderExpandedRow(row) : null}
             </Stack>
           </Paper>
         ))}
@@ -176,10 +181,19 @@ export default function EntityDataTable<T>({
           </Table.Thead>
           <Table.Tbody>
             {!loading && rows.map((row) => (
-              <Table.Tr key={getRowId(row)}>
-                {columns.map((column) => <Table.Td key={column.id} ta={column.align}>{column.cell(row)}</Table.Td>)}
-                {actions ? <Table.Td><TableRowActions actions={actions(row)} /></Table.Td> : null}
-              </Table.Tr>
+              <Fragment key={getRowId(row)}>
+                <Table.Tr>
+                  {columns.map((column) => <Table.Td key={column.id} ta={column.align}>{column.cell(row)}</Table.Td>)}
+                  {actions ? <Table.Td><TableRowActions actions={actions(row)} /></Table.Td> : null}
+                </Table.Tr>
+                {renderExpandedRow && isRowExpanded?.(row) ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={columnCount} bg="gray.0" p="md">
+                      {renderExpandedRow(row)}
+                    </Table.Td>
+                  </Table.Tr>
+                ) : null}
+              </Fragment>
             ))}
             {!loading && rows.length === 0 ? <Table.Tr><Table.Td colSpan={columnCount}>{emptyContent}</Table.Td></Table.Tr> : null}
             {loading ? <Table.Tr><Table.Td colSpan={columnCount}><Text c="dimmed" ta="center">Cargando...</Text></Table.Td></Table.Tr> : null}
