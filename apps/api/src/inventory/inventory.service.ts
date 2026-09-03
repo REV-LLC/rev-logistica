@@ -4,6 +4,7 @@ import {
   Inject,
   InternalServerErrorException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -408,7 +409,7 @@ export class InventoryService {
 
   async createSerializedAsset(payload: CreateSerializedAssetDto, userId: string) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
         this.assertBrandDiffersFromFamily(payload.asset.brand, assetFamily.name);
         const assetSubfamily = await this.resolveAssetSubfamily(
@@ -638,6 +639,12 @@ export class InventoryService {
 
       return { asset, ledger, providerPrice, motor: createdMotor };
       });
+      // The contextual accessory picker reloads this inventory immediately.
+      await this.invalidateInventoryCache({ warehouseId: payload.warehouseCurrentId }).catch(() => {
+        // Creation is already committed: a cache failure must not invite duplicate creation.
+        new Logger(InventoryService.name).warn('Serialized asset created; inventory cache invalidation failed');
+      });
+      return result;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

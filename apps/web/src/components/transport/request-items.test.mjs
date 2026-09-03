@@ -36,3 +36,13 @@ test('conserva el dueño cuando el item pertenece a una sola bodega', () => {
 
   assert.equal(item.ownerWarehouseId, 'provider-a');
 });
+
+test('conserva el vínculo de un implemento serializado y su bodega propietaria', () => {
+  const [item] = buildRequestItems([{
+    type: 'serial', assetId: 'balde-1', name: 'Balde para minicargador',
+    componentParentAssetId: 'minicargador-1', ownerWarehouseId: 'vereal',
+  }]);
+  assert.equal(item.assetId, 'balde-1');
+  assert.equal(item.componentParentAssetId, 'minicargador-1');
+  assert.equal(item.ownerWarehouseId, 'vereal');
+});
