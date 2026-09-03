@@ -963,28 +963,15 @@ export class AssetsService {
   async getAssetLocation(assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true, warehouseCurrentId: true },
+      select: { id: true },
     });
     if (!asset) {
       throw new NotFoundException('Asset not found');
     }
 
-    if (asset.warehouseCurrentId) {
-      const warehouse = await this.prisma.warehouse.findUnique({
-        where: { id: asset.warehouseCurrentId },
-        select: { id: true, name: true },
-      });
-      return {
-        assetId,
-        locationType: 'WAREHOUSE',
-        warehouse,
-        customerWorksite: null,
-      };
-    }
-
     const lastLedger = await this.prisma.stockLedger.findFirst({
       where: { assetId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
         movementType: true,
         warehouse: { select: { id: true, name: true } },
@@ -995,6 +982,7 @@ export class AssetsService {
             worksite: { select: { id: true, name: true } },
           },
         },
+        effectiveAt: true,
         createdAt: true,
       },
     });
@@ -1008,7 +996,11 @@ export class AssetsService {
       };
     }
 
-    if (lastLedger.customerWorksite) {
+    if (
+      (lastLedger.movementType === MovementType.OUT
+        || lastLedger.movementType === MovementType.ON_SITE)
+      && lastLedger.customerWorksite
+    ) {
       return {
         assetId,
         locationType: 'CUSTOMER_WORKSITE',
@@ -1017,7 +1009,11 @@ export class AssetsService {
       };
     }
 
-    if (lastLedger.warehouse) {
+    if (
+      (lastLedger.movementType === MovementType.IN
+        || lastLedger.movementType === MovementType.ADJUST)
+      && lastLedger.warehouse
+    ) {
       return {
         assetId,
         locationType: 'WAREHOUSE',

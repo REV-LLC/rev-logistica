@@ -135,7 +135,7 @@ export default function InventoryItemPickerModal({
           name: getSerialDisplayName(item),
           family: skuMeta?.category ?? 'Sin familia',
           ownerWarehouseName: item.ownerWarehouseName ?? 'Sin bodega dueña',
-          disabled: selectedSerialIds.has(item.assetId),
+          disabled: selectedSerialIds.has(item.assetId) || item.quantity !== 1,
           item,
         };
       }),
@@ -312,7 +312,7 @@ export default function InventoryItemPickerModal({
 
                     {group.rows.map((row) => {
                       const isSelected = selectedRowKeys.has(row.key);
-                      const quantity = row.type === 'bulk' ? row.item.quantity : 1;
+                      const quantity = row.item.quantity;
                       return (
                         <UnstyledButton
                           key={row.key}
@@ -347,7 +347,9 @@ export default function InventoryItemPickerModal({
                               <Text component="span" className="inventory-picker-mobile-row-status">
                                 {row.type === 'bulk' && row.item.quantity < 0
                                   ? 'Requiere ajuste'
-                                  : 'Ya agregado'}
+                                  : row.type === 'serial' && row.item.quantity !== 1
+                                    ? 'No disponible'
+                                    : 'Ya agregado'}
                               </Text>
                             ) : null}
                           </span>
@@ -586,8 +588,8 @@ export default function InventoryItemPickerModal({
                                         >
                                           {row.type === 'bulk' ? 'Masivo' : 'Equipo'}
                                           {' · '}
-                                          {row.type === 'bulk' ? row.item.quantity : 1} disponible
-                                          {(row.type === 'bulk' ? row.item.quantity : 1) === 1 ? '' : 's'}
+                                          {row.item.quantity} disponible
+                                          {row.item.quantity === 1 ? '' : 's'}
                                         </Text>
                                         {showOwnerWarehouse && !singleOwnerWarehouseName ? (
                                           <Text
@@ -602,7 +604,9 @@ export default function InventoryItemPickerModal({
                                           <Text size="xs" c="dimmed">
                                             {row.type === 'bulk' && row.item.quantity < 0
                                               ? 'Requiere ajuste'
-                                              : 'Ya agregado'}
+                                              : row.type === 'serial' && row.item.quantity !== 1
+                                                ? 'No disponible'
+                                                : 'Ya agregado'}
                                           </Text>
                                         ) : null}
                                       </Table.Td>
@@ -619,7 +623,7 @@ export default function InventoryItemPickerModal({
                                           </Table.Td>
                                           <Table.Td style={{ textAlign: 'center' }}>
                                             <Text size="sm" fw={700}>
-                                              {row.type === 'bulk' ? row.item.quantity : 1}
+                                              {row.item.quantity}
                                             </Text>
                                           </Table.Td>
                                           {showOwnerWarehouse ? (

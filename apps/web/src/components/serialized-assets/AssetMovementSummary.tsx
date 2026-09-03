@@ -7,6 +7,7 @@ type AssetMovement = {
   movementType?: string | null;
   quantity?: number | string | null;
   createdAt: string;
+  effectiveAt?: string;
   warehouse?: { id: string; name?: string | null } | null;
   customerWorksite?: {
     customer?: { name?: string | null } | null;
@@ -66,7 +67,7 @@ export default function AssetMovementSummary({
       if (movement.document && !documents.has(movement.document.id)) {
         documents.set(movement.document.id, {
           ...movement.document,
-          movementDate: movement.createdAt,
+          movementDate: movement.effectiveAt ?? movement.createdAt,
         });
       }
       return documents;
@@ -118,7 +119,7 @@ export default function AssetMovementSummary({
                       <Text size="sm">{movementLocation(movement)}</Text>
                     </div>
                     <Text size="xs" c="dimmed" ta="right" style={{ flexShrink: 0 }}>
-                      {formatMovementDate(movement.createdAt)}
+                      {formatMovementDate(movement.effectiveAt ?? movement.createdAt)}
                     </Text>
                   </Group>
                 </div>
