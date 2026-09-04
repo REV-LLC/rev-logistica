@@ -1,12 +1,29 @@
-'use client';
+"use client";
 
-import { ActionIcon, Badge, Box, Button, Card, Center, Group, Menu, Stack, Text } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import { IconDotsVertical, IconPencil, IconPhotoOff, IconTrash } from '@tabler/icons-react';
-import Link from 'next/link';
-import { ReactNode, useState } from 'react';
-import { getSerialDisplayName } from '@/lib/serial-assets';
-import { ownerColorById } from '@/lib/owner-color';
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Center,
+  Group,
+  Menu,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import {
+  IconDotsVertical,
+  IconPencil,
+  IconPhotoOff,
+  IconTrash,
+} from "@tabler/icons-react";
+import Link from "next/link";
+import { ReactNode, useEffect, useState } from "react";
+import { getSerialDisplayName } from "@/lib/serial-assets";
+import { ownerColorById } from "@/lib/owner-color";
+import classes from "@/components/SerialAssetCard.module.css";
 
 export type SerialAssetCardItem = {
   assetId: string;
@@ -18,50 +35,53 @@ export type SerialAssetCardItem = {
   imageUrl?: string | null;
   brand?: string | null;
   model?: string | null;
-  chargeType?: 'DAY' | 'HOUR' | string | null;
+  chargeType?: "DAY" | "HOUR" | string | null;
   minimumChargeHours?: number | string | null;
-  status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
+  status?: "IN" | "OUT" | "TRANSIT" | string | null;
   internalNumber?: string | number | null;
   imageFileObjectId?: string | null;
   registrationNumber?: string | null;
-  kind?: 'STANDARD' | 'MOTOR' | string | null;
-  motorConfiguration?: 'NONE' | 'FIXED' | 'INTERCHANGEABLE' | string | null;
+  kind?: "STANDARD" | "MOTOR" | string | null;
+  motorConfiguration?: "NONE" | "FIXED" | "INTERCHANGEABLE" | string | null;
   assignedMotorId?: string | null;
   assignedMixerId?: string | null;
 };
 
 function getStatusColor(status?: string | null) {
   const normalized = status?.toUpperCase();
-  if (normalized === 'IN') return 'green';
-  if (normalized === 'OUT') return 'red';
-  if (normalized === 'TRANSIT') return 'yellow';
-  return 'gray';
+  if (normalized === "IN") return "green";
+  if (normalized === "OUT") return "red";
+  if (normalized === "TRANSIT") return "yellow";
+  return "gray";
 }
 
 function getStatusLabel(status?: string | null, isWorksiteView?: boolean) {
-  const normalized = (status ?? 'IN').toString().toUpperCase();
-  if (isWorksiteView && normalized === 'OUT') return 'On site';
+  const normalized = (status ?? "IN").toString().toUpperCase();
+  if (isWorksiteView && normalized === "OUT") return "On site";
   return normalized;
 }
 
-function formatCharge(chargeType?: string | null, minimumChargeHours?: number | string | null) {
+function formatCharge(
+  chargeType?: string | null,
+  minimumChargeHours?: number | string | null,
+) {
   const normalized = chargeType?.toUpperCase();
-  if (normalized === 'HOUR') {
+  if (normalized === "HOUR") {
     const minimum =
-      typeof minimumChargeHours === 'number'
+      typeof minimumChargeHours === "number"
         ? minimumChargeHours
-        : typeof minimumChargeHours === 'string'
+        : typeof minimumChargeHours === "string"
           ? Number(minimumChargeHours)
           : null;
     if (minimum != null && Number.isFinite(minimum) && minimum > 0) {
       return `Hora (min ${minimum}h)`;
     }
-    return 'Hora';
+    return "Hora";
   }
-  if (normalized === 'DAY') {
-    return 'Dia';
+  if (normalized === "DAY") {
+    return "Dia";
   }
-  return '-';
+  return "-";
 }
 
 export default function SerialAssetCard({
@@ -80,6 +100,7 @@ export default function SerialAssetCard({
   additionalDetails = [],
   footer,
   compact = false,
+  showcase = false,
 }: {
   item: SerialAssetCardItem;
   href?: string;
@@ -98,12 +119,29 @@ export default function SerialAssetCard({
   deleteLoading?: boolean;
   onOpen?: () => void;
   statusBadge?: { label: string; color: string };
-  additionalDetails?: Array<{ label: string; value: ReactNode }>;
+  additionalDetails?: Array<{
+    label: string;
+    value: ReactNode;
+    icon?: ReactNode;
+    hideLabel?: boolean;
+  }>;
   footer?: ReactNode;
   compact?: boolean;
+  showcase?: boolean;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
-  const isMobile = useMediaQuery('(max-width: 48em)');
+  const [useOriginalImage, setUseOriginalImage] = useState(false);
+  const cardImageUrl = item.imageUrl
+    ? useOriginalImage || !item.imageFileObjectId
+      ? item.imageUrl
+      : `${item.imageUrl}.thumbnail.webp`
+    : null;
+
+  useEffect(() => {
+    setBrokenImage(false);
+    setUseOriginalImage(false);
+  }, [item.imageUrl]);
+  const isMobile = useMediaQuery("(max-width: 48em)");
   const description = getSerialDisplayName(item);
   const shouldShowOwnerChip = display?.showOwnerChip ?? isWorksiteView;
   const shouldShowSerial = display?.showSerial ?? true;
@@ -117,14 +155,14 @@ export default function SerialAssetCard({
       component={Link}
       href={href}
       fw={700}
-      size={compact ? 'sm' : undefined}
+      size={compact ? "sm" : undefined}
       lineClamp={2}
-      style={{ textDecoration: 'none', color: 'inherit' }}
+      style={{ textDecoration: "none", color: "inherit" }}
     >
       {description}
     </Text>
   ) : (
-    <Text fw={700} size={compact ? 'sm' : undefined} lineClamp={2}>
+    <Text fw={700} size={compact ? "sm" : undefined} lineClamp={2}>
       {description}
     </Text>
   );
@@ -132,86 +170,135 @@ export default function SerialAssetCard({
   return (
     <Card
       withBorder
-      padding={compact ? 'xs' : 'sm'}
+      padding={showcase ? 0 : compact ? "xs" : "sm"}
       radius="md"
       onClick={onOpen}
       onKeyDown={(event) => {
-        if (onOpen && (event.key === 'Enter' || event.key === ' ')) {
+        if (onOpen && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           onOpen();
         }
       }}
-      role={onOpen ? 'button' : undefined}
+      role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%',
-        maxWidth: '100%',
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        maxWidth: "100%",
         minWidth: 0,
-        overflow: 'hidden',
-        minHeight: isContentSized ? 'auto' : 320,
-        height: hasFooterContent && !compact ? '100%' : 'auto',
-        aspectRatio: isContentSized ? 'auto' : '1 / 1',
-        gap: isMobile ? (compact ? '0.625rem' : '0.75rem') : 0,
-        cursor: onOpen ? 'pointer' : undefined,
+        overflow: "hidden",
+        minHeight: showcase ? 460 : isContentSized ? "auto" : 320,
+        height: hasFooterContent && !compact ? "100%" : "auto",
+        aspectRatio: showcase ? undefined : isContentSized ? "auto" : "1 / 1",
+        gap: isMobile ? (compact ? "0.625rem" : "0.75rem") : 0,
+        cursor: onOpen ? "pointer" : undefined,
       }}
     >
       <Box
         style={{
-          flex: isContentSized ? '0 0 auto' : '0 0 62%',
-          width: '100%',
+          flex: showcase ? "0 0 48%" : isContentSized ? "0 0 auto" : "0 0 62%",
+          width: "100%",
           minWidth: 0,
-          height: isContentSized ? 'auto' : '62%',
-          aspectRatio: isContentSized ? '16 / 9' : undefined,
-          background: '#ffffff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderBottom: '1px solid var(--mantine-color-gray-3)',
-          borderRadius: isMobile ? 'calc(var(--mantine-radius-md) - 2px)' : 0,
-          overflow: 'hidden',
+          height: showcase ? "48%" : isContentSized ? "auto" : "62%",
+          aspectRatio: showcase ? undefined : isContentSized ? "16 / 9" : undefined,
+          background: "#ffffff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderBottom: "1px solid var(--mantine-color-gray-3)",
+          borderRadius: isMobile ? "calc(var(--mantine-radius-md) - 2px)" : 0,
+          overflow: "hidden",
+          position: "relative",
         }}
       >
-        {item.imageUrl && !brokenImage ? (
+        {cardImageUrl && !brokenImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={item.imageUrl}
+            src={cardImageUrl}
             alt={description}
-            onError={() => setBrokenImage(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#ffffff' }}
+            onError={() => {
+              if (
+                !useOriginalImage &&
+                item.imageUrl &&
+                item.imageFileObjectId
+              ) {
+                setUseOriginalImage(true);
+                return;
+              }
+              setBrokenImage(true);
+            }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: showcase ? "cover" : "contain",
+              background: "#ffffff",
+            }}
           />
         ) : (
           <Center className="asset-card-image-placeholder">
             <Stack align="center" gap={4}>
               <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
-              <Text size="xs" c="dimmed">Sin foto</Text>
+              <Text size="xs" c="dimmed">
+                Sin foto
+              </Text>
             </Stack>
           </Center>
         )}
+        {showcase ? (
+          <Badge
+            size="sm"
+            color={statusBadge?.color ?? getStatusColor(item.status)}
+            variant="light"
+            className={classes.showcaseStatusBadge}
+            style={{
+              position: "absolute",
+              right: 12,
+              top: 12,
+            }}
+          >
+            {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
+          </Badge>
+        ) : null}
       </Box>
 
       <Stack
         gap={compact ? 4 : 6}
-        mt={isMobile ? 0 : compact ? 6 : 'xs'}
-        justify={onAction ? 'space-between' : 'flex-start'}
-        style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0 }}
+        mt={showcase ? 0 : isMobile ? 0 : compact ? 6 : "xs"}
+        justify={onAction ? "space-between" : "flex-start"}
+        style={{
+          flex: "1 1 auto",
+          minWidth: 0,
+          minHeight: 0,
+          padding: showcase ? "1rem 1.25rem" : undefined,
+        }}
       >
         <Stack gap={4} style={{ minWidth: 0 }}>
-          <Group align="flex-start" justify="space-between" wrap="nowrap" style={{ minWidth: 0 }}>
-            <Box style={{ minWidth: 0, flex: 1 }}>
-              {title}
-            </Box>
+          <Group
+            align="flex-start"
+            justify="space-between"
+            wrap="nowrap"
+            style={{ minWidth: 0 }}
+          >
+            <Box style={{ minWidth: 0, flex: 1 }}>{title}</Box>
             <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-              <Badge
-                size={compact ? 'xs' : 'sm'}
-                color={statusBadge?.color ?? getStatusColor(item.status)}
-                variant="light"
-              >
-                {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
-              </Badge>
+              {!showcase ? (
+                <Badge
+                  size={compact ? "xs" : "sm"}
+                  color={statusBadge?.color ?? getStatusColor(item.status)}
+                  variant="light"
+                >
+                  {statusBadge?.label ??
+                    getStatusLabel(item.status, isWorksiteView)}
+                </Badge>
+              ) : null}
               {showMenu ? (
-                <Menu shadow="md" width={160} position="bottom-end" withinPortal>
+                <Menu
+                  shadow="md"
+                  width={160}
+                  position="bottom-end"
+                  withinPortal
+                >
                   <Menu.Target>
                     <ActionIcon
                       aria-label="Acciones del activo"
@@ -239,7 +326,7 @@ export default function SerialAssetCard({
                         leftSection={<IconTrash size={16} />}
                         onClick={onDelete}
                       >
-                        {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+                        {deleteLoading ? "Eliminando..." : "Eliminar"}
                       </Menu.Item>
                     ) : null}
                   </Menu.Dropdown>
@@ -249,14 +336,17 @@ export default function SerialAssetCard({
           </Group>
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
-              <Badge color={ownerColorById(item.ownerWarehouseId)} variant="light">
+              <Badge
+                color={ownerColorById(item.ownerWarehouseId)}
+                variant="light"
+              >
                 Dueño: {ownerChipLabel}
               </Badge>
             </Group>
           ) : null}
           {shouldShowSerial ? (
             <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-              {item.serialOrEngine ?? '-'}
+              {item.serialOrEngine ?? "-"}
             </Text>
           ) : null}
           {shouldShowCharge ? (
@@ -265,9 +355,17 @@ export default function SerialAssetCard({
             </Text>
           ) : null}
           {additionalDetails.map((detail) => (
-            <Text key={detail.label} size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
-              {detail.label}: {detail.value}
-            </Text>
+            <Group key={detail.label} gap={7} wrap="nowrap" align="center">
+              {detail.icon ? (
+                <Box c="var(--mantine-color-gray-7)" style={{ display: "flex", flexShrink: 0 }}>
+                  {detail.icon}
+                </Box>
+              ) : null}
+              <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
+                {detail.hideLabel ? null : `${detail.label}: `}
+                {detail.value}
+              </Text>
+            </Group>
           ))}
         </Stack>
 
@@ -279,7 +377,7 @@ export default function SerialAssetCard({
             loading={actionLoading}
             onClick={onAction}
           >
-            {actionLabel ?? 'Agregar'}
+            {actionLabel ?? "Agregar"}
           </Button>
         ) : null}
         {footer}

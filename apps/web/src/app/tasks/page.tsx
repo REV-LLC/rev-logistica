@@ -19,6 +19,8 @@ import {
 } from '@mantine/core';
 import {
   IconBrandWhatsapp,
+  IconChevronDown,
+  IconChevronUp,
   IconCircleCheck,
   IconChecklist,
   IconClock,
@@ -86,6 +88,17 @@ type Employee = {
 
 type AssigneeOptionValue = `user:${string}` | `employee:${string}`;
 
+type TaskEditDraft = {
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  dueDate: string;
+  reminderIntervalValue: number | '';
+  reminderIntervalUnit: TaskReminderUnit;
+  status: ActiveTaskStatus;
+  assignee: AssigneeOptionValue | null;
+};
+
 const statusOptions = [
   { value: 'OPEN', label: 'Abierta' },
   { value: 'DOING', label: 'En curso' },
@@ -118,6 +131,13 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString('es-CO');
 }
 
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
 function priorityColor(priority?: string | null) {
   if (priority === 'HIGH') return 'red';
   if (priority === 'MEDIUM') return 'yellow';
@@ -142,6 +162,19 @@ function getTaskAssigneeValue(task: Task): AssigneeOptionValue | null {
   if (task.assignedToUserId) return `user:${task.assignedToUserId}`;
   if (task.assignedToEmployeeId) return `employee:${task.assignedToEmployeeId}`;
   return null;
+}
+
+function createTaskEditDraft(task: Task): TaskEditDraft {
+  return {
+    title: task.title,
+    description: task.description ?? '',
+    priority: task.priority ?? 'MEDIUM',
+    dueDate: toDateInputValue(task.dueDate),
+    reminderIntervalValue: task.reminderIntervalValue ?? '',
+    reminderIntervalUnit: task.reminderIntervalUnit ?? 'DAYS',
+    status: task.status === 'DOING' ? 'DOING' : 'OPEN',
+    assignee: getTaskAssigneeValue(task),
+  };
 }
 
 function parseAssigneeValue(value: string | null): {
@@ -206,6 +239,9 @@ export default function TasksPage() {
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
+  const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -351,38 +387,63 @@ export default function TasksPage() {
     }
   };
 
-  const updateTask = async (id: string, patch: Partial<Task>) => {
-    let previous: Task[] = [];
-    setTasks((current) => {
-      previous = current;
-      return current.map((task) => {
-        if (task.id !== id) return task;
-        const next = { ...task, ...patch };
-        if (patch.assignedToUserId === null) {
-          next.assignedToUser = null;
-        } else if (patch.assignedToUserId) {
-          const match = users.find((user) => user.id === patch.assignedToUserId);
-          if (match) next.assignedToUser = match;
-        }
-        if (patch.assignedToEmployeeId === null) {
-          next.assignedToEmployee = null;
-        } else if (patch.assignedToEmployeeId) {
-          const match = employees.find((employee) => employee.id === patch.assignedToEmployeeId);
-          if (match)
-            next.assignedToEmployee = {
-              id: match.id,
-              name: getEmployeeName(match),
-              active: match.active,
-            };
-        }
-        return next;
-      });
-    });
+  const toggleTaskEditor = (task: Task) => {
+    if (expandedTaskId === task.id) {
+      setExpandedTaskId(null);
+      setEditDraft(null);
+      return;
+    }
+    setExpandedTaskId(task.id);
+    setEditDraft(createTaskEditDraft(task));
+    setError(null);
+  };
+
+  const cancelTaskEditor = () => {
+    setExpandedTaskId(null);
+    setEditDraft(null);
+  };
+
+  const saveTaskEdits = async (task: Task) => {
+    if (!editDraft?.title.trim()) return;
+    setSavingTaskId(task.id);
+    setError(null);
+    const assignee = parseAssigneeValue(editDraft.assignee);
+    const patch = {
+      title: editDraft.title.trim(),
+      description: editDraft.description.trim() || null,
+      priority: editDraft.priority,
+      dueDate: editDraft.dueDate || null,
+      reminderIntervalValue:
+        editDraft.reminderIntervalValue === '' ? null : editDraft.reminderIntervalValue,
+      reminderIntervalUnit:
+        editDraft.reminderIntervalValue === '' ? null : editDraft.reminderIntervalUnit,
+      status: editDraft.status,
+      ...assignee,
+    };
     try {
-      await api(`/tasks/${id}`, { method: 'PATCH', json: patch });
+      await api(`/tasks/${task.id}`, { method: 'PATCH', json: patch });
+      const assignedUser = assignee.assignedToUserId
+        ? users.find((user) => user.id === assignee.assignedToUserId) ?? null
+        : null;
+      const employee = assignee.assignedToEmployeeId
+        ? employees.find((item) => item.id === assignee.assignedToEmployeeId) ?? null
+        : null;
+      setTasks((current) => current.map((item) => item.id === task.id ? {
+        ...item,
+        ...patch,
+        dueDate: editDraft.dueDate || null,
+        assignedToUser: assignedUser,
+        assignedToEmployee: employee ? {
+          id: employee.id,
+          name: getEmployeeName(employee),
+          active: employee.active,
+        } : null,
+      } : item));
+      cancelTaskEditor();
     } catch (err) {
-      setTasks(previous);
       setError(err instanceof Error ? err.message : 'No se pudo actualizar el pendiente');
+    } finally {
+      setSavingTaskId(null);
     }
   };
 
@@ -393,6 +454,7 @@ export default function TasksPage() {
     try {
       await api(`/tasks/${taskToDelete.id}`, { method: 'DELETE' });
       setTasks((current) => current.filter((task) => task.id !== taskToDelete.id));
+      if (expandedTaskId === taskToDelete.id) cancelTaskEditor();
       setTaskToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo eliminar el pendiente');
@@ -410,6 +472,7 @@ export default function TasksPage() {
         json: { status: 'DONE' },
       });
       setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id));
+      if (expandedTaskId === task.id) cancelTaskEditor();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo completar el pendiente');
     } finally {
@@ -447,14 +510,9 @@ export default function TasksPage() {
       sortValue: (task) => task.priority ?? 'MEDIUM',
       mobile: { label: 'Prioridad', priority: 'detail' },
       cell: (task) => (
-        <Select
-          aria-label={`Prioridad de ${task.title}`}
-          value={task.priority ?? 'MEDIUM'}
-          onChange={(value) => updateTask(task.id, { priority: (value as TaskPriority) || 'MEDIUM' })}
-          data={priorityOptions}
-          size="xs"
-          allowDeselect={false}
-        />
+        <Badge color={priorityColor(task.priority)} variant="light">
+          {formatPriorityLabel(task.priority)}
+        </Badge>
       ),
     },
     {
@@ -484,17 +542,12 @@ export default function TasksPage() {
       sortValue: getTaskAssigneeName,
       mobile: { label: 'Responsable', priority: 'detail' },
       cell: (task) => (
-        <Select
-          aria-label={`Responsable de ${task.title}`}
-          value={getTaskAssigneeValue(task)}
-          onChange={(value) => updateTask(task.id, parseAssigneeValue(value))}
-          data={assigneeOptions}
-          size="xs"
-          placeholder="-"
-          searchable
-          clearable
-          disabled={assigneesLoading}
-        />
+        <Group gap={6} wrap="nowrap">
+          <IconUserCheck size={16} color="var(--mantine-color-gray-6)" />
+          <Text size="sm" c={getTaskAssigneeValue(task) ? undefined : 'dimmed'} lineClamp={2}>
+            {getTaskAssigneeName(task) === '-' ? 'Sin responsable' : getTaskAssigneeName(task)}
+          </Text>
+        </Group>
       ),
     },
     {
@@ -505,17 +558,145 @@ export default function TasksPage() {
       sortValue: (task) => task.status ?? 'OPEN',
       mobile: { label: 'Estado', priority: 'detail' },
       cell: (task) => (
-        <Select
-          aria-label={`Estado de ${task.title}`}
-          value={task.status ?? 'OPEN'}
-          onChange={(value) => updateTask(task.id, { status: (value as ActiveTaskStatus) || 'OPEN' })}
-          data={statusOptions}
-          size="xs"
-          allowDeselect={false}
-        />
+        <Badge color={task.status === 'DOING' ? 'blue' : 'gray'} variant="light">
+          {task.status === 'DOING' ? 'En curso' : 'Abierta'}
+        </Badge>
       ),
     },
   ];
+
+  const renderTaskEditor = (task: Task) => {
+    if (!editDraft || expandedTaskId !== task.id) return null;
+    const isSaving = savingTaskId === task.id;
+
+    return (
+      <Paper withBorder radius="lg" p={{ base: 'sm', md: 'md' }}>
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Text fw={700}>Editar pendiente</Text>
+              <Text size="sm" c="dimmed">
+                Nada se modifica ni se notifica hasta que presiones “Guardar cambios”.
+              </Text>
+            </div>
+            <Badge variant="light" color={priorityColor(editDraft.priority)}>
+              Prioridad {formatPriorityLabel(editDraft.priority)}
+            </Badge>
+          </Group>
+
+          <TextInput
+            label="Título"
+            value={editDraft.title}
+            onChange={(event) => setEditDraft({
+              ...editDraft,
+              title: event.currentTarget.value,
+            })}
+            required
+          />
+          <Textarea
+            label="Descripción"
+            value={editDraft.description}
+            onChange={(event) => setEditDraft({
+              ...editDraft,
+              description: event.currentTarget.value,
+            })}
+            minRows={2}
+          />
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            <Select
+              label="Estado"
+              description="Abierta: por iniciar. En curso: ya se está trabajando."
+              value={editDraft.status}
+              onChange={(value) => setEditDraft((current) => current ? {
+                ...current,
+                status: (value as ActiveTaskStatus) || 'OPEN',
+              } : current)}
+              data={statusOptions}
+              allowDeselect={false}
+            />
+            <Select
+              label="Prioridad"
+              description="Indica qué tan urgente es atenderla."
+              value={editDraft.priority}
+              onChange={(value) => setEditDraft((current) => current ? {
+                ...current,
+                priority: (value as TaskPriority) || 'MEDIUM',
+              } : current)}
+              data={priorityOptions}
+              allowDeselect={false}
+            />
+            <TextInput
+              label="Vence"
+              description="Déjala vacía si no tiene vencimiento."
+              type="date"
+              value={editDraft.dueDate}
+              onChange={(event) => setEditDraft({
+                ...editDraft,
+                dueDate: event.currentTarget.value,
+              })}
+            />
+          </SimpleGrid>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Select
+              label="Responsable"
+              description="Al guardar, el nuevo responsable podrá recibir la asignación por WhatsApp."
+              value={editDraft.assignee}
+              onChange={(value) => setEditDraft((current) => current ? {
+                ...current,
+                assignee: value as AssigneeOptionValue | null,
+              } : current)}
+              data={assigneeOptions}
+              searchable
+              clearable
+              disabled={assigneesLoading}
+              placeholder={assigneesLoading ? 'Cargando...' : 'Sin responsable'}
+            />
+            <div>
+              <Text fw={500} size="sm">Frecuencia del recordatorio por WhatsApp</Text>
+              <SimpleGrid cols={2} spacing="xs" mt={4}>
+                <NumberInput
+                  aria-label="Valor de frecuencia del recordatorio"
+                  placeholder="Sin recordatorio"
+                  value={editDraft.reminderIntervalValue}
+                  onChange={(value) => setEditDraft((current) => current ? {
+                    ...current,
+                    reminderIntervalValue: typeof value === 'number' ? value : '',
+                  } : current)}
+                  min={1}
+                  allowDecimal={false}
+                />
+                <Select
+                  aria-label="Unidad de frecuencia del recordatorio"
+                  value={editDraft.reminderIntervalUnit}
+                  onChange={(value) => setEditDraft((current) => current ? {
+                    ...current,
+                    reminderIntervalUnit: (value as TaskReminderUnit) || 'DAYS',
+                  } : current)}
+                  data={reminderUnitOptions}
+                  allowDeselect={false}
+                  disabled={editDraft.reminderIntervalValue === ''}
+                />
+              </SimpleGrid>
+            </div>
+          </SimpleGrid>
+
+          <Group justify="flex-end" className="mobile-actions">
+            <Button variant="default" onClick={cancelTaskEditor} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void saveTaskEdits(task)}
+              loading={isSaving}
+              disabled={!editDraft.title.trim()}
+            >
+              Guardar cambios
+            </Button>
+          </Group>
+        </Stack>
+      </Paper>
+    );
+  };
 
   return (
     <Container size="xl" py="xl">
@@ -587,6 +768,8 @@ export default function TasksPage() {
               getRowId={(task) => task.id}
               loading={loading}
               tableMinWidth={820}
+              isRowExpanded={(task) => expandedTaskId === task.id}
+              renderExpandedRow={renderTaskEditor}
               emptyState={{
                 title: 'No hay pendientes para los filtros actuales',
                 description: 'Cambia el estado, limpia la búsqueda o crea un nuevo pendiente.',
@@ -605,12 +788,24 @@ export default function TasksPage() {
               }}
               actions={(task) => [
                 {
+                  key: 'edit',
+                  label: expandedTaskId === task.id
+                    ? `Cerrar edición de ${task.title}`
+                    : `Ver y editar ${task.title}`,
+                  icon: expandedTaskId === task.id
+                    ? <IconChevronUp size={16} />
+                    : <IconChevronDown size={16} />,
+                  color: 'blue',
+                  disabled: savingTaskId !== null || completingTaskId !== null || deletingTask,
+                  onClick: () => toggleTaskEditor(task),
+                },
+                {
                   key: 'complete',
                   label: `Completar ${task.title}`,
                   icon: <IconCircleCheck size={16} />,
                   color: 'green',
                   loading: completingTaskId === task.id,
-                  disabled: deletingTask || (completingTaskId !== null && completingTaskId !== task.id),
+                  disabled: savingTaskId !== null || deletingTask || (completingTaskId !== null && completingTaskId !== task.id),
                   onClick: () => void completeTask(task),
                 },
                 {
@@ -618,7 +813,7 @@ export default function TasksPage() {
                   label: `Eliminar ${task.title}`,
                   icon: <IconTrash size={16} />,
                   color: 'red',
-                  disabled: completingTaskId !== null,
+                  disabled: savingTaskId !== null || completingTaskId !== null,
                   onClick: () => setTaskToDelete(task),
                 },
               ]}

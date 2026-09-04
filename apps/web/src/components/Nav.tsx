@@ -355,13 +355,13 @@ function NavItemIcon({
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        color: active ? "#b87500" : "var(--mantine-color-gray-6)",
+        color: active ? "#ff6a18" : "#c8d2df",
         background: active
-          ? "linear-gradient(135deg, rgba(217,154,24,0.24) 0%, rgba(255,229,153,0.9) 100%)"
-          : "rgba(148,163,184,0.10)",
-        boxShadow: active ? "0 8px 18px rgba(217,154,24,0.22)" : "none",
+          ? "rgba(255,106,24,0.14)"
+          : "rgba(255,255,255,0.05)",
+        boxShadow: active ? "0 8px 18px rgba(0,0,0,0.14)" : "none",
         border: active
-          ? "1px solid rgba(217,154,24,0.32)"
+          ? "1px solid rgba(255,106,24,0.32)"
           : "1px solid transparent",
       }}
     >
@@ -576,7 +576,7 @@ export default function Nav({ onNavigate }: NavProps) {
               root: {
                 borderRadius: 14,
                 borderLeft: "3px solid transparent",
-                background: "transparent",
+                background: isActive ? "rgba(255,255,255,0.07)" : "transparent",
                 paddingLeft: depth
                   ? "8px"
                   : "calc(var(--mantine-spacing-sm) - 3px)",
@@ -592,7 +592,7 @@ export default function Nav({ onNavigate }: NavProps) {
                 alignItems: "center",
               },
               label: {
-                color: isActive ? "#8a5a00" : "var(--mantine-color-gray-8)",
+                color: isActive ? "#ffffff" : "#d8e0ea",
                 fontWeight: isActive ? 750 : 560,
                 lineHeight: 1.2,
                 fontSize: depth ? "0.76rem" : "0.8rem",
@@ -629,7 +629,7 @@ export default function Nav({ onNavigate }: NavProps) {
             <Box
               ml={22}
               pl={8}
-              style={{ borderLeft: "1px solid var(--mantine-color-gray-3)" }}
+              style={{ borderLeft: "1px solid rgba(255,255,255,0.12)" }}
             >
               <Stack gap={1} py={2}>
                 {link.children?.map((child) => renderNavItem(child, depth + 1))}
@@ -651,7 +651,7 @@ export default function Nav({ onNavigate }: NavProps) {
           root: {
             borderRadius: 14,
             borderLeft: "3px solid transparent",
-            background: "transparent",
+            background: isActive ? "rgba(255,255,255,0.07)" : "transparent",
             paddingLeft: depth
               ? "8px"
               : "calc(var(--mantine-spacing-sm) - 3px)",
@@ -667,7 +667,7 @@ export default function Nav({ onNavigate }: NavProps) {
             alignItems: "center",
           },
           label: {
-            color: isActive ? "#8a5a00" : "var(--mantine-color-gray-8)",
+            color: isActive ? "#ffffff" : "#d8e0ea",
             fontWeight: isActive ? 750 : 560,
             lineHeight: 1.2,
             fontSize: depth ? "0.76rem" : "0.8rem",
@@ -713,7 +713,7 @@ export default function Nav({ onNavigate }: NavProps) {
             root: {
               borderRadius: 14,
               borderLeft: "3px solid transparent",
-              background: "transparent",
+              background: isActive ? "rgba(255,106,24,0.08)" : "transparent",
               paddingLeft: "calc(var(--mantine-spacing-sm) - 3px)",
               paddingRight: "8px",
               paddingTop: "5px",
@@ -726,7 +726,7 @@ export default function Nav({ onNavigate }: NavProps) {
               alignItems: "center",
             },
             label: {
-              color: isActive ? "#8a5a00" : "var(--mantine-color-gray-7)",
+              color: isActive ? "#ff7a30" : "#9eafc1",
               fontWeight: isActive ? 800 : 760,
               lineHeight: 1.2,
               fontSize: "0.88rem",
@@ -769,8 +769,7 @@ export default function Nav({ onNavigate }: NavProps) {
       gap="md"
       p="md"
       style={{
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+        background: "linear-gradient(180deg, #031426 0%, #041c31 100%)",
       }}
     >
       <Group
@@ -781,7 +780,7 @@ export default function Nav({ onNavigate }: NavProps) {
           minWidth: 0,
           padding: "6px",
           borderRadius: 16,
-          background: "rgba(255,255,255,0.72)",
+          background: "transparent",
         }}
       >
         <Link
@@ -790,9 +789,13 @@ export default function Nav({ onNavigate }: NavProps) {
           style={{ display: "block", flexShrink: 0 }}
         >
           <img
-            src="/fiesta.svg"
+            src="/fiesta.svg?v=silver"
             alt="Rev Logistica"
-            style={{ height: 54, width: "auto", display: "block" }}
+            style={{
+              height: 54,
+              width: "auto",
+              display: "block",
+            }}
           />
         </Link>
         <Stack
@@ -806,14 +809,27 @@ export default function Nav({ onNavigate }: NavProps) {
             radius="sm"
             tt="uppercase"
             size="md"
-            style={{ flexShrink: 0, maxWidth: "100%" }}
+            style={{
+              flexShrink: 0,
+              maxWidth: "100%",
+              color: currentRole === "ADMIN" ? "#ff3048" : undefined,
+              background: currentRole === "ADMIN" ? "rgba(255, 48, 72, 0.18)" : undefined,
+              opacity: 1,
+            }}
+            styles={{
+              label: {
+                color: currentRole === "ADMIN" ? "#ff3048" : undefined,
+                fontWeight: 850,
+                opacity: 1,
+              },
+            }}
           >
             {currentRole ?? "SIN ROL"}
           </Badge>
           {userDisplayName ? (
             <Text
               size="10px"
-              c="dimmed"
+              c="#9fb0c3"
               ta="right"
               lh={1.2}
               title={userDisplayName}
@@ -829,7 +845,7 @@ export default function Nav({ onNavigate }: NavProps) {
           ) : null}
         </Stack>
       </Group>
-      <Divider color="rgba(226,232,240,0.8)" />
+      <Divider color="rgba(255,255,255,0.10)" />
       <ScrollArea
         viewportRef={scrollViewportRef}
         type="auto"
@@ -850,7 +866,7 @@ export default function Nav({ onNavigate }: NavProps) {
         </Stack>
       </ScrollArea>
       <Box mt="auto" style={{ flexShrink: 0 }}>
-        <Divider mb="sm" color="rgba(226,232,240,0.8)" />
+        <Divider mb="sm" color="rgba(255,255,255,0.10)" />
         <Stack gap="xs">
           <OfficeDraftBrowserNotifications />
           {!authBypass ? (
@@ -874,13 +890,14 @@ export default function Nav({ onNavigate }: NavProps) {
             <Text
               size="11px"
               fw={850}
+              c="#d8e0ea"
               tt="uppercase"
               lh={1.1}
               style={{ letterSpacing: "0.16em" }}
             >
               {serviceName}
             </Text>
-            <Text size="9px" c="dimmed" lh={1.2} mt={2}>
+            <Text size="9px" c="#8fa2b7" lh={1.2} mt={2}>
               Finanzas · Inventario · Gestión
             </Text>
           </Box>

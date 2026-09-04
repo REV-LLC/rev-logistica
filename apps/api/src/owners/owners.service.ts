@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   BadRequestException,
   Injectable,
@@ -107,7 +107,7 @@ export class OwnersService {
 
   async uploadLogo(ownerId: string, file?: OwnerLogoFile) {
     if (!file) {
-      throw new BadRequestException('Logo file is required');
+      throw new BadRequestException('Debes seleccionar un archivo para el logo');
     }
     this.validateLogoFile(file);
 
@@ -116,7 +116,7 @@ export class OwnersService {
       select: { id: true },
     });
     if (!owner) {
-      throw new NotFoundException('Owner not found');
+      throw new NotFoundException('Proveedor no encontrado');
     }
 
     const config = this.getR2Config();
@@ -149,18 +149,52 @@ export class OwnersService {
     });
   }
 
+  async removeLogo(ownerId: string) {
+    const owner = await this.prisma.owner.findUnique({
+      where: { id: ownerId },
+      select: { id: true, logoKey: true },
+    });
+    if (!owner) {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
+
+    if (owner.logoKey) {
+      const config = this.getR2Config();
+      const s3 = new S3Client({
+        region: 'auto',
+        endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: config.accessKeyId,
+          secretAccessKey: config.secretAccessKey,
+        },
+      });
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: owner.logoKey,
+        }),
+      );
+    }
+
+    return this.prisma.owner.update({
+      where: { id: ownerId },
+      data: { logoUrl: null, logoKey: null },
+      select: OWNER_SELECT,
+    });
+  }
+
   private validateLogoFile(file: OwnerLogoFile) {
     if (file.size > MAX_LOGO_SIZE_BYTES) {
-      throw new BadRequestException('Logo must be 1 MB or smaller');
+      throw new BadRequestException('El logo debe pesar máximo 1 MB');
     }
     if (!ALLOWED_LOGO_MIME_TYPES.has(file.mimetype)) {
-      throw new BadRequestException('Logo must be PNG, WEBP, or JPEG');
+      throw new BadRequestException('El logo debe ser PNG, WEBP o JPEG');
     }
     if (!file.buffer?.length) {
-      throw new BadRequestException('Logo file is empty');
+      throw new BadRequestException('El archivo del logo está vacío');
     }
     if (!this.hasExpectedImageSignature(file.buffer, file.mimetype)) {
-      throw new BadRequestException('Logo content does not match the declared image type');
+      throw new BadRequestException('El contenido del logo no corresponde al tipo de imagen');
     }
   }
 

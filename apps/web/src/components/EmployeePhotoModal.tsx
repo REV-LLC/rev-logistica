@@ -1,7 +1,9 @@
-'use client';
+"use client";
 
-import { Center, Modal, Stack, Text } from '@mantine/core';
-import EmployeeAvatar, { useEmployeePhotoUrl } from '@/components/EmployeeAvatar';
+import { Center, Modal, Stack, Text } from "@mantine/core";
+import EmployeeAvatar, {
+  useEmployeePhotoUrl,
+} from "@/components/EmployeeAvatar";
 
 type EmployeePhotoRecord = {
   id: string;
@@ -10,11 +12,11 @@ type EmployeePhotoRecord = {
 };
 
 function employeeName(employee: EmployeePhotoRecord) {
-  return `${employee.name} ${employee.lastName ?? ''}`.trim();
+  return `${employee.name} ${employee.lastName ?? ""}`.trim();
 }
 
 function EmployeePhotoPreview({ employee }: { employee: EmployeePhotoRecord }) {
-  const photoUrl = useEmployeePhotoUrl(employee.id);
+  const photoUrl = useEmployeePhotoUrl(employee.id, 0, true);
 
   return (
     <Stack align="center" gap="md">

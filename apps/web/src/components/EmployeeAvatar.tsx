@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Avatar } from '@mantine/core';
-import { apiBlob, ApiError } from '@/lib/api';
+import { useEffect, useState } from "react";
+import { Avatar } from "@mantine/core";
+import { apiBlob, ApiError } from "@/lib/api";
 
 type EmployeeAvatarRecord = {
   id: string;
@@ -11,20 +11,20 @@ type EmployeeAvatarRecord = {
 };
 
 type EmployeePhotoCacheEntry =
-  | { status: 'loading'; promise: Promise<string | null> }
-  | { status: 'ready'; url: string | null };
+  | { status: "loading"; promise: Promise<string | null> }
+  | { status: "ready"; url: string | null };
 
 const employeePhotoCache = new Map<string, EmployeePhotoCacheEntry>();
 const employeePhotoEpoch = new Map<string, number>();
 const employeePhotoListeners = new Map<string, Set<(epoch: number) => void>>();
-const employeePhotoEpochStoragePrefix = 'rev:employee-photo-epoch:';
+const employeePhotoEpochStoragePrefix = "rev:employee-photo-epoch:";
 
 function getEmployeePhotoEpoch(employeeId: string) {
   const inMemoryEpoch = employeePhotoEpoch.get(employeeId);
   if (inMemoryEpoch !== undefined) return inMemoryEpoch;
 
   let storedEpoch = 0;
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     try {
       const storedValue = window.localStorage.getItem(
         `${employeePhotoEpochStoragePrefix}${employeeId}`,
@@ -50,21 +50,26 @@ function employeePhotoCacheKey(
 
 function getCachedEmployeePhotoUrl(cacheKey: string) {
   const cached = employeePhotoCache.get(cacheKey);
-  return cached?.status === 'ready' ? cached.url : null;
+  return cached?.status === "ready" ? cached.url : null;
 }
 
-function loadEmployeePhoto(employeeId: string, version: number, epoch: number) {
-  const cacheKey = employeePhotoCacheKey(employeeId, version, epoch);
+function loadEmployeePhoto(
+  employeeId: string,
+  version: number,
+  epoch: number,
+  fullSize: boolean,
+) {
+  const cacheKey = `${employeePhotoCacheKey(employeeId, version, epoch)}:${fullSize ? "full" : "thumbnail"}`;
   const cached = employeePhotoCache.get(cacheKey);
-  if (cached?.status === 'ready') {
+  if (cached?.status === "ready") {
     return Promise.resolve(cached.url);
   }
-  if (cached?.status === 'loading') {
+  if (cached?.status === "loading") {
     return cached.promise;
   }
 
   const promise = apiBlob(
-    `/employees/${employeeId}/photo?v=${version}-${epoch}`,
+    `/employees/${employeeId}/photo?variant=${fullSize ? "full" : "thumbnail"}&v=${version}-${epoch}`,
     {
       redirectOnAuthError: false,
     },
@@ -75,19 +80,19 @@ function loadEmployeePhoto(employeeId: string, version: number, epoch: number) {
         URL.revokeObjectURL(url);
         return null;
       }
-      employeePhotoCache.set(cacheKey, { status: 'ready', url });
+      employeePhotoCache.set(cacheKey, { status: "ready", url });
       return url;
     })
     .catch((error) => {
       if (error instanceof ApiError && error.status === 404) {
-        employeePhotoCache.set(cacheKey, { status: 'ready', url: null });
+        employeePhotoCache.set(cacheKey, { status: "ready", url: null });
       } else {
         employeePhotoCache.delete(cacheKey);
       }
       return null;
     });
 
-  employeePhotoCache.set(cacheKey, { status: 'loading', promise });
+  employeePhotoCache.set(cacheKey, { status: "loading", promise });
   return promise;
 }
 
@@ -95,7 +100,7 @@ export function invalidateEmployeePhoto(employeeId: string) {
   const cachePrefix = `${employeeId}:`;
   employeePhotoCache.forEach((entry, key) => {
     if (!key.startsWith(cachePrefix)) return;
-    if (entry.status === 'ready' && entry.url) {
+    if (entry.status === "ready" && entry.url) {
       URL.revokeObjectURL(entry.url);
     }
     employeePhotoCache.delete(key);
@@ -117,21 +122,25 @@ export function invalidateEmployeePhoto(employeeId: string) {
 }
 
 function getEmployeeFullName(
-  employee: Pick<EmployeeAvatarRecord, 'name' | 'lastName'>,
+  employee: Pick<EmployeeAvatarRecord, "name" | "lastName">,
 ) {
-  return `${employee.name} ${employee.lastName ?? ''}`.trim();
+  return `${employee.name} ${employee.lastName ?? ""}`.trim();
 }
 
 function getEmployeeInitials(
-  employee: Pick<EmployeeAvatarRecord, 'name' | 'lastName'>,
+  employee: Pick<EmployeeAvatarRecord, "name" | "lastName">,
 ) {
   const parts = getEmployeeFullName(employee).split(/\s+/).filter(Boolean);
-  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}` || "E";
 }
 
-export function useEmployeePhotoUrl(employeeId: string, version = 0) {
+export function useEmployeePhotoUrl(
+  employeeId: string,
+  version = 0,
+  fullSize = false,
+) {
   const [epoch, setEpoch] = useState(() => getEmployeePhotoEpoch(employeeId));
-  const cacheKey = employeePhotoCacheKey(employeeId, version, epoch);
+  const cacheKey = `${employeePhotoCacheKey(employeeId, version, epoch)}:${fullSize ? "full" : "thumbnail"}`;
   const [photoUrl, setPhotoUrl] = useState<string | null>(() =>
     getCachedEmployeePhotoUrl(cacheKey),
   );
@@ -156,7 +165,7 @@ export function useEmployeePhotoUrl(employeeId: string, version = 0) {
     let cancelled = false;
     setPhotoUrl(getCachedEmployeePhotoUrl(cacheKey));
 
-    loadEmployeePhoto(employeeId, version, epoch).then((url) => {
+    loadEmployeePhoto(employeeId, version, epoch, fullSize).then((url) => {
       if (cancelled) return;
       setPhotoUrl(url);
     });
@@ -164,7 +173,7 @@ export function useEmployeePhotoUrl(employeeId: string, version = 0) {
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, employeeId, epoch, version]);
+  }, [cacheKey, employeeId, epoch, fullSize, version]);
 
   return photoUrl;
 }

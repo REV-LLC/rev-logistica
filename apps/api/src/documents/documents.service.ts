@@ -1389,7 +1389,7 @@ export class DocumentsService {
         .map((item) => item.assetId)
         .filter((value): value is string => Boolean(value)),
     );
-    if (!selectedAssetIds.size) return;
+    if (!selectedAssetIds.size && !componentItems.length) return;
     const parentIds = [
       ...new Set(componentItems.map((item) => item.componentParentAssetId as string)),
     ];
@@ -1453,6 +1453,8 @@ export class DocumentsService {
       ]),
     );
     const quantities = new Map<string, number>();
+    const groupQuantities = new Map<string, number>();
+    const linkedAssets = new Set<string>();
     pairs.forEach(({ item, parentFamilyId, componentFamilyId }) => {
       const ruleKey = `${parentFamilyId}:${componentFamilyId}`;
       if (!ruleByPair.has(ruleKey)) {
@@ -1461,6 +1463,25 @@ export class DocumentsService {
         );
       }
       const quantity = item.assetId ? 1 : Number(item.quantity ?? 0);
+      if (item.assetId) {
+        if (linkedAssets.has(item.assetId)) {
+          throw new BadRequestException('Un accesorio no puede estar vinculado más de una vez en el documento');
+        }
+        linkedAssets.add(item.assetId);
+      }
+      const group = ruleByPair.get(ruleKey)?.exclusiveGroup;
+      if (group) {
+        const groupKey = JSON.stringify([item.componentParentAssetId, group]);
+        const total = (groupQuantities.get(groupKey) ?? 0) + quantity;
+        if (total > 1) {
+          throw new BadRequestException({
+            code: 'EXCLUSIVE_COMPONENT_GROUP',
+            message: `Selecciona solo un implemento para ${group} de este equipo`,
+            recovery: { type: 'SELECT_ASSET_COMPONENT', parentAssetId: item.componentParentAssetId, group },
+          });
+        }
+        groupQuantities.set(groupKey, total);
+      }
       const totalKey = `${item.componentParentAssetId}:${componentFamilyId}`;
       quantities.set(totalKey, (quantities.get(totalKey) ?? 0) + quantity);
     });

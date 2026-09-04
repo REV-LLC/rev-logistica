@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { DocumentStatus, DocumentType, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import sharp from 'sharp';
 import type { Readable } from 'stream';
 import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
 import {
@@ -39,6 +40,9 @@ export type FileEntityType =
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
+const IMAGE_THUMBNAIL_DIMENSION = 480;
+const IMAGE_THUMBNAIL_WEBP_QUALITY = 76;
+const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const STORAGE_PROVIDER = 'R2';
 const EVIDENCE_FILE_TYPE = 'PHOTO_EVIDENCE';
 const HOUR_METER_EVIDENCE_CATEGORY = 'EVIDENCIA_HOROMETRO';
@@ -295,6 +299,7 @@ export class FilesService {
           Key: objectKey,
           Body: file.buffer,
           ContentType: file.mimetype,
+          CacheControl: IMMUTABLE_FILE_CACHE_CONTROL,
           Metadata: {
             originalName: this.sanitizeMetadataValue(file.originalname),
             category,
@@ -304,6 +309,19 @@ export class FilesService {
           },
         }),
       );
+
+      if (file.mimetype.startsWith('image/')) {
+        const thumbnail = await this.createImageThumbnail(file.buffer);
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: `${objectKey}.thumbnail.webp`,
+            Body: thumbnail,
+            ContentType: 'image/webp',
+            CacheControl: IMMUTABLE_FILE_CACHE_CONTROL,
+          }),
+        );
+      }
 
       const publicUrl = `${config.publicBaseUrl}/${objectKey}`;
       const created = await this.prisma.fileObject.create({
@@ -432,10 +450,17 @@ export class FilesService {
 
     if (file.objectKey) {
       const config = this.getR2Config();
-      await this.createR2Client(config).send(
+      const client = this.createR2Client(config);
+      await client.send(
         new DeleteObjectCommand({
           Bucket: config.bucket,
           Key: file.objectKey,
+        }),
+      );
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: `${file.objectKey}.thumbnail.webp`,
         }),
       );
     }
@@ -453,8 +478,15 @@ export class FilesService {
 
     if (file.objectKey) {
       const config = this.getR2Config();
-      await this.createR2Client(config).send(
+      const client = this.createR2Client(config);
+      await client.send(
         new DeleteObjectCommand({ Bucket: config.bucket, Key: file.objectKey }),
+      );
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: `${file.objectKey}.thumbnail.webp`,
+        }),
       );
     }
     await this.prisma.fileObject.delete({ where: { id: file.id } });
@@ -481,10 +513,7 @@ export class FilesService {
     providerWarehouseId: true,
   } as const;
 
-  private async resolveProviderWarehouseId(
-    category: string,
-    value?: string,
-  ) {
+  private async resolveProviderWarehouseId(category: string, value?: string) {
     const providerWarehouseId = value?.trim() || null;
     if (category !== 'COMPROBANTE_SALIDA_PROVEEDOR') {
       return null;
@@ -664,6 +693,19 @@ export class FilesService {
         'File content does not match the declared type',
       );
     }
+  }
+
+  private createImageThumbnail(buffer: Buffer) {
+    return sharp(buffer)
+      .rotate()
+      .resize({
+        width: IMAGE_THUMBNAIL_DIMENSION,
+        height: IMAGE_THUMBNAIL_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: IMAGE_THUMBNAIL_WEBP_QUALITY, effort: 4 })
+      .toBuffer();
   }
 
   private hasExpectedSignature(buffer: Buffer, mimetype: string) {
