@@ -10,6 +10,7 @@ import TableRowActions from '@/components/TableRowActions';
 export type LedgerItem = {
   id: string;
   createdAt: string;
+  effectiveAt: string;
   movementType: string;
   quantity: number;
   refDocumentType?: string | null;
@@ -169,7 +170,7 @@ export default function LedgerTable({
             const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
             return (
               <Table.Tr key={item.id}>
-                <Table.Td>{formatDate(item.createdAt)}</Table.Td>
+                <Table.Td>{formatDate(item.effectiveAt)}</Table.Td>
                 {!isMobile ? <Table.Td>{formatMovementType(item, worksitePerspective)}</Table.Td> : null}
                 <Table.Td>
                   {item.assetId ? (
@@ -226,7 +227,7 @@ export default function LedgerTable({
         {detailsItem ? (
           <>
             <Text>
-              <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
+              <strong>Fecha:</strong> {formatDate(detailsItem.effectiveAt)}
             </Text>
             <Text mt="xs">
               <strong>Movement:</strong> {formatMovementType(detailsItem, worksitePerspective)}

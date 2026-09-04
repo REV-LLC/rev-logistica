@@ -900,6 +900,7 @@ model StockLedger {
   refDocumentId   String?
   refDocumentType DocumentType?
 
+  effectiveAt DateTime @default(now())
   createdAt DateTime @default(now())
   createdBy String
 
@@ -917,6 +918,8 @@ model StockLedger {
   @@index([refDocumentId])
   @@index([skuId])
   @@index([assetId])
+  @@index([assetId, effectiveAt(sort: Desc), createdAt(sort: Desc)])
+  @@index([skuId, ownerWarehouseId, effectiveAt(sort: Desc)])
   @@index([warehouseId])
   @@index([ownerWarehouseId])
 }

@@ -162,7 +162,7 @@ const ledgerDocumentColumns: DataTableColumn<LedgerDocumentGroup>[] = [
                 {group.reference}
               </Text>
             ) : <Text fw={700}>{group.reference}</Text>}
-            <Text size="xs" c="dimmed">{formatDate(primaryItem.createdAt)}</Text>
+            <Text size="xs" c="dimmed">{formatDate(primaryItem.effectiveAt)}</Text>
           </div>
           {group.documentType ? (
             <Badge size="xs" variant="light" color="gray" w="fit-content">{group.documentType}</Badge>
@@ -267,7 +267,7 @@ export default function LedgerDocumentTable({
             <Group justify="space-between" align="flex-start" wrap="wrap">
               <div>
                 <Text size="sm" c="dimmed">
-                  {formatDate(detailsGroup.items[0].createdAt)}
+                  {formatDate(detailsGroup.items[0].effectiveAt)}
                 </Text>
                 <Text fw={700}>{getMovementSummary(detailsGroup)}</Text>
                 <Text size="sm">{getLocationSummary(detailsGroup)}</Text>
