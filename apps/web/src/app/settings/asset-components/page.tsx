@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Badge,
   Button,
   Container,
@@ -28,6 +29,7 @@ type Rule = {
   required: boolean;
   minimumQuantity: number;
   maximumQuantity: number | null;
+  exclusiveGroup: string | null;
   sortOrder: number;
   active: boolean;
   parentAssetFamily: Family;
@@ -43,6 +45,8 @@ export default function AssetComponentsSettingsPage() {
   const [required, setRequired] = useState(false);
   const [minimum, setMinimum] = useState<number | string>(0);
   const [maximum, setMaximum] = useState<number | string>('');
+  const [exclusiveGroup, setExclusiveGroup] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +75,8 @@ export default function AssetComponentsSettingsPage() {
     setRequired(false);
     setMinimum(0);
     setMaximum('');
+    setExclusiveGroup('');
+    setEditingId(null);
     setError(null);
   };
 
@@ -82,14 +88,17 @@ export default function AssetComponentsSettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      await api(`/asset-families/${parentId}/components`, {
-        method: 'POST',
+      await api(editingId ? `/asset-families/components/${editingId}` : `/asset-families/${parentId}/components`, {
+        method: editingId ? 'PATCH' : 'POST',
         json: {
           componentAssetFamilyId: componentId,
-          required,
-          minimumQuantity: Number(minimum) || 0,
-          maximumQuantity: maximum === '' ? null : Number(maximum),
-          sortOrder: rules.filter((rule) => rule.parentAssetFamilyId === parentId).length * 10 + 10,
+          required: exclusiveGroup.trim() ? false : required,
+          minimumQuantity: exclusiveGroup.trim() ? 0 : Number(minimum) || 0,
+          maximumQuantity: exclusiveGroup.trim() ? 1 : maximum === '' ? null : Number(maximum),
+          exclusiveGroup: exclusiveGroup.trim() || null,
+          sortOrder: editingId
+            ? rules.find((rule) => rule.id === editingId)?.sortOrder ?? 0
+            : rules.filter((rule) => rule.parentAssetFamilyId === parentId).length * 10 + 10,
         },
       });
       await load();
@@ -127,13 +136,13 @@ export default function AssetComponentsSettingsPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Componentes de equipos"
-          description="Define qué familias pueden acompañar a cada tipo de equipo en una remisión."
+          description="Compatibilidad por familias, no por nombres. Agrupa implementos alternativos para elegir máximo uno por equipo en cada documento."
           icon={<IconLink size={24} />}
           iconColor="blue"
           accentColor="rgba(37, 99, 235, 0.12)"
         >
           <Group justify="flex-end">
-            <Button leftSection={<IconPlus size={16} />} onClick={() => setOpened(true)}>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => { reset(); setOpened(true); }}>
               Nueva relación
             </Button>
           </Group>
@@ -157,15 +166,22 @@ export default function AssetComponentsSettingsPage() {
                 {rules.map((rule) => (
                   <Table.Tr key={rule.id}>
                     <Table.Td><Text fw={700}>{rule.parentAssetFamily.name}</Text></Table.Td>
-                    <Table.Td>{rule.componentAssetFamily.name}</Table.Td>
+                    <Table.Td>{rule.componentAssetFamily.name}{rule.exclusiveGroup ? <Text size="xs" c="blue">{rule.exclusiveGroup} · elegir uno entre alternativas</Text> : null}</Table.Td>
                     <Table.Td><Badge variant="light">{rule.componentAssetFamily.controlType}</Badge></Table.Td>
                     <Table.Td>
                       {rule.required ? 'Obligatorio' : 'Opcional'} · mín. {rule.minimumQuantity}
                       {rule.maximumQuantity == null ? '' : ` · máx. ${rule.maximumQuantity}`}
                     </Table.Td>
-                    <Table.Td><Switch checked={rule.active} onChange={() => void toggle(rule)} /></Table.Td>
+                    <Table.Td><Switch checked={rule.active} onChange={() => void toggle(rule).catch((err) => setError(err instanceof Error ? err.message : 'No se pudo actualizar.'))} /></Table.Td>
                     <Table.Td>
-                      <Button color="red" variant="subtle" size="xs" leftSection={<IconTrash size={14} />} onClick={() => void remove(rule)}>
+                      <Button variant="subtle" size="xs" onClick={() => {
+                        setEditingId(rule.id); setParentId(rule.parentAssetFamilyId); setComponentId(rule.componentAssetFamilyId);
+                        setRequired(rule.required); setMinimum(rule.minimumQuantity); setMaximum(rule.maximumQuantity ?? '');
+                        setExclusiveGroup(rule.exclusiveGroup ?? ''); setError(null); setOpened(true);
+                      }}>Editar</Button>
+                      <Button color="red" variant="subtle" size="xs" leftSection={<IconTrash size={14} />} onClick={() => {
+                        if (window.confirm('¿Eliminar esta compatibilidad? No se eliminan los assets del inventario.')) void remove(rule).catch((err) => setError(err instanceof Error ? err.message : 'No se pudo eliminar.'));
+                      }}>
                         Eliminar
                       </Button>
                     </Table.Td>
@@ -180,15 +196,24 @@ export default function AssetComponentsSettingsPage() {
         </Paper>
       </Stack>
 
-      <Modal opened={opened} onClose={() => { setOpened(false); reset(); }} title="Nueva relación de componentes" centered>
+      <Modal opened={opened} onClose={() => { if (!saving) { setOpened(false); reset(); } }} title={editingId ? 'Editar compatibilidad' : 'Nueva relación de componentes'} centered>
         <Stack>
           {error ? <Alert color="red">{error}</Alert> : null}
-          <Select searchable label="Familia del equipo principal" data={familyOptions} value={parentId} onChange={(value) => { setParentId(value); setComponentId(null); }} />
+          <Select disabled={Boolean(editingId)} searchable label="Familia del equipo principal" data={familyOptions.filter((option) => families.find((family) => family.id === option.value)?.controlType === 'SERIAL')} value={parentId} onChange={(value) => { setParentId(value); setComponentId(null); }} />
           <Select searchable label="Familia componente" data={componentOptions} value={componentId} onChange={setComponentId} />
-          <Switch label="Componente obligatorio" checked={required} onChange={(event) => { setRequired(event.currentTarget.checked); if (event.currentTarget.checked && Number(minimum) < 1) setMinimum(1); }} />
+          <Autocomplete
+            label="Grupo de alternativas (opcional)"
+            description="Usa el mismo grupo para balde, martillo y uñas: solo se podrá elegir uno. No garantiza compatibilidad física entre modelos."
+            placeholder="IMPLEMENTO FRONTAL"
+            value={exclusiveGroup}
+            onChange={setExclusiveGroup}
+            data={[...new Set(rules.filter((rule) => rule.parentAssetFamilyId === parentId && rule.exclusiveGroup).map((rule) => rule.exclusiveGroup!))]}
+          />
+          {exclusiveGroup.trim() ? <Alert color="blue">Alternativa opcional: mínimo 0, máximo 1 entre todas las familias de este grupo. Solo admite assets serializados.</Alert> : null}
+          <Switch disabled={Boolean(exclusiveGroup.trim())} label="Componente obligatorio" checked={exclusiveGroup.trim() ? false : required} onChange={(event) => { setRequired(event.currentTarget.checked); if (event.currentTarget.checked && Number(minimum) < 1) setMinimum(1); }} />
           <Group grow align="end">
-            <NumberInput label="Cantidad mínima" min={0} value={minimum} onChange={setMinimum} />
-            <NumberInput label="Cantidad máxima" min={0} placeholder="Sin límite" value={maximum} onChange={setMaximum} />
+            <NumberInput disabled={Boolean(exclusiveGroup.trim())} label="Cantidad mínima" min={0} value={exclusiveGroup.trim() ? 0 : minimum} onChange={setMinimum} />
+            <NumberInput disabled={Boolean(exclusiveGroup.trim())} label="Cantidad máxima" min={0} placeholder="Sin límite" value={exclusiveGroup.trim() ? 1 : maximum} onChange={setMaximum} />
           </Group>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setOpened(false)}>Cancelar</Button>

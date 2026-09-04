@@ -6,6 +6,16 @@ import InventoryItemPickerModal, {
   type InventoryItemPickerBulkItem,
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
+import AssetComponentsSelectionModal, { type AssetComponentOption } from '@/components/AssetComponentsSelectionModal';
+
+const implementOptions: AssetComponentOption[] = ['Balde', 'Martillo hidráulico', 'Uñas estibadoras'].map((name, index) => ({
+  id: String(index), family: { id: String(index), code: String(index), name, controlType: 'SERIAL' },
+  required: false, minimumQuantity: 0, maximumQuantity: 1, exclusiveGroup: 'IMPLEMENTO FRONTAL', sortOrder: index,
+}));
+const implementItems: InventoryItemPickerSerialItem[] = implementOptions.map((option, index) => ({
+  assetId: `implement-${index}`, skuName: option.family.name, internalNumber: index + 1,
+  assetFamily: option.family, quantity: 1, ownerWarehouseId: 'vereal',
+}));
 
 const bulkItems: InventoryItemPickerBulkItem[] = [
   {
@@ -67,6 +77,7 @@ export default function ItemPickerComponentLabPage() {
   const [role, setRole] = useState<'ADMIN' | 'DRIVER'>('ADMIN');
   const [sourceMode, setSourceMode] = useState<'warehouse' | 'on-site'>('warehouse');
   const [notice, setNotice] = useState<string | null>(null);
+  const [implementsOpened, setImplementsOpened] = useState(false);
 
   return (
     <main>
@@ -112,6 +123,8 @@ export default function ItemPickerComponentLabPage() {
             <Button onClick={() => setOpened(true)} w="fit-content">
               Abrir selector
             </Button>
+            <Button variant="light" onClick={() => setImplementsOpened(true)}>Probar implementos de minicargador</Button>
+            {notice ? <Text role="status">{notice}</Text> : null}
           </Stack>
         </Paper>
       </Container>
@@ -129,6 +142,20 @@ export default function ItemPickerComponentLabPage() {
         itemsAddedNotice={notice}
         onItemAddedNotice={setNotice}
         showOwnerWarehouse={role !== 'DRIVER'}
+      />
+      <AssetComponentsSelectionModal
+        opened={implementsOpened}
+        parentName="Minicargador #1 · Vereal (demostración)"
+        options={implementOptions}
+        bulkItems={[]}
+        serialItems={sourceMode === 'warehouse' ? implementItems : implementItems.slice(0, 1)}
+        ownerWarehouseId="vereal"
+        restrictOwnerWarehouse={sourceMode === 'warehouse'}
+        onClose={() => setImplementsOpened(false)}
+        onConfirm={(items) => {
+          setNotice(`Implementos seleccionados: ${items.map((item) => item.type === 'serial' ? item.item.skuName : item.item.skuName).join(', ') || 'ninguno'}`);
+          setImplementsOpened(false);
+        }}
       />
     </main>
   );

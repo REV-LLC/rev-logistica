@@ -1481,7 +1481,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (sourceMode === 'warehouse') {
         if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
         const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
-        if (selectedOwner?.type === 'ALLY') {
+        if (selectedOwner?.type === 'ALLY' && !canDecide) {
           throw new Error('Para bodega alterna, usa captura libre de tags.');
         }
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
@@ -1504,7 +1504,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         setSerialItems(data.serial);
         setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
       }
-      if (openSelector && !useManualWarehouseCapture) {
+      if (openSelector && (!useManualWarehouseCapture || canDecide)) {
         setItemsModalOpen(true);
       }
     } catch (err) {
@@ -3631,7 +3631,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 width={isMobile ? '100%' : 320}
               />
             )}
-            {useManualWarehouseCapture ? null : (
+            {useManualWarehouseCapture && !canDecide ? null : (
               <Button onClick={() => void loadInventory()} loading={loadingInventory}>
                 Cargar items
               </Button>
@@ -4494,7 +4494,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           activeTab === 'generate' &&
           generateStep === 'items' &&
           itemsModalOpen &&
-          !useManualWarehouseCapture
+          (!useManualWarehouseCapture || canDecide)
         }
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
@@ -4548,6 +4548,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         serialItems={serialItems}
         ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
         restrictOwnerWarehouse={sourceMode === 'warehouse'}
+        canCreate={canDecide && sourceMode === 'warehouse' && docType === 'REMISSION'}
+        excludedAssetIds={selectedSerialIds}
+        onAssetCreated={(asset) => setSerialItems((current) => [...current.filter((item) => item.assetId !== asset.assetId), asset])}
         onClose={() => { setComponentParent(null); setComponentOptions([]); }}
         onConfirm={(selections) => void confirmAssetComponents(selections)}
       />
