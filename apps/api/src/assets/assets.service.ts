@@ -172,7 +172,7 @@ export class AssetsService {
   }
 
   async listAssetFamilies(params?: { controlType?: SkuControlType }) {
-    return this.prisma.assetFamily.findMany({
+    const families = await this.prisma.assetFamily.findMany({
       where: params?.controlType ? { controlType: params.controlType } : undefined,
       select: {
         id: true,
@@ -192,6 +192,16 @@ export class AssetsService {
       },
       orderBy: { name: 'asc' },
     });
+    const naturalNameOrder = new Intl.Collator('es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    return families.map((family) => ({
+      ...family,
+      subfamilies: [...family.subfamilies].sort((left, right) =>
+        naturalNameOrder.compare(left.name, right.name),
+      ),
+    }));
   }
 
   private componentRuleSelect() {
