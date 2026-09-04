@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rev-logistica-shell-v3';
+const CACHE_NAME = 'rev-logistica-shell-v4';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL, '/fiesta.svg', '/rev-logo-clean.svg', '/pwa-192.png', '/pwa-512.png'];
 
@@ -37,13 +37,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/_next/static/') || PRECACHE.includes(url.pathname)) {
+  if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return response;
-      })),
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request)),
+    );
+    return;
+  }
+
+  if (PRECACHE.includes(url.pathname)) {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request)),
     );
   }
 });

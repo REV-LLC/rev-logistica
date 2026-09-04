@@ -366,6 +366,7 @@ model AssetFamilyComponent {
   required               Boolean  @default(false)
   minimumQuantity        Int      @default(0)
   maximumQuantity        Int?
+  exclusiveGroup         String?
   sortOrder              Int      @default(0)
   active                 Boolean  @default(true)
   createdAt              DateTime @default(now())

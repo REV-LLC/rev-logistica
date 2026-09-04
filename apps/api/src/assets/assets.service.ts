@@ -212,6 +212,7 @@ export class AssetsService {
       required: true,
       minimumQuantity: true,
       maximumQuantity: true,
+      exclusiveGroup: true,
       sortOrder: true,
       active: true,
       parentAssetFamily: {
@@ -252,6 +253,7 @@ export class AssetsService {
     parentAssetFamilyId: string,
     payload: {
       componentAssetFamilyId: string;
+      exclusiveGroup?: string | null;
       required?: boolean;
       minimumQuantity?: number;
       maximumQuantity?: number | null;
@@ -269,9 +271,10 @@ export class AssetsService {
       throw new NotFoundException('Parent or component asset family not found');
     }
     const minimumQuantity = this.validateComponentQuantities(payload);
+    const exclusiveGroup = await this.validateExclusiveComponentGroup(payload);
     try {
       return await this.prisma.assetFamilyComponent.create({
-        data: { ...payload, parentAssetFamilyId, minimumQuantity },
+        data: { ...payload, parentAssetFamilyId, minimumQuantity, exclusiveGroup },
         select: this.componentRuleSelect(),
       });
     } catch (error) {
@@ -286,6 +289,7 @@ export class AssetsService {
     componentRuleId: string,
     payload: {
       componentAssetFamilyId: string;
+      exclusiveGroup?: string | null;
       required?: boolean;
       minimumQuantity?: number;
       maximumQuantity?: number | null;
@@ -300,6 +304,10 @@ export class AssetsService {
     if (existing.parentAssetFamilyId === payload.componentAssetFamilyId) {
       throw new BadRequestException('A family cannot be its own component');
     }
+    const exclusiveGroup = await this.validateExclusiveComponentGroup({
+      ...existing,
+      ...payload,
+    });
     const minimumQuantity = this.validateComponentQuantities({
       ...payload,
       minimumQuantity: payload.minimumQuantity ?? existing.minimumQuantity,
@@ -310,7 +318,7 @@ export class AssetsService {
     });
     return this.prisma.assetFamilyComponent.update({
       where: { id: componentRuleId },
-      data: { ...payload, minimumQuantity },
+      data: { ...payload, minimumQuantity, exclusiveGroup },
       select: this.componentRuleSelect(),
     });
   }
@@ -321,6 +329,27 @@ export class AssetsService {
     });
     if (!result.count) throw new NotFoundException('Component relationship not found');
     return { deleted: true };
+  }
+
+  private async validateExclusiveComponentGroup(payload: {
+    componentAssetFamilyId: string;
+    exclusiveGroup?: string | null;
+    required?: boolean;
+    minimumQuantity?: number;
+    maximumQuantity?: number | null;
+  }) {
+    const group = payload.exclusiveGroup?.trim().toLocaleUpperCase('es') || null;
+    if (!group) return null;
+    const family = await this.prisma.assetFamily.findUnique({
+      where: { id: payload.componentAssetFamilyId },
+    });
+    if (family?.controlType !== 'SERIAL') {
+      throw new BadRequestException('Los implementos alternativos deben ser assets serializados');
+    }
+    if (payload.required || (payload.minimumQuantity ?? 0) > 0 || payload.maximumQuantity !== 1) {
+      throw new BadRequestException('Cada alternativa debe ser opcional, con mínimo 0 y máximo 1');
+    }
+    return group;
   }
 
   async getAssetComponentOptions(assetId: string) {
@@ -351,6 +380,7 @@ export class AssetsService {
         required: rule.required,
         minimumQuantity: rule.minimumQuantity,
         maximumQuantity: rule.maximumQuantity,
+        exclusiveGroup: rule.exclusiveGroup,
         sortOrder: rule.sortOrder,
       })),
     };

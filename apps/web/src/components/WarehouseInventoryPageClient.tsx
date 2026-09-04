@@ -36,6 +36,7 @@ import {
   IconPhoto,
   IconPlus,
   IconSearch,
+  IconTrash,
   IconUpload,
   IconX,
 } from '@tabler/icons-react';
@@ -48,6 +49,7 @@ import OwnerCreateModal, {
 } from '@/components/OwnerCreateModal';
 import TableRowActions from '@/components/TableRowActions';
 import classes from '@/components/WarehouseInventoryPageClient.module.css';
+import WarehouseAssetsView from '@/components/WarehouseAssetsView';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -91,6 +93,11 @@ interface InventoryResponse {
       code?: string | null;
       name?: string | null;
     } | null;
+    assetSubfamily?: {
+      id?: string | null;
+      code?: string | null;
+      name?: string | null;
+    } | null;
     imageUrl?: string | null;
     imageFileObjectId: string | null;
     quantity: number;
@@ -123,6 +130,16 @@ type WarehouseStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 const MAX_OWNER_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
 const OWNER_LOGO_MIME_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
+
+function validateOwnerLogoFile(file: File) {
+  if (!OWNER_LOGO_MIME_TYPES.has(file.type)) {
+    return 'El logo debe ser PNG, WEBP o JPEG. Por ahora no se admite SVG.';
+  }
+  if (file.size > MAX_OWNER_LOGO_SIZE_BYTES) {
+    return 'El logo debe pesar máximo 1 MB.';
+  }
+  return null;
+}
 
 function normalizeInventorySearch(value: string) {
   return value
@@ -219,7 +236,7 @@ export default function WarehouseInventoryPageClient({
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustResult, setAdjustResult] = useState<string | null>(null);
   const [adjustSearch, setAdjustSearch] = useState('');
-  const inventorySearchParam = isOwnInventory ? (searchParams.get('q') ?? '') : '';
+  const inventorySearchParam = isOwnInventory || detailMode ? (searchParams.get('q') ?? '') : '';
   const [inventorySearch, setInventorySearchState] = useState(inventorySearchParam);
   const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -254,6 +271,9 @@ export default function WarehouseInventoryPageClient({
   const [editActive, setEditActive] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editOwnerLogoFile, setEditOwnerLogoFile] = useState<File | null>(null);
+  const [editRemoveOwnerLogo, setEditRemoveOwnerLogo] = useState(false);
+  const [editOwnerLogoPreviewUrl, setEditOwnerLogoPreviewUrl] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Warehouse | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -261,6 +281,17 @@ export default function WarehouseInventoryPageClient({
   const [emptyInventoryOpen, setEmptyInventoryOpen] = useState(false);
   const [emptyInventoryWarehouseName, setEmptyInventoryWarehouseName] = useState<string>('');
   const [addStockOpen, setAddStockOpen] = useState(false);
+  useEffect(() => {
+    if (!editOwnerLogoFile) {
+      setEditOwnerLogoPreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(editOwnerLogoFile);
+    setEditOwnerLogoPreviewUrl(previewUrl);
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [editOwnerLogoFile]);
 
   useEffect(() => {
     setInventorySearchState(inventorySearchParam);
@@ -435,12 +466,9 @@ export default function WarehouseInventoryPageClient({
 
   const handleOwnerLogoUpload = async (ownerId: string, file: File | null) => {
     if (!file) return;
-    if (!OWNER_LOGO_MIME_TYPES.has(file.type)) {
-      setOwnerLogoError('The logo must be PNG, WEBP, or JPEG. SVG is not allowed for now.');
-      return;
-    }
-    if (file.size > MAX_OWNER_LOGO_SIZE_BYTES) {
-      setOwnerLogoError('The logo must be 1 MB maximum.');
+    const validationError = validateOwnerLogoFile(file);
+    if (validationError) {
+      setOwnerLogoError(validationError);
       return;
     }
 
@@ -463,7 +491,7 @@ export default function WarehouseInventoryPageClient({
       } else if (err instanceof Error) {
         setOwnerLogoError(err.message);
       } else {
-        setOwnerLogoError('Unexpected error uploading the logo.');
+        setOwnerLogoError('No se pudo subir el logo.');
       }
     } finally {
       setOwnerLogoUploadingId(null);
@@ -597,7 +625,28 @@ export default function WarehouseInventoryPageClient({
     setEditActive(warehouse.active);
     setEditError(null);
     setOwnerLogoError(null);
+    setEditOwnerLogoFile(null);
+    setEditRemoveOwnerLogo(false);
     setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditOwnerLogoFile(null);
+    setEditRemoveOwnerLogo(false);
+    setOwnerLogoError(null);
+  };
+
+  const handleEditOwnerLogoSelect = (file: File | null) => {
+    if (!file) return;
+    const validationError = validateOwnerLogoFile(file);
+    if (validationError) {
+      setOwnerLogoError(validationError);
+      return;
+    }
+    setOwnerLogoError(null);
+    setEditOwnerLogoFile(file);
+    setEditRemoveOwnerLogo(false);
   };
 
   const handleEdit = async () => {
@@ -612,6 +661,7 @@ export default function WarehouseInventoryPageClient({
     }
     setEditLoading(true);
     setEditError(null);
+    setOwnerLogoError(null);
     try {
       await api<Warehouse>(`/warehouses/${editTarget.id}`, {
         method: 'PATCH',
@@ -622,8 +672,19 @@ export default function WarehouseInventoryPageClient({
           active: editActive,
         },
       });
-      setEditOpen(false);
-      await loadWarehouses();
+      if (editRemoveOwnerLogo) {
+        await api<Owner>(`/owners/${editOwnerCompanyId}/logo`, { method: 'DELETE' });
+      } else if (editOwnerLogoFile) {
+        const formData = new FormData();
+        formData.append('logo', editOwnerLogoFile);
+        await api<Owner>(`/owners/${editOwnerCompanyId}/logo`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
+      closeEdit();
+      await Promise.all([loadOwners(), loadWarehouses()]);
+      if (warehouseId) await handleFetch(warehouseId);
     } catch (err) {
       if (err instanceof ApiError) {
         setEditError(`Error ${err.status}: ${err.message}`);
@@ -919,9 +980,12 @@ export default function WarehouseInventoryPageClient({
   };
   const selectedWarehouse =
     warehouseCards.find((warehouse) => warehouse.id === warehouseId) ?? null;
+  const assetsWarehouse = selectedWarehouse ?? warehouseCards[0] ?? null;
 
   const createOwner = createOwnerCompanyId ? ownerById.get(createOwnerCompanyId) ?? null : null;
   const editOwner = editOwnerCompanyId ? ownerById.get(editOwnerCompanyId) ?? null : null;
+  const visibleEditOwnerLogo = editOwnerLogoPreviewUrl
+    ?? (editRemoveOwnerLogo ? null : editOwner?.logoUrl ?? null);
 
   const renderOwnerLogoUpload = (ownerId: string | null, owner?: Owner | null) => {
     if (!ownerId) {
@@ -1002,6 +1066,18 @@ export default function WarehouseInventoryPageClient({
 
   return (
     <main>
+      {data && inventoryView === 'SERIAL' && (isOwnInventory || detailMode) ? (
+        <WarehouseAssetsView
+          items={data.serial}
+          warehouseName={assetsWarehouse?.name ?? 'Bodega'}
+          warehouseType={assetsWarehouse?.type ?? (isOwnInventory ? 'OWN' : 'ALLY')}
+          search={inventorySearch}
+          onSearchChange={setInventorySearch}
+          deletingId={deletingSerialAssetId}
+          onDelete={deleteSerialAsset}
+          error={error}
+        />
+      ) : (
       <Container size="xl" py="xl">
         <Stack gap="lg">
           {warehousesError ? (
@@ -1093,13 +1169,22 @@ export default function WarehouseInventoryPageClient({
                       Consulta y administra el inventario de tus proveedores.
                     </Text>
                   </div>
-                  <Button
-                    onClick={openCreate}
-                    leftSection={<IconPlus size={17} />}
-                    className={classes.createButton}
-                  >
-                    Crear bodega
-                  </Button>
+                  <Group gap="sm" wrap="wrap">
+                    <Button
+                      variant="default"
+                      onClick={() => router.push('/providers')}
+                      leftSection={<IconBuildingWarehouse size={17} />}
+                    >
+                      Ver proveedores
+                    </Button>
+                    <Button
+                      onClick={openCreate}
+                      leftSection={<IconPlus size={17} />}
+                      className={classes.createButton}
+                    >
+                      Crear bodega
+                    </Button>
+                  </Group>
                 </Group>
 
                 <div className={classes.desktopFilters}>
@@ -1411,6 +1496,7 @@ export default function WarehouseInventoryPageClient({
           ) : null}
         </Stack>
       </Container>
+      )}
 
       <Drawer
         opened={warehouseFiltersOpen}
@@ -1692,68 +1778,222 @@ export default function WarehouseInventoryPageClient({
 
       <Modal
         opened={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={closeEdit}
         title="Editar bodega"
         size="lg"
+        centered
+        closeOnClickOutside={!editLoading}
+        closeOnEscape={!editLoading}
       >
-        <TextInput
-          label="Nombre"
-          value={editName}
-          onChange={(event) => setEditName(event.target.value)}
-        />
-        <Select
-          label="Tipo"
-          data={typeOptions}
-          value={editType}
-          onChange={(value) => setEditType((value as 'OWN' | 'ALLY') ?? 'OWN')}
-          mt="sm"
-        />
-        <Select
-          label="Empresa dueña"
-          placeholder={ownersLoading ? 'Cargando dueños...' : 'Seleccionar dueño'}
-          data={ownerOptions}
-          value={editOwnerCompanyId}
-          onChange={(value) => {
-            setOwnerLogoError(null);
-            setEditOwnerCompanyId(value);
-          }}
-          mt="sm"
-          disabled={ownersLoading && ownerOptions.length === 0}
-          searchable
-        />
-        <Box mt="sm">{renderOwnerLogoUpload(editOwnerCompanyId, editOwner)}</Box>
-        <Select
-          label="Estado"
-          data={activeOptions}
-          value={String(editActive)}
-          onChange={(value) => setEditActive(value === 'true')}
-          mt="sm"
-        />
-        {editError && (
-          <Text c="red" mt="sm">
-            {editError}
-          </Text>
-        )}
-        <Group mt="md" justify="space-between">
-          <Button
-            color="red"
-            variant="light"
-            onClick={() => {
-              if (!editTarget) return;
-              setEditOpen(false);
-              openDelete(editTarget);
+        <Stack gap="md">
+          <Paper
+            withBorder
+            radius="lg"
+            p="md"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(249,115,22,0.10) 0%, rgba(255,255,255,0.98) 100%)',
+              borderColor: 'rgba(15, 23, 42, 0.08)',
             }}
           >
-            Eliminar
-          </Button>
-          <Button
-            onClick={handleEdit}
-            loading={editLoading}
-            disabled={!editOwnerCompanyId}
-          >
-            Guardar
-          </Button>
-        </Group>
+            <Group justify="space-between" align="flex-start" wrap="wrap">
+              <div>
+                <Text fw={700}>Configuración de la bodega</Text>
+                <Text size="sm" c="dimmed" mt={4}>
+                  Actualiza su identidad, proveedor responsable y disponibilidad operativa.
+                </Text>
+              </div>
+              <Badge color={editType === 'OWN' ? 'orange' : 'blue'} variant="light">
+                {editType === 'OWN' ? 'Propia' : 'Aliada'}
+              </Badge>
+            </Group>
+          </Paper>
+
+          <Paper withBorder radius="lg" p="md">
+            <Stack gap="md">
+              <div>
+                <Text fw={700}>Datos de la bodega</Text>
+                <Text size="sm" c="dimmed">
+                  Los cambios se aplicarán únicamente cuando guardes el formulario.
+                </Text>
+              </div>
+
+              <TextInput
+                label="Nombre"
+                placeholder="Ejemplo: Bodega principal norte"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Select
+                  label="Tipo"
+                  data={typeOptions}
+                  value={editType}
+                  onChange={(value) => setEditType((value as 'OWN' | 'ALLY') ?? 'OWN')}
+                />
+                <Select
+                  label="Estado"
+                  data={activeOptions}
+                  value={String(editActive)}
+                  onChange={(value) => setEditActive(value === 'true')}
+                />
+              </SimpleGrid>
+
+              <Select
+                label="Empresa dueña"
+                description="El logo corresponde al proveedor y se muestra en todas sus bodegas."
+                placeholder={ownersLoading ? 'Cargando proveedores...' : 'Seleccionar proveedor'}
+                data={ownerOptions}
+                value={editOwnerCompanyId}
+                onChange={(value) => {
+                  setOwnerLogoError(null);
+                  setEditOwnerLogoFile(null);
+                  setEditRemoveOwnerLogo(false);
+                  setEditOwnerCompanyId(value);
+                }}
+                disabled={ownersLoading && ownerOptions.length === 0}
+                searchable
+              />
+
+              {editOwnerCompanyId ? (
+                <Paper withBorder radius="lg" p="md" bg="gray.0">
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="center" wrap="wrap">
+                      <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                        <Box
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 12,
+                            border: '1px solid rgba(15, 23, 42, 0.10)',
+                            background: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {visibleEditOwnerLogo ? (
+                            <Box
+                              component="img"
+                              src={visibleEditOwnerLogo}
+                              alt={`Logo de ${editOwner?.name ?? 'proveedor'}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 7 }}
+                            />
+                          ) : (
+                            <IconPhoto size={26} color="var(--mantine-color-gray-5)" />
+                          )}
+                        </Box>
+                        <div style={{ minWidth: 0 }}>
+                          <Text fw={700} truncate>
+                            Logo del proveedor
+                          </Text>
+                          <Text size="sm" c="dimmed">
+                            PNG, WEBP o JPEG · máximo 1 MB.
+                          </Text>
+                          {editOwnerLogoFile ? (
+                            <Badge mt={4} color="blue" variant="light">Nuevo logo pendiente</Badge>
+                          ) : editRemoveOwnerLogo ? (
+                            <Badge mt={4} color="red" variant="light">Se quitará al guardar</Badge>
+                          ) : null}
+                        </div>
+                      </Group>
+                      <Group gap="xs">
+                        <FileButton
+                          onChange={handleEditOwnerLogoSelect}
+                          accept="image/png,image/jpeg,image/webp"
+                        >
+                          {(props) => (
+                            <Button
+                              {...props}
+                              size="xs"
+                              variant="light"
+                              leftSection={<IconUpload size={14} />}
+                              disabled={editLoading}
+                            >
+                              {visibleEditOwnerLogo ? 'Cambiar' : 'Subir logo'}
+                            </Button>
+                          )}
+                        </FileButton>
+                        {editRemoveOwnerLogo ? (
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => setEditRemoveOwnerLogo(false)}
+                            disabled={editLoading}
+                          >
+                            Deshacer
+                          </Button>
+                        ) : visibleEditOwnerLogo ? (
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            leftSection={<IconTrash size={14} />}
+                            onClick={() => {
+                              setEditOwnerLogoFile(null);
+                              setEditRemoveOwnerLogo(Boolean(editOwner?.logoUrl));
+                            }}
+                            disabled={editLoading}
+                          >
+                            Quitar
+                          </Button>
+                        ) : null}
+                      </Group>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      Quitar o reemplazar el logo afectará la imagen del proveedor en todas sus bodegas.
+                    </Text>
+                  </Stack>
+                </Paper>
+              ) : null}
+            </Stack>
+          </Paper>
+
+          {ownerLogoError ? (
+            <Alert color="red" variant="light" title="No se pudo preparar el logo">
+              {ownerLogoError}
+            </Alert>
+          ) : null}
+          {editError ? (
+            <Alert color="red" variant="light" title="No se pudo actualizar la bodega">
+              {editError}
+            </Alert>
+          ) : null}
+
+          <Group align="center" wrap="wrap" className="mobile-actions">
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={16} />}
+              disabled={editLoading}
+              onClick={() => {
+                if (!editTarget) return;
+                closeEdit();
+                openDelete(editTarget);
+              }}
+            >
+              Eliminar bodega
+            </Button>
+            <Button
+              variant="default"
+              onClick={closeEdit}
+              disabled={editLoading}
+              ml="auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEdit}
+              loading={editLoading}
+              disabled={!editOwnerCompanyId || !editName.trim()}
+            >
+              Guardar cambios
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <Modal

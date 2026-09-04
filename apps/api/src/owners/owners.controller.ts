@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -76,5 +77,12 @@ export class OwnersController {
     @UploadedFile() file?: OwnerLogoFile,
   ) {
     return this.ownersService.uploadLogo(ownerId, file);
+  }
+
+  @Delete(':ownerId/logo')
+  removeOwnerLogo(
+    @Param('ownerId', new ParseUUIDPipe()) ownerId: string,
+  ) {
+    return this.ownersService.removeLogo(ownerId);
   }
 }

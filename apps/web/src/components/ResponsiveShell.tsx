@@ -197,15 +197,25 @@ export default function ResponsiveShell({
           </Group>
           <Link href="/" style={{ display: "block" }} onClick={close}>
             <img
-              src="/fiesta.svg"
+              src="/fiesta.svg?v=silver"
               alt="Rev Logistica"
-              style={{ height: 30, width: "auto", display: "block" }}
+              style={{
+                height: 30,
+                width: "auto",
+                display: "block",
+              }}
             />
           </Link>
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar withBorder>
+      <AppShell.Navbar
+        withBorder={false}
+        style={{
+          background: '#031426',
+          boxShadow: '10px 0 30px rgba(7, 29, 51, 0.08)',
+        }}
+      >
         <Nav onNavigate={close} />
       </AppShell.Navbar>
       <AppShell.Main>{children}</AppShell.Main>

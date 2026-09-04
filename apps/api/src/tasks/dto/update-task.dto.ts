@@ -16,7 +16,7 @@ export class UpdateTaskDto {
 
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsString()
@@ -32,7 +32,7 @@ export class UpdateTaskDto {
 
   @IsOptional()
   @IsDateString()
-  dueDate?: string;
+  dueDate?: string | null;
 
   @IsOptional()
   @IsInt()

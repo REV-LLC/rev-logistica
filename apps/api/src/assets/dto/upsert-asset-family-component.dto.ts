@@ -3,12 +3,19 @@ import {
   IsBoolean,
   IsInt,
   IsOptional,
+  IsString,
+  MaxLength,
   IsUUID,
   Min,
   ValidateIf,
 } from 'class-validator';
 
 export class UpsertAssetFamilyComponentDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  exclusiveGroup?: string | null;
+
   @IsUUID()
   componentAssetFamilyId: string;
 
