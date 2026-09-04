@@ -49,6 +49,7 @@ import OwnerCreateModal, {
 } from '@/components/OwnerCreateModal';
 import TableRowActions from '@/components/TableRowActions';
 import classes from '@/components/WarehouseInventoryPageClient.module.css';
+import WarehouseAssetsView from '@/components/WarehouseAssetsView';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -88,6 +89,11 @@ interface InventoryResponse {
     } | null;
     internalNumber?: string | number | null;
     assetFamily?: {
+      id?: string | null;
+      code?: string | null;
+      name?: string | null;
+    } | null;
+    assetSubfamily?: {
       id?: string | null;
       code?: string | null;
       name?: string | null;
@@ -230,7 +236,7 @@ export default function WarehouseInventoryPageClient({
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustResult, setAdjustResult] = useState<string | null>(null);
   const [adjustSearch, setAdjustSearch] = useState('');
-  const inventorySearchParam = isOwnInventory ? (searchParams.get('q') ?? '') : '';
+  const inventorySearchParam = isOwnInventory || detailMode ? (searchParams.get('q') ?? '') : '';
   const [inventorySearch, setInventorySearchState] = useState(inventorySearchParam);
   const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -974,6 +980,7 @@ export default function WarehouseInventoryPageClient({
   };
   const selectedWarehouse =
     warehouseCards.find((warehouse) => warehouse.id === warehouseId) ?? null;
+  const assetsWarehouse = selectedWarehouse ?? warehouseCards[0] ?? null;
 
   const createOwner = createOwnerCompanyId ? ownerById.get(createOwnerCompanyId) ?? null : null;
   const editOwner = editOwnerCompanyId ? ownerById.get(editOwnerCompanyId) ?? null : null;
@@ -1059,6 +1066,18 @@ export default function WarehouseInventoryPageClient({
 
   return (
     <main>
+      {data && inventoryView === 'SERIAL' && (isOwnInventory || detailMode) ? (
+        <WarehouseAssetsView
+          items={data.serial}
+          warehouseName={assetsWarehouse?.name ?? 'Bodega'}
+          warehouseType={assetsWarehouse?.type ?? (isOwnInventory ? 'OWN' : 'ALLY')}
+          search={inventorySearch}
+          onSearchChange={setInventorySearch}
+          deletingId={deletingSerialAssetId}
+          onDelete={deleteSerialAsset}
+          error={error}
+        />
+      ) : (
       <Container size="xl" py="xl">
         <Stack gap="lg">
           {warehousesError ? (
@@ -1477,6 +1496,7 @@ export default function WarehouseInventoryPageClient({
           ) : null}
         </Stack>
       </Container>
+      )}
 
       <Drawer
         opened={warehouseFiltersOpen}

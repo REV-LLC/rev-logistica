@@ -23,6 +23,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { getSerialDisplayName } from "@/lib/serial-assets";
 import { ownerColorById } from "@/lib/owner-color";
+import classes from "@/components/SerialAssetCard.module.css";
 
 export type SerialAssetCardItem = {
   assetId: string;
@@ -99,6 +100,7 @@ export default function SerialAssetCard({
   additionalDetails = [],
   footer,
   compact = false,
+  showcase = false,
 }: {
   item: SerialAssetCardItem;
   href?: string;
@@ -117,9 +119,15 @@ export default function SerialAssetCard({
   deleteLoading?: boolean;
   onOpen?: () => void;
   statusBadge?: { label: string; color: string };
-  additionalDetails?: Array<{ label: string; value: ReactNode }>;
+  additionalDetails?: Array<{
+    label: string;
+    value: ReactNode;
+    icon?: ReactNode;
+    hideLabel?: boolean;
+  }>;
   footer?: ReactNode;
   compact?: boolean;
+  showcase?: boolean;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
   const [useOriginalImage, setUseOriginalImage] = useState(false);
@@ -162,7 +170,7 @@ export default function SerialAssetCard({
   return (
     <Card
       withBorder
-      padding={compact ? "xs" : "sm"}
+      padding={showcase ? 0 : compact ? "xs" : "sm"}
       radius="md"
       onClick={onOpen}
       onKeyDown={(event) => {
@@ -180,20 +188,20 @@ export default function SerialAssetCard({
         maxWidth: "100%",
         minWidth: 0,
         overflow: "hidden",
-        minHeight: isContentSized ? "auto" : 320,
+        minHeight: showcase ? 460 : isContentSized ? "auto" : 320,
         height: hasFooterContent && !compact ? "100%" : "auto",
-        aspectRatio: isContentSized ? "auto" : "1 / 1",
+        aspectRatio: showcase ? undefined : isContentSized ? "auto" : "1 / 1",
         gap: isMobile ? (compact ? "0.625rem" : "0.75rem") : 0,
         cursor: onOpen ? "pointer" : undefined,
       }}
     >
       <Box
         style={{
-          flex: isContentSized ? "0 0 auto" : "0 0 62%",
+          flex: showcase ? "0 0 48%" : isContentSized ? "0 0 auto" : "0 0 62%",
           width: "100%",
           minWidth: 0,
-          height: isContentSized ? "auto" : "62%",
-          aspectRatio: isContentSized ? "16 / 9" : undefined,
+          height: showcase ? "48%" : isContentSized ? "auto" : "62%",
+          aspectRatio: showcase ? undefined : isContentSized ? "16 / 9" : undefined,
           background: "#ffffff",
           display: "flex",
           alignItems: "center",
@@ -201,6 +209,7 @@ export default function SerialAssetCard({
           borderBottom: "1px solid var(--mantine-color-gray-3)",
           borderRadius: isMobile ? "calc(var(--mantine-radius-md) - 2px)" : 0,
           overflow: "hidden",
+          position: "relative",
         }}
       >
         {cardImageUrl && !brokenImage ? (
@@ -222,7 +231,7 @@ export default function SerialAssetCard({
             style={{
               width: "100%",
               height: "100%",
-              objectFit: "contain",
+              objectFit: showcase ? "cover" : "contain",
               background: "#ffffff",
             }}
           />
@@ -236,13 +245,33 @@ export default function SerialAssetCard({
             </Stack>
           </Center>
         )}
+        {showcase ? (
+          <Badge
+            size="sm"
+            color={statusBadge?.color ?? getStatusColor(item.status)}
+            variant="light"
+            className={classes.showcaseStatusBadge}
+            style={{
+              position: "absolute",
+              right: 12,
+              top: 12,
+            }}
+          >
+            {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
+          </Badge>
+        ) : null}
       </Box>
 
       <Stack
         gap={compact ? 4 : 6}
-        mt={isMobile ? 0 : compact ? 6 : "xs"}
+        mt={showcase ? 0 : isMobile ? 0 : compact ? 6 : "xs"}
         justify={onAction ? "space-between" : "flex-start"}
-        style={{ flex: "1 1 auto", minWidth: 0, minHeight: 0 }}
+        style={{
+          flex: "1 1 auto",
+          minWidth: 0,
+          minHeight: 0,
+          padding: showcase ? "1rem 1.25rem" : undefined,
+        }}
       >
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Group
@@ -253,14 +282,16 @@ export default function SerialAssetCard({
           >
             <Box style={{ minWidth: 0, flex: 1 }}>{title}</Box>
             <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-              <Badge
-                size={compact ? "xs" : "sm"}
-                color={statusBadge?.color ?? getStatusColor(item.status)}
-                variant="light"
-              >
-                {statusBadge?.label ??
-                  getStatusLabel(item.status, isWorksiteView)}
-              </Badge>
+              {!showcase ? (
+                <Badge
+                  size={compact ? "xs" : "sm"}
+                  color={statusBadge?.color ?? getStatusColor(item.status)}
+                  variant="light"
+                >
+                  {statusBadge?.label ??
+                    getStatusLabel(item.status, isWorksiteView)}
+                </Badge>
+              ) : null}
               {showMenu ? (
                 <Menu
                   shadow="md"
@@ -324,14 +355,17 @@ export default function SerialAssetCard({
             </Text>
           ) : null}
           {additionalDetails.map((detail) => (
-            <Text
-              key={detail.label}
-              size="xs"
-              c="dimmed"
-              lineClamp={isMobile ? 2 : 1}
-            >
-              {detail.label}: {detail.value}
-            </Text>
+            <Group key={detail.label} gap={7} wrap="nowrap" align="center">
+              {detail.icon ? (
+                <Box c="var(--mantine-color-gray-7)" style={{ display: "flex", flexShrink: 0 }}>
+                  {detail.icon}
+                </Box>
+              ) : null}
+              <Text size="xs" c="dimmed" lineClamp={isMobile ? 2 : 1}>
+                {detail.hideLabel ? null : `${detail.label}: `}
+                {detail.value}
+              </Text>
+            </Group>
           ))}
         </Stack>
 

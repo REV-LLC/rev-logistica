@@ -1920,6 +1920,7 @@ export class InventoryService {
             imageUrl: true,
             imageFileObjectId: true,
             assetFamily: { select: { id: true, code: true, name: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
             price: true,
             subrentalPrice: true,
             replacementValue: true,
@@ -2034,6 +2035,7 @@ export class InventoryService {
           assignedMotorId: asset?.assignedMotorId ?? null,
           assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ?? null,
+          assetSubfamily: sku?.assetSubfamily ?? null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId },
           assetImageFileObjectId,
@@ -2213,6 +2215,7 @@ export class InventoryService {
             areaM2: true,
             unitWeight: true,
             assetFamily: { select: { id: true, code: true, name: true, controlType: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
           },
         })
       : [];
@@ -2303,6 +2306,9 @@ export class InventoryService {
           assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily
             ? { id: sku.assetFamily.id, code: sku.assetFamily.code, name: sku.assetFamily.name }
+            : null,
+          assetSubfamily: sku?.assetSubfamily
+            ? { id: sku.assetSubfamily.id, code: sku.assetSubfamily.code, name: sku.assetSubfamily.name }
             : null,
           weight: asset?.weight ?? null,
           storageLocation: { warehouseId: null },
