@@ -27,6 +27,37 @@ describe('AssetsService hour meter', () => {
   });
 });
 
+describe('AssetsService asset family catalog', () => {
+  it('returns numeric subfamily names in natural ascending order', async () => {
+    const prisma = {
+      assetFamily: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'plant-family',
+            code: 'PLANTA_ELECTRICA',
+            name: 'PLANTA ELÉCTRICA',
+            controlType: 'SERIAL',
+            subfamilies: [
+              { id: '10', code: '10_KVA', name: '10 KVA', active: true },
+              { id: '3-5', code: '3_5_KVA', name: '3.5 KVA', active: true },
+              { id: '3', code: '3_KVA', name: '3 KVA', active: true },
+            ],
+          },
+        ]),
+      },
+    };
+    const service = new AssetsService(prisma as any, { del: jest.fn() } as any);
+
+    const families = await service.listAssetFamilies();
+
+    expect(families[0].subfamilies.map((subfamily) => subfamily.name)).toEqual([
+      '3 KVA',
+      '3.5 KVA',
+      '10 KVA',
+    ]);
+  });
+});
+
 describe('AssetsService motor assignment', () => {
   it('assigns an available motor from the same warehouse', async () => {
     const tx = {
