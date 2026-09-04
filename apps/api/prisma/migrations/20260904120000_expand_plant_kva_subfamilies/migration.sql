@@ -1,22 +1,14 @@
--- Ensure the serialized plant family exists before seeding its capacity catalog.
-INSERT INTO "AssetFamily" (
-  "id",
-  "code",
-  "name",
-  "controlType",
-  "createdAt"
-)
-VALUES (
-  gen_random_uuid()::text,
-  'PLANTA_ELECTRICA',
-  'PLANTA ELÉCTRICA',
-  'SERIAL',
-  CURRENT_TIMESTAMP
-)
-ON CONFLICT ("code") DO NOTHING;
-
 -- KVA capacities from 3 to 10 in increments of 0.5. Existing values are
 -- reactivated and normalized without changing their identifiers.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM "AssetFamily" WHERE "code" = 'PLANTA_ELECTRICA'
+  ) THEN
+    RAISE EXCEPTION 'Asset family PLANTA_ELECTRICA does not exist';
+  END IF;
+END $$;
+
 WITH requested("code", "name") AS (
   VALUES
     ('3_KVA', '3 KVA'),
