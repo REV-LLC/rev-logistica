@@ -177,25 +177,51 @@ export default function ResponsiveShell({
       navbar={{ width: 284, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding={{ base: "xs", sm: "md" }}
     >
-      <AppShell.Header hiddenFrom="sm" px="sm">
+      <AppShell.Header
+        hiddenFrom="sm"
+        px="sm"
+        withBorder={false}
+        style={{
+          background: "#031426",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          boxShadow: "0 8px 24px rgba(3, 20, 38, 0.16)",
+          color: "#ffffff",
+          overflow: "hidden",
+        }}
+      >
         <Group h="100%" justify="space-between" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
             <Burger
               opened={opened}
               onClick={toggle}
               size="sm"
-              aria-label="Abrir menu"
+              color="#ffffff"
+              aria-label={opened ? "Cerrar menu" : "Abrir menu"}
             />
             <div>
-              <Text fw={700} size="sm" lh={1.1}>
+              <Text fw={700} size="sm" lh={1.1} c="#ffffff">
                 {headerCopy.title}
               </Text>
-              <Text size="xs" c="dimmed" lh={1.1}>
+              <Text size="xs" c="#aebdcd" lh={1.1}>
                 {headerCopy.subtitle}
               </Text>
             </div>
           </Group>
-          <Link href="/" style={{ display: "block" }} onClick={close}>
+          <Link
+            href="/"
+            onClick={close}
+            aria-hidden={opened}
+            tabIndex={opened ? -1 : undefined}
+            style={{
+              display: "block",
+              flexShrink: 0,
+              opacity: opened ? 0 : 1,
+              pointerEvents: opened ? "none" : "auto",
+              transform: opened ? "translateX(32px)" : "translateX(0)",
+              transition:
+                "opacity 170ms ease, transform 240ms cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
+          >
             <img
               src="/fiesta.svg?v=silver"
               alt="Rev Logistica"
