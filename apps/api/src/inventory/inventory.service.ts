@@ -191,6 +191,9 @@ export class InventoryService {
         warehouseCurrentId: true,
       },
     });
+    const motorOwner = await tx.warehouse.findUnique({
+      where: { id: ownerWarehouseId }, select: { type: true },
+    });
     await tx.stockLedger.create({
       data: {
         movementType: MovementType.ADJUST,
@@ -200,6 +203,7 @@ export class InventoryService {
         skuId: null,
         assetId: motor.id,
         quantity: 1,
+        isOpeningBalance: motorOwner?.type === 'ALLY' && warehouseCurrentId === ownerWarehouseId,
         createdBy: userId,
       },
     });
@@ -245,13 +249,14 @@ export class InventoryService {
     );
     const rows = await tx.stockLedger.findMany({
       where: { assetId: { in: sortedIds } },
-      orderBy: [{ effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
         assetId: true,
         movementType: true,
         warehouseId: true,
         customerWorksiteId: true,
         effectiveAt: true,
+        isOpeningBalance: true,
       },
     });
     const latestByAsset = new Map<string, (typeof rows)[number]>();
@@ -261,7 +266,7 @@ export class InventoryService {
     sortedIds.forEach((assetId) => {
       const latest = latestByAsset.get(assetId);
       if (!latest) throw new BadRequestException(`El equipo ${assetId} no tiene ubicación registrada`);
-      if (latest.effectiveAt.getTime() > effectiveAt.getTime()) {
+      if (!latest.isOpeningBalance && latest.effectiveAt.getTime() > effectiveAt.getTime()) {
         throw new BadRequestException({
           code: 'RETROACTIVE_INVENTORY_MOVEMENT',
           message: `No se puede registrar un movimiento retroactivo para el equipo ${assetId} porque tiene movimientos posteriores`,
@@ -295,6 +300,7 @@ export class InventoryService {
     if (!groups.length) return;
     const later = await tx.stockLedger.findFirst({
       where: {
+        isOpeningBalance: false,
         effectiveAt: { gt: effectiveAt },
         OR: groups.map((group) => ({
           skuId: group.skuId,
@@ -721,6 +727,8 @@ export class InventoryService {
           skuId: null,
           assetId: asset.id,
           quantity: 1,
+          isOpeningBalance: ownerWarehouse.type === 'ALLY'
+            && payload.warehouseCurrentId === payload.ownerWarehouseId,
           createdBy: userId,
         },
         select: { id: true, movementType: true, quantity: true },
@@ -819,6 +827,13 @@ export class InventoryService {
         throw new NotFoundException('Warehouse not found');
       }
 
+      // A provider's first catalogue quantity is opening stock. Later adjustments
+      // remain dated movements and must continue to protect historical balances.
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Sku" WHERE "id" = ${sku.id} FOR UPDATE`);
+      const existingStock = await tx.stockLedger.findFirst({
+        where: { skuId: sku.id, ownerWarehouseId: payload.ownerWarehouseId },
+        select: { id: true },
+      });
       const ledger = await tx.stockLedger.create({
         data: {
           movementType: MovementType.ADJUST,
@@ -828,6 +843,9 @@ export class InventoryService {
           skuId: sku.id,
           assetId: null,
           quantity: payload.quantity,
+          isOpeningBalance: ownerWarehouse.type === 'ALLY'
+            && payload.warehouseId === payload.ownerWarehouseId
+            && payload.quantity > 0 && !existingStock,
           createdBy: userId,
         },
         select: { id: true, movementType: true, quantity: true },
@@ -1030,7 +1048,7 @@ export class InventoryService {
 
       const warehouseOwner = await tx.warehouse.findUnique({
         where: { id: payload.ownerWarehouseId },
-        select: { id: true },
+        select: { id: true, type: true },
       });
       if (!warehouseOwner) {
         throw new NotFoundException('Owner warehouse not found');
@@ -1044,6 +1062,11 @@ export class InventoryService {
         throw new NotFoundException('Warehouse not found');
       }
 
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Sku" WHERE "id" = ${sku.id} FOR UPDATE`);
+      const existingStock = await tx.stockLedger.findFirst({
+        where: { skuId: sku.id, ownerWarehouseId: payload.ownerWarehouseId },
+        select: { id: true },
+      });
       const ledger = await tx.stockLedger.create({
         data: {
           movementType: MovementType.ADJUST,
@@ -1053,6 +1076,9 @@ export class InventoryService {
           skuId: payload.skuId,
           assetId: null,
           quantity: payload.quantity,
+          isOpeningBalance: warehouseOwner.type === 'ALLY'
+            && payload.warehouseId === payload.ownerWarehouseId
+            && payload.quantity > 0 && !existingStock,
           createdBy: userId,
         },
         select: { id: true },
@@ -1948,7 +1974,7 @@ export class InventoryService {
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
           assetId: true,
           movementType: true,
@@ -2259,7 +2285,7 @@ export class InventoryService {
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: { assetId: true, movementType: true },
       });
       serialLedgerRows.forEach((row) => {
