@@ -8,6 +8,7 @@ type AssetMovement = {
   quantity?: number | string | null;
   createdAt: string;
   effectiveAt?: string;
+  isOpeningBalance?: boolean;
   warehouse?: { id: string; name?: string | null } | null;
   customerWorksite?: {
     customer?: { name?: string | null } | null;
@@ -101,7 +102,7 @@ export default function AssetMovementSummary({
                     <div style={{ minWidth: 0 }}>
                       <Group gap="xs" mb={3} wrap="wrap">
                         <Badge size="sm" variant="light">
-                          {MOVEMENT_LABELS[type] ?? type.replaceAll('_', ' ')}
+                          {movement.isOpeningBalance ? 'Alta de catálogo' : MOVEMENT_LABELS[type] ?? type.replaceAll('_', ' ')}
                         </Badge>
                         {movement.document?.consecutive ? (
                           <Text
@@ -119,7 +120,8 @@ export default function AssetMovementSummary({
                       <Text size="sm">{movementLocation(movement)}</Text>
                     </div>
                     <Text size="xs" c="dimmed" ta="right" style={{ flexShrink: 0 }}>
-                      {formatMovementDate(movement.effectiveAt ?? movement.createdAt)}
+                      {movement.isOpeningBalance ? 'Registro: ' : ''}
+                      {formatMovementDate(movement.isOpeningBalance ? movement.createdAt : movement.effectiveAt ?? movement.createdAt)}
                     </Text>
                   </Group>
                 </div>

@@ -601,7 +601,7 @@ export class AssetsService {
       return await this.prisma.$transaction(async (tx) => {
         const warehouseOwner = await tx.warehouse.findUnique({
           where: { id: payload.warehouseOwnerId },
-          select: { id: true, name: true },
+          select: { id: true, name: true, type: true },
         });
 
         if (!warehouseOwner) {
@@ -675,6 +675,7 @@ export class AssetsService {
             assetId: createdAsset.id,
             ownerWarehouseId: payload.warehouseOwnerId,
             quantity: 1,
+            isOpeningBalance: warehouseOwner.type === 'ALLY' && warehouseCurrentId === payload.warehouseOwnerId,
             createdBy: userId,
           },
         });
@@ -981,7 +982,7 @@ export class AssetsService {
 
     const lastLedger = await this.prisma.stockLedger.findFirst({
       where: { assetId },
-      orderBy: [{ effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
         movementType: true,
         warehouse: { select: { id: true, name: true } },
