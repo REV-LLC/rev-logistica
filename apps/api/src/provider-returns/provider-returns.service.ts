@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentStatus, DocumentType, MovementType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { CreateProviderReturnDto } from './dto/create-provider-return.dto';
 
 const EVIDENCE_CATEGORY = 'EVIDENCIA_ENTREGA_PROVEEDOR';
@@ -149,6 +150,7 @@ export class ProviderReturnsService {
         throw new BadRequestException('Debes adjuntar la evidencia de entrega y el comprobante del proveedor');
       }
       if (!receipt.warehouseId) throw new BadRequestException('La recepción no tiene bodega destino');
+      await lockBulkStock(tx, receipt.providerReceiptItems.flatMap((item) => item.sourceLedger.skuId ? [item.sourceLedger.skuId] : []));
 
       for (const item of receipt.providerReceiptItems) {
         const other = await tx.providerReceiptItem.aggregate({
