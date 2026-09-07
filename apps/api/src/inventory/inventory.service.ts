@@ -53,6 +53,7 @@ import {
   WORKSITE_BALANCE_MOVEMENT_TYPES,
 } from './worksite-ledger-balance';
 import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
+import { lockBulkStock } from './bulk-stock-lock';
 import {
   buildSerializedWarehouseAvailability,
   isSerializedAvailable,
@@ -292,35 +293,6 @@ export class InventoryService {
     });
   }
 
-  private async assertNoLaterBulkMovements(
-    tx: Prisma.TransactionClient,
-    groups: Array<{ skuId: string; ownerWarehouseId: string }>,
-    effectiveAt: Date,
-  ) {
-    if (!groups.length) return;
-    const later = await tx.stockLedger.findFirst({
-      where: {
-        isOpeningBalance: false,
-        effectiveAt: { gt: effectiveAt },
-        OR: groups.map((group) => ({
-          skuId: group.skuId,
-          ownerWarehouseId: group.ownerWarehouseId,
-        })),
-      },
-      select: { skuId: true, ownerWarehouseId: true, effectiveAt: true },
-    });
-    if (later) {
-      throw new BadRequestException({
-        code: 'RETROACTIVE_INVENTORY_MOVEMENT',
-        message: `No se puede registrar un movimiento retroactivo para ${later.skuId} porque tiene movimientos posteriores`,
-        skuId: later.skuId,
-        ownerWarehouseId: later.ownerWarehouseId,
-        latestEffectiveAt: later.effectiveAt,
-        requestedEffectiveAt: effectiveAt,
-      });
-    }
-  }
-
   private parseLedgerCursor(cursor: string) {
     const raw = cursor.trim();
     let payload: { effectiveAt?: string; createdAt?: string; id?: string };
@@ -498,10 +470,13 @@ export class InventoryService {
         createdBy: userId,
       } as const;
 
-      return this.prisma.stockLedger.create({ data });
+      return data;
     });
 
-    const created = await this.prisma.$transaction(operations);
+    const created = await this.prisma.$transaction(async (tx) => {
+      await lockBulkStock(tx, operations.flatMap((data) => data.skuId ? [data.skuId] : []));
+      return Promise.all(operations.map((data) => tx.stockLedger.create({ data })));
+    });
 
     await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
@@ -903,6 +878,7 @@ export class InventoryService {
         throw new NotFoundException('Bodega no encontrada');
       }
 
+      await lockBulkStock(tx, [payload.skuId]);
       const currentRows = await tx.stockLedger.groupBy({
         by: ['skuId'],
         where: {
@@ -973,6 +949,7 @@ export class InventoryService {
         throw new BadRequestException('El SKU debe ser de stock por cantidad');
       }
 
+      await lockBulkStock(tx, [payload.skuId]);
       const stockRows = await tx.stockLedger.groupBy({
         by: ['warehouseId', 'ownerWarehouseId'],
         where: {
@@ -1118,7 +1095,7 @@ export class InventoryService {
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
 
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
+      await lockBulkStock(tx, bulkSkuIds);
       await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
@@ -1295,7 +1272,7 @@ export class InventoryService {
         this.normalizeOperationItems(payload.items);
       await this.assertOwnerWarehousesExist(ownerWarehouseIds);
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
+      await lockBulkStock(tx, bulkGroups.map((group) => group.skuId));
 
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       if (bulkSkuIds.length) {
@@ -1521,7 +1498,7 @@ export class InventoryService {
 
       const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, document.docDate);
+      await lockBulkStock(tx, bulkSkuIds);
       await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
@@ -1623,7 +1600,7 @@ export class InventoryService {
       await this.assertOwnerWarehousesExist(ownerWarehouseIds);
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
+      await lockBulkStock(tx, bulkSkuIds);
       await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,

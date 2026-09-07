@@ -14,6 +14,7 @@ describe('ProviderPickupsService', () => {
     const createMany = jest.fn().mockResolvedValue({ count: 4 });
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       document: {
         findUnique: jest.fn().mockResolvedValue({
           id: '33333333-3333-4333-8333-333333333333',
@@ -139,6 +140,7 @@ describe('ProviderPickupsService', () => {
   it('rejects confirmation when source stock changed after the draft was created', async () => {
     const createMany = jest.fn();
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       document: {
         findUnique: jest.fn().mockResolvedValue({
           id: '33333333-3333-4333-8333-333333333333',

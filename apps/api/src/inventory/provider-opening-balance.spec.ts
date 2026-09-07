@@ -55,10 +55,10 @@ describe('provider catalogue stock and late document entry', () => {
     expect(rows[1].effectiveAt).toEqual(registered);
   });
 
-  it('still rejects a real later bulk adjustment', async () => {
-    const { service, tx } = setup(false);
-    await expect(service.moveOnSite(payload, 'operator')).rejects.toMatchObject({ response: { code: 'RETROACTIVE_INVENTORY_MOVEMENT' } });
-    expect(tx.stockLedger.create).not.toHaveBeenCalled();
+  it('accepts a later quantity adjustment when the aggregate balance covers the delivery', async () => {
+    const { service, rows } = setup();
+    rows[1].isOpeningBalance = false;
+    await expect(service.moveOnSite(payload, 'operator')).resolves.toMatchObject({ count: 2 });
   });
 
   it('still rejects a later real movement of the equipment', async () => {
