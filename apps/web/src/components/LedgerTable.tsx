@@ -10,6 +10,8 @@ import TableRowActions from '@/components/TableRowActions';
 export type LedgerItem = {
   id: string;
   createdAt: string;
+  effectiveAt: string;
+  isOpeningBalance?: boolean;
   movementType: string;
   quantity: number;
   refDocumentType?: string | null;
@@ -55,6 +57,7 @@ function formatDate(value: string) {
 }
 
 function formatMovementType(item: LedgerItem, worksitePerspective: boolean) {
+  if (item.isOpeningBalance) return 'Alta de catálogo';
   if (worksitePerspective) {
     if (item.movementType === 'OUT' || item.movementType === 'ON_SITE') {
       return 'Entrada a obra';
@@ -169,7 +172,7 @@ export default function LedgerTable({
             const createdBy = item.creator?.employee?.name ?? item.creator?.email ?? '-';
             return (
               <Table.Tr key={item.id}>
-                <Table.Td>{formatDate(item.createdAt)}</Table.Td>
+                <Table.Td>{item.isOpeningBalance ? 'Sin fecha de disponibilidad' : formatDate(item.effectiveAt)}</Table.Td>
                 {!isMobile ? <Table.Td>{formatMovementType(item, worksitePerspective)}</Table.Td> : null}
                 <Table.Td>
                   {item.assetId ? (
@@ -226,7 +229,8 @@ export default function LedgerTable({
         {detailsItem ? (
           <>
             <Text>
-              <strong>Fecha:</strong> {formatDate(detailsItem.createdAt)}
+              <strong>{detailsItem.isOpeningBalance ? 'Registrado en el catálogo:' : 'Fecha:'}</strong>{' '}
+              {formatDate(detailsItem.isOpeningBalance ? detailsItem.createdAt : detailsItem.effectiveAt)}
             </Text>
             <Text mt="xs">
               <strong>Movement:</strong> {formatMovementType(detailsItem, worksitePerspective)}
