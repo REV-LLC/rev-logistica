@@ -34,12 +34,30 @@ export type WarehouseAssetItem = {
   brand?: string | null;
   model?: string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
-  location?: { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT'; name: string | null } | null;
+  active?: boolean;
+  isAvailableInOwnerWarehouse?: boolean;
+  location?: {
+    type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
+    id?: string | null;
+    name: string | null;
+    warehouseType?: 'OWN' | 'ALLY' | null;
+  } | null;
   internalNumber?: string | number | null;
   assetFamily?: { id?: string | null; code?: string | null; name?: string | null } | null;
   assetSubfamily?: { id?: string | null; code?: string | null; name?: string | null } | null;
   quantity: number;
 };
+
+export type OwnerAssetsResponse = {
+  warehouseId: string;
+  serial: Array<WarehouseAssetItem & {
+    active: boolean;
+    isAvailableInOwnerWarehouse: boolean;
+  }>;
+};
+
+type CatalogStatusFilter = 'OWNER_WAREHOUSE' | 'CUSTODY' | 'OTHER_WAREHOUSE' | 'UNKNOWN';
+type EquipmentFilter = AssetStatusFilter | CatalogStatusFilter;
 
 const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }> = [
   { value: 'ALL', label: 'Todos' },
@@ -48,6 +66,17 @@ const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }
   { value: 'WORKSHOP', label: 'En taller', color: '#f36a0a' },
   { value: 'RESERVED', label: 'Reservados', color: '#6d45d8' },
   { value: 'INACTIVE', label: 'Inactivos', color: '#a8afb9' },
+];
+
+const CATALOG_FILTERS: Array<{ value: EquipmentFilter; label: string; color?: string }> = [
+  { value: 'ALL', label: 'Todos' },
+  { value: 'OWNER_WAREHOUSE', label: 'En bodega del proveedor', color: '#16a34a' },
+  { value: 'CUSTODY', label: 'En nuestra bodega / custodia', color: '#0891b2' },
+  { value: 'WORKSITE', label: 'En obra', color: '#1677ed' },
+  { value: 'TRANSIT', label: 'En tránsito', color: '#ca8a04' },
+  { value: 'INACTIVE', label: 'Inactivos', color: '#a8afb9' },
+  { value: 'OTHER_WAREHOUSE', label: 'En otra bodega', color: '#64748b' },
+  { value: 'UNKNOWN', label: 'Sin ubicación', color: '#a8afb9' },
 ];
 
 function normalized(value: unknown) {
@@ -75,6 +104,37 @@ function statusBadge(item: WarehouseAssetItem) {
   return { label: 'DISPONIBLE', color: 'green' };
 }
 
+function catalogStatusFor(item: WarehouseAssetItem): EquipmentFilter {
+  if (item.active === false || item.status === 'INACTIVE') return 'INACTIVE';
+  if (item.location?.type === 'TRANSIT' || item.status === 'TRANSIT') return 'TRANSIT';
+  if (item.location?.type === 'WORKSITE') return 'WORKSITE';
+  if (item.location?.type === 'WAREHOUSE') {
+    if (item.isAvailableInOwnerWarehouse === true) return 'OWNER_WAREHOUSE';
+    if (item.location.warehouseType === 'OWN') return 'CUSTODY';
+    return 'OTHER_WAREHOUSE';
+  }
+  return 'UNKNOWN';
+}
+
+function catalogStatusBadge(item: WarehouseAssetItem) {
+  const status = catalogStatusFor(item);
+  if (status === 'OWNER_WAREHOUSE') return { label: 'EN BODEGA DEL PROVEEDOR', color: 'green' };
+  if (status === 'CUSTODY') return { label: 'EN NUESTRA BODEGA', color: 'cyan' };
+  if (status === 'WORKSITE') return { label: 'EN OBRA', color: 'blue' };
+  if (status === 'TRANSIT') return { label: 'EN TRÁNSITO', color: 'yellow' };
+  if (status === 'INACTIVE') return { label: 'INACTIVO', color: 'gray' };
+  if (status === 'OTHER_WAREHOUSE') return { label: 'EN OTRA BODEGA', color: 'gray' };
+  return { label: 'SIN UBICACIÓN', color: 'gray' };
+}
+
+function catalogLocationName(item: WarehouseAssetItem) {
+  if (item.location?.type === 'TRANSIT') {
+    return item.location.name ? `En tránsito · ${item.location.name}` : 'En tránsito';
+  }
+  if (item.location?.type === 'UNKNOWN' || !item.location) return 'Sin ubicación registrada';
+  return item.location.name || (item.location.type === 'WORKSITE' ? 'Obra sin nombre' : 'Bodega sin nombre');
+}
+
 export default function WarehouseAssetsView({
   items,
   warehouseName,
@@ -84,6 +144,7 @@ export default function WarehouseAssetsView({
   onDelete,
   deletingId,
   error,
+  catalog = false,
 }: {
   items: WarehouseAssetItem[];
   warehouseName: string;
@@ -93,14 +154,16 @@ export default function WarehouseAssetsView({
   onDelete?: (item: WarehouseAssetItem) => void;
   deletingId?: string | null;
   error?: string | null;
+  catalog?: boolean;
 }) {
-  const [filter, setFilter] = useState<AssetStatusFilter>('ALL');
+  const [filter, setFilter] = useState<EquipmentFilter>('ALL');
   const [order, setOrder] = useState<AssetOrder>('NAME');
+  const filters = catalog ? CATALOG_FILTERS : FILTERS;
 
   const filteredItems = useMemo(() => {
     const query = normalized(search.trim());
     return items
-      .filter((item) => filter === 'ALL' || statusFor(item) === filter)
+      .filter((item) => filter === 'ALL' || (catalog ? catalogStatusFor(item) : statusFor(item)) === filter)
       .filter((item) => !query || normalized([
         item.assetFamily?.name,
         item.assetSubfamily?.name,
@@ -111,6 +174,7 @@ export default function WarehouseAssetsView({
         item.internalNumber,
         item.brand,
         item.model,
+        ...(catalog ? [item.ownerWarehouseName, item.location?.name] : []),
       ].join(' ')).includes(query))
       .toSorted((a, b) => {
         if (order === 'INTERNAL_ASC' || order === 'INTERNAL_DESC') {
@@ -133,7 +197,7 @@ export default function WarehouseAssetsView({
           b.description,
         ].join(' ')), 'es');
       });
-  }, [filter, items, order, search]);
+  }, [catalog, filter, items, order, search]);
 
   const families = useMemo(() => {
     const grouped = new Map<string, {
@@ -172,7 +236,7 @@ export default function WarehouseAssetsView({
   }, [filteredItems]);
 
   return (
-    <section className={classes.page}>
+    <section className={`${classes.page} ${catalog ? classes.catalogPage : ''}`}>
       <header className={classes.header}>
         <div>
           <h1 className={classes.title}>{warehouseType === 'OWN' ? 'Equipos propios' : 'Equipos del proveedor'}</h1>
@@ -181,6 +245,11 @@ export default function WarehouseAssetsView({
             <span aria-hidden="true">•</span>
             <span className={classes.count}>{items.length} {items.length === 1 ? 'equipo' : 'equipos'}</span>
           </div>
+          {catalog ? (
+            <p className={classes.catalogDescription}>
+              Todos los equipos registrados a nombre de este proveedor, con su ubicación actual.
+            </p>
+          ) : null}
         </div>
         <div className={classes.typeChip}>
           <IconBuildingWarehouse size={19} stroke={2} />
@@ -217,7 +286,7 @@ export default function WarehouseAssetsView({
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>Estado del equipo</Menu.Label>
-                {FILTERS.map((option) => (
+                {filters.map((option) => (
                   <Menu.Item
                     key={option.value}
                     leftSection={filter === option.value ? <IconCheck size={15} /> : <span className={classes.menuSpacer} />}
@@ -244,7 +313,7 @@ export default function WarehouseAssetsView({
         </DataTableToolbar>
 
         <div className={classes.filters} aria-label="Filtrar equipos por estado">
-          {FILTERS.map((option) => (
+          {filters.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -291,20 +360,20 @@ export default function WarehouseAssetsView({
                       <SerialAssetCard
                         key={item.assetId}
                         item={item}
-                        href={`/inventory/serialized-assets/${item.assetId}?scope=${warehouseType === 'OWN' ? 'own' : 'allied'}`}
+                        href={catalog ? undefined : `/inventory/serialized-assets/${item.assetId}?scope=${warehouseType === 'OWN' ? 'own' : 'allied'}`}
                         showcase
-                        statusBadge={statusBadge(item)}
+                        statusBadge={catalog ? catalogStatusBadge(item) : statusBadge(item)}
                         display={{ showOwnerChip: false, showCharge: false }}
                         additionalDetails={[{
                           label: 'Ubicación',
-                          value: item.location?.name || (item.location?.type === 'WORKSITE' ? 'En obra' : warehouseName),
+                          value: catalog ? catalogLocationName(item) : item.location?.name || (item.location?.type === 'WORKSITE' ? 'En obra' : warehouseName),
                           icon: <IconMapPin size={17} stroke={1.8} />,
-                          hideLabel: true,
+                          hideLabel: !catalog,
                         }, {
                           label: 'Dueño',
                           value: item.ownerWarehouseName || warehouseName,
                           icon: <IconBuilding size={17} stroke={1.8} />,
-                          hideLabel: true,
+                          hideLabel: !catalog,
                         }, {
                           label: 'ID interno',
                           value: item.internalNumber ?? item.serialOrEngine ?? '-',
@@ -323,7 +392,7 @@ export default function WarehouseAssetsView({
                           </Button>
                         )}
                         deleteLoading={deletingId === item.assetId}
-                        onDelete={onDelete ? () => onDelete(item) : undefined}
+                        onDelete={!catalog && onDelete ? () => onDelete(item) : undefined}
                       />
                     ))}
                   </div>
@@ -336,7 +405,7 @@ export default function WarehouseAssetsView({
         {families.length === 0 ? (
           <div className={classes.empty}>
             <IconTools size={30} stroke={1.5} />
-            <p>No encontramos equipos con estos criterios.</p>
+            <p>{catalog && items.length === 0 ? 'Este proveedor todavía no tiene equipos registrados.' : 'No encontramos equipos con estos criterios.'}</p>
           </div>
         ) : null}
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -35,6 +35,7 @@ import {
   IconFilter,
   IconPhoto,
   IconPlus,
+  IconRefresh,
   IconSearch,
   IconTrash,
   IconUpload,
@@ -49,7 +50,7 @@ import OwnerCreateModal, {
 } from '@/components/OwnerCreateModal';
 import TableRowActions from '@/components/TableRowActions';
 import classes from '@/components/WarehouseInventoryPageClient.module.css';
-import WarehouseAssetsView from '@/components/WarehouseAssetsView';
+import WarehouseAssetsView, { type OwnerAssetsResponse } from '@/components/WarehouseAssetsView';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -149,6 +150,11 @@ function normalizeInventorySearch(value: string) {
     .toLocaleLowerCase('es');
 }
 
+function inventoryErrorMessage(error: unknown) {
+  if (error instanceof ApiError) return `${error.status}: ${error.message}`;
+  return error instanceof Error ? error.message : 'Error inesperado.';
+}
+
 function WarehouseIdentityMark({
   logoUrl,
   name,
@@ -220,8 +226,16 @@ export default function WarehouseInventoryPageClient({
         ? 'SERIAL'
         : 'ALL';
   const isOwnInventory = inventoryScope === 'own';
+  const isProviderDetail = detailMode && !isOwnInventory;
+  const providerView = searchParams.get('providerView') === 'available' ? 'AVAILABLE' : 'CATALOG';
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [data, setData] = useState<InventoryResponse | null>(null);
+  // Ownership catalogue is deliberately separate from physical stock used by actions.
+  const [ownerAssets, setOwnerAssets] = useState<OwnerAssetsResponse | null>(null);
+  const [ownerAssetsLoading, setOwnerAssetsLoading] = useState(false);
+  const [ownerAssetsError, setOwnerAssetsError] = useState<string | null>(null);
+  const inventoryRequest = useRef<AbortController | null>(null);
+  const warehouseRequestVersion = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingSerialAssetId, setDeletingSerialAssetId] = useState<string | null>(null);
@@ -313,6 +327,14 @@ export default function WarehouseInventoryPageClient({
     );
   };
 
+  const setProviderView = (view: 'CATALOG' | 'AVAILABLE') => {
+    const nextParams = new URLSearchParams(window.location.search);
+    if (view === 'AVAILABLE') nextParams.set('providerView', 'available');
+    else nextParams.delete('providerView');
+    const query = nextParams.toString();
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ''}`, { scroll: false });
+  };
+
   const ownerOptions = useMemo(() => {
     const ownersFromWarehouses = new Map<string, string>();
     warehouses.forEach((warehouse) => {
@@ -359,38 +381,62 @@ export default function WarehouseInventoryPageClient({
   ) => {
     const warehouseToFetch = targetWarehouseId ?? warehouseId;
     if (!warehouseToFetch) return;
+    inventoryRequest.current?.abort();
+    const controller = new AbortController();
+    inventoryRequest.current = controller;
+    const isCurrentRequest = () => inventoryRequest.current === controller && !controller.signal.aborted;
+    const fetchOwnerAssets = isProviderDetail
+      && knownWarehouses.some((warehouse) => warehouse.id === warehouseToFetch && warehouse.type === 'ALLY');
     setLoading(true);
     setError(null);
     setUnauthorized(false);
-
-    try {
-      const response = await api<InventoryResponse>(
-        `/inventory/warehouse/${warehouseToFetch}`,
-        { method: 'GET' }
-      );
-      setData(response);
-      if (response.bulk.length === 0 && response.serial.length === 0) {
-        const selectedWarehouseName =
-          knownWarehouses.find((warehouse) => warehouse.id === warehouseToFetch)?.name ??
-          'esta bodega';
-        setEmptyInventoryWarehouseName(selectedWarehouseName);
-        setEmptyInventoryOpen(true);
-      }
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        setUnauthorized(true);
-        return;
-      }
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error inesperado.');
-      }
-    } finally {
-      setLoading(false);
+    setEmptyInventoryOpen(false);
+    if (fetchOwnerAssets) {
+      setOwnerAssetsLoading(true);
+      setOwnerAssetsError(null);
     }
+
+    const fetchPhysicalStock = async () => {
+      try {
+        const response = await api<InventoryResponse>(
+          `/inventory/warehouse/${warehouseToFetch}`,
+          { method: 'GET', signal: controller.signal },
+        );
+        if (!isCurrentRequest()) return;
+        setData(response);
+        if (!isProviderDetail && response.bulk.length === 0 && response.serial.length === 0) {
+          const selectedWarehouseName =
+            knownWarehouses.find((warehouse) => warehouse.id === warehouseToFetch)?.name ?? 'esta bodega';
+          setEmptyInventoryWarehouseName(selectedWarehouseName);
+          setEmptyInventoryOpen(true);
+        }
+      } catch (err) {
+        if (!isCurrentRequest()) return;
+        setData(null);
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) setUnauthorized(true);
+        else setError(inventoryErrorMessage(err));
+      } finally {
+        if (isCurrentRequest()) setLoading(false);
+      }
+    };
+    const fetchCatalogue = async () => {
+      if (!fetchOwnerAssets) return;
+      try {
+        const response = await api<OwnerAssetsResponse>(
+          `/inventory/owner/${warehouseToFetch}/assets`,
+          { method: 'GET', signal: controller.signal },
+        );
+        if (isCurrentRequest()) setOwnerAssets(response);
+      } catch (err) {
+        if (!isCurrentRequest()) return;
+        setOwnerAssets(null);
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) setUnauthorized(true);
+        else setOwnerAssetsError(inventoryErrorMessage(err));
+      } finally {
+        if (isCurrentRequest()) setOwnerAssetsLoading(false);
+      }
+    };
+    await Promise.all([fetchPhysicalStock(), fetchCatalogue()]);
   };
 
   const openWarehouseDetail = (targetWarehouseId: string) => {
@@ -401,10 +447,12 @@ export default function WarehouseInventoryPageClient({
     `${item.skuId}::${item.ownerWarehouseId}`;
 
   const loadWarehouses = async () => {
+    const requestVersion = ++warehouseRequestVersion.current;
     setWarehousesLoading(true);
     setWarehousesError(null);
     try {
       const response = await api<Warehouse[]>('/warehouses', { method: 'GET' });
+      if (requestVersion !== warehouseRequestVersion.current) return;
       const visibleWarehouses = response.filter((warehouse) =>
         isOwnInventory ? warehouse.type === 'OWN' : warehouse.type === 'ALLY',
       );
@@ -433,6 +481,7 @@ export default function WarehouseInventoryPageClient({
         setData(null);
       }
     } catch (err) {
+      if (requestVersion !== warehouseRequestVersion.current) return;
       if (err instanceof ApiError) {
         setWarehousesError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -441,7 +490,7 @@ export default function WarehouseInventoryPageClient({
         setWarehousesError('Error cargando bodegas.');
       }
     } finally {
-      setWarehousesLoading(false);
+      if (requestVersion === warehouseRequestVersion.current) setWarehousesLoading(false);
     }
   };
 
@@ -499,8 +548,23 @@ export default function WarehouseInventoryPageClient({
   };
 
   useEffect(() => {
+    inventoryRequest.current?.abort();
+    setWarehouseId(null);
+    setData(null);
+    setOwnerAssets(null);
+    setError(null);
+    setOwnerAssetsError(null);
+    setLoading(false);
+    setOwnerAssetsLoading(false);
+    setEmptyInventoryOpen(false);
+    setAdjustOpen(false);
+    setAddStockOpen(false);
     void loadWarehouses();
     loadOwners();
+    return () => {
+      warehouseRequestVersion.current += 1;
+      inventoryRequest.current?.abort();
+    };
   }, [initialWarehouseId, inventoryScope]);
 
   useEffect(() => {
@@ -729,23 +793,6 @@ export default function WarehouseInventoryPageClient({
     }
   };
 
-  if (unauthorized) {
-    return (
-      <main>
-        <Container size="md" py="xl">
-          <Paper shadow="sm" p="xl" radius="md" withBorder>
-            <Text c="red" fw={600}>
-              No autorizado.
-            </Text>
-            <Button mt="md" onClick={() => router.replace('/login')}>
-              Ir a login
-            </Button>
-          </Paper>
-        </Container>
-      </main>
-    );
-  }
-
   const openAdjust = () => {
     if (!data) return;
     setAdjustOpen(true);
@@ -845,7 +892,7 @@ export default function WarehouseInventoryPageClient({
     }
   };
 
-  const deleteSerialAsset = async (item: InventoryResponse['serial'][number]) => {
+  const deleteSerialAsset = async (item: Pick<InventoryResponse['serial'][number], 'assetId' | 'serialOrEngine' | 'description'>) => {
     const label = item.serialOrEngine ?? item.description ?? 'este equipo';
     const reason = window.prompt(
       `Eliminar activo ${label}? El historial se conservará. Escribe el motivo:`,
@@ -913,11 +960,13 @@ export default function WarehouseInventoryPageClient({
       normalizeInventorySearch([item.skuName, item.skuId].filter(Boolean).join(' ')).includes(query),
     );
   }, [data, deferredInventorySearch]);
-  const showOwnInventorySearch = isOwnInventory;
+  const showInventorySearch = isOwnInventory || isProviderDetail;
   const filteredInventoryCount =
-    inventoryView === 'BULK' ? filteredBulkInventory.length : filteredSerialInventory.length;
-  const totalInventoryCount = inventoryView === 'BULK' ? (data?.bulk.length ?? 0) : (data?.serial.length ?? 0);
-  const inventoryItemLabel = inventoryView === 'BULK' ? 'referencias' : 'equipos';
+    isProviderDetail ? filteredBulkInventory.length + filteredSerialInventory.length
+      : inventoryView === 'BULK' ? filteredBulkInventory.length : filteredSerialInventory.length;
+  const totalInventoryCount = isProviderDetail ? (data?.bulk.length ?? 0) + (data?.serial.length ?? 0)
+    : inventoryView === 'BULK' ? (data?.bulk.length ?? 0) : (data?.serial.length ?? 0);
+  const inventoryItemLabel = isProviderDetail ? 'referencias y equipos' : inventoryView === 'BULK' ? 'referencias' : 'equipos';
 
   const warehouseCards = useMemo(
     () =>
@@ -979,8 +1028,10 @@ export default function WarehouseInventoryPageClient({
     setWarehouseOwnerFilter(null);
   };
   const selectedWarehouse =
-    warehouseCards.find((warehouse) => warehouse.id === warehouseId) ?? null;
+    warehouseCards.find((warehouse) => warehouse.id === warehouseId && (!detailMode || warehouse.id === initialWarehouseId)) ?? null;
   const assetsWarehouse = selectedWarehouse ?? warehouseCards[0] ?? null;
+  const currentInventory = data?.warehouseId === warehouseId && (!detailMode || warehouseId === initialWarehouseId) ? data : null;
+  const currentOwnerAssets = ownerAssets?.warehouseId === initialWarehouseId ? ownerAssets : null;
 
   const createOwner = createOwnerCompanyId ? ownerById.get(createOwnerCompanyId) ?? null : null;
   const editOwner = editOwnerCompanyId ? ownerById.get(editOwnerCompanyId) ?? null : null;
@@ -1064,11 +1115,24 @@ export default function WarehouseInventoryPageClient({
     );
   };
 
+  if (unauthorized) {
+    return (
+      <main>
+        <Container size="md" py="xl">
+          <Paper shadow="sm" p="xl" radius="md" withBorder>
+            <Text c="red" fw={600}>No autorizado.</Text>
+            <Button mt="md" onClick={() => router.replace('/login')}>Ir a login</Button>
+          </Paper>
+        </Container>
+      </main>
+    );
+  }
+
   return (
     <main>
-      {data && inventoryView === 'SERIAL' && (isOwnInventory || detailMode) ? (
+      {currentInventory && inventoryView === 'SERIAL' && isOwnInventory ? (
         <WarehouseAssetsView
-          items={data.serial}
+          items={currentInventory.serial}
           warehouseName={assetsWarehouse?.name ?? 'Bodega'}
           warehouseType={assetsWarehouse?.type ?? (isOwnInventory ? 'OWN' : 'ALLY')}
           search={inventorySearch}
@@ -1090,7 +1154,7 @@ export default function WarehouseInventoryPageClient({
               {ownersError}
             </Alert>
           ) : null}
-          {error ? (
+          {error && (!isProviderDetail || providerView === 'AVAILABLE') ? (
             <Alert color="red" variant="light" title="No se pudo consultar el inventario">
               {error}
             </Alert>
@@ -1411,26 +1475,111 @@ export default function WarehouseInventoryPageClient({
             </Paper>
           )}
 
-          {data ? (
+          {isProviderDetail ? (
+            <Stack gap="md">
+              <div className={classes.providerViewToolbar}>
+                <div
+                  className={classes.providerViews}
+                  role="tablist"
+                  aria-label="Vista del inventario del proveedor"
+                  onKeyDown={(event) => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const nextView = event.key === 'Home' ? 'CATALOG' : event.key === 'End' ? 'AVAILABLE'
+                      : providerView === 'CATALOG' ? 'AVAILABLE' : 'CATALOG';
+                    setProviderView(nextView);
+                    document.getElementById(nextView === 'CATALOG' ? 'provider-catalog-tab' : 'provider-available-tab')?.focus();
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    id="provider-catalog-tab"
+                    aria-controls="provider-catalog-panel"
+                    aria-selected={providerView === 'CATALOG'}
+                    tabIndex={providerView === 'CATALOG' ? 0 : -1}
+                    className={`${classes.providerView} ${providerView === 'CATALOG' ? classes.providerViewActive : ''}`}
+                    onClick={() => setProviderView('CATALOG')}
+                  >
+                    Equipos del proveedor
+                    {currentOwnerAssets ? <span className={classes.providerViewCount}>{currentOwnerAssets.serial.length}</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="provider-available-tab"
+                    aria-controls="provider-available-panel"
+                    aria-selected={providerView === 'AVAILABLE'}
+                    tabIndex={providerView === 'AVAILABLE' ? 0 : -1}
+                    className={`${classes.providerView} ${providerView === 'AVAILABLE' ? classes.providerViewActive : ''}`}
+                    onClick={() => setProviderView('AVAILABLE')}
+                  >
+                    Disponibles en bodega
+                  </button>
+                </div>
+                <Button
+                  variant="default"
+                  leftSection={<IconRefresh size={17} />}
+                  onClick={() => void (selectedWarehouse ? handleFetch() : loadWarehouses())}
+                  loading={loading || ownerAssetsLoading}
+                  disabled={warehousesLoading}
+                  className={classes.providerRefresh}
+                >
+                  Refrescar
+                </Button>
+              </div>
+              {providerView === 'CATALOG' ? (
+                <div id="provider-catalog-panel" role="tabpanel" aria-labelledby="provider-catalog-tab" aria-busy={ownerAssetsLoading}>
+                  {ownerAssetsError ? (
+                    <Alert color="red" title="No se pudieron cargar los equipos del proveedor">{ownerAssetsError}</Alert>
+                  ) : null}
+                  {ownerAssetsLoading || (warehousesLoading && !selectedWarehouse) ? (
+                    <Text role="status" c="dimmed" py="md">Cargando equipos del proveedor...</Text>
+                  ) : null}
+                  {currentOwnerAssets ? (
+                    <WarehouseAssetsView
+                      key={`catalog:${currentOwnerAssets.warehouseId}`}
+                      catalog
+                      items={currentOwnerAssets.serial}
+                      warehouseName={selectedWarehouse?.name ?? 'Proveedor'}
+                      warehouseType="ALLY"
+                      search={inventorySearch}
+                      onSearchChange={setInventorySearch}
+                    />
+                  ) : null}
+                </div>
+              ) : loading ? (
+                <Text role="status" c="dimmed" py="md">Actualizando disponibles en bodega...</Text>
+              ) : null}
+            </Stack>
+          ) : null}
+
+          {currentInventory && (!isProviderDetail || providerView === 'AVAILABLE') ? (
+            <div
+              id={isProviderDetail ? 'provider-available-panel' : undefined}
+              role={isProviderDetail ? 'tabpanel' : undefined}
+              aria-labelledby={isProviderDetail ? 'provider-available-tab' : undefined}
+              aria-busy={loading}
+            >
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>Resultado de inventario</Text>
+                  <Text fw={700}>{isProviderDetail ? 'Disponibles en bodega' : 'Resultado de inventario'}</Text>
                   <Text size="sm" c="dimmed">
                     {isOwnInventory
                       ? inventoryView === 'BULK'
                         ? 'Stock masivo disponible en nuestra bodega.'
                         : 'Equipos únicos disponibles en nuestra bodega.'
-                      : 'Stock masivo y equipos únicos de la bodega seleccionada.'}
+                      : 'Stock masivo y equipos únicos disponibles en esta bodega del proveedor.'}
                   </Text>
                 </div>
-                {showOwnInventorySearch ? (
+                {showInventorySearch ? (
                   <Stack gap={6}>
                     <TextInput
                       type="search"
-                      aria-label={inventoryView === 'BULK' ? 'Buscar inventario bulk' : 'Buscar equipos propios'}
+                      aria-label={isProviderDetail ? 'Buscar disponibles en bodega' : inventoryView === 'BULK' ? 'Buscar inventario bulk' : 'Buscar equipos propios'}
                       placeholder={
-                        inventoryView === 'BULK'
+                        isProviderDetail ? 'Buscar por referencia, equipo, familia, serial o número interno' : inventoryView === 'BULK'
                           ? 'Buscar por referencia o nombre'
                           : 'Buscar por equipo, familia, serial o número interno'
                       }
@@ -1458,13 +1607,13 @@ export default function WarehouseInventoryPageClient({
                     </Text>
                   </Stack>
                 ) : null}
-                {showOwnInventorySearch &&
+                {showInventorySearch &&
                 inventorySearch.trim() &&
                 filteredInventoryCount === 0 ? (
                   <Paper withBorder radius="md" p="xl">
                     <Stack align="center" gap={6}>
                       <Text fw={700}>
-                        {inventoryView === 'BULK' ? 'No encontramos referencias bulk' : 'No encontramos equipos'}
+                        {isProviderDetail ? 'No encontramos inventario con esta búsqueda' : inventoryView === 'BULK' ? 'No encontramos referencias bulk' : 'No encontramos equipos'}
                       </Text>
                       <Text size="sm" c="dimmed" ta="center">
                         {inventoryView === 'BULK'
@@ -1478,8 +1627,8 @@ export default function WarehouseInventoryPageClient({
                   </Paper>
                 ) : (
                 <InventoryDisplay
-                  bulk={showOwnInventorySearch ? filteredBulkInventory : data.bulk}
-                  serial={showOwnInventorySearch ? filteredSerialInventory : data.serial}
+                  bulk={showInventorySearch ? filteredBulkInventory : currentInventory.bulk}
+                  serial={showInventorySearch ? filteredSerialInventory : currentInventory.serial}
                   onAdjust={openAdjust}
                   onAddStock={openAddStock}
                   onDeleteSerialAsset={deleteSerialAsset}
@@ -1493,6 +1642,7 @@ export default function WarehouseInventoryPageClient({
                 )}
               </Stack>
             </Paper>
+            </div>
           ) : null}
         </Stack>
       </Container>

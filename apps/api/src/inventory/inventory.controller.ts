@@ -233,6 +233,15 @@ export class InventoryController {
     return this.inventoryService.getWarehouseInventory(warehouseId, includeZero === 'true');
   }
 
+  @Get('owner/:warehouseId/assets')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getOwnerAssetCatalog(
+    @Param('warehouseId', new ParseUUIDPipe()) warehouseId: string,
+  ) {
+    return this.inventoryService.getOwnerAssetCatalog(warehouseId);
+  }
+
   @Get('on-site/:customerWorksiteId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
