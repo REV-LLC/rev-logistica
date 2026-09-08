@@ -9,6 +9,7 @@ import {
   SkuControlType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
 import {
   getCanonicalJackReference,
   isCanonicalJackSubfamily,
@@ -980,10 +981,20 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
-    const lastLedger = await this.prisma.stockLedger.findFirst({
+    const ledgerRows = await this.prisma.stockLedger.findMany({
       where: { assetId },
-      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
+        id: true,
+        appendOrder: true,
+        assetId: true,
+        ownerWarehouseId: true,
+        warehouseId: true,
+        customerWorksiteId: true,
+        refDocumentId: true,
+        refDocumentType: true,
+        quantity: true,
+        isOpeningBalance: true,
         movementType: true,
         warehouse: { select: { id: true, name: true } },
         customerWorksite: {
@@ -997,6 +1008,7 @@ export class AssetsService {
         createdAt: true,
       },
     });
+    const lastLedger = resolveLatestSerializedMovements(ledgerRows).get(asset.id)?.locationMovement;
 
     if (!lastLedger) {
       return {
@@ -1023,6 +1035,7 @@ export class AssetsService {
     if (
       (lastLedger.movementType === MovementType.IN
         || lastLedger.movementType === MovementType.ADJUST)
+      && Number(lastLedger.quantity) > 0
       && lastLedger.warehouse
     ) {
       return {
@@ -1035,7 +1048,7 @@ export class AssetsService {
 
     return {
       assetId,
-      locationType: 'IN_TRANSIT',
+      locationType: lastLedger.movementType === MovementType.TRANSIT ? 'IN_TRANSIT' : 'UNKNOWN',
       warehouse: null,
       customerWorksite: null,
     };

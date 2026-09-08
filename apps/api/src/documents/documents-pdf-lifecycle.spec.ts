@@ -76,6 +76,8 @@ describe('DocumentsService PDF lifecycle', () => {
       files: [],
     };
     const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn(async (run) => run(prisma)),
       document: {
         findUnique: jest.fn().mockResolvedValue(document),
         update: jest.fn().mockResolvedValue({
@@ -93,16 +95,6 @@ describe('DocumentsService PDF lifecycle', () => {
             id: 'asset-1',
             motorConfiguration: 'NONE',
             assignedMotorId: null,
-            sku: { name: 'Equipo' },
-          },
-        ]),
-      },
-      asset: {
-        findMany: jest.fn().mockResolvedValue([
-          {
-            id: 'asset-1',
-            motorConfiguration: 'NONE',
-            assignedMotorId: null,
             sku: { name: 'Equipo', assetFamilyId: 'family-1' },
           },
         ]),
@@ -112,6 +104,7 @@ describe('DocumentsService PDF lifecycle', () => {
     };
     const inventory = {
       moveOut: jest.fn().mockResolvedValue({ ok: true }),
+      invalidateDocumentMovementCaches: jest.fn().mockResolvedValue(undefined),
     };
     const neverFinishes = new Promise(() => undefined);
     const emails = {
@@ -158,6 +151,8 @@ describe('DocumentsService PDF lifecycle', () => {
       files: [],
     };
     const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn(async (run) => run(prisma)),
       document: {
         findUnique: jest.fn().mockResolvedValue(document),
         update: jest.fn().mockResolvedValue({
@@ -181,7 +176,10 @@ describe('DocumentsService PDF lifecycle', () => {
       sku: { findMany: jest.fn().mockResolvedValue([]) },
       assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const inventory = { moveOut: jest.fn().mockResolvedValue({ ok: true }) };
+    const inventory = {
+      moveOut: jest.fn().mockResolvedValue({ ok: true }),
+      invalidateDocumentMovementCaches: jest.fn().mockResolvedValue(undefined),
+    };
     const emails = { sendFinalIfNeeded: jest.fn().mockResolvedValue(undefined) };
     const service = new DocumentsService(
       prisma as never,

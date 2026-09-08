@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   DocumentStatus,
   DocumentType,
@@ -6,7 +6,7 @@ import {
   Prisma,
   Role,
 } from '@prisma/client';
-import { plainToInstance } from 'class-transformer';
+import { ClassConstructor, plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { resolveDocumentInventorySourceMode } from './document-inventory-source';
 import { DocumentsService } from './documents.service';
@@ -46,6 +46,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   const database = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     document: {
       findUnique: jest.fn().mockResolvedValue(document),
       findMany: jest.fn().mockResolvedValue([]),
@@ -83,6 +84,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     moveOnSite: jest.fn(),
     moveIn: jest.fn(),
     moveReturnTransit: jest.fn(),
+    invalidateDocumentMovementCaches: jest.fn().mockResolvedValue(undefined),
   };
   const snapshots = { refresh: jest.fn() };
   const messages = { sendDraft: jest.fn() };
@@ -110,19 +112,19 @@ describe('Document physical inventory origin', () => {
   });
 
   it.each(['Entrega: ON_SITE', 'Entrega: WAREHOUSE'])('dispatches from our custody independently of %s', async (notes) => {
-    const { service, document, inventory } = fixture({ notes });
+    const { service, document, inventory, database } = fixture({ notes });
     await service['approveLoadedRequestDocument'](document, 'office-1');
     expect(inventory.moveOut).toHaveBeenCalledWith({
       warehouseId: 'our-warehouse',
       customerWorksiteId: 'worksite-1',
       documentId: 'document-1',
       items: [{ skuId: 'bulk-sku', quantity: 1, ownerWarehouseId: 'provider-warehouse' }],
-    }, 'office-1');
+    }, 'office-1', database);
     expect(inventory.moveOnSite).not.toHaveBeenCalled();
   });
 
   it('uses each owner warehouse for an explicitly direct provider dispatch', async () => {
-    const { service, document, inventory } = fixture({
+    const { service, document, inventory, database } = fixture({
       inventorySourceMode: OWNER_WAREHOUSES,
       warehouseId: null,
       notes: 'Entrega: WAREHOUSE',
@@ -132,7 +134,7 @@ describe('Document physical inventory origin', () => {
       customerWorksiteId: 'worksite-1',
       documentId: 'document-1',
       items: [{ skuId: 'bulk-sku', quantity: 1, ownerWarehouseId: 'provider-warehouse' }],
-    }, 'office-1');
+    }, 'office-1', database);
     expect(inventory.moveOut).not.toHaveBeenCalled();
   });
 
@@ -180,6 +182,99 @@ describe('Document physical inventory origin', () => {
       'Selecciona la bodega desde donde sale físicamente el equipo',
     );
     expect(inventory.moveOut).not.toHaveBeenCalled();
+  });
+
+  it('reloads the current draft items and origin after locking the document', async () => {
+    const { service, document, inventory, database } = fixture();
+    database.document.findUnique.mockResolvedValueOnce({ ...document,
+      inventorySourceMode: OWNER_WAREHOUSES, warehouseId: null,
+      items: [{ ...baseItem, quantity: new Prisma.Decimal(3) }],
+    });
+    await service['approveLoadedRequestDocument'](document, 'office-1');
+    expect(database.$queryRaw.mock.calls[0][0].sql).toContain('FROM "Document"');
+    expect(database.$queryRaw.mock.calls[0][0].values).toEqual([document.id]);
+    expect(database.$queryRaw.mock.invocationCallOrder[0])
+      .toBeLessThan(database.document.findUnique.mock.invocationCallOrder[0]);
+    expect(inventory.moveOnSite).toHaveBeenCalledWith({ documentId: document.id,
+      customerWorksiteId: 'worksite-1',
+      items: [{ skuId: 'bulk-sku', quantity: 3, ownerWarehouseId: 'provider-warehouse' }],
+    }, 'office-1', database);
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+  });
+
+  it('rejects a draft already confirmed by another operator under the transaction lock', async () => {
+    const { service, document, inventory, database } = fixture();
+    database.document.findUnique.mockResolvedValueOnce({ ...document, status: DocumentStatus.CONFIRMED });
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1'))
+      .rejects.toThrow('Solo se puede aprobar un documento en estado DRAFT');
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+    expect(inventory.invalidateDocumentMovementCaches).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the currently linked provider evidence before writing any movement', async () => {
+    const { service, document, inventory, database } = fixture();
+    database.warehouse.findMany.mockResolvedValueOnce([{ id: 'provider-warehouse', name: 'Proveedor' }] as never);
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1'))
+      .rejects.toMatchObject({ response: { code: 'PROVIDER_REMISSION_REQUIRED' } });
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+    expect(database.document.update).not.toHaveBeenCalled();
+  });
+
+  it('propagates a status-write failure after a valid movement to the same outer transaction', async () => {
+    const { service, document, inventory, database, prisma } = fixture();
+    const failure = new Error('synthetic status write failure');
+    database.document.update.mockRejectedValueOnce(failure);
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toBe(failure);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(inventory.moveOut.mock.calls[0][2]).toBe(database);
+    expect(inventory.moveOut.mock.invocationCallOrder[0]).toBeLessThan(database.document.update.mock.invocationCallOrder[0]);
+    expect(inventory.invalidateDocumentMovementCaches).not.toHaveBeenCalled();
+  });
+
+  it('keeps return billing cutoffs and confirmation in the same transaction as receipt', async () => {
+    const { service, document, inventory, database } = fixture({ type: DocumentType.RETURN });
+    await service['approveLoadedRequestDocument'](document, 'office-1');
+    expect(inventory.moveIn.mock.calls[0][2]).toBe(database);
+    expect(database.documentItem.updateMany).toHaveBeenCalledWith({
+      where: { documentId: document.id, billingCutoffDate: null },
+      data: { billingCutoffDate: document.docDate, billingStatus: 'CUT' },
+    });
+    expect(inventory.moveIn.mock.invocationCallOrder[0]).toBeLessThan(database.documentItem.updateMany.mock.invocationCallOrder[0]);
+    expect(database.documentItem.updateMany.mock.invocationCallOrder[0]).toBeLessThan(database.document.update.mock.invocationCallOrder[0]);
+    expect(database.document.update.mock.invocationCallOrder[0])
+      .toBeLessThan(inventory.invalidateDocumentMovementCaches.mock.invocationCallOrder[0]);
+  });
+
+  it('rolls a return approval back when billing cutoff update fails after receipt', async () => {
+    const { service, document, inventory, database } = fixture({ type: DocumentType.RETURN });
+    const failure = new Error('synthetic billing write failure');
+    database.documentItem.updateMany.mockRejectedValueOnce(failure);
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toBe(failure);
+    expect(inventory.moveIn).toHaveBeenCalledTimes(1);
+    expect(database.document.update).not.toHaveBeenCalled();
+    expect(inventory.invalidateDocumentMovementCaches).not.toHaveBeenCalled();
+  });
+
+  it.each(['P2034', '40001', '40P01'])('retries %s conflicts using a fresh locked read without leaking caches', async (code) => {
+    const { service, document, inventory, database, prisma } = fixture();
+    database.document.update.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('serialization', {
+      code: code === 'P2034' ? code : 'P2010', meta: { code }, clientVersion: 'test',
+    }));
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).resolves.toMatchObject({ status: DocumentStatus.CONFIRMED });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(database.document.findUnique).toHaveBeenCalledTimes(2);
+    expect(database.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['P2034', '40001', '40P01'])('returns readable conflict after three %s failures without side effects outside the transaction', async (code) => {
+    const { service, document, inventory, database, prisma } = fixture();
+    database.document.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('serialization', {
+      code: code === 'P2034' ? code : 'P2010', meta: { code }, clientVersion: 'test',
+    }));
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(inventory.invalidateDocumentMovementCaches).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -279,6 +374,63 @@ describe('Document physical inventory origin', () => {
     expect(database.document.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ inventorySourceMode: OWNER_WAREHOUSES }),
     }));
+  });
+
+  it.each([DocumentType.REMISSION, DocumentType.RETURN])(
+    'uses the supplied business date for generic %s instead of its registration date',
+    async (type) => {
+      const { service, database } = fixture();
+      await service.createDocument({
+        type,
+        status: DocumentStatus.CONFIRMED,
+        warehouseId: 'our-warehouse',
+        inventorySourceMode: WAREHOUSE,
+        notes: 'Entrega: ON_SITE | Fecha documento: 2026-08-17',
+        recipientPhones: ['3001234567'],
+        createdBy: 'user-1',
+      });
+      expect(database.document.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          docDate: new Date('2026-08-17T12:00:00.000Z'),
+          inventorySourceMode: WAREHOUSE,
+          notes: 'Entrega: ON_SITE | Fecha documento: 2026-08-17',
+        }),
+      }));
+    },
+  );
+
+  it('rejects missing explicit physical origin on generic remission before creating a document', async () => {
+    const { service, database } = fixture();
+    await expect(service.createDocument({
+      type: DocumentType.REMISSION,
+      inventorySourceMode: WAREHOUSE,
+      createdBy: 'user-1',
+    })).rejects.toThrow('Selecciona la bodega desde donde sale físicamente el equipo');
+    expect(database.document.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid generic document date before creating a document', async () => {
+    const { service, database } = fixture();
+    await expect(service.createDocument({
+      type: DocumentType.RETURN,
+      notes: 'Fecha documento: no-es-una-fecha',
+      createdBy: 'user-1',
+    })).rejects.toThrow('Fecha documento inválida');
+    expect(database.document.create).not.toHaveBeenCalled();
+  });
+
+  it('retains registration date and null origin for generic clients without either field', async () => {
+    const { service, database } = fixture();
+    const before = Date.now();
+    await service.createDocument({
+      type: DocumentType.REMISSION,
+      createdBy: 'user-1',
+      recipientPhones: ['3001234567'],
+    });
+    const { data } = database.document.create.mock.calls[0][0];
+    expect(data.inventorySourceMode).toBeNull();
+    expect(data.docDate.getTime()).toBeGreaterThanOrEqual(before);
+    expect(data.docDate.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it('allows empty autosaves but requires their explicit source before submission', async () => {
@@ -384,10 +536,10 @@ describe('Document physical inventory origin', () => {
     AutosaveDocumentRequestDto,
   ])('validates the two physical source values independently from delivery mode in %p', async (Dto) => {
     for (const inventorySourceMode of [WAREHOUSE, OWNER_WAREHOUSES, undefined]) {
-      const dto = plainToInstance(Dto, { inventorySourceMode });
+      const dto = plainToInstance(Dto as ClassConstructor<object>, { inventorySourceMode });
       expect((await validate(dto)).filter((error) => error.property === 'inventorySourceMode')).toEqual([]);
     }
-    const invalid = plainToInstance(Dto, { inventorySourceMode: 'ON_SITE' });
+    const invalid = plainToInstance(Dto as ClassConstructor<object>, { inventorySourceMode: 'ON_SITE' });
     expect((await validate(invalid)).find((error) => error.property === 'inventorySourceMode')).toBeDefined();
   });
 });

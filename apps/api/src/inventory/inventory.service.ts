@@ -57,6 +57,12 @@ import { lockBulkStock } from './bulk-stock-lock';
 import { buildAssetValidationError } from './asset-validation-error';
 import { resolveLatestSerializedMovements } from './serialized-ledger-location';
 import {
+  getInventoryDatePrecision,
+  inventoryEffectiveLowerBound,
+  resolveSerializedEffectiveAt,
+  type InventoryDatePrecision,
+} from './business-date-ledger-order';
+import {
   buildSerializedWarehouseAvailability,
   isSerializedAvailable,
 } from './serialized-warehouse-availability';
@@ -131,6 +137,21 @@ export class InventoryService {
       keys.push(this.getOnSiteCacheKey(params.customerWorksiteId));
     }
     await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  }
+
+  /** The caller of an enclosing transaction must invoke this only after commit. */
+  async invalidateDocumentMovementCaches(warehouseIds: string[], customerWorksiteId: string) {
+    await Promise.all([
+      this.invalidateInventoryCache({ customerWorksiteId }),
+      ...[...new Set(warehouseIds)].map((warehouseId) => this.invalidateInventoryCache({ warehouseId })),
+    ]);
+  }
+
+  private runMovementTransaction<T>(
+    execute: (tx: Prisma.TransactionClient) => Promise<T>,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<T> {
+    return transaction ? execute(transaction) : this.prisma.$transaction(execute);
   }
 
   private async createMotorAsset(
@@ -235,13 +256,17 @@ export class InventoryService {
   }
 
   private async resolveLedgerContext(documentId: string | undefined, tx: Prisma.TransactionClient) {
-    if (!documentId) return { refDocumentType: null, effectiveAt: new Date() };
+    if (!documentId) return { refDocumentType: null, effectiveAt: new Date(), datePrecision: 'INSTANT' as const };
     const document = await tx.document.findUnique({
       where: { id: documentId },
-      select: { type: true, docDate: true },
+      select: { type: true, docDate: true, notes: true },
     });
     if (!document) throw new NotFoundException('Document not found');
-    return { refDocumentType: document.type, effectiveAt: document.docDate };
+    return {
+      refDocumentType: document.type,
+      effectiveAt: document.docDate,
+      datePrecision: getInventoryDatePrecision(document),
+    };
   }
 
   private async lockAndAssertSerializedLocation(
@@ -251,15 +276,18 @@ export class InventoryService {
     expectedLocation: (assetId: string) =>
       | { type: 'WAREHOUSE'; id: string }
       | { type: 'WORKSITE'; id: string },
+    datePrecision: InventoryDatePrecision = 'INSTANT',
   ) {
-    if (!assetIds.length) return;
+    const lowerBound = inventoryEffectiveLowerBound(effectiveAt, datePrecision);
+    if (!assetIds.length) return lowerBound;
+    let resolvedEffectiveAt = lowerBound;
     const sortedIds = [...assetIds].sort();
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "Asset" WHERE "id" IN (${Prisma.join(sortedIds)}) ORDER BY "id" FOR UPDATE`,
     );
     const rows = await tx.stockLedger.findMany({
       where: { assetId: { in: sortedIds } },
-      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         assetId: true,
@@ -271,6 +299,7 @@ export class InventoryService {
         customerWorksiteId: true,
         effectiveAt: true,
         createdAt: true,
+        appendOrder: true,
         isOpeningBalance: true,
         quantity: true,
       },
@@ -284,7 +313,10 @@ export class InventoryService {
           code: 'ASSET_LOCATION_UNKNOWN', reason: 'NO_LOCATION',
         });
       }
-      if (!latest.isOpeningBalance && latest.effectiveAt.getTime() > effectiveAt.getTime()) {
+      const candidate = latest.isOpeningBalance
+        ? lowerBound
+        : resolveSerializedEffectiveAt(effectiveAt, latest.effectiveAt, datePrecision);
+      if (!candidate) {
         throw await buildAssetValidationError(tx, assetId, {
           code: 'RETROACTIVE_INVENTORY_MOVEMENT',
           reason: 'RETROACTIVE', latestMovement: latest, requestedEffectiveAt: effectiveAt,
@@ -311,12 +343,16 @@ export class InventoryService {
           reason: 'LOCATION_CONFLICT', expectedLocation: expected, latestMovement: location,
         });
       }
+      if (candidate.getTime() > resolvedEffectiveAt.getTime()) {
+        resolvedEffectiveAt = candidate;
+      }
     }
+    return resolvedEffectiveAt;
   }
 
   private parseLedgerCursor(cursor: string) {
     const raw = cursor.trim();
-    let payload: { effectiveAt?: string; createdAt?: string; id?: string };
+    let payload: { effectiveAt?: string; createdAt?: string; id?: string; appendOrder?: number | null };
 
     try {
       if (raw.startsWith('{')) {
@@ -337,13 +373,21 @@ export class InventoryService {
     if (Number.isNaN(effectiveAt.getTime())) {
       throw new BadRequestException('Invalid cursor');
     }
-
-    return { effectiveAt, id: String(payload.id) };
+    const hasAppendOrder = Object.prototype.hasOwnProperty.call(payload, 'appendOrder');
+    if (hasAppendOrder && payload.appendOrder !== null
+      && (!Number.isInteger(payload.appendOrder) || payload.appendOrder! < 1)) {
+      throw new BadRequestException('Invalid cursor');
+    }
+    return { effectiveAt, id: String(payload.id), appendOrder: payload.appendOrder, hasAppendOrder };
   }
 
-  private makeLedgerCursor(entry: { effectiveAt: Date; id: string }) {
+  private makeLedgerCursor(entry: { effectiveAt: Date; id: string; appendOrder?: number | null }, legacyOrder = false) {
     return Buffer.from(
-      JSON.stringify({ effectiveAt: entry.effectiveAt.toISOString(), id: entry.id }),
+      JSON.stringify({
+        effectiveAt: entry.effectiveAt.toISOString(),
+        ...(legacyOrder ? {} : { appendOrder: entry.appendOrder ?? null }),
+        id: entry.id,
+      }),
     ).toString('base64');
   }
 
@@ -1085,9 +1129,9 @@ export class InventoryService {
     });
   }
 
-  async moveOut(payload: CreateInventoryOutDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+  async moveOut(payload: CreateInventoryOutDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseId },
@@ -1110,17 +1154,18 @@ export class InventoryService {
       const ownerWarehouseIds = [
         ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
       ];
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
 
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
 
       await lockBulkStock(tx, bulkSkuIds);
-      await this.lockAndAssertSerializedLocation(
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         () => ({ type: 'WAREHOUSE', id: payload.warehouseId }),
+        datePrecision,
       );
 
       if (bulkSkuIds.length) {
@@ -1272,9 +1317,9 @@ export class InventoryService {
         count: created.length,
         ids: created.map((entry) => entry.id),
       };
-    });
+    }, transaction);
 
-    await this.invalidateInventoryCache({
+    if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
       customerWorksiteId: payload.customerWorksiteId,
     });
@@ -1282,12 +1327,12 @@ export class InventoryService {
     return result;
   }
 
-  async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string) {
+  async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string, transaction?: Prisma.TransactionClient) {
     const ownerWarehouseIds = [
       ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
     ];
-    const created = await this.prisma.$transaction(async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+    const created = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const customerWorksite = await tx.customerWorksite.findUnique({
         where: { id: payload.customerWorksiteId },
@@ -1299,7 +1344,7 @@ export class InventoryService {
 
       const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
         this.normalizeOperationItems(payload.items);
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
       const serialIds = [...serialAssetIds.values()];
       await lockBulkStock(tx, bulkGroups.map((group) => group.skuId));
 
@@ -1398,11 +1443,12 @@ export class InventoryService {
         }
       }
 
-      await this.lockAndAssertSerializedLocation(
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         (assetId) => ({ type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId) ?? '' }),
+        datePrecision,
       );
 
       if (serialIds.length) {
@@ -1493,16 +1539,9 @@ export class InventoryService {
       }
 
       return createdLedger;
-    });
+    }, transaction);
 
-    await this.invalidateInventoryCache({
-      customerWorksiteId: payload.customerWorksiteId,
-    });
-    await Promise.all(
-      ownerWarehouseIds.map((ownerWarehouseId) =>
-        this.invalidateInventoryCache({ warehouseId: ownerWarehouseId }),
-      ),
-    );
+    if (!transaction) await this.invalidateDocumentMovementCaches(ownerWarehouseIds, payload.customerWorksiteId);
 
     return {
       count: created.length,
@@ -1510,11 +1549,11 @@ export class InventoryService {
     };
   }
 
-  async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
+  async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.runMovementTransaction(async (tx) => {
       const document = await tx.document.findUnique({
         where: { id: payload.documentId },
-        select: { id: true, type: true, customerWorksiteId: true, docDate: true },
+        select: { id: true, type: true, customerWorksiteId: true, docDate: true, notes: true },
       });
       if (!document || document.type !== DocumentType.RETURN) {
         throw new BadRequestException('El documento debe ser una devolución');
@@ -1537,11 +1576,12 @@ export class InventoryService {
       const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
       const serialIds = [...serialAssetIds.values()];
       await lockBulkStock(tx, bulkSkuIds);
-      await this.lockAndAssertSerializedLocation(
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
         document.docDate,
         () => ({ type: 'WORKSITE', id: payload.customerWorksiteId }),
+        getInventoryDatePrecision(document),
       );
       const sourceRows = await tx.stockLedger.groupBy({
         by: ['skuId', 'assetId', 'ownerWarehouseId', 'movementType'],
@@ -1594,28 +1634,28 @@ export class InventoryService {
           customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
           refDocumentType: DocumentType.RETURN, skuId: item.skuId, assetId: null,
           ownerWarehouseId: item.ownerWarehouseId, quantity: item.quantity,
-          effectiveAt: document.docDate, createdBy: userId,
+          effectiveAt, createdBy: userId,
         }})),
         ...serialIds.map((assetId) => tx.stockLedger.create({ data: {
           movementType: MovementType.TRANSIT, warehouseId: null,
           customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
           refDocumentType: DocumentType.RETURN, skuId: null, assetId,
           ownerWarehouseId: assetOwner.get(assetId)!, quantity: 1,
-          effectiveAt: document.docDate, createdBy: userId,
+          effectiveAt, createdBy: userId,
         }})),
       ]);
       if (serialIds.length) {
         await tx.asset.updateMany({ where: { id: { in: serialIds } }, data: { warehouseCurrentId: null } });
       }
       return { count: created.length, ids: created.map((row) => row.id) };
-    });
-    await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
+    }, transaction);
+    if (!transaction) await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
     return result;
   }
 
-  async moveIn(payload: CreateInventoryInDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+  async moveIn(payload: CreateInventoryInDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseId },
@@ -1638,15 +1678,16 @@ export class InventoryService {
       const ownerWarehouseIds = [
         ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
       ];
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
       await lockBulkStock(tx, bulkSkuIds);
-      await this.lockAndAssertSerializedLocation(
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         () => ({ type: 'WORKSITE', id: payload.customerWorksiteId }),
+        datePrecision,
       );
 
       if (bulkSkuIds.length) {
@@ -1796,9 +1837,9 @@ export class InventoryService {
         count: created.length,
         ids: created.map((entry) => entry.id),
       };
-    });
+    }, transaction);
 
-    await this.invalidateInventoryCache({
+    if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
       customerWorksiteId: payload.customerWorksiteId,
     });
@@ -1818,6 +1859,7 @@ export class InventoryService {
 
     const catalogMovementSelect = {
       id: true,
+      appendOrder: true,
       assetId: true,
       warehouseId: true,
       customerWorksiteId: true,
@@ -1875,6 +1917,7 @@ export class InventoryService {
           orderBy: [
             { isOpeningBalance: 'asc' },
             { effectiveAt: 'desc' },
+            { appendOrder: { sort: 'desc', nulls: 'last' } },
             { createdAt: 'desc' },
             { id: 'desc' },
           ],
@@ -2179,17 +2222,28 @@ export class InventoryService {
       .map(([assetId, quantity]) => ({ assetId, quantity }));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
-    const serialStatusByAssetId = new Map<string, MovementType>();
+    const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     const serialLocationByAssetId = new Map<
       string,
-      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT'; name: string | null }
+      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN'; name: string | null }
     >();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
+          id: true,
+          appendOrder: true,
           assetId: true,
+          ownerWarehouseId: true,
+          warehouseId: true,
+          customerWorksiteId: true,
+          refDocumentId: true,
+          refDocumentType: true,
+          quantity: true,
+          isOpeningBalance: true,
+          effectiveAt: true,
+          createdAt: true,
           movementType: true,
           warehouse: { select: { name: true } },
           customerWorksite: {
@@ -2200,29 +2254,27 @@ export class InventoryService {
           },
         },
       });
-      serialLedgerRows.forEach((row) => {
-        if (!row.assetId) return;
-        const key = row.assetId.toLowerCase();
-        if (!serialStatusByAssetId.has(key)) {
-          serialStatusByAssetId.set(key, row.movementType);
-          const worksiteName =
-            row.customerWorksite?.alias?.trim()
-            || row.customerWorksite?.worksite.name
-            || null;
-          if (
-            (row.movementType === MovementType.ON_SITE
-              || row.movementType === MovementType.OUT)
-            && worksiteName
-          ) {
-            serialLocationByAssetId.set(key, { type: 'WORKSITE', name: worksiteName });
-          } else if (
-            (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
-            && row.warehouse?.name
-          ) {
-            serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse.name });
-          } else {
-            serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
-          }
+      resolveLatestSerializedMovements(serialLedgerRows).forEach(({ locationMovement: row }, assetId) => {
+        const key = assetId.toLowerCase();
+        serialStatusByAssetId.set(key, 'UNKNOWN');
+        serialLocationByAssetId.set(key, { type: 'UNKNOWN', name: null });
+        if (!row) return;
+        if (
+          (row.movementType === MovementType.ON_SITE || row.movementType === MovementType.OUT)
+          && row.customerWorksiteId
+        ) {
+          const name = row.customerWorksite?.alias?.trim() || row.customerWorksite?.worksite.name || null;
+          serialStatusByAssetId.set(key, 'OUT');
+          serialLocationByAssetId.set(key, { type: 'WORKSITE', name });
+        } else if (
+          (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+          && Number(row.quantity) > 0 && row.warehouseId
+        ) {
+          serialStatusByAssetId.set(key, 'IN');
+          serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse?.name ?? null });
+        } else if (row.movementType === MovementType.TRANSIT) {
+          serialStatusByAssetId.set(key, 'TRANSIT');
+          serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
         }
       });
     }
@@ -2368,12 +2420,10 @@ export class InventoryService {
           imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
-          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          status: serialStatusByAssetId.get(row.assetId.toLowerCase()) ?? 'UNKNOWN',
           location:
-            serialLocationByAssetId.get(row.assetId)
-            ?? (row.quantity > 0
-              ? { type: 'WAREHOUSE' as const, name: warehouse.name }
-              : { type: 'TRANSIT' as const, name: null }),
+            serialLocationByAssetId.get(row.assetId.toLowerCase())
+            ?? { type: 'UNKNOWN' as const, name: null },
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
           motorConfiguration:
@@ -2494,18 +2544,43 @@ export class InventoryService {
     const serialBase = serialNet.filter((row) => isSerializedAvailable(row.quantity));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
-    const serialStatusByAssetId = new Map<string, MovementType>();
+    const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { assetId: true, movementType: true },
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          appendOrder: true,
+          assetId: true,
+          ownerWarehouseId: true,
+          warehouseId: true,
+          customerWorksiteId: true,
+          refDocumentId: true,
+          refDocumentType: true,
+          quantity: true,
+          isOpeningBalance: true,
+          effectiveAt: true,
+          createdAt: true,
+          movementType: true,
+        },
       });
-      serialLedgerRows.forEach((row) => {
-        if (!row.assetId) return;
-        if (!serialStatusByAssetId.has(row.assetId)) {
-          serialStatusByAssetId.set(row.assetId, row.movementType);
+      resolveLatestSerializedMovements(serialLedgerRows).forEach(({ locationMovement: row }, assetId) => {
+        let status: 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN' = 'UNKNOWN';
+        if (row?.movementType === MovementType.TRANSIT) {
+          status = 'TRANSIT';
+        } else if (
+          row && (row.movementType === MovementType.OUT || row.movementType === MovementType.ON_SITE)
+          && row.customerWorksiteId
+        ) {
+          status = 'OUT';
+        } else if (
+          row && (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+          && Number(row.quantity) > 0 && row.warehouseId
+        ) {
+          status = 'IN';
         }
+        serialStatusByAssetId.set(assetId, status);
       });
     }
 
@@ -2638,7 +2713,7 @@ export class InventoryService {
           imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
-          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          status: serialStatusByAssetId.get(row.assetId) ?? 'UNKNOWN',
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
           motorConfiguration:
@@ -2690,6 +2765,12 @@ export class InventoryService {
   async getLedger(query: GetInventoryLedgerDto) {
     const take = Math.min(query.take ?? LEDGER_DEFAULT_TAKE, LEDGER_MAX_TAKE);
     const where: Prisma.StockLedgerWhereInput = {};
+    const cursor = query.cursor ? this.parseLedgerCursor(query.cursor) : null;
+    // An existing pagination session must keep its original ordering. Looking
+    // up one old cursor row cannot reveal which newly reordered rows it already
+    // consumed. Fresh sessions use appendOrder; old cursors stay legacy until
+    // the caller restarts the listing, without skipping or duplicating rows.
+    const legacyOrder = cursor !== null && !cursor.hasAppendOrder;
 
     if (query.warehouseId) where.warehouseId = query.warehouseId;
     if (query.customerWorksiteId) where.customerWorksiteId = query.customerWorksiteId;
@@ -2716,13 +2797,22 @@ export class InventoryService {
       where.effectiveAt = effectiveAt;
     }
 
-    if (query.cursor) {
-      const cursor = this.parseLedgerCursor(query.cursor);
+    if (cursor) {
+      const cursorAppendOrder = cursor.appendOrder ?? null;
+      const sameInstantAfterCursor: Prisma.StockLedgerWhereInput[] = cursorAppendOrder === null
+        ? [{ appendOrder: null, id: { lt: cursor.id } }]
+        : [
+            { appendOrder: { lt: cursorAppendOrder } },
+            { appendOrder: null },
+            { appendOrder: cursorAppendOrder, id: { lt: cursor.id } },
+          ];
       where.AND = [
         {
           OR: [
             { effectiveAt: { lt: cursor.effectiveAt } },
-            { effectiveAt: cursor.effectiveAt, id: { lt: cursor.id } },
+            legacyOrder
+              ? { effectiveAt: cursor.effectiveAt, id: { lt: cursor.id } }
+              : { effectiveAt: cursor.effectiveAt, OR: sameInstantAfterCursor },
           ],
         },
       ];
@@ -2731,7 +2821,9 @@ export class InventoryService {
     const items = await this.prisma.stockLedger.findMany({
       where,
       take,
-      orderBy: [{ effectiveAt: 'desc' }, { id: 'desc' }],
+      orderBy: legacyOrder
+        ? [{ effectiveAt: 'desc' }, { id: 'desc' }]
+        : [{ effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       include: {
         sku: {
           select: { id: true, name: true, imageUrl: true, imageFileObjectId: true },
@@ -2785,7 +2877,7 @@ export class InventoryService {
 
     const nextCursor =
       normalized.length === take
-        ? this.makeLedgerCursor(normalized[normalized.length - 1])
+        ? this.makeLedgerCursor(normalized[normalized.length - 1], legacyOrder)
         : null;
 
     return { items: normalized, nextCursor };
@@ -3524,24 +3616,13 @@ export class InventoryService {
     return monthStart;
   }
 
-  private mapSerialStatus(movementType: MovementType | undefined, quantity: number) {
-    if (movementType === MovementType.TRANSIT) {
-      return 'TRANSIT';
-    }
-    if (movementType === MovementType.OUT || movementType === MovementType.ON_SITE) {
-      return 'OUT';
-    }
-    if (movementType === MovementType.IN || movementType === MovementType.ADJUST) {
-      return 'IN';
-    }
-    return quantity > 0 ? 'IN' : 'OUT';
-  }
-
-  private async assertOwnerWarehousesExist(ownerWarehouseIds: string[]) {
+  private async assertOwnerWarehousesExist(
+    ownerWarehouseIds: string[], prismaClient: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
     if (!ownerWarehouseIds.length) {
       return;
     }
-    const warehouses = await this.prisma.warehouse.findMany({
+    const warehouses = await prismaClient.warehouse.findMany({
       where: { id: { in: ownerWarehouseIds } },
       select: { id: true },
     });

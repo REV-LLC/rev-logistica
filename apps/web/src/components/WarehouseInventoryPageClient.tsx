@@ -85,7 +85,7 @@ interface InventoryResponse {
     minimumChargeHours?: number | string | null;
     status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
     location?: {
-      type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT';
+      type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
       name: string | null;
     } | null;
     internalNumber?: string | number | null;

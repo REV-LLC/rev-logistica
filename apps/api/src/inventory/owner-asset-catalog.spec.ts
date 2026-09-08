@@ -15,7 +15,7 @@ describe('owner asset catalogue', () => {
   const delivered = new Date('2026-09-01T12:00:00Z');
 
   function movement(overrides: Record<string, any> = {}) {
-    const result = {
+    const result: Record<string, any> = {
       id: 'opening', assetId: 'asset', ownerWarehouseId: provider.id,
       movementType: MovementType.ADJUST, quantity: 1,
       isOpeningBalance: true, effectiveAt: registered, createdAt: registered,
@@ -70,7 +70,13 @@ describe('owner asset catalogue', () => {
             const [key, direction] = Object.entries(clause)[0];
             const a = left[key] instanceof Date ? left[key].getTime() : left[key];
             const b = right[key] instanceof Date ? right[key].getTime() : right[key];
-            if (a !== b) return (a > b ? 1 : -1) * (direction === 'desc' ? -1 : 1);
+            if (typeof direction === 'object' && direction !== null) {
+              const options = direction as { nulls: 'first' | 'last'; sort: 'asc' | 'desc' };
+              if (a == null && b == null) continue;
+              if (a == null) return options.nulls === 'last' ? 1 : -1;
+              if (b == null) return options.nulls === 'last' ? -1 : 1;
+              if (a !== b) return (a > b ? 1 : -1) * (options.sort === 'desc' ? -1 : 1);
+            } else if (a !== b) return (a > b ? 1 : -1) * (direction === 'desc' ? -1 : 1);
           }
           return 0;
         }).slice(0, select.ledger.take),
@@ -108,7 +114,7 @@ describe('owner asset catalogue', () => {
       where: { warehouseOwnerId: provider.id, deletedAt: null },
       select: expect.objectContaining({ ledger: expect.objectContaining({
         take: 1,
-        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
       }) }),
     }));
     expect(transferFind).not.toHaveBeenCalled();
@@ -121,6 +127,23 @@ describe('owner asset catalogue', () => {
       status: 'IN', quantity: 0, isAvailableInOwnerWarehouse: false,
       location: { type: 'WAREHOUSE', id: custody.id, name: custody.name, warehouseType: 'OWN' },
     });
+  });
+
+  it.each([null, 2])('the database head honors append order after a pickup order %s, not transaction start or UUID', async (pickupOrder) => {
+    const event = { isOpeningBalance: false, refDocumentId: 'pickup', refDocumentType: 'PROVIDER_PICKUP' };
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ ...event, id: 'zz-out', appendOrder: pickupOrder === null ? null : 1,
+        movementType: 'OUT', quantity: -1 }),
+      movement({ ...event, id: 'zz-in', appendOrder: pickupOrder, movementType: 'IN', warehouse: custody }),
+      movement({ id: '00-dispatch', isOpeningBalance: false, appendOrder: 3,
+        refDocumentId: 'dispatch', refDocumentType: 'REMISSION',
+        createdAt: new Date(registered.getTime() - 1000), movementType: 'OUT', quantity: -1,
+        warehouse: custody, customerWorksite: site }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'OUT', quantity: 0, location: { type: 'WORKSITE', id: site.id },
+    });
+    expect(transferFind).not.toHaveBeenCalled();
   });
 
   it('counts a completed return at the provider even when the IN keeps its origin worksite', async () => {
