@@ -74,7 +74,7 @@ describe('readable serialized movement errors', () => {
     const { tx, service } = setup();
     await expect(service['lockAndAssertSerializedLocation'](
       tx as never, [assetId], docDate, () => ({ type: 'WAREHOUSE', id: ownerId }),
-    )).resolves.toBeUndefined();
+    )).resolves.toBe(docDate);
     expect(tx.asset.findMany).not.toHaveBeenCalled();
     expect(tx.warehouse.findUnique).not.toHaveBeenCalled();
     expect(tx.stockLedger.create).not.toHaveBeenCalled();

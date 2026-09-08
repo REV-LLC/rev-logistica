@@ -908,6 +908,9 @@ model StockLedger {
   refDocumentType DocumentType?
 
   effectiveAt DateTime @default(now())
+  // Append order is independent of transaction-start audit timestamps. Legacy
+  // rows remain null and retain their original createdAt/id tie-break ordering.
+  appendOrder Int? @default(autoincrement())
   // Catalogue opening stock, not a dated physical receipt or availability start.
   isOpeningBalance Boolean @default(false)
   createdAt DateTime @default(now())

@@ -48,6 +48,41 @@ function transfer(refDocumentType = 'PROVIDER_PICKUP') {
 }
 
 describe('serialized ledger location resolution', () => {
+  it.each([null, 2])('orders a new append after a pickup with appendOrder=%s despite an older transaction timestamp', (pickupOrder) => {
+    const { source, destination } = transfer();
+    source.appendOrder = pickupOrder === null ? null : pickupOrder - 1;
+    destination.appendOrder = pickupOrder;
+    const dispatched = row({
+      id: '00000000-0000-0000-0000-000000000000',
+      appendOrder: 3, isOpeningBalance: false, effectiveAt,
+      createdAt: new Date(registeredAt.getTime() - 10000),
+      movementType: 'OUT', quantity: -1, customerWorksiteId: 'site',
+      refDocumentId: 'dispatch', refDocumentType: 'REMISSION',
+    });
+    expect(resolveLatestSerializedMovements([source, destination, dispatched]).get('mixer-3'))
+      .toEqual({ latest: dispatched, locationMovement: dispatched });
+  });
+
+  it('keeps true effective chronology ahead of any append number', () => {
+    const prior = row({ isOpeningBalance: false, appendOrder: 999, effectiveAt });
+    const future = row({ id: 'future', isOpeningBalance: false, appendOrder: null, effectiveAt: registeredAt });
+    expect(resolveLatestSerializedMovements([prior, future]).get('mixer-3')?.latest).toBe(future);
+  });
+
+  it('does not let a new catalogue opening override an older real movement', () => {
+    const opening = row({ appendOrder: 999 });
+    const real = row({ id: 'real', isOpeningBalance: false, appendOrder: null, effectiveAt });
+    expect(resolveLatestSerializedMovements([opening, real]).get('mixer-3')?.latest).toBe(real);
+  });
+
+  it('preserves two null historical rows in exactly createdAt and UUID order', () => {
+    const first = row({ id: 'a', appendOrder: null });
+    const second = row({ id: 'z', appendOrder: null });
+    expect(resolveLatestSerializedMovements([first, second]).get('mixer-3')?.latest).toBe(second);
+    first.createdAt = new Date(registeredAt.getTime() + 1);
+    expect(resolveLatestSerializedMovements([first, second]).get('mixer-3')?.latest).toBe(first);
+  });
+
   it('returns no serialized result for empty input or bulk rows', () => {
     expect(resolveLatestSerializedMovements([]).size).toBe(0);
     expect(resolveLatestSerializedMovements([row({ assetId: null })]).size).toBe(0);

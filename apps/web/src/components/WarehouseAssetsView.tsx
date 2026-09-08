@@ -19,7 +19,7 @@ import SerialAssetCard from '@/components/SerialAssetCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import classes from '@/components/WarehouseAssetsView.module.css';
 
-type AssetStatusFilter = 'ALL' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT';
+type AssetStatusFilter = 'ALL' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN';
 type AssetOrder = 'NAME' | 'INTERNAL_ASC' | 'INTERNAL_DESC';
 
 export type WarehouseAssetItem = {
@@ -66,6 +66,7 @@ const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }
   { value: 'WORKSHOP', label: 'En taller', color: '#f36a0a' },
   { value: 'RESERVED', label: 'Reservados', color: '#6d45d8' },
   { value: 'INACTIVE', label: 'Inactivos', color: '#a8afb9' },
+  { value: 'UNKNOWN', label: 'Sin ubicación', color: '#a8afb9' },
 ];
 
 const CATALOG_FILTERS: Array<{ value: EquipmentFilter; label: string; color?: string }> = [
@@ -87,6 +88,7 @@ function statusFor(item: WarehouseAssetItem): AssetStatusFilter {
   const status = normalized(item.status).toUpperCase();
   const locationName = normalized(item.location?.name);
   if (status === 'INACTIVE') return 'INACTIVE';
+  if (status === 'UNKNOWN' || item.location?.type === 'UNKNOWN') return 'UNKNOWN';
   if (status === 'RESERVED') return 'RESERVED';
   if (status === 'WORKSHOP' || locationName.includes('taller')) return 'WORKSHOP';
   if (item.location?.type === 'TRANSIT' || status === 'TRANSIT') return 'TRANSIT';
@@ -100,6 +102,7 @@ function statusBadge(item: WarehouseAssetItem) {
   if (status === 'WORKSHOP') return { label: 'EN TALLER', color: 'orange' };
   if (status === 'RESERVED') return { label: 'RESERVADO', color: 'violet' };
   if (status === 'INACTIVE') return { label: 'INACTIVO', color: 'gray' };
+  if (status === 'UNKNOWN') return { label: 'SIN UBICACIÓN', color: 'gray' };
   if (status === 'TRANSIT') return { label: 'EN TRÁNSITO', color: 'yellow' };
   return { label: 'DISPONIBLE', color: 'green' };
 }
@@ -366,7 +369,9 @@ export default function WarehouseAssetsView({
                         display={{ showOwnerChip: false, showCharge: false }}
                         additionalDetails={[{
                           label: 'Ubicación',
-                          value: catalog ? catalogLocationName(item) : item.location?.name || (item.location?.type === 'WORKSITE' ? 'En obra' : warehouseName),
+                          value: catalog ? catalogLocationName(item) : statusFor(item) === 'UNKNOWN'
+                            ? 'Sin ubicación registrada'
+                            : item.location?.name || (item.location?.type === 'WORKSITE' ? 'En obra' : warehouseName),
                           icon: <IconMapPin size={17} stroke={1.8} />,
                           hideLabel: !catalog,
                         }, {

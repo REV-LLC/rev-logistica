@@ -11,6 +11,7 @@ export type SerializedLedgerMovement = {
   isOpeningBalance: boolean;
   effectiveAt: Date;
   createdAt: Date;
+  appendOrder?: number | null;
 };
 
 export type ResolvedSerializedMovement<T extends SerializedLedgerMovement> = {
@@ -62,6 +63,9 @@ export function resolveLatestSerializedMovements<T extends SerializedLedgerMovem
   const sorted = [...rows].sort((a, b) =>
     Number(a.isOpeningBalance) - Number(b.isOpeningBalance)
     || b.effectiveAt.getTime() - a.effectiveAt.getTime()
+    // New rows are appended after legacy rows at the same effective instant.
+    // Two legacy nulls retain their historical order exactly.
+    || (b.appendOrder ?? 0) - (a.appendOrder ?? 0)
     || b.createdAt.getTime() - a.createdAt.getTime()
     || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   const providerEvents = new Map<string, T[]>();
