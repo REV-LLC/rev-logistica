@@ -1,11 +1,13 @@
 import '@mantine/core/styles.css';
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import Providers from '@/components/Providers';
+import BrowserTabTitle from '@/components/BrowserTabTitle';
 import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
-  title: 'Rev Logistica Backoffice',
+  title: 'REV Logística',
   description: 'Backoffice UI for inventory operations.',
   applicationName: 'REV Logística',
   manifest: '/manifest.webmanifest',
@@ -32,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body suppressHydrationWarning>
+        <Suspense fallback={null}>
+          <BrowserTabTitle />
+        </Suspense>
         <Providers>{children}</Providers>
         <Analytics />
       </body>
