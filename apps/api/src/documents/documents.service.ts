@@ -10,6 +10,7 @@ import {
   DocumentItemBillingStatus,
   DocumentStatus,
   DocumentType,
+  InventorySourceMode,
   NotificationChannel,
   Prisma,
   Role,
@@ -22,6 +23,7 @@ import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
+import { resolveDocumentInventorySourceMode } from './document-inventory-source';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -217,6 +219,7 @@ export class DocumentsService {
     status: DocumentStatus;
     consecutive: string | null;
     warehouseId: string | null;
+    inventorySourceMode?: InventorySourceMode | null;
     customerWorksiteId: string | null;
     createdBy: string;
     docDate: Date;
@@ -281,6 +284,7 @@ export class DocumentsService {
                 status: DocumentStatus.DRAFT,
                 consecutive,
                 warehouseId: document.warehouseId,
+                inventorySourceMode: document.inventorySourceMode ?? null,
                 customerWorksiteId: document.customerWorksiteId,
                 createdBy: document.createdBy,
                 docDate: document.docDate,
@@ -340,6 +344,7 @@ export class DocumentsService {
       type: DocumentType;
       status: DocumentStatus;
       warehouseId: string | null;
+      inventorySourceMode?: InventorySourceMode | null;
       customerWorksiteId: string | null;
       docDate: Date;
       notes: string | null;
@@ -354,7 +359,14 @@ export class DocumentsService {
     },
     userId: string,
   ) {
-    const items = await this.mapDocumentItemsToMovementItems(document.items);
+    this.assertExplicitRemissionInventorySource(document);
+    const sourceMode = resolveDocumentInventorySourceMode(document);
+    const items = await this.mapDocumentItemsToMovementItems(
+      document.items,
+      document.type === DocumentType.REMISSION
+        ? { mode: sourceMode, warehouseId: document.warehouseId }
+        : undefined,
+    );
     await this.validateDocumentComponentRelations(document.items);
 
     if (document.type === DocumentType.REMISSION) {
@@ -399,8 +411,7 @@ export class DocumentsService {
       if (!document.customerWorksiteId) {
         throw new BadRequestException('La remisión no tiene obra destino');
       }
-      const deliveryMode = this.parseDeliveryMode(document.notes);
-      if (deliveryMode === 'ON_SITE') {
+      if (sourceMode === InventorySourceMode.OWNER_WAREHOUSES) {
         await this.inventoryService.moveOnSite(
           {
             customerWorksiteId: document.customerWorksiteId,
@@ -579,6 +590,7 @@ export class DocumentsService {
     status?: string;
     number?: string;
     warehouseId?: string;
+    inventorySourceMode?: InventorySourceMode;
     customerWorksiteId?: string;
     notes?: string;
     recipientPhone?: string;
@@ -607,6 +619,7 @@ export class DocumentsService {
               status,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               notes: payload.notes ?? null,
               recipientPhone: recipientPhones[0],
@@ -635,6 +648,7 @@ export class DocumentsService {
     type: string;
     number?: string;
     warehouseId?: string;
+    inventorySourceMode?: InventorySourceMode;
     customerWorksiteId?: string;
     notes?: string;
     recipientPhone?: string;
@@ -653,6 +667,7 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    this.assertExplicitRemissionInventorySource({ ...payload, type });
     const recipientPhones =
       payload.sendWhatsapp === false
         ? []
@@ -679,6 +694,7 @@ export class DocumentsService {
               status: DocumentStatus.DRAFT,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
@@ -765,6 +781,7 @@ export class DocumentsService {
               status: DocumentStatus.IN_PROGRESS,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
@@ -830,6 +847,7 @@ export class DocumentsService {
         type: true,
         consecutive: true,
         warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -864,6 +882,8 @@ export class DocumentsService {
           type: nextType,
           consecutive,
           warehouseId: payload.warehouseId ?? existing.warehouseId,
+          inventorySourceMode:
+            payload.inventorySourceMode ?? existing.inventorySourceMode,
           customerWorksiteId:
             payload.customerWorksiteId ?? existing.customerWorksiteId,
           docDate: nextDocDate,
@@ -921,6 +941,9 @@ export class DocumentsService {
         id: true,
         createdBy: true,
         status: true,
+        type: true,
+        warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         recipientPhone: true,
         recipientPhones: true,
@@ -937,6 +960,7 @@ export class DocumentsService {
     if (document.status !== DocumentStatus.IN_PROGRESS) {
       throw new BadRequestException('Este formulario ya fue enviado');
     }
+    this.assertExplicitRemissionInventorySource(document);
     if (!document.customerWorksiteId) {
       throw new BadRequestException('Selecciona una obra');
     }
@@ -982,6 +1006,7 @@ export class DocumentsService {
       type?: string;
       number?: string;
       warehouseId?: string;
+      inventorySourceMode?: InventorySourceMode;
       customerWorksiteId?: string;
       notes?: string;
       recipientPhone?: string;
@@ -1008,6 +1033,7 @@ export class DocumentsService {
         type: true,
         consecutive: true,
         warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -1032,6 +1058,16 @@ export class DocumentsService {
         'Solo se permiten solicitudes de remisión o devolución',
       );
     }
+
+    this.assertExplicitRemissionInventorySource({
+      type: nextType,
+      warehouseId:
+        payload.warehouseId !== undefined
+          ? payload.warehouseId
+          : existing.warehouseId,
+      inventorySourceMode:
+        payload.inventorySourceMode ?? existing.inventorySourceMode,
+    });
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -1069,6 +1105,8 @@ export class DocumentsService {
               payload.warehouseId !== undefined
                 ? (payload.warehouseId ?? null)
                 : existing.warehouseId,
+            inventorySourceMode:
+              payload.inventorySourceMode ?? existing.inventorySourceMode,
             customerWorksiteId:
               payload.customerWorksiteId !== undefined
                 ? (payload.customerWorksiteId ?? null)
@@ -1313,6 +1351,7 @@ export class DocumentsService {
         docDate: true,
         notes: true,
         createdBy: true,
+        inventorySourceMode: true,
         warehouse: { select: { id: true, name: true } },
         customerWorksite: {
           select: {
@@ -1361,6 +1400,22 @@ export class DocumentsService {
         };
       })(),
     }));
+  }
+
+  private assertExplicitRemissionInventorySource(document: {
+    type: DocumentType;
+    inventorySourceMode?: InventorySourceMode | null;
+    warehouseId?: string | null;
+  }) {
+    if (
+      document.type === DocumentType.REMISSION &&
+      document.inventorySourceMode === InventorySourceMode.WAREHOUSE &&
+      !document.warehouseId
+    ) {
+      throw new BadRequestException(
+        'Selecciona la bodega desde donde sale físicamente el equipo',
+      );
+    }
   }
 
   private parseDeliveryMode(notes?: string | null): 'WAREHOUSE' | 'ON_SITE' {
@@ -1540,6 +1595,7 @@ export class DocumentsService {
       condition: string | null;
       requestedTag?: string | null;
     }>,
+    source?: { mode: InventorySourceMode; warehouseId: string | null },
   ) {
     if (!items.length) {
       throw new BadRequestException(
@@ -1606,8 +1662,12 @@ export class DocumentsService {
               where: {
                 skuId: item.skuId,
                 warehouseOwnerId: ownerWarehouseId,
-                warehouseCurrentId: ownerWarehouseId,
+                warehouseCurrentId:
+                  source?.mode === InventorySourceMode.WAREHOUSE
+                    ? source.warehouseId
+                    : ownerWarehouseId,
                 active: true,
+                deletedAt: null,
               },
               select: {
                 id: true,

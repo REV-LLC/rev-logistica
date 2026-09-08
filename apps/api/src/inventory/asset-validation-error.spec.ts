@@ -149,6 +149,48 @@ describe('readable serialized inventory validation errors', () => {
     expect(response.message).toContain('Ubicación registrada: no confirmada; el último registro es un ajuste');
   });
 
+  it.each([-1, 0, undefined])('does not claim warehouse presence from an IN with nonpositive or unknown quantity (%s)', async (quantity) => {
+    const { client } = setup();
+    const response = payload(await buildAssetValidationError(client, assetId, {
+      code: 'ASSET_LOCATION_CONFLICT', reason: 'LOCATION_CONFLICT', expectedLocation: origin,
+      latestMovement: { ...opening, movementType: MovementType.IN, warehouseId: originId, quantity },
+    }));
+    expect(response.message).toContain('Origen del documento: bodega «Bodega Principal».');
+    expect(response.message).toContain('Ubicación registrada: no confirmada; el último registro es una entrada sin cantidad positiva de bodega «Bodega Principal».');
+    expect(response.message).not.toContain('Ubicación registrada: bodega «Bodega Principal»');
+    expect(response.message).not.toMatch(uuidPattern);
+  });
+
+  it('names an ambiguous transfer without leaking identifiers or changing its code', async () => {
+    const { client } = setup();
+    const response = payload(await buildAssetValidationError(client, assetId, {
+      code: 'ASSET_LOCATION_AMBIGUOUS', reason: 'AMBIGUOUS_TRANSFER', expectedLocation: origin,
+    }));
+    expect(response.message).toBe('Los registros del traslado del equipo MEZCLADORA #3 (TECNIREPARACIONES) no permiten confirmar su ubicación. Revisa la entrada y la salida del traslado antes de continuar.');
+    expect(response).toMatchObject({ code: 'ASSET_LOCATION_AMBIGUOUS', assetId, expectedLocation: origin });
+    expect(response.message).not.toMatch(uuidPattern);
+  });
+
+  it('still describes a positive IN at its recorded warehouse', async () => {
+    const { client } = setup();
+    const response = payload(await buildAssetValidationError(client, assetId, {
+      code: 'ASSET_LOCATION_CONFLICT', reason: 'LOCATION_CONFLICT', expectedLocation: origin,
+      latestMovement: { ...opening, movementType: MovementType.IN },
+    }));
+    expect(response.message).toContain('Ubicación registrada: bodega «TECNIREPARACIONES».');
+    expect(response.message).not.toContain('sin cantidad positiva');
+  });
+
+  it('does not claim a quantity issue when a positive IN has no warehouse', async () => {
+    const { client } = setup();
+    const response = payload(await buildAssetValidationError(client, assetId, {
+      code: 'ASSET_LOCATION_CONFLICT', reason: 'LOCATION_CONFLICT', expectedLocation: origin,
+      latestMovement: { ...opening, movementType: MovementType.IN, warehouseId: null },
+    }));
+    expect(response.message).toContain('Ubicación registrada: no confirmada por el último movimiento.');
+    expect(response.message).not.toContain('sin cantidad positiva');
+  });
+
   it('caches duplicate location reads in the same rejected operation', async () => {
     const { client, tx } = setup();
     await buildAssetValidationError(client, assetId, {

@@ -171,6 +171,9 @@ export class ProviderReturnsService {
           item.sourceLedger.warehouseId &&
           item.sourceLedger.warehouseId !== item.sourceLedger.ownerWarehouseId,
       );
+      // One confirmation is one physical event, even though its OUT and IN
+      // legs are persisted by separate calls. Keep each row's audit timestamp.
+      const effectiveAt = new Date();
       await Promise.all(
         custodyItems.map((item) =>
           tx.stockLedger.create({
@@ -184,6 +187,7 @@ export class ProviderReturnsService {
               assetId: item.assetId,
               ownerWarehouseId: receipt.warehouseId!,
               quantity: item.quantity.negated(),
+              effectiveAt,
               createdBy: user.id,
             },
           }),
@@ -195,10 +199,11 @@ export class ProviderReturnsService {
         refDocumentId: receipt.id, refDocumentType: DocumentType.PROVIDER_RECEIPT,
         skuId: item.skuId, assetId: item.assetId,
         ownerWarehouseId: receipt.warehouseId!, quantity: item.quantity, createdBy: user.id,
+        effectiveAt,
       }})));
       const assetIds = receipt.providerReceiptItems.flatMap((item) => item.assetId ? [item.assetId] : []);
       if (assetIds.length) await tx.asset.updateMany({ where: { id: { in: assetIds } }, data: { warehouseCurrentId: receipt.warehouseId } });
-      await tx.document.update({ where: { id: receipt.id }, data: { status: DocumentStatus.CONFIRMED, docDate: new Date() } });
+      await tx.document.update({ where: { id: receipt.id }, data: { status: DocumentStatus.CONFIRMED, docDate: effectiveAt } });
       return { id: receipt.id, consecutive: receipt.consecutive, status: DocumentStatus.CONFIRMED };
     });
   }

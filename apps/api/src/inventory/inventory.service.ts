@@ -55,6 +55,7 @@ import {
 import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
 import { lockBulkStock } from './bulk-stock-lock';
 import { buildAssetValidationError } from './asset-validation-error';
+import { resolveLatestSerializedMovements } from './serialized-ledger-location';
 import {
   buildSerializedWarehouseAvailability,
   isSerializedAvailable,
@@ -70,6 +71,7 @@ const ON_SITE_CACHE_TTL_SECONDS = 30;
 type InventoryStockShortage = {
   skuId: string;
   ownerWarehouseId: string;
+  warehouseId?: string;
   requestedQuantity: number;
   availableQuantity: number;
   missingQuantity: number;
@@ -259,21 +261,24 @@ export class InventoryService {
       where: { assetId: { in: sortedIds } },
       orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
+        id: true,
         assetId: true,
+        ownerWarehouseId: true,
+        refDocumentId: true,
+        refDocumentType: true,
         movementType: true,
         warehouseId: true,
         customerWorksiteId: true,
         effectiveAt: true,
+        createdAt: true,
         isOpeningBalance: true,
         quantity: true,
       },
     });
-    const latestByAsset = new Map<string, (typeof rows)[number]>();
-    rows.forEach((row) => {
-      if (row.assetId && !latestByAsset.has(row.assetId)) latestByAsset.set(row.assetId, row);
-    });
+    const latestByAsset = resolveLatestSerializedMovements(rows);
     for (const assetId of sortedIds) {
-      const latest = latestByAsset.get(assetId);
+      const resolved = latestByAsset.get(assetId);
+      const latest = resolved?.latest;
       if (!latest) {
         throw await buildAssetValidationError(tx, assetId, {
           code: 'ASSET_LOCATION_UNKNOWN', reason: 'NO_LOCATION',
@@ -286,16 +291,24 @@ export class InventoryService {
         });
       }
       const expected = expectedLocation(assetId);
+      const location = resolved!.locationMovement;
+      if (!location) {
+        throw await buildAssetValidationError(tx, assetId, {
+          code: 'ASSET_LOCATION_AMBIGUOUS', reason: 'AMBIGUOUS_TRANSFER',
+          expectedLocation: expected,
+        });
+      }
       const validWarehouse = expected.type === 'WAREHOUSE'
-        && (latest.movementType === MovementType.IN || latest.movementType === MovementType.ADJUST)
-        && latest.warehouseId === expected.id;
+        && (location.movementType === MovementType.IN || location.movementType === MovementType.ADJUST)
+        && Number(location.quantity) > 0
+        && location.warehouseId === expected.id;
       const validWorksite = expected.type === 'WORKSITE'
-        && (latest.movementType === MovementType.OUT || latest.movementType === MovementType.ON_SITE)
-        && latest.customerWorksiteId === expected.id;
+        && (location.movementType === MovementType.OUT || location.movementType === MovementType.ON_SITE)
+        && location.customerWorksiteId === expected.id;
       if (!validWarehouse && !validWorksite) {
         throw await buildAssetValidationError(tx, assetId, {
           code: 'ASSET_LOCATION_CONFLICT',
-          reason: 'LOCATION_CONFLICT', expectedLocation: expected, latestMovement: latest,
+          reason: 'LOCATION_CONFLICT', expectedLocation: expected, latestMovement: location,
         });
       }
     }
@@ -1134,6 +1147,7 @@ export class InventoryService {
           return [{
             skuId: group.skuId,
             ownerWarehouseId: group.ownerWarehouseId,
+            warehouseId: payload.warehouseId,
             requestedQuantity: group.quantity,
             availableQuantity: available,
             missingQuantity: group.quantity - available,
@@ -1350,6 +1364,7 @@ export class InventoryService {
           return [{
             skuId: group.skuId,
             ownerWarehouseId: group.ownerWarehouseId,
+            warehouseId: group.ownerWarehouseId,
             requestedQuantity: group.quantity,
             availableQuantity: available,
             missingQuantity: group.quantity - available,
@@ -1804,6 +1819,9 @@ export class InventoryService {
     const catalogMovementSelect = {
       id: true,
       assetId: true,
+      warehouseId: true,
+      customerWorksiteId: true,
+      isOpeningBalance: true,
       movementType: true,
       quantity: true,
       ownerWarehouseId: true,
@@ -1865,16 +1883,14 @@ export class InventoryService {
       },
     });
 
-    // Provider transfers write OUT and IN in one event. They can have identical
-    // timestamps; UUID order must not hide that event's completed destination.
-    // Resolve only a matching transfer event, never an IN from another document.
-    const transferSourceEvents = assets.flatMap((asset) => {
+    // Load only the latest provider document for each affected asset, including
+    // both transfer legs and malformed counterparts. Filtering by timestamp,
+    // owner or movement type here would hide inconsistencies from the shared
+    // resolver and could make the catalogue disagree with approval validation.
+    const transferDocuments = assets.flatMap((asset) => {
       const latest = asset.ledger[0];
       if (
-        latest?.movementType !== MovementType.OUT
-        || latest.customerWorksite
-        || latest.ownerWarehouseId !== asset.warehouseOwnerId
-        || !latest.refDocumentId
+        !latest?.refDocumentId
         || (latest.refDocumentType !== DocumentType.PROVIDER_PICKUP
           && latest.refDocumentType !== DocumentType.PROVIDER_RECEIPT)
       ) {
@@ -1882,38 +1898,26 @@ export class InventoryService {
       }
       return [{
         assetId: asset.id,
-        ownerWarehouseId: asset.warehouseOwnerId,
         refDocumentId: latest.refDocumentId,
-        refDocumentType: latest.refDocumentType,
-        effectiveAt: latest.effectiveAt,
-        createdAt: latest.createdAt,
       }];
     });
-    const transferDestinations = transferSourceEvents.length
+    const transferRows = transferDocuments.length
       ? await this.prisma.stockLedger.findMany({
-          where: {
-            OR: transferSourceEvents,
-            movementType: MovementType.IN,
-            quantity: { gt: 0 },
-            isOpeningBalance: false,
-            warehouseId: { not: null },
-            customerWorksiteId: null,
-          },
+          where: { OR: transferDocuments },
           select: catalogMovementSelect,
         })
       : [];
-    const destinationsByAssetId = new Map<string, typeof transferDestinations>();
-    transferDestinations.forEach((destination) => {
-      if (!destination.assetId) return;
-      const destinations = destinationsByAssetId.get(destination.assetId) ?? [];
-      destinations.push(destination);
-      destinationsByAssetId.set(destination.assetId, destinations);
-    });
+    // Head rows also occur in transferRows; de-duplicate by ledger ID so one
+    // terminal provider receipt is not mistaken for two receipts.
+    const movementById = new Map(
+      [...assets.flatMap((asset) => asset.ledger), ...transferRows]
+        .map((movement) => [movement.id, movement] as const),
+    );
+    const locationsByAsset = resolveLatestSerializedMovements([...movementById.values()]);
 
     const ownerWarehouseName = this.formatOwnerWarehouseLabel(ownerWarehouse);
     const serial = assets.map((asset) => {
-      const transferDestination = destinationsByAssetId.get(asset.id);
-      const latest = transferDestination?.length === 1 ? transferDestination[0] : asset.ledger[0];
+      const latest = locationsByAsset.get(asset.id)?.locationMovement;
       let location: OwnerAssetCatalogLocation = {
         type: 'UNKNOWN', id: null, name: null, warehouseType: null,
       };

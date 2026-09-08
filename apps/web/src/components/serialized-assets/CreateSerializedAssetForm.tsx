@@ -203,11 +203,12 @@ const inferBrandModelFromSkuName = (
 type Props = {
   initialFamilyId?: string;
   initialWarehouseId?: string;
+  initialCurrentWarehouseId?: string;
   onCreated?: (assetId: string) => void;
   onSavingChange?: (saving: boolean) => void;
 };
 
-export default function CreateSerializedAssetForm({ initialFamilyId, initialWarehouseId, onCreated, onSavingChange }: Props) {
+export default function CreateSerializedAssetForm({ initialFamilyId, initialWarehouseId, initialCurrentWarehouseId, onCreated, onSavingChange }: Props) {
   const router = useRouter();
   const [families, setFamilies] = useState<AssetFamily[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -268,7 +269,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(initialWarehouseId ?? null);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(
-    initialWarehouseId ?? null,
+    initialCurrentWarehouseId ?? initialWarehouseId ?? null,
   );
   const [manualInternalNumber, setManualInternalNumber] = useState<number | ''>(
     '',

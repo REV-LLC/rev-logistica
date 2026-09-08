@@ -1,5 +1,6 @@
 import { DocumentType, MovementType } from '@prisma/client';
 import { InventoryService } from './inventory.service';
+import type { SerializedLedgerMovement } from './serialized-ledger-location';
 
 describe('InventoryService warehouse availability', () => {
   const warehouseId = '11111111-1111-4111-8111-111111111111';
@@ -10,14 +11,23 @@ describe('InventoryService warehouse availability', () => {
 
   function createService(
     groupBy: jest.Mock,
-    latestMovement = {
+    latestMovement: Partial<SerializedLedgerMovement> = {},
+  ) {
+    const latest: SerializedLedgerMovement = {
+      id: 'opening-ledger',
       assetId,
+      ownerWarehouseId,
       movementType: MovementType.ADJUST,
       warehouseId,
       customerWorksiteId: null,
+      quantity: 1,
+      isOpeningBalance: false,
+      refDocumentId: null,
+      refDocumentType: null,
       effectiveAt: new Date('2026-08-01T12:00:00.000Z'),
-    },
-  ) {
+      createdAt: new Date('2026-08-01T12:00:00.000Z'),
+      ...latestMovement,
+    };
     const create = jest.fn().mockResolvedValue({ id: 'ledger-1' });
     const tx = {
       warehouse: {
@@ -36,7 +46,7 @@ describe('InventoryService warehouse availability', () => {
         groupBy,
         create,
         findFirst: jest.fn().mockResolvedValue(null),
-        findMany: jest.fn().mockResolvedValue([latestMovement]),
+        findMany: jest.fn().mockResolvedValue([latest]),
       },
       asset: {
         findMany: jest
@@ -165,6 +175,25 @@ describe('InventoryService warehouse availability', () => {
       where: { warehouseId, skuId: { in: [skuId] } },
       _sum: { quantity: true },
     });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [MovementType.ADJUST, -1],
+    [MovementType.ADJUST, 0],
+    [MovementType.IN, -1],
+    [MovementType.IN, 0],
+  ])('does not treat a %s row with quantity %s as confirmed warehouse presence', async (movementType, quantity) => {
+    const groupBy = jest.fn();
+    const { service, create } = createService(groupBy, { movementType, quantity });
+    await expect(service.moveOut({
+      warehouseId,
+      customerWorksiteId: worksiteId,
+      items: [{ assetId, ownerWarehouseId }],
+    }, 'user-1')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'ASSET_LOCATION_CONFLICT' }),
+    });
+    expect(groupBy).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
 
