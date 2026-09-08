@@ -3,6 +3,7 @@ import { MovementType, Prisma } from '@prisma/client';
 
 export type AssetValidationReason =
   | 'LOCATION_CONFLICT'
+  | 'AMBIGUOUS_TRANSFER'
   | 'NO_LOCATION'
   | 'RETROACTIVE'
   | 'NOT_IN_WAREHOUSE'
@@ -128,7 +129,8 @@ export async function buildAssetValidationError(
       return locationName({ type: 'WORKSITE', id: latest.customerWorksiteId });
     }
     if ((latest.movementType === MovementType.IN
-      || (latest.movementType === MovementType.ADJUST && Number(latest.quantity) > 0))
+      || latest.movementType === MovementType.ADJUST)
+      && Number(latest.quantity) > 0
       && latest.warehouseId) {
       return locationName({ type: 'WAREHOUSE', id: latest.warehouseId });
     }
@@ -140,6 +142,9 @@ export async function buildAssetValidationError(
     }
     if (latest.movementType === MovementType.ADJUST) {
       return `no confirmada; el último registro es un ajuste${warehouse}`;
+    }
+    if (latest.movementType === MovementType.IN && !(Number(latest.quantity) > 0)) {
+      return `no confirmada; el último registro es una entrada sin cantidad positiva${warehouse}`;
     }
     return 'no confirmada por el último movimiento';
   }
@@ -157,6 +162,9 @@ export async function buildAssetValidationError(
 
   let message: string;
   switch (options.reason) {
+    case 'AMBIGUOUS_TRANSFER':
+      message = `Los registros del traslado ${genitiveSubject} no permiten confirmar su ubicación. Revisa la entrada y la salida del traslado antes de continuar.`;
+      break;
     case 'LOCATION_CONFLICT':
       message = `La ubicación registrada ${genitiveSubject} no coincide con el origen del documento. ${await locationContext()}`;
       break;

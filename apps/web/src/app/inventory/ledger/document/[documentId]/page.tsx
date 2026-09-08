@@ -28,6 +28,7 @@ import { getSerialDisplayName } from '@/lib/serial-assets';
 import {
   buildInventoryStockShortageMessage,
   extractInventoryStockShortages,
+  getStockShortageReviewAction,
 } from '@/lib/inventory-stock-errors';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
@@ -41,6 +42,12 @@ import {
 import TableRowActions from '@/components/TableRowActions';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPickerModal';
+import {
+  getRequestInventorySourceMode,
+  getRequestSourceWarehouseId,
+  loadRequestSourceInventories,
+  type RequestInventorySourceMode,
+} from '@/components/transport/request-inventory-source';
 
 const PRINT_LINES_PER_PAGE = 20;
 
@@ -52,6 +59,7 @@ type DocumentDetail = {
   createdAt: string;
   docDate: string;
   notes: string | null;
+  inventorySourceMode?: RequestInventorySourceMode | null;
   recipientPhone?: string | null;
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
@@ -138,6 +146,7 @@ const getEmployeeFullName = (employee: EmployeeOption) =>
 type WarehouseOption = {
   id: string;
   name: string;
+  type?: string;
 };
 
 type ProviderRemissionRequirement = {
@@ -490,6 +499,7 @@ export default function DocumentDetailPage() {
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
+  const [adjustWarningWarehouseId, setAdjustWarningWarehouseId] = useState<string | null>(null);
   const [printAudience, setPrintAudience] = useState<'internal' | 'customer'>('internal');
   const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
   const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
@@ -750,6 +760,15 @@ export default function DocumentDetailPage() {
     }
     return false;
   };
+  const getDocumentSourceName = (doc: DocumentDetail, ownerId?: string | null) =>
+    warehouses.find((warehouse) => warehouse.id === getRequestSourceWarehouseId(doc, ownerId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+      ?? 'Sin seleccionar';
+  const stockReviewAction = getStockShortageReviewAction({
+    ownerWarehouseId: adjustWarningOwnerWarehouseId,
+    warehouseId: adjustWarningWarehouseId,
+    warehouseType: warehouses.find((warehouse) => warehouse.id === adjustWarningWarehouseId)?.type,
+  });
   const openBillingModal = (item: DocumentDetail['items'][number]) => {
     const defaultReturnedAt =
       document?.type === 'RETURN'
@@ -843,8 +862,10 @@ export default function DocumentDetailPage() {
       if (!mixerItem?.asset || !ownerWarehouseId) {
         throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
       }
+      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId);
+      if (!sourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
       const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(
-        `/inventory/warehouse/${ownerWarehouseId}`,
+        `/inventory/warehouse/${sourceWarehouseId}`,
         { method: 'GET' },
       );
       const mixer: InventoryItemPickerSerialItem = {
@@ -907,6 +928,7 @@ export default function DocumentDetailPage() {
       stockShortages.length > 0 ||
       messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      setAdjustWarningWarehouseId(stockShortages[0]?.warehouseId ?? null);
       if (stockShortages.length > 0) {
         const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
         setAdjustWarningOwnerWarehouseId(firstOwnerId);
@@ -935,13 +957,13 @@ export default function DocumentDetailPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const ownerLabel = ownerName ? ` Propietario indicado: ${ownerName}.` : '';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
+        `No se puede aprobar la remisión: revisa las existencias en el origen físico del documento.${ownerLabel}${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setError(null);
@@ -967,6 +989,7 @@ export default function DocumentDetailPage() {
           type: doc.type,
           number: doc.consecutive ?? undefined,
           warehouseId: doc.warehouse?.id ?? undefined,
+          inventorySourceMode: doc.inventorySourceMode ?? undefined,
           customerWorksiteId: doc.customerWorksite?.id ?? undefined,
           notes: doc.notes ?? undefined,
           recipientPhone: doc.recipientPhone ?? undefined,
@@ -1007,23 +1030,9 @@ export default function DocumentDetailPage() {
     setResolveInventoryByOwner({});
   };
 
-  const loadResolveInventories = async (ownerIds: string[]) => {
-    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
-    if (!uniqueOwnerIds.length) return {};
-    const loadedEntries = await Promise.all(
-      uniqueOwnerIds.map(async (ownerId) => {
-        try {
-          const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
-            method: 'GET',
-          });
-          return [ownerId, { serial: inventory.serial ?? [] }] as const;
-        } catch {
-          return [ownerId, { serial: [] }] as const;
-        }
-      }),
-    );
-    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
-  };
+  const loadResolveInventories = (doc: DocumentDetail, ownerIds: string[]) =>
+    loadRequestSourceInventories<{ ownerWarehouseId?: string | null }, InventorySerial>(doc, ownerIds, (id) =>
+      api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
 
   const buildInitialResolveState = (
     doc: DocumentDetail,
@@ -1081,7 +1090,12 @@ export default function DocumentDetailPage() {
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('The line has no owner warehouse.');
+      setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
+      return;
+    }
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    if (!sourceWarehouseId) {
+      setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
@@ -1117,16 +1131,16 @@ export default function DocumentDetailPage() {
             active: true,
           },
           ownerWarehouseId,
-          warehouseCurrentId: ownerWarehouseId,
+          warehouseCurrentId: sourceWarehouseId,
         },
       });
 
-      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
         ...prev,
-        [ownerWarehouseId]: { serial: refreshedInventory.serial ?? [] },
+        [ownerWarehouseId]: { serial: (refreshedInventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerWarehouseId) },
       }));
       setResolveAssetByIndex((prev) => ({
         ...prev,
@@ -1315,7 +1329,7 @@ export default function DocumentDetailPage() {
         const ownerIds = unresolved
           .map(({ item }) => item.condition?.trim() ?? '')
           .filter((value): value is string => Boolean(value));
-        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const inventoriesByOwner = await loadResolveInventories(doc, ownerIds);
         const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
 
         setResolveDocument(doc);
@@ -1451,6 +1465,7 @@ export default function DocumentDetailPage() {
           type: resolveDocument.type,
           number: resolveDocument.consecutive ?? undefined,
           warehouseId: resolveDocument.warehouse?.id ?? undefined,
+          inventorySourceMode: resolveDocument.inventorySourceMode ?? undefined,
           customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
           notes: resolveDocument.notes ?? undefined,
           items: itemsPayload,
@@ -1502,6 +1517,11 @@ export default function DocumentDetailPage() {
               <Text c="dimmed">
                 Estado: {document?.status ?? '-'} | Creado: {document ? formatDate(document.createdAt) : '-'}
               </Text>
+              {document?.type === 'REMISSION' ? <Text size="sm" c="dimmed" mt="xs">
+                Salida física: {getRequestInventorySourceMode(document) === 'WAREHOUSE'
+                  ? document.warehouse?.name ?? 'Sin seleccionar'
+                  : 'bodega de cada propietario'}.
+              </Text> : null}
             </div>
             <Group>
               {canDecide && document?.status === 'DRAFT' ? (
@@ -2068,8 +2088,9 @@ export default function DocumentDetailPage() {
         onClose={() => {
           setAdjustWarningModalOpen(false);
           setAdjustWarningOwnerWarehouseId(null);
+          setAdjustWarningWarehouseId(null);
         }}
-        title="Ajuste requerido"
+        title="Revisar existencias en el origen"
         centered
       >
         <Stack gap="md">
@@ -2077,22 +2098,17 @@ export default function DocumentDetailPage() {
             {adjustWarningMessage ??
               'Primero ajusta el stock de la bodega antes de hacer movimientos.'}
           </Text>
+          {adjustWarningWarehouseId !== adjustWarningOwnerWarehouseId ? <Text size="sm" c="dimmed">Comprueba la recepción y la ubicación real antes de modificar cantidades. Un cambio de bodega no cambia el propietario.</Text> : null}
           <Group justify="flex-end">
             <Button
               onClick={() => {
                 setAdjustWarningModalOpen(false);
-                const params = new URLSearchParams();
-                if (adjustWarningOwnerWarehouseId) {
-                  params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
-                  params.set('warehouseId', adjustWarningOwnerWarehouseId);
-                }
-                router.push(
-                  `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
-                );
+                if (stockReviewAction.href) router.push(stockReviewAction.href);
                 setAdjustWarningOwnerWarehouseId(null);
+                setAdjustWarningWarehouseId(null);
               }}
             >
-              Entendido
+              {stockReviewAction.label}
             </Button>
           </Group>
         </Stack>
@@ -2118,8 +2134,9 @@ export default function DocumentDetailPage() {
                     Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Propietario: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
+                  {resolveDocument?.type === 'REMISSION' ? <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text> : null}
                   <Select
                     label="Equipo"
                     placeholder="Seleccionar SKU"
@@ -2179,7 +2196,7 @@ export default function DocumentDetailPage() {
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            The tag requests #{expectedInternal}, but it does not exist in that warehouse.
+                            El tag solicita #{expectedInternal}, pero no aparece disponible en la bodega de salida.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
@@ -2221,6 +2238,11 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="sm">
           {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
+          {resolveDocument && createSerialIndex != null ? <Alert color="blue" title="Registro inicial del equipo">
+            Propietario: {warehouses.find((warehouse) => warehouse.id === resolveDocument.items[createSerialIndex]?.condition)?.name ?? 'Sin seleccionar'}.<br />
+            Ubicación inicial: {getDocumentSourceName(resolveDocument, resolveDocument.items[createSerialIndex]?.condition)}.
+            <Text size="sm" mt="xs">Registra únicamente un equipo nuevo. Si ya existe en otra ubicación, registra su recepción; no lo crees otra vez.</Text>
+          </Alert> : null}
           <TextInput
             label="Serial / motor"
             value={createSerialSerialOrEngine}

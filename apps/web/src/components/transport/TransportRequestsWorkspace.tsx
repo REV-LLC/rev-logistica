@@ -54,6 +54,7 @@ import { getSerialDisplayName } from '@/lib/serial-assets';
 import {
   buildInventoryStockShortageMessage,
   extractInventoryStockShortages,
+  getStockShortageReviewAction,
 } from '@/lib/inventory-stock-errors';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
@@ -63,6 +64,12 @@ import AssetComponentsSelectionModal, {
 } from '@/components/AssetComponentsSelectionModal';
 import { enqueueOfflineOperation, syncOfflineOperations } from '@/lib/offline-queue';
 import { buildRequestItems } from '@/components/transport/request-items';
+import {
+  getRequestInventorySourceMode,
+  getRequestSourceWarehouseId,
+  loadRequestSourceInventories,
+  type RequestInventorySourceMode,
+} from '@/components/transport/request-inventory-source';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -203,6 +210,7 @@ type RequestDocumentDetail = {
   consecutive: string | null;
   docDate: string;
   notes: string | null;
+  inventorySourceMode?: RequestInventorySourceMode | null;
   recipientPhone?: string | null;
   recipientPhones?: string[];
   warehouse?: { id: string; name: string } | null;
@@ -605,6 +613,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [sendWhatsapp, setSendWhatsapp] = useState(true);
   const [docDate, setDocDate] = useState(() => getTodayDateInput());
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('ON_SITE');
+  const [inventorySourceMode, setInventorySourceMode] = useState<RequestInventorySourceMode>('WAREHOUSE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [observations, setObservations] = useState('');
@@ -673,6 +682,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
+  const [adjustWarningWarehouseId, setAdjustWarningWarehouseId] = useState<string | null>(null);
   const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
@@ -696,6 +706,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
   const autosaveCreatingRef = useRef(false);
   const restoringRequestRef = useRef<string | null>(null);
+  const inventoryLoadVersionRef = useRef(0);
   const userSession = useMemo(() => getCurrentUserSession(), []);
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
@@ -819,6 +830,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       type: docType,
       number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
       warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
+      inventorySourceMode: docType === 'REMISSION' ? inventorySourceMode : undefined,
       customerWorksiteId: customerWorksiteId || undefined,
       notes: buildRequestNotes({
         observations,
@@ -837,6 +849,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       consecutive,
       customerWorksiteId,
       deliveryMode,
+      inventorySourceMode,
       dispatcherId,
       docDate,
       docType,
@@ -883,6 +896,49 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     docType === 'RETURN' ? 'Firma de quien entrega' : 'Firma de recibido';
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)?.name ?? '-';
+  const stockReviewAction = getStockShortageReviewAction({
+    ownerWarehouseId: adjustWarningOwnerWarehouseId,
+    warehouseId: adjustWarningWarehouseId,
+    warehouseType: warehouses.find((warehouse) => warehouse.id === adjustWarningWarehouseId)?.type,
+  });
+  const physicalSourceWarehouseId = getRequestSourceWarehouseId({
+    type: docType,
+    inventorySourceMode,
+    warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null,
+  }, sourceOwnerWarehouseId);
+  const physicalSourceWarehouseName = warehouses.find((warehouse) => warehouse.id === physicalSourceWarehouseId)?.name ?? 'Sin seleccionar';
+  const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null) =>
+    warehouses.find((warehouse) => warehouse.id === getRequestSourceWarehouseId(doc, ownerId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+      ?? 'Sin seleccionar';
+  const clearLoadedInventory = () => {
+    inventoryLoadVersionRef.current += 1;
+    setLoadingInventory(false);
+    setBulkItems([]);
+    setSerialItems([]);
+    setItemsModalOpen(false);
+    setPendingMixerQueue([]);
+    setComponentParent(null);
+    setComponentOptions([]);
+    lastAutoOpenedWarehouseRef.current = null;
+  };
+  const changePhysicalSource = (nextMode: RequestInventorySourceMode, nextWarehouseId: string | null) => {
+    const settingsChanged = nextMode !== inventorySourceMode
+      || (nextMode === 'WAREHOUSE' && nextWarehouseId !== warehouseId);
+    if (!settingsChanged) return;
+    const currentSource = { type: docType, inventorySourceMode, warehouse: warehouseId ? { id: warehouseId } : principalWarehouse };
+    const nextSource = { type: docType, inventorySourceMode: nextMode, warehouse: nextWarehouseId ? { id: nextWarehouseId } : null };
+    const selectedOriginChanges = selectedItems.some((item) =>
+      getRequestSourceWarehouseId(currentSource, item.ownerWarehouseId) !== getRequestSourceWarehouseId(nextSource, item.ownerWarehouseId));
+    if (selectedOriginChanges && !window.confirm('Al cambiar la salida física se quitarán los ítems seleccionados para volver a comprobar su disponibilidad. ¿Continuar?')) return;
+    clearLoadedInventory();
+    if (selectedOriginChanges) {
+      setSelectedItems([]);
+      clearProviderRemissionDocuments();
+    }
+    setInventorySourceMode(nextMode);
+    setWarehouseId(nextWarehouseId);
+  };
   const effectiveSourceWorksiteId =
     sourceMode === 'on-site' ? customerWorksiteId || sourceWorksiteId || null : sourceWorksiteId;
   const sourceWorksiteName =
@@ -902,18 +958,17 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   };
   const getResolveSkuOptions = (ownerWarehouseId?: string | null) => {
     if (!ownerWarehouseId) return [];
-    const inventory = resolveInventoryByOwner[ownerWarehouseId];
-    if (!inventory) return [];
-    const availableSkuIds = new Set<string>();
-    inventory.bulk.forEach((item) => {
-      if (item.quantity > 0) availableSkuIds.add(item.skuId);
-    });
-    inventory.serial.forEach((item) => {
-      if (item.skuId) availableSkuIds.add(item.skuId);
-    });
-    return skuOptions
-      .filter((sku) => availableSkuIds.has(sku.id))
-      .map((sku) => ({ value: sku.id, label: sku.name }));
+    if (resolveDocument?.type === 'RETURN') {
+      const inventory = resolveInventoryByOwner[ownerWarehouseId];
+      const available = new Set([
+        ...(inventory?.bulk.filter((item) => item.quantity > 0).map((item) => item.skuId) ?? []),
+        ...(inventory?.serial.map((item) => item.skuId) ?? []),
+      ]);
+      return skuOptions.filter((sku) => available.has(sku.id)).map((sku) => ({ value: sku.id, label: sku.name }));
+    }
+    // Catalogue references remain selectable when the specific equipment must
+    // first be registered. Availability is checked on the physical-source picker.
+    return skuOptions.map((sku) => ({ value: sku.id, label: sku.name }));
   };
 
   useEffect(() => {
@@ -1255,7 +1310,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (!mixerItem?.asset || !ownerWarehouseId) {
         throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
       }
-      const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId);
+      if (!sourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
+      const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       const mixer: InventorySerial = {
@@ -1321,6 +1378,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       stockShortages.length > 0 ||
       messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      setAdjustWarningWarehouseId(stockShortages[0]?.warehouseId ?? null);
       if (stockShortages.length > 0) {
         const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
         setAdjustWarningOwnerWarehouseId(firstOwnerId);
@@ -1349,13 +1407,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const ownerLabel = ownerName ? ` Propietario indicado: ${ownerName}.` : '';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
+        `No se puede aprobar la remisión: revisa las existencias en el origen físico del documento.${ownerLabel}${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);
@@ -1475,19 +1533,22 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
   }, [currentUserId, dispatcherId, employees, isDriverRole]);
 
   const loadInventory = async (openSelector = true) => {
+    const version = ++inventoryLoadVersionRef.current;
     setLoadingInventory(true);
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
         if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
+        if (!physicalSourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
         const selectedOwner = warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId);
         if (selectedOwner?.type === 'ALLY' && !canDecide) {
           throw new Error('Para bodega alterna, usa captura libre de tags.');
         }
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/warehouse/${sourceOwnerWarehouseId}`,
+          `/inventory/warehouse/${physicalSourceWarehouseId ?? ''}`,
           { method: 'GET' }
         );
+        if (version !== inventoryLoadVersionRef.current) return;
         setBulkItems(
           data.bulk.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
@@ -1500,6 +1561,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           `/inventory/on-site/${effectiveSourceWorksiteId}/request-options`,
           { method: 'GET' }
         );
+        if (version !== inventoryLoadVersionRef.current) return;
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
         setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
@@ -1508,6 +1570,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         setItemsModalOpen(true);
       }
     } catch (err) {
+      if (version !== inventoryLoadVersionRef.current) return;
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -1516,7 +1579,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         setError('Error loading inventory');
       }
     } finally {
-      setLoadingInventory(false);
+      if (version === inventoryLoadVersionRef.current) setLoadingInventory(false);
     }
   };
 
@@ -1535,10 +1598,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       lastAutoOpenedWarehouseRef.current = null;
       return;
     }
-    if (lastAutoOpenedWarehouseRef.current === sourceOwnerWarehouseId) return;
-    lastAutoOpenedWarehouseRef.current = sourceOwnerWarehouseId;
+    const inventoryKey = `${physicalSourceWarehouseId}:${sourceOwnerWarehouseId}`;
+    if (lastAutoOpenedWarehouseRef.current === inventoryKey) return;
+    lastAutoOpenedWarehouseRef.current = inventoryKey;
     void loadInventory(true);
-  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, warehouses]);
+  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, physicalSourceWarehouseId, warehouses]);
 
   useEffect(() => {
     if (sourceMode !== 'on-site') return;
@@ -1638,29 +1702,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setResolveInventoryByOwner({});
   };
 
-  const loadResolveInventories = async (ownerIds: string[]) => {
-    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
-    if (!uniqueOwnerIds.length) return {};
-    const loadedEntries = await Promise.all(
-      uniqueOwnerIds.map(async (ownerId) => {
-        try {
-          const inventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
-            method: 'GET',
-          });
-          return [
-            ownerId,
-            {
-              bulk: (inventory.bulk ?? []).filter((item) => item.ownerWarehouseId === ownerId),
-              serial: (inventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerId),
-            },
-          ] as const;
-        } catch {
-          return [ownerId, { bulk: [], serial: [] }] as const;
-        }
-      }),
-    );
-    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
-  };
+  const loadResolveInventories = (doc: RequestDocumentDetail, ownerIds: string[]) =>
+    loadRequestSourceInventories<InventoryBulk, InventorySerial>(doc, ownerIds, (id) =>
+      api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
 
   const buildInitialResolveState = (
     doc: RequestDocumentDetail,
@@ -1681,13 +1725,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
       const ownerWarehouseId = item.condition?.trim();
       if (!ownerWarehouseId) return;
-      const inventory = inventoriesByOwner[ownerWarehouseId];
-      const skuIsAvailable = Boolean(
-        inventory?.bulk.some((bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0) ||
-          inventory?.serial.some((serial) => serial.skuId === matchedSku.id),
-      );
-      if (!skuIsAvailable) return;
-
+      if (doc.type === 'RETURN') {
+        const inventory = inventoriesByOwner[ownerWarehouseId];
+        if (!inventory?.bulk.some((bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0)
+          && !inventory?.serial.some((serial) => serial.skuId === matchedSku.id)) return;
+      }
       initialSkuMap[index] = matchedSku.id;
 
       if (matchedSku.controlType !== 'SERIAL') return;
@@ -1725,7 +1767,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('The line has no owner warehouse.');
+      setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
+      return;
+    }
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    if (!sourceWarehouseId) {
+      setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
@@ -1761,11 +1808,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             active: true,
           },
           ownerWarehouseId,
-          warehouseCurrentId: ownerWarehouseId,
+          warehouseCurrentId: sourceWarehouseId,
         },
       });
 
-      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
@@ -1905,6 +1952,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           type: doc.type,
           number: doc.consecutive ?? undefined,
           warehouseId: doc.warehouse?.id ?? undefined,
+          inventorySourceMode: doc.inventorySourceMode ?? undefined,
           customerWorksiteId: doc.customerWorksite?.id ?? undefined,
           notes: doc.notes ?? undefined,
           recipientPhones: doc.recipientPhones?.length ? doc.recipientPhones : undefined,
@@ -1965,7 +2013,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         const ownerIds = unresolved
           .map(({ item }) => item.condition?.trim() ?? '')
           .filter((value): value is string => Boolean(value));
-        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const inventoriesByOwner = await loadResolveInventories(doc, ownerIds);
         const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
 
         setResolveDocument(doc);
@@ -2096,6 +2144,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
           type: resolveDocument.type,
           number: resolveDocument.consecutive ?? undefined,
           warehouseId: resolveDocument.warehouse?.id ?? undefined,
+          inventorySourceMode: resolveDocument.inventorySourceMode ?? undefined,
           customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
           notes: resolveDocument.notes ?? undefined,
           items: itemsPayload,
@@ -2462,6 +2511,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
     setSendWhatsapp(true);
     setDocDate(getTodayDateInput());
     setDeliveryMode('ON_SITE');
+    setInventorySourceMode('WAREHOUSE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
     setObservations('');
@@ -2515,6 +2565,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       setRecipientPhoneDraft('');
       setDocDate(doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '');
       setDeliveryMode(parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE');
+      setInventorySourceMode(getRequestInventorySourceMode(doc));
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
       setObservations(extractUserObservations(doc.notes ?? null));
@@ -2674,7 +2725,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       if (docType === 'RETURN' && !effectiveWarehouseId) {
         throw new Error('Selecciona la bodega para la devolucion.');
       }
-      if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !effectiveWarehouseId) {
+      if (docType === 'REMISSION' && inventorySourceMode === 'WAREHOUSE' && !effectiveWarehouseId) {
         throw new Error('Selecciona la bodega de despacho.');
       }
       if (docType === 'REMISSION' && deliveryMode === 'ON_SITE' && isDriverRole && !driverId) {
@@ -2698,6 +2749,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         type: docType,
         number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
         warehouseId: effectiveWarehouseId ?? undefined,
+        inventorySourceMode: docType === 'REMISSION' ? inventorySourceMode : undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         ...(shouldSendWhatsapp ? { recipientPhones } : {}),
         ...(!editingRequestId ? { sendWhatsapp: shouldSendWhatsapp } : {}),
@@ -3276,7 +3328,13 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
 
                     <Radio.Group
                       value={docType}
-                      onChange={(value) => setDocType(value as 'REMISSION' | 'RETURN')}
+                      onChange={(value) => {
+                        if (value === docType) return;
+                        if (selectedItems.length && !window.confirm('Al cambiar el tipo de documento se quitarán los ítems seleccionados. ¿Continuar?')) return;
+                        clearLoadedInventory();
+                        setSelectedItems([]);
+                        setDocType(value as 'REMISSION' | 'RETURN');
+                      }}
                       label="Tipo"
                     >
                       <Group mt="xs">
@@ -3326,9 +3384,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               error={generateFieldErrors.docDate}
             />
                     </SimpleGrid>
-                    {editingRequestId && isAdminRole ? (
+                    {docType === 'RETURN' && editingRequestId && isAdminRole ? (
                       <WarehouseSelect
-                        label={docType === 'RETURN' ? 'Bodega destino' : 'Bodega del documento'}
+                        label="Bodega destino"
                         value={warehouseId}
                         onChange={setWarehouseId}
                         warehouses={warehouses}
@@ -3355,6 +3413,35 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                 </Paper>
 
               <Paper withBorder radius="lg" p="md">
+                  {docType === 'REMISSION' ? (
+                    <Stack gap="sm" mb="lg">
+                      <Text fw={800}>Salida física del inventario</Text>
+                      <Text size="sm" c="dimmed">Indica dónde estaban los equipos antes del despacho. El propietario no cambia por estar en nuestra bodega.</Text>
+                      <Radio.Group
+                        label="Origen físico"
+                        value={inventorySourceMode}
+                        onChange={(value) => changePhysicalSource(value as RequestInventorySourceMode, warehouseId ?? principalWarehouse?.id ?? null)}
+                      >
+                        <Stack gap="xs" mt="xs">
+                          <Radio value="WAREHOUSE" label="Desde una bodega" />
+                          <Radio value="OWNER_WAREHOUSES" label="Directo desde bodegas de propietarios" />
+                        </Stack>
+                      </Radio.Group>
+                      {inventorySourceMode === 'WAREHOUSE' ? (
+                        <WarehouseSelect
+                          label="Bodega de salida"
+                          formatLabels={false}
+                          value={warehouseId ?? principalWarehouse?.id ?? null}
+                          onChange={(value) => changePhysicalSource('WAREHOUSE', value)}
+                          warehouses={warehouses}
+                          clearable={false}
+                          required
+                          width="100%"
+                        />
+                      ) : <Text size="sm" c="dimmed">Cada ítem sale de la bodega de su propietario; no pasa por nuestra bodega.</Text>}
+                      <Divider />
+                    </Stack>
+                  ) : null}
                   <Stack gap="sm">
                     <Text fw={800}>
                       {docType === 'REMISSION' ? 'Modo de entrega' : 'Modo de devolución'}
@@ -3373,12 +3460,12 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         <Radio
                           value="WAREHOUSE"
                           label={docType === 'REMISSION'
-                            ? 'Despacho desde bodega'
+                            ? 'Cliente retira en bodega'
                             : 'Cliente entrega en bodega'}
                         />
                         <Radio
                           value="ON_SITE"
-                          label={docType === 'REMISSION' ? 'Entrega en obra' : 'Recogida en obra'}
+                          label={docType === 'REMISSION' ? 'REV entrega en obra' : 'Recogida en obra'}
                         />
                       </Group>
                     </Radio.Group>
@@ -3613,21 +3700,25 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
               </div>
             </SimpleGrid>
           </Paper>
-          <Text c="dimmed">Agregar los equipos y su origen.</Text>
+          <Text c="dimmed">Agrega los equipos y conserva su propietario.</Text>
+          {docType === 'REMISSION' ? <Text size="sm" mt="xs">
+            Salida física: {inventorySourceMode === 'WAREHOUSE' ? physicalSourceWarehouseName : 'bodega de cada propietario'}. La entrega al cliente no cambia este origen.
+          </Text> : null}
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
               <WarehouseSelect
-                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
+                label={helpLabel('Propietario', 'Filtra a quién pertenecen los equipos. No cambia la salida física del documento.')}
                 value={sourceOwnerWarehouseId}
                 onChange={(value) => {
+                  clearLoadedInventory();
                   setSourceOwnerWarehouseId(value);
                   const nextWarehouse = warehouses.find((warehouse) => warehouse.id === value);
                   if (nextWarehouse?.type !== 'ALLY') setCreationProviderRequirements(null);
                 }}
                 warehouses={warehouses}
                 clearable
-                placeholder="Buscar origen"
+                placeholder="Buscar propietario"
                 width={isMobile ? '100%' : 320}
               />
             )}
@@ -4343,8 +4434,9 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         onClose={() => {
           setAdjustWarningModalOpen(false);
           setAdjustWarningOwnerWarehouseId(null);
+          setAdjustWarningWarehouseId(null);
         }}
-        title="Ajuste requerido"
+        title="Revisar existencias en el origen"
         centered
       >
         <Stack gap="md">
@@ -4352,22 +4444,17 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
             {adjustWarningMessage ??
               'Primero ajusta el stock de bodega antes de hacer movimientos.'}
           </Text>
+          {adjustWarningWarehouseId !== adjustWarningOwnerWarehouseId ? <Text size="sm" c="dimmed">Comprueba la recepción y la ubicación real antes de modificar cantidades. Un cambio de bodega no cambia el propietario.</Text> : null}
           <Group justify="flex-end">
             <Button
               onClick={() => {
                 setAdjustWarningModalOpen(false);
-                const params = new URLSearchParams();
-                if (adjustWarningOwnerWarehouseId) {
-                  params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
-                  params.set('warehouseId', adjustWarningOwnerWarehouseId);
-                }
-                router.push(
-                  `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
-                );
+                if (stockReviewAction.href) router.push(stockReviewAction.href);
                 setAdjustWarningOwnerWarehouseId(null);
+                setAdjustWarningWarehouseId(null);
               }}
             >
-              Entendido
+              {stockReviewAction.label}
             </Button>
           </Group>
         </Stack>
@@ -4394,15 +4481,16 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                     Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Propietario: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
+                  {resolveDocument?.type === 'REMISSION' ? <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text> : null}
                   <Select
                     label="Equipo"
-                    placeholder="Buscar equipo de esta bodega"
+                    placeholder="Buscar referencia de equipo"
                     searchable
                     data={getResolveSkuOptions(item.condition)}
                     value={resolveSkuByIndex[index] ?? null}
-                    nothingFoundMessage="Esta bodega no tiene equipos disponibles"
+                    nothingFoundMessage="No se encontró esa referencia en el catálogo"
                     onChange={(value) => {
                       setResolveSkuByIndex((prev) => ({
                         ...prev,
@@ -4455,7 +4543,7 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            El tag solicita #{expectedInternal}, pero no existe en esa bodega.
+                            El tag solicita #{expectedInternal}, pero no aparece disponible en la bodega de salida.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
@@ -4547,6 +4635,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
         bulkItems={bulkItems}
         serialItems={serialItems}
         ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
+        physicalWarehouseId={getRequestSourceWarehouseId({
+          type: docType,
+          inventorySourceMode,
+          warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null,
+        }, componentParent?.ownerWarehouseId)}
         restrictOwnerWarehouse={sourceMode === 'warehouse'}
         canCreate={canDecide && sourceMode === 'warehouse' && docType === 'REMISSION'}
         excludedAssetIds={selectedSerialIds}
@@ -4601,6 +4694,11 @@ export default function TransportRequestsWorkspace({ mode = 'requests' }: { mode
       >
         <Stack gap="sm">
           {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
+          {resolveDocument && createSerialIndex != null ? <Alert color="blue" title="Registro inicial del equipo">
+            Propietario: {warehouses.find((warehouse) => warehouse.id === resolveDocument.items[createSerialIndex]?.condition)?.name ?? 'Sin seleccionar'}.<br />
+            Ubicación inicial: {getDocumentSourceName(resolveDocument, resolveDocument.items[createSerialIndex]?.condition)}.
+            <Text size="sm" mt="xs">Registra únicamente un equipo nuevo. Si ya existe en otra ubicación, registra su recepción; no lo crees otra vez.</Text>
+          </Alert> : null}
           <TextInput
             label="Serial / motor"
             value={createSerialSerialOrEngine}

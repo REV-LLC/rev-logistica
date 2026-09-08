@@ -9,8 +9,10 @@ describe('readable serialized movement errors', () => {
 
   function setup() {
     const latest = {
+      id: 'opening-ledger', ownerWarehouseId: ownerId,
       assetId, movementType: MovementType.ADJUST, warehouseId: ownerId,
       customerWorksiteId: null, effectiveAt: new Date('2026-09-08T13:34:28.026Z'),
+      createdAt: new Date('2026-09-08T13:34:28.026Z'), refDocumentId: null, refDocumentType: null,
       isOpeningBalance: true, quantity: 1,
     };
     const tx = {

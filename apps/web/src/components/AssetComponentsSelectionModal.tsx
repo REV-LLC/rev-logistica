@@ -28,6 +28,7 @@ type Props = {
   bulkItems: InventoryItemPickerBulkItem[];
   serialItems: InventoryItemPickerSerialItem[];
   ownerWarehouseId: string | null;
+  physicalWarehouseId?: string | null;
   restrictOwnerWarehouse?: boolean;
   canCreate?: boolean;
   excludedAssetIds?: Set<string | undefined>;
@@ -48,6 +49,7 @@ export default function AssetComponentsSelectionModal({
   bulkItems,
   serialItems,
   ownerWarehouseId,
+  physicalWarehouseId,
   restrictOwnerWarehouse = true,
   canCreate = false,
   excludedAssetIds,
@@ -116,7 +118,7 @@ export default function AssetComponentsSelectionModal({
     setCreating(null);
     setRefreshing(true);
     try {
-      const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(`/inventory/warehouse/${ownerWarehouseId}`);
+      const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(`/inventory/warehouse/${physicalWarehouseId ?? ownerWarehouseId}`);
       const item = inventory.serial.find((entry) => entry.assetId === assetId && entry.assetFamily?.id === option.family.id);
       if (!item) throw new Error('El accesorio se creó, pero aún no aparece disponible en esta bodega. Actualiza para seleccionarlo; no lo crees otra vez.');
       setCreatedItems((current) => [...current.filter((entry) => entry.assetId !== assetId), item]);
@@ -266,6 +268,7 @@ export default function AssetComponentsSelectionModal({
         key={creating.id}
         initialFamilyId={creating.family.id}
         initialWarehouseId={ownerWarehouseId}
+        initialCurrentWarehouseId={physicalWarehouseId ?? ownerWarehouseId}
         onSavingChange={setCreatingBusy}
         onCreated={(assetId) => void refreshCreatedAsset(assetId, creating)}
       /> : null}

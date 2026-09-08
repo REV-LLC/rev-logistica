@@ -77,6 +77,11 @@ enum DocumentStatus {
   VOID
 }
 
+enum InventorySourceMode {
+  WAREHOUSE
+  OWNER_WAREHOUSES
+}
+
 enum DocumentItemBillingStatus {
   OPEN
   CUT
@@ -714,6 +719,8 @@ model Document {
   consecutive         String?        @unique
   customerWorksiteId  String?
   warehouseId         String?
+  // Null preserves the interpretation used by documents created before this field.
+  inventorySourceMode InventorySourceMode?
   providerWarehouseId String?
   createdBy           String
   docDate             DateTime       @default(now())

@@ -6,10 +6,12 @@ describe('provider catalogue stock and late document entry', () => {
   const delivered = new Date('2026-09-02T12:00:00Z');
   function setup(opening = true, quantity = 1) {
     const rows: any[] = [
-      { assetId: 'vibrator', skuId: null, ownerWarehouseId: 'provider', warehouseId: 'provider',
+      { id: 'opening-vibrator', createdAt: registered, refDocumentId: null, refDocumentType: null,
+        assetId: 'vibrator', skuId: null, ownerWarehouseId: 'provider', warehouseId: 'provider',
         customerWorksiteId: null, movementType: MovementType.ADJUST, quantity: 1,
         effectiveAt: registered, isOpeningBalance: opening },
-      { assetId: null, skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider',
+      { id: 'opening-hose', createdAt: registered, refDocumentId: null, refDocumentType: null,
+        assetId: null, skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider',
         customerWorksiteId: null, movementType: MovementType.ADJUST, quantity,
         effectiveAt: registered, isOpeningBalance: opening },
     ];
@@ -35,7 +37,13 @@ describe('provider catalogue stock and late document entry', () => {
             ? [{ assetId: 'vibrator', _sum: { quantity: 1 } }]
             : [{ skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider', _sum: { quantity } }];
         }),
-        create: jest.fn(async ({ data }) => { rows.push({ ...data, isOpeningBalance: false }); return { id: 'new-row' }; }),
+        create: jest.fn(async ({ data }) => {
+          rows.push({
+            id: `ledger-${rows.length + 1}`, createdAt: registered,
+            refDocumentId: null, refDocumentType: null, ...data, isOpeningBalance: false,
+          });
+          return { id: 'new-row' };
+        }),
       },
     };
     const prisma = { $transaction: (fn: any) => fn(tx),

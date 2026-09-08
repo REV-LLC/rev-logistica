@@ -15,7 +15,7 @@ describe('owner asset catalogue', () => {
   const delivered = new Date('2026-09-01T12:00:00Z');
 
   function movement(overrides: Record<string, any> = {}) {
-    return {
+    const result = {
       id: 'opening', assetId: 'asset', ownerWarehouseId: provider.id,
       movementType: MovementType.ADJUST, quantity: 1,
       isOpeningBalance: true, effectiveAt: registered, createdAt: registered,
@@ -23,10 +23,15 @@ describe('owner asset catalogue', () => {
       warehouse: provider, customerWorksite: null,
       ...overrides,
     };
+    return {
+      ...result,
+      warehouseId: result.warehouse?.id ?? null,
+      customerWorksiteId: result.customerWorksite?.id ?? null,
+    };
   }
 
   function asset(overrides: Record<string, any> = {}) {
-    return {
+    const result = {
       id: 'asset', skuId: 'sku', warehouseOwnerId: provider.id,
       // A cached asset warehouse is deliberately present even in unknown cases;
       // only ledger location can establish physical availability.
@@ -46,6 +51,7 @@ describe('owner asset catalogue', () => {
       ledger: [movement()],
       ...overrides,
     };
+    return { ...result, ledger: result.ledger.map((entry) => ({ ...entry, assetId: result.id })) };
   }
 
   function setup(rows: ReturnType<typeof asset>[] = [asset()]) {
@@ -70,12 +76,7 @@ describe('owner asset catalogue', () => {
         }).slice(0, select.ledger.take),
       })));
     const transferFind = jest.fn(async ({ where }) => rows.flatMap((row) => row.ledger)
-      .filter((row) => row.movementType === where.movementType
-        && Number(row.quantity) > where.quantity.gt
-        && row.isOpeningBalance === where.isOpeningBalance
-        && row.warehouse !== null
-        && row.customerWorksite === null
-        && where.OR.some((event: Record<string, unknown>) => Object.entries(event).every(([key, value]) =>
+      .filter((row) => where.OR.some((event: Record<string, unknown>) => Object.entries(event).every(([key, value]) =>
           value instanceof Date ? row[key]?.getTime() === value.getTime() : row[key] === value))));
     const prisma = {
       warehouse: { findUnique: warehouseFind },
@@ -182,7 +183,8 @@ describe('owner asset catalogue', () => {
     const event = { isOpeningBalance: false, refDocumentId: 'transfer', refDocumentType };
     const { service, transferFind } = setup([asset({ ledger: [
       movement({ ...event, id: '0000-in', movementType: MovementType.IN, warehouse: destination }),
-      movement({ ...event, id: 'ffff-out', movementType: MovementType.OUT, quantity: -1 }),
+      movement({ ...event, id: 'ffff-out', movementType: MovementType.OUT, quantity: -1,
+        warehouse: destination.id === provider.id ? custody : provider }),
     ] })]);
     expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
       status: 'IN', quantity,
@@ -190,11 +192,9 @@ describe('owner asset catalogue', () => {
       location: { type: 'WAREHOUSE', id: destination.id, name: destination.name, warehouseType: destination.type },
     });
     expect(transferFind).toHaveBeenCalledTimes(1);
-    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
-      OR: [{ assetId: 'asset', ownerWarehouseId: provider.id, refDocumentId: 'transfer', refDocumentType,
-        effectiveAt: registered, createdAt: registered }],
-      movementType: MovementType.IN, isOpeningBalance: false,
-    }) }));
+    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ assetId: 'asset', refDocumentId: 'transfer' }] },
+    }));
   });
 
   it.each(['different-document', 'different-time'])('does not borrow an IN from a %s transfer', async (difference) => {
@@ -218,6 +218,147 @@ describe('owner asset catalogue', () => {
       movement({ ...event, id: 'ffff-out', movementType: MovementType.OUT, quantity: -1 }),
     ] })]);
     expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({ status: 'UNKNOWN', quantity: 0 });
+  });
+
+  it('uses a complete transfer destination when the IN UUID is greatest', async () => {
+    const event = { isOpeningBalance: false, refDocumentId: 'transfer', refDocumentType: DocumentType.PROVIDER_PICKUP };
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ ...event, id: 'ffff-in', movementType: MovementType.IN, warehouse: custody }),
+      movement({ ...event, id: '0000-out', movementType: MovementType.OUT, quantity: -1 }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'IN', quantity: 0, location: { type: 'WAREHOUSE', id: custody.id },
+    });
+    expect(transferFind).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show availability for ambiguous transfers even when IN has the greatest UUID', async () => {
+    const event = { isOpeningBalance: false, refDocumentId: 'transfer', refDocumentType: DocumentType.PROVIDER_RECEIPT };
+    const { service } = setup([asset({ ledger: [
+      movement({ ...event, id: 'ffff-in', movementType: MovementType.IN }),
+      movement({ ...event, id: '0001-in', movementType: MovementType.IN, warehouse: custody }),
+      movement({ ...event, id: '0000-out', movementType: MovementType.OUT, warehouse: custody, quantity: -1 }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'UNKNOWN', quantity: 0, isAvailableInOwnerWarehouse: false,
+      location: { type: 'UNKNOWN' },
+    });
+  });
+
+  it('shows a legacy custody receipt whose IN timestamps are later than the OUT timestamps', async () => {
+    const event = { isOpeningBalance: false, refDocumentId: 'receipt', refDocumentType: DocumentType.PROVIDER_RECEIPT };
+    const later = new Date(registered.getTime() + 1);
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ ...event, id: '0000-in', movementType: MovementType.IN, effectiveAt: later, createdAt: later }),
+      movement({ ...event, id: 'ffff-out', movementType: MovementType.OUT, warehouse: custody, quantity: -1 }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'IN', quantity: 1, isAvailableInOwnerWarehouse: true,
+      location: { type: 'WAREHOUSE', id: provider.id },
+    });
+    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ assetId: 'asset', refDocumentId: 'receipt' }] },
+    }));
+  });
+
+  it('shows a single-IN provider receipt from transit as available without querying earlier documents', async () => {
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ id: 'earlier-transit', isOpeningBalance: false, effectiveAt: delivered,
+        movementType: MovementType.TRANSIT, warehouse: null, customerWorksite: site,
+        refDocumentId: 'return-document', refDocumentType: DocumentType.RETURN }),
+      movement({ id: 'receipt', isOpeningBalance: false, movementType: MovementType.IN,
+        refDocumentId: 'provider-receipt', refDocumentType: DocumentType.PROVIDER_RECEIPT }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'IN', quantity: 1, isAvailableInOwnerWarehouse: true,
+      location: { type: 'WAREHOUSE', id: provider.id },
+    });
+    // The head IN is also returned by this query and must not be counted twice.
+    expect(transferFind).toHaveBeenCalledTimes(1);
+    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ assetId: 'asset', refDocumentId: 'provider-receipt' }] },
+    }));
+  });
+
+  it.each([
+    ['an OUT effective after the IN', { effectiveAt: new Date(registered.getTime() + 1) }],
+    ['an OUT registered after the IN', { createdAt: new Date(registered.getTime() + 1) }],
+    ['another owner', { ownerWarehouseId: custody.id }],
+    ['another document type', { refDocumentType: DocumentType.PROVIDER_PICKUP }],
+    ['missing document type', { refDocumentType: null }],
+  ])('keeps a receipt UNKNOWN when the same document has a counterpart with %s', async (_label, mismatch) => {
+    const event = { isOpeningBalance: false, refDocumentId: 'receipt', refDocumentType: DocumentType.PROVIDER_RECEIPT };
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ ...event, id: 'ffff-in', movementType: MovementType.IN }),
+      movement({ ...event, id: '0000-out', movementType: MovementType.OUT, warehouse: custody,
+        quantity: -1, ...mismatch }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'UNKNOWN', quantity: 0, location: { type: 'UNKNOWN' },
+    });
+    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ assetId: 'asset', refDocumentId: 'receipt' }] },
+    }));
+  });
+
+  it.each([
+    ['missing pickup source', { refDocumentType: DocumentType.PROVIDER_PICKUP }],
+    ['non-owner receipt destination', { warehouse: custody }],
+    ['receipt with origin worksite', { customerWorksite: site }],
+    ['negative receipt quantity', { quantity: -1 }],
+  ])('does not show availability for %s', async (_label, mismatch) => {
+    const { service } = setup([asset({ ledger: [movement({
+      isOpeningBalance: false, movementType: MovementType.IN,
+      refDocumentId: 'provider-receipt', refDocumentType: DocumentType.PROVIDER_RECEIPT,
+      ...mismatch,
+    })] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'UNKNOWN', quantity: 0, isAvailableInOwnerWarehouse: false,
+    });
+  });
+
+  it('resolves several latest provider documents in a single scoped query without crossing assets', async () => {
+    const event = { isOpeningBalance: false, refDocumentId: 'shared-transfer', refDocumentType: DocumentType.PROVIDER_PICKUP };
+    const { service, transferFind } = setup([
+      asset({ ledger: [
+        movement({ ...event, id: 'ffff-asset-out', movementType: MovementType.OUT, quantity: -1 }),
+        movement({ ...event, id: '0000-asset-in', movementType: MovementType.IN, warehouse: custody }),
+      ] }),
+      asset({ id: 'second-asset', ledger: [
+        movement({ ...event, id: 'ffff-second-out', movementType: MovementType.OUT, quantity: -1 }),
+      ] }),
+      asset({ id: 'unrelated', warehouseOwnerId: custody.id, ledger: [
+        movement({ ...event, id: 'ffff-unrelated-in', movementType: MovementType.IN, warehouse: custody }),
+      ] }),
+    ]);
+    const result = await service.getOwnerAssetCatalog(provider.id);
+    expect(result.serial).toHaveLength(2);
+    expect(result.serial.find((entry) => entry.assetId === 'asset')).toMatchObject({
+      status: 'IN', location: { type: 'WAREHOUSE', id: custody.id },
+    });
+    expect(result.serial.find((entry) => entry.assetId === 'second-asset')).toMatchObject({
+      status: 'UNKNOWN', quantity: 0,
+    });
+    expect(transferFind).toHaveBeenCalledTimes(1);
+    expect(transferFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [
+        { assetId: 'asset', refDocumentId: 'shared-transfer' },
+        { assetId: 'second-asset', refDocumentId: 'shared-transfer' },
+      ] },
+    }));
+  });
+
+  it('does not fetch a previous provider transfer after a newer real dispatch', async () => {
+    const { service, transferFind } = setup([asset({ ledger: [
+      movement({ id: 'receipt', isOpeningBalance: false, effectiveAt: delivered,
+        movementType: MovementType.IN, refDocumentId: 'receipt', refDocumentType: DocumentType.PROVIDER_RECEIPT }),
+      movement({ id: 'new-dispatch', isOpeningBalance: false, movementType: MovementType.OUT,
+        quantity: -1, customerWorksite: site, refDocumentId: 'remission', refDocumentType: DocumentType.REMISSION }),
+    ] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      status: 'OUT', quantity: 0, location: { type: 'WORKSITE', id: site.id },
+    });
+    expect(transferFind).not.toHaveBeenCalled();
   });
 
   it('returns edit metadata and prefers equipment images over reference images', async () => {
