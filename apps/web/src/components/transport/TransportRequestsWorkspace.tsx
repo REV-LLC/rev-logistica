@@ -6,6 +6,8 @@ import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
+import { buildDocumentDateTime, getDocumentDateTimeInput, isDocumentTimeValid } from '@/lib/document-date-time';
+import { getDocumentRequestNumber } from './request-number';
 import { getCurrentUserRole, getCurrentUserSession } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import {
@@ -34,7 +36,6 @@ import {
   formatDateTime,
   formatDocType,
   getEmployeeFullName,
-  getTodayDateInput,
   normalizeLocalWhatsappPhone,
   parseNotes,
   requestTypeColor,
@@ -88,9 +89,14 @@ export default function TransportRequestsWorkspace({
   const [flowUrlReady, setFlowUrlReady] = useState(false);
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
+  const [savedConsecutive, setSavedConsecutive] = useState<string | null>(null);
+  const documentNumber = getDocumentRequestNumber(consecutive, docType, savedConsecutive);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [sendWhatsapp, setSendWhatsapp] = useState(true);
-  const [docDate, setDocDate] = useState(() => getTodayDateInput());
+  const [docDate, setDocDate] = useState(() => getDocumentDateTimeInput().date);
+  const [docTime, setDocTime] = useState(() => getDocumentDateTimeInput().time);
+  const [originalDocumentTimestamp, setOriginalDocumentTimestamp] = useState<string | null>(null);
+  const documentTimestamp = buildDocumentDateTime(docDate, docTime, originalDocumentTimestamp);
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>(
     'ON_SITE',
   );
@@ -318,12 +324,14 @@ export default function TransportRequestsWorkspace({
   const { autosaveStatus, setAutosaveStatus, autosavePayload } =
     useRequestAutosave({
       docType,
-      consecutive,
+      documentNumber,
+      setConsecutive,
+      setSavedConsecutive,
       warehouseId,
       principalWarehouse,
       customerWorksiteId,
       observations,
-      docDate,
+      documentTimestamp,
       deliveryMode,
       vehicleId,
       driverId,
@@ -510,11 +518,15 @@ export default function TransportRequestsWorkspace({
     setAssignMotorError(null);
     setError(null);
     setConsecutive('');
+    setSavedConsecutive(null);
     setCustomerId(null);
     setAdditionalRecipientPhones([]);
     setRecipientPhoneDraft('');
     setSendWhatsapp(true);
-    setDocDate(getTodayDateInput());
+    const now = getDocumentDateTimeInput();
+    setDocDate(now.date);
+    setDocTime(now.time);
+    setOriginalDocumentTimestamp(null);
     setDeliveryMode('ON_SITE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
@@ -544,6 +556,7 @@ export default function TransportRequestsWorkspace({
     setSubmitResult,
     setError,
     docDate,
+    documentTimestamp,
     customerId,
     selectedItems,
     customerWorksiteId,
@@ -558,7 +571,9 @@ export default function TransportRequestsWorkspace({
     deliveryMode,
     isDriverRole,
     driverId,
-    consecutive,
+    documentNumber,
+    setConsecutive,
+    setSavedConsecutive,
     isAdminRole,
     autosaveDraftId,
     evidencePhotos,
@@ -597,6 +612,7 @@ export default function TransportRequestsWorkspace({
       setAutosaveReady(false);
       setDocType(doc.type === 'RETURN' ? 'RETURN' : 'REMISSION');
       setConsecutive(doc.consecutive ?? '');
+      setSavedConsecutive(doc.consecutive);
       setCustomerId(doc.customerWorksite?.customer?.id ?? null);
       setAdditionalRecipientPhones(
         (doc.recipientPhones?.length
@@ -609,9 +625,10 @@ export default function TransportRequestsWorkspace({
           .filter((phone): phone is string => Boolean(phone)),
       );
       setRecipientPhoneDraft('');
-      setDocDate(
-        doc.docDate ? new Date(doc.docDate).toISOString().slice(0, 10) : '',
-      );
+      const savedDateTime = getDocumentDateTimeInput(doc.docDate);
+      setDocDate(savedDateTime.date);
+      setDocTime(savedDateTime.time);
+      setOriginalDocumentTimestamp(doc.docDate);
       setDeliveryMode(
         parsed.deliveryMode === 'ON_SITE' ? 'ON_SITE' : 'WAREHOUSE',
       );
@@ -739,6 +756,12 @@ export default function TransportRequestsWorkspace({
     const nextFieldErrors: GenerateFieldErrors = {};
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
     if (!docDate) nextFieldErrors.docDate = 'Selecciona la fecha.';
+    if (!isDocumentTimeValid(docTime)) {
+      nextFieldErrors.docTime = 'Ingresa la hora en formato HH:mm (00:00 a 23:59).';
+    }
+    if (docDate && isDocumentTimeValid(docTime) && !documentTimestamp) {
+      nextFieldErrors.docDate = 'Selecciona una fecha válida.';
+    }
     if (!customerWorksiteId)
       nextFieldErrors.customerWorksiteId = 'Selecciona la obra.';
     if (
@@ -781,7 +804,10 @@ export default function TransportRequestsWorkspace({
         }
         setAutosaveReady(true);
         setAutosaveStatus('saved');
-        if (draft.consecutive) setConsecutive(draft.consecutive);
+        if (draft.consecutive) {
+          setConsecutive(draft.consecutive);
+          setSavedConsecutive(draft.consecutive);
+        }
       } catch (err) {
         setAutosaveStatus('error');
         setError(
@@ -1095,6 +1121,8 @@ export default function TransportRequestsWorkspace({
                 generateFieldErrors={generateFieldErrors}
                 docDate={docDate}
                 setDocDate={setDocDate}
+                docTime={docTime}
+                setDocTime={setDocTime}
                 isAdminRole={isAdminRole}
                 warehouseId={warehouseId}
                 setWarehouseId={setWarehouseId}
@@ -1128,6 +1156,7 @@ export default function TransportRequestsWorkspace({
               selectedCustomer={selectedCustomer}
               selectedWorksiteLabel={selectedWorksiteLabel}
               docDate={docDate}
+              docTime={docTime}
               docType={docType}
               deliveryMode={deliveryMode}
               selectedDriver={selectedDriver}
@@ -1170,6 +1199,7 @@ export default function TransportRequestsWorkspace({
               selectedCustomer={selectedCustomer}
               selectedWorksiteLabel={selectedWorksiteLabel}
               docDate={docDate}
+              docTime={docTime}
               selectedItems={selectedItems}
               canDecide={canDecide}
               sendWhatsapp={sendWhatsapp}

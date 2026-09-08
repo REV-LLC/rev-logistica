@@ -48,6 +48,7 @@ import {
   LEDGER_MAX_TAKE,
 } from './dto/get-inventory-ledger.dto';
 import { GetInventorySummaryDto } from './dto/get-inventory-summary.dto';
+import { ledgerSearchWhere } from './ledger-search';
 import {
   getWorksiteQuantityDelta,
   WORKSITE_BALANCE_MOVEMENT_TYPES,
@@ -2476,7 +2477,7 @@ export class InventoryService {
 
   async getLedger(query: GetInventoryLedgerDto) {
     const take = Math.min(query.take ?? LEDGER_DEFAULT_TAKE, LEDGER_MAX_TAKE);
-    const where: Prisma.StockLedgerWhereInput = {};
+    const where: Prisma.StockLedgerWhereInput = ledgerSearchWhere(query.search);
 
     if (query.warehouseId) where.warehouseId = query.warehouseId;
     if (query.customerWorksiteId) where.customerWorksiteId = query.customerWorksiteId;
@@ -2505,7 +2506,13 @@ export class InventoryService {
 
     if (query.cursor) {
       const cursor = this.parseLedgerCursor(query.cursor);
+      const conditions = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
       where.AND = [
+        ...conditions,
         {
           OR: [
             { effectiveAt: { lt: cursor.effectiveAt } },

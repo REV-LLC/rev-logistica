@@ -31,6 +31,7 @@ type Props = {
   selectedCustomer: Customer | null;
   selectedWorksiteLabel: string;
   docDate: string;
+  docTime: string;
   selectedItems: SelectedItem[];
   canDecide: boolean;
   sendWhatsapp: boolean;
@@ -74,6 +75,7 @@ export default function RequestSigningSection({
   selectedCustomer,
   selectedWorksiteLabel,
   docDate,
+  docTime,
   selectedItems,
   canDecide,
   sendWhatsapp,
@@ -163,10 +165,10 @@ export default function RequestSigningSection({
           </div>
           <div>
             <Text size="xs" fw={800} c="dimmed" tt="uppercase">
-              Fecha
+              Fecha y hora
             </Text>
             <Text size="sm" fw={700}>
-              {docDate || '-'}
+              {docDate ? `${docDate} ${docTime}` : '-'}
             </Text>
           </div>
           <div>

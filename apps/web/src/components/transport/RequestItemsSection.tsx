@@ -35,6 +35,7 @@ type Props = {
   selectedCustomer: Customer | null;
   selectedWorksiteLabel: string;
   docDate: string;
+  docTime: string;
   docType: 'REMISSION' | 'RETURN';
   deliveryMode: 'WAREHOUSE' | 'ON_SITE';
   selectedDriver: Employee | null;
@@ -79,6 +80,7 @@ export default function RequestItemsSection({
   selectedCustomer,
   selectedWorksiteLabel,
   docDate,
+  docTime,
   docType,
   deliveryMode,
   selectedDriver,
@@ -166,10 +168,10 @@ export default function RequestItemsSection({
           </div>
           <div>
             <Text size="xs" fw={800} c="dimmed" tt="uppercase">
-              Fecha
+              Fecha y hora
             </Text>
             <Text size="sm" fw={700}>
-              {docDate || '-'}
+              {docDate ? `${docDate} ${docTime}` : '-'}
             </Text>
           </div>
           <div>

@@ -239,12 +239,14 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
   );
   const hook = await mountHook(useRequestAutosave, {
     docType: 'REMISSION',
-    consecutive: '123',
+    documentNumber: 'RM123',
+    setConsecutive: noop,
+    setSavedConsecutive: noop,
     warehouseId: 'own',
     principalWarehouse: null,
     customerWorksiteId: 'site',
     observations: 'Entregar por portería',
-    docDate: '2026-09-07',
+    documentTimestamp: '2026-09-07T14:35:00-05:00',
     deliveryMode: 'ON_SITE',
     vehicleId: 'truck',
     driverId: 'driver',
@@ -273,6 +275,7 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
   assert.equal(payload.items[0].componentParentAssetId, 'loader');
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
   assert.match(payload.notes, /Conductor: driver/);
+  assert.match(payload.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
 
 const submissionOptions = {
@@ -284,6 +287,7 @@ const submissionOptions = {
   setSubmitResult: noop,
   setError: noop,
   docDate: '2026-09-07',
+  documentTimestamp: '2026-09-07T14:35:00-05:00',
   customerId: 'customer',
   selectedItems: [
     {
@@ -306,7 +310,9 @@ const submissionOptions = {
   deliveryMode: 'ON_SITE',
   isDriverRole: false,
   driverId: null,
-  consecutive: '123',
+  documentNumber: 'RM123',
+  setConsecutive: noop,
+  setSavedConsecutive: noop,
   isAdminRole: false,
   autosaveDraftId: null,
   evidencePhotos: [],
@@ -370,6 +376,8 @@ test('envío online mantiene el vínculo, acepta dueño pendiente y omite WhatsA
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
   assert.equal(payload.items[1].ownerWarehouseId, undefined);
   assert.equal(payload.sendWhatsapp, false);
+  assert.equal(payload.number, 'RM123');
+  assert.match(payload.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
   assert.ok(!calls.some((call) => call.url.includes('customer-messages')));
 });
 
@@ -448,6 +456,7 @@ test('envío offline conserva el orden guardar → enviar → correo sin perder 
   assert.deepEqual(queued[1].dependsOn, ['op-1']);
   assert.deepEqual(queued[2].dependsOn, ['op-2']);
   assert.equal(queued[0].body.items[0].componentParentAssetId, 'loader');
+  assert.match(queued[0].body.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
 
 test('devolución dañada exige descripción antes de enviar', async () => {
@@ -484,4 +493,107 @@ test('devolución dañada exige descripción antes de enviar', async () => {
   await act(() => hook.current.handleSubmit());
   assert.match(errors.at(-1), /Describe el daño/);
   assert.deepEqual(calls, []);
+});
+
+
+test('autoguardado espera una hora válida y sincroniza el consecutivo APP asignado al cambiar el tipo', async () => {
+  const calls = [], assigned = [], savedNumbers = [];
+  Object.defineProperty(globalThis.navigator, 'onLine', {
+    configurable: true,
+    value: true,
+  });
+  const { useRequestAutosave } = loadTransportModule('use-request-autosave.ts', {
+    '@/lib/api': { api: async (url, options) => {
+      calls.push({ url, options });
+      return { id: 'draft', consecutive: 'DV-APP-000002' };
+    } },
+  });
+  const timers = new Map();
+  let timerId = 0;
+  const originalSetTimeout = window.setTimeout;
+  const originalClearTimeout = window.clearTimeout;
+  window.setTimeout = callback => {
+    timers.set(++timerId, callback);
+    return timerId;
+  };
+  window.clearTimeout = id => timers.delete(id);
+  try {
+    const options = {
+      ...submissionOptions,
+      docType: 'RETURN',
+      documentNumber: undefined,
+      documentTimestamp: null,
+      autosaveDraftId: 'draft',
+      autosaveReady: true,
+      submitting: false,
+      setConsecutive: value => assigned.push(value),
+      setSavedConsecutive: value => savedNumbers.push(value),
+    };
+    const hook = await mountHook(useRequestAutosave, options);
+    assert.equal(timers.size, 0);
+    await hook.update({ ...options, documentTimestamp: '2026-09-07T23:59:47-05:00' });
+    assert.equal(timers.size, 1);
+    const callback = [...timers.values()][0];
+    timers.clear();
+    await act(() => callback());
+    assert.equal(calls[0].options.json.number, undefined);
+    assert.match(calls[0].options.json.notes, /Fecha documento: 2026-09-07T23:59:47-05:00/);
+    assert.deepEqual(assigned, ['DV-APP-000002']);
+    assert.deepEqual(savedNumbers, assigned);
+    assert.equal(hook.current.autosaveStatus, 'saved');
+  } finally {
+    window.setTimeout = originalSetTimeout;
+    window.clearTimeout = originalClearTimeout;
+  }
+});
+
+test('envío conserva el número APP actualizado si falla el envío del borrador y permite reintentar', async () => {
+  const calls = [], assigned = [], savedNumbers = [], errors = [];
+  Object.defineProperty(globalThis.navigator, 'onLine', {
+    configurable: true,
+    value: true,
+  });
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': { ApiError, api: async (url, options) => {
+      calls.push({ url, options });
+      if (url.endsWith('/submit')) throw new Error('Conexión interrumpida');
+      return { id: 'draft', consecutive: 'DV-APP-000003' };
+    } },
+    '@/lib/offline-queue': { enqueueOfflineOperation: noop, syncOfflineOperations: noop },
+  });
+  const hook = await mountHook(useRequestSubmission, {
+    ...submissionOptions,
+    docType: 'RETURN',
+    driverId: 'driver',
+    documentNumber: undefined,
+    autosaveDraftId: 'draft',
+    setConsecutive: value => assigned.push(value),
+    setSavedConsecutive: value => savedNumbers.push(value),
+    setError: error => errors.push(error),
+  });
+  await act(() => hook.current.handleSubmit());
+  assert.deepEqual(calls.map(call => call.url), ['/documents/draft/request/autosave', '/documents/draft/request/submit']);
+  assert.equal(calls[0].options.json.number, undefined);
+  assert.deepEqual(assigned, ['DV-APP-000003']);
+  assert.deepEqual(savedNumbers, assigned);
+  assert.match(errors.at(-1), /Conexión interrumpida/);
+});
+
+test('envío rechaza fecha u hora inválida antes de guardar o encolar el documento', async () => {
+  const calls = [], errors = [];
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': { ApiError, api: async url => calls.push(url) },
+    '@/lib/offline-queue': {
+      enqueueOfflineOperation: async operation => calls.push(operation),
+      syncOfflineOperations: noop,
+    },
+  });
+  const hook = await mountHook(useRequestSubmission, {
+    ...submissionOptions,
+    documentTimestamp: null,
+    setError: error => errors.push(error),
+  });
+  await act(() => hook.current.handleSubmit());
+  assert.deepEqual(calls, []);
+  assert.match(errors.at(-1), /una fecha válida y una hora entre 00:00 y 23:59/);
 });

@@ -1,19 +1,21 @@
 'use client';
 import { buildRequestItems } from '@/components/transport/request-items';
 import { api } from '@/lib/api';
-import { useEffect, useMemo, useState } from 'react';
-import { buildRequestNotes, withDocPrefix } from './request-formatting';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { buildRequestNotes } from './request-formatting';
 import type { Warehouse } from './request-types';
 import { SelectedItem } from './request-types';
 
 type Options = {
   docType: 'REMISSION' | 'RETURN';
-  consecutive: string;
+  documentNumber: string | undefined;
+  setConsecutive: Dispatch<SetStateAction<string>>;
+  setSavedConsecutive: Dispatch<SetStateAction<string | null>>;
   warehouseId: string | null;
   principalWarehouse: Warehouse | null;
   customerWorksiteId: string;
   observations: string;
-  docDate: string;
+  documentTimestamp: string | null;
   deliveryMode: 'WAREHOUSE' | 'ON_SITE';
   vehicleId: string | null;
   driverId: string | null;
@@ -30,12 +32,14 @@ type Options = {
 
 export function useRequestAutosave({
   docType,
-  consecutive,
+  documentNumber,
+  setConsecutive,
+  setSavedConsecutive,
   warehouseId,
   principalWarehouse,
   customerWorksiteId,
   observations,
-  docDate,
+  documentTimestamp,
   deliveryMode,
   vehicleId,
   driverId,
@@ -56,12 +60,12 @@ export function useRequestAutosave({
   const autosavePayload = useMemo(
     () => ({
       type: docType,
-      number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
+      number: documentNumber,
       warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
       customerWorksiteId: customerWorksiteId || undefined,
       notes: buildRequestNotes({
         observations,
-        docDate,
+        documentTimestamp,
         docType,
         deliveryMode,
         vehicleId,
@@ -73,11 +77,11 @@ export function useRequestAutosave({
       items: buildRequestItems(selectedItems),
     }),
     [
-      consecutive,
+      documentNumber,
       customerWorksiteId,
       deliveryMode,
       dispatcherId,
-      docDate,
+      documentTimestamp,
       docType,
       driverId,
       observations,
@@ -92,7 +96,7 @@ export function useRequestAutosave({
   );
 
   useEffect(() => {
-    if (!autosaveDraftId || !autosaveReady || editingRequestId || submitting)
+    if (!autosaveDraftId || !autosaveReady || editingRequestId || submitting || !documentTimestamp)
       return;
     if (!navigator.onLine) {
       setAutosaveStatus('offline');
@@ -102,11 +106,15 @@ export function useRequestAutosave({
     const timeout = window.setTimeout(async () => {
       setAutosaveStatus('saving');
       try {
-        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+        const saved = await api<{ id: string; consecutive: string | null }>(`/documents/${autosaveDraftId}/request/autosave`, {
           method: 'PATCH',
           json: autosavePayload,
         });
-        if (active) setAutosaveStatus('saved');
+        if (active && saved.id === autosaveDraftId) {
+          setConsecutive(saved.consecutive ?? '');
+          setSavedConsecutive(saved.consecutive);
+          setAutosaveStatus('saved');
+        }
       } catch {
         if (active) setAutosaveStatus('error');
       }
@@ -119,6 +127,9 @@ export function useRequestAutosave({
     autosaveDraftId,
     autosavePayload,
     autosaveReady,
+    documentTimestamp,
+    setConsecutive,
+    setSavedConsecutive,
     editingRequestId,
     submitting,
   ]);

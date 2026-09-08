@@ -1,8 +1,13 @@
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MovementType } from '@prisma/client';
 
 export class GetInventoryLedgerDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
   @IsOptional()
   @IsUUID()
   warehouseId?: string;

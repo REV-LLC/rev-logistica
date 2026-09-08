@@ -146,7 +146,7 @@ export function extractUserObservations(notes: string | null) {
 
 export function buildRequestNotes({
   observations,
-  docDate,
+  documentTimestamp,
   docType,
   deliveryMode,
   vehicleId,
@@ -154,7 +154,7 @@ export function buildRequestNotes({
   dispatcherId,
 }: {
   observations: string;
-  docDate: string;
+  documentTimestamp: string | null;
   docType: 'REMISSION' | 'RETURN';
   deliveryMode: 'WAREHOUSE' | 'ON_SITE';
   vehicleId: string | null;
@@ -163,7 +163,7 @@ export function buildRequestNotes({
 }) {
   return [
     observations.trim() || null,
-    `Fecha documento: ${docDate}`,
+    documentTimestamp ? `Fecha documento: ${documentTimestamp}` : null,
     `Entrega: ${deliveryMode}`,
     deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
     deliveryMode === 'ON_SITE' && driverId ? `Conductor: ${driverId}` : null,

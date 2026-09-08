@@ -1,5 +1,6 @@
 'use client';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import DocumentTimeInput from '@/components/DocumentTimeInput';
 import {
   Badge,
   Button,
@@ -47,6 +48,8 @@ type Props = {
   generateFieldErrors: GenerateFieldErrors;
   docDate: string;
   setDocDate: Dispatch<SetStateAction<string>>;
+  docTime: string;
+  setDocTime: Dispatch<SetStateAction<string>>;
   isAdminRole: boolean;
   warehouseId: string | null;
   setWarehouseId: Dispatch<SetStateAction<string | null>>;
@@ -92,6 +95,8 @@ export default function RequestInformationSection({
   generateFieldErrors,
   docDate,
   setDocDate,
+  docTime,
+  setDocTime,
   isAdminRole,
   warehouseId,
   setWarehouseId,
@@ -229,8 +234,8 @@ export default function RequestInformationSection({
                   {!isDriverRole ? (
                     <TextInput
                       label={helpLabel(
-                        'Consecutivo (opcional)',
-                        'Si queda vacio, oficina puede asignarlo en la confirmacion.',
+                        'Consecutivo físico (opcional)',
+                        'Ingresa el número del papel. Si queda vacío, la app genera un consecutivo de la serie RM-APP o DV-APP.',
                       )}
                       withAsterisk={false}
                       value={consecutive}
@@ -278,6 +283,14 @@ export default function RequestInformationSection({
                     }}
                     required
                     error={generateFieldErrors.docDate}
+                  />
+                  <DocumentTimeInput
+                    value={docTime}
+                    onChange={(value) => {
+                      setDocTime(value);
+                      setGenerateFieldErrors((prev) => ({ ...prev, docTime: undefined }));
+                    }}
+                    error={generateFieldErrors.docTime}
                   />
                 </SimpleGrid>
                 {editingRequestId && isAdminRole ? (

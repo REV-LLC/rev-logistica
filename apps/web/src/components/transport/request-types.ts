@@ -96,6 +96,7 @@ export type ProviderRemissionModalState = {
 export type GenerateFieldErrors = {
   customerId?: string;
   docDate?: string;
+  docTime?: string;
   customerWorksiteId?: string;
   recipientPhones?: string;
   driverId?: string;

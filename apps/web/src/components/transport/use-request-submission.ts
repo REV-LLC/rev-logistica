@@ -11,7 +11,6 @@ import { formatTransportError } from './request-errors';
 import {
   buildRequestNotes,
   normalizeLocalWhatsappPhone,
-  withDocPrefix,
 } from './request-formatting';
 import type {
   CustomerWorksite,
@@ -36,6 +35,7 @@ type Options = {
   setSubmitResult: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
   docDate: string;
+  documentTimestamp: string | null;
   customerId: string | null;
   selectedItems: SelectedItem[];
   customerWorksiteId: string;
@@ -50,7 +50,9 @@ type Options = {
   deliveryMode: 'WAREHOUSE' | 'ON_SITE';
   isDriverRole: boolean;
   driverId: string | null;
-  consecutive: string;
+  documentNumber: string | undefined;
+  setConsecutive: Dispatch<SetStateAction<string>>;
+  setSavedConsecutive: Dispatch<SetStateAction<string | null>>;
   isAdminRole: boolean;
   autosaveDraftId: string | null;
   evidencePhotos: EvidencePhotoDraft[];
@@ -80,6 +82,7 @@ export function useRequestSubmission({
   setSubmitResult,
   setError,
   docDate,
+  documentTimestamp,
   customerId,
   selectedItems,
   customerWorksiteId,
@@ -94,7 +97,9 @@ export function useRequestSubmission({
   deliveryMode,
   isDriverRole,
   driverId,
-  consecutive,
+  documentNumber,
+  setConsecutive,
+  setSavedConsecutive,
   isAdminRole,
   autosaveDraftId,
   evidencePhotos,
@@ -118,6 +123,9 @@ export function useRequestSubmission({
     try {
       if (!docDate || !customerId) {
         throw new Error('Completa los campos requeridos.');
+      }
+      if (!documentTimestamp) {
+        throw new Error('Ingresa una fecha válida y una hora entre 00:00 y 23:59.');
       }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
@@ -207,7 +215,7 @@ export function useRequestSubmission({
 
       const documentPayload = {
         type: docType,
-        number: consecutive ? withDocPrefix(consecutive, docType) : undefined,
+        number: documentNumber,
         warehouseId: effectiveWarehouseId ?? undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         ...(shouldSendWhatsapp ? { recipientPhones } : {}),
@@ -218,7 +226,7 @@ export function useRequestSubmission({
             : (receivedSignature ?? ''),
         notes: buildRequestNotes({
           observations,
-          docDate,
+          documentTimestamp,
           docType,
           deliveryMode,
           vehicleId,
@@ -282,9 +290,9 @@ export function useRequestSubmission({
         return;
       }
 
-      let created: { id: string };
+      let created: { id: string; consecutive?: string | null };
       if (autosaveDraftId) {
-        await api(`/documents/${autosaveDraftId}/request/autosave`, {
+        const saved = await api<{ id: string; consecutive: string | null }>(`/documents/${autosaveDraftId}/request/autosave`, {
           method: 'PATCH',
           json: {
             ...autosavePayload,
@@ -293,6 +301,8 @@ export function useRequestSubmission({
             items: movementItems,
           },
         });
+        setConsecutive(saved.consecutive ?? '');
+        setSavedConsecutive(saved.consecutive);
         created = await api<{ id: string }>(
           `/documents/${autosaveDraftId}/request/submit`,
           {
@@ -301,7 +311,7 @@ export function useRequestSubmission({
           },
         );
       } else {
-        created = await api<{ id: string }>(
+        created = await api<{ id: string; consecutive?: string | null }>(
           editingRequestId
             ? `/documents/${editingRequestId}/request`
             : '/documents/requests',
@@ -313,6 +323,10 @@ export function useRequestSubmission({
             },
           },
         );
+        if (created.consecutive !== undefined) {
+          setConsecutive(created.consecutive ?? '');
+          setSavedConsecutive(created.consecutive);
+        }
       }
       const successMessage = editingRequestId
         ? `Solicitud actualizada (${created.id}).`
