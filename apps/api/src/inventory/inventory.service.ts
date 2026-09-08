@@ -54,6 +54,7 @@ import {
 } from './worksite-ledger-balance';
 import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
 import { lockBulkStock } from './bulk-stock-lock';
+import { buildAssetValidationError } from './asset-validation-error';
 import {
   buildSerializedWarehouseAvailability,
   isSerializedAvailable,
@@ -264,22 +265,24 @@ export class InventoryService {
         customerWorksiteId: true,
         effectiveAt: true,
         isOpeningBalance: true,
+        quantity: true,
       },
     });
     const latestByAsset = new Map<string, (typeof rows)[number]>();
     rows.forEach((row) => {
       if (row.assetId && !latestByAsset.has(row.assetId)) latestByAsset.set(row.assetId, row);
     });
-    sortedIds.forEach((assetId) => {
+    for (const assetId of sortedIds) {
       const latest = latestByAsset.get(assetId);
-      if (!latest) throw new BadRequestException(`El equipo ${assetId} no tiene ubicación registrada`);
+      if (!latest) {
+        throw await buildAssetValidationError(tx, assetId, {
+          code: 'ASSET_LOCATION_UNKNOWN', reason: 'NO_LOCATION',
+        });
+      }
       if (!latest.isOpeningBalance && latest.effectiveAt.getTime() > effectiveAt.getTime()) {
-        throw new BadRequestException({
+        throw await buildAssetValidationError(tx, assetId, {
           code: 'RETROACTIVE_INVENTORY_MOVEMENT',
-          message: `No se puede registrar un movimiento retroactivo para el equipo ${assetId} porque tiene movimientos posteriores`,
-          assetId,
-          latestEffectiveAt: latest.effectiveAt,
-          requestedEffectiveAt: effectiveAt,
+          reason: 'RETROACTIVE', latestMovement: latest, requestedEffectiveAt: effectiveAt,
         });
       }
       const expected = expectedLocation(assetId);
@@ -290,13 +293,12 @@ export class InventoryService {
         && (latest.movementType === MovementType.OUT || latest.movementType === MovementType.ON_SITE)
         && latest.customerWorksiteId === expected.id;
       if (!validWarehouse && !validWorksite) {
-        throw new BadRequestException({
+        throw await buildAssetValidationError(tx, assetId, {
           code: 'ASSET_LOCATION_CONFLICT',
-          message: `El equipo ${assetId} ya no está en la ubicación de origen`,
-          assetId,
+          reason: 'LOCATION_CONFLICT', expectedLocation: expected, latestMovement: latest,
         });
       }
-    });
+    }
   }
 
   private parseLedgerCursor(cursor: string) {
@@ -1161,12 +1163,15 @@ export class InventoryService {
         });
         const availableByAsset = buildSerializedWarehouseAvailability(serialRows, onSiteRows);
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const available = availableByAsset.get(assetId) ?? 0;
           if (!isSerializedAvailable(available)) {
-            throw new BadRequestException(`Asset ${assetId} is not in warehouse`);
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_IN_WAREHOUSE', reason: 'NOT_IN_WAREHOUSE',
+              expectedLocation: { type: 'WAREHOUSE', id: payload.warehouseId },
+            });
           }
-        });
+        }
       }
 
       const assets = serialIds.length
@@ -1178,18 +1183,20 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
       const ledgerOps = [
         ...bulkGroups.map((group) =>
@@ -1212,7 +1219,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {
@@ -1358,18 +1368,20 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
       await this.lockAndAssertSerializedLocation(
         tx,
@@ -1398,12 +1410,15 @@ export class InventoryService {
         });
         const availableByAsset = buildSerializedWarehouseAvailability(warehouseRows, onSiteRows);
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const available = availableByAsset.get(assetId) ?? 0;
           if (!isSerializedAvailable(available)) {
-            throw new BadRequestException(`Asset ${assetId} is not available in owner warehouse`);
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_IN_OWNER_WAREHOUSE', reason: 'NOT_IN_OWNER_WAREHOUSE',
+              expectedLocation: { type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId)! },
+            });
           }
-        });
+        }
       }
 
       const ledgerOps = [
@@ -1427,7 +1442,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {
@@ -1545,12 +1563,15 @@ export class InventoryService {
         ? await tx.asset.findMany({ where: { id: { in: serialIds }, active: true, deletedAt: null }, select: { id: true, warehouseOwnerId: true } })
         : [];
       const assetOwner = new Map(assets.map((asset) => [asset.id, asset.warehouseOwnerId]));
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const ownerId = serialOwnerWarehouseByAsset.get(assetId);
         if (!ownerId || assetOwner.get(assetId) !== ownerId || (available.get(`:${assetId}:${ownerId}`) ?? 0) < 1) {
-          throw new BadRequestException(`El equipo ${assetId} no está disponible en esta obra`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_ON_SITE', reason: 'NOT_ON_SITE',
+            expectedLocation: { type: 'WORKSITE', id: payload.customerWorksiteId },
+          });
         }
-      });
+      }
 
       const created = await Promise.all([
         ...bulkGroups.map((item) => tx.stockLedger.create({ data: {
@@ -1665,14 +1686,15 @@ export class InventoryService {
           availableByAsset.set(assetId, (availableByAsset.get(assetId) ?? 0) + delta);
         });
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const net = availableByAsset.get(assetId) ?? 0;
           if (net <= 0) {
-            throw new BadRequestException(
-              `Asset ${assetId} is not currently on-site for this customer worksite`,
-            );
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_ON_SITE', reason: 'NOT_ON_SITE',
+              expectedLocation: { type: 'WORKSITE', id: payload.customerWorksiteId },
+            });
           }
-        });
+        }
       }
 
       const assets = serialIds.length
@@ -1684,18 +1706,20 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
       const ledgerOps = [
         ...bulkGroups.map((group) =>
@@ -1718,7 +1742,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {

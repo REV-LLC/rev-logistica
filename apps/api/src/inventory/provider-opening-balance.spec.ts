@@ -16,6 +16,7 @@ describe('provider catalogue stock and late document entry', () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       document: { findUnique: jest.fn().mockResolvedValue({ type: DocumentType.REMISSION, docDate: delivered }) },
+      warehouse: { findUnique: jest.fn(async ({ where }) => ({ id: where.id, name: 'Proveedor' })) },
       customerWorksite: { findUnique: jest.fn().mockResolvedValue({ id: 'site' }) },
       asset: { findMany: jest.fn().mockResolvedValue([{ id: 'vibrator', warehouseOwnerId: 'provider' }]),
         update: jest.fn().mockResolvedValue({}) },
