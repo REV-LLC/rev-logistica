@@ -192,9 +192,6 @@ export class InventoryService {
         warehouseCurrentId: true,
       },
     });
-    const motorOwner = await tx.warehouse.findUnique({
-      where: { id: ownerWarehouseId }, select: { type: true },
-    });
     await tx.stockLedger.create({
       data: {
         movementType: MovementType.ADJUST,
@@ -204,7 +201,7 @@ export class InventoryService {
         skuId: null,
         assetId: motor.id,
         quantity: 1,
-        isOpeningBalance: motorOwner?.type === 'ALLY' && warehouseCurrentId === ownerWarehouseId,
+        isOpeningBalance: true,
         createdBy: userId,
       },
     });
@@ -702,8 +699,7 @@ export class InventoryService {
           skuId: null,
           assetId: asset.id,
           quantity: 1,
-          isOpeningBalance: ownerWarehouse.type === 'ALLY'
-            && payload.warehouseCurrentId === payload.ownerWarehouseId,
+          isOpeningBalance: true,
           createdBy: userId,
         },
         select: { id: true, movementType: true, quantity: true },
@@ -3427,6 +3423,7 @@ export class InventoryService {
                 assetId: asset.id,
                 ownerWarehouseId: supplierWarehouse.id,
                 quantity: 1,
+                isOpeningBalance: true,
                 createdBy: userId,
               },
             });
