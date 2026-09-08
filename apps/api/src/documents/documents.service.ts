@@ -1409,7 +1409,11 @@ export class DocumentsService {
     const [assets, skus] = await Promise.all([
       this.prisma.asset.findMany({
         where: { id: { in: [...new Set([...selectedAssetIds, ...parentIds, ...childAssetIds])] } },
-        select: { id: true, sku: { select: { assetFamilyId: true } } },
+        select: {
+          id: true,
+          internalNumber: true,
+          sku: { select: { assetFamilyId: true, name: true } },
+        },
       }),
       this.prisma.sku.findMany({
         where: { id: { in: [...new Set(directSkuIds)] } },
@@ -1419,6 +1423,7 @@ export class DocumentsService {
     const assetFamilyByAssetId = new Map(
       assets.map((asset) => [asset.id, asset.sku.assetFamilyId]),
     );
+    const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
     const familyBySkuId = new Map(skus.map((sku) => [sku.id, sku.assetFamilyId]));
     const pairs = componentItems.map((item) => {
       const parentFamilyId = assetFamilyByAssetId.get(item.componentParentAssetId as string);
@@ -1445,6 +1450,7 @@ export class DocumentsService {
         active: true,
         parentAssetFamilyId: { in: selectedParentFamilyIds },
       },
+      include: { componentAssetFamily: { select: { name: true } } },
     });
     const ruleByPair = new Map(
       rules.map((rule) => [
@@ -1510,8 +1516,16 @@ export class DocumentsService {
         .forEach((rule) => {
           const quantity = quantities.get(`${assetId}:${rule.componentAssetFamilyId}`) ?? 0;
           if (quantity < rule.minimumQuantity) {
+            const asset = assetsById.get(assetId);
+            const assetName = asset?.sku.name?.trim() || 'El equipo seleccionado';
+            const internalNumber = asset?.internalNumber;
+            const assetLabel = typeof internalNumber === 'number' && internalNumber > 0
+              ? `${assetName} #${internalNumber}`
+              : assetName;
+            const componentName = rule.componentAssetFamily?.name?.trim()
+              || 'la familia de componentes requerida';
             throw new BadRequestException(
-              `El equipo requiere al menos ${rule.minimumQuantity} componente(s) de ${rule.componentAssetFamilyId}`,
+              `${assetLabel} requiere al menos ${rule.minimumQuantity} componente(s) de ${componentName}.`,
             );
           }
         });
