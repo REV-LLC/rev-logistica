@@ -675,7 +675,7 @@ export class AssetsService {
             assetId: createdAsset.id,
             ownerWarehouseId: payload.warehouseOwnerId,
             quantity: 1,
-            isOpeningBalance: warehouseOwner.type === 'ALLY' && warehouseCurrentId === payload.warehouseOwnerId,
+            isOpeningBalance: true,
             createdBy: userId,
           },
         });
