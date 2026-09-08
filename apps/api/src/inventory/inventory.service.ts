@@ -75,6 +75,15 @@ type InventoryStockShortage = {
   existsInWarehouse: boolean;
 };
 
+type OwnerAssetCatalogLocation = {
+  type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
+  id: string | null;
+  name: string | null;
+  warehouseType: WarehouseType | null;
+};
+
+type OwnerAssetCatalogStatus = 'IN' | 'OUT' | 'TRANSIT' | 'INACTIVE' | 'UNKNOWN';
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -1753,6 +1762,206 @@ export class InventoryService {
     });
 
     return result;
+  }
+
+  /** Owner catalogue membership does not depend on current physical stock. */
+  async getOwnerAssetCatalog(warehouseId: string) {
+    const ownerWarehouse = await this.prisma.warehouse.findUnique({
+      where: { id: warehouseId },
+      select: { id: true, name: true, ownerCompany: { select: { name: true } } },
+    });
+    if (!ownerWarehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    const catalogMovementSelect = {
+      id: true,
+      assetId: true,
+      movementType: true,
+      quantity: true,
+      ownerWarehouseId: true,
+      refDocumentId: true,
+      refDocumentType: true,
+      effectiveAt: true,
+      createdAt: true,
+      warehouse: { select: { id: true, name: true, type: true } },
+      customerWorksite: {
+        select: {
+          id: true,
+          alias: true,
+          worksite: { select: { name: true } },
+        },
+      },
+    } satisfies Prisma.StockLedgerSelect;
+
+    const assets = await this.prisma.asset.findMany({
+      where: { warehouseOwnerId: warehouseId, deletedAt: null },
+      select: {
+        id: true,
+        skuId: true,
+        warehouseOwnerId: true,
+        serialOrEngine: true,
+        registrationNumber: true,
+        description: true,
+        brand: true,
+        model: true,
+        internalNumber: true,
+        active: true,
+        kind: true,
+        motorConfiguration: true,
+        assignedMotorId: true,
+        assignedToMixer: { select: { id: true } },
+        weight: true,
+        imageFileObjectId: true,
+        imageFileObject: { select: { storageKey: true } },
+        sku: {
+          select: {
+            name: true,
+            imageUrl: true,
+            imageFileObjectId: true,
+            imageFileObject: { select: { storageKey: true } },
+            assetFamily: { select: { id: true, code: true, name: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
+          },
+        },
+        ledger: {
+          take: 1,
+          // A later catalogue registration must not override a real delivery.
+          orderBy: [
+            { isOpeningBalance: 'asc' },
+            { effectiveAt: 'desc' },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          select: catalogMovementSelect,
+        },
+      },
+    });
+
+    // Provider transfers write OUT and IN in one event. They can have identical
+    // timestamps; UUID order must not hide that event's completed destination.
+    // Resolve only a matching transfer event, never an IN from another document.
+    const transferSourceEvents = assets.flatMap((asset) => {
+      const latest = asset.ledger[0];
+      if (
+        latest?.movementType !== MovementType.OUT
+        || latest.customerWorksite
+        || latest.ownerWarehouseId !== asset.warehouseOwnerId
+        || !latest.refDocumentId
+        || (latest.refDocumentType !== DocumentType.PROVIDER_PICKUP
+          && latest.refDocumentType !== DocumentType.PROVIDER_RECEIPT)
+      ) {
+        return [];
+      }
+      return [{
+        assetId: asset.id,
+        ownerWarehouseId: asset.warehouseOwnerId,
+        refDocumentId: latest.refDocumentId,
+        refDocumentType: latest.refDocumentType,
+        effectiveAt: latest.effectiveAt,
+        createdAt: latest.createdAt,
+      }];
+    });
+    const transferDestinations = transferSourceEvents.length
+      ? await this.prisma.stockLedger.findMany({
+          where: {
+            OR: transferSourceEvents,
+            movementType: MovementType.IN,
+            quantity: { gt: 0 },
+            isOpeningBalance: false,
+            warehouseId: { not: null },
+            customerWorksiteId: null,
+          },
+          select: catalogMovementSelect,
+        })
+      : [];
+    const destinationsByAssetId = new Map<string, typeof transferDestinations>();
+    transferDestinations.forEach((destination) => {
+      if (!destination.assetId) return;
+      const destinations = destinationsByAssetId.get(destination.assetId) ?? [];
+      destinations.push(destination);
+      destinationsByAssetId.set(destination.assetId, destinations);
+    });
+
+    const ownerWarehouseName = this.formatOwnerWarehouseLabel(ownerWarehouse);
+    const serial = assets.map((asset) => {
+      const transferDestination = destinationsByAssetId.get(asset.id);
+      const latest = transferDestination?.length === 1 ? transferDestination[0] : asset.ledger[0];
+      let location: OwnerAssetCatalogLocation = {
+        type: 'UNKNOWN', id: null, name: null, warehouseType: null,
+      };
+      let status: OwnerAssetCatalogStatus = 'UNKNOWN';
+
+      if (latest?.ownerWarehouseId === asset.warehouseOwnerId) {
+        if (
+          (latest.movementType === MovementType.IN || latest.movementType === MovementType.ADJUST)
+          && Number(latest.quantity) > 0
+          && latest.warehouse
+        ) {
+          location = {
+            type: 'WAREHOUSE',
+            id: latest.warehouse.id,
+            name: latest.warehouse.name,
+            warehouseType: latest.warehouse.type,
+          };
+          status = 'IN';
+        } else if (
+          (latest.movementType === MovementType.OUT || latest.movementType === MovementType.ON_SITE)
+          && latest.customerWorksite
+        ) {
+          location = {
+            type: 'WORKSITE',
+            id: latest.customerWorksite.id,
+            name: latest.customerWorksite.alias?.trim() || latest.customerWorksite.worksite.name,
+            warehouseType: null,
+          };
+          status = 'OUT';
+        } else if (latest.movementType === MovementType.TRANSIT) {
+          location = { type: 'TRANSIT', id: null, name: null, warehouseType: null };
+          status = 'TRANSIT';
+        }
+      }
+
+      const isAvailableInOwnerWarehouse = asset.active
+        && location.type === 'WAREHOUSE'
+        && location.id === warehouseId;
+      if (!asset.active) status = 'INACTIVE';
+
+      return {
+        assetId: asset.id,
+        skuId: asset.skuId,
+        ownerWarehouseId: asset.warehouseOwnerId,
+        ownerWarehouseName,
+        serialOrEngine: asset.serialOrEngine,
+        registrationNumber: asset.registrationNumber,
+        description: asset.description,
+        skuName: asset.sku.name,
+        brand: asset.brand,
+        model: asset.model,
+        internalNumber: asset.internalNumber,
+        imageUrl: asset.imageFileObject?.storageKey
+          ?? asset.sku.imageFileObject?.storageKey
+          ?? asset.sku.imageUrl,
+        imageFileObjectId: asset.imageFileObjectId ?? asset.sku.imageFileObjectId,
+        assetImageFileObjectId: asset.imageFileObjectId,
+        skuImageFileObjectId: asset.sku.imageFileObjectId,
+        assetFamily: asset.sku.assetFamily,
+        assetSubfamily: asset.sku.assetSubfamily,
+        active: asset.active,
+        kind: asset.kind,
+        motorConfiguration: asset.motorConfiguration,
+        assignedMotorId: asset.assignedMotorId,
+        assignedMixerId: asset.assignedToMixer?.id ?? null,
+        weight: asset.weight,
+        status,
+        location,
+        isAvailableInOwnerWarehouse,
+        // This catalogue is for management. Dispatches use the stock endpoints.
+        quantity: isAvailableInOwnerWarehouse ? 1 : 0,
+      };
+    }).sort((a, b) => this.compareSerialInventoryRows(a, b));
+
+    return { warehouseId, serial };
   }
 
   async getWarehouseInventory(warehouseId: string, includeZero = false) {
