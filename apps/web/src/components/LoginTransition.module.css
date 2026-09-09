@@ -1,0 +1,31 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f8fa;
+  background-image: radial-gradient(ellipse at 50% 40%, #fff 15%, transparent 70%), url('/login/contours.svg');
+  background-position: center;
+  color: #101119;
+  animation: appear 180ms ease-out;
+  transition: opacity 360ms ease;
+}
+
+.overlay[data-leaving='true'] { opacity: 0; }
+.content { text-align: center; animation: arrive 500ms cubic-bezier(.22, 1, .36, 1) both; }
+.content img { display: block; margin: 0 auto 24px; }
+.title { margin: 0; font-size: clamp(22px, 4vw, 28px); font-weight: 650; letter-spacing: -.6px; }
+.subtitle { margin: 10px 0 28px; font-size: 14px; color: #737b8b; }
+.track { width: 160px; height: 3px; margin: auto; overflow: hidden; border-radius: 3px; background: #e8e9ed; }
+.track span { display: block; width: 50%; height: 100%; border-radius: inherit; background: #ffca19; animation: progress 1100ms ease-in-out infinite; }
+
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes progress { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .content, .track span { animation: none; transition: none; }
+  .track span { width: 100%; }
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="690" height="940" viewBox="0 0 690 940" fill="none">
+  <g stroke="#e7e9ee" stroke-opacity=".65" stroke-width=".8">
+    <path id="a" d="M391-98C247-9 284 80 415 100S668 184 579 299 392 403 464 498 744 568 711 727 529 827 570 1034"/>
+    <use href="#a" transform="translate(-18 0)"/><use href="#a" transform="translate(-36 0)"/><use href="#a" transform="translate(-54 0)"/><use href="#a" transform="translate(-72 0)"/><use href="#a" transform="translate(-90 0)"/><use href="#a" transform="translate(-108 0)"/><use href="#a" transform="translate(18 0)"/><use href="#a" transform="translate(36 0)"/><use href="#a" transform="translate(54 0)"/><use href="#a" transform="translate(72 0)"/><use href="#a" transform="translate(90 0)"/><use href="#a" transform="translate(108 0)"/><use href="#a" transform="translate(126 0)"/><use href="#a" transform="translate(144 0)"/>
+    <path id="b" d="M-104 882C1 784 96 751 161 818S114 967 226 1037"/>
+    <use href="#b" transform="translate(0 -19)"/><use href="#b" transform="translate(0 -38)"/><use href="#b" transform="translate(0 -57)"/><use href="#b" transform="translate(0 -76)"/><use href="#b" transform="translate(0 -95)"/><use href="#b" transform="translate(0 19)"/><use href="#b" transform="translate(0 38)"/><use href="#b" transform="translate(0 57)"/>
+  </g>
+</svg>

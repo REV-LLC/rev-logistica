@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Container, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { api, ApiError } from '@/lib/api';
+import { useLoginTransition } from '@/components/LoginTransition';
 import {
   consumeSessionExpiredNotice,
   getCurrentUserRole,
@@ -16,6 +17,7 @@ import {
 
 function LoginPageContent() {
   const router = useRouter();
+  const beginLoginTransition = useLoginTransition();
   const searchParams = useSearchParams();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -66,6 +68,7 @@ function LoginPageContent() {
         throw new Error('Invalid server response.');
       }
       setToken(data.accessToken);
+      beginLoginTransition();
       router.replace(
         getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()),
       );
