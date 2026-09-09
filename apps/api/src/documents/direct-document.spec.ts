@@ -33,6 +33,7 @@ function payload(overrides: Partial<CreateDirectDocumentDto> = {}): CreateDirect
 function setup() {
   const sequence: string[] = [];
   const tx = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     warehouse: {
       findMany: jest.fn().mockImplementation(async ({ where }) => [
         { id: own, type: 'OWN' }, { id: provider, type: 'ALLY' },

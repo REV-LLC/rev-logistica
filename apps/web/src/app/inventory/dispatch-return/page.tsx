@@ -30,6 +30,8 @@ import type { DataTableColumn } from '@/components/tables/table.types';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import { getRequestSourceWarehouseId, type RequestInventorySourceMode } from '@/components/transport/request-inventory-source';
 import { buildDirectDocumentItems } from '@/components/transport/direct-document-items';
+import DocumentTimeInput from '@/components/DocumentTimeInput';
+import { buildDocumentDateTime, getDocumentDateTimeInput } from '@/lib/document-date-time';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -117,6 +119,7 @@ export default function RemisionDevolucionPage() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [recipientPhone, setRecipientPhone] = useState('');
   const [docDate, setDocDate] = useState('');
+  const [docTime, setDocTime] = useState(() => getDocumentDateTimeInput().time);
   const [cutOffDate, setCutOffDate] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('WAREHOUSE');
   const [inventorySourceMode, setInventorySourceMode] = useState<RequestInventorySourceMode>('WAREHOUSE');
@@ -458,6 +461,10 @@ export default function RemisionDevolucionPage() {
       if (!docDate || !consecutive || !customerId) {
         throw new Error('Complete the required fields.');
       }
+      const documentTimestamp = buildDocumentDateTime(docDate, docTime);
+      if (!documentTimestamp) {
+        throw new Error('Ingresa una fecha válida y una hora entre 00:00 y 23:59.');
+      }
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
       }
@@ -506,7 +513,7 @@ export default function RemisionDevolucionPage() {
         customerWorksiteId: customerWorksiteId || undefined,
         recipientPhone,
         notes: [
-          `Fecha documento: ${docDate}`,
+          `Fecha documento: ${documentTimestamp}`,
           docType === 'RETURN' && cutOffDate ? `Fecha corte: ${cutOffDate}` : null,
           docType === 'REMISSION' ? `Entrega: ${deliveryMode}` : null,
           deliveryMode === 'ON_SITE' && vehicleId ? `Vehiculo: ${vehicleId}` : null,
@@ -547,6 +554,7 @@ export default function RemisionDevolucionPage() {
       setCustomerId(null);
       setRecipientPhone('');
       setDocDate('');
+      setDocTime(getDocumentDateTimeInput().time);
       setCutOffDate('');
       setDeliveryMode('WAREHOUSE');
       setInventorySourceMode('WAREHOUSE');
@@ -667,6 +675,7 @@ export default function RemisionDevolucionPage() {
               onChange={(event) => setDocDate(event.target.value)}
               required
             />
+            <DocumentTimeInput value={docTime} onChange={setDocTime} />
             <TextInput
               label={helpLabel(
                 'Teléfono de quien recibe',

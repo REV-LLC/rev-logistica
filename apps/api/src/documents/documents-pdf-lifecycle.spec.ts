@@ -4,6 +4,7 @@ import { DocumentsService } from './documents.service';
 describe('DocumentsService PDF lifecycle', () => {
   it('generates and stores the PDF after creating a request draft', async () => {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
       document: {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({

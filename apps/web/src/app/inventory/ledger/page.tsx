@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
@@ -17,6 +17,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconArrowRight, IconChevronDown, IconFilter, IconSearch } from '@tabler/icons-react';
+import { useDebouncedValue } from '@mantine/hooks';
 import type { LedgerItem } from '@/components/LedgerTable';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import {
@@ -64,17 +65,18 @@ function createInitialFilters(): Filters {
     movementType: '',
     skuId: '',
     assetId: '',
-    from: dateInputDaysAgo(30),
+    from: '',
     to: '',
   };
 }
 
-function buildQuery(filters: Filters, cursor?: string | null) {
+function buildQuery(filters: Filters, search: string, cursor?: string | null) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
   params.set('take', String(DEFAULT_TAKE));
+  if (search.trim()) params.set('search', search.trim());
   if (cursor) params.set('cursor', cursor);
   return params.toString();
 }
@@ -133,25 +135,16 @@ function requester(group: LedgerDocumentGroup) {
 function formattedDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
-function searchableText(group: LedgerDocumentGroup) {
-  return [
-    group.reference,
-    group.documentType,
-    movementSummary(group),
-    locationSummary(group),
-    requester(group),
-    ...group.items.flatMap((item) => [itemName(item), item.asset?.serialOrEngine, item.skuId, item.assetId]),
-  ].filter(Boolean).join(' ').toLocaleLowerCase('es');
+  return date.toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 
 export default function LedgerPage() {
   const router = useRouter();
   const [filters, setFilters] = useState<Filters>(createInitialFilters);
+  const [appliedFilters, setAppliedFilters] = useState<Filters>(createInitialFilters);
   const [search, setSearch] = useState('');
-  const [dateRange, setDateRange] = useState('30');
+  const [debouncedSearch] = useDebouncedValue(search, 300);
+  const [dateRange, setDateRange] = useState('all');
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -163,32 +156,38 @@ export default function LedgerPage() {
   const [worksites, setWorksites] = useState<WorksiteOption[]>([]);
   const [skus, setSkus] = useState<SkuOption[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
+  const latestRequest = useRef(0);
 
-  const fetchLedger = async (options?: { append?: boolean; filtersOverride?: Filters }) => {
-    const activeFilters = options?.filtersOverride ?? filters;
+  const fetchLedger = useCallback(async (cursor?: string | null) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError(null);
     setUnauthorized(false);
     try {
-      const cursor = options?.append ? nextCursor : null;
-      const response = await api<LedgerResponse>(`/inventory/ledger?${buildQuery(activeFilters, cursor)}`, { method: 'GET' });
-      setItems((current) => (options?.append ? [...current, ...response.items] : response.items));
+      const response = await api<LedgerResponse>(`/inventory/ledger?${buildQuery(appliedFilters, debouncedSearch, cursor)}`, { method: 'GET' });
+      if (requestId !== latestRequest.current) return;
+      setItems((current) => (cursor ? [...current, ...response.items] : response.items));
       setNextCursor(response.nextCursor);
     } catch (err) {
+      if (requestId !== latestRequest.current) return;
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setUnauthorized(true);
       } else {
         setError(err instanceof Error ? err.message : 'No se pudo consultar el historial.');
       }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
-  };
+  }, [appliedFilters, debouncedSearch]);
 
   useEffect(() => {
-    const initialFilters = createInitialFilters();
-    setFilters(initialFilters);
-    void fetchLedger({ filtersOverride: initialFilters });
+    setItems([]);
+    setNextCursor(null);
+    void fetchLedger();
+    return () => { latestRequest.current += 1; };
+  }, [fetchLedger]);
+
+  useEffect(() => {
     void Promise.all([
       api<WarehouseOption[]>('/warehouses'),
       api<WorksiteOption[]>('/worksites'),
@@ -200,14 +199,9 @@ export default function LedgerPage() {
       setSkus(skuRows);
       setAssets(assetRows);
     }).catch(() => undefined).finally(() => setFiltersLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const groups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
-  const visibleGroups = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('es');
-    return query ? groups.filter((group) => searchableText(group).includes(query)) : groups;
-  }, [groups, search]);
+  const visibleGroups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
   const visibleMovements = visibleGroups.reduce((total, group) => total + group.items.length, 0);
 
   const locationValue = filters.warehouseId
@@ -218,9 +212,7 @@ export default function LedgerPage() {
 
   const updateAndFetch = (next: Filters) => {
     setFilters(next);
-    setItems([]);
-    setNextCursor(null);
-    void fetchLedger({ filtersOverride: next });
+    setAppliedFilters(next);
   };
 
   const handleDateRange = (value: string | null) => {
@@ -254,6 +246,7 @@ export default function LedgerPage() {
           <TextInput
             aria-label="Buscar documento, ítem o serial"
             placeholder="Buscar documento, ítem o serial"
+            maxLength={200}
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
             leftSection={<IconSearch size={17} />}
@@ -328,7 +321,7 @@ export default function LedgerPage() {
           {!loading && visibleGroups.length === 0 ? <div className={styles.empty}><strong>No hay movimientos para mostrar</strong><span>Prueba otra búsqueda o cambia los filtros.</span></div> : null}
         </div>
 
-        <Button variant="subtle" className={styles.loadMore} disabled={!nextCursor} loading={loading} onClick={() => fetchLedger({ append: true })}>
+        <Button variant="subtle" className={styles.loadMore} disabled={!nextCursor || search !== debouncedSearch} loading={loading} onClick={() => fetchLedger(nextCursor)}>
           {nextCursor ? 'Cargar más movimientos' : loading ? 'Cargando movimientos' : 'No hay más resultados'}
         </Button>
 

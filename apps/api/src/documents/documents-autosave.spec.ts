@@ -5,6 +5,7 @@ import { DocumentsService } from './documents.service';
 describe('DocumentsService autosave lifecycle', () => {
   it('creates an in-progress document without generating a PDF', async () => {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
       document: {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({
