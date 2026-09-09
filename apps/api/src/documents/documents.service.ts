@@ -75,6 +75,11 @@ export class DocumentsService {
     const raw = requested?.trim() ?? '';
     if (!raw) return null;
     if (!prefix) return raw;
+    if (/^(RM|DV)-APP-/i.test(raw)) {
+      throw new BadRequestException(
+        'Los consecutivos APP se asignan automáticamente. Para un documento físico ingresa el número impreso.',
+      );
+    }
     const cleaned = raw.replace(/^(RM|DV)[\s\-_]*/i, '').trim();
     if (!cleaned) return null;
     if (!/^\d+$/.test(cleaned)) {
@@ -87,7 +92,7 @@ export class DocumentsService {
     const match = value
       .trim()
       .toUpperCase()
-      .match(new RegExp(`^${prefix}(\\d+)$`));
+      .match(new RegExp(`^(?:RJ-)?${prefix}(\\d+)(?:-\\d+)?$`));
     if (!match) return null;
     return Number(match[1]);
   }
@@ -96,15 +101,19 @@ export class DocumentsService {
     type: DocumentType,
     tx: Prisma.TransactionClient,
   ) {
-    const prefix = this.getConsecutivePrefix(type);
-    if (!prefix) return null;
+    const documentPrefix = this.getConsecutivePrefix(type);
+    if (!documentPrefix) return null;
+    const prefix = `${documentPrefix}-APP-`;
+
+    await this.lockAutomaticConsecutive(type, tx);
 
     const rows = await tx.document.findMany({
       where: {
         type,
-        consecutive: {
-          startsWith: prefix,
-        },
+        OR: [
+          { consecutive: { startsWith: prefix } },
+          { consecutive: { startsWith: `RJ-${prefix}` } },
+        ],
       },
       select: { consecutive: true },
     });
@@ -120,6 +129,16 @@ export class DocumentsService {
     return `${prefix}${String(next).padStart(6, '0')}`;
   }
 
+  private async lockAutomaticConsecutive(
+    type: DocumentType,
+    tx: Prisma.TransactionClient,
+  ) {
+    // Keep this lock until the document is saved and the transaction ends.
+    // Separate locks let remissions and returns allocate independently.
+    const lockType = type === DocumentType.REMISSION ? 1 : 2;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(76001, ${lockType}::integer)`;
+  }
+
   private async resolveConsecutive(
     type: DocumentType,
     tx: Prisma.TransactionClient,
@@ -128,6 +147,25 @@ export class DocumentsService {
     const normalized = this.normalizeRequestedConsecutive(type, requested);
     if (normalized) return normalized;
     return this.generateNextConsecutive(type, tx);
+  }
+
+  private async resolveUpdatedConsecutive(
+    type: DocumentType,
+    tx: Prisma.TransactionClient,
+    existing: { type: DocumentType; consecutive: string | null },
+    requested?: string,
+  ) {
+    const keepsExistingNumber =
+      requested === undefined ||
+      requested.trim().toUpperCase() === existing.consecutive?.toUpperCase();
+    if (keepsExistingNumber) {
+      if (type === existing.type) return existing.consecutive;
+      if (/^(RM|DV)-APP-/i.test(existing.consecutive ?? '')) {
+        return this.generateNextConsecutive(type, tx);
+      }
+      return this.resolveConsecutive(type, tx, existing.consecutive ?? undefined);
+    }
+    return this.resolveConsecutive(type, tx, requested);
   }
 
   private isConsecutiveConflict(error: unknown) {
@@ -269,6 +307,9 @@ export class DocumentsService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           const createdDocumentIds: string[] = [document.id];
+
+          // Acquire the same allocation lock before touching document items.
+          await this.lockAutomaticConsecutive(document.type, tx);
 
           await tx.documentItem.deleteMany({
             where: { documentId: document.id },
@@ -918,12 +959,11 @@ export class DocumentsService {
         await this.documentPdfSnapshots.refresh(document.id);
         return document;
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002' &&
-          !payload.number
-        ) {
+        if (this.isConsecutiveConflict(error) && !payload.number) {
           continue;
+        }
+        if (this.isConsecutiveConflict(error)) {
+          throw new BadRequestException('El consecutivo ya existe');
         }
         throw error;
       }
@@ -1054,10 +1094,12 @@ export class DocumentsService {
       this.parseDocumentDateFromNotes(nextNotes) ?? existing.docDate;
 
     return this.prisma.$transaction(async (tx) => {
-      const consecutive =
-        payload.number !== undefined
-          ? await this.resolveConsecutive(nextType, tx, payload.number)
-          : existing.consecutive;
+      const consecutive = await this.resolveUpdatedConsecutive(
+        nextType,
+        tx,
+        existing,
+        payload.number,
+      );
       const updated = await tx.document.update({
         where: { id: documentId },
         data: {
@@ -1253,10 +1295,12 @@ export class DocumentsService {
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
-        const consecutive =
-          payload.number !== undefined
-            ? await this.resolveConsecutive(nextType, tx, payload.number)
-            : existing.consecutive;
+        const consecutive = await this.resolveUpdatedConsecutive(
+          nextType,
+          tx,
+          existing,
+          payload.number,
+        );
         const nextNotes =
           payload.notes !== undefined
             ? (payload.notes ?? null)

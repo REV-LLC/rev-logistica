@@ -56,14 +56,13 @@ const colombiaDateFormatter = new Intl.DateTimeFormat('es-CO', {
 
 const colombiaTimeFormatter = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota',
-  hour: 'numeric',
+  hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
-  hour12: true,
+  hourCycle: 'h23',
 });
 
-export function formatDocumentDateTime(docDate: Date, createdAt: Date) {
-  return `${colombiaDateFormatter.format(docDate)}, ${colombiaTimeFormatter.format(createdAt)}`;
+export function formatDocumentDateTime(docDate: Date) {
+  return `${colombiaDateFormatter.format(docDate)}, ${colombiaTimeFormatter.format(docDate)}`;
 }
 
 export function buildPdfItemDescription(item: PdfItem) {
@@ -249,7 +248,7 @@ export class DocumentPdfService {
       .font('Helvetica')
       .fontSize(9)
       .text(
-        `Fecha: ${formatDocumentDateTime(document.docDate, document.createdAt)}`,
+        `Fecha: ${formatDocumentDateTime(document.docDate)}`,
       );
     pdf.moveDown(0.8);
   }

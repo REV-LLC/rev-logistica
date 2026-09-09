@@ -42,13 +42,14 @@ describe('DocumentPdfService', () => {
     return buffer.toString('latin1').match(/\/Type \/Page\b/g)?.length ?? 0;
   }
 
-  it('combines the selected document day with the real creation time in Colombia', () => {
+  it('prints the selected document date and time in Colombia using 24-hour format', () => {
     expect(
       formatDocumentDateTime(
-        new Date('2026-08-14T12:00:00.000Z'),
-        new Date('2026-08-14T14:57:00.000Z'),
-      ).replaceAll('\u00a0', ' '),
-    ).toBe('14/08/2026, 9:57:00 a. m.');
+        new Date('2026-08-15T04:45:00.000Z'),
+      ),
+    ).toBe('14/08/2026, 23:45');
+    expect(formatDocumentDateTime(new Date('2026-08-14T05:00:00.000Z')))
+      .toBe('14/08/2026, 00:00');
   });
 
   async function imageDataUrl(options: {

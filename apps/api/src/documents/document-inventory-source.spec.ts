@@ -46,6 +46,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   const database = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $queryRaw: jest.fn().mockResolvedValue([]),
     document: {
       findUnique: jest.fn().mockResolvedValue(document),

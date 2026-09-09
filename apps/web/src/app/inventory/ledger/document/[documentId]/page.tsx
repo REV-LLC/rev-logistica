@@ -285,19 +285,17 @@ const documentDateFormatter = new Intl.DateTimeFormat('es-CO', {
 
 const documentTimeFormatter = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota',
-  hour: 'numeric',
+  hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
-  hour12: true,
+  hourCycle: 'h23',
 });
 
-function formatDocumentDateTime(docDateValue: string, createdAtValue: string) {
+function formatDocumentDateTime(docDateValue: string) {
   const docDate = new Date(docDateValue);
-  const createdAt = new Date(createdAtValue);
-  if (Number.isNaN(docDate.getTime()) || Number.isNaN(createdAt.getTime())) {
+  if (Number.isNaN(docDate.getTime())) {
     return formatDateTime(docDateValue);
   }
-  return `${documentDateFormatter.format(docDate)}, ${documentTimeFormatter.format(createdAt)}`;
+  return `${documentDateFormatter.format(docDate)}, ${documentTimeFormatter.format(docDate)}`;
 }
 
 function formatWhatsappPhone(value: string) {
@@ -1800,7 +1798,7 @@ export default function DocumentDetailPage() {
             <div className={styles.topRow}>
               <div>
                 <strong>Fecha:</strong>{' '}
-                {formatDocumentDateTime(document.docDate, document.createdAt)}
+                {formatDocumentDateTime(document.docDate)}
               </div>
               <div>
                 <strong>Consecutivo:</strong> {title}
