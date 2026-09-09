@@ -1509,19 +1509,24 @@ export default function DocumentDetailPage() {
           withBorder
           className={styles.noPrint}
         >
-          <Group justify="space-between" className="mobile-stack">
+          <Group justify="space-between" align="flex-start" gap="lg" className={styles.documentHeader}>
             <div>
               <Title order={2}>{title}</Title>
-              <Text c="dimmed">
-                Estado: {document?.status ?? '-'} | Creado: {document ? formatDate(document.createdAt) : '-'}
-              </Text>
+              <Group gap="sm" mt={6}>
+                <Badge variant="light" color={document?.status === 'CONFIRMED' ? 'green' : document?.status === 'DRAFT' ? 'yellow' : 'gray'}>
+                  {document?.status === 'DRAFT' ? 'Borrador' : document?.status === 'CONFIRMED' ? 'Confirmado' : document?.status ?? '-'}
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  Creado el {document ? formatDate(document.createdAt) : '-'}
+                </Text>
+              </Group>
               {document?.type === 'REMISSION' ? <Text size="sm" c="dimmed" mt="xs">
                 Salida física: {getRequestInventorySourceMode(document) === 'WAREHOUSE'
                   ? document.warehouse?.name ?? 'Sin seleccionar'
                   : 'bodega de cada propietario'}.
               </Text> : null}
             </div>
-            <Group>
+            <Group gap="xs" className={styles.documentActions}>
               {canDecide && document?.status === 'DRAFT' ? (
                 <>
                   <Button
@@ -1564,7 +1569,7 @@ export default function DocumentDetailPage() {
           </Group>
 
           {document?.recipientPhone || document?.messageDeliveries?.length ? (
-            <Paper withBorder radius="md" p="sm" mt="md" bg="green.0">
+            <section className={styles.detailSection} aria-label="Copia por WhatsApp">
               <Group align="flex-start" wrap="nowrap">
                 <ThemeIcon color="green" variant="light" radius="xl">
                   <IconBrandWhatsapp size={17} />
@@ -1594,7 +1599,7 @@ export default function DocumentDetailPage() {
                   )}
                 </Stack>
               </Group>
-            </Paper>
+            </section>
           ) : null}
 
           {loading ? <Text mt="md">Cargando...</Text> : null}
@@ -1609,7 +1614,7 @@ export default function DocumentDetailPage() {
             </Text>
           ) : null}
           {document?.type === 'RETURN' ? (
-            <Paper withBorder p={{ base: 'sm', sm: 'md' }} mt="md" className={styles.billingSection}>
+            <section className={`${styles.detailSection} ${styles.billingSection}`} aria-label="Corte de items">
               <Title order={5}>Corte de items</Title>
               <div className={styles.desktopBillingTable}>
                 <Table.ScrollContainer minWidth={820} mt="sm">
@@ -1673,7 +1678,7 @@ export default function DocumentDetailPage() {
                   const cutoffDate = getEffectiveBillingCutoffDate(item);
                   const billingStatus = getEffectiveBillingStatus(item);
                   return (
-                    <Paper key={`billing-mobile-${item.id}`} withBorder radius="md" p="sm">
+                    <div key={`billing-mobile-${item.id}`} className={styles.billingRow}>
                       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
                         <Text fw={700} size="sm" className={styles.mobileItemName}>
                           {describeItem(item)}
@@ -1717,51 +1722,55 @@ export default function DocumentDetailPage() {
                           <Text size="sm">{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Text>
                         </div>
                       </SimpleGrid>
-                    </Paper>
+                    </div>
                   );
                 })}
               </Stack>
-            </Paper>
+            </section>
           ) : null}
           {evidenceFiles.length ? (
-            <Paper withBorder p="md" mt="md">
-              <Title order={5}>Evidencias visuales</Title>
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm" mt="sm">
+            <section className={styles.detailSection} aria-labelledby="evidence-heading">
+              <Group justify="space-between" gap="xs" mb="md">
+                <Group gap="xs">
+                  <Title order={3} size="h5" id="evidence-heading">Evidencias visuales</Title>
+                  <Text size="sm" c="dimmed">({evidenceFiles.length})</Text>
+                </Group>
+                <Text size="xs" c="dimmed">Selecciona una imagen para ampliarla</Text>
+              </Group>
+              <div className={styles.evidenceGrid}>
                 {evidenceFiles.map((file, index) => (
                   <a
                     key={file.id}
                     href={file.storageKey}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    className={styles.evidenceLink}
+                    aria-label={`Abrir evidencia ${index + 1} en una nueva pestaña`}
                   >
-                    <Paper withBorder radius="md" p={6}>
-                      <img
-                        src={file.storageKey}
-                        alt={`Evidencia ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          aspectRatio: '4 / 3',
-                          objectFit: 'cover',
-                          borderRadius: 6,
-                          display: 'block',
-                        }}
-                      />
-                      <Text size="xs" c="dimmed" mt={4}>
-                        {formatDateTime(file.createdAt)}
-                      </Text>
-                    </Paper>
+                    <img
+                      src={file.storageKey}
+                      alt={`Evidencia ${index + 1}`}
+                      className={styles.evidenceImage}
+                    />
+                    <Group justify="space-between" gap="xs" mt="xs">
+                      <Text size="xs" fw={500}>Evidencia {index + 1}</Text>
+                      <Text size="xs" c="dimmed">{formatDateTime(file.createdAt)}</Text>
+                    </Group>
                   </a>
                 ))}
-              </SimpleGrid>
-            </Paper>
+              </div>
+            </section>
           ) : null}
         </Paper>
 
         {document ? (
           linePages.map((lines, pageIndex) => (
-          <div
+          <Paper
             key={`${document.id}-page-${pageIndex + 1}`}
+            shadow="sm"
+            p={{ base: 'md', sm: 'xl' }}
+            radius="md"
+            withBorder
             className={`${styles.sheet}${pageIndex < linePages.length - 1 ? ` ${styles.pageBreakAfter}` : ''}`}
           >
             <header className={styles.header}>
@@ -1900,7 +1909,7 @@ export default function DocumentDetailPage() {
                 )}
               </div>
             </section>
-          </div>
+          </Paper>
           ))
         ) : null}
       </Container>
