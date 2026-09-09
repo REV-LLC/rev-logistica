@@ -15,6 +15,7 @@ import {
   IconShieldLock,
 } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
+import { useLoginTransition } from '@/components/LoginTransition';
 import {
   consumeSessionExpiredNotice,
   getCurrentUserRole,
@@ -35,6 +36,7 @@ const features = [
 
 function LoginPageContent() {
   const router = useRouter();
+  const beginLoginTransition = useLoginTransition();
   const searchParams = useSearchParams();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -87,6 +89,7 @@ function LoginPageContent() {
         throw new Error('No se pudo iniciar sesión. Inténtalo de nuevo.');
       }
       setToken(data.accessToken);
+      beginLoginTransition();
       router.replace(
         getPostLoginDestination(searchParams.get('next'), getCurrentUserRole()),
       );
