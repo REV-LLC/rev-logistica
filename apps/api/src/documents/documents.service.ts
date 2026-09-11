@@ -22,6 +22,7 @@ import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
+import { assertTabletWarehouse, resolveTabletDocumentAccess } from '../auth/tablet-access';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -30,10 +31,10 @@ export function assertCanViewDocument(
   requester?: { role: Role; userId: string },
 ) {
   if (
-    requester?.role === Role.DRIVER &&
+    (requester?.role === Role.DRIVER || requester?.role === Role.WAREHOUSE_TABLET) &&
     document.createdBy !== requester.userId
   ) {
-    throw new ForbiddenException('Drivers can only view their own documents');
+    throw new ForbiddenException('Solo puedes consultar documentos creados desde tu perfil.');
   }
 }
 
@@ -169,6 +170,13 @@ export class DocumentsService {
       ? error.meta.target.map((value) => String(value))
       : [String(error.meta?.target ?? '')];
     return targets.some((target) => target.includes('consecutive'));
+  }
+
+  private assertNoTabletAuthorizationConflict(error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' &&
+        String(error.meta?.target).includes('tabletAuthorizationId')) {
+      throw new ForbiddenException('Este PIN ya autorizó otro documento. Ingresa tu PIN nuevamente para empezar uno nuevo.');
+    }
   }
 
   private async buildRejectedConsecutive(
@@ -674,6 +682,8 @@ export class DocumentsService {
   }
 
   async createRequestDocument(payload: {
+    requesterRole?: Role;
+    tabletEmployeeToken?: string;
     type: string;
     number?: string;
     warehouseId?: string;
@@ -695,6 +705,9 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
+      ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
+    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
     const recipientPhones =
       payload.sendWhatsapp === false
         ? []
@@ -727,6 +740,7 @@ export class DocumentsService {
               recipientPhone: recipientPhones[0],
               recipientPhones,
               createdBy: payload.createdBy,
+              ...tabletContext,
             },
           });
 
@@ -762,6 +776,7 @@ export class DocumentsService {
         await this.documentPdfSnapshots.refresh(document.id);
         return document;
       } catch (error) {
+        this.assertNoTabletAuthorizationConflict(error);
         if (this.isConsecutiveConflict(error) && !payload.number) {
           continue;
         }
@@ -776,8 +791,11 @@ export class DocumentsService {
   }
 
   async createAutosavedRequestDocument(
-    payload: AutosaveDocumentRequestDto & { createdBy: string },
+    payload: AutosaveDocumentRequestDto & { createdBy: string; requesterRole?: Role },
   ) {
+    const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
+      ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
+    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
     if (
       payload.type !== DocumentType.REMISSION &&
       payload.type !== DocumentType.RETURN
@@ -812,6 +830,7 @@ export class DocumentsService {
               recipientPhone: recipientPhones[0] ?? null,
               recipientPhones,
               createdBy: payload.createdBy,
+              ...tabletContext,
             },
             select: { id: true, consecutive: true, status: true },
           });
@@ -846,6 +865,7 @@ export class DocumentsService {
           return document;
         });
       } catch (error) {
+        this.assertNoTabletAuthorizationConflict(error);
         if (this.isConsecutiveConflict(error) && !payload.number) continue;
         if (this.isConsecutiveConflict(error)) {
           throw new BadRequestException('El consecutivo ya existe');
@@ -862,6 +882,11 @@ export class DocumentsService {
     payload: AutosaveDocumentRequestDto,
     requester: { sub: string; role: Role },
   ) {
+    if (requester.role === Role.WAREHOUSE_TABLET) {
+      const context = await resolveTabletDocumentAccess(this.prisma, requester.sub, payload.tabletEmployeeToken, documentId);
+      assertTabletWarehouse(context.warehouseId, payload.warehouseId);
+      if (payload.type !== DocumentType.REMISSION && payload.type !== DocumentType.RETURN) throw new BadRequestException('Solo puedes crear remisiones y devoluciones.');
+    }
     const existing = await this.prisma.document.findUnique({
       where: { id: documentId },
       select: {
@@ -958,6 +983,9 @@ export class DocumentsService {
     payload: SubmitAutosavedDocumentRequestDto,
     requester: { sub: string; role: Role },
   ) {
+    if (requester.role === Role.WAREHOUSE_TABLET) {
+      await resolveTabletDocumentAccess(this.prisma, requester.sub, payload.tabletEmployeeToken, documentId);
+    }
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       select: {
@@ -1010,11 +1038,11 @@ export class DocumentsService {
     requester: { sub: string; role: Role },
   ) {
     if (
-      requester.role === Role.DRIVER &&
+      (requester.role === Role.DRIVER || requester.role === Role.WAREHOUSE_TABLET) &&
       document.createdBy !== requester.sub
     ) {
       throw new ForbiddenException(
-        'Los conductores solo pueden editar sus propios formularios',
+        'Solo puedes editar formularios creados desde tu perfil.',
       );
     }
   }
@@ -1341,7 +1369,7 @@ export class DocumentsService {
     const where: Prisma.DocumentWhereInput = {};
     if (params.status) where.status = params.status;
     if (params.type) where.type = params.type;
-    if (params.role === Role.DRIVER) {
+    if (params.role === Role.DRIVER || params.role === Role.WAREHOUSE_TABLET) {
       where.createdBy = params.userId;
     }
 
@@ -1358,6 +1386,7 @@ export class DocumentsService {
         docDate: true,
         notes: true,
         createdBy: true,
+        performedByEmployeeName: true,
         warehouse: { select: { id: true, name: true } },
         customerWorksite: {
           select: {

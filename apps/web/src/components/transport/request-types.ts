@@ -103,6 +103,7 @@ export type GenerateFieldErrors = {
 };
 
 export type RequestDocument = {
+  performedByEmployeeName?: string | null;
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
   status: string;

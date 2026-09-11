@@ -36,5 +36,11 @@ jobs:
       - name: Build API
         run: npm --workspace apps/api run build
 
+      - name: Test API
+        run: npm --workspace apps/api test -- --runInBand
+
+      - name: Test Web
+        run: npm --workspace apps/web test
+
       - name: Build Web
         run: npm --workspace apps/web run build

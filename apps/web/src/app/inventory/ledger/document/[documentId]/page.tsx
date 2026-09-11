@@ -45,6 +45,7 @@ import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPi
 const PRINT_LINES_PER_PAGE = 20;
 
 type DocumentDetail = {
+  performedByEmployeeName?: string | null;
   id: string;
   type: string;
   status: string;
@@ -1847,7 +1848,7 @@ export default function DocumentDetailPage() {
             </section>
 
             <section className={styles.signatures}>
-              <div>ELABORADO POR<br />{document.creator?.name ?? document.creator?.email ?? '-'}</div>
+              <div>ELABORADO POR<br />{document.performedByEmployeeName ?? document.creator?.name ?? document.creator?.email ?? '-'}</div>
               <div>TRANSPORTADO POR<br />{transportadoPorDisplay}</div>
               <div>
                 ENTREGADO POR

@@ -36,7 +36,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Get('categories/:entityType')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   getCategories(@Param('entityType') entityType: string) {
     return this.filesService.getCategories(entityType);
   }
@@ -50,7 +50,7 @@ export class FilesController {
   }
 
   @Get('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   listEntityFiles(
     @Param('entityType') entityType: string,
     @Param('entityId', new ParseUUIDPipe()) entityId: string,
@@ -63,7 +63,7 @@ export class FilesController {
   }
 
   @Post('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   @UseInterceptors(
     FilesInterceptor('files', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),
@@ -89,7 +89,7 @@ export class FilesController {
   }
 
   @Post('documents/:documentId/evidence')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   @UseInterceptors(
     FilesInterceptor('photos', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),
@@ -108,7 +108,7 @@ export class FilesController {
   }
 
   @Get(':fileId/download')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   async downloadFile(
     @Param('fileId', new ParseUUIDPipe()) fileId: string,
     @Req() request: Request & { user: JwtPayload },

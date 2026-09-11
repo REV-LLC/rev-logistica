@@ -47,6 +47,9 @@ class AutosaveDocumentRequestItemDto {
 }
 
 export class AutosaveDocumentRequestDto {
+  @IsOptional()
+  @IsString()
+  tabletEmployeeToken?: string;
   @IsEnum(DocumentType)
   type: DocumentType;
 

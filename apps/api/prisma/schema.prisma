@@ -12,6 +12,7 @@ enum Role {
   OFFICE
   DRIVER
   OPERATOR
+  WAREHOUSE_TABLET
 }
 
 enum WarehouseType {
@@ -172,6 +173,11 @@ model User {
   role         Role
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+  warehouseId  String?
+  warehouse    Warehouse? @relation(fields: [warehouseId], references: [id])
+  tabletAuthorizations TabletDocumentAuthorization[]
+  pinAttempts Int @default(0)
+  pinWindowEndsAt DateTime?
 
   documentsCreated              Document[]              @relation("CreatedBy")
   ledgerCreated                 StockLedger[]           @relation("LedgerCreatedBy")
@@ -305,6 +311,7 @@ model Warehouse {
   type           WarehouseType
   ownerCompanyId String
   active         Boolean       @default(true)
+  tabletUsers    User[]
   createdAt      DateTime      @default(now())
 
   assetsOwned               Asset[]                  @relation("OwnerWarehouse")
@@ -707,6 +714,11 @@ model Task {
 }
 
 model Document {
+  performedByEmployeeId String?
+  performedByEmployee Employee? @relation(fields: [performedByEmployeeId], references: [id], onDelete: Restrict)
+  performedByEmployeeName String?
+  tabletAuthorizationId String? @unique
+  tabletAuthorization TabletDocumentAuthorization? @relation(fields: [tabletAuthorizationId], references: [id], onDelete: Restrict)
   id                  String         @id @default(uuid())
   shareToken          String         @unique @default(uuid())
   type                DocumentType
@@ -1072,6 +1084,9 @@ model Employee {
   documentId String?
   userId     String?      @unique
   active     Boolean      @default(true)
+  tabletPin EmployeeTabletPin?
+  documentsPerformed Document[]
+  tabletAuthorizations TabletDocumentAuthorization[]
   createdAt  DateTime     @default(now())
 
   vehicles        EmployeeVehicle[]
@@ -1079,6 +1094,27 @@ model Employee {
   tasksAssigned   Task[]            @relation("TaskAssignedToEmployee")
   assetFuelings   AssetFueling[]    @relation("AssetFuelingOperator")
   vehicleFuelings VehicleFueling[]  @relation("VehicleFuelingDriver")
+}
+
+model EmployeeTabletPin {
+  employeeId String @id
+  pinHash String
+  lookup String @unique
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model TabletDocumentAuthorization {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  userId String
+  employeeId String
+  warehouseId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  document Document?
+  @@index([userId, expiresAt])
 }
 
 model Vehicle {

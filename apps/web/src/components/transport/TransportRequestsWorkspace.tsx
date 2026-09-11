@@ -74,10 +74,17 @@ import { useRequestRecipients } from './use-request-recipients';
 import { useRequestSignature } from './use-request-signature';
 import { useRequestSubmission } from './use-request-submission';
 import { useRequestsList } from './use-requests-list';
+import type { TabletEmployeeContext } from './TabletDocumentGate';
 export default function TransportRequestsWorkspace({
   mode = 'requests',
+  tabletEmployee = null,
+  onTabletReset,
+  onTabletReidentify,
 }: {
   mode?: RequestsPageMode;
+  tabletEmployee?: TabletEmployeeContext | null;
+  onTabletReset?: () => void;
+  onTabletReidentify?: () => void;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isTabletOrMobile = useMediaQuery('(max-width: 1024px)');
@@ -98,15 +105,15 @@ export default function TransportRequestsWorkspace({
   const [originalDocumentTimestamp, setOriginalDocumentTimestamp] = useState<string | null>(null);
   const documentTimestamp = buildDocumentDateTime(docDate, docTime, originalDocumentTimestamp);
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>(
-    'ON_SITE',
+    tabletEmployee ? 'WAREHOUSE' : 'ON_SITE',
   );
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
-  const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [warehouseId, setWarehouseId] = useState<string | null>(tabletEmployee?.warehouseId ?? null);
   const [observations, setObservations] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [driverId, setDriverId] = useState<string | null>(null);
-  const [dispatcherId, setDispatcherId] = useState<string | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(tabletEmployee?.employee.id ?? null);
+  const [dispatcherId, setDispatcherId] = useState<string | null>(tabletEmployee?.employee.id ?? null);
 
   const [sourceOwnerWarehouseId, setSourceOwnerWarehouseId] = useState<
     string | null
@@ -189,6 +196,7 @@ export default function TransportRequestsWorkspace({
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
+  const isTabletRole = userRole === 'WAREHOUSE_TABLET';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
   const {
@@ -267,6 +275,7 @@ export default function TransportRequestsWorkspace({
     sourceMode === 'warehouse' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
+      (tabletEmployee ? warehouses.find((warehouse) => warehouse.id === tabletEmployee.warehouseId) : null) ??
       warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       warehouses.find(
         (warehouse) =>
@@ -276,7 +285,7 @@ export default function TransportRequestsWorkspace({
         warehouse.name.toUpperCase().includes('PRINCIPAL'),
       ) ??
       null,
-    [warehouses],
+    [warehouses, tabletEmployee],
   );
   const worksiteOptions = worksites.map((item) => ({
     value: item.id,
@@ -323,6 +332,7 @@ export default function TransportRequestsWorkspace({
   });
   const { autosaveStatus, setAutosaveStatus, autosavePayload } =
     useRequestAutosave({
+      tabletEmployeeToken: tabletEmployee?.token,
       docType,
       documentNumber,
       setConsecutive,
@@ -507,6 +517,7 @@ export default function TransportRequestsWorkspace({
   });
 
   const resetGenerateForm = () => {
+    if (tabletEmployee && onTabletReset) { onTabletReset(); return; }
     if (currentUserId) {
       window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
     }
@@ -548,6 +559,7 @@ export default function TransportRequestsWorkspace({
     clearProviderRemissionDocuments();
   };
   const { handleSubmit } = useRequestSubmission({
+    tabletEmployeeToken: tabletEmployee?.token,
     setSubmitting,
     observations,
     vehicleId,
@@ -592,6 +604,10 @@ export default function TransportRequestsWorkspace({
   });
 
   const editRequest = async (documentId: string, autosaved = false) => {
+    if (isTabletRole && mode === 'requests') {
+      router.push(`/transport/generate?draft=${documentId}`);
+      return;
+    }
     if (mode === 'requests' && !autosaved) {
       router.push(`/transport/generate?edit=${documentId}`);
       return;
@@ -731,7 +747,7 @@ export default function TransportRequestsWorkspace({
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
     const explicitDraftId = params.get('draft');
-    const storedDraftId = currentUserId
+    const storedDraftId = currentUserId && !isTabletRole
       ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
       : null;
     const draftId = explicitDraftId ?? (editId ? null : storedDraftId);
@@ -752,6 +768,7 @@ export default function TransportRequestsWorkspace({
   }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
 
   const goToItemsStep = async () => {
+    if (isTabletRole && !tabletEmployee) { setError('Ingresa tu PIN antes de crear el documento.'); return; }
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
@@ -976,7 +993,7 @@ export default function TransportRequestsWorkspace({
     : 'Solicitudes de documentos';
   const pageDescription = isGeneratePage
     ? 'Completa informacion, items y firma para crear una solicitud de documento.'
-    : isDriverRole
+    : isDriverRole || isTabletRole
       ? 'Consulta tus borradores y anexa fotografías que hayan quedado pendientes.'
       : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
   const requestColumns: DataTableColumn<RequestDocument>[] = [
@@ -999,7 +1016,7 @@ export default function TransportRequestsWorkspace({
             </Badge>
           </div>
           <Badge hiddenFrom="md" color="yellow" variant="light">
-            {row.status}
+            {row.status === 'IN_PROGRESS' ? 'En preparación' : row.status === 'DRAFT' ? 'Por aprobar' : row.status}
           </Badge>
         </Group>
       ),
@@ -1033,7 +1050,7 @@ export default function TransportRequestsWorkspace({
       header: 'Creado por',
       width: '19%',
       mobile: { label: 'Creado por', priority: 'detail' },
-      cell: (row) => row.creator?.name ?? row.creator?.email ?? '-',
+      cell: (row) => <div><Text size="sm">{row.performedByEmployeeName ?? row.creator?.name ?? row.creator?.email ?? '-'}</Text>{row.performedByEmployeeName ? <Text size="xs" c="dimmed">Perfil: {row.creator?.email}</Text> : null}</div>,
     },
     {
       id: 'createdAt',
@@ -1059,6 +1076,7 @@ export default function TransportRequestsWorkspace({
     <main>
       <Container size="xl" py="xl">
         <Stack gap="lg">
+          {tabletEmployee ? <Alert color="blue"><Group justify="space-between"><div><Text fw={700}>Documento realizado por: {tabletEmployee.employee.name}</Text><Text size="sm">Bodega: {principalWarehouse?.name ?? 'Cargando…'}</Text></div><Group>{autosaveDraftId ? <Button variant="subtle" onClick={onTabletReidentify}>Validar PIN de nuevo</Button> : null}<Button variant="light" onClick={onTabletReset}>Salir y pedir otro PIN</Button></Group></Group></Alert> : null}
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Group
               justify="space-between"
@@ -1084,7 +1102,7 @@ export default function TransportRequestsWorkspace({
             </Group>
             <Tabs value={activeTab} variant="pills">
               <RequestsListSection
-                isDriverRole={isDriverRole}
+                isDriverRole={isDriverRole || isTabletRole}
                 loadRequests={loadRequests}
                 requestsLoading={requestsLoading}
                 requestsError={requestsError}
