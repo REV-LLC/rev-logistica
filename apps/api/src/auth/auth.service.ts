@@ -10,6 +10,7 @@ interface JwtPayload {
   email: string;
   name?: string;
   role: Role;
+  warehouseId?: string;
 }
 
 @Injectable()
@@ -24,6 +25,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedIdentifier },
       include: {
+        warehouse: true,
         employee: {
           select: { name: true, lastName: true },
         },
@@ -35,6 +37,9 @@ export class AuthService {
     }
 
     await this.assertPassword(password, user.passwordHash);
+    if (user.role === Role.WAREHOUSE_TABLET && !user.warehouse?.active) {
+      throw new UnauthorizedException('Este perfil no tiene una bodega activa asignada. Contacta a administración.');
+    }
 
     const employeeName = user.employee
       ? `${user.employee.name} ${user.employee.lastName}`.trim()
@@ -45,6 +50,7 @@ export class AuthService {
       email: user.email,
       ...(employeeName ? { name: employeeName } : {}),
       role: user.role,
+      ...(user.warehouseId ? { warehouseId: user.warehouseId } : {}),
     };
 
     return {

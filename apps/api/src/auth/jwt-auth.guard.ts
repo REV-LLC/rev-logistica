@@ -36,10 +36,17 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token);
+      if (payload.role === 'WAREHOUSE_TABLET') {
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { warehouse: true } });
+        if (!user?.active || user.role !== 'WAREHOUSE_TABLET' || !user.warehouse?.active) {
+          throw new UnauthorizedException('El perfil de bodega está inactivo. Contacta a administración.');
+        }
+        payload.warehouseId = user.warehouseId;
+      }
       request['user'] = payload;
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid token');
+      throw new UnauthorizedException('La sesión ya no es válida. Inicia sesión nuevamente.');
     }
   }
 

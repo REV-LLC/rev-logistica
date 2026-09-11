@@ -28,6 +28,7 @@ import {
 import type { useRequestAutosave } from './use-request-autosave';
 
 type Options = {
+  tabletEmployeeToken?: string;
   setSubmitting: Dispatch<SetStateAction<boolean>>;
   observations: string;
   vehicleId: string | null;
@@ -76,6 +77,7 @@ type Options = {
 };
 
 export function useRequestSubmission({
+  tabletEmployeeToken,
   setSubmitting,
   observations,
   vehicleId,
@@ -124,6 +126,7 @@ export function useRequestSubmission({
     setSubmitResult(null);
     setError(null);
     try {
+      if (tabletEmployeeToken && !navigator.onLine) throw new Error('Conecta la tablet a internet para verificar al empleado y enviar el documento.');
       if (!docDate || !customerId) {
         throw new Error('Completa los campos requeridos.');
       }
@@ -217,6 +220,7 @@ export function useRequestSubmission({
       }
 
       const documentPayload = {
+        ...(tabletEmployeeToken ? { tabletEmployeeToken } : {}),
         type: docType,
         number: documentNumber,
         warehouseId: effectiveWarehouseId ?? undefined,
@@ -311,7 +315,7 @@ export function useRequestSubmission({
           `/documents/${autosaveDraftId}/request/submit`,
           {
             method: 'POST',
-            json: { sendWhatsapp: shouldSendWhatsapp },
+            json: { sendWhatsapp: shouldSendWhatsapp, ...(tabletEmployeeToken ? { tabletEmployeeToken } : {}) },
           },
         );
       } else {

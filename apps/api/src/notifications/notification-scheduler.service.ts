@@ -5,6 +5,7 @@ import { NotificationsService } from './notifications.service';
 export class NotificationSchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationSchedulerService.name);
   private timer?: NodeJS.Timeout;
+  private running = false;
 
   constructor(private readonly notifications: NotificationsService) {}
 
@@ -21,11 +22,23 @@ export class NotificationSchedulerService implements OnModuleInit, OnModuleDestr
   }
 
   private async dispatch() {
+    if (this.running) return;
+    this.running = true;
     try {
-      const result = await this.notifications.dispatchNotifications();
-      if (result.sent || result.failed) this.logger.log(`Notification dispatch: ${JSON.stringify(result)}`);
-    } catch (error) {
-      this.logger.error('Automatic notification dispatch failed', error instanceof Error ? error.stack : undefined);
+      const jobs = [
+        { name: 'Recordatorios existentes', run: () => this.notifications.dispatchNotifications() },
+        { name: 'Recordatorio diario de horómetros', run: () => this.notifications.dispatchHourMeterReminders() },
+      ];
+      for (const job of jobs) {
+        try {
+          const result = await job.run();
+          if (result.sent || result.failed) this.logger.log(`${job.name}: ${JSON.stringify(result)}`);
+        } catch (error) {
+          this.logger.error(`Falló el envío automático: ${job.name}`, error instanceof Error ? error.stack : String(error));
+        }
+      }
+    } finally {
+      this.running = false;
     }
   }
 }

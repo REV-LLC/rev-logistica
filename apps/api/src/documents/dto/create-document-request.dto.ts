@@ -49,6 +49,9 @@ class CreateDocumentRequestItemDto {
 }
 
 export class CreateDocumentRequestDto {
+  @IsOptional()
+  @IsString()
+  tabletEmployeeToken?: string;
   @IsEnum(DocumentType)
   type: DocumentType;
 

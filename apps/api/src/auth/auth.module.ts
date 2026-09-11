@@ -7,6 +7,8 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { resolveJwtSecret } from './jwt-config';
+import { TabletController } from './tablet.controller';
+import { TabletService } from './tablet.service';
 
 const resolveJwtExpiresIn = (value?: string): number | StringValue =>
   value
@@ -25,8 +27,8 @@ const resolveJwtExpiresIn = (value?: string): number | StringValue =>
       },
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
+  controllers: [AuthController, TabletController],
+  providers: [AuthService, JwtAuthGuard, RolesGuard, TabletService],
   exports: [AuthService, JwtModule, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}

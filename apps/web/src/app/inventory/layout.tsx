@@ -9,7 +9,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
       allowedRoles={['ADMIN', 'OFFICE']}
       routeRoleRules={[
         { prefix: '/inventory/hour-meter', roles: ['ADMIN', 'OFFICE', 'OPERATOR'] },
-        { prefix: '/inventory/ledger/document', roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
+        { prefix: '/inventory/ledger/document', roles: ['ADMIN', 'OFFICE', 'DRIVER', 'WAREHOUSE_TABLET'] },
         { prefix: '/inventory/provider-returns', roles: ['ADMIN', 'OFFICE', 'DRIVER'] },
       ]}
     >

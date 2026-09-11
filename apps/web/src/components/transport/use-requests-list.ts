@@ -1,5 +1,6 @@
 'use client';
 import { api, ApiError } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import { RequestDocument } from './request-types';
 
@@ -18,13 +19,13 @@ export function useRequestsList() {
     setRequestsError(null);
     try {
       const data = await api<RequestDocument[]>(
-        '/documents?status=DRAFT&take=200',
+        getCurrentUserRole() === 'WAREHOUSE_TABLET' ? '/documents?take=200' : '/documents?status=DRAFT&take=200',
         {
           method: 'GET',
         },
       );
       setRequests(
-        data.filter((doc) => doc.type === 'REMISSION' || doc.type === 'RETURN'),
+        data.filter((doc) => (doc.type === 'REMISSION' || doc.type === 'RETURN') && (doc.status === 'DRAFT' || doc.status === 'IN_PROGRESS')),
       );
     } catch (err) {
       if (err instanceof ApiError) {

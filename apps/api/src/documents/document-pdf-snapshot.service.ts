@@ -163,6 +163,7 @@ export class DocumentPdfSnapshotService {
       select: {
         id: true,
         createdBy: true,
+        performedByEmployeeName: true,
         type: true,
         status: true,
         consecutive: true,
@@ -253,9 +254,9 @@ export class DocumentPdfSnapshotService {
     const receiverName = responsibleIds.receiverId
       ? (employeeNameById.get(responsibleIds.receiverId) ?? null)
       : null;
-    const preparedBy = document.creator.employee
+    const preparedBy = document.performedByEmployeeName ?? (document.creator.employee
       ? `${document.creator.employee.name} ${document.creator.employee.lastName}`.trim()
-      : document.creator.email;
+      : document.creator.email);
     const isOnSite = this.parseDeliveryMode(document.notes) === 'ON_SITE';
     const { creator: _creator, ...pdfDocument } = document;
 

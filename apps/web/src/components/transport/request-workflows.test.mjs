@@ -334,6 +334,35 @@ const submissionOptions = {
   router: { refresh: noop, push: noop },
 };
 
+test('tablet conserva la identificación del empleado al guardar y enviar el borrador', async () => {
+  const calls = [], errors = [];
+  Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value: true });
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': { ApiError, api: async (url, options) => { calls.push({ url, options }); return { id: 'draft', consecutive: 'RM-APP-000001' }; } },
+    '@/lib/offline-queue': { enqueueOfflineOperation: noop, syncOfflineOperations: noop },
+  });
+  const hook = await mountHook(useRequestSubmission, { ...submissionOptions, autosaveDraftId: 'draft', tabletEmployeeToken: 'verified-token', setError: value => errors.push(value) });
+  await act(() => hook.current.handleSubmit());
+  assert.deepEqual(errors.filter(Boolean), []);
+  const save = calls.find(call => call.url.endsWith('/request/autosave'));
+  const submit = calls.find(call => call.url.endsWith('/request/submit'));
+  assert.equal(save.options.json.tabletEmployeeToken, 'verified-token');
+  assert.equal(submit.options.json.tabletEmployeeToken, 'verified-token');
+});
+
+test('tablet requiere conexión y no persiste su autorización en la cola offline', async () => {
+  const calls = [], errors = [];
+  Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value: false });
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': { ApiError, api: async () => calls.push('api') },
+    '@/lib/offline-queue': { enqueueOfflineOperation: async () => calls.push('queue'), syncOfflineOperations: noop },
+  });
+  const hook = await mountHook(useRequestSubmission, { ...submissionOptions, autosaveDraftId: 'draft', tabletEmployeeToken: 'verified-token', setError: value => errors.push(value) });
+  await act(() => hook.current.handleSubmit());
+  assert.deepEqual(calls, []);
+  assert.match(errors.filter(Boolean)[0], /Conecta la tablet a internet/);
+});
+
 test('cambiar la salida física descarta una respuesta de inventario anterior', async () => {
   let finish;
   const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {

@@ -1,5 +1,5 @@
-import TransportRequestsWorkspace from '@/components/transport/TransportRequestsWorkspace';
+import TabletDocumentGate from '@/components/transport/TabletDocumentGate';
 
 export default function GenerateDocumentPage() {
-  return <TransportRequestsWorkspace mode="generate" />;
+  return <TabletDocumentGate />;
 }

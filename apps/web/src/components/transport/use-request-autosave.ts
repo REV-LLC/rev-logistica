@@ -8,6 +8,7 @@ import type { Warehouse } from './request-types';
 import { SelectedItem } from './request-types';
 
 type Options = {
+  tabletEmployeeToken?: string;
   docType: 'REMISSION' | 'RETURN';
   documentNumber: string | undefined;
   setConsecutive: Dispatch<SetStateAction<string>>;
@@ -33,6 +34,7 @@ type Options = {
 };
 
 export function useRequestAutosave({
+  tabletEmployeeToken,
   docType,
   documentNumber,
   setConsecutive,
@@ -62,6 +64,7 @@ export function useRequestAutosave({
 
   const autosavePayload = useMemo(
     () => ({
+      ...(tabletEmployeeToken ? { tabletEmployeeToken } : {}),
       type: docType,
       number: documentNumber,
       warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
@@ -81,6 +84,7 @@ export function useRequestAutosave({
       items: buildRequestItems(selectedItems),
     }),
     [
+      tabletEmployeeToken,
       documentNumber,
       customerWorksiteId,
       deliveryMode,

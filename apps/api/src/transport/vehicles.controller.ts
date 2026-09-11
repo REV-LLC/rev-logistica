@@ -25,7 +25,7 @@ export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   listVehicles() {
     return this.vehiclesService.listVehicles();
   }
