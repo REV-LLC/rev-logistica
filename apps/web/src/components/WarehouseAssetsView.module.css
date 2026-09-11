@@ -9,6 +9,18 @@
   overflow: hidden;
 }
 
+.catalogPage {
+  min-height: 0;
+}
+
+.catalogDescription {
+  color: var(--assets-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0.75rem 0 0;
+  max-width: 44rem;
+}
+
 .header {
   align-items: flex-start;
   border-bottom: 1px solid var(--assets-line);
@@ -266,6 +278,10 @@
   .filters::-webkit-scrollbar { display: none; }
   .filter { flex: 0 0 auto; }
   .grid { grid-template-columns: 1fr; }
+  .catalogPage { min-height: 0; }
+  .catalogPage .header { flex-wrap: wrap; gap: 0.8rem; }
+  .catalogPage .filters { flex-wrap: wrap; margin-inline: 0; overflow: visible; padding-inline: 0; gap: 0.5rem; }
+  .catalogPage .filter { min-height: 2.5rem; padding: 0.55rem 0.65rem; font-size: 0.8rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

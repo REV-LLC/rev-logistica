@@ -1,5 +1,6 @@
 'use client';
 import {
+  Alert,
   Button,
   Group,
   Modal,
@@ -13,6 +14,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import { FUEL_OPTIONS } from './request-formatting';
 
 type Props = {
+  ownerName: string;
+  physicalSourceName: string;
   createSerialOpen: boolean;
   createSerialSaving: boolean;
   setCreateSerialOpen: Dispatch<SetStateAction<boolean>>;
@@ -35,6 +38,8 @@ type Props = {
 };
 
 export default function ApprovalCreateAssetDialog({
+  ownerName,
+  physicalSourceName,
   createSerialOpen,
   createSerialSaving,
   setCreateSerialOpen,
@@ -72,6 +77,10 @@ export default function ApprovalCreateAssetDialog({
       centered
     >
       <Stack gap="sm">
+        <Alert color="blue" title="Registro inicial del equipo">
+          Propietario: {ownerName}. Ubicación inicial: {physicalSourceName}.
+          Crea el equipo solo si aún no existe; si ya está registrado, registra su ingreso a la bodega de salida sin duplicarlo.
+        </Alert>
         {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
         <TextInput
           label="Serial / motor"

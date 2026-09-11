@@ -96,6 +96,7 @@ const warehouseOptions = {
   sourceMode: 'warehouse',
   principalWarehouse: null,
   sourceOwnerWarehouseId: 'ally',
+  physicalSourceWarehouseId: 'own',
   warehouses: [{ id: 'ally', name: 'Proveedor', type: 'ALLY' }],
   canDecide: true,
   effectiveSourceWorksiteId: null,
@@ -137,7 +138,7 @@ test('Office carga inventario de bodega alterna y abre el selector; Driver conse
   };
   const hook = await mountHook(useRequestInventory, options);
   await act(() => hook.current.loadInventory());
-  assert.deepEqual(calls, ['/inventory/warehouse/ally']);
+  assert.deepEqual(calls, ['/inventory/warehouse/own']);
   assert.deepEqual(
     hook.current.serialItems.map((item) => item.assetId),
     ['bucket'],
@@ -238,6 +239,7 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
     { '@/lib/api': { api: noop } },
   );
   const hook = await mountHook(useRequestAutosave, {
+    inventorySourceMode: 'WAREHOUSE',
     docType: 'REMISSION',
     documentNumber: 'RM123',
     setConsecutive: noop,
@@ -274,11 +276,13 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
   assert.deepEqual(payload.recipientPhones, ['3001234567']);
   assert.equal(payload.items[0].componentParentAssetId, 'loader');
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
+  assert.equal(payload.inventorySourceMode, 'WAREHOUSE');
   assert.match(payload.notes, /Conductor: driver/);
   assert.match(payload.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
 
 const submissionOptions = {
+  inventorySourceMode: 'WAREHOUSE',
   setSubmitting: noop,
   observations: 'Entregar',
   vehicleId: null,
@@ -359,6 +363,71 @@ test('tablet requiere conexión y no persiste su autorización en la cola offlin
   assert.match(errors.filter(Boolean)[0], /Conecta la tablet a internet/);
 });
 
+test('cambiar la salida física descarta una respuesta de inventario anterior', async () => {
+  let finish;
+  const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
+    '@/lib/api': { ApiError, api: () => new Promise(resolve => { finish = resolve; }) },
+  });
+  const hook = await mountHook(useRequestInventory, warehouseOptions);
+  let pending;
+  await act(async () => { pending = hook.current.loadInventory(); });
+  await act(async () => hook.current.clearLoadedInventory());
+  await hook.update({ ...warehouseOptions, physicalSourceWarehouseId: 'ally' });
+  await act(async () => {
+    finish({ bulk: [], serial: [{ assetId: 'stale', ownerWarehouseId: 'ally' }] });
+    await pending;
+  });
+  assert.deepEqual(hook.current.serialItems, []);
+  assert.equal(hook.current.itemsModalOpen, false);
+});
+
+test('resolución registra el equipo del proveedor en la salida física y conserva el origen al aprobar', async () => {
+  const calls = [];
+  const doc = {
+    id: 'doc', type: 'REMISSION', consecutive: 'RM000001',
+    inventorySourceMode: 'WAREHOUSE', warehouse: { id: 'own', name: 'Bodega propia' },
+    customerWorksite: { id: 'site' }, notes: 'Entrega: ON_SITE',
+    items: [{ requestedTag: 'MEZCLADORA #42', condition: 'ally', quantity: 1 }],
+  };
+  let created = false;
+  const { useRequestApproval } = loadTransportModule('use-request-approval.ts', {
+    '@/lib/api': { ApiError, api: async (url, options) => {
+      calls.push({ url, options });
+      if (url === '/inventory/serialized-assets') {
+        created = true;
+        return { asset: { id: 'new-asset' } };
+      }
+      if (url.startsWith('/inventory/warehouse/')) return {
+        bulk: [], serial: created ? [{ assetId: 'new-asset', skuId: 'mixer', ownerWarehouseId: 'ally', internalNumber: 42 }] : [],
+      };
+      if (url.endsWith('/provider-remission-requirements')) return { missingProviders: [] };
+      return doc;
+    } },
+  });
+  window.confirm = () => true;
+  const hook = await mountHook(useRequestApproval, {
+    ...approvalOptions,
+    skuOptions: [{ id: 'mixer', name: 'MEZCLADORA', controlType: 'SERIAL', assetFamilyId: 'family' }],
+  });
+  await act(() => hook.current.decideRequest('doc', 'APPROVE'));
+  assert.deepEqual(hook.current.getResolveSkuOptions('ally'), [{ value: 'mixer', label: 'MEZCLADORA' }]);
+  await act(async () => hook.current.openCreateSerialForRow(0));
+  await act(async () => {
+    hook.current.setCreateSerialSerialOrEngine('MOTOR-QA');
+    hook.current.setCreateSerialInternalNumber(42);
+  });
+  await act(() => hook.current.createMissingSerialFromResolve());
+  const registration = calls.find(call => call.url === '/inventory/serialized-assets').options.json;
+  assert.equal(registration.ownerWarehouseId, 'ally');
+  assert.equal(registration.warehouseCurrentId, 'own');
+  assert.ok(calls.filter(call => call.url.startsWith('/inventory/warehouse/')).every(call => call.url.endsWith('/own')));
+  await act(() => hook.current.resolveAndApprove());
+  const update = calls.find(call => call.options?.method === 'PATCH').options.json;
+  assert.equal(update.inventorySourceMode, 'WAREHOUSE');
+  assert.equal(update.warehouseId, 'own');
+  assert.ok(calls.some(call => call.url.endsWith('/decision')));
+});
+
 test('envío online mantiene el vínculo, acepta dueño pendiente y omite WhatsApp cuando Office lo desactiva', async () => {
   const calls = [],
     errors = [];
@@ -403,6 +472,7 @@ test('envío online mantiene el vínculo, acepta dueño pendiente y omite WhatsA
   const payload = calls[0].options.json;
   assert.equal(payload.items[0].componentParentAssetId, 'loader');
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
+  assert.equal(payload.inventorySourceMode, 'WAREHOUSE');
   assert.equal(payload.items[1].ownerWarehouseId, undefined);
   assert.equal(payload.sendWhatsapp, false);
   assert.equal(payload.number, 'RM123');

@@ -6,16 +6,19 @@ describe('provider catalogue stock and late document entry', () => {
   const delivered = new Date('2026-09-02T12:00:00Z');
   function setup(opening = true, quantity = 1) {
     const rows: any[] = [
-      { assetId: 'vibrator', skuId: null, ownerWarehouseId: 'provider', warehouseId: 'provider',
+      { id: 'opening-vibrator', createdAt: registered, refDocumentId: null, refDocumentType: null,
+        assetId: 'vibrator', skuId: null, ownerWarehouseId: 'provider', warehouseId: 'provider',
         customerWorksiteId: null, movementType: MovementType.ADJUST, quantity: 1,
         effectiveAt: registered, isOpeningBalance: opening },
-      { assetId: null, skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider',
+      { id: 'opening-hose', createdAt: registered, refDocumentId: null, refDocumentType: null,
+        assetId: null, skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider',
         customerWorksiteId: null, movementType: MovementType.ADJUST, quantity,
         effectiveAt: registered, isOpeningBalance: opening },
     ];
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       document: { findUnique: jest.fn().mockResolvedValue({ type: DocumentType.REMISSION, docDate: delivered }) },
+      warehouse: { findUnique: jest.fn(async ({ where }) => ({ id: where.id, name: 'Proveedor' })) },
       customerWorksite: { findUnique: jest.fn().mockResolvedValue({ id: 'site' }) },
       asset: { findMany: jest.fn().mockResolvedValue([{ id: 'vibrator', warehouseOwnerId: 'provider' }]),
         update: jest.fn().mockResolvedValue({}) },
@@ -34,7 +37,13 @@ describe('provider catalogue stock and late document entry', () => {
             ? [{ assetId: 'vibrator', _sum: { quantity: 1 } }]
             : [{ skuId: 'hose', ownerWarehouseId: 'provider', warehouseId: 'provider', _sum: { quantity } }];
         }),
-        create: jest.fn(async ({ data }) => { rows.push({ ...data, isOpeningBalance: false }); return { id: 'new-row' }; }),
+        create: jest.fn(async ({ data }) => {
+          rows.push({
+            id: `ledger-${rows.length + 1}`, createdAt: registered,
+            refDocumentId: null, refDocumentType: null, ...data, isOpeningBalance: false,
+          });
+          return { id: 'new-row' };
+        }),
       },
     };
     const prisma = { $transaction: (fn: any) => fn(tx),
@@ -55,10 +64,10 @@ describe('provider catalogue stock and late document entry', () => {
     expect(rows[1].effectiveAt).toEqual(registered);
   });
 
-  it('still rejects a real later bulk adjustment', async () => {
-    const { service, tx } = setup(false);
-    await expect(service.moveOnSite(payload, 'operator')).rejects.toMatchObject({ response: { code: 'RETROACTIVE_INVENTORY_MOVEMENT' } });
-    expect(tx.stockLedger.create).not.toHaveBeenCalled();
+  it('accepts a later quantity adjustment when the aggregate balance covers the delivery', async () => {
+    const { service, rows } = setup();
+    rows[1].isOpeningBalance = false;
+    await expect(service.moveOnSite(payload, 'operator')).resolves.toMatchObject({ count: 2 });
   });
 
   it('still rejects a later real movement of the equipment', async () => {

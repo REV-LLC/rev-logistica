@@ -19,6 +19,7 @@ import {
 } from './request-types';
 
 type Props = {
+  getDocumentSourceName: (doc: RequestDocumentDetail, ownerId?: string | null) => string;
   resolveModalOpen: boolean;
   closeResolveModal: () => void;
   resolveDocument: RequestDocumentDetail | null;
@@ -41,6 +42,7 @@ type Props = {
 };
 
 export default function ApprovalResolutionDialog({
+  getDocumentSourceName,
   resolveModalOpen,
   closeResolveModal,
   resolveDocument,
@@ -87,18 +89,21 @@ export default function ApprovalResolutionDialog({
                   Cantidad: {Number(item.quantity ?? 1) || 1}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  Bodega:{' '}
+                  Propietario:{' '}
                   {warehouses.find(
                     (warehouse) => warehouse.id === item.condition,
                   )?.name ?? '-'}
                 </Text>
+                {resolveDocument?.type === 'REMISSION' ? (
+                  <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text>
+                ) : null}
                 <Select
                   label="Equipo"
-                  placeholder="Buscar equipo de esta bodega"
+                  placeholder="Buscar referencia de equipo"
                   searchable
                   data={getResolveSkuOptions(item.condition)}
                   value={resolveSkuByIndex[index] ?? null}
-                  nothingFoundMessage="Esta bodega no tiene equipos disponibles"
+                  nothingFoundMessage="No hay referencias en el catálogo"
                   onChange={(value) => {
                     setResolveSkuByIndex((prev) => ({
                       ...prev,
@@ -154,8 +159,8 @@ export default function ApprovalResolutionDialog({
                       />
                       {expectedInternal != null && !hasExpected ? (
                         <Text size="xs" c="orange.7">
-                          El tag solicita #{expectedInternal}, pero no existe en
-                          esa bodega.
+                          El tag solicita #{expectedInternal}, pero no aparece disponible
+                          en la bodega de salida.
                         </Text>
                       ) : null}
                       {!serialOptions.length ||

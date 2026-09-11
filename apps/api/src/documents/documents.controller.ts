@@ -23,6 +23,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { ApplyDocumentItemsCutoffDto } from './dto/apply-document-items-cutoff.dto';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
+import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
 import { CreateDocumentRequestDto } from './dto/create-document-request.dto';
 import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
 import { UpdateDocumentItemBillingDto } from './dto/update-document-item-billing.dto';
@@ -68,6 +69,22 @@ export class DocumentsController {
         ...payload,
         createdBy: request.user.sub,
       }),
+    });
+  }
+
+  @Post('direct')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createDirectDocument(
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+    payload: CreateDirectDocumentDto,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: 'documents.direct.create',
+      userId: request.user.sub,
+      run: () => this.documentsService.createDirectDocument(payload, request.user.sub),
     });
   }
 

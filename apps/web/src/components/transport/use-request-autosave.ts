@@ -1,4 +1,5 @@
 'use client';
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import { buildRequestItems } from '@/components/transport/request-items';
 import { api } from '@/lib/api';
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
@@ -12,6 +13,7 @@ type Options = {
   documentNumber: string | undefined;
   setConsecutive: Dispatch<SetStateAction<string>>;
   setSavedConsecutive: Dispatch<SetStateAction<string | null>>;
+  inventorySourceMode: RequestInventorySourceMode;
   warehouseId: string | null;
   principalWarehouse: Warehouse | null;
   customerWorksiteId: string;
@@ -37,6 +39,7 @@ export function useRequestAutosave({
   documentNumber,
   setConsecutive,
   setSavedConsecutive,
+  inventorySourceMode,
   warehouseId,
   principalWarehouse,
   customerWorksiteId,
@@ -65,6 +68,7 @@ export function useRequestAutosave({
       type: docType,
       number: documentNumber,
       warehouseId: warehouseId ?? principalWarehouse?.id ?? undefined,
+      inventorySourceMode: docType === 'REMISSION' ? inventorySourceMode : undefined,
       customerWorksiteId: customerWorksiteId || undefined,
       notes: buildRequestNotes({
         observations,
@@ -84,6 +88,7 @@ export function useRequestAutosave({
       documentNumber,
       customerWorksiteId,
       deliveryMode,
+      inventorySourceMode,
       dispatcherId,
       documentTimestamp,
       docType,

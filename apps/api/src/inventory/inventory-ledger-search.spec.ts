@@ -72,7 +72,7 @@ describe('InventoryService ledger search', () => {
         {
           OR: [
             { effectiveAt: { lt: row.effectiveAt } },
-            { effectiveAt: row.effectiveAt, id: { lt: row.id } },
+            { effectiveAt: row.effectiveAt, OR: [{ appendOrder: null, id: { lt: row.id } }] },
           ],
         },
       ],

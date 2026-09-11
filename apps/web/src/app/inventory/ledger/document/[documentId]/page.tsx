@@ -28,6 +28,7 @@ import { getSerialDisplayName } from '@/lib/serial-assets';
 import {
   buildInventoryStockShortageMessage,
   extractInventoryStockShortages,
+  getStockShortageReviewAction,
 } from '@/lib/inventory-stock-errors';
 import styles from './remdev-print.module.css';
 import Image from 'next/image';
@@ -41,6 +42,12 @@ import {
 import TableRowActions from '@/components/TableRowActions';
 import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
 import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPickerModal';
+import {
+  getRequestInventorySourceMode,
+  getRequestSourceWarehouseId,
+  loadRequestSourceInventories,
+  type RequestInventorySourceMode,
+} from '@/components/transport/request-inventory-source';
 
 const PRINT_LINES_PER_PAGE = 20;
 
@@ -53,6 +60,7 @@ type DocumentDetail = {
   createdAt: string;
   docDate: string;
   notes: string | null;
+  inventorySourceMode?: RequestInventorySourceMode | null;
   recipientPhone?: string | null;
   warehouse?: { id: string; name: string } | null;
   customerWorksite?: {
@@ -139,6 +147,7 @@ const getEmployeeFullName = (employee: EmployeeOption) =>
 type WarehouseOption = {
   id: string;
   name: string;
+  type?: string;
 };
 
 type ProviderRemissionRequirement = {
@@ -489,6 +498,7 @@ export default function DocumentDetailPage() {
   const [adjustWarningModalOpen, setAdjustWarningModalOpen] = useState(false);
   const [adjustWarningMessage, setAdjustWarningMessage] = useState<string | null>(null);
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] = useState<string | null>(null);
+  const [adjustWarningWarehouseId, setAdjustWarningWarehouseId] = useState<string | null>(null);
   const [printAudience, setPrintAudience] = useState<'internal' | 'customer'>('internal');
   const billingCutoffPickerRef = useRef<HTMLInputElement | null>(null);
   const billingReturnedPickerRef = useRef<HTMLInputElement | null>(null);
@@ -749,6 +759,15 @@ export default function DocumentDetailPage() {
     }
     return false;
   };
+  const getDocumentSourceName = (doc: DocumentDetail, ownerId?: string | null) =>
+    warehouses.find((warehouse) => warehouse.id === getRequestSourceWarehouseId(doc, ownerId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+      ?? 'Sin seleccionar';
+  const stockReviewAction = getStockShortageReviewAction({
+    ownerWarehouseId: adjustWarningOwnerWarehouseId,
+    warehouseId: adjustWarningWarehouseId,
+    warehouseType: warehouses.find((warehouse) => warehouse.id === adjustWarningWarehouseId)?.type,
+  });
   const openBillingModal = (item: DocumentDetail['items'][number]) => {
     const defaultReturnedAt =
       document?.type === 'RETURN'
@@ -842,8 +861,10 @@ export default function DocumentDetailPage() {
       if (!mixerItem?.asset || !ownerWarehouseId) {
         throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
       }
+      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId);
+      if (!sourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
       const inventory = await api<{ serial: InventoryItemPickerSerialItem[] }>(
-        `/inventory/warehouse/${ownerWarehouseId}`,
+        `/inventory/warehouse/${sourceWarehouseId}`,
         { method: 'GET' },
       );
       const mixer: InventoryItemPickerSerialItem = {
@@ -906,6 +927,7 @@ export default function DocumentDetailPage() {
       stockShortages.length > 0 ||
       messages.some((message) => /insufficient stock|stock insuficiente/i.test(message));
     if (hasStockError && canDecide) {
+      setAdjustWarningWarehouseId(stockShortages[0]?.warehouseId ?? null);
       if (stockShortages.length > 0) {
         const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
         setAdjustWarningOwnerWarehouseId(firstOwnerId);
@@ -934,13 +956,13 @@ export default function DocumentDetailPage() {
         const skuName = skuOptions.find((entry) => entry.id === skuId)?.name;
         return skuName ?? `SKU ${skuId.slice(0, 8)}`;
       });
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const ownerLabel = ownerName ? ` Propietario indicado: ${ownerName}.` : '';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
+        `No se puede aprobar la remisión: revisa las existencias en el origen físico del documento.${ownerLabel}${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setError(null);
@@ -966,6 +988,7 @@ export default function DocumentDetailPage() {
           type: doc.type,
           number: doc.consecutive ?? undefined,
           warehouseId: doc.warehouse?.id ?? undefined,
+          inventorySourceMode: doc.inventorySourceMode ?? undefined,
           customerWorksiteId: doc.customerWorksite?.id ?? undefined,
           notes: doc.notes ?? undefined,
           recipientPhone: doc.recipientPhone ?? undefined,
@@ -1006,23 +1029,9 @@ export default function DocumentDetailPage() {
     setResolveInventoryByOwner({});
   };
 
-  const loadResolveInventories = async (ownerIds: string[]) => {
-    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
-    if (!uniqueOwnerIds.length) return {};
-    const loadedEntries = await Promise.all(
-      uniqueOwnerIds.map(async (ownerId) => {
-        try {
-          const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerId}`, {
-            method: 'GET',
-          });
-          return [ownerId, { serial: inventory.serial ?? [] }] as const;
-        } catch {
-          return [ownerId, { serial: [] }] as const;
-        }
-      }),
-    );
-    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
-  };
+  const loadResolveInventories = (doc: DocumentDetail, ownerIds: string[]) =>
+    loadRequestSourceInventories<{ ownerWarehouseId?: string | null }, InventorySerial>(doc, ownerIds, (id) =>
+      api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
 
   const buildInitialResolveState = (
     doc: DocumentDetail,
@@ -1080,7 +1089,12 @@ export default function DocumentDetailPage() {
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('The line has no owner warehouse.');
+      setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
+      return;
+    }
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    if (!sourceWarehouseId) {
+      setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
@@ -1116,16 +1130,16 @@ export default function DocumentDetailPage() {
             active: true,
           },
           ownerWarehouseId,
-          warehouseCurrentId: ownerWarehouseId,
+          warehouseCurrentId: sourceWarehouseId,
         },
       });
 
-      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
         ...prev,
-        [ownerWarehouseId]: { serial: refreshedInventory.serial ?? [] },
+        [ownerWarehouseId]: { serial: (refreshedInventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerWarehouseId) },
       }));
       setResolveAssetByIndex((prev) => ({
         ...prev,
@@ -1314,7 +1328,7 @@ export default function DocumentDetailPage() {
         const ownerIds = unresolved
           .map(({ item }) => item.condition?.trim() ?? '')
           .filter((value): value is string => Boolean(value));
-        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const inventoriesByOwner = await loadResolveInventories(doc, ownerIds);
         const { initialSkuMap, initialAssetMap } = buildInitialResolveState(doc, inventoriesByOwner);
 
         setResolveDocument(doc);
@@ -1450,6 +1464,7 @@ export default function DocumentDetailPage() {
           type: resolveDocument.type,
           number: resolveDocument.consecutive ?? undefined,
           warehouseId: resolveDocument.warehouse?.id ?? undefined,
+          inventorySourceMode: resolveDocument.inventorySourceMode ?? undefined,
           customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
           notes: resolveDocument.notes ?? undefined,
           items: itemsPayload,
@@ -1495,14 +1510,24 @@ export default function DocumentDetailPage() {
           withBorder
           className={styles.noPrint}
         >
-          <Group justify="space-between" className="mobile-stack">
+          <Group justify="space-between" align="flex-start" gap="lg" className={styles.documentHeader}>
             <div>
               <Title order={2}>{title}</Title>
-              <Text c="dimmed">
-                Estado: {document?.status ?? '-'} | Creado: {document ? formatDate(document.createdAt) : '-'}
-              </Text>
+              <Group gap="sm" mt={6}>
+                <Badge variant="light" color={document?.status === 'CONFIRMED' ? 'green' : document?.status === 'DRAFT' ? 'yellow' : 'gray'}>
+                  {document?.status === 'DRAFT' ? 'Borrador' : document?.status === 'CONFIRMED' ? 'Confirmado' : document?.status ?? '-'}
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  Creado el {document ? formatDate(document.createdAt) : '-'}
+                </Text>
+              </Group>
+              {document?.type === 'REMISSION' ? <Text size="sm" c="dimmed" mt="xs">
+                Salida física: {getRequestInventorySourceMode(document) === 'WAREHOUSE'
+                  ? document.warehouse?.name ?? 'Sin seleccionar'
+                  : 'bodega de cada propietario'}.
+              </Text> : null}
             </div>
-            <Group>
+            <Group gap="xs" className={styles.documentActions}>
               {canDecide && document?.status === 'DRAFT' ? (
                 <>
                   <Button
@@ -1545,7 +1570,7 @@ export default function DocumentDetailPage() {
           </Group>
 
           {document?.recipientPhone || document?.messageDeliveries?.length ? (
-            <Paper withBorder radius="md" p="sm" mt="md" bg="green.0">
+            <section className={styles.detailSection} aria-label="Copia por WhatsApp">
               <Group align="flex-start" wrap="nowrap">
                 <ThemeIcon color="green" variant="light" radius="xl">
                   <IconBrandWhatsapp size={17} />
@@ -1575,7 +1600,7 @@ export default function DocumentDetailPage() {
                   )}
                 </Stack>
               </Group>
-            </Paper>
+            </section>
           ) : null}
 
           {loading ? <Text mt="md">Cargando...</Text> : null}
@@ -1590,7 +1615,7 @@ export default function DocumentDetailPage() {
             </Text>
           ) : null}
           {document?.type === 'RETURN' ? (
-            <Paper withBorder p={{ base: 'sm', sm: 'md' }} mt="md" className={styles.billingSection}>
+            <section className={`${styles.detailSection} ${styles.billingSection}`} aria-label="Corte de items">
               <Title order={5}>Corte de items</Title>
               <div className={styles.desktopBillingTable}>
                 <Table.ScrollContainer minWidth={820} mt="sm">
@@ -1654,7 +1679,7 @@ export default function DocumentDetailPage() {
                   const cutoffDate = getEffectiveBillingCutoffDate(item);
                   const billingStatus = getEffectiveBillingStatus(item);
                   return (
-                    <Paper key={`billing-mobile-${item.id}`} withBorder radius="md" p="sm">
+                    <div key={`billing-mobile-${item.id}`} className={styles.billingRow}>
                       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
                         <Text fw={700} size="sm" className={styles.mobileItemName}>
                           {describeItem(item)}
@@ -1698,51 +1723,55 @@ export default function DocumentDetailPage() {
                           <Text size="sm">{item.returnedAt ? formatDate(item.returnedAt) : '-'}</Text>
                         </div>
                       </SimpleGrid>
-                    </Paper>
+                    </div>
                   );
                 })}
               </Stack>
-            </Paper>
+            </section>
           ) : null}
           {evidenceFiles.length ? (
-            <Paper withBorder p="md" mt="md">
-              <Title order={5}>Evidencias visuales</Title>
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm" mt="sm">
+            <section className={styles.detailSection} aria-labelledby="evidence-heading">
+              <Group justify="space-between" gap="xs" mb="md">
+                <Group gap="xs">
+                  <Title order={3} size="h5" id="evidence-heading">Evidencias visuales</Title>
+                  <Text size="sm" c="dimmed">({evidenceFiles.length})</Text>
+                </Group>
+                <Text size="xs" c="dimmed">Selecciona una imagen para ampliarla</Text>
+              </Group>
+              <div className={styles.evidenceGrid}>
                 {evidenceFiles.map((file, index) => (
                   <a
                     key={file.id}
                     href={file.storageKey}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    className={styles.evidenceLink}
+                    aria-label={`Abrir evidencia ${index + 1} en una nueva pestaña`}
                   >
-                    <Paper withBorder radius="md" p={6}>
-                      <img
-                        src={file.storageKey}
-                        alt={`Evidencia ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          aspectRatio: '4 / 3',
-                          objectFit: 'cover',
-                          borderRadius: 6,
-                          display: 'block',
-                        }}
-                      />
-                      <Text size="xs" c="dimmed" mt={4}>
-                        {formatDateTime(file.createdAt)}
-                      </Text>
-                    </Paper>
+                    <img
+                      src={file.storageKey}
+                      alt={`Evidencia ${index + 1}`}
+                      className={styles.evidenceImage}
+                    />
+                    <Group justify="space-between" gap="xs" mt="xs">
+                      <Text size="xs" fw={500}>Evidencia {index + 1}</Text>
+                      <Text size="xs" c="dimmed">{formatDateTime(file.createdAt)}</Text>
+                    </Group>
                   </a>
                 ))}
-              </SimpleGrid>
-            </Paper>
+              </div>
+            </section>
           ) : null}
         </Paper>
 
         {document ? (
           linePages.map((lines, pageIndex) => (
-          <div
+          <Paper
             key={`${document.id}-page-${pageIndex + 1}`}
+            shadow="sm"
+            p={{ base: 'md', sm: 'xl' }}
+            radius="md"
+            withBorder
             className={`${styles.sheet}${pageIndex < linePages.length - 1 ? ` ${styles.pageBreakAfter}` : ''}`}
           >
             <header className={styles.header}>
@@ -1881,7 +1910,7 @@ export default function DocumentDetailPage() {
                 )}
               </div>
             </section>
-          </div>
+          </Paper>
           ))
         ) : null}
       </Container>
@@ -2067,8 +2096,9 @@ export default function DocumentDetailPage() {
         onClose={() => {
           setAdjustWarningModalOpen(false);
           setAdjustWarningOwnerWarehouseId(null);
+          setAdjustWarningWarehouseId(null);
         }}
-        title="Ajuste requerido"
+        title="Revisar existencias en el origen"
         centered
       >
         <Stack gap="md">
@@ -2076,22 +2106,17 @@ export default function DocumentDetailPage() {
             {adjustWarningMessage ??
               'Primero ajusta el stock de la bodega antes de hacer movimientos.'}
           </Text>
+          {adjustWarningWarehouseId !== adjustWarningOwnerWarehouseId ? <Text size="sm" c="dimmed">Comprueba la recepción y la ubicación real antes de modificar cantidades. Un cambio de bodega no cambia el propietario.</Text> : null}
           <Group justify="flex-end">
             <Button
               onClick={() => {
                 setAdjustWarningModalOpen(false);
-                const params = new URLSearchParams();
-                if (adjustWarningOwnerWarehouseId) {
-                  params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
-                  params.set('warehouseId', adjustWarningOwnerWarehouseId);
-                }
-                router.push(
-                  `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
-                );
+                if (stockReviewAction.href) router.push(stockReviewAction.href);
                 setAdjustWarningOwnerWarehouseId(null);
+                setAdjustWarningWarehouseId(null);
               }}
             >
-              Entendido
+              {stockReviewAction.label}
             </Button>
           </Group>
         </Stack>
@@ -2117,8 +2142,9 @@ export default function DocumentDetailPage() {
                     Cantidad: {Number(item.quantity ?? 1) || 1}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Bodega: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
+                    Propietario: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
                   </Text>
+                  {resolveDocument?.type === 'REMISSION' ? <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text> : null}
                   <Select
                     label="Equipo"
                     placeholder="Seleccionar SKU"
@@ -2178,7 +2204,7 @@ export default function DocumentDetailPage() {
                         />
                         {expectedInternal != null && !hasExpected ? (
                           <Text size="xs" c="orange.7">
-                            The tag requests #{expectedInternal}, but it does not exist in that warehouse.
+                            El tag solicita #{expectedInternal}, pero no aparece disponible en la bodega de salida.
                           </Text>
                         ) : null}
                         {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
@@ -2220,6 +2246,11 @@ export default function DocumentDetailPage() {
       >
         <Stack gap="sm">
           {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
+          {resolveDocument && createSerialIndex != null ? <Alert color="blue" title="Registro inicial del equipo">
+            Propietario: {warehouses.find((warehouse) => warehouse.id === resolveDocument.items[createSerialIndex]?.condition)?.name ?? 'Sin seleccionar'}.<br />
+            Ubicación inicial: {getDocumentSourceName(resolveDocument, resolveDocument.items[createSerialIndex]?.condition)}.
+            <Text size="sm" mt="xs">Registra únicamente un equipo nuevo. Si ya existe en otra ubicación, registra su recepción; no lo crees otra vez.</Text>
+          </Alert> : null}
           <TextInput
             label="Serial / motor"
             value={createSerialSerialOrEngine}

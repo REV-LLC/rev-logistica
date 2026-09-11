@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 class CreateDocumentRequestItemDto {
@@ -62,6 +62,10 @@ export class CreateDocumentRequestDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @IsOptional()
+  @IsEnum(InventorySourceMode)
+  inventorySourceMode?: InventorySourceMode;
 
   @IsOptional()
   @IsUUID()

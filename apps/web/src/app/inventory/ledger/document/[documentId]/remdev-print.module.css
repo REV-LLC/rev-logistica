@@ -1,9 +1,66 @@
+.documentHeader {
+  padding: 12px 0 24px;
+}
+
+.documentActions {
+  padding-top: 4px;
+}
+
+.detailSection {
+  border-top: 1px solid var(--mantine-color-default-border);
+  padding: 24px 0;
+}
+
+.billingRow {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 24px;
+}
+
+.evidenceLink {
+  display: block;
+  min-width: 0;
+  max-width: 380px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.evidenceLink:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-6);
+  outline-offset: 5px;
+}
+
+.evidenceImage {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--mantine-color-gray-1);
+  transition: opacity 150ms ease;
+}
+
+.evidenceLink:hover .evidenceImage {
+  opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .documentActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .sheet {
   margin-top: 20px;
-  background: #fff;
-  border: 1px solid #111;
   color: #111;
-  padding: 14px;
   font-family: 'Arial Narrow', Arial, sans-serif;
 }
 
@@ -217,7 +274,6 @@
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: 8px;
   }
 
   .header {
@@ -293,10 +349,12 @@
 
   .sheet {
     break-inside: avoid;
-    box-shadow: none;
+    box-shadow: none !important;
+    background: #fff;
     margin-top: 0;
-    border: 1px solid #111;
-    padding: 6px;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 6px !important;
     width: 100%;
   }
 

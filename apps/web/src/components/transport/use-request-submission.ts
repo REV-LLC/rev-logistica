@@ -1,4 +1,5 @@
 'use client';
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import { buildRequestItems } from '@/components/transport/request-items';
 import { api } from '@/lib/api';
 import {
@@ -45,6 +46,7 @@ type Options = {
   whatsappRecipientPhones: string[];
   editingRequestId: string | null;
   receivedSignature: string | null;
+  inventorySourceMode: RequestInventorySourceMode;
   warehouseId: string | null;
   principalWarehouse: Warehouse | null;
   docType: 'REMISSION' | 'RETURN';
@@ -93,6 +95,7 @@ export function useRequestSubmission({
   whatsappRecipientPhones,
   editingRequestId,
   receivedSignature,
+  inventorySourceMode,
   warehouseId,
   principalWarehouse,
   docType,
@@ -221,6 +224,7 @@ export function useRequestSubmission({
         type: docType,
         number: documentNumber,
         warehouseId: effectiveWarehouseId ?? undefined,
+        inventorySourceMode: docType === 'REMISSION' ? inventorySourceMode : undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         ...(shouldSendWhatsapp ? { recipientPhones } : {}),
         ...(!editingRequestId ? { sendWhatsapp: shouldSendWhatsapp } : {}),

@@ -36,11 +36,22 @@ jobs:
       - name: Build API
         run: npm --workspace apps/api run build
 
-      - name: Test API
+      - name: Test API inventory and document regressions
         run: npm --workspace apps/api test -- --runInBand
-
-      - name: Test Web
-        run: npm --workspace apps/web test
 
       - name: Build Web
         run: npm --workspace apps/web run build
+
+  web-regressions:
+    name: Web request regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # These existing node:test files import TypeScript source directly.
+          # Keep the application build runtime unchanged in the build job.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm --workspace apps/web test

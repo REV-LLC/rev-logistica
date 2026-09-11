@@ -1,3 +1,4 @@
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import {
   type InventoryItemPickerBulkItem,
   type InventoryItemPickerSerialItem,
@@ -121,6 +122,7 @@ export type RequestDocument = {
 };
 
 export type RequestDocumentDetail = {
+  inventorySourceMode?: RequestInventorySourceMode | null;
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
   status: string;

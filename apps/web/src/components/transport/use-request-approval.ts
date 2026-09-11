@@ -1,4 +1,5 @@
 'use client';
+import { getRequestSourceWarehouseId, loadRequestSourceInventories } from './request-inventory-source';
 import { api, ApiError } from '@/lib/api';
 import {
   buildInventoryStockShortageMessage,
@@ -134,6 +135,8 @@ export function useRequestApproval({
   const [adjustWarningOwnerWarehouseId, setAdjustWarningOwnerWarehouseId] =
     useState<string | null>(null);
 
+  const [adjustWarningWarehouseId, setAdjustWarningWarehouseId] = useState<string | null>(null);
+
   const [providerRemissionUploading, setProviderRemissionUploading] =
     useState(false);
 
@@ -155,18 +158,17 @@ export function useRequestApproval({
 
   const getResolveSkuOptions = (ownerWarehouseId?: string | null) => {
     if (!ownerWarehouseId) return [];
-    const inventory = resolveInventoryByOwner[ownerWarehouseId];
-    if (!inventory) return [];
-    const availableSkuIds = new Set<string>();
-    inventory.bulk.forEach((item) => {
-      if (item.quantity > 0) availableSkuIds.add(item.skuId);
-    });
-    inventory.serial.forEach((item) => {
-      if (item.skuId) availableSkuIds.add(item.skuId);
-    });
-    return skuOptions
-      .filter((sku) => availableSkuIds.has(sku.id))
-      .map((sku) => ({ value: sku.id, label: sku.name }));
+    if (resolveDocument?.type === 'RETURN') {
+      const inventory = resolveInventoryByOwner[ownerWarehouseId];
+      const available = new Set([
+        ...(inventory?.bulk.filter((item) => item.quantity > 0).map((item) => item.skuId) ?? []),
+        ...(inventory?.serial.map((item) => item.skuId) ?? []),
+      ]);
+      return skuOptions.filter((sku) => available.has(sku.id)).map((sku) => ({ value: sku.id, label: sku.name }));
+    }
+    // Catalogue references remain selectable when the specific equipment must
+    // first be registered. Availability is checked on the physical-source picker.
+    return skuOptions.map((sku) => ({ value: sku.id, label: sku.name }));
   };
 
   const openMixerMotorRecovery = async (
@@ -177,30 +179,21 @@ export function useRequestApproval({
     setMotorRecoveryLoading(true);
     setMotorRecoveryError(null);
     try {
-      const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, {
+      const doc = await api<RequestDocumentDetail>(`/documents/${documentId}`, { method: 'GET' });
+      const mixerItem = doc.items.find((item) => item.assetId === recovery.mixerAssetId);
+      const ownerWarehouseId = recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
+      if (!mixerItem?.asset || !ownerWarehouseId) {
+        throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
+      }
+      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId);
+      if (!sourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
+      const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
-      const mixerItem = doc.items.find(
-        (item) => item.assetId === recovery.mixerAssetId,
-      );
-      const ownerWarehouseId =
-        recovery.ownerWarehouseId ?? mixerItem?.condition?.trim();
-      if (!mixerItem?.asset || !ownerWarehouseId) {
-        throw new Error(
-          'No se pudo identificar la mezcladora o su bodega de origen.',
-        );
-      }
-      const inventory = await api<{ serial: InventorySerial[] }>(
-        `/inventory/warehouse/${ownerWarehouseId}`,
-        {
-          method: 'GET',
-        },
-      );
       const mixer: InventorySerial = {
         assetId: mixerItem.asset.id,
         skuId: mixerItem.skuId ?? mixerItem.asset.sku?.id ?? null,
-        skuName:
-          mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
+        skuName: mixerItem.asset.sku?.name ?? mixerItem.sku?.name ?? 'Mezcladora',
         description: mixerItem.asset.description ?? null,
         serialOrEngine: mixerItem.asset.serialOrEngine ?? null,
         internalNumber: null,
@@ -209,20 +202,15 @@ export function useRequestApproval({
         assignedMotorId: mixerItem.asset.assignedMotorId ?? null,
       };
       const motors = (inventory.serial ?? []).filter(
-        (item) =>
-          item.kind === 'MOTOR' &&
-          item.ownerWarehouseId === ownerWarehouseId &&
-          (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
+        (item) => item.kind === 'MOTOR'
+          && item.ownerWarehouseId === ownerWarehouseId
+          && (!item.assignedMixerId || item.assignedMixerId === mixer.assetId),
       );
       setMotorRecovery({ document: doc, mixer, motors, ownerWarehouseId });
       setRequestsError(null);
       return true;
     } catch (error) {
-      setRequestsError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron cargar los motores disponibles.',
-      );
+      setRequestsError(error instanceof Error ? error.message : 'No se pudieron cargar los motores disponibles.');
       return false;
     } finally {
       setMotorRecoveryLoading(false);
@@ -269,6 +257,7 @@ export function useRequestApproval({
         /insufficient stock|stock insuficiente/i.test(message),
       );
     if (hasStockError && canDecide) {
+      setAdjustWarningWarehouseId(stockShortages[0]?.warehouseId ?? null);
       if (stockShortages.length > 0) {
         const firstOwnerId = stockShortages[0]?.ownerWarehouseId ?? null;
         setAdjustWarningOwnerWarehouseId(firstOwnerId);
@@ -305,13 +294,13 @@ export function useRequestApproval({
           return skuName ?? `SKU ${skuId.slice(0, 8)}`;
         },
       );
-      const warehouseLabel = ownerName ?? 'la bodega alterna';
+      const ownerLabel = ownerName ? ` Propietario indicado: ${ownerName}.` : '';
       const missingItemsBlock = missingSkuLabels.length
         ? `\n\nItems por crear/ajustar:\n- ${missingSkuLabels.join('\n- ')}`
         : '';
       setAdjustWarningOwnerWarehouseId(ownerId ?? null);
       setAdjustWarningMessage(
-        `No se puede aprobar la remisión porque "${warehouseLabel}" no tiene stock suficiente.${missingItemsBlock}`,
+        `No se puede aprobar la remisión: revisa las existencias en el origen físico del documento.${ownerLabel}${missingItemsBlock}`,
       );
       setAdjustWarningModalOpen(true);
       setRequestsError(null);
@@ -330,45 +319,16 @@ export function useRequestApproval({
     setResolveInventoryByOwner({});
   };
 
-  const loadResolveInventories = async (ownerIds: string[]) => {
-    const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))];
-    if (!uniqueOwnerIds.length) return {};
-    const loadedEntries = await Promise.all(
-      uniqueOwnerIds.map(async (ownerId) => {
-        try {
-          const inventory = await api<{
-            bulk: InventoryBulk[];
-            serial: InventorySerial[];
-          }>(`/inventory/warehouse/${ownerId}`, {
-            method: 'GET',
-          });
-          return [
-            ownerId,
-            {
-              bulk: (inventory.bulk ?? []).filter(
-                (item) => item.ownerWarehouseId === ownerId,
-              ),
-              serial: (inventory.serial ?? []).filter(
-                (item) => item.ownerWarehouseId === ownerId,
-              ),
-            },
-          ] as const;
-        } catch {
-          return [ownerId, { bulk: [], serial: [] }] as const;
-        }
-      }),
-    );
-    return Object.fromEntries(loadedEntries) as ResolveInventoryByOwner;
-  };
+  const loadResolveInventories = (doc: RequestDocumentDetail, ownerIds: string[]) =>
+    loadRequestSourceInventories<InventoryBulk, InventorySerial>(doc, ownerIds, (id) =>
+      api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
 
   const buildInitialResolveState = (
     doc: RequestDocumentDetail,
     inventoriesByOwner: ResolveInventoryByOwner,
   ) => {
     const skuByNormalizedName = new Map<string, SkuOption>();
-    skuOptions.forEach((sku) =>
-      skuByNormalizedName.set(sku.name.trim().toUpperCase(), sku),
-    );
+    skuOptions.forEach((sku) => skuByNormalizedName.set(sku.name.trim().toUpperCase(), sku));
     const initialSkuMap: Record<number, string> = {};
     const initialAssetMap: Record<number, string> = {};
 
@@ -376,34 +336,25 @@ export function useRequestApproval({
       if (item.assetId) return;
       const normalizedTag = normalizeTagBase(item.requestedTag);
       const matchedSku = item.skuId
-        ? (skuOptions.find((sku) => sku.id === item.skuId) ?? null)
-        : normalizedTag
-          ? (skuByNormalizedName.get(normalizedTag) ?? null)
-          : null;
+        ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
+        : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
       if (!matchedSku) return;
 
       const ownerWarehouseId = item.condition?.trim();
       if (!ownerWarehouseId) return;
-      const inventory = inventoriesByOwner[ownerWarehouseId];
-      const skuIsAvailable = Boolean(
-        inventory?.bulk.some(
-          (bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0,
-        ) || inventory?.serial.some((serial) => serial.skuId === matchedSku.id),
-      );
-      if (!skuIsAvailable) return;
-
+      if (doc.type === 'RETURN') {
+        const inventory = inventoriesByOwner[ownerWarehouseId];
+        if (!inventory?.bulk.some((bulk) => bulk.skuId === matchedSku.id && bulk.quantity > 0)
+          && !inventory?.serial.some((serial) => serial.skuId === matchedSku.id)) return;
+      }
       initialSkuMap[index] = matchedSku.id;
 
       if (matchedSku.controlType !== 'SERIAL') return;
       const serialCandidates =
-        inventoriesByOwner[ownerWarehouseId]?.serial.filter(
-          (serial) => serial.skuId === matchedSku.id,
-        ) ?? [];
+        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
       const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
       if (internalFromTag == null) return;
-      const exactAsset = serialCandidates.find(
-        (serial) => serial.internalNumber === internalFromTag,
-      );
+      const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
       if (exactAsset) {
         initialAssetMap[index] = exactAsset.assetId;
       }
@@ -433,7 +384,12 @@ export function useRequestApproval({
     if (!row) return;
     const ownerWarehouseId = row.condition?.trim();
     if (!ownerWarehouseId) {
-      setCreateSerialError('The line has no owner warehouse.');
+      setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
+      return;
+    }
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    if (!sourceWarehouseId) {
+      setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
     }
     const selectedSkuId = resolveSkuByIndex[createSerialIndex];
@@ -446,10 +402,7 @@ export function useRequestApproval({
       setCreateSerialError('El serial/motor es obligatorio.');
       return;
     }
-    if (
-      createSerialInternalNumber === '' ||
-      Number(createSerialInternalNumber) <= 0
-    ) {
+    if (createSerialInternalNumber === '' || Number(createSerialInternalNumber) <= 0) {
       setCreateSerialError('Invalid internal number.');
       return;
     }
@@ -457,32 +410,26 @@ export function useRequestApproval({
     setCreateSerialSaving(true);
     setCreateSerialError(null);
     try {
-      const response = await api<CreateSerializedAssetResponse>(
-        '/inventory/serialized-assets',
-        {
-          method: 'POST',
-          json: {
-            family: { id: selectedSku.assetFamilyId },
-            sku: { id: selectedSku.id },
-            asset: {
-              serialOrEngine: createSerialSerialOrEngine.trim(),
-              internalNumber: Number(createSerialInternalNumber),
-              brand: createSerialBrand.trim() || undefined,
-              model: createSerialModel.trim() || undefined,
-              year: createSerialYear === '' ? undefined : createSerialYear,
-              fuel: createSerialFuel ?? undefined,
-              active: true,
-            },
-            ownerWarehouseId,
-            warehouseCurrentId: ownerWarehouseId,
+      const response = await api<CreateSerializedAssetResponse>('/inventory/serialized-assets', {
+        method: 'POST',
+        json: {
+          family: { id: selectedSku.assetFamilyId },
+          sku: { id: selectedSku.id },
+          asset: {
+            serialOrEngine: createSerialSerialOrEngine.trim(),
+            internalNumber: Number(createSerialInternalNumber),
+            brand: createSerialBrand.trim() || undefined,
+            model: createSerialModel.trim() || undefined,
+            year: createSerialYear === '' ? undefined : createSerialYear,
+            fuel: createSerialFuel ?? undefined,
+            active: true,
           },
+          ownerWarehouseId,
+          warehouseCurrentId: sourceWarehouseId,
         },
-      );
+      });
 
-      const refreshedInventory = await api<{
-        bulk: InventoryBulk[];
-        serial: InventorySerial[];
-      }>(`/inventory/warehouse/${ownerWarehouseId}`, {
+      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
@@ -627,6 +574,7 @@ export function useRequestApproval({
           type: doc.type,
           number: doc.consecutive ?? undefined,
           warehouseId: doc.warehouse?.id ?? undefined,
+          inventorySourceMode: doc.inventorySourceMode ?? undefined,
           customerWorksiteId: doc.customerWorksite?.id ?? undefined,
           notes: doc.notes ?? undefined,
           recipientPhones: doc.recipientPhones?.length
@@ -701,7 +649,7 @@ export function useRequestApproval({
         const ownerIds = unresolved
           .map(({ item }) => item.condition?.trim() ?? '')
           .filter((value): value is string => Boolean(value));
-        const inventoriesByOwner = await loadResolveInventories(ownerIds);
+        const inventoriesByOwner = await loadResolveInventories(doc, ownerIds);
         const { initialSkuMap, initialAssetMap } = buildInitialResolveState(
           doc,
           inventoriesByOwner,
@@ -818,6 +766,7 @@ export function useRequestApproval({
           type: resolveDocument.type,
           number: resolveDocument.consecutive ?? undefined,
           warehouseId: resolveDocument.warehouse?.id ?? undefined,
+          inventorySourceMode: resolveDocument.inventorySourceMode ?? undefined,
           customerWorksiteId: resolveDocument.customerWorksite?.id ?? undefined,
           notes: resolveDocument.notes ?? undefined,
           items: itemsPayload,
@@ -849,6 +798,7 @@ export function useRequestApproval({
     resolvingApprove,
     createSerialOpen,
     setCreateSerialOpen,
+    createSerialIndex,
     setCreateSerialIndex,
     createSerialSerialOrEngine,
     setCreateSerialSerialOrEngine,
@@ -865,6 +815,8 @@ export function useRequestApproval({
     createSerialSaving,
     createSerialError,
     setCreateSerialError,
+    adjustWarningWarehouseId,
+    setAdjustWarningWarehouseId,
     adjustWarningModalOpen,
     setAdjustWarningModalOpen,
     adjustWarningMessage,

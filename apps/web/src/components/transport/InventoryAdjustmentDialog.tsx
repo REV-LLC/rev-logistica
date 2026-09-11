@@ -1,9 +1,14 @@
 'use client';
+import { getStockShortageReviewAction } from '@/lib/inventory-stock-errors';
+import type { Warehouse } from './request-types';
 import { Button, Group, Modal, Stack, Text } from '@mantine/core';
 import type { useRouter } from 'next/navigation';
 import type { Dispatch, SetStateAction } from 'react';
 
 type Props = {
+  adjustWarningWarehouseId: string | null;
+  setAdjustWarningWarehouseId: Dispatch<SetStateAction<string | null>>;
+  warehouses: Warehouse[];
   adjustWarningModalOpen: boolean;
   setAdjustWarningModalOpen: Dispatch<SetStateAction<boolean>>;
   setAdjustWarningOwnerWarehouseId: Dispatch<SetStateAction<string | null>>;
@@ -13,6 +18,9 @@ type Props = {
 };
 
 export default function InventoryAdjustmentDialog({
+  adjustWarningWarehouseId,
+  setAdjustWarningWarehouseId,
+  warehouses,
   adjustWarningModalOpen,
   setAdjustWarningModalOpen,
   setAdjustWarningOwnerWarehouseId,
@@ -20,37 +28,40 @@ export default function InventoryAdjustmentDialog({
   adjustWarningOwnerWarehouseId,
   router,
 }: Props) {
+  const stockReviewAction = getStockShortageReviewAction({
+    ownerWarehouseId: adjustWarningOwnerWarehouseId,
+    warehouseId: adjustWarningWarehouseId,
+    warehouseType: warehouses.find(w => w.id === adjustWarningWarehouseId)?.type,
+  });
   return (
     <Modal
       opened={adjustWarningModalOpen}
       onClose={() => {
         setAdjustWarningModalOpen(false);
         setAdjustWarningOwnerWarehouseId(null);
+        setAdjustWarningWarehouseId(null);
       }}
-      title="Ajuste requerido"
+      title="Revisar existencias en el origen"
       centered
     >
       <Stack gap="md">
         <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
           {adjustWarningMessage ??
-            'Primero ajusta el stock de bodega antes de hacer movimientos.'}
+            'Revisa las existencias en la bodega de salida del documento.'}
         </Text>
+        {adjustWarningWarehouseId && adjustWarningWarehouseId !== adjustWarningOwnerWarehouseId ? (
+          <Text size="sm" c="dimmed">Comprueba primero el ingreso y la ubicación física del equipo antes de ajustar cantidades.</Text>
+        ) : null}
         <Group justify="flex-end">
           <Button
             onClick={() => {
               setAdjustWarningModalOpen(false);
-              const params = new URLSearchParams();
-              if (adjustWarningOwnerWarehouseId) {
-                params.set('ownerWarehouseId', adjustWarningOwnerWarehouseId);
-                params.set('warehouseId', adjustWarningOwnerWarehouseId);
-              }
-              router.push(
-                `/inventory/bulk-adjustments${params.toString() ? `?${params.toString()}` : ''}`,
-              );
+              if (stockReviewAction.href) router.push(stockReviewAction.href);
               setAdjustWarningOwnerWarehouseId(null);
+        setAdjustWarningWarehouseId(null);
             }}
           >
-            Entendido
+            {stockReviewAction.label}
           </Button>
         </Group>
       </Stack>

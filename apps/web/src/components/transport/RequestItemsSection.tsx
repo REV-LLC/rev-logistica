@@ -1,4 +1,5 @@
 'use client';
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import {
   Badge,
@@ -29,6 +30,9 @@ import {
 import { helpLabel } from './RequestHelpLabel';
 
 type Props = {
+  clearLoadedInventory: () => void;
+  inventorySourceMode: RequestInventorySourceMode;
+  physicalSourceWarehouseName: string;
   sourceMode: 'warehouse' | 'on-site';
   setGenerateStep: Dispatch<SetStateAction<GenerateStep>>;
   renderGenerateError: () => JSX.Element | null;
@@ -74,6 +78,9 @@ type Props = {
 };
 
 export default function RequestItemsSection({
+  clearLoadedInventory,
+  inventorySourceMode,
+  physicalSourceWarehouseName,
   sourceMode,
   setGenerateStep,
   renderGenerateError,
@@ -190,17 +197,22 @@ export default function RequestItemsSection({
           </div>
         </SimpleGrid>
       </Paper>
-      <Text c="dimmed">Agregar los equipos y su origen.</Text>
+      <Text c="dimmed">Agrega los equipos y selecciona su propietario.</Text>
+      {sourceMode === 'warehouse' ? <Text size="sm" c="dimmed">
+        Salida física: {inventorySourceMode === 'OWNER_WAREHOUSES' ? 'bodega de cada propietario' : physicalSourceWarehouseName}.
+        El modo de transporte no cambia la ubicación del inventario.
+      </Text> : null}
 
       <Group mt="md" align="flex-end" wrap="wrap">
         {sourceMode === 'warehouse' && (
           <WarehouseSelect
             label={helpLabel(
-              'Origen',
+              'Propietario',
               'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.',
             )}
             value={sourceOwnerWarehouseId}
             onChange={(value) => {
+              clearLoadedInventory();
               setSourceOwnerWarehouseId(value);
               const nextWarehouse = warehouses.find(
                 (warehouse) => warehouse.id === value,
@@ -210,7 +222,7 @@ export default function RequestItemsSection({
             }}
             warehouses={warehouses}
             clearable
-            placeholder="Buscar origen"
+            placeholder="Buscar propietario"
             width={isMobile ? '100%' : 320}
           />
         )}
