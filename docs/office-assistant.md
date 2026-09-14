@@ -52,9 +52,9 @@ No se envía la conexión de base ni su contraseña al modelo. Los logs guardan 
 
 ## Despliegue
 
-La configuración y la prueba real se realizaron contra la base local de desarrollo. No se han aplicado las vistas ni los secretos a producción. Para habilitarlo en la aplicación compartida se necesitan el despliegue del API y frontend, las vistas y el rol de lectura en la base objetivo, y las tres variables anteriores configuradas como secretos del API. Comprobar permisos y una pregunta real en ese entorno antes de habilitar su uso operativo.
+Producción usa Railway para el API/PostgreSQL y Vercel para la web. Las vistas y el usuario de lectura se configuran por entorno antes de desplegar el código; las tres variables anteriores son secretos exclusivos del API. Comprobar permisos y una pregunta real después del despliegue. Las credenciales locales no sustituyen a las de producción.
 
-`docs/office-local` y `docs/office-local-windows.zip` conservan la propuesta anterior de Ollama como referencia histórica. No forman parte de la configuración activa ni deben instalarse para esta modalidad. No se ejecutaron en las torres Windows.
+El modo elegido es OpenAI: no requiere Ollama, GPU, un servidor de IA en las torres ni puertos adicionales en la oficina.
 
 ## Verificación
 
