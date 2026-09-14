@@ -25,8 +25,9 @@ describe('Office agent loop (no external requests)', () => {
     ]);
     jest.spyOn(OpenAIProvider.prototype, 'getModel').mockResolvedValue(model);
     const service = new OfficeAssistantService(database as unknown as OfficeDatabaseService);
-    const result = await service.ask('office-user', { message: '¿Cuántos hay?', history: [] });
+    const result = await service.ask('office-user', { message: '¿Cuántos equipos de REV hay?', history: [] });
     expect(database.query).toHaveBeenCalledTimes(1);
+    expect(database.query).toHaveBeenCalledWith(expect.any(String), 'Unidades', '1', 'INTERNAL');
     expect(result.evidence).toEqual([evidence]);
     expect(result.readOnly).toBe(true);
     model.assertComplete();

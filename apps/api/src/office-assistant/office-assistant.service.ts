@@ -6,6 +6,7 @@ import { OfficeDatabaseService } from './office-database.service';
 import type { OfficeEvidence } from './office-database.service';
 import type { OfficeQuestion } from './office-assistant.dto';
 import { OFFICE_INSTRUCTIONS } from './office-instructions';
+import { requestedOwnerScope } from './owner-scope';
 
 @Injectable()
 export class OfficeAssistantService {
@@ -39,6 +40,7 @@ export class OfficeAssistantService {
     let attempts = 0;
     let provider: OpenAIProvider | undefined;
     let evidenceBudget = 32000;
+    const ownerScope = requestedOwnerScope(input.message);
     try {
       provider = new OpenAIProvider({
         useResponses: true,
@@ -56,7 +58,7 @@ export class OfficeAssistantService {
         execute: async ({ sql, title }) => {
           if (++attempts > 8) return { error: 'Límite de consultas alcanzado. Responde con la evidencia obtenida y señala lo pendiente.' };
           try {
-            const result = await this.database.query(sql, title.slice(0, 160), String(evidence.length + 1));
+            const result = await this.database.query(sql, title.slice(0, 160), String(evidence.length + 1), ownerScope);
             // Bound cost and data sent to the model; preserve evidence for the UI.
             const modelRows: Record<string, unknown>[] = [];
             for (const row of result.rows) {
@@ -82,7 +84,7 @@ export class OfficeAssistantService {
       const agent = new Agent({
         name: 'Asistente Office REV',
         model: this.model(),
-        instructions: `${OFFICE_INSTRUCTIONS}\nFecha actual: ${new Date().toISOString()}. Zona horaria: America/Bogota.\nESQUEMA DISPONIBLE:\n${schema}`,
+        instructions: `${OFFICE_INSTRUCTIONS}\n${ownerScope ? 'ÁMBITO OBLIGATORIO: solo equipos propiedad de REV (INTERNAL). Las consultas de inventario se filtran en el servidor antes de sumar. No incluyas equipos de proveedores en estos totales.' : ''}\nFecha actual: ${new Date().toISOString()}. Zona horaria: America/Bogota.\nESQUEMA DISPONIBLE:\n${schema}`,
         tools: [query],
         modelSettings: { store: false, parallelToolCalls: false, maxTokens: 5000, reasoning: { effort: 'low' } },
       });
