@@ -771,6 +771,7 @@ model Document {
   creator           User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
   items                      DocumentItem[]
+  reversedLedger             StockLedger[] @relation("LedgerReversal")
   ledger                     StockLedger[]
   files                      FileObject[]
   messageDeliveries          DocumentMessageDelivery[]
@@ -916,6 +917,10 @@ model StockLedger {
   movementType       MovementType
   quantity           Decimal
 
+  // Original quantity remains in history; a separate document compensates it.
+  reversedByDocumentId String?
+  reversedByDocument Document? @relation("LedgerReversal", fields: [reversedByDocumentId], references: [id], onDelete: Restrict)
+
   refDocumentId   String?
   refDocumentType DocumentType?
 
@@ -939,6 +944,7 @@ model StockLedger {
   creator              User                  @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
   providerReceiptItems ProviderReceiptItem[]
 
+  @@index([reversedByDocumentId])
   @@index([refDocumentId])
   @@index([skuId])
   @@index([assetId])
