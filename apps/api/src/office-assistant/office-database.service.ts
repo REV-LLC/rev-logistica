@@ -2,6 +2,7 @@ import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestj
 import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 import { OFFICE_VIEWS, validateOfficeQuery } from './query-policy';
+import { scopeOfficeQuery, type OfficeOwnerScope } from './owner-scope';
 
 export type OfficeEvidence = {
   id: string;
@@ -74,8 +75,8 @@ export class OfficeDatabaseService implements OnModuleDestroy {
     });
   }
 
-  async query(sql: string, title: string, id: string): Promise<OfficeEvidence> {
-    const validated = validateOfficeQuery(sql);
+  async query(sql: string, title: string, id: string, ownerScope?: OfficeOwnerScope): Promise<OfficeEvidence> {
+    const validated = validateOfficeQuery(scopeOfficeQuery(sql, ownerScope));
     return this.read(async (client) => {
       const result = await client.query(`SELECT * FROM (${validated.sql}) AS office_result LIMIT 201`);
       const columns = result.fields.map((f) => f.name);

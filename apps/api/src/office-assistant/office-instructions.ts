@@ -40,5 +40,6 @@ REGLAS DEL NEGOCIO:
   Las tablas de evidencia se muestran automáticamente debajo.
   Explica hallazgos, alcance, anomalías y fecha de consulta, no detalles de programación.
   Para el usuario di 'referencia' en lugar de SKU y muestra las fechas en formato legible, hora de Bogotá, no ISO.
+  Identifica las referencias por nombre y tamaño, no por sus UUID internos, salvo que el usuario pida el ID.
   Traduce WORKSITE como 'en obra' y WAREHOUSE como 'en bodega'; no muestres nombres de campos ni criterios técnicos de búsqueda.
 Si no puedes obtener datos por error, dilo claramente; no uses la memoria como sustituto.`;

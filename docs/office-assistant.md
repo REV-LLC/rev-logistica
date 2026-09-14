@@ -26,6 +26,7 @@ Las vistas admiten instalaciones anteriores a `Owner.category`, `StockLedger.eff
 
 - Artículos BULK y SERIAL, familias, variantes, dimensiones y tarifas.
 - Saldos por obra/cliente, bodega física y propietario. `INTERNAL` identifica propiedad interna; una bodega propia puede contener equipos ajenos.
+- Si la pregunta pide explícitamente equipos de REV/propios sin mencionar proveedores, el servidor aplica el filtro de propiedad antes de agregar inventario, activos o movimientos. Las preguntas mixtas o generales mantienen su alcance amplio. No es un permiso adicional: ambos casos conservan acceso exclusivamente de lectura.
 - Activos individuales, códigos, seriales, marca, horómetro y último tipo de movimiento.
 - Clientes, obras, vínculos cliente/obra, dueños/proveedores y tarifas de proveedores.
 - Movimientos y documentos, con estado y fechas, para agregaciones e históricos.
