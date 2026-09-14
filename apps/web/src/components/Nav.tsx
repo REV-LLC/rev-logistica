@@ -41,6 +41,7 @@ import {
   IconHome,
   IconRulerMeasure,
   IconMap2,
+  IconMessageCircle,
   IconReceipt,
   IconSettings,
   IconTag,
@@ -74,6 +75,7 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
       {

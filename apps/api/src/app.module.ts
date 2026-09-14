@@ -35,6 +35,7 @@ import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
 import { ProviderReturnsModule } from './provider-returns/provider-returns.module';
 import { ProviderPickupsModule } from './provider-pickups/provider-pickups.module';
 import { FuelModule } from './fuel/fuel.module';
+import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { FuelModule } from './fuel/fuel.module';
     ProviderReturnsModule,
     ProviderPickupsModule,
     FuelModule,
+    OfficeAssistantModule,
   ],
   controllers: [AppController],
   providers: [
@@ -89,6 +91,7 @@ export class AppModule implements NestModule {
       .apply(UppercaseBodyMiddleware)
       .exclude(
         { path: 'auth/login', method: RequestMethod.POST },
+        { path: 'office-assistant/chat', method: RequestMethod.POST },
         { path: 'webhooks/whatsapp', method: RequestMethod.GET },
         { path: 'webhooks/whatsapp', method: RequestMethod.POST },
       )
