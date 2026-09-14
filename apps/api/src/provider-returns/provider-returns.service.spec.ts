@@ -28,7 +28,7 @@ describe('ProviderReturnsService pending deliveries', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ sourceLedgerId: 'bulk-ledger', pendingQuantity: 6, type: 'BULK' });
     expect(result[1]).toMatchObject({ sourceLedgerId: 'serial-ledger', pendingQuantity: 1, type: 'SERIAL', publicCode: 'MOT-VRL-001' });
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ document: { createdBy: 'driver-1' } }) }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ document: { status: DocumentStatus.CONFIRMED, createdBy: 'driver-1' }, reversedByDocumentId: null }) }));
   });
 
   it('hides fully delivered lines', async () => {
@@ -62,7 +62,8 @@ describe('ProviderReturnsService receipt event dates', () => {
               sourceLedger: {
                 movementType: sourceMovement, quantity: new Prisma.Decimal(1),
                 warehouseId: sourceMovement === MovementType.IN ? 'own' : null,
-                ownerWarehouseId: 'provider', skuId: null,
+                ownerWarehouseId: 'provider', skuId: null, reversedByDocumentId: null,
+                document: { status: DocumentStatus.CONFIRMED, type: DocumentType.RETURN },
               },
             }],
           }),
@@ -101,4 +102,51 @@ describe('ProviderReturnsService receipt event dates', () => {
       });
     },
   );
+});
+
+describe('ProviderReturnsService reversed returns', () => {
+  it('requires approved, unreversed sources for the pending list', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never);
+    await service.listPending({ id: 'admin', role: Role.ADMIN });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      document: { status: DocumentStatus.CONFIRMED }, reversedByDocumentId: null,
+    }) }));
+  });
+
+  it('rejects creating a provider delivery from a draft return', async () => {
+    const tx = { document: { findUnique: jest.fn().mockResolvedValue({ id: 'dv', type: DocumentType.RETURN, status: DocumentStatus.DRAFT }), create: jest.fn() } };
+    const service = new ProviderReturnsService({ $transaction: (fn: any) => fn(tx) } as never);
+    await expect(service.createDraft({ sourceDocumentId: 'dv', providerWarehouseId: 'provider', items: [] }, { id: 'admin', role: Role.ADMIN })).rejects.toThrow('debe estar aprobada');
+    expect(tx.document.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects the old source after the return has been approved again', async () => {
+    const tx = {
+      document: { findUnique: jest.fn().mockResolvedValue({ id: 'dv', type: DocumentType.RETURN, status: DocumentStatus.CONFIRMED }), create: jest.fn() },
+      warehouse: { findFirst: jest.fn().mockResolvedValue({ id: 'provider' }) },
+      stockLedger: { findMany: jest.fn().mockResolvedValue([{ id: 'old', refDocumentId: 'dv', ownerWarehouseId: 'provider', warehouseId: 'own', movementType: MovementType.IN, quantity: 1, reversedByDocumentId: 'reversal', providerReceiptItems: [] }]) },
+    };
+    const service = new ProviderReturnsService({ $transaction: (fn: any) => fn(tx) } as never);
+    await expect(service.createDraft({ sourceDocumentId: 'dv', providerWarehouseId: 'provider', items: [{ sourceLedgerId: 'old', quantity: 1 }] }, { id: 'admin', role: Role.ADMIN })).rejects.toThrow('no coincide');
+    expect(tx.document.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: DocumentStatus.DRAFT, reversedByDocumentId: null },
+    { status: DocumentStatus.CONFIRMED, reversedByDocumentId: 'reversal' },
+  ])('rejects confirming a saved receipt whose source is no longer valid: %j', async ({ status, reversedByDocumentId }) => {
+    const tx = {
+      document: { findUnique: jest.fn().mockResolvedValue({
+        id: 'rp', type: DocumentType.PROVIDER_RECEIPT, status: DocumentStatus.DRAFT, warehouseId: 'provider',
+        files: [{ category: 'EVIDENCIA_ENTREGA_PROVEEDOR' }, { category: 'COMPROBANTE_RECEPCION_PROVEEDOR' }],
+        providerReceiptItems: [{ sourceLedger: { skuId: null, reversedByDocumentId, document: { status, type: DocumentType.RETURN } } }],
+      }), update: jest.fn() },
+      stockLedger: { create: jest.fn() },
+    };
+    const service = new ProviderReturnsService({ $transaction: (fn: any) => fn(tx) } as never);
+    await expect(service.confirm('rp', { id: 'admin', role: Role.ADMIN })).rejects.toThrow('fue revertida');
+    expect(tx.stockLedger.create).not.toHaveBeenCalled();
+    expect(tx.document.update).not.toHaveBeenCalled();
+  });
 });

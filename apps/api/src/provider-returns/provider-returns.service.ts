@@ -16,7 +16,8 @@ export class ProviderReturnsService {
       where: {
         movementType: { in: [MovementType.TRANSIT, MovementType.IN] },
         refDocumentType: DocumentType.RETURN,
-        document: user.role === Role.DRIVER ? { createdBy: user.id } : undefined,
+        reversedByDocumentId: null,
+        document: { status: DocumentStatus.CONFIRMED, ...(user.role === Role.DRIVER ? { createdBy: user.id } : {}) },
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -75,10 +76,10 @@ export class ProviderReturnsService {
     return this.prisma.$transaction(async (tx) => {
       const sourceDocument = await tx.document.findUnique({
         where: { id: payload.sourceDocumentId },
-        select: { id: true, type: true, createdBy: true },
+        select: { id: true, type: true, status: true, createdBy: true },
       });
-      if (!sourceDocument || sourceDocument.type !== DocumentType.RETURN) {
-        throw new BadRequestException('La DV seleccionada no existe');
+      if (!sourceDocument || sourceDocument.type !== DocumentType.RETURN || sourceDocument.status !== DocumentStatus.CONFIRMED) {
+        throw new BadRequestException('La DV seleccionada debe estar aprobada');
       }
       if (user.role === Role.DRIVER && sourceDocument.createdBy !== user.id) {
         throw new ForbiddenException('Solo puedes entregar devoluciones creadas por ti');
@@ -103,7 +104,7 @@ export class ProviderReturnsService {
           ledger.movementType === MovementType.IN &&
           Boolean(ledger.warehouseId) &&
           ledger.warehouseId !== ledger.ownerWarehouseId;
-        if ((!isTransit && !isInRevCustody) || ledger.refDocumentId !== sourceDocument.id ||
+        if (ledger.reversedByDocumentId || (!isTransit && !isInRevCustody) || ledger.refDocumentId !== sourceDocument.id ||
             ledger.ownerWarehouseId !== provider.id || quantity > Number(ledger.quantity) - delivered ||
             (ledger.assetId && quantity !== 1)) {
           throw new BadRequestException('La selección no coincide con los pendientes de esta DV y proveedor');
@@ -133,14 +134,14 @@ export class ProviderReturnsService {
         },
         select: { id: true, consecutive: true },
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async confirm(receiptId: string, user: { id: string; role: Role }) {
     return this.prisma.$transaction(async (tx) => {
       const receipt = await tx.document.findUnique({
         where: { id: receiptId },
-        include: { files: { select: { category: true } }, providerReceiptItems: { include: { sourceLedger: true } } },
+        include: { files: { select: { category: true } }, providerReceiptItems: { include: { sourceLedger: { include: { document: { select: { status: true, type: true } } } } } } },
       });
       if (!receipt || receipt.type !== DocumentType.PROVIDER_RECEIPT) throw new NotFoundException('Recepción no encontrada');
       if (receipt.status !== DocumentStatus.DRAFT) throw new BadRequestException('La recepción ya fue procesada');
@@ -153,6 +154,11 @@ export class ProviderReturnsService {
       await lockBulkStock(tx, receipt.providerReceiptItems.flatMap((item) => item.sourceLedger.skuId ? [item.sourceLedger.skuId] : []));
 
       for (const item of receipt.providerReceiptItems) {
+        if (item.sourceLedger.reversedByDocumentId ||
+            item.sourceLedger.document?.status !== DocumentStatus.CONFIRMED ||
+            item.sourceLedger.document?.type !== DocumentType.RETURN) {
+          throw new BadRequestException('La devolución de origen fue revertida o no está aprobada');
+        }
         const other = await tx.providerReceiptItem.aggregate({
           where: { sourceLedgerId: item.sourceLedgerId, receiptDocumentId: { not: receipt.id }, receiptDocument: { status: DocumentStatus.CONFIRMED } },
           _sum: { quantity: true },
@@ -205,6 +211,6 @@ export class ProviderReturnsService {
       if (assetIds.length) await tx.asset.updateMany({ where: { id: { in: assetIds } }, data: { warehouseCurrentId: receipt.warehouseId } });
       await tx.document.update({ where: { id: receipt.id }, data: { status: DocumentStatus.CONFIRMED, docDate: effectiveAt } });
       return { id: receipt.id, consecutive: receipt.consecutive, status: DocumentStatus.CONFIRMED };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }
