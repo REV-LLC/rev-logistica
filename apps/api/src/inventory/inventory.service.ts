@@ -57,6 +57,7 @@ import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
 import { lockBulkStock } from './bulk-stock-lock';
 import { buildAssetValidationError } from './asset-validation-error';
 import { resolveLatestSerializedMovements } from './serialized-ledger-location';
+import { serializedBalanceConsistency } from './serialized-balance-consistency';
 import {
   getInventoryDatePrecision,
   inventoryEffectiveLowerBound,
@@ -92,7 +93,7 @@ type OwnerAssetCatalogLocation = {
   warehouseType: WarehouseType | null;
 };
 
-type OwnerAssetCatalogStatus = 'IN' | 'OUT' | 'TRANSIT' | 'INACTIVE' | 'UNKNOWN';
+type OwnerAssetCatalogStatus = 'IN' | 'OUT' | 'TRANSIT' | 'INACTIVE' | 'UNKNOWN' | 'INCONSISTENT';
 
 @Injectable()
 export class InventoryService {
@@ -1852,7 +1853,7 @@ export class InventoryService {
   async getOwnerAssetCatalog(warehouseId: string) {
     const ownerWarehouse = await this.prisma.warehouse.findUnique({
       where: { id: warehouseId },
-      select: { id: true, name: true, ownerCompany: { select: { name: true } } },
+      select: { id: true, name: true, type: true, ownerCompany: { select: { name: true } } },
     });
     if (!ownerWarehouse) {
       throw new NotFoundException('Warehouse not found');
@@ -1913,7 +1914,8 @@ export class InventoryService {
           },
         },
         ledger: {
-          take: 1,
+          // Own equipment needs the full history to cross-check its balance.
+          ...(ownerWarehouse.type === WarehouseType.OWN ? {} : { take: 1 }),
           // A later catalogue registration must not override a real delivery.
           orderBy: [
             { isOpeningBalance: 'asc' },
@@ -1997,7 +1999,15 @@ export class InventoryService {
         }
       }
 
+      const balance = ownerWarehouse.type === WarehouseType.OWN
+        ? serializedBalanceConsistency(asset.ledger, warehouseId, latest)
+        : undefined;
+      if (balance && !balance.isConsistent) {
+        status = balance.issue === 'NO_MOVEMENTS' ? 'UNKNOWN' : 'INCONSISTENT';
+        location = { type: 'UNKNOWN', id: null, name: null, warehouseType: null };
+      }
       const isAvailableInOwnerWarehouse = asset.active
+        && (!balance || balance.isConsistent)
         && location.type === 'WAREHOUSE'
         && location.id === warehouseId;
       if (!asset.active) status = 'INACTIVE';
@@ -2031,8 +2041,9 @@ export class InventoryService {
         status,
         location,
         isAvailableInOwnerWarehouse,
+        ...(balance ? { balance } : {}),
         // This catalogue is for management. Dispatches use the stock endpoints.
-        quantity: isAvailableInOwnerWarehouse ? 1 : 0,
+        quantity: balance ? balance.warehouseQuantity : isAvailableInOwnerWarehouse ? 1 : 0,
       };
     }).sort((a, b) => this.compareSerialInventoryRows(a, b));
 
@@ -2052,7 +2063,7 @@ export class InventoryService {
 
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id: warehouseId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, type: true },
     });
 
     if (!warehouse) {
@@ -2223,6 +2234,7 @@ export class InventoryService {
       .map(([assetId, quantity]) => ({ assetId, quantity }));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
+    const consistentOwnAssets = new Set<string>();
     const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     const serialLocationByAssetId = new Map<
       string,
@@ -2257,6 +2269,9 @@ export class InventoryService {
       });
       resolveLatestSerializedMovements(serialLedgerRows).forEach(({ locationMovement: row }, assetId) => {
         const key = assetId.toLowerCase();
+        if (warehouse.type === WarehouseType.OWN && serializedBalanceConsistency(
+          serialLedgerRows.filter((movement) => movement.assetId === assetId), warehouseId, row,
+        ).isConsistent) consistentOwnAssets.add(key);
         serialStatusByAssetId.set(key, 'UNKNOWN');
         serialLocationByAssetId.set(key, { type: 'UNKNOWN', name: null });
         if (!row) return;
@@ -2398,6 +2413,11 @@ export class InventoryService {
 
     const serial = serialBase
       .filter((row) => assetsById.has(row.assetId))
+      // Keep contradictory own equipment visible in the management catalogue,
+      // but do not offer it as dispatchable stock until its history is corrected.
+      .filter((row) => warehouse.type !== WarehouseType.OWN
+        || assetsById.get(row.assetId)?.warehouseOwnerId !== warehouseId
+        || consistentOwnAssets.has(row.assetId.toLowerCase()))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;

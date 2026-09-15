@@ -19,7 +19,7 @@ import SerialAssetCard from '@/components/SerialAssetCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import classes from '@/components/WarehouseAssetsView.module.css';
 
-type AssetStatusFilter = 'ALL' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN';
+type AssetStatusFilter = 'ALL' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN' | 'INCONSISTENT';
 type AssetOrder = 'NAME' | 'INTERNAL_ASC' | 'INTERNAL_DESC';
 
 export type WarehouseAssetItem = {
@@ -36,6 +36,12 @@ export type WarehouseAssetItem = {
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   active?: boolean;
   isAvailableInOwnerWarehouse?: boolean;
+  balance?: {
+    warehouseQuantity: number;
+    worksiteQuantity: number;
+    isConsistent: boolean;
+    issue: 'NO_MOVEMENTS' | 'INVALID_BALANCE' | 'LOCATION_MISMATCH' | null;
+  };
   location?: {
     type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
     id?: string | null;
@@ -66,6 +72,7 @@ const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }
   { value: 'WORKSHOP', label: 'En taller', color: '#f36a0a' },
   { value: 'RESERVED', label: 'Reservados', color: '#6d45d8' },
   { value: 'INACTIVE', label: 'Inactivos', color: '#a8afb9' },
+  { value: 'INCONSISTENT', label: 'Revisar ubicación', color: '#d97706' },
   { value: 'UNKNOWN', label: 'Sin ubicación', color: '#a8afb9' },
 ];
 
@@ -88,6 +95,8 @@ function statusFor(item: WarehouseAssetItem): AssetStatusFilter {
   const status = normalized(item.status).toUpperCase();
   const locationName = normalized(item.location?.name);
   if (status === 'INACTIVE') return 'INACTIVE';
+  if (status === 'INCONSISTENT' || (item.balance && !item.balance.isConsistent
+    && item.balance.issue !== 'NO_MOVEMENTS')) return 'INCONSISTENT';
   if (status === 'UNKNOWN' || item.location?.type === 'UNKNOWN') return 'UNKNOWN';
   if (status === 'RESERVED') return 'RESERVED';
   if (status === 'WORKSHOP' || locationName.includes('taller')) return 'WORKSHOP';
@@ -102,6 +111,7 @@ function statusBadge(item: WarehouseAssetItem) {
   if (status === 'WORKSHOP') return { label: 'EN TALLER', color: 'orange' };
   if (status === 'RESERVED') return { label: 'RESERVADO', color: 'violet' };
   if (status === 'INACTIVE') return { label: 'INACTIVO', color: 'gray' };
+  if (status === 'INCONSISTENT') return { label: 'REVISAR UBICACIÓN', color: 'orange' };
   if (status === 'UNKNOWN') return { label: 'SIN UBICACIÓN', color: 'gray' };
   if (status === 'TRANSIT') return { label: 'EN TRÁNSITO', color: 'yellow' };
   return { label: 'DISPONIBLE', color: 'green' };
@@ -369,12 +379,19 @@ export default function WarehouseAssetsView({
                         display={{ showOwnerChip: false, showCharge: false }}
                         additionalDetails={[{
                           label: 'Ubicación',
-                          value: catalog ? catalogLocationName(item) : statusFor(item) === 'UNKNOWN'
+                          value: statusFor(item) === 'INCONSISTENT' ? 'Ubicación por confirmar'
+                            : catalog ? catalogLocationName(item) : statusFor(item) === 'UNKNOWN'
                             ? 'Sin ubicación registrada'
                             : item.location?.name || (item.location?.type === 'WORKSITE' ? 'En obra' : warehouseName),
                           icon: <IconMapPin size={17} stroke={1.8} />,
                           hideLabel: !catalog,
-                        }, {
+                        }, ...(item.balance ? [{
+                          label: 'Saldo',
+                          value: `Bodega: ${item.balance.warehouseQuantity} · Obras: ${item.balance.worksiteQuantity}`,
+                        }] : []), ...(statusFor(item) === 'INCONSISTENT' ? [{
+                          label: 'Revisión',
+                          value: 'El saldo y los movimientos no coinciden. Confirmar ubicación antes de despachar.',
+                        }] : []), {
                           label: 'Dueño',
                           value: item.ownerWarehouseName || warehouseName,
                           icon: <IconBuilding size={17} stroke={1.8} />,
