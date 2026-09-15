@@ -307,8 +307,8 @@ export default function EditSerializedAssetPage() {
     [fuel],
   );
   const warehouseCurrentName = useMemo(
-    () => displayValue(warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name),
-    [warehouses, warehouseCurrentId],
+    () => displayValue(assetLocation?.warehouse?.name),
+    [assetLocation],
   );
   const locationBadge = useMemo(() => {
     if (assetLocation?.locationType === 'INCONSISTENT') return { color: 'orange', label: 'Revisar ubicación' };
@@ -336,11 +336,11 @@ export default function EditSerializedAssetPage() {
       },
       {
         label: 'Ubicacion actual',
-        value: warehouseCurrentId ? warehouseCurrentName : worksiteLocationName ?? 'En obra',
+        value: locationBadge.label,
         icon: <IconMapPin size={18} />,
       },
     ],
-    [asset, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
+    [asset, locationBadge.label],
   );
   const readOnlySections = useMemo(
     () => [
@@ -657,7 +657,7 @@ export default function EditSerializedAssetPage() {
 
                 <AssetMovementSummary
                   movements={recentMovements}
-                  warehouseCurrentId={warehouseCurrentId}
+                  warehouseCurrentId={assetLocation?.locationType === 'WAREHOUSE' ? assetLocation.warehouse?.id ?? null : null}
                   warehouseCurrentName={warehouseCurrentName}
                   worksiteLocationName={worksiteLocationName}
                 />
