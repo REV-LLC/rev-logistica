@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
+import { serializedBalanceConsistency } from '../inventory/serialized-balance-consistency';
 import {
   getCanonicalJackReference,
   isCanonicalJackSubfamily,
@@ -975,7 +976,7 @@ export class AssetsService {
   async getAssetLocation(assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true },
+      select: { id: true, warehouseOwnerId: true, warehouseOwner: { select: { type: true } } },
     });
     if (!asset) {
       throw new NotFoundException('Asset not found');
@@ -1009,6 +1010,16 @@ export class AssetsService {
       },
     });
     const lastLedger = resolveLatestSerializedMovements(ledgerRows).get(asset.id)?.locationMovement;
+    const balance = asset.warehouseOwner?.type === 'OWN'
+      ? serializedBalanceConsistency(ledgerRows, asset.warehouseOwnerId, lastLedger)
+      : undefined;
+    if (balance && !balance.isConsistent) {
+      return {
+        assetId,
+        locationType: balance.issue === 'NO_MOVEMENTS' ? 'UNKNOWN' : 'INCONSISTENT',
+        warehouse: null, customerWorksite: null, balance,
+      };
+    }
 
     if (!lastLedger) {
       return {
@@ -1027,6 +1038,7 @@ export class AssetsService {
       return {
         assetId,
         locationType: 'CUSTOMER_WORKSITE',
+        ...(balance ? { balance } : {}),
         warehouse: null,
         customerWorksite: lastLedger.customerWorksite,
       };
@@ -1041,6 +1053,7 @@ export class AssetsService {
       return {
         assetId,
         locationType: 'WAREHOUSE',
+        ...(balance ? { balance } : {}),
         warehouse: lastLedger.warehouse,
         customerWorksite: null,
       };

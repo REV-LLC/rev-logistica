@@ -385,8 +385,8 @@ export default function WarehouseInventoryPageClient({
     const controller = new AbortController();
     inventoryRequest.current = controller;
     const isCurrentRequest = () => inventoryRequest.current === controller && !controller.signal.aborted;
-    const fetchOwnerAssets = isProviderDetail
-      && knownWarehouses.some((warehouse) => warehouse.id === warehouseToFetch && warehouse.type === 'ALLY');
+    const fetchOwnerAssets = isOwnInventory || (isProviderDetail
+      && knownWarehouses.some((warehouse) => warehouse.id === warehouseToFetch && warehouse.type === 'ALLY'));
     setLoading(true);
     setError(null);
     setUnauthorized(false);
@@ -404,7 +404,7 @@ export default function WarehouseInventoryPageClient({
         );
         if (!isCurrentRequest()) return;
         setData(response);
-        if (!isProviderDetail && response.bulk.length === 0 && response.serial.length === 0) {
+        if (!isProviderDetail && !(isOwnInventory && inventoryView === 'SERIAL') && response.bulk.length === 0 && response.serial.length === 0) {
           const selectedWarehouseName =
             knownWarehouses.find((warehouse) => warehouse.id === warehouseToFetch)?.name ?? 'esta bodega';
           setEmptyInventoryWarehouseName(selectedWarehouseName);
@@ -1031,7 +1031,7 @@ export default function WarehouseInventoryPageClient({
     warehouseCards.find((warehouse) => warehouse.id === warehouseId && (!detailMode || warehouse.id === initialWarehouseId)) ?? null;
   const assetsWarehouse = selectedWarehouse ?? warehouseCards[0] ?? null;
   const currentInventory = data?.warehouseId === warehouseId && (!detailMode || warehouseId === initialWarehouseId) ? data : null;
-  const currentOwnerAssets = ownerAssets?.warehouseId === initialWarehouseId ? ownerAssets : null;
+  const currentOwnerAssets = ownerAssets?.warehouseId === warehouseId && (!detailMode || warehouseId === initialWarehouseId) ? ownerAssets : null;
 
   const createOwner = createOwnerCompanyId ? ownerById.get(createOwnerCompanyId) ?? null : null;
   const editOwner = editOwnerCompanyId ? ownerById.get(editOwnerCompanyId) ?? null : null;
@@ -1130,9 +1130,13 @@ export default function WarehouseInventoryPageClient({
 
   return (
     <main>
-      {currentInventory && inventoryView === 'SERIAL' && isOwnInventory ? (
-        <WarehouseAssetsView
-          items={currentInventory.serial}
+      {inventoryView === 'SERIAL' && isOwnInventory ? (
+        <>
+        {(ownerAssetsLoading || warehousesLoading) && !currentOwnerAssets ? <Text role="status" p="md">Cargando equipos propios...</Text> : null}
+        {ownerAssetsError ? <Alert color="red" title="No se pudieron cargar los equipos propios">{ownerAssetsError}</Alert> : null}
+        {warehousesError ? <Alert color="red" title="No se pudieron cargar bodegas">{warehousesError}</Alert> : null}
+        {currentOwnerAssets ? <WarehouseAssetsView
+          items={currentOwnerAssets.serial}
           warehouseName={assetsWarehouse?.name ?? 'Bodega'}
           warehouseType={assetsWarehouse?.type ?? (isOwnInventory ? 'OWN' : 'ALLY')}
           search={inventorySearch}
@@ -1140,7 +1144,8 @@ export default function WarehouseInventoryPageClient({
           deletingId={deletingSerialAssetId}
           onDelete={deleteSerialAsset}
           error={error}
-        />
+        /> : null}
+        </>
       ) : (
       <Container size="xl" py="xl">
         <Stack gap="lg">
