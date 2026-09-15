@@ -30,7 +30,64 @@ describe('Office agent loop (no external requests)', () => {
     expect(database.query).toHaveBeenCalledWith(expect.any(String), 'Unidades', '1', 'INTERNAL');
     expect(result.evidence).toEqual([evidence]);
     expect(result.readOnly).toBe(true);
+    expect(database.schema).not.toHaveBeenCalled();
+    expect(result.usage).toHaveProperty('requests');
     model.assertComplete();
+  });
+
+  it('answers inventory with one database call and no schema exploration', async () => {
+    const evidence = { id: '1', title: 'Inventario', rows: [{ articulo: 'Prueba', cantidad: '12' }],
+      columns: ['articulo', 'cantidad'], views: ['inventory_balances'], rowCount: 1, truncated: false, queriedAt: '2026-09-15' };
+    const database = { schema: jest.fn(), query: jest.fn().mockResolvedValue(evidence) };
+    const model = new ScriptedModel([
+      [functionCall('consultar_inventario', { terms: ['tornill'], location: 'WORKSITE', ownership: 'ALL', groupBy: 'LOCATION' }, { callId: 'inventory-1' })],
+      [assistantMessage('Hay 12 unidades en obra [1].')],
+    ]);
+    jest.spyOn(OpenAIProvider.prototype, 'getModel').mockResolvedValue(model);
+    const result = await new OfficeAssistantService(database as unknown as OfficeDatabaseService)
+      .ask('office-user', { message: '¿Dónde están los tornillos de REV?', history: [] });
+    expect(database.schema).not.toHaveBeenCalled();
+    expect(database.query).toHaveBeenCalledWith(expect.stringContaining('SUM(quantity)'), expect.any(String), '1', 'INTERNAL');
+    expect(database.query).toHaveBeenCalledTimes(1);
+    expect(result.evidence[0].rows).toEqual(evidence.rows);
+    expect(JSON.stringify(model.lastCall?.request.input)).toContain('Prueba');
+    model.assertComplete();
+  });
+
+  it('deduplicates within a question, but fetches fresh data for the next question', async () => {
+    const evidence = { id: '1', title: 'Consulta', rows: [{ cantidad: '12' }], columns: ['cantidad'],
+      views: ['inventory_balances'], rowCount: 1, truncated: false, queriedAt: '2026-09-15' };
+    const database = { query: jest.fn().mockResolvedValue(evidence) };
+    const sql = 'SELECT SUM(quantity) AS cantidad FROM rev_office.inventory_balances';
+    const model = new ScriptedModel([
+      [functionCall('consultar_datos', { sql, title: 'Consulta' }, { callId: 'query-1' })],
+      [functionCall('consultar_datos', { sql, title: 'Repetida' }, { callId: 'query-2' })],
+      [assistantMessage('12 [1].')],
+      [functionCall('consultar_datos', { sql, title: 'Consulta' }, { callId: 'query-3' })],
+      [assistantMessage('12 [1].')],
+    ]);
+    jest.spyOn(OpenAIProvider.prototype, 'getModel').mockResolvedValue(model);
+    const service = new OfficeAssistantService(database as unknown as OfficeDatabaseService);
+    const first = await service.ask('office-user', { message: 'Inventario', history: [] });
+    expect(database.query).toHaveBeenCalledTimes(1);
+    expect(first.evidence).toHaveLength(1);
+    await service.ask('office-user', { message: 'Inventario', history: [] });
+    expect(database.query).toHaveBeenCalledTimes(2);
+    model.assertComplete();
+  });
+
+  it('loads only requested schema without treating metadata as evidence', async () => {
+    const database = { schema: jest.fn().mockResolvedValue('rev_office.customers (customer_name: text)') };
+    const model = new ScriptedModel([
+      [functionCall('ver_esquema', { views: ['customers'] }, { callId: 'schema-1' })],
+      [assistantMessage('Hay 123 clientes.')],
+    ]);
+    jest.spyOn(OpenAIProvider.prototype, 'getModel').mockResolvedValue(model);
+    const result = await new OfficeAssistantService(database as unknown as OfficeDatabaseService)
+      .ask('office-user', { message: 'Clientes', history: [] });
+    expect(database.schema).toHaveBeenCalledWith(['customers']);
+    expect(result.evidence).toHaveLength(0);
+    expect(result.answer).not.toContain('123');
   });
 
   it('does not return invented facts without a successful database query', async () => {
