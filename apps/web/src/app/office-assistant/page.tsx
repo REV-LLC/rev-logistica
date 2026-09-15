@@ -5,22 +5,13 @@ import {
   Accordion, Alert, Badge, Button, Container, Group, Loader, Paper,
   ScrollArea, SimpleGrid, Stack, Table, Text, Textarea, ThemeIcon, Title,
 } from '@mantine/core';
-import { IconArrowUp, IconDatabase, IconMessageCircle, IconPlus, IconShieldCheck } from '@tabler/icons-react';
+import { IconArrowUp, IconDatabase, IconDownload, IconMessageCircle, IconPlus, IconShieldCheck } from '@tabler/icons-react';
 import { api } from '@/lib/api';
+import { columnLabel, displayOfficeValue } from '@/lib/office-report';
+import type { OfficeEvidence as Evidence, OfficeReply as Reply } from '@/lib/office-report';
 import styles from './office-assistant.module.css';
 
-type Evidence = {
-  id: string;
-  title: string;
-  views: string[];
-  columns: string[];
-  rows: Record<string, unknown>[];
-  rowCount: number;
-  truncated: boolean;
-  queriedAt: string;
-};
-type Reply = { answer: string; evidence: Evidence[]; queriedAt: string; readOnly: boolean };
-type Message = { id: string; role: 'user' | 'assistant'; content: string; reply?: Reply };
+type Message = { id: string; role: 'user' | 'assistant'; content: string; reply?: Reply; question?: string };
 const examples = [
   { title: 'Ubicar inventario', question: '¿Dónde están todos los tornillos niveladores de REV?' },
   { title: 'Consultar alquileres', question: '¿Cuántos tornillos hay en obra y cuáles obras los tienen? Desglosa por artículo.' },
@@ -28,10 +19,26 @@ const examples = [
   { title: 'Comparar clientes', question: '¿Cuáles clientes tienen más unidades BULK pendientes de devolver? Desglosa por artículo.' },
 ];
 
-function displayValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+function ExcelDownload({ reply, question }: { reply: Reply; question: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const pending = useRef(false);
+  async function download() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      const { downloadOfficeExcel } = await import('@/lib/office-excel');
+      await downloadOfficeExcel(reply, question);
+    } catch { setError(true); }
+    finally { pending.current = false; setBusy(false); }
+  }
+  return <Stack gap={4} mt="sm">
+    <Group><Button size="xs" variant="light" leftSection={<IconDownload size={15} />} loading={busy} onClick={() => void download()}>Descargar Excel</Button>
+      <Text size="xs" c="dimmed">Copia de estas tablas · sin otra consulta a OpenAI</Text></Group>
+    {error ? <Text size="xs" c="red" role="alert">No se pudo generar el Excel. Inténtalo de nuevo.</Text> : null}
+  </Stack>;
 }
 
 function Sources({ sources }: { sources: Evidence[] }) {
@@ -48,9 +55,9 @@ function Sources({ sources }: { sources: Evidence[] }) {
             {source.rows.length ? (
               <ScrollArea type="auto" mah={360}>
                 <Table striped highlightOnHover withTableBorder>
-                  <Table.Thead><Table.Tr>{source.columns.map((column) => <Table.Th key={column}>{column.replaceAll('_', ' ')}</Table.Th>)}</Table.Tr></Table.Thead>
+                  <Table.Thead><Table.Tr>{source.columns.map((column) => <Table.Th key={column}>{columnLabel(column)}</Table.Th>)}</Table.Tr></Table.Thead>
                   <Table.Tbody>{source.rows.map((row, index) => (
-                    <Table.Tr key={index}>{source.columns.map((column) => <Table.Td key={column}>{displayValue(row[column])}</Table.Td>)}</Table.Tr>
+                    <Table.Tr key={index}>{source.columns.map((column) => <Table.Td key={column}>{displayOfficeValue(column, row[column], source.columnTypes?.[column])}</Table.Td>)}</Table.Tr>
                   ))}</Table.Tbody>
                 </Table>
               </ScrollArea>
@@ -100,7 +107,7 @@ export default function OfficeAssistantPage() {
         method: 'POST', signal: request.signal,
         json: { message: content, history: messages.slice(-12).map((m) => ({ role: m.role, content: m.content.slice(0, 8000) })) },
       });
-      setMessages((previous) => [...previous, { id: crypto.randomUUID(), role: 'assistant', content: reply.answer, reply }]);
+      setMessages((previous) => [...previous, { id: crypto.randomUUID(), role: 'assistant', content: reply.answer, reply, question: content }]);
     } catch (cause) {
       setError(request.signal.aborted ? 'La consulta tardó demasiado. Intenta una pregunta más concreta.'
         : cause instanceof Error ? cause.message : 'No se pudo completar la consulta.');
@@ -155,6 +162,7 @@ export default function OfficeAssistantPage() {
               <Text size="xs" fw={700} c={message.role === 'user' ? 'blue' : 'teal'} mb="xs">{message.role === 'user' ? 'TÚ' : 'ASISTENTE OFFICE'}</Text>
               <Text className={styles.message}>{message.content}</Text>
               {message.reply ? <Sources sources={message.reply.evidence} /> : null}
+              {message.reply?.evidence.length ? <ExcelDownload reply={message.reply} question={message.question ?? ''} /> : null}
             </Paper>
           ))}
         </Stack>

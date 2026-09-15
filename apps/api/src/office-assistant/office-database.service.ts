@@ -9,6 +9,7 @@ export type OfficeEvidence = {
   title: string;
   views: string[];
   columns: string[];
+  columnTypes?: Record<string, 'number' | 'date' | 'datetime' | 'text' | 'boolean'>;
   rows: Record<string, unknown>[];
   rowCount: number;
   truncated: boolean;
@@ -18,6 +19,7 @@ export type OfficeEvidence = {
 @Injectable()
 export class OfficeDatabaseService implements OnModuleDestroy {
   private pool?: Pool;
+  private schemaCache?: { expiresAt: number; lines: Map<string, string> };
 
   private getPool() {
     const url = process.env.OFFICE_ASSISTANT_DATABASE_URL;
@@ -61,8 +63,15 @@ export class OfficeDatabaseService implements OnModuleDestroy {
     } finally { client.release(); }
   }
 
-  async schema() {
-    return this.read(async (client) => {
+  async schema(views: readonly string[] = OFFICE_VIEWS, fresh = false) {
+    if (views.some((view) => !OFFICE_VIEWS.includes(view as typeof OFFICE_VIEWS[number]))) {
+      throw new Error('Vista no autorizada.');
+    }
+    // Only metadata is cached. Query data and read-only privilege checks never are.
+    if (!fresh && this.schemaCache && this.schemaCache.expiresAt > Date.now()) {
+      return views.map((view) => this.schemaCache!.lines.get(view)).join('\n');
+    }
+    const lines = await this.read(async (client) => {
       const { rows } = await client.query<{ table_name: string; column_name: string; data_type: string }>(`
         SELECT table_name, column_name, data_type FROM information_schema.columns
         WHERE table_schema = 'rev_office' AND table_name = ANY($1)
@@ -70,9 +79,11 @@ export class OfficeDatabaseService implements OnModuleDestroy {
       if (new Set(rows.map((r) => r.table_name)).size !== OFFICE_VIEWS.length) {
         throw new ServiceUnavailableException('Faltan vistas del asistente. Ejecute su configuración de lectura.');
       }
-      return OFFICE_VIEWS.map((view) => `rev_office.${view} (${rows.filter((r) => r.table_name === view)
-        .map((r) => `${r.column_name}: ${r.data_type}`).join(', ')})`).join('\n');
+      return new Map<string, string>(OFFICE_VIEWS.map((view) => [view, `rev_office.${view} (${rows.filter((r) => r.table_name === view)
+        .map((r) => `${r.column_name}: ${r.data_type}`).join(', ')})`]));
     });
+    this.schemaCache = { expiresAt: Date.now() + 300000, lines };
+    return views.map((view) => lines.get(view)).join('\n');
   }
 
   async query(sql: string, title: string, id: string, ownerScope?: OfficeOwnerScope): Promise<OfficeEvidence> {
@@ -90,8 +101,10 @@ export class OfficeDatabaseService implements OnModuleDestroy {
         const row = Object.fromEntries(Object.entries(raw).map(([key, rawValue]) => {
           const field = result.fields.find((f) => f.name === key);
           // Keep arbitrary precision, but avoid displaying 30 meaningless zero decimals.
-          const value = field?.dataTypeID === 1700 && typeof rawValue === 'string' && rawValue.includes('.')
-            ? rawValue.replace(/0+$/, '').replace(/\.$/, '') : rawValue;
+          const value = field?.dataTypeID === 1082 && rawValue instanceof Date
+            ? `${rawValue.getFullYear()}-${String(rawValue.getMonth() + 1).padStart(2, '0')}-${String(rawValue.getDate()).padStart(2, '0')}`
+            : field?.dataTypeID === 1700 && typeof rawValue === 'string' && rawValue.includes('.')
+              ? rawValue.replace(/0+$/, '').replace(/\.$/, '') : rawValue;
           if (typeof value === 'string' && value.length > 500) {
             truncated = true;
             return [key, `${value.slice(0, 500)}…`];
@@ -102,7 +115,11 @@ export class OfficeDatabaseService implements OnModuleDestroy {
         if (bytes > 64000) { truncated = true; break; }
         rows.push(row);
       }
-      return { id, title, views: validated.views, columns, rows,
+      const columnTypes = Object.fromEntries(result.fields.map((field) => [field.name,
+        [20, 21, 23, 700, 701, 1700].includes(field.dataTypeID) ? 'number'
+          : field.dataTypeID === 1082 ? 'date' : [1114, 1184].includes(field.dataTypeID) ? 'datetime'
+            : field.dataTypeID === 16 ? 'boolean' : 'text'])) as OfficeEvidence['columnTypes'];
+      return { id, title, views: validated.views, columns, columnTypes, rows,
         rowCount: rows.length, truncated, queriedAt: new Date().toISOString() };
     });
   }
