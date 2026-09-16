@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -10,6 +11,7 @@ import {
   DocumentItemBillingStatus,
   DocumentStatus,
   DocumentType,
+  InventorySourceMode,
   NotificationChannel,
   Prisma,
   Role,
@@ -25,6 +27,11 @@ import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
+import { assertTabletWarehouse, resolveTabletDocumentAccess } from '../auth/tablet-access';
+import { resolveDocumentInventorySourceMode } from './document-inventory-source';
+import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
+import { lockBulkStock } from '../inventory/bulk-stock-lock';
+import { isSerializationConflict } from './document-transaction-conflict';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -33,10 +40,10 @@ export function assertCanViewDocument(
   requester?: { role: Role; userId: string },
 ) {
   if (
-    requester?.role === Role.DRIVER &&
+    (requester?.role === Role.DRIVER || requester?.role === Role.WAREHOUSE_TABLET) &&
     document.createdBy !== requester.userId
   ) {
-    throw new ForbiddenException('Drivers can only view their own documents');
+    throw new ForbiddenException('Solo puedes consultar documentos creados desde tu perfil.');
   }
 }
 
@@ -175,6 +182,13 @@ export class DocumentsService {
     return targets.some((target) => target.includes('consecutive'));
   }
 
+  private assertNoTabletAuthorizationConflict(error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' &&
+        String(error.meta?.target).includes('tabletAuthorizationId')) {
+      throw new ForbiddenException('Este PIN ya autorizó otro documento. Ingresa tu PIN nuevamente para empezar uno nuevo.');
+    }
+  }
+
   private async buildRejectedConsecutive(
     tx: Prisma.TransactionClient,
     currentConsecutive?: string | null,
@@ -259,6 +273,7 @@ export class DocumentsService {
     status: DocumentStatus;
     consecutive: string | null;
     warehouseId: string | null;
+    inventorySourceMode?: InventorySourceMode | null;
     customerWorksiteId: string | null;
     createdBy: string;
     docDate: Date;
@@ -326,6 +341,7 @@ export class DocumentsService {
                 status: DocumentStatus.DRAFT,
                 consecutive,
                 warehouseId: document.warehouseId,
+                inventorySourceMode: document.inventorySourceMode ?? null,
                 customerWorksiteId: document.customerWorksiteId,
                 createdBy: document.createdBy,
                 docDate: document.docDate,
@@ -380,11 +396,72 @@ export class DocumentsService {
   }
 
   private async approveLoadedRequestDocument(
+    reference: { id: string },
+    userId: string,
+    notifyAccessories = false,
+  ) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Document" WHERE "id" = ${reference.id} FOR UPDATE`);
+          // The caller's draft may predate another office edit or approval.
+          // Resolve the actual items, origin and evidence only under this lock.
+          const document = await tx.document.findUnique({
+            where: { id: reference.id },
+            include: {
+              items: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+              files: {
+                where: { fileType: { in: ['SIGNATURE_RECEIVED', 'PHOTO_EVIDENCE', 'COMPROBANTE_SALIDA_PROVEEDOR'] } },
+                select: { category: true, providerWarehouseId: true },
+              },
+            },
+          });
+          if (!document) throw new NotFoundException('Document not found');
+          const hasAccessories = document.items.some((item) => item.accessoryId);
+          if (document.status === DocumentStatus.CONFIRMED && hasAccessories) {
+            return { confirmed: { id: document.id, status: document.status, consecutive: document.consecutive },
+              warehouseIds: [] as string[], customerWorksiteId: document.customerWorksiteId, alreadyConfirmed: true };
+          }
+          if (document.status !== DocumentStatus.DRAFT) {
+            throw new BadRequestException('Solo se puede aprobar un documento en estado DRAFT');
+          }
+          if (document.type !== DocumentType.REMISSION && document.type !== DocumentType.RETURN) {
+            throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
+          }
+          await this.assertProviderRemissionEvidence(document, tx);
+          if (hasAccessories) {
+            this.assertExplicitRemissionInventorySource(document);
+            await this.accessoryDocuments.apply(tx, document, userId,
+              resolveDocumentInventorySourceMode(document) === InventorySourceMode.OWNER_WAREHOUSES ? 'ON_SITE' : 'WAREHOUSE');
+          }
+          const result = await this.executeRequestApproval({ ...document,
+            items: document.items.filter((item) => !item.accessoryId) }, userId, tx, hasAccessories);
+          return { ...result, alreadyConfirmed: false,
+            warehouseIds: [...new Set([...result.warehouseIds, ...document.items.flatMap((item) => item.condition ? [item.condition] : [])])] };
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 30000 });
+
+        await this.inventoryService.invalidateDocumentMovementCaches(result.warehouseIds, result.customerWorksiteId)
+          .catch(() => this.logger.warn('Documento aprobado; la caché de inventario se actualizará al vencer su TTL'));
+        if (notifyAccessories && !result.alreadyConfirmed) this.sendFinalEmailInBackground(reference.id);
+        return result.confirmed;
+      } catch (error) {
+        if (isSerializationConflict(error)) {
+          if (attempt < 2) continue;
+          throw new ConflictException('El inventario cambió mientras se aprobaba el documento. Actualiza las existencias e inténtalo de nuevo');
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('No se pudo completar la aprobación. Actualiza el documento e inténtalo de nuevo');
+  }
+
+  private async executeRequestApproval(
     document: {
       id: string;
       type: DocumentType;
       status: DocumentStatus;
       warehouseId: string | null;
+      inventorySourceMode?: InventorySourceMode | null;
       customerWorksiteId: string | null;
       docDate: Date;
       notes: string | null;
@@ -398,15 +475,30 @@ export class DocumentsService {
       }>;
     },
     userId: string,
-    transaction?: Prisma.TransactionClient,
+    tx: Prisma.TransactionClient,
+    hasAccessoryMovements = false,
   ) {
-    const db = transaction ?? this.prisma;
-    const items = document.items.length ? await this.mapDocumentItemsToMovementItems(document.items) : [];
-    await this.validateDocumentComponentRelations(document.items);
+    this.assertExplicitRemissionInventorySource(document);
+    const sourceMode = resolveDocumentInventorySourceMode(document);
+    const items = document.items.length ? await this.mapDocumentItemsToMovementItems(
+      document.items,
+      document.type === DocumentType.REMISSION
+        ? { mode: sourceMode, warehouseId: document.warehouseId }
+        : undefined,
+      tx,
+    ) : [];
+    await this.validateDocumentComponentRelations(document.items, tx);
 
     if (!items.length) {
-      if (!transaction) throw new BadRequestException('El documento no tiene ítems para aprobar.');
-      return db.document.update({ where: { id: document.id }, data: { status: DocumentStatus.CONFIRMED }, select: { id: true, status: true, consecutive: true } });
+      if (!hasAccessoryMovements) throw new BadRequestException('El documento no tiene ítems para aprobar.');
+      if (document.type === DocumentType.RETURN) {
+        await tx.documentItem.updateMany({ where: { documentId: document.id, billingCutoffDate: null },
+          data: { billingCutoffDate: document.docDate, billingStatus: DocumentItemBillingStatus.CUT } });
+      }
+      const confirmed = await tx.document.update({ where: { id: document.id },
+        data: { status: DocumentStatus.CONFIRMED, voidReason: null, voidedAt: null, voidedBy: null },
+        select: { id: true, status: true, consecutive: true } });
+      return { confirmed, warehouseIds: document.warehouseId ? [document.warehouseId] : [], customerWorksiteId: document.customerWorksiteId };
     }
 
     if (document.type === DocumentType.REMISSION) {
@@ -414,7 +506,7 @@ export class DocumentsService {
         .map((item) => item.assetId)
         .filter((value): value is string => Boolean(value));
       if (assetIds.length) {
-        const assets = await db.asset.findMany({
+        const assets = await tx.asset.findMany({
           where: { id: { in: assetIds } },
           select: {
             id: true,
@@ -451,8 +543,7 @@ export class DocumentsService {
       if (!document.customerWorksiteId) {
         throw new BadRequestException('La remisión no tiene obra destino');
       }
-      const deliveryMode = this.parseDeliveryMode(document.notes);
-      if (deliveryMode === 'ON_SITE') {
+      if (sourceMode === InventorySourceMode.OWNER_WAREHOUSES) {
         await this.inventoryService.moveOnSite(
           {
             customerWorksiteId: document.customerWorksiteId,
@@ -460,7 +551,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
-          transaction,
+          tx,
         );
       } else {
         if (!document.warehouseId) {
@@ -476,7 +567,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
-          transaction,
+          tx,
         );
       }
     } else {
@@ -487,7 +578,7 @@ export class DocumentsService {
       if (!document.warehouseId) {
         throw new BadRequestException('La devolución requiere bodega destino');
       }
-      const destinationWarehouse = await db.warehouse.findFirst({
+      const destinationWarehouse = await tx.warehouse.findFirst({
         where: { id: document.warehouseId, active: true },
         select: { id: true, type: true },
       });
@@ -504,7 +595,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
-          transaction,
+          tx,
         );
       } else {
         const mismatchedItem = items.find(
@@ -522,10 +613,10 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
-          transaction,
+          tx,
         );
       }
-      await db.documentItem.updateMany({
+      await tx.documentItem.updateMany({
         where: {
           documentId: document.id,
           billingCutoffDate: null,
@@ -537,7 +628,7 @@ export class DocumentsService {
       });
     }
 
-    return db.document.update({
+    const confirmed = await tx.document.update({
       where: { id: document.id },
       data: {
         status: DocumentStatus.CONFIRMED,
@@ -547,6 +638,11 @@ export class DocumentsService {
       },
       select: { id: true, status: true, consecutive: true },
     });
+    return {
+      confirmed,
+      warehouseIds: [...new Set([...items.map((item) => item.ownerWarehouseId), ...(document.warehouseId ? [document.warehouseId] : [])])],
+      customerWorksiteId: document.customerWorksiteId,
+    };
   }
 
   private parseSignatureMimeType(signatureDataUrl: string) {
@@ -635,6 +731,7 @@ export class DocumentsService {
     status?: string;
     number?: string;
     warehouseId?: string;
+    inventorySourceMode?: InventorySourceMode;
     customerWorksiteId?: string;
     notes?: string;
     recipientPhone?: string;
@@ -644,6 +741,9 @@ export class DocumentsService {
     const type = payload.type as DocumentType;
     const status =
       (payload.status as DocumentStatus | undefined) ?? DocumentStatus.DRAFT;
+    this.assertExplicitRemissionInventorySource({ ...payload, type });
+    const documentDate =
+      this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
     const recipientPhones = this.normalizeDocumentRecipientPhones(
       payload.recipientPhones,
       payload.recipientPhone,
@@ -663,8 +763,9 @@ export class DocumentsService {
               status,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
-              docDate: this.parseDocumentDateFromNotes(payload.notes) ?? new Date(),
+              docDate: documentDate,
               notes: payload.notes ?? null,
               recipientPhone: recipientPhones[0],
               recipientPhones,
@@ -688,10 +789,131 @@ export class DocumentsService {
     throw new BadRequestException('No se pudo generar consecutivo automático');
   }
 
+  /** Legacy immediate entry: document and every stock effect commit together. */
+  async createDirectDocument(payload: CreateDirectDocumentDto, userId: string) {
+    if (payload.type !== DocumentType.REMISSION && payload.type !== DocumentType.RETURN) {
+      throw new BadRequestException('Solo se permiten remisiones y devoluciones directas');
+    }
+    if (payload.status !== undefined && payload.status !== DocumentStatus.CONFIRMED) {
+      throw new BadRequestException('El registro directo solo permite documentos confirmados');
+    }
+    if (payload.type === DocumentType.REMISSION
+      && payload.inventorySourceMode !== InventorySourceMode.WAREHOUSE
+      && payload.inventorySourceMode !== InventorySourceMode.OWNER_WAREHOUSES) {
+      throw new BadRequestException('Selecciona desde dónde sale físicamente el equipo');
+    }
+    this.assertExplicitRemissionInventorySource(payload);
+    if (!payload.customerWorksiteId || !payload.items?.length) {
+      throw new BadRequestException('La obra y al menos un ítem son obligatorios');
+    }
+    const serializedIds = new Set<string>();
+    for (const item of payload.items) {
+      if (Boolean(item.skuId) === Boolean(item.assetId) || !item.ownerWarehouseId
+        || (item.skuId && (!Number.isFinite(item.quantity) || Number(item.quantity) <= 0))
+        || (item.assetId && item.quantity !== undefined && item.quantity !== 1)) {
+        throw new BadRequestException('Cada ítem debe identificar su dueño y un artículo con cantidad positiva o un solo equipo');
+      }
+      if (item.assetId) {
+        if (serializedIds.has(item.assetId)) throw new BadRequestException('Un equipo no puede repetirse en el documento');
+        serializedIds.add(item.assetId);
+      }
+    }
+    const ownerWarehouseIds = [...new Set(payload.items.map((item) => item.ownerWarehouseId))];
+    const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
+    const recipientPhones = this.normalizeDocumentRecipientPhones(payload.recipientPhones, payload.recipientPhone);
+    const warehouseIdsToInvalidate = [...ownerWarehouseIds, ...(payload.warehouseId ? [payload.warehouseId] : [])];
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const document = await this.prisma.$transaction(async (tx) => {
+          const owners = await tx.warehouse.findMany({
+            where: { id: { in: ownerWarehouseIds }, active: true },
+            select: { id: true, type: true },
+          });
+          if (owners.length !== ownerWarehouseIds.length) {
+            throw new BadRequestException('Uno de los propietarios no tiene una bodega activa válida');
+          }
+          const providerIds = new Set(owners.filter((owner) => owner.type === 'ALLY').map((owner) => owner.id));
+          const providerReturnItems = payload.items.filter((item) => providerIds.has(item.ownerWarehouseId));
+          const ownReturnItems = payload.items.filter((item) => !providerIds.has(item.ownerWarehouseId));
+          const warehouseRequired = payload.type === DocumentType.REMISSION
+            ? payload.inventorySourceMode === InventorySourceMode.WAREHOUSE
+            : ownReturnItems.length > 0;
+          if (warehouseRequired) {
+            const warehouse = payload.warehouseId ? await tx.warehouse.findFirst({
+              where: { id: payload.warehouseId, active: true }, select: { id: true, type: true },
+            }) : null;
+            if (!warehouse || (payload.type === DocumentType.RETURN && warehouse.type !== 'OWN')) {
+              throw new BadRequestException(payload.type === DocumentType.RETURN
+                ? 'Selecciona la bodega propia que recibirá los equipos propios'
+                : 'Selecciona una bodega de salida activa válida');
+            }
+          }
+
+          // Lock every item in the usual SKU -> serialized-asset order before
+          // splitting a mixed return. Each existing writer reuses these locks.
+          await lockBulkStock(tx, payload.items.flatMap((item) => item.skuId ? [item.skuId] : []));
+          const assetIds = [...serializedIds].sort();
+          if (assetIds.length) {
+            await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Asset" WHERE "id" IN (${Prisma.join(assetIds)}) ORDER BY "id" FOR UPDATE`);
+          }
+          const consecutive = await this.resolveConsecutive(payload.type, tx, payload.number);
+          const created = await tx.document.create({
+            data: {
+              type: payload.type, status: DocumentStatus.CONFIRMED, consecutive,
+              warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
+              customerWorksiteId: payload.customerWorksiteId, docDate: documentDate,
+              notes: payload.notes ?? null, recipientPhone: recipientPhones[0], recipientPhones,
+              createdBy: userId,
+            },
+            select: { id: true, consecutive: true, status: true, docDate: true },
+          });
+          // Preserve legacy representation: its items come from StockLedger.
+          // Do not introduce DocumentItem billing rows alongside those entries.
+          const common = { documentId: created.id, customerWorksiteId: payload.customerWorksiteId };
+          if (payload.type === DocumentType.REMISSION) {
+            if (payload.inventorySourceMode === InventorySourceMode.WAREHOUSE) {
+              await this.inventoryService.moveOut({ ...common, warehouseId: payload.warehouseId!, items: payload.items }, userId, tx);
+            } else {
+              await this.inventoryService.moveOnSite({ ...common, items: payload.items }, userId, tx);
+            }
+          } else {
+            if (providerReturnItems.length) {
+              await this.inventoryService.moveReturnTransit({ ...common, items: providerReturnItems }, userId, tx);
+            }
+            if (ownReturnItems.length) {
+              await this.inventoryService.moveIn({ ...common, warehouseId: payload.warehouseId!, items: ownReturnItems }, userId, tx);
+            }
+          }
+          return created;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 30000 });
+
+        // No cache flush or external message may escape a rolled-back operation.
+        // Cache failure after commit must not tell the client that creation failed.
+        await this.inventoryService.invalidateDocumentMovementCaches(warehouseIdsToInvalidate, payload.customerWorksiteId)
+          .catch(() => this.logger.warn('Documento directo confirmado; la caché de inventario se actualizará al vencer su TTL'));
+        return document;
+      } catch (error) {
+        if (isSerializationConflict(error)) {
+          if (attempt < 2) continue;
+          throw new ConflictException('El inventario cambió mientras se registraba el documento. Actualiza las existencias e inténtalo de nuevo');
+        }
+        if (this.isConsecutiveConflict(error) && !payload.number) continue;
+        if (this.isConsecutiveConflict(error)) throw new BadRequestException('El consecutivo ya existe');
+        throw error;
+      }
+    }
+    throw new BadRequestException('No se pudo generar consecutivo automático');
+  }
+
   async createRequestDocument(payload: {
+    requesterRole?: Role;
+    tabletEmployeeToken?: string;
     type: string;
     number?: string;
     warehouseId?: string;
+    inventorySourceMode?: InventorySourceMode;
     customerWorksiteId?: string;
     notes?: string;
     recipientPhone?: string;
@@ -712,6 +934,10 @@ export class DocumentsService {
     }>;
   }) {
     const type = payload.type as DocumentType;
+    const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
+      ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
+    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
+    this.assertExplicitRemissionInventorySource({ ...payload, type });
     const recipientPhones =
       payload.sendWhatsapp === false
         ? []
@@ -738,12 +964,14 @@ export class DocumentsService {
               status: DocumentStatus.DRAFT,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
               recipientPhone: recipientPhones[0],
               recipientPhones,
               createdBy: payload.createdBy,
+              ...tabletContext,
             },
           });
 
@@ -781,6 +1009,7 @@ export class DocumentsService {
         await this.documentPdfSnapshots.refresh(document.id);
         return document;
       } catch (error) {
+        this.assertNoTabletAuthorizationConflict(error);
         if (this.isConsecutiveConflict(error) && !payload.number) {
           continue;
         }
@@ -795,8 +1024,11 @@ export class DocumentsService {
   }
 
   async createAutosavedRequestDocument(
-    payload: AutosaveDocumentRequestDto & { createdBy: string },
+    payload: AutosaveDocumentRequestDto & { createdBy: string; requesterRole?: Role },
   ) {
+    const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
+      ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
+    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
     if (
       payload.type !== DocumentType.REMISSION &&
       payload.type !== DocumentType.RETURN
@@ -825,12 +1057,14 @@ export class DocumentsService {
               status: DocumentStatus.IN_PROGRESS,
               consecutive,
               warehouseId: payload.warehouseId ?? null,
+              inventorySourceMode: payload.inventorySourceMode ?? null,
               customerWorksiteId: payload.customerWorksiteId ?? null,
               docDate: documentDate,
               notes: payload.notes ?? null,
               recipientPhone: recipientPhones[0] ?? null,
               recipientPhones,
               createdBy: payload.createdBy,
+              ...tabletContext,
             },
             select: { id: true, consecutive: true, status: true },
           });
@@ -867,6 +1101,7 @@ export class DocumentsService {
           return document;
         });
       } catch (error) {
+        this.assertNoTabletAuthorizationConflict(error);
         if (this.isConsecutiveConflict(error) && !payload.number) continue;
         if (this.isConsecutiveConflict(error)) {
           throw new BadRequestException('El consecutivo ya existe');
@@ -883,6 +1118,11 @@ export class DocumentsService {
     payload: AutosaveDocumentRequestDto,
     requester: { sub: string; role: Role },
   ) {
+    if (requester.role === Role.WAREHOUSE_TABLET) {
+      const context = await resolveTabletDocumentAccess(this.prisma, requester.sub, payload.tabletEmployeeToken, documentId);
+      assertTabletWarehouse(context.warehouseId, payload.warehouseId);
+      if (payload.type !== DocumentType.REMISSION && payload.type !== DocumentType.RETURN) throw new BadRequestException('Solo puedes crear remisiones y devoluciones.');
+    }
     const existing = await this.prisma.document.findUnique({
       where: { id: documentId },
       select: {
@@ -892,6 +1132,7 @@ export class DocumentsService {
         type: true,
         consecutive: true,
         warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -928,6 +1169,8 @@ export class DocumentsService {
           type: nextType,
           consecutive,
           warehouseId: payload.warehouseId ?? existing.warehouseId,
+          inventorySourceMode:
+            payload.inventorySourceMode ?? existing.inventorySourceMode,
           customerWorksiteId:
             payload.customerWorksiteId ?? existing.customerWorksiteId,
           docDate: nextDocDate,
@@ -981,12 +1224,18 @@ export class DocumentsService {
     payload: SubmitAutosavedDocumentRequestDto,
     requester: { sub: string; role: Role },
   ) {
+    if (requester.role === Role.WAREHOUSE_TABLET) {
+      await resolveTabletDocumentAccess(this.prisma, requester.sub, payload.tabletEmployeeToken, documentId);
+    }
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       select: {
         id: true,
         createdBy: true,
         status: true,
+        type: true,
+        warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         recipientPhone: true,
         recipientPhones: true,
@@ -1003,6 +1252,7 @@ export class DocumentsService {
     if (document.status !== DocumentStatus.IN_PROGRESS) {
       throw new BadRequestException('Este formulario ya fue enviado');
     }
+    this.assertExplicitRemissionInventorySource(document);
     if (!document.customerWorksiteId) {
       throw new BadRequestException('Selecciona una obra');
     }
@@ -1033,11 +1283,11 @@ export class DocumentsService {
     requester: { sub: string; role: Role },
   ) {
     if (
-      requester.role === Role.DRIVER &&
+      (requester.role === Role.DRIVER || requester.role === Role.WAREHOUSE_TABLET) &&
       document.createdBy !== requester.sub
     ) {
       throw new ForbiddenException(
-        'Los conductores solo pueden editar sus propios formularios',
+        'Solo puedes editar formularios creados desde tu perfil.',
       );
     }
   }
@@ -1048,6 +1298,7 @@ export class DocumentsService {
       type?: string;
       number?: string;
       warehouseId?: string;
+      inventorySourceMode?: InventorySourceMode;
       customerWorksiteId?: string;
       notes?: string;
       recipientPhone?: string;
@@ -1076,6 +1327,7 @@ export class DocumentsService {
         type: true,
         consecutive: true,
         warehouseId: true,
+        inventorySourceMode: true,
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -1100,6 +1352,16 @@ export class DocumentsService {
         'Solo se permiten solicitudes de remisión o devolución',
       );
     }
+
+    this.assertExplicitRemissionInventorySource({
+      type: nextType,
+      warehouseId:
+        payload.warehouseId !== undefined
+          ? payload.warehouseId
+          : existing.warehouseId,
+      inventorySourceMode:
+        payload.inventorySourceMode ?? existing.inventorySourceMode,
+    });
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -1139,6 +1401,8 @@ export class DocumentsService {
               payload.warehouseId !== undefined
                 ? (payload.warehouseId ?? null)
                 : existing.warehouseId,
+            inventorySourceMode:
+              payload.inventorySourceMode ?? existing.inventorySourceMode,
             customerWorksiteId:
               payload.customerWorksiteId !== undefined
                 ? (payload.customerWorksiteId ?? null)
@@ -1368,7 +1632,7 @@ export class DocumentsService {
     const where: Prisma.DocumentWhereInput = {};
     if (params.status) where.status = params.status;
     if (params.type) where.type = params.type;
-    if (params.role === Role.DRIVER) {
+    if (params.role === Role.DRIVER || params.role === Role.WAREHOUSE_TABLET) {
       where.createdBy = params.userId;
     }
 
@@ -1385,6 +1649,8 @@ export class DocumentsService {
         docDate: true,
         notes: true,
         createdBy: true,
+        performedByEmployeeName: true,
+        inventorySourceMode: true,
         warehouse: { select: { id: true, name: true } },
         customerWorksite: {
           select: {
@@ -1435,6 +1701,22 @@ export class DocumentsService {
     }));
   }
 
+  private assertExplicitRemissionInventorySource(document: {
+    type: DocumentType;
+    inventorySourceMode?: InventorySourceMode | null;
+    warehouseId?: string | null;
+  }) {
+    if (
+      document.type === DocumentType.REMISSION &&
+      document.inventorySourceMode === InventorySourceMode.WAREHOUSE &&
+      !document.warehouseId
+    ) {
+      throw new BadRequestException(
+        'Selecciona la bodega desde donde sale físicamente el equipo',
+      );
+    }
+  }
+
   private parseDeliveryMode(notes?: string | null): 'WAREHOUSE' | 'ON_SITE' {
     if (!notes) return 'WAREHOUSE';
     const parts = notes.split('|').map((value) => value.trim());
@@ -1454,6 +1736,7 @@ export class DocumentsService {
       componentParentAssetId?: string | null;
       quantity: Prisma.Decimal | null;
     }>,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     const componentItems = items.filter((item) => item.componentParentAssetId);
     const selectedAssetIds = new Set(
@@ -1479,11 +1762,15 @@ export class DocumentsService {
       .map((item) => item.skuId)
       .filter((value): value is string => Boolean(value));
     const [assets, skus] = await Promise.all([
-      this.prisma.asset.findMany({
+      client.asset.findMany({
         where: { id: { in: [...new Set([...selectedAssetIds, ...parentIds, ...childAssetIds])] } },
-        select: { id: true, sku: { select: { assetFamilyId: true } } },
+        select: {
+          id: true,
+          internalNumber: true,
+          sku: { select: { assetFamilyId: true, name: true } },
+        },
       }),
-      this.prisma.sku.findMany({
+      client.sku.findMany({
         where: { id: { in: [...new Set(directSkuIds)] } },
         select: { id: true, assetFamilyId: true },
       }),
@@ -1491,6 +1778,7 @@ export class DocumentsService {
     const assetFamilyByAssetId = new Map(
       assets.map((asset) => [asset.id, asset.sku.assetFamilyId]),
     );
+    const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
     const familyBySkuId = new Map(skus.map((sku) => [sku.id, sku.assetFamilyId]));
     const pairs = componentItems.map((item) => {
       const parentFamilyId = assetFamilyByAssetId.get(item.componentParentAssetId as string);
@@ -1512,11 +1800,12 @@ export class DocumentsService {
           .filter((value): value is string => Boolean(value)),
       ),
     ];
-    const rules = await this.prisma.assetFamilyComponent.findMany({
+    const rules = await client.assetFamilyComponent.findMany({
       where: {
         active: true,
         parentAssetFamilyId: { in: selectedParentFamilyIds },
       },
+      include: { componentAssetFamily: { select: { name: true } } },
     });
     const ruleByPair = new Map(
       rules.map((rule) => [
@@ -1582,8 +1871,16 @@ export class DocumentsService {
         .forEach((rule) => {
           const quantity = quantities.get(`${assetId}:${rule.componentAssetFamilyId}`) ?? 0;
           if (quantity < rule.minimumQuantity) {
+            const asset = assetsById.get(assetId);
+            const assetName = asset?.sku.name?.trim() || 'El equipo seleccionado';
+            const internalNumber = asset?.internalNumber;
+            const assetLabel = typeof internalNumber === 'number' && internalNumber > 0
+              ? `${assetName} #${internalNumber}`
+              : assetName;
+            const componentName = rule.componentAssetFamily?.name?.trim()
+              || 'la familia de componentes requerida';
             throw new BadRequestException(
-              `El equipo requiere al menos ${rule.minimumQuantity} componente(s) de ${rule.componentAssetFamilyId}`,
+              `${assetLabel} requiere al menos ${rule.minimumQuantity} componente(s) de ${componentName}.`,
             );
           }
         });
@@ -1598,6 +1895,8 @@ export class DocumentsService {
       condition: string | null;
       requestedTag?: string | null;
     }>,
+    source?: { mode: InventorySourceMode; warehouseId: string | null },
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     if (!items.length) {
       throw new BadRequestException(
@@ -1614,7 +1913,7 @@ export class DocumentsService {
     ];
     const skuControlTypeById = new Map<string, string>();
     if (skuIds.length) {
-      const skus = await this.prisma.sku.findMany({
+      const skus = await client.sku.findMany({
         where: { id: { in: skuIds } },
         select: {
           id: true,
@@ -1660,12 +1959,16 @@ export class DocumentsService {
               return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
             })();
 
-            const assets = await this.prisma.asset.findMany({
+            const assets = await client.asset.findMany({
               where: {
                 skuId: item.skuId,
                 warehouseOwnerId: ownerWarehouseId,
-                warehouseCurrentId: ownerWarehouseId,
+                warehouseCurrentId:
+                  source?.mode === InventorySourceMode.WAREHOUSE
+                    ? source.warehouseId
+                    : ownerWarehouseId,
                 active: true,
+                deletedAt: null,
               },
               select: {
                 id: true,
@@ -1731,6 +2034,7 @@ export class DocumentsService {
       items: Array<{ condition: string | null; quantity: Prisma.Decimal | number | null }>;
       files: Array<{ category: string | null; providerWarehouseId: string | null }>;
     },
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     if (document.type !== DocumentType.REMISSION) {
       return { required: false, providers: [], missingProviders: [] };
@@ -1751,7 +2055,7 @@ export class DocumentsService {
 
     const ownerWarehouseIds = [...itemSummaryByOwner.keys()];
     const providerWarehouses = ownerWarehouseIds.length
-      ? await this.prisma.warehouse.findMany({
+      ? await client.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds }, type: 'ALLY' },
           select: { id: true, name: true },
         })
@@ -1775,6 +2079,26 @@ export class DocumentsService {
       providers,
       missingProviders: providers.filter((provider) => !provider.documentUploaded),
     };
+  }
+
+  private async assertProviderRemissionEvidence(
+    document: {
+      type: DocumentType;
+      items: Array<{ condition: string | null; quantity: Prisma.Decimal | number | null }>;
+      files: Array<{ category: string | null; providerWarehouseId: string | null }>;
+    },
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const requirements = await this.buildProviderRemissionRequirements(document, client);
+    if (requirements.missingProviders.length) {
+      throw new BadRequestException({
+        code: 'PROVIDER_REMISSION_REQUIRED',
+        message: requirements.missingProviders.length === 1
+          ? `La remisión incluye equipos de ${requirements.missingProviders[0].providerName} y requiere la foto de la remisión física entregada por ese proveedor`
+          : 'La remisión requiere una foto de la remisión física por cada proveedor incluido',
+        providers: requirements.missingProviders,
+      });
+    }
   }
 
   async previewProviderRemissionRequirements(
@@ -1813,24 +2137,8 @@ export class DocumentsService {
   }
 
   private async approveWithAccessories(documentId: string, userId: string) {
-    const outcome = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Document" WHERE id = ${documentId} FOR UPDATE`;
-      const document = await tx.document.findUniqueOrThrow({ where: { id: documentId }, include: { items: true, files: true } });
-      if (document.status === DocumentStatus.CONFIRMED) return { document, changed: false };
-      if (document.status !== DocumentStatus.DRAFT || !['REMISSION', 'RETURN'].includes(document.type)) {
-        throw new BadRequestException('Solo se puede aprobar una remisión o devolución pendiente.');
-      }
-      const requirements = await this.buildProviderRemissionRequirements(document);
-      if (requirements.missingProviders.length) throw new BadRequestException({ code: 'PROVIDER_REMISSION_REQUIRED', message: 'Adjunta la remisión física de cada proveedor antes de aprobar.', providers: requirements.missingProviders });
-      await this.accessoryDocuments.apply(tx, document, userId, this.parseDeliveryMode(document.notes));
-      await this.approveLoadedRequestDocument({ ...document, items: document.items.filter((item) => !item.accessoryId) }, userId, tx);
-      return { document, changed: true };
-    }, { timeout: 20000 });
-    if (outcome.changed) {
-      await this.inventoryService.invalidateDocumentInventory(outcome.document.warehouseId, outcome.document.customerWorksiteId, outcome.document.items.map((item) => item.condition).filter((id): id is string => !!id));
-      this.sendFinalEmailInBackground(documentId);
-    }
-    return { id: documentId, status: DocumentStatus.CONFIRMED, splitDocumentIds: [documentId], splitConsecutives: outcome.document.consecutive ? [outcome.document.consecutive] : [] };
+    const confirmed = await this.approveLoadedRequestDocument({ id: documentId }, userId, true);
+    return { ...confirmed, splitDocumentIds: [documentId], splitConsecutives: confirmed.consecutive ? [confirmed.consecutive] : [] };
   }
 
   async approveRequestDocument(documentId: string, userId: string) {
@@ -1888,19 +2196,7 @@ export class DocumentsService {
       );
     }
 
-    if (document.type === DocumentType.REMISSION) {
-      const requirements = await this.buildProviderRemissionRequirements(document);
-      if (requirements.missingProviders.length) {
-        throw new BadRequestException({
-          code: 'PROVIDER_REMISSION_REQUIRED',
-          message:
-            requirements.missingProviders.length === 1
-              ? `La remisión incluye equipos de ${requirements.missingProviders[0].providerName} y requiere la foto de la remisión física entregada por ese proveedor`
-              : 'La remisión requiere una foto de la remisión física por cada proveedor incluido',
-          providers: requirements.missingProviders,
-        });
-      }
-    }
+    await this.assertProviderRemissionEvidence(document);
 
     if (
       document.type === DocumentType.REMISSION &&

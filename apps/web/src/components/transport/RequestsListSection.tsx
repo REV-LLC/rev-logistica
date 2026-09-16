@@ -93,6 +93,10 @@ export default function RequestsListSection({
           description: 'Las nuevas solicitudes pendientes aparecerán aquí.',
         }}
         actions={(row) => [
+          ...(row.status === 'IN_PROGRESS' ? [{
+            key: 'resume', label: `Continuar ${row.consecutive ?? 'formulario'}`, icon: <IconPencil size={16} />,
+            onClick: () => editRequest(row.id, true),
+          }] : []),
           {
             key: 'view',
             label: `Ver ${row.consecutive ?? 'solicitud'}`,

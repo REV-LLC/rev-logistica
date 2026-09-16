@@ -225,7 +225,7 @@ export class InventoryController {
 
   @Get('warehouse/:warehouseId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getWarehouseInventory(
     @Param('warehouseId', new ParseUUIDPipe()) warehouseId: string,
     @Query('includeZero') includeZero?: string,
@@ -233,9 +233,18 @@ export class InventoryController {
     return this.inventoryService.getWarehouseInventory(warehouseId, includeZero === 'true');
   }
 
-  @Get('on-site/:customerWorksiteId')
+  @Get('owner/:warehouseId/assets')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  getOwnerAssetCatalog(
+    @Param('warehouseId', new ParseUUIDPipe()) warehouseId: string,
+  ) {
+    return this.inventoryService.getOwnerAssetCatalog(warehouseId);
+  }
+
+  @Get('on-site/:customerWorksiteId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getOnSiteInventory(
     @Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string,
   ) {
@@ -244,7 +253,7 @@ export class InventoryController {
 
   @Get('on-site/:customerWorksiteId/request-options')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getOnSiteRequestInventory(
     @Param('customerWorksiteId', new ParseUUIDPipe()) customerWorksiteId: string,
     @Req() request: Request & { user: JwtPayload },

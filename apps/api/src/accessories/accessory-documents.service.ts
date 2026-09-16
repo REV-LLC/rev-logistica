@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Document, DocumentItem, Prisma } from '@prisma/client';
 import { AccessoriesService } from './accessories.service';
 import { isCompatible, Location } from './accessory-rules';
+import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
 
 type AccessoryDocument = Document & { items: DocumentItem[] };
 
@@ -125,11 +126,10 @@ export class AccessoryDocumentsService {
           );
         if (
           source.warehouseId &&
-          source.warehouseId !== document.warehouseId &&
-          !(
-            deliveryMode === 'ON_SITE' &&
-            source.warehouseId === accessory.ownerWarehouseId
-          )
+          source.warehouseId !==
+            (deliveryMode === 'ON_SITE'
+              ? accessory.ownerWarehouseId
+              : document.warehouseId)
         ) {
           throw new BadRequestException(
             'El accesorio no está en la bodega de origen del documento.',
@@ -148,20 +148,16 @@ export class AccessoryDocumentsService {
           );
         }
         if (!selectedParents.has(parent.id)) {
-          const latest = await tx.stockLedger.findFirst({
-            where: { assetId: parent.id },
-            orderBy: [
-              { isOpeningBalance: 'asc' },
-              { effectiveAt: 'desc' },
-              { createdAt: 'desc' },
-              { id: 'desc' },
-            ],
+          const history = await tx.stockLedger.findMany({
+            where: { assetId: parent.id, reversedByDocumentId: null },
           });
+          const resolved = resolveLatestSerializedMovements(history).get(parent.id);
+          const latest = resolved?.locationMovement;
           if (
             !latest ||
             !['OUT', 'ON_SITE'].includes(latest.movementType) ||
             latest.customerWorksiteId !== siteId ||
-            latest.effectiveAt > document.docDate
+            resolved!.latest.effectiveAt > document.docDate
           ) {
             throw new BadRequestException(
               'Incluye el equipo en la remisión o selecciona uno que ya esté en esta obra.',

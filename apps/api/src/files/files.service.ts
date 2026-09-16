@@ -584,10 +584,10 @@ export class FilesService {
       return;
     }
 
-    if (mode === 'write' && user.role === Role.DRIVER) {
+    if (mode === 'write' && (user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET)) {
       if (entityType !== 'DOCUMENT') {
         throw new ForbiddenException(
-          'Drivers can only upload document evidence',
+          'Este perfil solo puede subir evidencias de documentos.',
         );
       }
     }
@@ -608,18 +608,18 @@ export class FilesService {
           'Files are not available for this document type',
         );
       }
-      if (user.role === Role.DRIVER && document.createdBy !== user.id) {
+      if ((user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET) && document.createdBy !== user.id) {
         throw new ForbiddenException(
-          'Drivers can only access their own document files',
+          'Solo puedes acceder a archivos de documentos creados desde tu perfil.',
         );
       }
       if (
         mode === 'write' &&
-        user.role === Role.DRIVER &&
+        (user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET) &&
         document.status !== DocumentStatus.DRAFT
       ) {
         throw new ForbiddenException(
-          'Drivers can only add files to their own draft documents',
+          'Solo puedes añadir archivos a solicitudes pendientes de aprobación creadas desde tu perfil.',
         );
       }
       return;

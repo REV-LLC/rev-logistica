@@ -54,7 +54,7 @@ export async function accessoryDocumentOptions(
         : {
             customerWorksiteId: null,
             OR: [
-              ...(query.warehouseId
+              ...(query.warehouseId && query.deliveryMode !== 'ON_SITE'
                 ? [{ warehouseId: query.warehouseId }]
                 : []),
               ...(query.deliveryMode === 'ON_SITE'

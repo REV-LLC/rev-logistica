@@ -23,6 +23,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { ApplyDocumentItemsCutoffDto } from './dto/apply-document-items-cutoff.dto';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
+import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
 import { CreateDocumentRequestDto } from './dto/create-document-request.dto';
 import { DecideDocumentRequestDto } from './dto/decide-document-request.dto';
 import { UpdateDocumentItemBillingDto } from './dto/update-document-item-billing.dto';
@@ -71,8 +72,24 @@ export class DocumentsController {
     });
   }
 
+  @Post('direct')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createDirectDocument(
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+    payload: CreateDirectDocumentDto,
+    @Req() request: Request & { user: JwtPayload },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.idempotency.execute({
+      key: idempotencyKey,
+      operation: 'documents.direct.create',
+      userId: request.user.sub,
+      run: () => this.documentsService.createDirectDocument(payload, request.user.sub),
+    });
+  }
+
   @Post('requests')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async createRequest(
     @Body(
       new ValidationPipe({
@@ -108,12 +125,13 @@ export class DocumentsController {
         ...payload,
         type,
         createdBy: request.user.sub,
+        requesterRole: request.user.role,
       }),
     });
   }
 
   @Post('requests/provider-remission-requirements')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   previewProviderRemissionRequirements(
     @Body(
       new ValidationPipe({
@@ -131,7 +149,7 @@ export class DocumentsController {
   }
 
   @Post('requests/autosave')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async createAutosavedRequest(
     @Body(
       new ValidationPipe({
@@ -151,12 +169,13 @@ export class DocumentsController {
       run: () => this.documentsService.createAutosavedRequestDocument({
         ...payload,
         createdBy: request.user.sub,
+        requesterRole: request.user.role,
       }),
     });
   }
 
   @Patch(':documentId/request/autosave')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async updateAutosavedRequest(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Body(
@@ -183,7 +202,7 @@ export class DocumentsController {
   }
 
   @Post(':documentId/request/submit')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async submitAutosavedRequest(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Body(
@@ -289,7 +308,7 @@ export class DocumentsController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   listDocuments(
     @Req() request: Request & { user: JwtPayload },
     @Query('status') status?: DocumentStatus,
@@ -351,12 +370,15 @@ export class DocumentsController {
   }
 
   @Post(':documentId/customer-email/draft')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async sendDraftCustomerEmail(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Req() request: Request & { user: JwtPayload },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (request.user.role === Role.WAREHOUSE_TABLET) {
+      await this.documentsService.getDocument(documentId, { role: request.user.role, userId: request.user.sub });
+    }
     return this.idempotency.execute({
       key: idempotencyKey,
       operation: `documents.customer-email.draft:${documentId}`,
@@ -374,12 +396,15 @@ export class DocumentsController {
   }
 
   @Post(':documentId/customer-messages/draft')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async sendDraftCustomerMessages(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Req() request: Request & { user: JwtPayload },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (request.user.role === Role.WAREHOUSE_TABLET) {
+      await this.documentsService.getDocument(documentId, { role: request.user.role, userId: request.user.sub });
+    }
     return this.idempotency.execute({
       key: idempotencyKey,
       operation: `documents.customer-messages.draft:${documentId}`,
@@ -389,7 +414,7 @@ export class DocumentsController {
   }
 
   @Get(':documentId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getDocument(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Req() request: Request & { user: JwtPayload },
@@ -401,7 +426,7 @@ export class DocumentsController {
   }
 
   @Get(':documentId/provider-remission-requirements')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getProviderRemissionRequirements(
     @Param('documentId', new ParseUUIDPipe()) documentId: string,
     @Req() request: Request & { user: JwtPayload },

@@ -41,6 +41,7 @@ import {
   IconHome,
   IconRulerMeasure,
   IconMap2,
+  IconMessageCircle,
   IconReceipt,
   IconSettings,
   IconTag,
@@ -74,6 +75,9 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
+      { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
+      { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
       {
         href: "/transport/requests",
         label: "Documentos",
@@ -284,6 +288,7 @@ const sections: NavSection[] = [
   {
     title: "Configuración",
     links: [
+      { href: "/settings/warehouse-tablets", label: "Tablets de bodega", icon: IconBuildingWarehouse, roles: ["ADMIN"] },
       {
         href: "/settings/task-notifications",
         label: "Alertas de tareas",
@@ -830,7 +835,7 @@ export default function Nav({ onNavigate }: NavProps) {
               },
             }}
           >
-            {currentRole ?? "SIN ROL"}
+            {currentRole === "WAREHOUSE_TABLET" ? "TABLET DE BODEGA" : currentRole ?? "SIN ROL"}
           </Badge>
           {userDisplayName ? (
             <Text

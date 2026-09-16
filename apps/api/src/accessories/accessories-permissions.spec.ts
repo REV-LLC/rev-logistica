@@ -62,13 +62,13 @@ describe('Accessory endpoint permissions with authentication enabled', () => {
     );
     await expect(
       auth.canActivate(context('update', 'invalid')),
-    ).rejects.toThrow('Invalid token');
+    ).rejects.toThrow('La sesión ya no es válida. Inicia sesión nuevamente.');
     const expired = await jwt.signAsync(
       { sub: 'test-user', role: 'ADMIN' },
       { expiresIn: -1 },
     );
     await expect(auth.canActivate(context('move', expired))).rejects.toThrow(
-      'Invalid token',
+      'La sesión ya no es válida. Inicia sesión nuevamente.',
     );
   });
   it('allows Driver to read documentary options without granting card management', async () => {

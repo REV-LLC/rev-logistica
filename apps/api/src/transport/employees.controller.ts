@@ -35,13 +35,13 @@ export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   listEmployees() {
     return this.employeesService.listEmployees();
   }
 
   @Get(':employeeId/photo')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async getEmployeePhoto(
     @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
     @Query('variant') variant: string | undefined,

@@ -1,6 +1,9 @@
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class SubmitAutosavedDocumentRequestDto {
+  @IsOptional()
+  @IsString()
+  tabletEmployeeToken?: string;
   @IsOptional()
   @IsBoolean()
   sendWhatsapp?: boolean;

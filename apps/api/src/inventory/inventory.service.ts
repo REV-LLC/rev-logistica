@@ -54,6 +54,16 @@ import {
   WORKSITE_BALANCE_MOVEMENT_TYPES,
 } from './worksite-ledger-balance';
 import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
+import { lockBulkStock } from './bulk-stock-lock';
+import { buildAssetValidationError } from './asset-validation-error';
+import { resolveLatestSerializedMovements } from './serialized-ledger-location';
+import { serializedBalanceConsistency } from './serialized-balance-consistency';
+import {
+  getInventoryDatePrecision,
+  inventoryEffectiveLowerBound,
+  resolveSerializedEffectiveAt,
+  type InventoryDatePrecision,
+} from './business-date-ledger-order';
 import {
   buildSerializedWarehouseAvailability,
   isSerializedAvailable,
@@ -69,11 +79,21 @@ const ON_SITE_CACHE_TTL_SECONDS = 30;
 type InventoryStockShortage = {
   skuId: string;
   ownerWarehouseId: string;
+  warehouseId?: string;
   requestedQuantity: number;
   availableQuantity: number;
   missingQuantity: number;
   existsInWarehouse: boolean;
 };
+
+type OwnerAssetCatalogLocation = {
+  type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
+  id: string | null;
+  name: string | null;
+  warehouseType: WarehouseType | null;
+};
+
+type OwnerAssetCatalogStatus = 'IN' | 'OUT' | 'TRANSIT' | 'INACTIVE' | 'UNKNOWN' | 'INCONSISTENT';
 
 @Injectable()
 export class InventoryService {
@@ -119,6 +139,21 @@ export class InventoryService {
       keys.push(this.getOnSiteCacheKey(params.customerWorksiteId));
     }
     await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  }
+
+  /** The caller of an enclosing transaction must invoke this only after commit. */
+  async invalidateDocumentMovementCaches(warehouseIds: string[], customerWorksiteId: string | null) {
+    await Promise.all([
+      this.invalidateInventoryCache({ customerWorksiteId }),
+      ...[...new Set(warehouseIds)].map((warehouseId) => this.invalidateInventoryCache({ warehouseId })),
+    ]);
+  }
+
+  private runMovementTransaction<T>(
+    execute: (tx: Prisma.TransactionClient) => Promise<T>,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<T> {
+    return transaction ? execute(transaction) : this.prisma.$transaction(execute);
   }
 
   private async createMotorAsset(
@@ -192,9 +227,6 @@ export class InventoryService {
         warehouseCurrentId: true,
       },
     });
-    const motorOwner = await tx.warehouse.findUnique({
-      where: { id: ownerWarehouseId }, select: { type: true },
-    });
     await tx.stockLedger.create({
       data: {
         movementType: MovementType.ADJUST,
@@ -204,7 +236,7 @@ export class InventoryService {
         skuId: null,
         assetId: motor.id,
         quantity: 1,
-        isOpeningBalance: motorOwner?.type === 'ALLY' && warehouseCurrentId === ownerWarehouseId,
+        isOpeningBalance: true,
         createdBy: userId,
       },
     });
@@ -226,13 +258,17 @@ export class InventoryService {
   }
 
   private async resolveLedgerContext(documentId: string | undefined, tx: Prisma.TransactionClient) {
-    if (!documentId) return { refDocumentType: null, effectiveAt: new Date() };
+    if (!documentId) return { refDocumentType: null, effectiveAt: new Date(), datePrecision: 'INSTANT' as const };
     const document = await tx.document.findUnique({
       where: { id: documentId },
-      select: { type: true, docDate: true },
+      select: { type: true, docDate: true, notes: true },
     });
     if (!document) throw new NotFoundException('Document not found');
-    return { refDocumentType: document.type, effectiveAt: document.docDate };
+    return {
+      refDocumentType: document.type,
+      effectiveAt: document.docDate,
+      datePrecision: getInventoryDatePrecision(document),
+    };
   }
 
   private async lockAndAssertSerializedLocation(
@@ -242,84 +278,78 @@ export class InventoryService {
     expectedLocation: (assetId: string) =>
       | { type: 'WAREHOUSE'; id: string }
       | { type: 'WORKSITE'; id: string },
+    datePrecision: InventoryDatePrecision = 'INSTANT',
   ) {
-    if (!assetIds.length) return;
+    const lowerBound = inventoryEffectiveLowerBound(effectiveAt, datePrecision);
+    if (!assetIds.length) return lowerBound;
+    let resolvedEffectiveAt = lowerBound;
     const sortedIds = [...assetIds].sort();
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "Asset" WHERE "id" IN (${Prisma.join(sortedIds)}) ORDER BY "id" FOR UPDATE`,
     );
     const rows = await tx.stockLedger.findMany({
       where: { assetId: { in: sortedIds } },
-      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
+        id: true,
         assetId: true,
+        ownerWarehouseId: true,
+        refDocumentId: true,
+        refDocumentType: true,
         movementType: true,
         warehouseId: true,
         customerWorksiteId: true,
         effectiveAt: true,
+        createdAt: true,
+        appendOrder: true,
         isOpeningBalance: true,
+        quantity: true,
       },
     });
-    const latestByAsset = new Map<string, (typeof rows)[number]>();
-    rows.forEach((row) => {
-      if (row.assetId && !latestByAsset.has(row.assetId)) latestByAsset.set(row.assetId, row);
-    });
-    sortedIds.forEach((assetId) => {
-      const latest = latestByAsset.get(assetId);
-      if (!latest) throw new BadRequestException(`El equipo ${assetId} no tiene ubicación registrada`);
-      if (!latest.isOpeningBalance && latest.effectiveAt.getTime() > effectiveAt.getTime()) {
-        throw new BadRequestException({
+    const latestByAsset = resolveLatestSerializedMovements(rows);
+    for (const assetId of sortedIds) {
+      const resolved = latestByAsset.get(assetId);
+      const latest = resolved?.latest;
+      if (!latest) {
+        throw await buildAssetValidationError(tx, assetId, {
+          code: 'ASSET_LOCATION_UNKNOWN', reason: 'NO_LOCATION',
+        });
+      }
+      const candidate = latest.isOpeningBalance
+        ? lowerBound
+        : resolveSerializedEffectiveAt(effectiveAt, latest.effectiveAt, datePrecision);
+      if (!candidate) {
+        throw await buildAssetValidationError(tx, assetId, {
           code: 'RETROACTIVE_INVENTORY_MOVEMENT',
-          message: `No se puede registrar un movimiento retroactivo para el equipo ${assetId} porque tiene movimientos posteriores`,
-          assetId,
-          latestEffectiveAt: latest.effectiveAt,
-          requestedEffectiveAt: effectiveAt,
+          reason: 'RETROACTIVE', latestMovement: latest, requestedEffectiveAt: effectiveAt,
         });
       }
       const expected = expectedLocation(assetId);
-      const validWarehouse = expected.type === 'WAREHOUSE'
-        && (latest.movementType === MovementType.IN || latest.movementType === MovementType.ADJUST)
-        && latest.warehouseId === expected.id;
-      const validWorksite = expected.type === 'WORKSITE'
-        && (latest.movementType === MovementType.OUT || latest.movementType === MovementType.ON_SITE)
-        && latest.customerWorksiteId === expected.id;
-      if (!validWarehouse && !validWorksite) {
-        throw new BadRequestException({
-          code: 'ASSET_LOCATION_CONFLICT',
-          message: `El equipo ${assetId} ya no está en la ubicación de origen`,
-          assetId,
+      const location = resolved!.locationMovement;
+      if (!location) {
+        throw await buildAssetValidationError(tx, assetId, {
+          code: 'ASSET_LOCATION_AMBIGUOUS', reason: 'AMBIGUOUS_TRANSFER',
+          expectedLocation: expected,
         });
       }
-    });
-  }
-
-  private async assertNoLaterBulkMovements(
-    tx: Prisma.TransactionClient,
-    groups: Array<{ skuId: string; ownerWarehouseId: string }>,
-    effectiveAt: Date,
-  ) {
-    if (!groups.length) return;
-    const later = await tx.stockLedger.findFirst({
-      where: {
-        isOpeningBalance: false,
-        effectiveAt: { gt: effectiveAt },
-        OR: groups.map((group) => ({
-          skuId: group.skuId,
-          ownerWarehouseId: group.ownerWarehouseId,
-        })),
-      },
-      select: { skuId: true, ownerWarehouseId: true, effectiveAt: true },
-    });
-    if (later) {
-      throw new BadRequestException({
-        code: 'RETROACTIVE_INVENTORY_MOVEMENT',
-        message: `No se puede registrar un movimiento retroactivo para ${later.skuId} porque tiene movimientos posteriores`,
-        skuId: later.skuId,
-        ownerWarehouseId: later.ownerWarehouseId,
-        latestEffectiveAt: later.effectiveAt,
-        requestedEffectiveAt: effectiveAt,
-      });
+      const validWarehouse = expected.type === 'WAREHOUSE'
+        && (location.movementType === MovementType.IN || location.movementType === MovementType.ADJUST)
+        && Number(location.quantity) > 0
+        && location.warehouseId === expected.id;
+      const validWorksite = expected.type === 'WORKSITE'
+        && (location.movementType === MovementType.OUT || location.movementType === MovementType.ON_SITE)
+        && location.customerWorksiteId === expected.id;
+      if (!validWarehouse && !validWorksite) {
+        throw await buildAssetValidationError(tx, assetId, {
+          code: 'ASSET_LOCATION_CONFLICT',
+          reason: 'LOCATION_CONFLICT', expectedLocation: expected, latestMovement: location,
+        });
+      }
+      if (candidate.getTime() > resolvedEffectiveAt.getTime()) {
+        resolvedEffectiveAt = candidate;
+      }
     }
+    return resolvedEffectiveAt;
   }
 
   private async assertNoUnremittedAccessories(tx: Prisma.TransactionClient, assetIds: string[]) {
@@ -330,7 +360,7 @@ export class InventoryService {
 
   private parseLedgerCursor(cursor: string) {
     const raw = cursor.trim();
-    let payload: { effectiveAt?: string; createdAt?: string; id?: string };
+    let payload: { effectiveAt?: string; createdAt?: string; id?: string; appendOrder?: number | null };
 
     try {
       if (raw.startsWith('{')) {
@@ -351,13 +381,21 @@ export class InventoryService {
     if (Number.isNaN(effectiveAt.getTime())) {
       throw new BadRequestException('Invalid cursor');
     }
-
-    return { effectiveAt, id: String(payload.id) };
+    const hasAppendOrder = Object.prototype.hasOwnProperty.call(payload, 'appendOrder');
+    if (hasAppendOrder && payload.appendOrder !== null
+      && (!Number.isInteger(payload.appendOrder) || payload.appendOrder! < 1)) {
+      throw new BadRequestException('Invalid cursor');
+    }
+    return { effectiveAt, id: String(payload.id), appendOrder: payload.appendOrder, hasAppendOrder };
   }
 
-  private makeLedgerCursor(entry: { effectiveAt: Date; id: string }) {
+  private makeLedgerCursor(entry: { effectiveAt: Date; id: string; appendOrder?: number | null }, legacyOrder = false) {
     return Buffer.from(
-      JSON.stringify({ effectiveAt: entry.effectiveAt.toISOString(), id: entry.id }),
+      JSON.stringify({
+        effectiveAt: entry.effectiveAt.toISOString(),
+        ...(legacyOrder ? {} : { appendOrder: entry.appendOrder ?? null }),
+        id: entry.id,
+      }),
     ).toString('base64');
   }
 
@@ -505,10 +543,13 @@ export class InventoryService {
         createdBy: userId,
       } as const;
 
-      return this.prisma.stockLedger.create({ data });
+      return data;
     });
 
-    const created = await this.prisma.$transaction(operations);
+    const created = await this.prisma.$transaction(async (tx) => {
+      await lockBulkStock(tx, operations.flatMap((data) => data.skuId ? [data.skuId] : []));
+      return Promise.all(operations.map((data) => tx.stockLedger.create({ data })));
+    });
 
     await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
@@ -734,8 +775,7 @@ export class InventoryService {
           skuId: null,
           assetId: asset.id,
           quantity: 1,
-          isOpeningBalance: ownerWarehouse.type === 'ALLY'
-            && payload.warehouseCurrentId === payload.ownerWarehouseId,
+          isOpeningBalance: true,
           createdBy: userId,
         },
         select: { id: true, movementType: true, quantity: true },
@@ -910,6 +950,7 @@ export class InventoryService {
         throw new NotFoundException('Bodega no encontrada');
       }
 
+      await lockBulkStock(tx, [payload.skuId]);
       const currentRows = await tx.stockLedger.groupBy({
         by: ['skuId'],
         where: {
@@ -980,6 +1021,7 @@ export class InventoryService {
         throw new BadRequestException('El SKU debe ser de stock por cantidad');
       }
 
+      await lockBulkStock(tx, [payload.skuId]);
       const stockRows = await tx.stockLedger.groupBy({
         by: ['warehouseId', 'ownerWarehouseId'],
         where: {
@@ -1095,18 +1137,9 @@ export class InventoryService {
     });
   }
 
-  private withMovementTransaction<T>(transaction: Prisma.TransactionClient | undefined, operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    return transaction ? operation(transaction) : this.prisma.$transaction(operation);
-  }
-
-  async invalidateDocumentInventory(warehouseId: string | null, customerWorksiteId: string | null, ownerIds: string[]) {
-    await this.invalidateInventoryCache({ warehouseId: warehouseId ?? undefined, customerWorksiteId: customerWorksiteId ?? undefined });
-    await Promise.all([...new Set(ownerIds)].map((id) => this.invalidateInventoryCache({ warehouseId: id })));
-  }
-
   async moveOut(payload: CreateInventoryOutDto, userId: string, transaction?: Prisma.TransactionClient) {
-    const result = await this.withMovementTransaction(transaction, async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+    const result = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseId },
@@ -1129,17 +1162,18 @@ export class InventoryService {
       const ownerWarehouseIds = [
         ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
       ];
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
 
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
 
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
-      await this.lockAndAssertSerializedLocation(
+      await lockBulkStock(tx, bulkSkuIds);
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         () => ({ type: 'WAREHOUSE', id: payload.warehouseId }),
+        datePrecision,
       );
       await this.assertNoUnremittedAccessories(tx, serialIds);
 
@@ -1167,6 +1201,7 @@ export class InventoryService {
           return [{
             skuId: group.skuId,
             ownerWarehouseId: group.ownerWarehouseId,
+            warehouseId: payload.warehouseId,
             requestedQuantity: group.quantity,
             availableQuantity: available,
             missingQuantity: group.quantity - available,
@@ -1196,12 +1231,15 @@ export class InventoryService {
         });
         const availableByAsset = buildSerializedWarehouseAvailability(serialRows, onSiteRows);
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const available = availableByAsset.get(assetId) ?? 0;
           if (!isSerializedAvailable(available)) {
-            throw new BadRequestException(`Asset ${assetId} is not in warehouse`);
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_IN_WAREHOUSE', reason: 'NOT_IN_WAREHOUSE',
+              expectedLocation: { type: 'WAREHOUSE', id: payload.warehouseId },
+            });
           }
-        });
+        }
       }
 
       const assets = serialIds.length
@@ -1213,18 +1251,20 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
       const ledgerOps = [
         ...bulkGroups.map((group) =>
@@ -1247,7 +1287,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {
@@ -1283,7 +1326,7 @@ export class InventoryService {
         count: created.length,
         ids: created.map((entry) => entry.id),
       };
-    });
+    }, transaction);
 
     if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
@@ -1297,8 +1340,8 @@ export class InventoryService {
     const ownerWarehouseIds = [
       ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
     ];
-    const created = await this.withMovementTransaction(transaction, async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+    const created = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const customerWorksite = await tx.customerWorksite.findUnique({
         where: { id: payload.customerWorksiteId },
@@ -1310,9 +1353,9 @@ export class InventoryService {
 
       const { bulkGroups, serialAssetIds, serialOwnerWarehouseByAsset } =
         this.normalizeOperationItems(payload.items);
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
+      await lockBulkStock(tx, bulkGroups.map((group) => group.skuId));
 
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       if (bulkSkuIds.length) {
@@ -1375,6 +1418,7 @@ export class InventoryService {
           return [{
             skuId: group.skuId,
             ownerWarehouseId: group.ownerWarehouseId,
+            warehouseId: group.ownerWarehouseId,
             requestedQuantity: group.quantity,
             availableQuantity: available,
             missingQuantity: group.quantity - available,
@@ -1393,24 +1437,27 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
-      await this.lockAndAssertSerializedLocation(
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         (assetId) => ({ type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId) ?? '' }),
+        datePrecision,
       );
       await this.assertNoUnremittedAccessories(tx, serialIds);
 
@@ -1434,12 +1481,15 @@ export class InventoryService {
         });
         const availableByAsset = buildSerializedWarehouseAvailability(warehouseRows, onSiteRows);
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const available = availableByAsset.get(assetId) ?? 0;
           if (!isSerializedAvailable(available)) {
-            throw new BadRequestException(`Asset ${assetId} is not available in owner warehouse`);
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_IN_OWNER_WAREHOUSE', reason: 'NOT_IN_OWNER_WAREHOUSE',
+              expectedLocation: { type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId)! },
+            });
           }
-        });
+        }
       }
 
       const ledgerOps = [
@@ -1463,7 +1513,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {
@@ -1496,16 +1549,9 @@ export class InventoryService {
       }
 
       return createdLedger;
-    });
+    }, transaction);
 
-    if (!transaction) await this.invalidateInventoryCache({
-      customerWorksiteId: payload.customerWorksiteId,
-    });
-    if (!transaction) await Promise.all(
-      ownerWarehouseIds.map((ownerWarehouseId) =>
-        this.invalidateInventoryCache({ warehouseId: ownerWarehouseId }),
-      ),
-    );
+    if (!transaction) await this.invalidateDocumentMovementCaches(ownerWarehouseIds, payload.customerWorksiteId);
 
     return {
       count: created.length,
@@ -1514,10 +1560,10 @@ export class InventoryService {
   }
 
   async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string, transaction?: Prisma.TransactionClient) {
-    const result = await this.withMovementTransaction(transaction, async (tx) => {
+    const result = await this.runMovementTransaction(async (tx) => {
       const document = await tx.document.findUnique({
         where: { id: payload.documentId },
-        select: { id: true, type: true, customerWorksiteId: true, docDate: true },
+        select: { id: true, type: true, customerWorksiteId: true, docDate: true, notes: true },
       });
       if (!document || document.type !== DocumentType.RETURN) {
         throw new BadRequestException('El documento debe ser una devolución');
@@ -1539,12 +1585,13 @@ export class InventoryService {
 
       const bulkSkuIds = [...new Set(bulkGroups.map((item) => item.skuId))];
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, document.docDate);
-      await this.lockAndAssertSerializedLocation(
+      await lockBulkStock(tx, bulkSkuIds);
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
         document.docDate,
         () => ({ type: 'WORKSITE', id: payload.customerWorksiteId }),
+        getInventoryDatePrecision(document),
       );
       const sourceRows = await tx.stockLedger.groupBy({
         by: ['skuId', 'assetId', 'ownerWarehouseId', 'movementType'],
@@ -1581,12 +1628,15 @@ export class InventoryService {
         ? await tx.asset.findMany({ where: { id: { in: serialIds }, active: true, deletedAt: null }, select: { id: true, warehouseOwnerId: true } })
         : [];
       const assetOwner = new Map(assets.map((asset) => [asset.id, asset.warehouseOwnerId]));
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const ownerId = serialOwnerWarehouseByAsset.get(assetId);
         if (!ownerId || assetOwner.get(assetId) !== ownerId || (available.get(`:${assetId}:${ownerId}`) ?? 0) < 1) {
-          throw new BadRequestException(`El equipo ${assetId} no está disponible en esta obra`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_ON_SITE', reason: 'NOT_ON_SITE',
+            expectedLocation: { type: 'WORKSITE', id: payload.customerWorksiteId },
+          });
         }
-      });
+      }
 
       const created = await Promise.all([
         ...bulkGroups.map((item) => tx.stockLedger.create({ data: {
@@ -1594,28 +1644,28 @@ export class InventoryService {
           customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
           refDocumentType: DocumentType.RETURN, skuId: item.skuId, assetId: null,
           ownerWarehouseId: item.ownerWarehouseId, quantity: item.quantity,
-          effectiveAt: document.docDate, createdBy: userId,
+          effectiveAt, createdBy: userId,
         }})),
         ...serialIds.map((assetId) => tx.stockLedger.create({ data: {
           movementType: MovementType.TRANSIT, warehouseId: null,
           customerWorksiteId: payload.customerWorksiteId, refDocumentId: payload.documentId,
           refDocumentType: DocumentType.RETURN, skuId: null, assetId,
           ownerWarehouseId: assetOwner.get(assetId)!, quantity: 1,
-          effectiveAt: document.docDate, createdBy: userId,
+          effectiveAt, createdBy: userId,
         }})),
       ]);
       if (serialIds.length) {
         await tx.asset.updateMany({ where: { id: { in: serialIds } }, data: { warehouseCurrentId: null } });
       }
       return { count: created.length, ids: created.map((row) => row.id) };
-    });
+    }, transaction);
     if (!transaction) await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
     return result;
   }
 
   async moveIn(payload: CreateInventoryInDto, userId: string, transaction?: Prisma.TransactionClient) {
-    const result = await this.withMovementTransaction(transaction, async (tx) => {
-      const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
+    const result = await this.runMovementTransaction(async (tx) => {
+      const { refDocumentType, effectiveAt: documentEffectiveAt, datePrecision } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
         where: { id: payload.warehouseId },
@@ -1638,15 +1688,16 @@ export class InventoryService {
       const ownerWarehouseIds = [
         ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
       ];
-      await this.assertOwnerWarehousesExist(ownerWarehouseIds);
+      await this.assertOwnerWarehousesExist(ownerWarehouseIds, transaction);
       const bulkSkuIds = [...new Set(bulkGroups.map((group) => group.skuId))];
       const serialIds = [...serialAssetIds.values()];
-      await this.assertNoLaterBulkMovements(tx, bulkGroups, effectiveAt);
-      await this.lockAndAssertSerializedLocation(
+      await lockBulkStock(tx, bulkSkuIds);
+      const effectiveAt = await this.lockAndAssertSerializedLocation(
         tx,
         serialIds,
-        effectiveAt,
+        documentEffectiveAt,
         () => ({ type: 'WORKSITE', id: payload.customerWorksiteId }),
+        datePrecision,
       );
 
       if (bulkSkuIds.length) {
@@ -1701,14 +1752,15 @@ export class InventoryService {
           availableByAsset.set(assetId, (availableByAsset.get(assetId) ?? 0) + delta);
         });
 
-        serialIds.forEach((assetId) => {
+        for (const assetId of serialIds) {
           const net = availableByAsset.get(assetId) ?? 0;
           if (net <= 0) {
-            throw new BadRequestException(
-              `Asset ${assetId} is not currently on-site for this customer worksite`,
-            );
+            throw await buildAssetValidationError(tx, assetId, {
+              code: 'ASSET_NOT_ON_SITE', reason: 'NOT_ON_SITE',
+              expectedLocation: { type: 'WORKSITE', id: payload.customerWorksiteId },
+            });
           }
-        });
+        }
       }
 
       const assets = serialIds.length
@@ -1720,18 +1772,20 @@ export class InventoryService {
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
-      serialIds.forEach((assetId) => {
+      for (const assetId of serialIds) {
         const expectedOwnerWarehouseId = serialOwnerWarehouseByAsset.get(assetId);
         const assetOwnerWarehouseId = ownerWarehouseByAsset.get(assetId);
         if (!assetOwnerWarehouseId) {
-          throw new BadRequestException(`Asset ${assetId} not found`);
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_NOT_FOUND', reason: 'NOT_FOUND',
+          });
         }
         if (expectedOwnerWarehouseId !== assetOwnerWarehouseId) {
-          throw new BadRequestException(
-            `Asset ${assetId} ownerWarehouseId does not match asset owner`,
-          );
+          throw await buildAssetValidationError(tx, assetId, {
+            code: 'ASSET_OWNER_MISMATCH', reason: 'OWNER_MISMATCH',
+          });
         }
-      });
+      }
 
       const ledgerOps = [
         ...bulkGroups.map((group) =>
@@ -1754,7 +1808,10 @@ export class InventoryService {
         ...serialIds.map((assetId) => {
           const ownerWarehouseId = ownerWarehouseByAsset.get(assetId);
           if (!ownerWarehouseId) {
-            throw new BadRequestException(`Asset ${assetId} owner warehouse not found`);
+            throw new BadRequestException({
+              code: 'ASSET_OWNER_NOT_FOUND', assetId,
+              message: 'No se encontró la bodega propietaria del equipo seleccionado. Revisa su registro antes de continuar.',
+            });
           }
           return tx.stockLedger.create({
             data: {
@@ -1790,7 +1847,7 @@ export class InventoryService {
         count: created.length,
         ids: created.map((entry) => entry.id),
       };
-    });
+    }, transaction);
 
     if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
@@ -1798,6 +1855,207 @@ export class InventoryService {
     });
 
     return result;
+  }
+
+  /** Owner catalogue membership does not depend on current physical stock. */
+  async getOwnerAssetCatalog(warehouseId: string) {
+    const ownerWarehouse = await this.prisma.warehouse.findUnique({
+      where: { id: warehouseId },
+      select: { id: true, name: true, type: true, ownerCompany: { select: { name: true } } },
+    });
+    if (!ownerWarehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    const catalogMovementSelect = {
+      id: true,
+      appendOrder: true,
+      assetId: true,
+      warehouseId: true,
+      customerWorksiteId: true,
+      isOpeningBalance: true,
+      movementType: true,
+      quantity: true,
+      ownerWarehouseId: true,
+      refDocumentId: true,
+      refDocumentType: true,
+      effectiveAt: true,
+      createdAt: true,
+      warehouse: { select: { id: true, name: true, type: true } },
+      customerWorksite: {
+        select: {
+          id: true,
+          alias: true,
+          worksite: { select: { name: true } },
+        },
+      },
+    } satisfies Prisma.StockLedgerSelect;
+
+    const assets = await this.prisma.asset.findMany({
+      where: { warehouseOwnerId: warehouseId, deletedAt: null },
+      select: {
+        id: true,
+        skuId: true,
+        warehouseOwnerId: true,
+        serialOrEngine: true,
+        registrationNumber: true,
+        description: true,
+        brand: true,
+        model: true,
+        internalNumber: true,
+        active: true,
+        kind: true,
+        motorConfiguration: true,
+        assignedMotorId: true,
+        assignedToMixer: { select: { id: true } },
+        weight: true,
+        imageFileObjectId: true,
+        imageFileObject: { select: { storageKey: true } },
+        sku: {
+          select: {
+            name: true,
+            imageUrl: true,
+            imageFileObjectId: true,
+            imageFileObject: { select: { storageKey: true } },
+            assetFamily: { select: { id: true, code: true, name: true } },
+            assetSubfamily: { select: { id: true, code: true, name: true } },
+          },
+        },
+        ledger: {
+          // Own equipment needs the full history to cross-check its balance.
+          ...(ownerWarehouse.type === WarehouseType.OWN ? {} : { take: 1 }),
+          // A later catalogue registration must not override a real delivery.
+          orderBy: [
+            { isOpeningBalance: 'asc' },
+            { effectiveAt: 'desc' },
+            { appendOrder: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          select: catalogMovementSelect,
+        },
+      },
+    });
+
+    // Load only the latest provider document for each affected asset, including
+    // both transfer legs and malformed counterparts. Filtering by timestamp,
+    // owner or movement type here would hide inconsistencies from the shared
+    // resolver and could make the catalogue disagree with approval validation.
+    const transferDocuments = assets.flatMap((asset) => {
+      const latest = asset.ledger[0];
+      if (
+        !latest?.refDocumentId
+        || (latest.refDocumentType !== DocumentType.PROVIDER_PICKUP
+          && latest.refDocumentType !== DocumentType.PROVIDER_RECEIPT)
+      ) {
+        return [];
+      }
+      return [{
+        assetId: asset.id,
+        refDocumentId: latest.refDocumentId,
+      }];
+    });
+    const transferRows = transferDocuments.length
+      ? await this.prisma.stockLedger.findMany({
+          where: { OR: transferDocuments },
+          select: catalogMovementSelect,
+        })
+      : [];
+    // Head rows also occur in transferRows; de-duplicate by ledger ID so one
+    // terminal provider receipt is not mistaken for two receipts.
+    const movementById = new Map(
+      [...assets.flatMap((asset) => asset.ledger), ...transferRows]
+        .map((movement) => [movement.id, movement] as const),
+    );
+    const locationsByAsset = resolveLatestSerializedMovements([...movementById.values()]);
+
+    const ownerWarehouseName = this.formatOwnerWarehouseLabel(ownerWarehouse);
+    const serial = assets.map((asset) => {
+      const latest = locationsByAsset.get(asset.id)?.locationMovement;
+      let location: OwnerAssetCatalogLocation = {
+        type: 'UNKNOWN', id: null, name: null, warehouseType: null,
+      };
+      let status: OwnerAssetCatalogStatus = 'UNKNOWN';
+
+      if (latest?.ownerWarehouseId === asset.warehouseOwnerId) {
+        if (
+          (latest.movementType === MovementType.IN || latest.movementType === MovementType.ADJUST)
+          && Number(latest.quantity) > 0
+          && latest.warehouse
+        ) {
+          location = {
+            type: 'WAREHOUSE',
+            id: latest.warehouse.id,
+            name: latest.warehouse.name,
+            warehouseType: latest.warehouse.type,
+          };
+          status = 'IN';
+        } else if (
+          (latest.movementType === MovementType.OUT || latest.movementType === MovementType.ON_SITE)
+          && latest.customerWorksite
+        ) {
+          location = {
+            type: 'WORKSITE',
+            id: latest.customerWorksite.id,
+            name: latest.customerWorksite.alias?.trim() || latest.customerWorksite.worksite.name,
+            warehouseType: null,
+          };
+          status = 'OUT';
+        } else if (latest.movementType === MovementType.TRANSIT) {
+          location = { type: 'TRANSIT', id: null, name: null, warehouseType: null };
+          status = 'TRANSIT';
+        }
+      }
+
+      const balance = ownerWarehouse.type === WarehouseType.OWN
+        ? serializedBalanceConsistency(asset.ledger, warehouseId, latest)
+        : undefined;
+      if (balance && !balance.isConsistent) {
+        status = balance.issue === 'NO_MOVEMENTS' ? 'UNKNOWN' : 'INCONSISTENT';
+        location = { type: 'UNKNOWN', id: null, name: null, warehouseType: null };
+      }
+      const isAvailableInOwnerWarehouse = asset.active
+        && (!balance || balance.isConsistent)
+        && location.type === 'WAREHOUSE'
+        && location.id === warehouseId;
+      if (!asset.active) status = 'INACTIVE';
+
+      return {
+        assetId: asset.id,
+        skuId: asset.skuId,
+        ownerWarehouseId: asset.warehouseOwnerId,
+        ownerWarehouseName,
+        serialOrEngine: asset.serialOrEngine,
+        registrationNumber: asset.registrationNumber,
+        description: asset.description,
+        skuName: asset.sku.name,
+        brand: asset.brand,
+        model: asset.model,
+        internalNumber: asset.internalNumber,
+        imageUrl: asset.imageFileObject?.storageKey
+          ?? asset.sku.imageFileObject?.storageKey
+          ?? asset.sku.imageUrl,
+        imageFileObjectId: asset.imageFileObjectId ?? asset.sku.imageFileObjectId,
+        assetImageFileObjectId: asset.imageFileObjectId,
+        skuImageFileObjectId: asset.sku.imageFileObjectId,
+        assetFamily: asset.sku.assetFamily,
+        assetSubfamily: asset.sku.assetSubfamily,
+        active: asset.active,
+        kind: asset.kind,
+        motorConfiguration: asset.motorConfiguration,
+        assignedMotorId: asset.assignedMotorId,
+        assignedMixerId: asset.assignedToMixer?.id ?? null,
+        weight: asset.weight,
+        status,
+        location,
+        isAvailableInOwnerWarehouse,
+        ...(balance ? { balance } : {}),
+        // This catalogue is for management. Dispatches use the stock endpoints.
+        quantity: balance ? balance.warehouseQuantity : isAvailableInOwnerWarehouse ? 1 : 0,
+      };
+    }).sort((a, b) => this.compareSerialInventoryRows(a, b));
+
+    return { warehouseId, serial };
   }
 
   async getWarehouseInventory(warehouseId: string, includeZero = false) {
@@ -1813,7 +2071,7 @@ export class InventoryService {
 
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id: warehouseId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, type: true },
     });
 
     if (!warehouse) {
@@ -1984,17 +2242,29 @@ export class InventoryService {
       .map(([assetId, quantity]) => ({ assetId, quantity }));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
-    const serialStatusByAssetId = new Map<string, MovementType>();
+    const consistentOwnAssets = new Set<string>();
+    const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     const serialLocationByAssetId = new Map<
       string,
-      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT'; name: string | null }
+      { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN'; name: string | null }
     >();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
+          id: true,
+          appendOrder: true,
           assetId: true,
+          ownerWarehouseId: true,
+          warehouseId: true,
+          customerWorksiteId: true,
+          refDocumentId: true,
+          refDocumentType: true,
+          quantity: true,
+          isOpeningBalance: true,
+          effectiveAt: true,
+          createdAt: true,
           movementType: true,
           warehouse: { select: { name: true } },
           customerWorksite: {
@@ -2005,29 +2275,30 @@ export class InventoryService {
           },
         },
       });
-      serialLedgerRows.forEach((row) => {
-        if (!row.assetId) return;
-        const key = row.assetId.toLowerCase();
-        if (!serialStatusByAssetId.has(key)) {
-          serialStatusByAssetId.set(key, row.movementType);
-          const worksiteName =
-            row.customerWorksite?.alias?.trim()
-            || row.customerWorksite?.worksite.name
-            || null;
-          if (
-            (row.movementType === MovementType.ON_SITE
-              || row.movementType === MovementType.OUT)
-            && worksiteName
-          ) {
-            serialLocationByAssetId.set(key, { type: 'WORKSITE', name: worksiteName });
-          } else if (
-            (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
-            && row.warehouse?.name
-          ) {
-            serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse.name });
-          } else {
-            serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
-          }
+      resolveLatestSerializedMovements(serialLedgerRows).forEach(({ locationMovement: row }, assetId) => {
+        const key = assetId.toLowerCase();
+        if (warehouse.type === WarehouseType.OWN && serializedBalanceConsistency(
+          serialLedgerRows.filter((movement) => movement.assetId === assetId), warehouseId, row,
+        ).isConsistent) consistentOwnAssets.add(key);
+        serialStatusByAssetId.set(key, 'UNKNOWN');
+        serialLocationByAssetId.set(key, { type: 'UNKNOWN', name: null });
+        if (!row) return;
+        if (
+          (row.movementType === MovementType.ON_SITE || row.movementType === MovementType.OUT)
+          && row.customerWorksiteId
+        ) {
+          const name = row.customerWorksite?.alias?.trim() || row.customerWorksite?.worksite.name || null;
+          serialStatusByAssetId.set(key, 'OUT');
+          serialLocationByAssetId.set(key, { type: 'WORKSITE', name });
+        } else if (
+          (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+          && Number(row.quantity) > 0 && row.warehouseId
+        ) {
+          serialStatusByAssetId.set(key, 'IN');
+          serialLocationByAssetId.set(key, { type: 'WAREHOUSE', name: row.warehouse?.name ?? null });
+        } else if (row.movementType === MovementType.TRANSIT) {
+          serialStatusByAssetId.set(key, 'TRANSIT');
+          serialLocationByAssetId.set(key, { type: 'TRANSIT', name: null });
         }
       });
     }
@@ -2150,6 +2421,11 @@ export class InventoryService {
 
     const serial = serialBase
       .filter((row) => assetsById.has(row.assetId))
+      // Keep contradictory own equipment visible in the management catalogue,
+      // but do not offer it as dispatchable stock until its history is corrected.
+      .filter((row) => warehouse.type !== WarehouseType.OWN
+        || assetsById.get(row.assetId)?.warehouseOwnerId !== warehouseId
+        || consistentOwnAssets.has(row.assetId.toLowerCase()))
       .map((row) => {
         const asset = assetsById.get(row.assetId);
         const sku = asset ? skusById.get(asset.skuId) : undefined;
@@ -2173,12 +2449,10 @@ export class InventoryService {
           imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
-          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          status: serialStatusByAssetId.get(row.assetId.toLowerCase()) ?? 'UNKNOWN',
           location:
-            serialLocationByAssetId.get(row.assetId)
-            ?? (row.quantity > 0
-              ? { type: 'WAREHOUSE' as const, name: warehouse.name }
-              : { type: 'TRANSIT' as const, name: null }),
+            serialLocationByAssetId.get(row.assetId.toLowerCase())
+            ?? { type: 'UNKNOWN' as const, name: null },
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
           motorConfiguration:
@@ -2299,18 +2573,43 @@ export class InventoryService {
     const serialBase = serialNet.filter((row) => isSerializedAvailable(row.quantity));
 
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
-    const serialStatusByAssetId = new Map<string, MovementType>();
+    const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     if (assetIds.length > 0) {
       const serialLedgerRows = await this.prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
-        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { assetId: true, movementType: true },
+        orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          appendOrder: true,
+          assetId: true,
+          ownerWarehouseId: true,
+          warehouseId: true,
+          customerWorksiteId: true,
+          refDocumentId: true,
+          refDocumentType: true,
+          quantity: true,
+          isOpeningBalance: true,
+          effectiveAt: true,
+          createdAt: true,
+          movementType: true,
+        },
       });
-      serialLedgerRows.forEach((row) => {
-        if (!row.assetId) return;
-        if (!serialStatusByAssetId.has(row.assetId)) {
-          serialStatusByAssetId.set(row.assetId, row.movementType);
+      resolveLatestSerializedMovements(serialLedgerRows).forEach(({ locationMovement: row }, assetId) => {
+        let status: 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN' = 'UNKNOWN';
+        if (row?.movementType === MovementType.TRANSIT) {
+          status = 'TRANSIT';
+        } else if (
+          row && (row.movementType === MovementType.OUT || row.movementType === MovementType.ON_SITE)
+          && row.customerWorksiteId
+        ) {
+          status = 'OUT';
+        } else if (
+          row && (row.movementType === MovementType.IN || row.movementType === MovementType.ADJUST)
+          && Number(row.quantity) > 0 && row.warehouseId
+        ) {
+          status = 'IN';
         }
+        serialStatusByAssetId.set(assetId, status);
       });
     }
 
@@ -2443,7 +2742,7 @@ export class InventoryService {
           imageUrl: assetImageUrl ?? sku?.imageUrl ?? null,
           brand: asset?.brand ?? null,
           model: asset?.model ?? null,
-          status: this.mapSerialStatus(serialStatusByAssetId.get(row.assetId), row.quantity),
+          status: serialStatusByAssetId.get(row.assetId) ?? 'UNKNOWN',
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
           motorConfiguration:
@@ -2495,6 +2794,12 @@ export class InventoryService {
   async getLedger(query: GetInventoryLedgerDto) {
     const take = Math.min(query.take ?? LEDGER_DEFAULT_TAKE, LEDGER_MAX_TAKE);
     const where: Prisma.StockLedgerWhereInput = ledgerSearchWhere(query.search);
+    const cursor = query.cursor ? this.parseLedgerCursor(query.cursor) : null;
+    // An existing pagination session must keep its original ordering. Looking
+    // up one old cursor row cannot reveal which newly reordered rows it already
+    // consumed. Fresh sessions use appendOrder; old cursors stay legacy until
+    // the caller restarts the listing, without skipping or duplicating rows.
+    const legacyOrder = cursor !== null && !cursor.hasAppendOrder;
 
     if (query.warehouseId) where.warehouseId = query.warehouseId;
     if (query.customerWorksiteId) where.customerWorksiteId = query.customerWorksiteId;
@@ -2521,8 +2826,15 @@ export class InventoryService {
       where.effectiveAt = effectiveAt;
     }
 
-    if (query.cursor) {
-      const cursor = this.parseLedgerCursor(query.cursor);
+    if (cursor) {
+      const cursorAppendOrder = cursor.appendOrder ?? null;
+      const sameInstantAfterCursor: Prisma.StockLedgerWhereInput[] = cursorAppendOrder === null
+        ? [{ appendOrder: null, id: { lt: cursor.id } }]
+        : [
+            { appendOrder: { lt: cursorAppendOrder } },
+            { appendOrder: null },
+            { appendOrder: cursorAppendOrder, id: { lt: cursor.id } },
+          ];
       const conditions = Array.isArray(where.AND)
         ? where.AND
         : where.AND
@@ -2533,7 +2845,9 @@ export class InventoryService {
         {
           OR: [
             { effectiveAt: { lt: cursor.effectiveAt } },
-            { effectiveAt: cursor.effectiveAt, id: { lt: cursor.id } },
+            legacyOrder
+              ? { effectiveAt: cursor.effectiveAt, id: { lt: cursor.id } }
+              : { effectiveAt: cursor.effectiveAt, OR: sameInstantAfterCursor },
           ],
         },
       ];
@@ -2542,7 +2856,9 @@ export class InventoryService {
     const items = await this.prisma.stockLedger.findMany({
       where,
       take,
-      orderBy: [{ effectiveAt: 'desc' }, { id: 'desc' }],
+      orderBy: legacyOrder
+        ? [{ effectiveAt: 'desc' }, { id: 'desc' }]
+        : [{ effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       include: {
         sku: {
           select: { id: true, name: true, imageUrl: true, imageFileObjectId: true },
@@ -2596,7 +2912,7 @@ export class InventoryService {
 
     const nextCursor =
       normalized.length === take
-        ? this.makeLedgerCursor(normalized[normalized.length - 1])
+        ? this.makeLedgerCursor(normalized[normalized.length - 1], legacyOrder)
         : null;
 
     return { items: normalized, nextCursor };
@@ -3335,24 +3651,13 @@ export class InventoryService {
     return monthStart;
   }
 
-  private mapSerialStatus(movementType: MovementType | undefined, quantity: number) {
-    if (movementType === MovementType.TRANSIT) {
-      return 'TRANSIT';
-    }
-    if (movementType === MovementType.OUT || movementType === MovementType.ON_SITE) {
-      return 'OUT';
-    }
-    if (movementType === MovementType.IN || movementType === MovementType.ADJUST) {
-      return 'IN';
-    }
-    return quantity > 0 ? 'IN' : 'OUT';
-  }
-
-  private async assertOwnerWarehousesExist(ownerWarehouseIds: string[]) {
+  private async assertOwnerWarehousesExist(
+    ownerWarehouseIds: string[], prismaClient: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
     if (!ownerWarehouseIds.length) {
       return;
     }
-    const warehouses = await this.prisma.warehouse.findMany({
+    const warehouses = await prismaClient.warehouse.findMany({
       where: { id: { in: ownerWarehouseIds } },
       select: { id: true },
     });
@@ -3474,6 +3779,7 @@ export class InventoryService {
                 assetId: asset.id,
                 ownerWarehouseId: supplierWarehouse.id,
                 quantity: 1,
+                isOpeningBalance: true,
                 createdBy: userId,
               },
             });

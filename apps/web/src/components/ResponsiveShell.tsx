@@ -10,6 +10,11 @@ import Nav from "@/components/Nav";
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
     {
+      prefix: "/office-assistant",
+      title: "Asistente Office",
+      subtitle: "Consultas de solo lectura",
+    },
+    {
       prefix: "/fuel",
       title: "Combustible",
       subtitle: "Consumo operativo",

@@ -21,6 +21,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { IconCheck, IconChevronLeft, IconPackage, IconSearch } from '@tabler/icons-react';
 import type { SerialAssetCardItem } from '@/components/SerialAssetCard';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import { getSelectablePickerRows, isPickerQuantityAvailable, togglePickerRows } from '@/components/transport/inventory-picker-availability';
 
 export type InventoryItemPickerBulkItem = {
   skuId: string;
@@ -122,7 +123,7 @@ export default function InventoryItemPickerModal({
           name: item.skuName ?? skuMeta?.name ?? 'SKU',
           family: skuMeta?.category ?? 'Sin familia',
           ownerWarehouseName: item.ownerWarehouseName ?? 'Sin bodega dueña',
-          disabled: selectedBulkKeys.has(buildBulkItemKey(item)) || item.quantity < 0,
+          disabled: selectedBulkKeys.has(buildBulkItemKey(item)) || !isPickerQuantityAvailable('bulk', item.quantity),
           item,
         };
       }),
@@ -135,7 +136,7 @@ export default function InventoryItemPickerModal({
           name: getSerialDisplayName(item),
           family: skuMeta?.category ?? 'Sin familia',
           ownerWarehouseName: item.ownerWarehouseName ?? 'Sin bodega dueña',
-          disabled: selectedSerialIds.has(item.assetId) || item.quantity !== 1,
+          disabled: selectedSerialIds.has(item.assetId) || !isPickerQuantityAvailable('serial', item.quantity),
           item,
         };
       }),
@@ -178,42 +179,24 @@ export default function InventoryItemPickerModal({
   }, [groupedRows, searchQuery, showOwnerWarehouse]);
 
   const visibleSelectableRows = useMemo(
-    () => filteredGroups.flatMap((group) => group.rows).filter((row) => !row.disabled),
+    () => getSelectablePickerRows(filteredGroups.flatMap((group) => group.rows)),
     [filteredGroups],
   );
+  const selectableRows = useMemo(
+    () => getSelectablePickerRows(groupedRows.flatMap((group) => group.rows)),
+    [groupedRows],
+  );
+  const selectedRows = selectableRows.filter((row) => selectedRowKeys.has(row.key));
 
   const toggleRow = (row: PickerRow) => {
-    if (row.disabled) return;
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      if (next.has(row.key)) {
-        next.delete(row.key);
-      } else {
-        next.add(row.key);
-      }
-      return next;
-    });
+    setSelectedRowKeys((current) => togglePickerRows(current, [row]));
   };
 
   const toggleAllVisible = () => {
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      const allVisibleSelected =
-        visibleSelectableRows.length > 0 && visibleSelectableRows.every((row) => next.has(row.key));
-
-      visibleSelectableRows.forEach((row) => {
-        if (allVisibleSelected) {
-          next.delete(row.key);
-        } else {
-          next.add(row.key);
-        }
-      });
-      return next;
-    });
+    setSelectedRowKeys((current) => togglePickerRows(current, visibleSelectableRows));
   };
 
   const confirmSelection = () => {
-    const selectedRows = groupedRows.flatMap((group) => group.rows).filter((row) => selectedRowKeys.has(row.key));
     let addedCount = 0;
     selectedRows.forEach((row) => {
       const added = row.type === 'bulk' ? onAddBulk(row.item) : onAddSerial(row.item);
@@ -228,9 +211,9 @@ export default function InventoryItemPickerModal({
     onClose();
   };
 
-  const selectedCount = selectedRowKeys.size;
+  const selectedCount = selectedRows.length;
   const hasItems = groupedRows.some((group) => group.rows.length > 0);
-  const availableCount = groupedRows.flatMap((group) => group.rows).filter((row) => !row.disabled).length;
+  const availableCount = selectableRows.length;
   const ownerWarehouseNames = useMemo(
     () => Array.from(new Set(groupedRows.flatMap((group) => group.rows.map((row) => row.ownerWarehouseName)))),
     [groupedRows],
@@ -311,7 +294,7 @@ export default function InventoryItemPickerModal({
                     </div>
 
                     {group.rows.map((row) => {
-                      const isSelected = selectedRowKeys.has(row.key);
+                      const isSelected = !row.disabled && selectedRowKeys.has(row.key);
                       const quantity = row.item.quantity;
                       return (
                         <UnstyledButton
@@ -345,11 +328,9 @@ export default function InventoryItemPickerModal({
                             </Text>
                             {row.disabled ? (
                               <Text component="span" className="inventory-picker-mobile-row-status">
-                                {row.type === 'bulk' && row.item.quantity < 0
-                                  ? 'Requiere ajuste'
-                                  : row.type === 'serial' && row.item.quantity !== 1
-                                    ? 'No disponible'
-                                    : 'Ya agregado'}
+                                {!isPickerQuantityAvailable(row.type, row.item.quantity)
+                                  ? 'No disponible'
+                                  : 'Ya agregado'}
                               </Text>
                             ) : null}
                           </span>
@@ -554,7 +535,7 @@ export default function InventoryItemPickerModal({
                               </Table.Thead>
                               <Table.Tbody>
                                 {group.rows.map((row) => {
-                                  const isSelected = selectedRowKeys.has(row.key);
+                                  const isSelected = !row.disabled && selectedRowKeys.has(row.key);
                                   return (
                                     <Table.Tr
                                       key={row.key}
@@ -602,11 +583,9 @@ export default function InventoryItemPickerModal({
                                         ) : null}
                                         {row.disabled ? (
                                           <Text size="xs" c="dimmed">
-                                            {row.type === 'bulk' && row.item.quantity < 0
-                                              ? 'Requiere ajuste'
-                                              : row.type === 'serial' && row.item.quantity !== 1
-                                                ? 'No disponible'
-                                                : 'Ya agregado'}
+                                            {!isPickerQuantityAvailable(row.type, row.item.quantity)
+                                              ? 'No disponible'
+                                              : 'Ya agregado'}
                                           </Text>
                                         ) : null}
                                       </Table.Td>

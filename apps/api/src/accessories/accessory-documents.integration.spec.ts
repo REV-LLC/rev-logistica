@@ -516,7 +516,7 @@ if (testUrl) {
       await documents.rejectRequestDocument(doc.id, userId, 'QA rechazo');
       await expect(
         documents.approveRequestDocument(doc.id, userId),
-      ).rejects.toThrow('pendiente');
+      ).rejects.toThrow('estado DRAFT');
       expect((await accessories.get(accessory.id)).balances[0].quantity).toBe(
         10,
       );

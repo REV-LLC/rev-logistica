@@ -32,12 +32,12 @@ interface JwtPayload {
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   listAssets(
     @Query('serial') serial?: string,
     @Query('search') search?: string,
@@ -97,7 +97,7 @@ export class AssetsController {
   }
 
   @Patch(':assetId/assigned-motor')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   assignMotor(
     @Param('assetId', new ParseUUIDPipe()) assetId: string,
     @Body(
@@ -113,19 +113,19 @@ export class AssetsController {
   }
 
   @Get(':assetId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getAssetById(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
     return this.assetsService.getAssetById(assetId);
   }
 
   @Get(':assetId/location')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getAssetLocation(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
     return this.assetsService.getAssetLocation(assetId);
   }
 
   @Get(':assetId/component-options')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getComponentOptions(@Param('assetId', new ParseUUIDPipe()) assetId: string) {
     return this.assetsService.getAssetComponentOptions(assetId);
   }

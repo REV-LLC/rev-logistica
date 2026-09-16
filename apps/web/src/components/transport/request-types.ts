@@ -1,3 +1,4 @@
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import {
   type InventoryItemPickerBulkItem,
   type InventoryItemPickerSerialItem,
@@ -106,6 +107,7 @@ export type GenerateFieldErrors = {
 };
 
 export type RequestDocument = {
+  performedByEmployeeName?: string | null;
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
   status: string;
@@ -123,6 +125,7 @@ export type RequestDocument = {
 };
 
 export type RequestDocumentDetail = {
+  inventorySourceMode?: RequestInventorySourceMode | null;
   id: string;
   type: 'REMISSION' | 'RETURN' | string;
   status: string;

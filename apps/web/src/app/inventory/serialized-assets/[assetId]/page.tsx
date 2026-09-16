@@ -110,7 +110,8 @@ type AssetLedgerResponse = {
 };
 
 type AssetLocationResponse = {
-  locationType: 'WAREHOUSE' | 'CUSTOMER_WORKSITE' | 'IN_TRANSIT' | 'UNKNOWN';
+  locationType: 'WAREHOUSE' | 'CUSTOMER_WORKSITE' | 'IN_TRANSIT' | 'UNKNOWN' | 'INCONSISTENT';
+  balance?: { warehouseQuantity: number; worksiteQuantity: number; isConsistent: boolean };
   warehouse?: { id: string; name?: string | null } | null;
   customerWorksite?: {
     customer?: { name?: string | null } | null;
@@ -196,6 +197,7 @@ export default function EditSerializedAssetPage() {
   const [active, setActive] = useState(true);
   const [editing, setEditing] = useState(false);
   const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
+  const [assetLocation, setAssetLocation] = useState<AssetLocationResponse | null>(null);
   const [recentMovements, setRecentMovements] = useState<AssetLedgerItem[]>([]);
 
   useEffect(() => {
@@ -249,6 +251,7 @@ export default function EditSerializedAssetPage() {
         setAssetImageFileObjectId(assetData.imageFileObjectId ?? null);
         setWarehouseCurrentId(assetData.warehouseCurrentId);
         setWorksiteLocationName(resolvedWorksiteLocation);
+        setAssetLocation(locationData);
         setRecentMovements(ledgerData.items);
         setActive(assetData.active);
       } catch (err) {
@@ -308,28 +311,16 @@ export default function EditSerializedAssetPage() {
     [fuel],
   );
   const warehouseCurrentName = useMemo(
-    () => displayValue(warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name),
-    [warehouses, warehouseCurrentId],
+    () => displayValue(assetLocation?.warehouse?.name),
+    [assetLocation],
   );
   const locationBadge = useMemo(() => {
-    if (!asset) {
-      return { color: 'gray' as const, label: EMPTY_VALUE };
-    }
-    if (!warehouseCurrentId) {
-      return {
-        color: 'red' as const,
-        label: worksiteLocationName ?? 'En obra',
-      };
-    }
-    const currentName =
-      warehouses.find((warehouse) => warehouse.id === warehouseCurrentId)?.name ??
-      asset.warehouseCurrent?.name ??
-      'Bodega';
-    if (warehouseCurrentId === asset.warehouseOwnerId) {
-      return { color: 'blue' as const, label: currentName };
-    }
-    return { color: 'red' as const, label: currentName };
-  }, [asset, warehouseCurrentId, warehouses, worksiteLocationName]);
+    if (assetLocation?.locationType === 'INCONSISTENT') return { color: 'orange', label: 'Revisar ubicación' };
+    if (assetLocation?.locationType === 'CUSTOMER_WORKSITE') return { color: 'blue', label: worksiteLocationName ?? 'En obra' };
+    if (assetLocation?.locationType === 'WAREHOUSE') return { color: 'green', label: assetLocation.warehouse?.name || 'Bodega' };
+    if (assetLocation?.locationType === 'IN_TRANSIT') return { color: 'yellow', label: 'En tránsito' };
+    return { color: 'gray', label: 'Sin ubicación registrada' };
+  }, [assetLocation, worksiteLocationName]);
   const detailCards = useMemo(
     () => [
       {
@@ -349,11 +340,11 @@ export default function EditSerializedAssetPage() {
       },
       {
         label: 'Ubicacion actual',
-        value: warehouseCurrentId ? warehouseCurrentName : worksiteLocationName ?? 'En obra',
+        value: locationBadge.label,
         icon: <IconMapPin size={18} />,
       },
     ],
-    [asset, warehouseCurrentId, warehouseCurrentName, worksiteLocationName],
+    [asset, locationBadge.label],
   );
   const readOnlySections = useMemo(
     () => [
@@ -610,6 +601,12 @@ export default function EditSerializedAssetPage() {
 
       {asset ? (
         <Stack gap="lg">
+          {assetLocation?.balance && (
+            <Alert color={assetLocation.balance.isConsistent ? 'blue' : 'orange'} variant="light">
+              Saldo registrado: bodega {assetLocation.balance.warehouseQuantity} · obras {assetLocation.balance.worksiteQuantity}.
+              {assetLocation.locationType === 'INCONSISTENT' && ' El saldo y los movimientos no coinciden. Confirmar ubicación antes de despachar.'}
+            </Alert>
+          )}
           <SerializedAssetHero
             active={active}
             description={autoDescription}
@@ -669,7 +666,7 @@ export default function EditSerializedAssetPage() {
 
                 <AssetMovementSummary
                   movements={recentMovements}
-                  warehouseCurrentId={warehouseCurrentId}
+                  warehouseCurrentId={assetLocation?.locationType === 'WAREHOUSE' ? assetLocation.warehouse?.id ?? null : null}
                   warehouseCurrentName={warehouseCurrentName}
                   worksiteLocationName={worksiteLocationName}
                 />

@@ -153,6 +153,7 @@ enum Role {
   OFFICE
   DRIVER
   OPERATOR
+  WAREHOUSE_TABLET
 }
 
 enum WarehouseType {
@@ -216,6 +217,11 @@ enum DocumentStatus {
   CONFIRMED
   FAILED
   VOID
+}
+
+enum InventorySourceMode {
+  WAREHOUSE
+  OWNER_WAREHOUSES
 }
 
 enum DocumentItemBillingStatus {
@@ -313,6 +319,11 @@ model User {
   role         Role
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+  warehouseId  String?
+  warehouse    Warehouse? @relation(fields: [warehouseId], references: [id])
+  tabletAuthorizations TabletDocumentAuthorization[]
+  pinAttempts Int @default(0)
+  pinWindowEndsAt DateTime?
 
   documentsCreated              Document[]              @relation("CreatedBy")
   ledgerCreated                 StockLedger[]           @relation("LedgerCreatedBy")
@@ -447,6 +458,7 @@ model Warehouse {
   type           WarehouseType
   ownerCompanyId String
   active         Boolean       @default(true)
+  tabletUsers    User[]
   createdAt      DateTime      @default(now())
 
   assetsOwned               Asset[]                  @relation("OwnerWarehouse")
@@ -859,19 +871,26 @@ model Document {
   accessoryMovements            AccessoryMovement[]
   accessoryTransitBalances      AccessoryBalance[]
   accessoryProviderReceiptItems AccessoryProviderReceiptItem[]
-  id                            String                         @id @default(uuid())
-  shareToken                    String                         @unique @default(uuid())
-  type                          DocumentType
-  status                        DocumentStatus                 @default(DRAFT)
-  consecutive                   String?                        @unique
-  customerWorksiteId            String?
-  warehouseId                   String?
-  providerWarehouseId           String?
-  createdBy                     String
-  docDate                       DateTime                       @default(now())
-  notes                         String?
-  recipientPhone                String?
-  recipientPhones               String[]                       @default([])
+  performedByEmployeeId String?
+  performedByEmployee Employee? @relation(fields: [performedByEmployeeId], references: [id], onDelete: Restrict)
+  performedByEmployeeName String?
+  tabletAuthorizationId String? @unique
+  tabletAuthorization TabletDocumentAuthorization? @relation(fields: [tabletAuthorizationId], references: [id], onDelete: Restrict)
+  id                  String         @id @default(uuid())
+  shareToken          String         @unique @default(uuid())
+  type                DocumentType
+  status              DocumentStatus @default(DRAFT)
+  consecutive         String?        @unique
+  customerWorksiteId  String?
+  warehouseId         String?
+  // Null preserves the interpretation used by documents created before this field.
+  inventorySourceMode InventorySourceMode?
+  providerWarehouseId String?
+  createdBy           String
+  docDate             DateTime       @default(now())
+  notes               String?
+  recipientPhone      String?
+  recipientPhones     String[]       @default([])
 
   // Failed fields
   failedReason         String?
@@ -904,6 +923,7 @@ model Document {
   creator           User              @relation("CreatedBy", fields: [createdBy], references: [id])
 
   items                      DocumentItem[]
+  reversedLedger             StockLedger[] @relation("LedgerReversal")
   ledger                     StockLedger[]
   files                      FileObject[]
   messageDeliveries          DocumentMessageDelivery[]
@@ -1056,14 +1076,21 @@ model StockLedger {
   movementType       MovementType
   quantity           Decimal
 
+  // Original quantity remains in history; a separate document compensates it.
+  reversedByDocumentId String?
+  reversedByDocument Document? @relation("LedgerReversal", fields: [reversedByDocumentId], references: [id], onDelete: Restrict)
+
   refDocumentId   String?
   refDocumentType DocumentType?
 
-  effectiveAt      DateTime @default(now())
-  // Provider catalogue opening stock, not a dated physical receipt.
-  isOpeningBalance Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  createdBy        String
+  effectiveAt DateTime @default(now())
+  // Append order is independent of transaction-start audit timestamps. Legacy
+  // rows remain null and retain their original createdAt/id tie-break ordering.
+  appendOrder Int? @default(autoincrement())
+  // Catalogue opening stock, not a dated physical receipt or availability start.
+  isOpeningBalance Boolean @default(false)
+  createdAt DateTime @default(now())
+  createdBy String
 
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
   ownerWarehouse   Warehouse         @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])
@@ -1076,6 +1103,7 @@ model StockLedger {
   creator              User                  @relation("LedgerCreatedBy", fields: [createdBy], references: [id])
   providerReceiptItems ProviderReceiptItem[]
 
+  @@index([reversedByDocumentId])
   @@index([refDocumentId])
   @@index([skuId])
   @@index([assetId])
@@ -1231,6 +1259,9 @@ model Employee {
   documentId String?
   userId     String?      @unique
   active     Boolean      @default(true)
+  tabletPin EmployeeTabletPin?
+  documentsPerformed Document[]
+  tabletAuthorizations TabletDocumentAuthorization[]
   createdAt  DateTime     @default(now())
 
   vehicles        EmployeeVehicle[]
@@ -1238,6 +1269,27 @@ model Employee {
   tasksAssigned   Task[]            @relation("TaskAssignedToEmployee")
   assetFuelings   AssetFueling[]    @relation("AssetFuelingOperator")
   vehicleFuelings VehicleFueling[]  @relation("VehicleFuelingDriver")
+}
+
+model EmployeeTabletPin {
+  employeeId String @id
+  pinHash String
+  lookup String @unique
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model TabletDocumentAuthorization {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  userId String
+  employeeId String
+  warehouseId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  document Document?
+  @@index([userId, expiresAt])
 }
 
 model Vehicle {

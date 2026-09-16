@@ -48,6 +48,12 @@ El tercer tipo se agregó al esquema, API, formulario, selector documental y mov
 
 Individualizar un saldo antiguo de pinzas/guayas exige conciliar y etiquetar las unidades. La identidad nueva empieza en el corte; no puede atribuirse retrospectivamente una identidad física que nunca fue registrada. No asignar automáticamente todas las guayas al primer vibrador del catálogo. La correspondencia de cada unidad y equipo se registra por separado de su compatibilidad.
 
+Las pinzas y guayas en bodega sin vínculo conocido se conservarán disponibles y **sin equipo asignado**, hasta que Office identifique las unidades. La guaya eléctrica estándar es compatible con los vibradores eléctricos; esto no extiende su compatibilidad a gasolina.
+
+La referencia anterior «GUAYA GRUESA» no representa una baja física: el usuario confirmó conservar su unidad y asociarla al vibrador de su remisión. El manifiesto privado registra el documento y equipo exactos, que deben revalidarse antes de aplicar. Su nombre visible será «Guaya + nombre del vibrador»; conservar su código propio e historial al intercambiarla, sin reescribir el texto de documentos confirmados.
+
+El balde y las uñas de la entrega del minicargador New Holland pueden acompañarlo juntos. La asignación representa custodia, no montaje simultáneo de ambos implementos.
+
 ### Compatibilidad
 
 **Martillo hidráulico INDECO:** el usuario restringió su compatibilidad únicamente a la retroexcavadora Liu Gong actual. En el respaldo auditado se identificó un único equipo Liu Gong 766A, código `REXC-8941-0001`. El destino de compatibilidad es `scope=ASSETS` con ese ID exacto; no toda RETROEXCAVADORA, su subfamilia ni futuros equipos Liu Gong.
@@ -87,3 +93,11 @@ Que una tarifa registrada sea cero o nula no demuestra que no haya un acuerdo co
 - Regresión de los cambios nuevos de producción, incluida fecha/origen físico, tablet con PIN y consultas de Office.
 
 Las pruebas del auditor validan únicamente la detección y las propuestas; no equivalen a pruebas del corte completo.
+
+## Punto de control de integración (2026-09-16)
+
+Integración local contra `origin/production` en `88e706b`, conservando origen físico explícito, transacciones documentales, permisos de tablet y las nuevas consultas de inventario. Se ajustó el selector de accesorios al origen físico, la ubicación de equipos al resolvedor serializado actual (sin movimientos revertidos) y los reintentos de recepciones concurrentes. No se actualizaron dependencias fuera del lockfile integrado.
+
+- API: 779 pruebas aprobadas en 78 suites, incluidas 23 pruebas con PostgreSQL real sobre la copia aislada `accessory_qa_migration_20260915`.
+- Web: 75 pruebas aprobadas. Builds de API y web aprobados.
+- Estas verificaciones no certifican aún la transformación del inventario anterior, ni reemplazan las pruebas visuales con autenticación. No se ejecutó conversión ni despliegue en producción.

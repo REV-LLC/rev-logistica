@@ -22,6 +22,7 @@ export function isAuthBypassEnabled() {
 }
 
 export type JwtPayload = {
+  warehouseId?: string;
   sub?: string;
   identifier?: string;
   email?: string;
@@ -88,9 +89,10 @@ export function getTokenPayload() {
   return parseJwtPayload(token);
 }
 
-export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
+export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR' | 'WAREHOUSE_TABLET';
 
 const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
+  WAREHOUSE_TABLET: '/transport/generate',
   ADMIN: '/',
   OFFICE: '/',
   DRIVER: '/',
@@ -98,6 +100,7 @@ const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
 };
 
 const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
+  WAREHOUSE_TABLET: ['/transport/generate', '/transport/requests', '/inventory/ledger/document'],
   DRIVER: [
     '/',
     '/transport/generate',
@@ -137,7 +140,7 @@ export function getCurrentUserRole(): AppRole | null {
   if (isAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
-  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR') return role;
+  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR' || role === 'WAREHOUSE_TABLET') return role;
   return null;
 }
 

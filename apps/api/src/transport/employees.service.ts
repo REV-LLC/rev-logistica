@@ -93,6 +93,7 @@ export class EmployeesService {
     loginRole?: Role;
     loginActive?: boolean;
   }) {
+    if (payload.loginRole === Role.WAREHOUSE_TABLET) throw new BadRequestException('Crea los perfiles compartidos desde Tablets de bodega.');
     const vehicleIds = payload.vehicleIds ?? [];
     if (vehicleIds.length) {
       await this.assertVehiclesExist(vehicleIds);
@@ -198,6 +199,7 @@ export class EmployeesService {
       throw new NotFoundException('Employee not found');
     }
 
+    if (payload.loginRole === Role.WAREHOUSE_TABLET) throw new BadRequestException('Crea los perfiles compartidos desde Tablets de bodega.');
     const vehicleIds = payload.vehicleIds;
     if (vehicleIds && vehicleIds.length) {
       await this.assertVehiclesExist(vehicleIds);
