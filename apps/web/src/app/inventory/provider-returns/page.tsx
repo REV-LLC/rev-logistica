@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/api';
 
 type PendingItem = {
   sourceLedgerId: string;
+  sourceAccessoryMovementId?: string;
   sourceDocumentId: string;
   consecutive: string | null;
   docDate: string;
@@ -105,7 +106,8 @@ export default function ProviderReturnsPage() {
           sourceDocumentId: group.sourceDocumentId,
           providerWarehouseId: group.provider.id,
           notes: notesByGroup[group.key]?.trim() || undefined,
-          items: chosen.map((item) => ({ sourceLedgerId: item.sourceLedgerId, quantity: selected[item.sourceLedgerId] })),
+          items: chosen.filter((item) => !item.sourceAccessoryMovementId).map((item) => ({ sourceLedgerId: item.sourceLedgerId, quantity: selected[item.sourceLedgerId] })),
+          accessoryItems: chosen.filter((item) => item.sourceAccessoryMovementId).map((item) => ({ sourceMovementId: item.sourceAccessoryMovementId, quantity: selected[item.sourceLedgerId] })),
         },
       });
       await upload(receipt.id, 'EVIDENCIA_ENTREGA_PROVEEDOR', evidence);
@@ -202,7 +204,7 @@ export default function ProviderReturnsPage() {
   return (
     <Container size="md" py="lg">
       <Group justify="space-between" mb="lg">
-        <div><Title order={2}>Entregas a proveedor</Title><Text c="dimmed">Confirma equipos recogidos en una DV cuando el proveedor los recibe físicamente.</Text></div>
+        <div><Title order={2}>Entregas a proveedor</Title><Text c="dimmed">Confirma equipos y accesorios de una DV cuando el proveedor los recibe físicamente.</Text></div>
         <Button variant="light" leftSection={<IconRefresh size={16} />} loading={loading} onClick={() => void load()}>Actualizar</Button>
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
@@ -232,7 +234,7 @@ export default function ProviderReturnsPage() {
                 const quantity = selected[item.sourceLedgerId] ?? 0;
                 return <Paper key={item.sourceLedgerId} withBorder p="sm" radius="sm">
                   <Group justify="space-between" align="center" wrap="nowrap">
-                    <Checkbox checked={quantity > 0} onChange={(event) => setSelected((current) => ({ ...current, [item.sourceLedgerId]: event.currentTarget.checked ? item.pendingQuantity : 0 }))} label={<div><Text fw={600}>{item.skuName ?? 'Equipo'}</Text><Text size="xs" c="dimmed">{item.publicCode || item.serialOrEngine || item.description || (item.type === 'BULK' ? `${item.pendingQuantity} pendientes` : 'Serial')}</Text></div>} />
+                    <Checkbox checked={quantity > 0} onChange={(event) => { const checked = event.currentTarget.checked; setSelected((current) => ({ ...current, [item.sourceLedgerId]: checked ? item.pendingQuantity : 0 })); }} label={<div><Text fw={600}>{item.skuName ?? 'Equipo'}</Text><Text size="xs" c="dimmed">{item.publicCode || item.serialOrEngine || item.description || (item.type === 'BULK' ? `${item.pendingQuantity} pendientes` : 'Serial')}</Text></div>} />
                     {item.type === 'BULK' && quantity > 0 && <NumberInput w={100} min={1} max={item.pendingQuantity} value={quantity} onChange={(value) => setSelected((current) => ({ ...current, [item.sourceLedgerId]: Number(value) || 0 }))} />}
                   </Group>
                 </Paper>;
@@ -241,7 +243,7 @@ export default function ProviderReturnsPage() {
             <Stack mt="md">
               <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Evidencia de entrega" description="Foto del equipo entregado físicamente en la bodega." value={evidenceByGroup[activeGroup.key] ?? null} onChange={(file) => setEvidenceByGroup((current) => ({ ...current, [activeGroup.key]: file }))} />
               <FileInput accept="image/png,image/jpeg,image/webp" capture="environment" clearable required leftSection={<IconCamera size={16} />} label="Comprobante del proveedor" description="Foto legible del recibo físico entregado por el proveedor." value={proofByGroup[activeGroup.key] ?? null} onChange={(file) => setProofByGroup((current) => ({ ...current, [activeGroup.key]: file }))} />
-              <Textarea label="Observaciones" value={notesByGroup[activeGroup.key] ?? ''} onChange={(event) => setNotesByGroup((current) => ({ ...current, [activeGroup.key]: event.currentTarget.value }))} />
+              <Textarea label="Observaciones" value={notesByGroup[activeGroup.key] ?? ''} onChange={(event) => { const value = event.currentTarget.value; setNotesByGroup((current) => ({ ...current, [activeGroup.key]: value })); }} />
               <Button size="md" leftSection={<IconCheck size={18} />} loading={submittingKey === activeGroup.key} onClick={() => void confirm(activeGroup)}>Confirmar entrega en {activeGroup.provider.name}</Button>
             </Stack>
           </Paper>}

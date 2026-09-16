@@ -26,6 +26,14 @@ class UpdateDocumentRequestItemDto {
 
   @IsOptional()
   @IsUUID()
+  accessoryId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accessorySourceBalanceId?: string;
+
+  @IsOptional()
+  @IsUUID()
   componentParentAssetId?: string;
 
   @IsOptional()

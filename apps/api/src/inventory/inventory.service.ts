@@ -322,6 +322,12 @@ export class InventoryService {
     }
   }
 
+  private async assertNoUnremittedAccessories(tx: Prisma.TransactionClient, assetIds: string[]) {
+    if (!assetIds.length) return;
+    const pending = await tx.accessoryBalance.findFirst({ where: { assetId: { in: assetIds }, customerWorksiteId: null, transitDocumentId: null, quantity: { gt: 0 } }, select: { id: true } });
+    if (pending) throw new BadRequestException('El equipo tiene accesorios asignados en bodega. Inclúyelos en la remisión o devuélvelos a la bodega antes de despachar.');
+  }
+
   private parseLedgerCursor(cursor: string) {
     const raw = cursor.trim();
     let payload: { effectiveAt?: string; createdAt?: string; id?: string };
@@ -1089,8 +1095,17 @@ export class InventoryService {
     });
   }
 
-  async moveOut(payload: CreateInventoryOutDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
+  private withMovementTransaction<T>(transaction: Prisma.TransactionClient | undefined, operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    return transaction ? operation(transaction) : this.prisma.$transaction(operation);
+  }
+
+  async invalidateDocumentInventory(warehouseId: string | null, customerWorksiteId: string | null, ownerIds: string[]) {
+    await this.invalidateInventoryCache({ warehouseId: warehouseId ?? undefined, customerWorksiteId: customerWorksiteId ?? undefined });
+    await Promise.all([...new Set(ownerIds)].map((id) => this.invalidateInventoryCache({ warehouseId: id })));
+  }
+
+  async moveOut(payload: CreateInventoryOutDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.withMovementTransaction(transaction, async (tx) => {
       const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
@@ -1126,6 +1141,7 @@ export class InventoryService {
         effectiveAt,
         () => ({ type: 'WAREHOUSE', id: payload.warehouseId }),
       );
+      await this.assertNoUnremittedAccessories(tx, serialIds);
 
       if (bulkSkuIds.length) {
         const bulkRows = await tx.stockLedger.groupBy({
@@ -1269,7 +1285,7 @@ export class InventoryService {
       };
     });
 
-    await this.invalidateInventoryCache({
+    if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
       customerWorksiteId: payload.customerWorksiteId,
     });
@@ -1277,11 +1293,11 @@ export class InventoryService {
     return result;
   }
 
-  async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string) {
+  async moveOnSite(payload: CreateInventoryOnSiteDto, userId: string, transaction?: Prisma.TransactionClient) {
     const ownerWarehouseIds = [
       ...new Set(payload.items.map((item) => item.ownerWarehouseId).filter(Boolean)),
     ];
-    const created = await this.prisma.$transaction(async (tx) => {
+    const created = await this.withMovementTransaction(transaction, async (tx) => {
       const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const customerWorksite = await tx.customerWorksite.findUnique({
@@ -1396,6 +1412,7 @@ export class InventoryService {
         effectiveAt,
         (assetId) => ({ type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId) ?? '' }),
       );
+      await this.assertNoUnremittedAccessories(tx, serialIds);
 
       if (serialIds.length) {
         const warehouseRows = await tx.stockLedger.groupBy({
@@ -1481,10 +1498,10 @@ export class InventoryService {
       return createdLedger;
     });
 
-    await this.invalidateInventoryCache({
+    if (!transaction) await this.invalidateInventoryCache({
       customerWorksiteId: payload.customerWorksiteId,
     });
-    await Promise.all(
+    if (!transaction) await Promise.all(
       ownerWarehouseIds.map((ownerWarehouseId) =>
         this.invalidateInventoryCache({ warehouseId: ownerWarehouseId }),
       ),
@@ -1496,8 +1513,8 @@ export class InventoryService {
     };
   }
 
-  async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
+  async moveReturnTransit(payload: CreateInventoryTransitDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.withMovementTransaction(transaction, async (tx) => {
       const document = await tx.document.findUnique({
         where: { id: payload.documentId },
         select: { id: true, type: true, customerWorksiteId: true, docDate: true },
@@ -1592,12 +1609,12 @@ export class InventoryService {
       }
       return { count: created.length, ids: created.map((row) => row.id) };
     });
-    await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
+    if (!transaction) await this.invalidateInventoryCache({ customerWorksiteId: payload.customerWorksiteId });
     return result;
   }
 
-  async moveIn(payload: CreateInventoryInDto, userId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
+  async moveIn(payload: CreateInventoryInDto, userId: string, transaction?: Prisma.TransactionClient) {
+    const result = await this.withMovementTransaction(transaction, async (tx) => {
       const { refDocumentType, effectiveAt } = await this.resolveLedgerContext(payload.documentId, tx);
 
       const warehouse = await tx.warehouse.findUnique({
@@ -1775,7 +1792,7 @@ export class InventoryService {
       };
     });
 
-    await this.invalidateInventoryCache({
+    if (!transaction) await this.invalidateInventoryCache({
       warehouseId: payload.warehouseId,
       customerWorksiteId: payload.customerWorksiteId,
     });

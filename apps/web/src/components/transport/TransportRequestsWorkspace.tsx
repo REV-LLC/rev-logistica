@@ -60,6 +60,7 @@ import ProviderRemissionDialog from './ProviderRemissionDialog';
 import RequestDocumentsDialog from './RequestDocumentsDialog';
 import RequestInformationSection from './RequestInformationSection';
 import RequestItemsSection from './RequestItemsSection';
+import RequestAccessorySelector from './RequestAccessorySelector';
 import RequestSignatureDialog from './RequestSignatureDialog';
 import RequestSigningSection from './RequestSigningSection';
 import RequestsListSection from './RequestsListSection';
@@ -645,6 +646,18 @@ export default function TransportRequestsWorkspace({
       setSelectedItems(
         doc.items.map((item) => {
           const ownerWarehouseId = item.condition ?? null;
+          if (item.accessoryId) {
+            return {
+              selectionId: createSelectionId(), type: 'accessory' as const,
+              accessoryId: item.accessoryId,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
+              accessoryKind: item.accessoryKind ?? undefined,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              name: item.requestedTag ?? item.accessoryName ?? 'Accesorio',
+              quantity: Number(item.quantity ?? 1), ownerWarehouseId,
+              isDamaged: Boolean(item.conditionNote?.trim()), damageDescription: item.conditionNote ?? '',
+            };
+          }
           if (!item.skuId && !item.assetId && item.requestedTag) {
             return {
               selectionId: createSelectionId(),
@@ -918,6 +931,7 @@ export default function TransportRequestsWorkspace({
   };
 
   const renderAdminItemFields = (item: SelectedItem, index: number) => {
+    if (item.type === 'accessory') return null;
     if (!editingRequestId || !canDecide) return null;
     return (
       <Stack gap="xs" mt="xs">
@@ -1150,6 +1164,7 @@ export default function TransportRequestsWorkspace({
 
           {activeTab === 'generate' && generateStep === 'items' ? (
             <RequestItemsSection
+              accessorySelector={<RequestAccessorySelector docType={docType} deliveryMode={deliveryMode} warehouseId={warehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} />}
               sourceMode={sourceMode}
               setGenerateStep={setGenerateStep}
               renderGenerateError={renderGenerateError}

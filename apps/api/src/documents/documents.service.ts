@@ -18,6 +18,9 @@ import { DocumentCustomerEmailsService } from '../document-emails/document-custo
 import { DocumentCustomerMessagesService } from '../document-messages/document-customer-messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { prepareAccessoryDocumentItems } from '../accessories/accessory-document-items';
+import { AccessoryDocumentsService } from '../accessories/accessory-documents.service';
+import { AccessoriesService } from '../accessories/accessories.service';
 import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
@@ -53,6 +56,7 @@ export class DocumentsService {
     private readonly documentEmails: DocumentCustomerEmailsService,
     private readonly documentMessages: DocumentCustomerMessagesService,
     private readonly documentPdfSnapshots: DocumentPdfSnapshotService,
+    private readonly accessoryDocuments: AccessoryDocumentsService = new AccessoryDocumentsService(new AccessoriesService(prisma)),
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -394,16 +398,23 @@ export class DocumentsService {
       }>;
     },
     userId: string,
+    transaction?: Prisma.TransactionClient,
   ) {
-    const items = await this.mapDocumentItemsToMovementItems(document.items);
+    const db = transaction ?? this.prisma;
+    const items = document.items.length ? await this.mapDocumentItemsToMovementItems(document.items) : [];
     await this.validateDocumentComponentRelations(document.items);
+
+    if (!items.length) {
+      if (!transaction) throw new BadRequestException('El documento no tiene ítems para aprobar.');
+      return db.document.update({ where: { id: document.id }, data: { status: DocumentStatus.CONFIRMED }, select: { id: true, status: true, consecutive: true } });
+    }
 
     if (document.type === DocumentType.REMISSION) {
       const assetIds = items
         .map((item) => item.assetId)
         .filter((value): value is string => Boolean(value));
       if (assetIds.length) {
-        const assets = await this.prisma.asset.findMany({
+        const assets = await db.asset.findMany({
           where: { id: { in: assetIds } },
           select: {
             id: true,
@@ -449,6 +460,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
+          transaction,
         );
       } else {
         if (!document.warehouseId) {
@@ -464,6 +476,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
+          transaction,
         );
       }
     } else {
@@ -474,7 +487,7 @@ export class DocumentsService {
       if (!document.warehouseId) {
         throw new BadRequestException('La devolución requiere bodega destino');
       }
-      const destinationWarehouse = await this.prisma.warehouse.findFirst({
+      const destinationWarehouse = await db.warehouse.findFirst({
         where: { id: document.warehouseId, active: true },
         select: { id: true, type: true },
       });
@@ -491,6 +504,7 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
+          transaction,
         );
       } else {
         const mismatchedItem = items.find(
@@ -508,9 +522,10 @@ export class DocumentsService {
             documentId: document.id,
           },
           userId,
+          transaction,
         );
       }
-      await this.prisma.documentItem.updateMany({
+      await db.documentItem.updateMany({
         where: {
           documentId: document.id,
           billingCutoffDate: null,
@@ -522,7 +537,7 @@ export class DocumentsService {
       });
     }
 
-    return this.prisma.document.update({
+    return db.document.update({
       where: { id: document.id },
       data: {
         status: DocumentStatus.CONFIRMED,
@@ -687,6 +702,8 @@ export class DocumentsService {
     items: Array<{
       skuId?: string;
       assetId?: string;
+      accessoryId?: string;
+      accessorySourceBalanceId?: string;
       componentParentAssetId?: string;
       ownerWarehouseId?: string;
       quantity?: number;
@@ -732,10 +749,12 @@ export class DocumentsService {
 
           if (payload.items.length) {
             await tx.documentItem.createMany({
-              data: payload.items.map((item) => ({
+              data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                accessoryId: item.accessoryId ?? null,
+                accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -746,7 +765,7 @@ export class DocumentsService {
                   defaultBillingCutoffDate,
                   null,
                 ),
-              })),
+              }))),
             });
           }
 
@@ -818,10 +837,12 @@ export class DocumentsService {
 
           if (payload.items?.length) {
             await tx.documentItem.createMany({
-              data: payload.items.map((item) => ({
+              data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                accessoryId: item.accessoryId ?? null,
+                accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -833,7 +854,7 @@ export class DocumentsService {
                   payload.type === DocumentType.RETURN ? documentDate : null,
                   null,
                 ),
-              })),
+              }))),
             });
           }
 
@@ -902,7 +923,7 @@ export class DocumentsService {
         payload.number,
       );
       const updated = await tx.document.update({
-        where: { id: documentId },
+        where: { id: documentId, status: DocumentStatus.IN_PROGRESS },
         data: {
           type: nextType,
           consecutive,
@@ -925,10 +946,12 @@ export class DocumentsService {
           const cutoffDate =
             nextType === DocumentType.RETURN ? nextDocDate : null;
           await tx.documentItem.createMany({
-            data: payload.items.map((item) => ({
+            data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              accessoryId: item.accessoryId ?? null,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -936,7 +959,7 @@ export class DocumentsService {
               conditionNote: item.conditionNote?.trim() || null,
               billingCutoffDate: cutoffDate,
               billingStatus: this.getBillingStatus(cutoffDate, null),
-            })),
+            }))),
           });
         }
       }
@@ -997,7 +1020,7 @@ export class DocumentsService {
     }
 
     const submitted = await this.prisma.document.update({
-      where: { id: documentId },
+      where: { id: documentId, status: DocumentStatus.IN_PROGRESS },
       data: { status: DocumentStatus.DRAFT },
       select: { id: true, consecutive: true, status: true },
     });
@@ -1033,6 +1056,8 @@ export class DocumentsService {
       items: Array<{
         skuId?: string;
         assetId?: string;
+        accessoryId?: string;
+        accessorySourceBalanceId?: string;
         componentParentAssetId?: string;
         ownerWarehouseId?: string;
         quantity?: number;
@@ -1106,7 +1131,7 @@ export class DocumentsService {
               ? [existing.recipientPhone]
               : [];
         const updated = await tx.document.update({
-          where: { id: documentId },
+          where: { id: documentId, status: DocumentStatus.DRAFT },
           data: {
             type: nextType,
             consecutive,
@@ -1134,10 +1159,12 @@ export class DocumentsService {
 
         if (payload.items.length) {
           await tx.documentItem.createMany({
-            data: payload.items.map((item) => ({
+            data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              accessoryId: item.accessoryId ?? null,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -1148,7 +1175,7 @@ export class DocumentsService {
                 defaultBillingCutoffDate,
                 null,
               ),
-            })),
+            }))),
           });
         }
 
@@ -1785,6 +1812,27 @@ export class DocumentsService {
     return this.buildProviderRemissionRequirements(document);
   }
 
+  private async approveWithAccessories(documentId: string, userId: string) {
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Document" WHERE id = ${documentId} FOR UPDATE`;
+      const document = await tx.document.findUniqueOrThrow({ where: { id: documentId }, include: { items: true, files: true } });
+      if (document.status === DocumentStatus.CONFIRMED) return { document, changed: false };
+      if (document.status !== DocumentStatus.DRAFT || !['REMISSION', 'RETURN'].includes(document.type)) {
+        throw new BadRequestException('Solo se puede aprobar una remisión o devolución pendiente.');
+      }
+      const requirements = await this.buildProviderRemissionRequirements(document);
+      if (requirements.missingProviders.length) throw new BadRequestException({ code: 'PROVIDER_REMISSION_REQUIRED', message: 'Adjunta la remisión física de cada proveedor antes de aprobar.', providers: requirements.missingProviders });
+      await this.accessoryDocuments.apply(tx, document, userId, this.parseDeliveryMode(document.notes));
+      await this.approveLoadedRequestDocument({ ...document, items: document.items.filter((item) => !item.accessoryId) }, userId, tx);
+      return { document, changed: true };
+    }, { timeout: 20000 });
+    if (outcome.changed) {
+      await this.inventoryService.invalidateDocumentInventory(outcome.document.warehouseId, outcome.document.customerWorksiteId, outcome.document.items.map((item) => item.condition).filter((id): id is string => !!id));
+      this.sendFinalEmailInBackground(documentId);
+    }
+    return { id: documentId, status: DocumentStatus.CONFIRMED, splitDocumentIds: [documentId], splitConsecutives: outcome.document.consecutive ? [outcome.document.consecutive] : [] };
+  }
+
   async approveRequestDocument(documentId: string, userId: string) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
@@ -1822,6 +1870,9 @@ export class DocumentsService {
     });
     if (!document) {
       throw new NotFoundException('Document not found');
+    }
+    if (document.items.some((item) => item.accessoryId)) {
+      return this.approveWithAccessories(documentId, userId);
     }
     if (document.status !== DocumentStatus.DRAFT) {
       throw new BadRequestException(
@@ -1918,7 +1969,7 @@ export class DocumentsService {
         existing.consecutive,
       );
       const updated = await tx.document.update({
-        where: { id: documentId },
+        where: { id: documentId, status: DocumentStatus.DRAFT },
         data: {
           status: DocumentStatus.VOID,
           consecutive: rejectedConsecutive,

@@ -35,6 +35,7 @@ import { MobilityGuidesModule } from './mobility-guides/mobility-guides.module';
 import { ProviderReturnsModule } from './provider-returns/provider-returns.module';
 import { ProviderPickupsModule } from './provider-pickups/provider-pickups.module';
 import { FuelModule } from './fuel/fuel.module';
+import { AccessoriesModule } from './accessories/accessories.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { FuelModule } from './fuel/fuel.module';
     ProviderReturnsModule,
     ProviderPickupsModule,
     FuelModule,
+    AccessoriesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -20,6 +20,7 @@ describe('InventoryService warehouse availability', () => {
   ) {
     const create = jest.fn().mockResolvedValue({ id: 'ledger-1' });
     const tx = {
+      accessoryBalance: { findFirst: jest.fn().mockResolvedValue(null) },
       warehouse: {
         findUnique: jest.fn().mockResolvedValue({ id: warehouseId }),
       },

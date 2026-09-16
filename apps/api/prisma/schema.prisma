@@ -7,6 +7,147 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AccessoryKind {
+  INDIVIDUAL
+  RETURNABLE
+  CONSUMABLE
+}
+
+enum AccessoryScope {
+  FAMILY
+  SUBFAMILIES
+  ASSETS
+}
+
+enum AccessoryMovementType {
+  RECEIVE
+  ASSIGN
+  RETURN
+  TRANSFER
+  CONSUME
+  RETIRE
+  TRANSIT
+  PROVIDER_RECEIVE
+}
+
+model Accessory {
+  id                  String         @id @default(uuid())
+  name                String
+  description         String?
+  kind                AccessoryKind
+  internalCode        String?        @unique
+  familyId            String
+  scope               AccessoryScope
+  ownerWarehouseId    String
+  active              Boolean        @default(true)
+  version             Int            @default(0)
+  creationRequestId   String         @unique
+  creationFingerprint String
+  createdBy           String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  family         AssetFamily          @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  ownerWarehouse Warehouse            @relation(fields: [ownerWarehouseId], references: [id], onDelete: Restrict)
+  subfamilies    AccessorySubfamily[]
+  assets         AccessoryAsset[]
+  balances       AccessoryBalance[]
+  movements      AccessoryMovement[]
+  revisions      AccessoryRevision[]
+  documentItems  DocumentItem[]
+
+  @@index([familyId, active])
+  @@index([ownerWarehouseId])
+  @@index([name, id])
+}
+
+model AccessorySubfamily {
+  accessoryId String
+  subfamilyId String
+  accessory   Accessory      @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  subfamily   AssetSubfamily @relation(fields: [subfamilyId], references: [id], onDelete: Restrict)
+
+  @@id([accessoryId, subfamilyId])
+  @@index([subfamilyId])
+}
+
+model AccessoryAsset {
+  accessoryId String
+  assetId     String
+  accessory   Accessory @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([accessoryId, assetId])
+  @@index([assetId])
+}
+
+model AccessoryBalance {
+  id                 String            @id @default(uuid())
+  accessoryId        String
+  locationKey        String
+  warehouseId        String?
+  assetId            String?
+  customerWorksiteId String?
+  transitDocumentId  String?
+  quantity           Int
+  accessory          Accessory         @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  warehouse          Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  asset              Asset?            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  customerWorksite   CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  transitDocument    Document?         @relation(fields: [transitDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([accessoryId, locationKey])
+  @@index([assetId])
+  @@index([warehouseId])
+  @@index([customerWorksiteId])
+  @@index([transitDocumentId])
+}
+
+model AccessoryMovement {
+  id                   String                         @id @default(uuid())
+  accessoryId          String
+  requestId            String                         @unique
+  documentId           String?
+  fingerprint          String
+  type                 AccessoryMovementType
+  quantity             Int
+  from                 Json?
+  to                   Json?
+  note                 String
+  createdBy            String
+  createdAt            DateTime                       @default(now())
+  accessory            Accessory                      @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  document             Document?                      @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  providerReceiptItems AccessoryProviderReceiptItem[]
+
+  @@index([accessoryId, createdAt])
+  @@index([documentId])
+}
+
+model AccessoryRevision {
+  id          String    @id @default(uuid())
+  accessoryId String
+  before      Json
+  after       Json
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  accessory   Accessory @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+
+  @@index([accessoryId, createdAt])
+}
+
+model AccessoryProviderReceiptItem {
+  id                String            @id @default(uuid())
+  receiptDocumentId String
+  sourceMovementId  String
+  quantity          Int
+  receiptDocument   Document          @relation(fields: [receiptDocumentId], references: [id], onDelete: Cascade)
+  sourceMovement    AccessoryMovement @relation(fields: [sourceMovementId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptDocumentId, sourceMovementId])
+  @@index([sourceMovementId])
+}
+
 enum Role {
   ADMIN
   OFFICE
@@ -282,12 +423,13 @@ model Worksite {
 }
 
 model CustomerWorksite {
-  id         String   @id @default(uuid())
-  customerId String
-  worksiteId String
-  alias      String?
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  accessoryBalances AccessoryBalance[]
+  id                String             @id @default(uuid())
+  customerId        String
+  worksiteId        String
+  alias             String?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id])
   worksite Worksite @relation(fields: [worksiteId], references: [id])
@@ -320,6 +462,8 @@ model Warehouse {
   providerMobilityGuides    ProviderMobilityGuide[]
   providerSkuPrices         ProviderSkuPrice[]
   providerRemissionFiles    FileObject[]             @relation("ProviderRemissionWarehouse")
+  accessoriesOwned          Accessory[]
+  accessoryBalances         AccessoryBalance[]
 }
 
 model LegacyWarehouse {
@@ -357,6 +501,7 @@ model AssetFamily {
   subfamilies            AssetSubfamily[]
   componentRules         AssetFamilyComponent[] @relation("ComponentRuleParent")
   usedAsComponentInRules AssetFamilyComponent[] @relation("ComponentRuleComponent")
+  accessories            Accessory[]
 }
 
 model AssetFamilyComponent {
@@ -389,9 +534,10 @@ model AssetSubfamily {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  assetFamily      AssetFamily            @relation(fields: [assetFamilyId], references: [id])
-  skus             Sku[]
-  internalCounters AssetInternalCounter[]
+  assetFamily            AssetFamily            @relation(fields: [assetFamilyId], references: [id])
+  skus                   Sku[]
+  internalCounters       AssetInternalCounter[]
+  accessoryCompatibility AccessorySubfamily[]
 
   @@unique([assetFamilyId, code])
   @@unique([assetFamilyId, name])
@@ -495,15 +641,17 @@ model Asset {
   assignedToMixer  Asset?      @relation("MixerAssignedMotor")
   deletedBy        User?       @relation("AssetDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
 
-  documentItems         DocumentItem[]
-  ledger                StockLedger[]
-  mobilityGuides        MobilityGuide[]
-  hourReadings          AssetHourReading[]
-  maintenancePlans      MaintenancePlan[]
-  providerReceiptItems  ProviderReceiptItem[]
-  providerPickupItems   ProviderPickupItem[]
-  assetFuelings         AssetFueling[]
-  documentItemsAsParent DocumentItem[]        @relation("DocumentItemComponentParentAsset")
+  documentItems          DocumentItem[]
+  ledger                 StockLedger[]
+  mobilityGuides         MobilityGuide[]
+  hourReadings           AssetHourReading[]
+  maintenancePlans       MaintenancePlan[]
+  providerReceiptItems   ProviderReceiptItem[]
+  providerPickupItems    ProviderPickupItem[]
+  assetFuelings          AssetFueling[]
+  documentItemsAsParent  DocumentItem[]        @relation("DocumentItemComponentParentAsset")
+  accessoryCompatibility AccessoryAsset[]
+  accessoryBalances      AccessoryBalance[]
 
   @@index([skuId])
   @@index([registrationNumber])
@@ -696,9 +844,10 @@ model Task {
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
-  createdBy          User        @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
-  assignedTo         User?       @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
-  assignedToEmployee Employee?   @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
+  createdBy          User      @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo         User?     @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+  assignedToEmployee Employee? @relation("TaskAssignedToEmployee", fields: [assignedToEmployeeId], references: [id])
+
   @@index([createdByUserId])
   @@index([assignedToUserId])
   @@index([assignedToEmployeeId])
@@ -707,19 +856,22 @@ model Task {
 }
 
 model Document {
-  id                  String         @id @default(uuid())
-  shareToken          String         @unique @default(uuid())
-  type                DocumentType
-  status              DocumentStatus @default(DRAFT)
-  consecutive         String?        @unique
-  customerWorksiteId  String?
-  warehouseId         String?
-  providerWarehouseId String?
-  createdBy           String
-  docDate             DateTime       @default(now())
-  notes               String?
-  recipientPhone      String?
-  recipientPhones     String[]       @default([])
+  accessoryMovements            AccessoryMovement[]
+  accessoryTransitBalances      AccessoryBalance[]
+  accessoryProviderReceiptItems AccessoryProviderReceiptItem[]
+  id                            String                         @id @default(uuid())
+  shareToken                    String                         @unique @default(uuid())
+  type                          DocumentType
+  status                        DocumentStatus                 @default(DRAFT)
+  consecutive                   String?                        @unique
+  customerWorksiteId            String?
+  warehouseId                   String?
+  providerWarehouseId           String?
+  createdBy                     String
+  docDate                       DateTime                       @default(now())
+  notes                         String?
+  recipientPhone                String?
+  recipientPhones               String[]                       @default([])
 
   // Failed fields
   failedReason         String?
@@ -855,7 +1007,12 @@ model DocumentItem {
   requestedTag String?
 
   // SERIAL
-  assetId String?
+  assetId                  String?
+  accessoryId              String?
+  accessorySourceBalanceId String?
+  accessoryName            String?
+  accessoryCode            String?
+  accessoryKind            AccessoryKind?
 
   // Optional grouping: this line accompanied a serialized parent asset.
   componentParentAssetId String?
@@ -872,15 +1029,17 @@ model DocumentItem {
 
   createdAt DateTime @default(now())
 
-  document             Document @relation(fields: [documentId], references: [id])
-  sku                  Sku?     @relation(fields: [skuId], references: [id])
-  asset                Asset?   @relation(fields: [assetId], references: [id])
-  componentParentAsset Asset?   @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
+  document             Document   @relation(fields: [documentId], references: [id])
+  sku                  Sku?       @relation(fields: [skuId], references: [id])
+  asset                Asset?     @relation(fields: [assetId], references: [id])
+  accessory            Accessory? @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  componentParentAsset Asset?     @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
 
   @@index([documentId])
   @@index([skuId])
   @@index([assetId])
   @@index([componentParentAssetId])
+  @@index([accessoryId])
   @@index([requestedTag])
 }
 
@@ -900,11 +1059,11 @@ model StockLedger {
   refDocumentId   String?
   refDocumentType DocumentType?
 
-  effectiveAt DateTime @default(now())
+  effectiveAt      DateTime @default(now())
   // Provider catalogue opening stock, not a dated physical receipt.
-  isOpeningBalance Boolean @default(false)
-  createdAt DateTime @default(now())
-  createdBy String
+  isOpeningBalance Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  createdBy        String
 
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id])
   ownerWarehouse   Warehouse         @relation("LedgerOwnerWarehouse", fields: [ownerWarehouseId], references: [id])

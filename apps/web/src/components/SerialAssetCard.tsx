@@ -24,6 +24,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { getSerialDisplayName } from "@/lib/serial-assets";
 import { ownerColorById } from "@/lib/owner-color";
 import classes from "@/components/SerialAssetCard.module.css";
+import { getCurrentUserRole } from "@/lib/auth";
 
 export type SerialAssetCardItem = {
   assetId: string;
@@ -130,6 +131,11 @@ export default function SerialAssetCard({
   showcase?: boolean;
 }) {
   const [brokenImage, setBrokenImage] = useState(false);
+  const [canManageAccessories, setCanManageAccessories] = useState(false);
+  useEffect(() => {
+    const role = getCurrentUserRole();
+    setCanManageAccessories(role === 'ADMIN' || role === 'OFFICE');
+  }, []);
   const [useOriginalImage, setUseOriginalImage] = useState(false);
   const cardImageUrl = item.imageUrl
     ? useOriginalImage || !item.imageFileObjectId
@@ -381,6 +387,18 @@ export default function SerialAssetCard({
           </Button>
         ) : null}
         {footer}
+        {href && canManageAccessories ? (
+          <Button
+            component={Link}
+            href={`/inventory/accessories/equipment/${item.assetId}?create=1`}
+            variant="light"
+            size="xs"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            Agregar accesorio
+          </Button>
+        ) : null}
       </Stack>
     </Card>
   );

@@ -15,7 +15,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import type { Dispatch, JSX, SetStateAction } from 'react';
+import type { Dispatch, JSX, ReactNode, SetStateAction } from 'react';
 import { normalizeQuantityInput } from './request-formatting';
 import {
   Customer,
@@ -29,6 +29,7 @@ import {
 import { helpLabel } from './RequestHelpLabel';
 
 type Props = {
+  accessorySelector?: ReactNode;
   sourceMode: 'warehouse' | 'on-site';
   setGenerateStep: Dispatch<SetStateAction<GenerateStep>>;
   renderGenerateError: () => JSX.Element | null;
@@ -74,6 +75,7 @@ type Props = {
 };
 
 export default function RequestItemsSection({
+  accessorySelector,
   sourceMode,
   setGenerateStep,
   renderGenerateError,
@@ -262,6 +264,7 @@ export default function RequestItemsSection({
       <Divider my="md" />
 
       <Title order={4}>Seleccionados</Title>
+      {accessorySelector}
       {selectedItems.length === 0 ? (
         <Paper radius="lg" p="lg" bg="gray.0" mt="md">
           <Text fw={700}>No hay equipos agregados</Text>
@@ -294,8 +297,11 @@ export default function RequestItemsSection({
                   {renderAdminItemFields(item, index)}
                 </Table.Td>
                 <Table.Td>
-                  {item.type === 'bulk' || item.type === 'free' ? (
+                  {item.type === 'bulk' || item.type === 'free' || (item.type === 'accessory' && (item.accessoryKind === 'CONSUMABLE' || item.accessoryKind === 'RETURNABLE')) ? (
                     <NumberInput
+                      aria-label={`Cantidad de ${item.name}`}
+                      allowDecimal={item.type !== 'accessory'}
+                      max={item.type === 'accessory' ? item.availableQuantity : undefined}
                       min={1}
                       value={item.quantity ?? 1}
                       onChange={(value) =>
@@ -351,8 +357,10 @@ export default function RequestItemsSection({
                     </Text>
                   ) : null}
                 </div>
-                {item.type === 'bulk' || item.type === 'free' ? (
+                {item.type === 'bulk' || item.type === 'free' || (item.type === 'accessory' && (item.accessoryKind === 'CONSUMABLE' || item.accessoryKind === 'RETURNABLE')) ? (
                   <NumberInput
+                    allowDecimal={item.type !== 'accessory'}
+                    max={item.type === 'accessory' ? item.availableQuantity : undefined}
                     label="Cantidad"
                     min={1}
                     value={item.quantity ?? 1}

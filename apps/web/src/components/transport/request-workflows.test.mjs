@@ -262,6 +262,7 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
         componentParentAssetId: 'loader',
         ownerWarehouseId: 'ally',
       },
+      { type: 'accessory', accessoryId: 'puntas', accessorySourceBalanceId: 'balance', componentParentAssetId: 'loader', quantity: 4, name: 'Puntas', ownerWarehouseId: 'own' },
     ],
     autosaveDraftId: null,
     autosaveReady: false,
@@ -274,6 +275,8 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
   assert.deepEqual(payload.recipientPhones, ['3001234567']);
   assert.equal(payload.items[0].componentParentAssetId, 'loader');
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
+  assert.equal(payload.items[1].accessoryId, 'puntas');
+  assert.equal(payload.items[1].accessorySourceBalanceId, 'balance');
   assert.match(payload.notes, /Conductor: driver/);
   assert.match(payload.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
@@ -441,6 +444,7 @@ test('envío offline conserva el orden guardar → enviar → correo sin perder 
   const hook = await mountHook(useRequestSubmission, {
     ...submissionOptions,
     autosaveDraftId: 'draft',
+    selectedItems: [...submissionOptions.selectedItems, { type: 'accessory', accessoryId: 'canasta', accessorySourceBalanceId: 'saldo', componentParentAssetId: 'loader', name: 'Canasta', quantity: 1, ownerWarehouseId: 'own' }],
     setError: (error) => errors.push(error),
   });
   await act(() => hook.current.handleSubmit());
@@ -456,6 +460,8 @@ test('envío offline conserva el orden guardar → enviar → correo sin perder 
   assert.deepEqual(queued[1].dependsOn, ['op-1']);
   assert.deepEqual(queued[2].dependsOn, ['op-2']);
   assert.equal(queued[0].body.items[0].componentParentAssetId, 'loader');
+  assert.equal(queued[0].body.items.at(-1).accessoryId, 'canasta');
+  assert.equal(queued[0].body.items.at(-1).accessorySourceBalanceId, 'saldo');
   assert.match(queued[0].body.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
 

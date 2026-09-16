@@ -33,6 +33,10 @@ import AssetDetailsPanel from '@/components/serialized-assets/AssetDetailsPanel'
 import AssetMovementSummary from '@/components/serialized-assets/AssetMovementSummary';
 import SerializedAssetEditForm from '@/components/serialized-assets/SerializedAssetEditForm';
 import SerializedAssetHero from '@/components/serialized-assets/SerializedAssetHero';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+
+const AccessoriesWorkspace = dynamic(() => import('@/components/accessories/AccessoriesWorkspace'));
 
 type AssetResponse = {
   id: string;
@@ -614,6 +618,8 @@ export default function EditSerializedAssetPage() {
             location={locationBadge}
           />
 
+          {!asset.deletedAt ? <Button component={Link} href={`/inventory/accessories/equipment/${asset.id}?create=1`} variant="light" style={{ alignSelf: 'flex-start' }}>Agregar accesorio</Button> : null}
+
           <Tabs defaultValue="details" keepMounted={false}>
             <Tabs.List mb="lg">
               <Tabs.Tab value="details" leftSection={<IconInfoCircle size={17} />}>
@@ -624,6 +630,9 @@ export default function EditSerializedAssetPage() {
               </Tabs.Tab>
               <Tabs.Tab value="maintenance" leftSection={<IconTool size={17} />}>
                 Mantenimiento
+              </Tabs.Tab>
+              <Tabs.Tab value="accessories" leftSection={<IconTool size={17} />}>
+                Accesorios
               </Tabs.Tab>
             </Tabs.List>
 
@@ -677,6 +686,9 @@ export default function EditSerializedAssetPage() {
               <MaintenancePanel
                 subject={{ type: 'ASSET', id: asset.id, label: asset.publicCode }}
               />
+            </Tabs.Panel>
+            <Tabs.Panel value="accessories">
+              <AccessoriesWorkspace equipmentId={asset.id} />
             </Tabs.Panel>
           </Tabs>
         </Stack>

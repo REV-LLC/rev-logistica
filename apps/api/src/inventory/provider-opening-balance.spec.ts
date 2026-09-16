@@ -14,6 +14,7 @@ describe('provider catalogue stock and late document entry', () => {
         effectiveAt: registered, isOpeningBalance: opening },
     ];
     const tx = {
+      accessoryBalance: { findFirst: jest.fn().mockResolvedValue(null) },
       $queryRaw: jest.fn().mockResolvedValue([]),
       document: { findUnique: jest.fn().mockResolvedValue({ type: DocumentType.REMISSION, docDate: delivered }) },
       customerWorksite: { findUnique: jest.fn().mockResolvedValue({ id: 'site' }) },

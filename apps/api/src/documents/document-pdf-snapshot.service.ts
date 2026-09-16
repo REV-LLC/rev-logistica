@@ -184,6 +184,8 @@ export class DocumentPdfSnapshotService {
         },
         items: {
           select: {
+            accessoryId: true,
+            accessoryCode: true,
             quantity: true,
             requestedTag: true,
             conditionNote: true,

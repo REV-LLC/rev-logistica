@@ -95,6 +95,11 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Equipos unicos",
     },
     {
+      prefix: "/inventory/accessories",
+      title: "Accesorios",
+      subtitle: "Compatibilidad y existencias",
+    },
+    {
       prefix: "/settings/catalog-options",
       title: "Catalogo items",
       subtitle: "Ajustes",

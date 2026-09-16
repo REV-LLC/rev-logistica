@@ -21,7 +21,7 @@ describe('ProviderReturnsService pending deliveries', () => {
         providerReceiptItems: [],
       },
     ]);
-    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never);
+    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never, { listPending: jest.fn().mockResolvedValue([]) } as never);
 
     const result = await service.listPending({ id: 'driver-1', role: Role.DRIVER });
 
@@ -38,7 +38,7 @@ describe('ProviderReturnsService pending deliveries', () => {
       ownerWarehouse: { id: 'provider', name: 'Proveedor', type: 'ALLY' },
       document: { id: 'dv', consecutive: 'DV1', docDate: new Date(), createdBy: 'driver', customerWorksite: null },
       providerReceiptItems: [{ quantity: 1 }],
-    }]) } } as never);
+    }]) } } as never, { listPending: jest.fn().mockResolvedValue([]) } as never);
 
     await expect(service.listPending({ id: 'admin', role: Role.ADMIN })).resolves.toEqual([]);
   });

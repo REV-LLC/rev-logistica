@@ -754,6 +754,9 @@ export class AssetsService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        if (payload.active === false) {
+          await this.assertNoAssignedAccessories(tx, assetId);
+        }
         if (payload.hourMeter !== undefined) {
           const current = await tx.asset.findUniqueOrThrow({
             where: { id: assetId },
@@ -888,6 +891,12 @@ export class AssetsService {
     return result;
   }
 
+  private async assertNoAssignedAccessories(tx: Prisma.TransactionClient, assetId: string) {
+    await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${assetId} FOR UPDATE`;
+    const assigned = await tx.accessoryBalance.count({ where: { assetId, quantity: { gt: 0 } } });
+    if (assigned) throw new BadRequestException('Devuelve o traslada los accesorios asignados antes de desactivar o eliminar el equipo.');
+  }
+
   async deleteAsset(assetId: string, reason: string, userId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
@@ -916,6 +925,7 @@ export class AssetsService {
 
     const normalizedReason = reason.trim();
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.assertNoAssignedAccessories(tx, assetId);
       const maintenanceItems = await tx.maintenanceItem.findMany({
         where: { plan: { assetId } },
         select: { id: true },

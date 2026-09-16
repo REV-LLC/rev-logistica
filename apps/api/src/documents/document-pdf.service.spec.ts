@@ -42,6 +42,15 @@ describe('DocumentPdfService', () => {
     return buffer.toString('latin1').match(/\/Type \/Page\b/g)?.length ?? 0;
   }
 
+  it('prints the accessory snapshot without requiring a fictitious equipment or SKU', () => {
+    expect(buildPdfItemDescription({ quantity: 4, requestedTag: 'Puntas · Accesorio de DEM-001', conditionNote: null, sku: null, asset: null })).toBe('Puntas · Accesorio de DEM-001');
+  });
+
+  it('paginates a large accessory document instead of truncating its lines', async () => {
+    const buffer = await new DocumentPdfService().render({ ...document, items: Array.from({ length: 45 }, (_, index) => ({ quantity: 1, requestedTag: `Canasta ${index} · Accesorio de PLU-001`, conditionNote: null, sku: null, asset: null })) });
+    expect(pageCount(buffer)).toBeGreaterThan(1);
+  });
+
   it('prints the selected document date and time in Colombia using 24-hour format', () => {
     expect(
       formatDocumentDateTime(
