@@ -256,7 +256,7 @@ export default function HourMeterPage() {
             </Paper>
           ) : null}
           {historyError ? <Alert color="red">{historyError}</Alert> : null}
-          {historyData ? <HourReadingHistory readings={historyData.readings} /> : null}
+          {historyData ? <HourReadingHistory readings={historyData.readings} showReportedHours /> : null}
         </Stack>
       </Modal>
     </Container>
