@@ -162,6 +162,11 @@ export class UpdateMaintenanceItemDto {
 }
 
 export class RecordAssetHoursDto {
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  operatorReportedHours?: number;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   hours: number;

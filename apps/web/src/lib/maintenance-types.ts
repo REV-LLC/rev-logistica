@@ -40,6 +40,8 @@ export type NotificationTopic = {
 export type MaintenanceScheduleType = 'HOURS' | 'CALENDAR_DAYS';
 
 export type MaintenanceReading = {
+  previousHours?: number | string | null;
+  operatorReportedHours?: number | string | null;
   id: string;
   hours: number | string;
   recordedAt: string;
