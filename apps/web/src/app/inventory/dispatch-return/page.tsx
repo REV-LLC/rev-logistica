@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -840,7 +841,10 @@ export default function RemisionDevolucionPage() {
               {evidencePhotos.map((photo) => (
                 <Paper key={photo.id} withBorder radius="md" p={6}>
                   <div style={{ position: 'relative' }}>
-                    <img
+                    <AppImage
+                      width={400}
+                      height={300}
+                      sizes="(max-width: 768px) 45vw, 300px"
                       src={photo.previewUrl}
                       alt="Vista previa de evidencia"
                       style={{

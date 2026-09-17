@@ -1,5 +1,6 @@
 "use client";
 
+import AppImage from '@/components/AppImage';
 import {
   ActionIcon,
   Badge,
@@ -136,16 +137,10 @@ export default function SerialAssetCard({
     const role = getCurrentUserRole();
     setCanManageAccessories(role === 'ADMIN' || role === 'OFFICE');
   }, []);
-  const [useOriginalImage, setUseOriginalImage] = useState(false);
-  const cardImageUrl = item.imageUrl
-    ? useOriginalImage || !item.imageFileObjectId
-      ? item.imageUrl
-      : `${item.imageUrl}.thumbnail.webp`
-    : null;
+  const cardImageUrl = item.imageUrl;
 
   useEffect(() => {
     setBrokenImage(false);
-    setUseOriginalImage(false);
   }, [item.imageUrl]);
   const isMobile = useMediaQuery("(max-width: 48em)");
   const description = getSerialDisplayName(item);
@@ -219,21 +214,13 @@ export default function SerialAssetCard({
         }}
       >
         {cardImageUrl && !brokenImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <AppImage
+            width={640}
+            height={480}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 400px"
             src={cardImageUrl}
             alt={description}
-            onError={() => {
-              if (
-                !useOriginalImage &&
-                item.imageUrl &&
-                item.imageFileObjectId
-              ) {
-                setUseOriginalImage(true);
-                return;
-              }
-              setBrokenImage(true);
-            }}
+            onError={() => setBrokenImage(true)}
             style={{
               width: "100%",
               height: "100%",

@@ -1,4 +1,5 @@
 'use client';
+import AppImage from '@/components/AppImage';
 import {
   Alert,
   Button,
@@ -113,7 +114,10 @@ export default function ProviderRemissionDialog({
                     leftSection={<IconCamera size={16} />}
                   />
                   {draft ? (
-                    <img
+                    <AppImage
+                      width={360}
+                      height={270}
+                      sizes="(max-width: 400px) 90vw, 360px"
                       src={draft.previewUrl}
                       alt={`Remisión física de ${provider.providerName}`}
                       style={{
