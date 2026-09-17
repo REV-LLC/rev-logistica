@@ -774,6 +774,7 @@ export class AssetsService {
               data: {
                 assetId,
                 hours: payload.hourMeter,
+                previousHours: current.hourMeter,
                 note: 'ACTUALIZACIÓN DESDE FICHA DEL ACTIVO',
                 recordedByUserId: userId,
               },

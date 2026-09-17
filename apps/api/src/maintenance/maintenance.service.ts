@@ -164,6 +164,9 @@ export class MaintenanceService {
     role: Role,
   ) {
     await this.assertHourlyAsset(assetId, role === Role.OPERATOR);
+    if (payload.operatorReportedHours == null) {
+      throw new BadRequestException('Debes ingresar las horas reportadas por el operario');
+    }
     if (!payload.evidenceFileObjectId) {
       throw new BadRequestException('Debes adjuntar una evidencia fotográfica');
     }
@@ -314,10 +317,7 @@ export class MaintenanceService {
         hours: payload.hours, recordedAt: payload.recordedAt ? new Date(payload.recordedAt) : new Date(),
         note: payload.note?.trim() || null, recordedByUserId: userId,
       };
-      if (payload.hours === latestHours) {
-        if (subject === 'asset') {
-          throw new BadRequestException('New hours must be greater than current hours');
-        }
+      if (payload.hours === latestHours && subject === 'vehicle') {
         return { hours: latestHours, unchanged: true };
       }
       if (subject === 'asset') {
@@ -326,6 +326,8 @@ export class MaintenanceService {
           data: {
             ...data,
             assetId: id,
+            previousHours: latestHours,
+            operatorReportedHours: payload.operatorReportedHours,
             evidenceFileObjectId: payload.evidenceFileObjectId,
           },
         });

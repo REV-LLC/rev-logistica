@@ -253,7 +253,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
           </Tabs.Panel>
           {isHourly ? (
             <Tabs.Panel value="history" pt="md">
-              <HourReadingHistory readings={data.readings} />
+              <HourReadingHistory readings={data.readings} showReportedHours={subject.type === 'ASSET'} />
             </Tabs.Panel>
           ) : null}
         </Tabs>

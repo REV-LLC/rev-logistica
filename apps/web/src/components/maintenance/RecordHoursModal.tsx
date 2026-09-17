@@ -28,6 +28,7 @@ export default function RecordHoursModal({
   onSaved,
 }: Props) {
   const [hours, setHours] = useState<number | ''>(currentHours);
+  const [operatorReportedHours, setOperatorReportedHours] = useState<number | ''>('');
   const [recordedAt, setRecordedAt] = useState(currentLocalDateTime);
   const [note, setNote] = useState('');
   const [evidence, setEvidence] = useState<File | null>(null);
@@ -37,6 +38,7 @@ export default function RecordHoursModal({
   useEffect(() => {
     if (!opened) return;
     setHours(currentHours);
+    setOperatorReportedHours('');
     setRecordedAt(currentLocalDateTime());
     setNote('');
     setEvidence(null);
@@ -44,8 +46,14 @@ export default function RecordHoursModal({
   }, [currentHours, opened]);
 
   const save = async () => {
-    if (hours === '' || hours <= currentHours) {
-      setError(`La nueva lectura debe ser superior a ${currentHours} horas.`);
+    if (hours === '' || hours < currentHours || (subject.type !== 'ASSET' && hours === currentHours)) {
+      setError(subject.type === 'ASSET'
+        ? `La nueva lectura no puede ser inferior a ${currentHours} horas.`
+        : `La nueva lectura debe ser superior a ${currentHours} horas.`);
+      return;
+    }
+    if (subject.type === 'ASSET' && (operatorReportedHours === '' || !Number.isFinite(operatorReportedHours) || operatorReportedHours < 0)) {
+      setError('Ingresa las horas reportadas por el operario (cero o más).');
       return;
     }
     if (subject.type === 'ASSET' && !evidence) {
@@ -78,6 +86,7 @@ export default function RecordHoursModal({
         method: 'POST',
         json: {
           hours,
+          operatorReportedHours: subject.type === 'ASSET' ? operatorReportedHours : undefined,
           recordedAt: recordedAt ? new Date(recordedAt).toISOString() : undefined,
           note: note.trim() || undefined,
           evidenceFileObjectId,
@@ -110,6 +119,19 @@ export default function RecordHoursModal({
           suffix=" horas"
           required
         />
+        {subject.type === 'ASSET' ? (
+          <NumberInput
+            label="Horas reportadas por el operario"
+            description="Horas a cobrar por esta jornada, incluyendo mínima o esperas en obra. Pueden diferir del horómetro."
+            value={operatorReportedHours}
+            onChange={(value) => setOperatorReportedHours(typeof value === 'number' ? value : '')}
+            min={0}
+            decimalScale={2}
+            step={0.5}
+            suffix=" horas"
+            required
+          />
+        ) : null}
         <TextInput
           label="Fecha de lectura"
           type="datetime-local"

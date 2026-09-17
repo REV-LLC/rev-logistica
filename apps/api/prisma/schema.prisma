@@ -714,6 +714,8 @@ model AssetHourReading {
   id                   String   @id @default(uuid())
   assetId              String
   hours                Decimal  @db.Decimal(12, 2)
+  previousHours        Decimal? @db.Decimal(12, 2)
+  operatorReportedHours Decimal? @db.Decimal(12, 2)
   recordedAt           DateTime @default(now())
   note                 String?
   evidenceFileObjectId String?
