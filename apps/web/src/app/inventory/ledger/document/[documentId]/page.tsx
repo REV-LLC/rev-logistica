@@ -94,6 +94,8 @@ type DocumentDetail = {
     condition?: string | null;
     conditionNote?: string | null;
     requestedTag?: string | null;
+    accessoryId?: string | null;
+    accessorySourceBalanceId?: string | null;
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
@@ -750,6 +752,7 @@ export default function DocumentDetailPage() {
     item.billingStatus ?? (getEffectiveBillingCutoffDate(item) ? 'CUT' : 'OPEN');
   const isResolvePendingItem = (item: DocumentDetail['items'][number]) => {
     const hasTag = Boolean(item.requestedTag?.trim());
+    if (item.accessoryId) return false;
     if (!item.skuId && !item.assetId) {
       return hasTag;
     }
@@ -994,6 +997,8 @@ export default function DocumentDetailPage() {
           recipientPhone: doc.recipientPhone ?? undefined,
           items: [
             ...doc.items.filter((item) => item.assetId !== motor.assetId).map((item) => ({
+              accessoryId: item.accessoryId ?? undefined,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
               skuId: item.assetId ? undefined : item.skuId ?? undefined,
               assetId: item.assetId ?? undefined,
               componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -1043,7 +1048,7 @@ export default function DocumentDetailPage() {
     const initialAssetMap: Record<number, string> = {};
 
     doc.items.forEach((item, index) => {
-      if (item.assetId) return;
+      if (item.assetId || item.accessoryId) return;
       const normalizedTag = normalizeTagBase(item.requestedTag);
       const matchedSku = item.skuId
         ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
@@ -1407,6 +1412,13 @@ export default function DocumentDetailPage() {
     try {
       const itemsPayload = resolveDocument.items.map((item, index) => {
         const ownerWarehouseId = item.condition ?? undefined;
+        if (item.accessoryId) return {
+          accessoryId: item.accessoryId,
+          accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
+          componentParentAssetId: item.componentParentAssetId ?? undefined,
+          quantity: Number(item.quantity), ownerWarehouseId,
+          conditionNote: item.conditionNote ?? undefined,
+        };
         if (item.assetId) {
           return {
             assetId: item.assetId,

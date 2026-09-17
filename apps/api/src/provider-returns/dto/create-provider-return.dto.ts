@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
 
 export class ProviderReturnItemDto {
   @IsUUID()
@@ -8,6 +8,11 @@ export class ProviderReturnItemDto {
   @IsNumber()
   @IsPositive()
   quantity: number;
+}
+
+export class AccessoryProviderReturnItemDto {
+  @IsUUID() sourceMovementId: string;
+  @IsInt() @IsPositive() quantity: number;
 }
 
 export class CreateProviderReturnDto {
@@ -22,8 +27,12 @@ export class CreateProviderReturnDto {
   notes?: string;
 
   @IsArray()
-  @ArrayMinSize(1)
+  @ArrayMinSize(0)
   @ValidateNested({ each: true })
   @Type(() => ProviderReturnItemDto)
   items: ProviderReturnItemDto[];
+
+  @IsOptional() @IsArray() @ArrayMaxSize(500)
+  @ValidateNested({ each: true }) @Type(() => AccessoryProviderReturnItemDto)
+  accessoryItems?: AccessoryProviderReturnItemDto[];
 }

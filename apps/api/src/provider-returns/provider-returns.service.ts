@@ -1,15 +1,18 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentStatus, DocumentType, MovementType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { CreateProviderReturnDto } from './dto/create-provider-return.dto';
+import { AccessoryProviderReturnsService } from '../accessories/accessory-provider-returns.service';
+import { AccessoriesService } from '../accessories/accessories.service';
+import { isSerializationConflict } from '../documents/document-transaction-conflict';
 
 const EVIDENCE_CATEGORY = 'EVIDENCIA_ENTREGA_PROVEEDOR';
 const PROOF_CATEGORY = 'COMPROBANTE_RECEPCION_PROVEEDOR';
 
 @Injectable()
 export class ProviderReturnsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accessoryReturns: AccessoryProviderReturnsService = new AccessoryProviderReturnsService(prisma, new AccessoriesService(prisma))) {}
 
   async listPending(user: { id: string; role: Role }) {
     const rows = await this.prisma.stockLedger.findMany({
@@ -36,7 +39,7 @@ export class ProviderReturnsService {
       },
     });
 
-    return rows.flatMap((row) => {
+    const equipment = rows.flatMap((row) => {
       const delivered = row.providerReceiptItems.reduce((sum, item) => sum + Number(item.quantity), 0);
       const pendingQuantity = Number(row.quantity) - delivered;
       const isTransit = row.movementType === MovementType.TRANSIT;
@@ -70,9 +73,11 @@ export class ProviderReturnsService {
         pendingQuantity,
       }];
     });
+    return [...equipment, ...await this.accessoryReturns.listPending(user)];
   }
 
   async createDraft(payload: CreateProviderReturnDto, user: { id: string; role: Role }) {
+    if (!payload.items.length && !payload.accessoryItems?.length) throw new BadRequestException('Selecciona al menos un equipo o accesorio.');
     return this.prisma.$transaction(async (tx) => {
       const sourceDocument = await tx.document.findUnique({
         where: { id: payload.sourceDocumentId },
@@ -88,6 +93,8 @@ export class ProviderReturnsService {
         where: { id: payload.providerWarehouseId, type: 'ALLY', active: true }, select: { id: true },
       });
       if (!provider) throw new BadRequestException('La bodega proveedora no es válida');
+
+      const accessoryItems = await this.accessoryReturns.prepare(tx, sourceDocument.id, provider.id, payload.accessoryItems ?? []);
 
       const requested = new Map(payload.items.map((item) => [item.sourceLedgerId, item.quantity]));
       if (requested.size !== payload.items.length) throw new BadRequestException('Hay ítems repetidos');
@@ -111,6 +118,7 @@ export class ProviderReturnsService {
         }
       }
 
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('provider-receipt-consecutive', 0))::text`;
       const existing = await tx.document.findMany({
         where: { type: DocumentType.PROVIDER_RECEIPT, consecutive: { startsWith: 'RP' } }, select: { consecutive: true },
       });
@@ -124,6 +132,8 @@ export class ProviderReturnsService {
           providerSourceDocumentId: sourceDocument.id,
           createdBy: user.id,
           notes: payload.notes?.trim() || null,
+          accessoryProviderReceiptItems: { create: accessoryItems.map((item) => ({ sourceMovementId: item.sourceMovementId, quantity: item.quantity })) },
+          items: { create: accessoryItems.map((item) => item.documentItem) },
           providerReceiptItems: { create: ledgers.map((ledger) => ({
             sourceDocumentId: sourceDocument.id,
             sourceLedgerId: ledger.id,
@@ -138,20 +148,38 @@ export class ProviderReturnsService {
   }
 
   async confirm(receiptId: string, user: { id: string; role: Role }) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.confirmOnce(receiptId, user);
+      } catch (error) {
+        if (!isSerializationConflict(error)) throw error;
+        if (attempt === 2) throw new ConflictException('El inventario cambió durante la recepción. Actualiza e inténtalo de nuevo.');
+      }
+    }
+    throw new ConflictException('No se pudo completar la recepción. Inténtalo de nuevo.');
+  }
+
+  private async confirmOnce(receiptId: string, user: { id: string; role: Role }) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Document" WHERE id = ${receiptId} FOR UPDATE`;
       const receipt = await tx.document.findUnique({
         where: { id: receiptId },
         include: { files: { select: { category: true } }, providerReceiptItems: { include: { sourceLedger: { include: { document: { select: { status: true, type: true } } } } } } },
       });
       if (!receipt || receipt.type !== DocumentType.PROVIDER_RECEIPT) throw new NotFoundException('Recepción no encontrada');
-      if (receipt.status !== DocumentStatus.DRAFT) throw new BadRequestException('La recepción ya fue procesada');
       if (user.role === Role.DRIVER && receipt.createdBy !== user.id) throw new ForbiddenException('Esta recepción pertenece a otro conductor');
+      if (receipt.status === DocumentStatus.CONFIRMED) return { id: receipt.id, consecutive: receipt.consecutive, status: receipt.status };
+      if (receipt.status !== DocumentStatus.DRAFT) throw new BadRequestException('La recepción ya fue procesada');
       if (!receipt.files.some((file) => file.category === EVIDENCE_CATEGORY) ||
           !receipt.files.some((file) => file.category === PROOF_CATEGORY)) {
         throw new BadRequestException('Debes adjuntar la evidencia de entrega y el comprobante del proveedor');
       }
       if (!receipt.warehouseId) throw new BadRequestException('La recepción no tiene bodega destino');
+      // Match document approval: accessories before equipment and quantity stock.
+      await this.accessoryReturns.confirm(tx, { ...receipt, warehouseId: receipt.warehouseId }, user.id);
+      for (const id of [...new Set(receipt.providerReceiptItems.flatMap((item) => item.assetId ? [item.assetId] : []))].sort()) await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${id} FOR UPDATE`;
       await lockBulkStock(tx, receipt.providerReceiptItems.flatMap((item) => item.sourceLedger.skuId ? [item.sourceLedger.skuId] : []));
+      for (const id of [...new Set(receipt.providerReceiptItems.map((item) => item.sourceLedgerId))].sort()) await tx.$queryRaw`SELECT id FROM "StockLedger" WHERE id = ${id} FOR UPDATE`;
 
       for (const item of receipt.providerReceiptItems) {
         if (item.sourceLedger.reversedByDocumentId ||

@@ -25,6 +25,8 @@ export type SharedDocument = {
     worksite: { name: string; address: string | null } | null;
   } | null;
   items: Array<{
+    accessoryId?: string | null;
+    accessoryCode?: string | null;
     quantity: { toString(): string } | string | number | null;
     requestedTag: string | null;
     conditionNote: string | null;
@@ -195,7 +197,7 @@ export class DocumentPdfService {
   }
 
   fileName(document: Pick<SharedDocument, 'type' | 'consecutive'>) {
-    const kind = document.type === 'RETURN' ? 'devolucion' : 'remision';
+    const kind = document.type === 'RETURN' ? 'devolucion' : document.type === 'PROVIDER_RECEIPT' ? 'recepcion-proveedor' : 'remision';
     const number =
       document.consecutive?.replace(/[^a-zA-Z0-9_-]/g, '-') || 'documento';
     return `${kind}-${number}.pdf`;
@@ -204,7 +206,7 @@ export class DocumentPdfService {
   private documentTitle(
     document: Pick<SharedDocument, 'type' | 'consecutive'>,
   ) {
-    const kind = document.type === 'RETURN' ? 'Devolución' : 'Remisión';
+    const kind = document.type === 'RETURN' ? 'Devolución' : document.type === 'PROVIDER_RECEIPT' ? 'Recepción de proveedor' : 'Remisión';
     return `${kind} ${document.consecutive ?? ''}`.trim();
   }
 
@@ -271,27 +273,28 @@ export class DocumentPdfService {
   }
 
   private drawItems(pdf: PDFKit.PDFDocument, document: SharedDocument) {
-    this.sectionTitle(pdf, 'DETALLE DE EQUIPOS');
+    this.sectionTitle(pdf, document.items.some((item) => item.accessoryId) ? 'DETALLE DE EQUIPOS Y ACCESORIOS' : 'DETALLE DE EQUIPOS');
     this.itemHeader(pdf);
     document.items.forEach((item) => {
-      if (pdf.y > 720) {
-        pdf.addPage();
-        this.drawContinuationHeader(pdf, document);
-        this.itemHeader(pdf);
-      }
-      const y = pdf.y;
       const description = buildPdfItemDescription(item);
       const equipment =
-        item.asset?.internalNumber != null
+        item.accessoryCode || (item.asset?.internalNumber != null
           ? String(item.asset.internalNumber)
-          : item.asset?.serialOrEngine || '-';
+          : item.asset?.serialOrEngine || '-');
       const quantity = item.quantity == null ? '1' : item.quantity.toString();
       const note = item.conditionNote || '-';
       const rowHeight = Math.max(
         22,
         pdf.heightOfString(description, { width: 255 }) + 8,
         pdf.heightOfString(note, { width: 125 }) + 8,
+        pdf.heightOfString(equipment, { width: 62 }) + 8,
       );
+      if (pdf.y + rowHeight > 742) {
+        pdf.addPage();
+        this.drawContinuationHeader(pdf, document);
+        this.itemHeader(pdf);
+      }
+      const y = pdf.y;
       pdf.rect(36, y, 523, rowHeight).stroke('#666666');
       [82, 345, 417].forEach((x) =>
         pdf

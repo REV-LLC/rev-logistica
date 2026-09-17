@@ -166,6 +166,7 @@ describe('explicit business-day inventory chronology', () => {
       };
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([]),
+        accessoryBalance: { findFirst: jest.fn().mockResolvedValue(null) },
         document: { findUnique: jest.fn().mockResolvedValue(document) },
         warehouse: {
           findUnique: jest.fn(async ({ where }) => ({ id: where.id })),

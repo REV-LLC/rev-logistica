@@ -21,7 +21,7 @@ describe('ProviderReturnsService pending deliveries', () => {
         providerReceiptItems: [],
       },
     ]);
-    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never);
+    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never, { listPending: jest.fn().mockResolvedValue([]) } as never);
 
     const result = await service.listPending({ id: 'driver-1', role: Role.DRIVER });
 
@@ -38,7 +38,7 @@ describe('ProviderReturnsService pending deliveries', () => {
       ownerWarehouse: { id: 'provider', name: 'Proveedor', type: 'ALLY' },
       document: { id: 'dv', consecutive: 'DV1', docDate: new Date(), createdBy: 'driver', customerWorksite: null },
       providerReceiptItems: [{ quantity: 1 }],
-    }]) } } as never);
+    }]) } } as never, { listPending: jest.fn().mockResolvedValue([]) } as never);
 
     await expect(service.listPending({ id: 'admin', role: Role.ADMIN })).resolves.toEqual([]);
   });
@@ -49,6 +49,8 @@ describe('ProviderReturnsService receipt event dates', () => {
     'assigns one effective date to the confirmed receipt and every ledger row from %s',
     async (sourceMovement) => {
       const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        accessoryProviderReceiptItem: { findMany: jest.fn().mockResolvedValue([]) },
         document: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'receipt', type: DocumentType.PROVIDER_RECEIPT, status: DocumentStatus.DRAFT,
@@ -107,7 +109,7 @@ describe('ProviderReturnsService receipt event dates', () => {
 describe('ProviderReturnsService reversed returns', () => {
   it('requires approved, unreversed sources for the pending list', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never);
+    const service = new ProviderReturnsService({ stockLedger: { findMany } } as never, { listPending: jest.fn().mockResolvedValue([]) } as never);
     await service.listPending({ id: 'admin', role: Role.ADMIN });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
       document: { status: DocumentStatus.CONFIRMED }, reversedByDocumentId: null,
@@ -117,7 +119,7 @@ describe('ProviderReturnsService reversed returns', () => {
   it('rejects creating a provider delivery from a draft return', async () => {
     const tx = { document: { findUnique: jest.fn().mockResolvedValue({ id: 'dv', type: DocumentType.RETURN, status: DocumentStatus.DRAFT }), create: jest.fn() } };
     const service = new ProviderReturnsService({ $transaction: (fn: any) => fn(tx) } as never);
-    await expect(service.createDraft({ sourceDocumentId: 'dv', providerWarehouseId: 'provider', items: [] }, { id: 'admin', role: Role.ADMIN })).rejects.toThrow('debe estar aprobada');
+    await expect(service.createDraft({ sourceDocumentId: 'dv', providerWarehouseId: 'provider', items: [{ sourceLedgerId: 'source', quantity: 1 }] }, { id: 'admin', role: Role.ADMIN })).rejects.toThrow('debe estar aprobada');
     expect(tx.document.create).not.toHaveBeenCalled();
   });
 
@@ -137,6 +139,8 @@ describe('ProviderReturnsService reversed returns', () => {
     { status: DocumentStatus.CONFIRMED, reversedByDocumentId: 'reversal' },
   ])('rejects confirming a saved receipt whose source is no longer valid: %j', async ({ status, reversedByDocumentId }) => {
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      accessoryProviderReceiptItem: { findMany: jest.fn().mockResolvedValue([]) },
       document: { findUnique: jest.fn().mockResolvedValue({
         id: 'rp', type: DocumentType.PROVIDER_RECEIPT, status: DocumentStatus.DRAFT, warehouseId: 'provider',
         files: [{ category: 'EVIDENCIA_ENTREGA_PROVEEDOR' }, { category: 'COMPROBANTE_RECEPCION_PROVEEDOR' }],

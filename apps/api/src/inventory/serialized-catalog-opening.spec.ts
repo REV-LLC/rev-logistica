@@ -24,6 +24,7 @@ describe('serialized catalogue creation followed by historical delivery', () => 
     };
     const tx = {
       warehouse,
+      accessoryBalance: { findFirst: jest.fn().mockResolvedValue(null) },
       assetFamily: { findUnique: jest.fn().mockResolvedValue(family) },
       assetSubfamily: { findUnique: jest.fn().mockResolvedValue(subfamily) },
       sku: {

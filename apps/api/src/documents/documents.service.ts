@@ -20,6 +20,9 @@ import { DocumentCustomerEmailsService } from '../document-emails/document-custo
 import { DocumentCustomerMessagesService } from '../document-messages/document-customer-messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { prepareAccessoryDocumentItems } from '../accessories/accessory-document-items';
+import { AccessoryDocumentsService } from '../accessories/accessory-documents.service';
+import { AccessoriesService } from '../accessories/accessories.service';
 import { normalizeRequiredColombianPhone } from '../messaging/colombian-phone';
 import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
@@ -60,6 +63,7 @@ export class DocumentsService {
     private readonly documentEmails: DocumentCustomerEmailsService,
     private readonly documentMessages: DocumentCustomerMessagesService,
     private readonly documentPdfSnapshots: DocumentPdfSnapshotService,
+    private readonly accessoryDocuments: AccessoryDocumentsService = new AccessoryDocumentsService(new AccessoriesService(prisma)),
   ) {}
 
   private getConsecutivePrefix(type: DocumentType) {
@@ -394,6 +398,7 @@ export class DocumentsService {
   private async approveLoadedRequestDocument(
     reference: { id: string },
     userId: string,
+    notifyAccessories = false,
   ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -412,6 +417,11 @@ export class DocumentsService {
             },
           });
           if (!document) throw new NotFoundException('Document not found');
+          const hasAccessories = document.items.some((item) => item.accessoryId);
+          if (document.status === DocumentStatus.CONFIRMED && hasAccessories) {
+            return { confirmed: { id: document.id, status: document.status, consecutive: document.consecutive },
+              warehouseIds: [] as string[], customerWorksiteId: document.customerWorksiteId, alreadyConfirmed: true };
+          }
           if (document.status !== DocumentStatus.DRAFT) {
             throw new BadRequestException('Solo se puede aprobar un documento en estado DRAFT');
           }
@@ -419,11 +429,20 @@ export class DocumentsService {
             throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
           }
           await this.assertProviderRemissionEvidence(document, tx);
-          return this.executeRequestApproval(document, userId, tx);
+          if (hasAccessories) {
+            this.assertExplicitRemissionInventorySource(document);
+            await this.accessoryDocuments.apply(tx, document, userId,
+              resolveDocumentInventorySourceMode(document) === InventorySourceMode.OWNER_WAREHOUSES ? 'ON_SITE' : 'WAREHOUSE');
+          }
+          const result = await this.executeRequestApproval({ ...document,
+            items: document.items.filter((item) => !item.accessoryId) }, userId, tx, hasAccessories);
+          return { ...result, alreadyConfirmed: false,
+            warehouseIds: [...new Set([...result.warehouseIds, ...document.items.flatMap((item) => item.condition ? [item.condition] : [])])] };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 30000 });
 
         await this.inventoryService.invalidateDocumentMovementCaches(result.warehouseIds, result.customerWorksiteId)
           .catch(() => this.logger.warn('Documento aprobado; la caché de inventario se actualizará al vencer su TTL'));
+        if (notifyAccessories && !result.alreadyConfirmed) this.sendFinalEmailInBackground(reference.id);
         return result.confirmed;
       } catch (error) {
         if (isSerializationConflict(error)) {
@@ -457,17 +476,30 @@ export class DocumentsService {
     },
     userId: string,
     tx: Prisma.TransactionClient,
+    hasAccessoryMovements = false,
   ) {
     this.assertExplicitRemissionInventorySource(document);
     const sourceMode = resolveDocumentInventorySourceMode(document);
-    const items = await this.mapDocumentItemsToMovementItems(
+    const items = document.items.length ? await this.mapDocumentItemsToMovementItems(
       document.items,
       document.type === DocumentType.REMISSION
         ? { mode: sourceMode, warehouseId: document.warehouseId }
         : undefined,
       tx,
-    );
+    ) : [];
     await this.validateDocumentComponentRelations(document.items, tx);
+
+    if (!items.length) {
+      if (!hasAccessoryMovements) throw new BadRequestException('El documento no tiene ítems para aprobar.');
+      if (document.type === DocumentType.RETURN) {
+        await tx.documentItem.updateMany({ where: { documentId: document.id, billingCutoffDate: null },
+          data: { billingCutoffDate: document.docDate, billingStatus: DocumentItemBillingStatus.CUT } });
+      }
+      const confirmed = await tx.document.update({ where: { id: document.id },
+        data: { status: DocumentStatus.CONFIRMED, voidReason: null, voidedAt: null, voidedBy: null },
+        select: { id: true, status: true, consecutive: true } });
+      return { confirmed, warehouseIds: document.warehouseId ? [document.warehouseId] : [], customerWorksiteId: document.customerWorksiteId };
+    }
 
     if (document.type === DocumentType.REMISSION) {
       const assetIds = items
@@ -892,6 +924,8 @@ export class DocumentsService {
     items: Array<{
       skuId?: string;
       assetId?: string;
+      accessoryId?: string;
+      accessorySourceBalanceId?: string;
       componentParentAssetId?: string;
       ownerWarehouseId?: string;
       quantity?: number;
@@ -943,10 +977,12 @@ export class DocumentsService {
 
           if (payload.items.length) {
             await tx.documentItem.createMany({
-              data: payload.items.map((item) => ({
+              data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                accessoryId: item.accessoryId ?? null,
+                accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -957,7 +993,7 @@ export class DocumentsService {
                   defaultBillingCutoffDate,
                   null,
                 ),
-              })),
+              }))),
             });
           }
 
@@ -1035,10 +1071,12 @@ export class DocumentsService {
 
           if (payload.items?.length) {
             await tx.documentItem.createMany({
-              data: payload.items.map((item) => ({
+              data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
+                accessoryId: item.accessoryId ?? null,
+                accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -1050,7 +1088,7 @@ export class DocumentsService {
                   payload.type === DocumentType.RETURN ? documentDate : null,
                   null,
                 ),
-              })),
+              }))),
             });
           }
 
@@ -1126,7 +1164,7 @@ export class DocumentsService {
         payload.number,
       );
       const updated = await tx.document.update({
-        where: { id: documentId },
+        where: { id: documentId, status: DocumentStatus.IN_PROGRESS },
         data: {
           type: nextType,
           consecutive,
@@ -1151,10 +1189,12 @@ export class DocumentsService {
           const cutoffDate =
             nextType === DocumentType.RETURN ? nextDocDate : null;
           await tx.documentItem.createMany({
-            data: payload.items.map((item) => ({
+            data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              accessoryId: item.accessoryId ?? null,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -1162,7 +1202,7 @@ export class DocumentsService {
               conditionNote: item.conditionNote?.trim() || null,
               billingCutoffDate: cutoffDate,
               billingStatus: this.getBillingStatus(cutoffDate, null),
-            })),
+            }))),
           });
         }
       }
@@ -1230,7 +1270,7 @@ export class DocumentsService {
     }
 
     const submitted = await this.prisma.document.update({
-      where: { id: documentId },
+      where: { id: documentId, status: DocumentStatus.IN_PROGRESS },
       data: { status: DocumentStatus.DRAFT },
       select: { id: true, consecutive: true, status: true },
     });
@@ -1267,6 +1307,8 @@ export class DocumentsService {
       items: Array<{
         skuId?: string;
         assetId?: string;
+        accessoryId?: string;
+        accessorySourceBalanceId?: string;
         componentParentAssetId?: string;
         ownerWarehouseId?: string;
         quantity?: number;
@@ -1351,7 +1393,7 @@ export class DocumentsService {
               ? [existing.recipientPhone]
               : [];
         const updated = await tx.document.update({
-          where: { id: documentId },
+          where: { id: documentId, status: DocumentStatus.DRAFT },
           data: {
             type: nextType,
             consecutive,
@@ -1381,10 +1423,12 @@ export class DocumentsService {
 
         if (payload.items.length) {
           await tx.documentItem.createMany({
-            data: payload.items.map((item) => ({
+            data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
+              accessoryId: item.accessoryId ?? null,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -1395,7 +1439,7 @@ export class DocumentsService {
                 defaultBillingCutoffDate,
                 null,
               ),
-            })),
+            }))),
           });
         }
 
@@ -2092,6 +2136,11 @@ export class DocumentsService {
     return this.buildProviderRemissionRequirements(document);
   }
 
+  private async approveWithAccessories(documentId: string, userId: string) {
+    const confirmed = await this.approveLoadedRequestDocument({ id: documentId }, userId, true);
+    return { ...confirmed, splitDocumentIds: [documentId], splitConsecutives: confirmed.consecutive ? [confirmed.consecutive] : [] };
+  }
+
   async approveRequestDocument(documentId: string, userId: string) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
@@ -2129,6 +2178,9 @@ export class DocumentsService {
     });
     if (!document) {
       throw new NotFoundException('Document not found');
+    }
+    if (document.items.some((item) => item.accessoryId)) {
+      return this.approveWithAccessories(documentId, userId);
     }
     if (document.status !== DocumentStatus.DRAFT) {
       throw new BadRequestException(
@@ -2213,7 +2265,7 @@ export class DocumentsService {
         existing.consecutive,
       );
       const updated = await tx.document.update({
-        where: { id: documentId },
+        where: { id: documentId, status: DocumentStatus.DRAFT },
         data: {
           status: DocumentStatus.VOID,
           consecutive: rejectedConsecutive,

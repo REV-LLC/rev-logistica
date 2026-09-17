@@ -52,7 +52,10 @@ export type Warehouse = {
 
 export type SelectedItem = {
   selectionId: string;
-  type: 'bulk' | 'serial' | 'free';
+  type: 'bulk' | 'serial' | 'free' | 'accessory';
+  accessoryId?: string;
+  accessorySourceBalanceId?: string;
+  accessoryKind?: 'INDIVIDUAL' | 'RETURNABLE' | 'CONSUMABLE';
   bulkKey?: string;
   skuId?: string;
   assetId?: string;
@@ -149,6 +152,11 @@ export type RequestDocumentDetail = {
     id: string;
     skuId?: string | null;
     assetId?: string | null;
+    accessoryId?: string | null;
+    accessorySourceBalanceId?: string | null;
+    accessoryKind?: 'INDIVIDUAL' | 'RETURNABLE' | 'CONSUMABLE' | null;
+    accessoryName?: string | null;
+    accessoryCode?: string | null;
     componentParentAssetId?: string | null;
     quantity?: string | number | null;
     condition?: string | null;

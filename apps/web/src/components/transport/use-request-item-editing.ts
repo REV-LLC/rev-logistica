@@ -168,6 +168,7 @@ export function useRequestItemEditing({
       if (
         !item ||
         item.type === 'serial' ||
+        item.type === 'accessory' ||
         !Number.isFinite(quantity) ||
         quantity <= 1
       ) {

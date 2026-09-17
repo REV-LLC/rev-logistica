@@ -228,6 +228,12 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
       },
       {
+        href: "/inventory/accessories",
+        label: "Accesorios",
+        icon: IconBox,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/inventory/hour-meter",
         label: "Horómetros",
         icon: IconGauge,

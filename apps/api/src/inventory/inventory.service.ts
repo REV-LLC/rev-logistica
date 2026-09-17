@@ -142,7 +142,7 @@ export class InventoryService {
   }
 
   /** The caller of an enclosing transaction must invoke this only after commit. */
-  async invalidateDocumentMovementCaches(warehouseIds: string[], customerWorksiteId: string) {
+  async invalidateDocumentMovementCaches(warehouseIds: string[], customerWorksiteId: string | null) {
     await Promise.all([
       this.invalidateInventoryCache({ customerWorksiteId }),
       ...[...new Set(warehouseIds)].map((warehouseId) => this.invalidateInventoryCache({ warehouseId })),
@@ -350,6 +350,12 @@ export class InventoryService {
       }
     }
     return resolvedEffectiveAt;
+  }
+
+  private async assertNoUnremittedAccessories(tx: Prisma.TransactionClient, assetIds: string[]) {
+    if (!assetIds.length) return;
+    const pending = await tx.accessoryBalance.findFirst({ where: { assetId: { in: assetIds }, customerWorksiteId: null, transitDocumentId: null, quantity: { gt: 0 } }, select: { id: true } });
+    if (pending) throw new BadRequestException('El equipo tiene accesorios asignados en bodega. Inclúyelos en la remisión o devuélvelos a la bodega antes de despachar.');
   }
 
   private parseLedgerCursor(cursor: string) {
@@ -1169,6 +1175,7 @@ export class InventoryService {
         () => ({ type: 'WAREHOUSE', id: payload.warehouseId }),
         datePrecision,
       );
+      await this.assertNoUnremittedAccessories(tx, serialIds);
 
       if (bulkSkuIds.length) {
         const bulkRows = await tx.stockLedger.groupBy({
@@ -1452,6 +1459,7 @@ export class InventoryService {
         (assetId) => ({ type: 'WAREHOUSE', id: ownerWarehouseByAsset.get(assetId) ?? '' }),
         datePrecision,
       );
+      await this.assertNoUnremittedAccessories(tx, serialIds);
 
       if (serialIds.length) {
         const warehouseRows = await tx.stockLedger.groupBy({

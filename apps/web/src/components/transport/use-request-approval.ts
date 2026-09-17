@@ -144,6 +144,7 @@ export function useRequestApproval({
     item: RequestDocumentDetail['items'][number],
   ) => {
     const hasTag = Boolean(item.requestedTag?.trim());
+    if (item.accessoryId) return false;
     if (!item.skuId && !item.assetId) {
       return hasTag;
     }
@@ -333,7 +334,7 @@ export function useRequestApproval({
     const initialAssetMap: Record<number, string> = {};
 
     doc.items.forEach((item, index) => {
-      if (item.assetId) return;
+      if (item.assetId || item.accessoryId) return;
       const normalizedTag = normalizeTagBase(item.requestedTag);
       const matchedSku = item.skuId
         ? skuOptions.find((sku) => sku.id === item.skuId) ?? null
@@ -582,6 +583,8 @@ export function useRequestApproval({
             : undefined,
           items: [
             ...existingItems.map((item) => ({
+              accessoryId: item.accessoryId ?? undefined,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
               skuId: item.assetId ? undefined : (item.skuId ?? undefined),
               assetId: item.assetId ?? undefined,
               componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -705,6 +708,12 @@ export function useRequestApproval({
     try {
       const itemsPayload = resolveDocument.items.map((item, index) => {
         const ownerWarehouseId = item.condition ?? undefined;
+        if (item.accessoryId) return {
+          accessoryId: item.accessoryId,
+          accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
+          componentParentAssetId: item.componentParentAssetId ?? undefined,
+          quantity: Number(item.quantity), ownerWarehouseId, conditionNote: item.conditionNote ?? undefined,
+        };
         if (item.assetId) {
           return {
             assetId: item.assetId,
