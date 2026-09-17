@@ -42,6 +42,14 @@ describe('Accessory physical source after production integration', () => {
     }));
   });
 
+  it('uses the explicit accessory-line origin instead of the document default', async () => {
+    const f = fixture();
+    const document = { ...f.document, items: f.document.items.map(item => ({ ...item, sourceWarehouseId: 'owner' })) };
+    await f.service.apply(f.tx as never, document as never, 'user', 'WAREHOUSE');
+    expect(f.moveInTransaction).toHaveBeenCalledTimes(1);
+    expect(f.moveInTransaction.mock.calls[0][2].from.warehouseId).toBe('owner');
+  });
+
   it.each(['WAREHOUSE', 'ON_SITE'] as const)('rejects stock outside the exact %s source', async (mode) => {
     const f = fixture();
     f.source.warehouseId = mode === 'ON_SITE' ? 'physical' : 'owner';

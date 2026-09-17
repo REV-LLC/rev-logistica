@@ -1,4 +1,5 @@
 'use client';
+import { getRequestItemInventoryKey } from './request-inventory-source';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import {
   Button,
@@ -19,7 +20,7 @@ import {
 } from './request-types';
 
 type Props = {
-  getDocumentSourceName: (doc: RequestDocumentDetail, ownerId?: string | null) => string;
+  getDocumentSourceName: (doc: RequestDocumentDetail, ownerId?: string | null, sourceId?: string | null) => string;
   resolveModalOpen: boolean;
   closeResolveModal: () => void;
   resolveDocument: RequestDocumentDetail | null;
@@ -95,7 +96,7 @@ export default function ApprovalResolutionDialog({
                   )?.name ?? '-'}
                 </Text>
                 {resolveDocument?.type === 'REMISSION' ? (
-                  <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text>
+                  <Text size="xs" c="dimmed">Origen: {getDocumentSourceName(resolveDocument, item.condition, item.sourceWarehouseId)}</Text>
                 ) : null}
                 <Select
                   label="Equipo"
@@ -123,7 +124,7 @@ export default function ApprovalResolutionDialog({
                   if (selectedSku?.controlType !== 'SERIAL') return null;
                   const ownerWarehouseId = item.condition?.trim() ?? '';
                   const inventory =
-                    resolveInventoryByOwner[ownerWarehouseId]?.serial ?? [];
+                    resolveInventoryByOwner[getRequestItemInventoryKey(resolveDocument!, item)]?.serial ?? [];
                   const expectedInternal = parseInternalNumberFromTag(
                     item.requestedTag,
                   );

@@ -56,6 +56,7 @@ export function useRequestItemEditing({
           name: item.skuName ?? item.skuId,
           quantity: sourceMode === 'on-site' ? item.quantity : 1,
           availableQuantity: item.quantity,
+          sourceWarehouseId: item.sourceWarehouseId,
           ownerWarehouseId: item.ownerWarehouseId,
         },
       ];
@@ -70,7 +71,7 @@ export function useRequestItemEditing({
       return;
     }
     if (!sourceOwnerWarehouseId) {
-      setError('Selecciona primero la bodega dueña');
+      setError('Selecciona primero de dónde recogiste el equipo');
       return;
     }
     const selectedOwnerType = warehouses.find(
@@ -86,6 +87,7 @@ export function useRequestItemEditing({
         const exists = prev.some(
           (item) =>
             item.ownerWarehouseId === sourceOwnerWarehouseId &&
+            item.sourceWarehouseId === sourceOwnerWarehouseId &&
             (item.requestedTag ?? item.name).toUpperCase() ===
               requestedReference,
         );
@@ -99,6 +101,7 @@ export function useRequestItemEditing({
             requestedTag: requestedReference,
             quantity: 1,
             ownerWarehouseId: sourceOwnerWarehouseId,
+            sourceWarehouseId: sourceOwnerWarehouseId,
           },
         ];
       });
@@ -123,12 +126,14 @@ export function useRequestItemEditing({
               type: 'bulk',
               bulkKey: buildBulkKey({
                 skuId,
+                sourceWarehouseId: item.sourceWarehouseId,
                 ownerWarehouseId: item.ownerWarehouseId ?? null,
               }),
               skuId,
               name: sku.name,
               quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
               ownerWarehouseId: item.ownerWarehouseId,
+              sourceWarehouseId: item.sourceWarehouseId,
               isDamaged: item.isDamaged,
               damageDescription: item.damageDescription,
             }
@@ -154,7 +159,7 @@ export function useRequestItemEditing({
           ...item,
           ownerWarehouseId,
           ...(item.type === 'bulk' && item.skuId
-            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId }) }
+            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId, sourceWarehouseId: item.sourceWarehouseId }) }
             : {}),
         };
       }),

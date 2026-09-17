@@ -18,6 +18,10 @@ import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 class UpdateDocumentRequestItemDto {
   @IsOptional()
   @IsUUID()
+  sourceWarehouseId?: string;
+
+  @IsOptional()
+  @IsUUID()
   skuId?: string;
 
   @IsOptional()

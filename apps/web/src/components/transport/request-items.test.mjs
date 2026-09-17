@@ -3,6 +3,14 @@ import test from 'node:test';
 
 import { buildRequestItems } from './request-items.ts';
 
+test('el payload conserva el origen por ítem independiente del propietario y del tipo', () => {
+  for (const type of ['bulk', 'serial', 'free', 'accessory']) {
+    const [item] = buildRequestItems([{ type, name: 'QA', sourceWarehouseId: 'our-warehouse', ownerWarehouseId: 'provider' }]);
+    assert.equal(item.sourceWarehouseId, 'our-warehouse');
+    assert.equal(item.ownerWarehouseId, 'provider');
+  }
+});
+
 test('las mangueras retornables conservan la cantidad parcial en el documento', () => {
   const [item] = buildRequestItems([{ type: 'accessory', accessoryKind: 'RETURNABLE', accessoryId: 'mangueras',
     accessorySourceBalanceId: 'saldo-obra', componentParentAssetId: 'compresor', quantity: 2,

@@ -1,5 +1,5 @@
 'use client';
-import { getRequestSourceWarehouseId, loadRequestSourceInventories } from './request-inventory-source';
+import { getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source';
 import { api, ApiError } from '@/lib/api';
 import {
   buildInventoryStockShortageMessage,
@@ -186,7 +186,7 @@ export function useRequestApproval({
       if (!mixerItem?.asset || !ownerWarehouseId) {
         throw new Error('No se pudo identificar la mezcladora o su bodega de origen.');
       }
-      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId);
+      const sourceWarehouseId = getRequestSourceWarehouseId(doc, ownerWarehouseId, mixerItem.sourceWarehouseId);
       if (!sourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
       const inventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
@@ -200,6 +200,7 @@ export function useRequestApproval({
         internalNumber: null,
         quantity: 1,
         ownerWarehouseId,
+        sourceWarehouseId: mixerItem.sourceWarehouseId ?? undefined,
         assignedMotorId: mixerItem.asset.assignedMotorId ?? null,
       };
       const motors = (inventory.serial ?? []).filter(
@@ -352,7 +353,7 @@ export function useRequestApproval({
 
       if (matchedSku.controlType !== 'SERIAL') return;
       const serialCandidates =
-        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
+        inventoriesByOwner[getRequestItemInventoryKey(doc, item)]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
       const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
       if (internalFromTag == null) return;
       const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
@@ -388,7 +389,7 @@ export function useRequestApproval({
       setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
       return;
     }
-    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId, row.sourceWarehouseId);
     if (!sourceWarehouseId) {
       setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
@@ -435,7 +436,7 @@ export function useRequestApproval({
       });
       setResolveInventoryByOwner((prev) => ({
         ...prev,
-        [ownerWarehouseId]: {
+        [getRequestItemInventoryKey(resolveDocument, row)]: {
           bulk: (refreshedInventory.bulk ?? []).filter(
             (item) => item.ownerWarehouseId === ownerWarehouseId,
           ),
@@ -583,6 +584,7 @@ export function useRequestApproval({
             : undefined,
           items: [
             ...existingItems.map((item) => ({
+              sourceWarehouseId: item.sourceWarehouseId ?? undefined,
               accessoryId: item.accessoryId ?? undefined,
               accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
               skuId: item.assetId ? undefined : (item.skuId ?? undefined),
@@ -599,6 +601,7 @@ export function useRequestApproval({
               assetId: motor.assetId,
               componentParentAssetId: mixer.assetId,
               ownerWarehouseId,
+              sourceWarehouseId: mixer.sourceWarehouseId,
             },
           ],
         },
@@ -709,6 +712,7 @@ export function useRequestApproval({
       const itemsPayload = resolveDocument.items.map((item, index) => {
         const ownerWarehouseId = item.condition ?? undefined;
         if (item.accessoryId) return {
+          sourceWarehouseId: item.sourceWarehouseId ?? undefined,
           accessoryId: item.accessoryId,
           accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
           componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -717,6 +721,7 @@ export function useRequestApproval({
         if (item.assetId) {
           return {
             assetId: item.assetId,
+            sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             conditionNote: item.conditionNote ?? undefined,
@@ -729,6 +734,7 @@ export function useRequestApproval({
           if (existingSku?.controlType === 'SERIAL') {
             return {
               assetId: resolveAssetByIndex[index],
+              sourceWarehouseId: item.sourceWarehouseId ?? undefined,
               componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
               requestedTag: item.requestedTag ?? undefined,
@@ -739,6 +745,7 @@ export function useRequestApproval({
         if (item.skuId) {
           return {
             skuId: item.skuId,
+            sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             quantity: Number(item.quantity ?? 1) || 1,
             ownerWarehouseId,
@@ -753,6 +760,7 @@ export function useRequestApproval({
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
             assetId: resolveAssetByIndex[index],
+            sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
             requestedTag: item.requestedTag ?? undefined,
@@ -761,6 +769,7 @@ export function useRequestApproval({
         }
         return {
           skuId: resolvedSkuId,
+          sourceWarehouseId: item.sourceWarehouseId ?? undefined,
           componentParentAssetId: item.componentParentAssetId ?? undefined,
           quantity: Number(item.quantity ?? 1) || 1,
           ownerWarehouseId,
