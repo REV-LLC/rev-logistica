@@ -232,7 +232,7 @@ export default function RequestInformationSection({
                   label="Tipo"
                 >
                   <Group mt="xs">
-                    <Radio value="REMISSION" label="Despacho" />
+                    <Radio value="REMISSION" label="Remisión" />
                     <Radio value="RETURN" label="Devolucion" />
                   </Group>
                 </Radio.Group>
@@ -379,7 +379,7 @@ export default function RequestInformationSection({
                       value="WAREHOUSE"
                       label={
                         docType === 'REMISSION'
-                          ? 'Cliente retira en bodega'
+                          ? 'Cliente retira'
                           : 'Cliente entrega en bodega'
                       }
                     />
@@ -387,7 +387,7 @@ export default function RequestInformationSection({
                       value="ON_SITE"
                       label={
                         docType === 'REMISSION'
-                          ? 'REV entrega en obra'
+                          ? 'Entrega a obra'
                           : 'Recogida en obra'
                       }
                     />

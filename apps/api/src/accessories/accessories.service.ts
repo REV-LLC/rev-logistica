@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { accessoryDocumentOptions } from './accessory-document-options';
@@ -268,87 +268,111 @@ export class AccessoriesService {
     );
   }
 
-  private async withErrors<T>(fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'El código o la operación ya existe. Actualiza antes de intentarlo nuevamente.',
-        );
+  private async withErrors<T>(
+    fn: () => Promise<T>,
+    retryGeneratedCode = false,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          // Retry the entire rolled-back transaction, only for generated-code collisions.
+          if (
+            retryGeneratedCode &&
+            attempt < 4 &&
+            Array.isArray(error.meta?.target) &&
+            error.meta.target.includes('internalCode')
+          )
+            continue;
+          throw new ConflictException(
+            'El código o la operación ya existe. Actualiza antes de intentarlo nuevamente.',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
   async create(dto: CreateAccessoryDto, userId: string) {
     const hash = fingerprint({ ...dto, userId });
-    return this.withErrors(() =>
-      this.prisma.$transaction(async (tx) => {
-        // Serialize retries even before the accessory exists.
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${dto.requestId}, 0))::text`;
-        const prior = await tx.accessory.findUnique({
-          where: { creationRequestId: dto.requestId },
-          include: detailInclude,
-        });
-        if (prior) {
-          if (prior.creationFingerprint !== hash)
-            throw new ConflictException(
-              'La operación ya fue usada con otros datos.',
+    const generateCode = dto.kind === 'INDIVIDUAL' && !dto.internalCode?.trim();
+    return this.withErrors(
+      () =>
+        this.prisma.$transaction(async (tx) => {
+          // Serialize retries even before the accessory exists.
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${dto.requestId}, 0))::text`;
+          const prior = await tx.accessory.findUnique({
+            where: { creationRequestId: dto.requestId },
+            include: detailInclude,
+          });
+          if (prior) {
+            if (prior.creationFingerprint !== hash)
+              throw new ConflictException(
+                'La operación ya fue usada con otros datos.',
+              );
+            return prior;
+          }
+          const details = {
+            ...dto,
+            internalCode: generateCode
+              ? `ACC-${randomBytes(6).toString('hex').toUpperCase()}`
+              : dto.internalCode,
+          };
+          await this.validateDetails(tx, details);
+          if (
+            !Number.isSafeInteger(dto.quantity) ||
+            dto.quantity < 1 ||
+            dto.quantity > 1000000
+          )
+            throw new BadRequestException(
+              'La cantidad inicial debe ser un número entero positivo.',
             );
-          return prior;
-        }
-        await this.validateDetails(tx, dto);
-        if (
-          !Number.isSafeInteger(dto.quantity) ||
-          dto.quantity < 1 ||
-          dto.quantity > 1000000
-        )
-          throw new BadRequestException(
-            'La cantidad inicial debe ser un número entero positivo.',
-          );
-        if (dto.kind === 'INDIVIDUAL' && dto.quantity !== 1)
-          throw new BadRequestException(
-            'Registra cada accesorio individualizado por separado.',
-          );
-        const warehouse = await this.warehouse(tx, dto.warehouseId);
-        await this.warehouse(tx, dto.ownerWarehouseId);
-        return tx.accessory.create({
-          data: {
-            ...this.details(dto),
-            ownerWarehouseId: dto.ownerWarehouseId,
-            createdBy: userId,
-            creationRequestId: dto.requestId,
-            creationFingerprint: hash,
-            subfamilies: {
-              create: dto.subfamilyIds.map((subfamilyId) => ({ subfamilyId })),
-            },
-            assets: { create: dto.assetIds.map((assetId) => ({ assetId })) },
-            balances: {
-              create: {
-                locationKey: locationKey({ warehouseId: dto.warehouseId }),
-                warehouseId: dto.warehouseId,
-                quantity: dto.quantity,
+          if (dto.kind === 'INDIVIDUAL' && dto.quantity !== 1)
+            throw new BadRequestException(
+              'Registra cada accesorio individualizado por separado.',
+            );
+          const warehouse = await this.warehouse(tx, dto.warehouseId);
+          await this.warehouse(tx, dto.ownerWarehouseId);
+          return tx.accessory.create({
+            data: {
+              ...this.details(details),
+              ownerWarehouseId: dto.ownerWarehouseId,
+              createdBy: userId,
+              creationRequestId: dto.requestId,
+              creationFingerprint: hash,
+              subfamilies: {
+                create: dto.subfamilyIds.map((subfamilyId) => ({
+                  subfamilyId,
+                })),
+              },
+              assets: { create: dto.assetIds.map((assetId) => ({ assetId })) },
+              balances: {
+                create: {
+                  locationKey: locationKey({ warehouseId: dto.warehouseId }),
+                  warehouseId: dto.warehouseId,
+                  quantity: dto.quantity,
+                },
+              },
+              movements: {
+                create: {
+                  requestId: dto.requestId,
+                  fingerprint: hash,
+                  type: 'RECEIVE',
+                  quantity: dto.quantity,
+                  to: { warehouseId: warehouse.id, label: warehouse.name },
+                  note: 'EXISTENCIA INICIAL',
+                  createdBy: userId,
+                },
               },
             },
-            movements: {
-              create: {
-                requestId: dto.requestId,
-                fingerprint: hash,
-                type: 'RECEIVE',
-                quantity: dto.quantity,
-                to: { warehouseId: warehouse.id, label: warehouse.name },
-                note: 'EXISTENCIA INICIAL',
-                createdBy: userId,
-              },
-            },
-          },
-          include: detailInclude,
-        });
-      }),
+            include: detailInclude,
+          });
+        }),
+      generateCode,
     );
   }
 
@@ -366,7 +390,14 @@ export class AccessoriesService {
         throw new BadRequestException(
           'No puedes cambiar el tipo de un accesorio con historial. Registra uno nuevo.',
         );
-      await this.validateDetails(tx, dto);
+      const details = {
+        ...dto,
+        internalCode:
+          dto.kind === 'INDIVIDUAL'
+            ? dto.internalCode?.trim() || item.internalCode!
+            : dto.internalCode,
+      };
+      await this.validateDetails(tx, details);
       const assigned = item.balances.filter((balance) => balance.asset);
       if (!dto.active && item.balances.length)
         throw new BadRequestException(
@@ -381,7 +412,7 @@ export class AccessoriesService {
       const updated = await tx.accessory.update({
         where: { id },
         data: {
-          ...this.details(dto),
+          ...this.details(details),
           active: dto.active,
           version: { increment: 1 },
           subfamilies: {
