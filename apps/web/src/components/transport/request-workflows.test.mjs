@@ -111,7 +111,7 @@ const warehouseOptions = {
   setSourceWorksiteId: noop,
 };
 
-test('Office carga inventario de bodega alterna y abre el selector; Driver conserva captura libre', async () => {
+test('carga todos los propietarios presentes en la ubicación; Driver captura manualmente solo al salir de proveedor', async () => {
   const calls = [],
     errors = [];
   const { useRequestInventory } = loadTransportModule(
@@ -141,12 +141,16 @@ test('Office carga inventario de bodega alterna y abre el selector; Driver conse
   assert.deepEqual(calls, ['/inventory/warehouse/own']);
   assert.deepEqual(
     hook.current.serialItems.map((item) => item.assetId),
-    ['bucket'],
+    ['bucket', 'foreign'],
   );
+  assert.ok(hook.current.serialItems.every(item => item.sourceWarehouseId === 'own'));
   assert.equal(hook.current.itemsModalOpen, true);
   await hook.update({ ...options, canDecide: false });
   await act(() => hook.current.loadInventory());
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2); // Provider-owned stock in our custody is selectable by Driver.
+  await hook.update({ ...options, physicalSourceWarehouseId: 'ally', canDecide: false });
+  await act(() => hook.current.loadInventory());
+  assert.equal(calls.length, 2);
   assert.match(errors.at(-1), /captura libre/);
 });
 
@@ -184,6 +188,7 @@ test('devolución consulta saldo de obra y conserva la presentación de dueños 
 test('selección preserva grupos exclusivos y vincula un implemento recién creado con su equipo y dueño', async () => {
   const parent = {
     assetId: 'loader',
+    sourceWarehouseId: 'physical-origin',
     ownerWarehouseId: 'ally',
     description: 'Minicargador',
   };
@@ -231,6 +236,8 @@ test('selección preserva grupos exclusivos y vincula un implemento recién crea
   assert.equal(selected[1].assetId, 'new-bucket');
   assert.equal(selected[1].componentParentAssetId, 'loader');
   assert.equal(selected[1].ownerWarehouseId, 'ally');
+  assert.equal(selected[0].sourceWarehouseId, 'physical-origin');
+  assert.equal(selected[1].sourceWarehouseId, 'physical-origin');
 });
 
 test('autoguardado conserva firma, destinatarios y vínculo del implemento en su payload', async () => {
@@ -263,6 +270,7 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
         assetId: 'bucket',
         componentParentAssetId: 'loader',
         ownerWarehouseId: 'ally',
+        sourceWarehouseId: 'physical-origin',
       },
       { type: 'accessory', accessoryId: 'puntas', accessorySourceBalanceId: 'balance', componentParentAssetId: 'loader', quantity: 4, name: 'Puntas', ownerWarehouseId: 'own' },
     ],
@@ -277,6 +285,7 @@ test('autoguardado conserva firma, destinatarios y vínculo del implemento en su
   assert.deepEqual(payload.recipientPhones, ['3001234567']);
   assert.equal(payload.items[0].componentParentAssetId, 'loader');
   assert.equal(payload.items[0].ownerWarehouseId, 'ally');
+  assert.equal(payload.items[0].sourceWarehouseId, 'physical-origin');
   assert.equal(payload.items[1].accessoryId, 'puntas');
   assert.equal(payload.items[1].accessorySourceBalanceId, 'balance');
   assert.equal(payload.inventorySourceMode, 'WAREHOUSE');
@@ -543,7 +552,7 @@ test('envío offline conserva el orden guardar → enviar → correo sin perder 
   const hook = await mountHook(useRequestSubmission, {
     ...submissionOptions,
     autosaveDraftId: 'draft',
-    selectedItems: [...submissionOptions.selectedItems, { type: 'accessory', accessoryId: 'canasta', accessorySourceBalanceId: 'saldo', componentParentAssetId: 'loader', name: 'Canasta', quantity: 1, ownerWarehouseId: 'own' }],
+    selectedItems: [...submissionOptions.selectedItems, { type: 'accessory', accessoryId: 'canasta', accessorySourceBalanceId: 'saldo', componentParentAssetId: 'loader', name: 'Canasta', quantity: 1, ownerWarehouseId: 'own', sourceWarehouseId: 'physical-origin' }],
     setError: (error) => errors.push(error),
   });
   await act(() => hook.current.handleSubmit());
@@ -561,6 +570,7 @@ test('envío offline conserva el orden guardar → enviar → correo sin perder 
   assert.equal(queued[0].body.items[0].componentParentAssetId, 'loader');
   assert.equal(queued[0].body.items.at(-1).accessoryId, 'canasta');
   assert.equal(queued[0].body.items.at(-1).accessorySourceBalanceId, 'saldo');
+  assert.equal(queued[0].body.items.at(-1).sourceWarehouseId, 'physical-origin');
   assert.match(queued[0].body.notes, /Fecha documento: 2026-09-07T14:35:00-05:00/);
 });
 

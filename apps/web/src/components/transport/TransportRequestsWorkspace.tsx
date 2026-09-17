@@ -374,14 +374,12 @@ export default function TransportRequestsWorkspace({
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)
       ?.name ?? '-';
-  const physicalSourceWarehouseId = getRequestSourceWarehouseId({
-    type: docType, inventorySourceMode,
-    warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null,
-  }, sourceOwnerWarehouseId);
+  // This is only the next batch's origin. Previously added lines retain theirs.
+  const physicalSourceWarehouseId = sourceOwnerWarehouseId ?? principalWarehouse?.id ?? null;
   const physicalSourceWarehouseName = warehouses.find(w => w.id === physicalSourceWarehouseId)?.name ?? 'Sin seleccionar';
-  const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null) =>
-    warehouses.find(w => w.id === getRequestSourceWarehouseId(doc, ownerId))?.name
-      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+  const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null, sourceId?: string | null) =>
+    warehouses.find(w => w.id === getRequestSourceWarehouseId(doc, ownerId, sourceId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId, sourceId) === doc.warehouse?.id ? doc.warehouse?.name : null)
       ?? 'Sin seleccionar';
   const effectiveSourceWorksiteId =
     sourceMode === 'on-site'
@@ -583,23 +581,6 @@ export default function TransportRequestsWorkspace({
     setComponentParent(null);
     setComponentOptions([]);
   };
-  const changePhysicalSource = (nextMode: RequestInventorySourceMode, nextWarehouseId: string | null) => {
-    const settingsChanged = nextMode !== inventorySourceMode
-      || (nextMode === 'WAREHOUSE' && nextWarehouseId !== warehouseId);
-    if (!settingsChanged) return;
-    const currentSource = { type: docType, inventorySourceMode, warehouse: warehouseId ? { id: warehouseId } : principalWarehouse };
-    const nextSource = { type: docType, inventorySourceMode: nextMode, warehouse: nextWarehouseId ? { id: nextWarehouseId } : null };
-    const selectedOriginChanges = selectedItems.some((item) =>
-      getRequestSourceWarehouseId(currentSource, item.ownerWarehouseId) !== getRequestSourceWarehouseId(nextSource, item.ownerWarehouseId));
-    if (selectedOriginChanges && !window.confirm('Al cambiar la salida física se quitarán los ítems seleccionados para volver a comprobar su disponibilidad. ¿Continuar?')) return;
-    clearLoadedInventory();
-    if (selectedOriginChanges) {
-      setSelectedItems([]);
-      clearProviderRemissionDocuments();
-    }
-    setInventorySourceMode(nextMode);
-    setWarehouseId(nextWarehouseId);
-  };
 
   const { handleSubmit } = useRequestSubmission({
     tabletEmployeeToken: tabletEmployee?.token,
@@ -706,9 +687,12 @@ export default function TransportRequestsWorkspace({
       setSelectedItems(
         doc.items.map((item) => {
           const ownerWarehouseId = item.condition ?? null;
+          const sourceWarehouseId = doc.type === 'REMISSION'
+            ? getRequestSourceWarehouseId(doc, ownerWarehouseId, item.sourceWarehouseId) : undefined;
           if (item.accessoryId) {
             return {
               selectionId: createSelectionId(), type: 'accessory' as const,
+              sourceWarehouseId,
               accessoryId: item.accessoryId,
               accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
               accessoryKind: item.accessoryKind ?? undefined,
@@ -722,6 +706,7 @@ export default function TransportRequestsWorkspace({
             return {
               selectionId: createSelectionId(),
               type: 'free' as const,
+              sourceWarehouseId,
               name: item.requestedTag,
               requestedTag: item.requestedTag,
               quantity: Number(item.quantity ?? 1) || 1,
@@ -735,11 +720,14 @@ export default function TransportRequestsWorkspace({
             return {
               selectionId: createSelectionId(),
               type: 'bulk' as const,
+              sourceWarehouseId,
               bulkKey: buildBulkKey({
                 skuId: item.skuId,
+                sourceWarehouseId,
                 ownerWarehouseId,
               }),
               skuId: item.skuId,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
               name: item.sku?.name ?? item.skuId,
               quantity: Number(item.quantity ?? 1) || 1,
               ownerWarehouseId,
@@ -750,6 +738,7 @@ export default function TransportRequestsWorkspace({
           return {
             selectionId: createSelectionId(),
             type: 'serial' as const,
+            sourceWarehouseId,
             assetId: item.assetId ?? undefined,
             name:
               item.asset?.description ??
@@ -1205,9 +1194,6 @@ export default function TransportRequestsWorkspace({
                 warehouses={warehouses}
                 observations={observations}
                 setObservations={setObservations}
-                inventorySourceMode={inventorySourceMode}
-                principalWarehouse={principalWarehouse}
-                changePhysicalSource={changePhysicalSource}
                 deliveryMode={deliveryMode}
                 setDeliveryMode={setDeliveryMode}
                 isMobile={isMobile}
@@ -1229,9 +1215,8 @@ export default function TransportRequestsWorkspace({
 
           {activeTab === 'generate' && generateStep === 'items' ? (
             <RequestItemsSection
-              accessorySelector={!isTabletRole ? <RequestAccessorySelector docType={docType} deliveryMode={inventorySourceMode === 'OWNER_WAREHOUSES' ? 'ON_SITE' : 'WAREHOUSE'} warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
+              accessorySelector={!isTabletRole ? <RequestAccessorySelector docType={docType} deliveryMode="WAREHOUSE" warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
               clearLoadedInventory={clearLoadedInventory}
-              inventorySourceMode={inventorySourceMode}
               physicalSourceWarehouseName={physicalSourceWarehouseName}
               sourceMode={sourceMode}
               setGenerateStep={setGenerateStep}
@@ -1246,6 +1231,7 @@ export default function TransportRequestsWorkspace({
               selectedDispatcher={selectedDispatcher}
               sourceOwnerWarehouseId={sourceOwnerWarehouseId}
               setSourceOwnerWarehouseId={setSourceOwnerWarehouseId}
+              originWarehouses={tabletEmployee ? warehouses.filter(w => w.id === tabletEmployee.warehouseId) : warehouses}
               warehouses={warehouses}
               setCreationProviderRequirements={setCreationProviderRequirements}
               isMobile={isMobile}
@@ -1437,7 +1423,7 @@ export default function TransportRequestsWorkspace({
         bulkItems={bulkItems}
         serialItems={serialItems}
         ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
-        physicalWarehouseId={getRequestSourceWarehouseId({ type: docType, inventorySourceMode, warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null }, componentParent?.ownerWarehouseId)}
+        physicalWarehouseId={componentParent?.sourceWarehouseId ?? physicalSourceWarehouseId}
         restrictOwnerWarehouse={sourceMode === 'warehouse'}
         canCreate={
           canDecide && sourceMode === 'warehouse' && docType === 'REMISSION'
@@ -1464,7 +1450,7 @@ export default function TransportRequestsWorkspace({
 
       <ApprovalCreateAssetDialog
         ownerName={warehouses.find(w => w.id === (createSerialIndex == null ? null : resolveDocument?.items[createSerialIndex]?.condition))?.name ?? 'Sin seleccionar'}
-        physicalSourceName={resolveDocument ? getDocumentSourceName(resolveDocument, createSerialIndex == null ? null : resolveDocument.items[createSerialIndex]?.condition) : 'Sin seleccionar'}
+        physicalSourceName={resolveDocument ? getDocumentSourceName(resolveDocument, createSerialIndex == null ? null : resolveDocument.items[createSerialIndex]?.condition, createSerialIndex == null ? null : resolveDocument.items[createSerialIndex]?.sourceWarehouseId) : 'Sin seleccionar'}
         createSerialOpen={createSerialOpen}
         createSerialSaving={createSerialSaving}
         setCreateSerialOpen={setCreateSerialOpen}

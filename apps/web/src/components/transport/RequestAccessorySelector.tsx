@@ -201,6 +201,7 @@ function AccessoryOptions({
           quantity: 1,
           availableQuantity: option.quantity,
           ownerWarehouseId: option.ownerWarehouseId,
+          sourceWarehouseId: docType === 'REMISSION' ? warehouseId : undefined,
         },
       ];
     });

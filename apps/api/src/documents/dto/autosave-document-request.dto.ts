@@ -17,6 +17,10 @@ import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 class AutosaveDocumentRequestItemDto {
   @IsOptional()
   @IsUUID()
+  sourceWarehouseId?: string;
+
+  @IsOptional()
+  @IsUUID()
   skuId?: string;
 
   @IsOptional()

@@ -1,5 +1,4 @@
 'use client';
-import type { RequestInventorySourceMode } from './request-inventory-source';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import {
   Badge,
@@ -32,7 +31,7 @@ import { helpLabel } from './RequestHelpLabel';
 type Props = {
   accessorySelector?: ReactNode;
   clearLoadedInventory: () => void;
-  inventorySourceMode: RequestInventorySourceMode;
+  originWarehouses: Warehouse[];
   physicalSourceWarehouseName: string;
   sourceMode: 'warehouse' | 'on-site';
   setGenerateStep: Dispatch<SetStateAction<GenerateStep>>;
@@ -81,7 +80,7 @@ type Props = {
 export default function RequestItemsSection({
   accessorySelector,
   clearLoadedInventory,
-  inventorySourceMode,
+  originWarehouses,
   physicalSourceWarehouseName,
   sourceMode,
   setGenerateStep,
@@ -199,18 +198,17 @@ export default function RequestItemsSection({
           </div>
         </SimpleGrid>
       </Paper>
-      <Text c="dimmed">Agrega los equipos y selecciona su propietario.</Text>
+      <Text c="dimmed">Agrega los equipos que lleva este documento.</Text>
       {sourceMode === 'warehouse' ? <Text size="sm" c="dimmed">
-        Salida física: {inventorySourceMode === 'OWNER_WAREHOUSES' ? 'bodega de cada propietario' : physicalSourceWarehouseName}.
-        El modo de transporte no cambia la ubicación del inventario.
+        Selecciona dónde los recogiste y agrégalos. Puedes cambiar de bodega para agregar más; los anteriores conservan su origen.
       </Text> : null}
 
       <Group mt="md" align="flex-end" wrap="wrap">
         {sourceMode === 'warehouse' && (
           <WarehouseSelect
             label={helpLabel(
-              'Propietario',
-              'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.',
+              '¿De dónde salen estos equipos?',
+              'Bodega donde se recogieron. El propietario de los equipos del inventario se conserva por separado.',
             )}
             value={sourceOwnerWarehouseId}
             onChange={(value) => {
@@ -222,9 +220,10 @@ export default function RequestItemsSection({
               if (nextWarehouse?.type !== 'ALLY')
                 setCreationProviderRequirements(null);
             }}
-            warehouses={warehouses}
-            clearable
-            placeholder="Buscar propietario"
+            warehouses={originWarehouses}
+            formatLabels={false}
+            clearable={false}
+            placeholder="Seleccionar bodega o proveedor"
             width={isMobile ? '100%' : 320}
           />
         )}
@@ -233,13 +232,14 @@ export default function RequestItemsSection({
             onClick={() => void loadInventory()}
             loading={loadingInventory}
           >
-            Cargar items
+            Seleccionar equipos
           </Button>
         )}
       </Group>
 
       {useManualWarehouseCapture ? (
         <Stack mt="md" gap="sm">
+          <Text size="sm">Registra lo que recogiste en {physicalSourceWarehouseName}. Office lo identificará antes de aprobar.</Text>
           <Group align="flex-end" wrap="wrap">
             <TextInput
               label="Referencia"
@@ -270,7 +270,7 @@ export default function RequestItemsSection({
 
       {useManualWarehouseCapture ? null : (
         <Text size="sm" c="dimmed">
-          Pulsa "Cargar items" para abrir el selector de items.
+          Pulsa "Seleccionar equipos" para consultar el inventario de esta bodega.
         </Text>
       )}
       <Divider my="md" />
@@ -300,6 +300,7 @@ export default function RequestItemsSection({
               <Table.Tr key={item.selectionId}>
                 <Table.Td>
                   <Text fw={600}>{item.name}</Text>
+                  {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
                   {item.serial && (
                     <Text size="xs" c="dimmed">
                       {item.serial}
@@ -363,6 +364,7 @@ export default function RequestItemsSection({
               <Stack gap="xs">
                 <div>
                   <Text fw={600}>{item.name}</Text>
+                  {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
                   {item.serial ? (
                     <Text size="xs" c="dimmed">
                       {item.serial}
