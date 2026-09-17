@@ -14,6 +14,8 @@ Módulo independiente del alta de equipos serializados. No crea familias/SKUs fi
 
 Crear compatibilidad **no entrega existencias**. Entregar consumibles **no los consume**. Ejemplo: ingreso 10 → entrega 10 → consumo 6 → devolución 4 = saldo de bodega 4 e historial de los cuatro movimientos.
 
+El código del individualizado es opcional en el formulario: si se deja vacío al crear, el servidor genera `ACC-` seguido de 12 caracteres alfanuméricos hexadecimales. Se puede ingresar el código físico existente. Al editar, dejarlo vacío conserva el código actual. Los reintentos de una misma alta conservan identidad, código y una sola existencia; los códigos manuales duplicados siguen rechazándose. No se renumeran accesorios existentes ni se asigna código individual a referencias por cantidad.
+
 Las mangueras retornables permiten reposición y devolución parcial, pero nunca `CONSUME`. Ejemplo: ingreso 10 → entrega 6 → devolución 2 = 6 en bodega y 4 en obra; siguen existiendo 10. Pinzas y guayas se individualizan y se vinculan a sus equipos. Compatibilidad `ASSETS` permite restringir un martillo a una sola máquina, sin ampliar a toda su familia ni mover existencias automáticamente.
 
 ## Entradas de interfaz

@@ -107,7 +107,7 @@ export default function TransportRequestsWorkspace({
   const [originalDocumentTimestamp, setOriginalDocumentTimestamp] = useState<string | null>(null);
   const documentTimestamp = buildDocumentDateTime(docDate, docTime, originalDocumentTimestamp);
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>(
-    tabletEmployee ? 'WAREHOUSE' : 'ON_SITE',
+    'ON_SITE',
   );
   const [inventorySourceMode, setInventorySourceMode] = useState<RequestInventorySourceMode>('WAREHOUSE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
