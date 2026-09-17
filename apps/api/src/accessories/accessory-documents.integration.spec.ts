@@ -4,7 +4,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { DocumentsService } from '../documents/documents.service';
 import { AccessoriesService } from './accessories.service';
 import { ProviderReturnsService } from '../provider-returns/provider-returns.service';
-import { Role } from '@prisma/client';
+import { DocumentType, InventorySourceMode, Role } from '@prisma/client';
 
 const testUrl = process.env.ACCESSORY_TEST_DATABASE_URL;
 if (testUrl) {
@@ -52,6 +52,8 @@ if (testUrl) {
       providerId: string,
       familyId: string,
       skuId: string,
+      bulkFamilyId: string,
+      bulkSkuId: string,
       customerId: string;
     const worksiteIds: string[] = [],
       siteIds: string[] = [];
@@ -107,6 +109,10 @@ if (testUrl) {
       customerId = (
         await prisma.customer.create({ data: { name: `QA CLIENTE ${run}` } })
       ).id;
+      bulkFamilyId = (await prisma.assetFamily.create({ data: {
+        code: `QB-${run}`, name: 'QA MATERIAL MIXTO', controlType: 'BULK',
+      } })).id;
+      bulkSkuId = (await prisma.sku.create({ data: { name: 'QA MATERIAL MIXTO', assetFamilyId: bulkFamilyId } })).id;
       for (const suffix of ['A', 'B']) {
         const worksite = await prisma.worksite.create({
           data: { name: `QA OBRA ${suffix} ${run}` },
@@ -136,7 +142,7 @@ if (testUrl) {
         where: { documentId: { in: documentIds } },
       });
       await prisma.stockLedger.deleteMany({
-        where: { assetId: { in: assetIds } },
+        where: { OR: [{ assetId: { in: assetIds } }, ...(bulkSkuId ? [{ skuId: bulkSkuId }] : [])] },
       });
       await prisma.accessoryBalance.deleteMany({
         where: { accessoryId: { in: accessoryIds } },
@@ -150,6 +156,8 @@ if (testUrl) {
       });
       await prisma.asset.deleteMany({ where: { id: { in: assetIds } } });
       if (skuId) await prisma.sku.delete({ where: { id: skuId } });
+      if (bulkSkuId) await prisma.sku.delete({ where: { id: bulkSkuId } });
+      if (bulkFamilyId) await prisma.assetFamily.delete({ where: { id: bulkFamilyId } });
       if (familyId)
         await prisma.assetFamily.delete({ where: { id: familyId } });
       await prisma.customerWorksite.deleteMany({
@@ -261,6 +269,92 @@ if (testUrl) {
       });
       return { parent, accessory, doc, balance };
     }
+
+    it('debits the same bulk reference and owner separately from each physical warehouse', async () => {
+      for (const origin of [warehouseId, providerId]) {
+        await prisma.stockLedger.create({ data: { skuId: bulkSkuId, warehouseId: origin,
+          ownerWarehouseId: providerId, movementType: 'IN', quantity: 5,
+          effectiveAt: new Date('2020-01-01'), createdBy: userId } });
+      }
+      const items = [
+        { skuId: bulkSkuId, quantity: 2, ownerWarehouseId: providerId, sourceWarehouseId: warehouseId },
+        { skuId: bulkSkuId, quantity: 3, ownerWarehouseId: providerId, sourceWarehouseId: providerId },
+      ];
+      const doc = await draft('REMISSION', items);
+      await documents.updateRequestDocument(doc.id, { items }, userId);
+      await evidence(doc.id, 'COMPROBANTE_SALIDA_PROVEEDOR');
+      await documents.approveRequestDocument(doc.id, userId);
+      const rows = await prisma.stockLedger.findMany({ where: { refDocumentId: doc.id } });
+      expect(rows).toHaveLength(2);
+      expect(rows.find(row => row.warehouseId === warehouseId)?.quantity.toNumber()).toBe(-2);
+      expect(rows.find(row => row.warehouseId === providerId)?.quantity.toNumber()).toBe(-3);
+      const remaining = await prisma.stockLedger.groupBy({ by: ['warehouseId'],
+        where: { skuId: bulkSkuId }, _sum: { quantity: true } });
+      expect(remaining.find(row => row.warehouseId === warehouseId)?._sum.quantity?.toNumber()).toBe(3);
+      expect(remaining.find(row => row.warehouseId === providerId)?._sum.quantity?.toNumber()).toBe(2);
+    });
+
+    it('persists mixed origins through autosave, submission and approval without mixing owners', async () => {
+      const first = await fixture('INDIVIDUAL', 1);
+      const second = await fixture('INDIVIDUAL', 1);
+      // Fixture opening stock: one supplier-owned machine starts at the supplier.
+      await prisma.asset.update({ where: { id: second.parent.id }, data: {
+        warehouseOwnerId: providerId, warehouseCurrentId: providerId,
+      } });
+      await prisma.stockLedger.updateMany({ where: { assetId: second.parent.id }, data: {
+        ownerWarehouseId: providerId, warehouseId: providerId,
+      } });
+      const items = [
+        { assetId: first.parent.id, ownerWarehouseId: warehouseId, sourceWarehouseId: warehouseId },
+        { ...line(first.accessory.id, first.accessory.balances[0].id, first.parent.id, 1), sourceWarehouseId: warehouseId },
+        { assetId: second.parent.id, ownerWarehouseId: providerId, sourceWarehouseId: providerId },
+      ];
+      const doc = await documents.createAutosavedRequestDocument({
+        type: DocumentType.REMISSION, inventorySourceMode: InventorySourceMode.WAREHOUSE,
+        warehouseId, customerWorksiteId: siteIds[0], createdBy: userId,
+        notes: 'Entrega: ON_SITE', items,
+      });
+      documentIds.push(doc.id);
+      await documents.updateAutosavedRequestDocument(doc.id, { items }, { sub: userId, role: Role.OFFICE });
+      const saved = await prisma.documentItem.findMany({ where: { documentId: doc.id } });
+      expect(saved.map(item => item.sourceWarehouseId).sort()).toEqual([warehouseId, warehouseId, providerId].sort());
+      expect(await prisma.stockLedger.count({ where: { refDocumentId: doc.id } })).toBe(0);
+      await evidence(doc.id, 'SIGNATURE_RECEIVED');
+      await evidence(doc.id, 'COMPROBANTE_SALIDA_PROVEEDOR');
+      await documents.submitAutosavedRequestDocument(doc.id, { sendWhatsapp: false }, { sub: userId, role: Role.OFFICE });
+      await documents.approveRequestDocument(doc.id, userId);
+      const movements = await prisma.stockLedger.findMany({ where: { refDocumentId: doc.id } });
+      expect(movements).toHaveLength(2);
+      expect(movements).toEqual(expect.arrayContaining([
+        expect.objectContaining({ assetId: first.parent.id, warehouseId, ownerWarehouseId: warehouseId, movementType: 'OUT' }),
+        expect.objectContaining({ assetId: second.parent.id, warehouseId: providerId, ownerWarehouseId: providerId, movementType: 'OUT' }),
+      ]));
+      const inWorksite = (await accessories.get(first.accessory.id)).balances[0];
+      expect(inWorksite.customerWorksiteId).toBe(siteIds[0]);
+      const returned = await draft('RETURN', [
+        { assetId: first.parent.id, ownerWarehouseId: warehouseId },
+        line(first.accessory.id, inWorksite.id, first.parent.id, 1),
+        { assetId: second.parent.id, ownerWarehouseId: providerId },
+      ]);
+      await documents.approveRequestDocument(returned.id, userId);
+      expect(await prisma.stockLedger.count({ where: { refDocumentId: returned.id, warehouseId, movementType: 'IN' } })).toBe(2);
+      expect((await accessories.get(first.accessory.id)).balances[0].warehouseId).toBe(warehouseId);
+    });
+
+    it('rolls back the entire mixed remission, including accessories, if a later origin is incorrect', async () => {
+      const first = await fixture('INDIVIDUAL', 1);
+      const second = await fixture('INDIVIDUAL', 1);
+      const doc = await draft('REMISSION', [
+        { assetId: first.parent.id, ownerWarehouseId: warehouseId, sourceWarehouseId: warehouseId },
+        { ...line(first.accessory.id, first.accessory.balances[0].id, first.parent.id, 1), sourceWarehouseId: warehouseId },
+        { assetId: second.parent.id, ownerWarehouseId: warehouseId, sourceWarehouseId: providerId },
+      ]);
+      await expect(documents.approveRequestDocument(doc.id, userId)).rejects.toThrow();
+      expect(await prisma.stockLedger.count({ where: { refDocumentId: doc.id } })).toBe(0);
+      expect(await prisma.accessoryMovement.count({ where: { documentId: doc.id } })).toBe(0);
+      expect((await accessories.get(first.accessory.id)).balances[0].warehouseId).toBe(warehouseId);
+      expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).status).toBe('DRAFT');
+    });
 
     it('draft/save captures labels and owner without reserving stock; concurrent approval moves once', async () => {
       const { parent, accessory } = await fixture('INDIVIDUAL', 1);

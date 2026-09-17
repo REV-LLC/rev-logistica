@@ -3,9 +3,9 @@ import {
   type InventoryItemPickerBulkItem,
   type InventoryItemPickerSerialItem,
 } from '@/components/InventoryItemPickerModal';
-export type InventoryBulk = InventoryItemPickerBulkItem;
+export type InventoryBulk = InventoryItemPickerBulkItem & { sourceWarehouseId?: string | null };
 
-export type InventorySerial = InventoryItemPickerSerialItem;
+export type InventorySerial = InventoryItemPickerSerialItem & { sourceWarehouseId?: string | null };
 
 export type RequestInventoryResponse = {
   bulk: InventoryBulk[];
@@ -51,6 +51,7 @@ export type Warehouse = {
 };
 
 export type SelectedItem = {
+  sourceWarehouseId?: string | null;
   selectionId: string;
   type: 'bulk' | 'serial' | 'free' | 'accessory';
   accessoryId?: string;
@@ -149,6 +150,7 @@ export type RequestDocumentDetail = {
     createdAt: string;
   }>;
   items: Array<{
+    sourceWarehouseId?: string | null;
     id: string;
     skuId?: string | null;
     assetId?: string | null;

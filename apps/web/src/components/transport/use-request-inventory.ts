@@ -134,11 +134,9 @@ export function useRequestInventory({
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
-        if (!sourceOwnerWarehouseId)
-          throw new Error('Selecciona la bodega dueña para filtrar items.');
-        if (!physicalSourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
+        if (!physicalSourceWarehouseId) throw new Error('Selecciona de dónde recogiste los equipos.');
         const selectedOwner = warehouses.find(
-          (warehouse) => warehouse.id === sourceOwnerWarehouseId,
+          (warehouse) => warehouse.id === physicalSourceWarehouseId,
         );
         if (selectedOwner?.type === 'ALLY' && !canDecide) {
           throw new Error('Para bodega alterna, usa captura libre de tags.');
@@ -148,16 +146,8 @@ export function useRequestInventory({
           serial: InventorySerial[];
         }>(`/inventory/warehouse/${physicalSourceWarehouseId}`, { method: 'GET' });
         if (version !== inventoryLoadVersionRef.current) return;
-        setBulkItems(
-          data.bulk.filter(
-            (item) => item.ownerWarehouseId === sourceOwnerWarehouseId,
-          ),
-        );
-        setSerialItems(
-          data.serial.filter(
-            (item) => item.ownerWarehouseId === sourceOwnerWarehouseId,
-          ),
-        );
+        setBulkItems(data.bulk.map(item => ({ ...item, sourceWarehouseId: physicalSourceWarehouseId })));
+        setSerialItems(data.serial.map(item => ({ ...item, sourceWarehouseId: physicalSourceWarehouseId })));
       } else if (sourceMode === 'on-site') {
         if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
         const data = await api<RequestInventoryResponse>(

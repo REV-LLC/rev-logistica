@@ -18,7 +18,8 @@ export const createSelectionId = () => globalThis.crypto.randomUUID();
 export const buildBulkKey = (item: {
   skuId: string;
   ownerWarehouseId: string | null;
-}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+  sourceWarehouseId?: string | null;
+}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}`;
 
 export const normalizeTagBase = (value?: string | null) =>
   (value ?? '')

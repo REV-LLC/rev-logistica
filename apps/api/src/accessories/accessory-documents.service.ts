@@ -127,9 +127,9 @@ export class AccessoryDocumentsService {
         if (
           source.warehouseId &&
           source.warehouseId !==
-            (deliveryMode === 'ON_SITE'
+            (line.sourceWarehouseId || (deliveryMode === 'ON_SITE'
               ? accessory.ownerWarehouseId
-              : document.warehouseId)
+              : document.warehouseId))
         ) {
           throw new BadRequestException(
             'El accesorio no está en la bodega de origen del documento.',
@@ -139,9 +139,9 @@ export class AccessoryDocumentsService {
           source.assetId &&
           (!parent.warehouseCurrentId ||
             parent.warehouseCurrentId !==
-              (deliveryMode === 'ON_SITE'
+              (line.sourceWarehouseId || (deliveryMode === 'ON_SITE'
                 ? parent.warehouseOwnerId
-                : document.warehouseId))
+                : document.warehouseId)))
         ) {
           throw new BadRequestException(
             'El accesorio asignado no está con el equipo en la bodega de origen.',
