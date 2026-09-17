@@ -101,6 +101,59 @@ function fixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Document physical inventory origin', () => {
+  it.each(['autosave', 'request'])('an older client cannot erase saved item origins through %s', async route => {
+    const { service, database } = fixture({
+      status: route === 'autosave' ? DocumentStatus.IN_PROGRESS : DocumentStatus.DRAFT,
+      items: [{ ...baseItem, sourceWarehouseId: 'provider-warehouse' }],
+    });
+    const payload = { items: [{ skuId: 'bulk-sku', quantity: 1, ownerWarehouseId: 'provider-warehouse' }] };
+    const save = route === 'autosave'
+      ? service.updateAutosavedRequestDocument('document-1', payload, { sub: 'office-1', role: Role.OFFICE })
+      : service.updateRequestDocument('document-1', payload, 'office-1');
+    await expect(save).rejects.toThrow('Actualiza la aplicación');
+    expect(database.documentItem.deleteMany).not.toHaveBeenCalled();
+  });
+  it.each(['Entrega: ON_SITE', 'Entrega: WAREHOUSE'])(
+    'dispatches a mixed remission by each line origin, regardless of %s', async notes => {
+      const { service, document, inventory, database } = fixture({ notes, items: [
+        { ...baseItem, sourceWarehouseId: 'our-warehouse', quantity: new Prisma.Decimal(2) },
+        { ...baseItem, sourceWarehouseId: 'provider-warehouse', quantity: new Prisma.Decimal(3) },
+      ] });
+      await service['approveLoadedRequestDocument'](document, 'office-1');
+      expect(inventory.moveOut).toHaveBeenCalledTimes(2);
+      for (const [warehouseId, quantity] of [['our-warehouse', 2], ['provider-warehouse', 3]]) {
+        expect(inventory.moveOut).toHaveBeenCalledWith({ warehouseId,
+          customerWorksiteId: 'worksite-1', documentId: document.id,
+          items: [{ skuId: 'bulk-sku', quantity, ownerWarehouseId: 'provider-warehouse' }],
+        }, 'office-1', database);
+      }
+      expect(inventory.moveOnSite).not.toHaveBeenCalled();
+      expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledWith(
+        expect.arrayContaining(['our-warehouse', 'provider-warehouse']), 'worksite-1');
+    });
+
+  it('rejects an inactive explicit origin before executing its inventory movement', async () => {
+    const { service, document, inventory, database } = fixture({ items: [{ ...baseItem, sourceWarehouseId: 'closed' }] });
+    database.warehouse.findFirst.mockResolvedValue(null as never);
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toThrow('no está activa');
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+    expect(database.document.update).not.toHaveBeenCalled();
+  });
+
+  it('a manual provider description cannot move stock until resolved', async () => {
+    const { service, document, inventory } = fixture({ items: [{ ...baseItem, skuId: null,
+      sourceWarehouseId: 'provider-warehouse', requestedTag: 'PLUMA #4' }] });
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toThrow('sin resolver');
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+  });
+
+  it('explicit remission origins never change return destinations', async () => {
+    const { service, document, inventory } = fixture({ type: DocumentType.RETURN,
+      items: [{ ...baseItem, sourceWarehouseId: 'provider-warehouse' }] });
+    await service['approveLoadedRequestDocument'](document, 'office-1');
+    expect(inventory.moveIn).toHaveBeenCalledWith(expect.objectContaining({ warehouseId: 'our-warehouse' }), 'office-1', expect.anything());
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+  });
   it.each([
     [WAREHOUSE, 'Entrega: ON_SITE', WAREHOUSE],
     [OWNER_WAREHOUSES, 'Entrega: WAREHOUSE', OWNER_WAREHOUSES],
@@ -510,9 +563,11 @@ describe('Document physical inventory origin', () => {
 
   it('copies the origin to every document produced by splitting a long remission', async () => {
     const { service, document, database } = fixture({
-      items: Array.from({ length: 21 }, (_, index) => ({ ...baseItem, id: `item-${index}` })),
+      items: Array.from({ length: 21 }, (_, index) => ({ ...baseItem, id: `item-${index}`, sourceWarehouseId: index % 2 ? 'our-warehouse' : 'provider-warehouse' })),
     });
     await service['splitRemissionDraftDocument'](document as never);
+    expect(database.documentItem.createMany.mock.calls.flatMap(([args]) => args.data).map(item => item.sourceWarehouseId))
+      .toEqual(document.items.map(item => item.sourceWarehouseId));
     expect(database.document.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         inventorySourceMode: WAREHOUSE,

@@ -453,6 +453,7 @@ model CustomerWorksite {
 }
 
 model Warehouse {
+  documentItemSources DocumentItem[] @relation("DocumentItemSourceWarehouse")
   id             String        @id @default(uuid())
   name           String
   type           WarehouseType
@@ -1023,6 +1024,10 @@ model DocumentItem {
   id         String @id @default(uuid())
   documentId String
 
+  // Explicit physical origin for new remission lines; null preserves legacy rules.
+  sourceWarehouseId String?
+  sourceWarehouse Warehouse? @relation("DocumentItemSourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: Restrict)
+
   // BULK
   skuId        String?
   quantity     Decimal?
@@ -1058,6 +1063,7 @@ model DocumentItem {
   componentParentAsset Asset?     @relation("DocumentItemComponentParentAsset", fields: [componentParentAssetId], references: [id], onDelete: SetNull)
 
   @@index([documentId])
+  @@index([sourceWarehouseId])
   @@index([skuId])
   @@index([assetId])
   @@index([componentParentAssetId])

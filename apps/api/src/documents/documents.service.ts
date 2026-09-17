@@ -28,7 +28,7 @@ import { DocumentPdfSnapshotService } from './document-pdf-snapshot.service';
 import { AutosaveDocumentRequestDto } from './dto/autosave-document-request.dto';
 import { SubmitAutosavedDocumentRequestDto } from './dto/submit-autosaved-document-request.dto';
 import { assertTabletWarehouse, resolveTabletDocumentAccess } from '../auth/tablet-access';
-import { resolveDocumentInventorySourceMode } from './document-inventory-source';
+import { resolveDocumentInventorySourceMode, resolveDocumentItemSourceWarehouseId } from './document-inventory-source';
 import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
 import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { isSerializationConflict } from './document-transaction-conflict';
@@ -232,6 +232,7 @@ export class DocumentsService {
   private buildDocumentItemCreateManyData(
     documentId: string,
     items: Array<{
+      sourceWarehouseId?: string | null;
       skuId: string | null;
       assetId: string | null;
       componentParentAssetId?: string | null;
@@ -250,6 +251,7 @@ export class DocumentsService {
   ) {
     return items.map((item) => ({
       documentId,
+      sourceWarehouseId: item.sourceWarehouseId ?? null,
       skuId: item.skuId ?? null,
       assetId: item.assetId ?? null,
       componentParentAssetId: item.componentParentAssetId ?? null,
@@ -437,7 +439,7 @@ export class DocumentsService {
           const result = await this.executeRequestApproval({ ...document,
             items: document.items.filter((item) => !item.accessoryId) }, userId, tx, hasAccessories);
           return { ...result, alreadyConfirmed: false,
-            warehouseIds: [...new Set([...result.warehouseIds, ...document.items.flatMap((item) => item.condition ? [item.condition] : [])])] };
+            warehouseIds: [...new Set([...result.warehouseIds, ...document.items.flatMap((item) => [item.condition, item.sourceWarehouseId].filter((id): id is string => !!id))])] };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 30000 });
 
         await this.inventoryService.invalidateDocumentMovementCaches(result.warehouseIds, result.customerWorksiteId)
@@ -466,6 +468,7 @@ export class DocumentsService {
       docDate: Date;
       notes: string | null;
       items: Array<{
+        sourceWarehouseId?: string | null;
         skuId: string | null;
         assetId: string | null;
         componentParentAssetId: string | null;
@@ -543,7 +546,21 @@ export class DocumentsService {
       if (!document.customerWorksiteId) {
         throw new BadRequestException('La remisión no tiene obra destino');
       }
-      if (sourceMode === InventorySourceMode.OWNER_WAREHOUSES) {
+      if (document.items.some((item) => item.sourceWarehouseId)) {
+        // One transaction for every origin: a shortage rolls back the whole document.
+        const groups = new Map<string, typeof items>();
+        document.items.forEach((line, index) => {
+          const origin = resolveDocumentItemSourceWarehouseId(document, line);
+          if (!origin) throw new BadRequestException(`Selecciona de dónde salió el ítem ${index + 1}.`);
+          groups.set(origin, [...(groups.get(origin) ?? []), items[index]]);
+        });
+        for (const [warehouseId, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+          const origin = await tx.warehouse.findFirst({ where: { id: warehouseId, active: true }, select: { id: true } });
+          if (!origin) throw new BadRequestException('La bodega de origen del ítem no está activa.');
+          await this.inventoryService.moveOut({ warehouseId, customerWorksiteId: document.customerWorksiteId,
+            items: group, documentId: document.id }, userId, tx);
+        }
+      } else if (sourceMode === InventorySourceMode.OWNER_WAREHOUSES) {
         await this.inventoryService.moveOnSite(
           {
             customerWorksiteId: document.customerWorksiteId,
@@ -640,7 +657,7 @@ export class DocumentsService {
     });
     return {
       confirmed,
-      warehouseIds: [...new Set([...items.map((item) => item.ownerWarehouseId), ...(document.warehouseId ? [document.warehouseId] : [])])],
+      warehouseIds: [...new Set([...items.map((item) => item.ownerWarehouseId), ...document.items.flatMap(item => item.sourceWarehouseId ? [item.sourceWarehouseId] : []), ...(document.warehouseId ? [document.warehouseId] : [])])],
       customerWorksiteId: document.customerWorksiteId,
     };
   }
@@ -928,6 +945,7 @@ export class DocumentsService {
       accessorySourceBalanceId?: string;
       componentParentAssetId?: string;
       ownerWarehouseId?: string;
+      sourceWarehouseId?: string;
       quantity?: number;
       requestedTag?: string;
       conditionNote?: string;
@@ -936,7 +954,10 @@ export class DocumentsService {
     const type = payload.type as DocumentType;
     const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
       ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
-    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
+    if (tabletContext) {
+      assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
+      payload.items?.forEach(item => { if (item.sourceWarehouseId) assertTabletWarehouse(tabletContext.warehouseId, item.sourceWarehouseId); });
+    }
     this.assertExplicitRemissionInventorySource({ ...payload, type });
     const recipientPhones =
       payload.sendWhatsapp === false
@@ -983,6 +1004,7 @@ export class DocumentsService {
                 assetId: item.assetId ?? null,
                 accessoryId: item.accessoryId ?? null,
                 accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
+                sourceWarehouseId: payload.type === DocumentType.REMISSION ? item.sourceWarehouseId ?? null : null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -1028,7 +1050,10 @@ export class DocumentsService {
   ) {
     const tabletContext = payload.requesterRole === Role.WAREHOUSE_TABLET
       ? await resolveTabletDocumentAccess(this.prisma, payload.createdBy, payload.tabletEmployeeToken) : null;
-    if (tabletContext) assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
+    if (tabletContext) {
+      assertTabletWarehouse(tabletContext.warehouseId, payload.warehouseId);
+      payload.items?.forEach(item => { if (item.sourceWarehouseId) assertTabletWarehouse(tabletContext.warehouseId, item.sourceWarehouseId); });
+    }
     if (
       payload.type !== DocumentType.REMISSION &&
       payload.type !== DocumentType.RETURN
@@ -1077,6 +1102,7 @@ export class DocumentsService {
                 assetId: item.assetId ?? null,
                 accessoryId: item.accessoryId ?? null,
                 accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
+                sourceWarehouseId: payload.type === DocumentType.REMISSION ? item.sourceWarehouseId ?? null : null,
                 componentParentAssetId: item.componentParentAssetId ?? null,
                 quantity: item.quantity ?? (item.skuId ? 1 : null),
                 requestedTag: item.requestedTag?.trim() || null,
@@ -1121,6 +1147,7 @@ export class DocumentsService {
     if (requester.role === Role.WAREHOUSE_TABLET) {
       const context = await resolveTabletDocumentAccess(this.prisma, requester.sub, payload.tabletEmployeeToken, documentId);
       assertTabletWarehouse(context.warehouseId, payload.warehouseId);
+      payload.items?.forEach(item => { if (item.sourceWarehouseId) assertTabletWarehouse(context.warehouseId, item.sourceWarehouseId); });
       if (payload.type !== DocumentType.REMISSION && payload.type !== DocumentType.RETURN) throw new BadRequestException('Solo puedes crear remisiones y devoluciones.');
     }
     const existing = await this.prisma.document.findUnique({
@@ -1133,6 +1160,7 @@ export class DocumentsService {
         consecutive: true,
         warehouseId: true,
         inventorySourceMode: true,
+        items: { select: { sourceWarehouseId: true } },
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -1147,6 +1175,10 @@ export class DocumentsService {
     }
 
     const nextType = payload.type ?? existing.type;
+    if (nextType === DocumentType.REMISSION && payload.items?.length &&
+      existing.items?.some(item => item.sourceWarehouseId) && !payload.items.some(item => item.sourceWarehouseId)) {
+      throw new BadRequestException('Actualiza la aplicación y vuelve a abrir el documento para conservar el origen de sus ítems.');
+    }
     const recipientPhones = payload.recipientPhones
       ? payload.recipientPhones.length
         ? this.normalizeDocumentRecipientPhones(payload.recipientPhones)
@@ -1195,6 +1227,7 @@ export class DocumentsService {
               assetId: item.assetId ?? null,
               accessoryId: item.accessoryId ?? null,
               accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
+              sourceWarehouseId: nextType === DocumentType.REMISSION ? item.sourceWarehouseId ?? null : null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -1311,6 +1344,7 @@ export class DocumentsService {
         accessorySourceBalanceId?: string;
         componentParentAssetId?: string;
         ownerWarehouseId?: string;
+        sourceWarehouseId?: string;
         quantity?: number;
         requestedTag?: string;
         conditionNote?: string;
@@ -1328,6 +1362,7 @@ export class DocumentsService {
         consecutive: true,
         warehouseId: true,
         inventorySourceMode: true,
+        items: { select: { sourceWarehouseId: true } },
         customerWorksiteId: true,
         notes: true,
         recipientPhone: true,
@@ -1344,6 +1379,10 @@ export class DocumentsService {
 
     const nextType =
       (payload.type as DocumentType | undefined) ?? existing.type;
+    if (nextType === DocumentType.REMISSION && payload.items.length &&
+      existing.items?.some(item => item.sourceWarehouseId) && !payload.items.some(item => item.sourceWarehouseId)) {
+      throw new BadRequestException('Actualiza la aplicación y vuelve a abrir el documento para conservar el origen de sus ítems.');
+    }
     if (
       nextType !== DocumentType.REMISSION &&
       nextType !== DocumentType.RETURN
@@ -1429,6 +1468,7 @@ export class DocumentsService {
               assetId: item.assetId ?? null,
               accessoryId: item.accessoryId ?? null,
               accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
+              sourceWarehouseId: nextType === DocumentType.REMISSION ? item.sourceWarehouseId ?? null : null,
               componentParentAssetId: item.componentParentAssetId ?? null,
               quantity: item.quantity ?? (item.skuId ? 1 : null),
               requestedTag: item.requestedTag?.trim() || null,
@@ -1889,6 +1929,7 @@ export class DocumentsService {
 
   private async mapDocumentItemsToMovementItems(
     items: Array<{
+      sourceWarehouseId?: string | null;
       skuId: string | null;
       assetId: string | null;
       quantity: Prisma.Decimal | null;
@@ -1963,10 +2004,10 @@ export class DocumentsService {
               where: {
                 skuId: item.skuId,
                 warehouseOwnerId: ownerWarehouseId,
-                warehouseCurrentId:
+                warehouseCurrentId: (source && item.sourceWarehouseId) || (
                   source?.mode === InventorySourceMode.WAREHOUSE
                     ? source.warehouseId
-                    : ownerWarehouseId,
+                    : ownerWarehouseId),
                 active: true,
                 deletedAt: null,
               },

@@ -1,4 +1,5 @@
 export type RequestItemInput = {
+  sourceWarehouseId?: string | null;
   type: 'bulk' | 'serial' | 'free' | 'accessory';
   accessoryId?: string;
   accessorySourceBalanceId?: string;
@@ -22,6 +23,7 @@ export function buildRequestItems(items: RequestItemInput[]) {
 
     if (item.type === 'accessory') {
       return {
+        ...(item.sourceWarehouseId ? { sourceWarehouseId: item.sourceWarehouseId } : {}),
         accessoryId: item.accessoryId,
         accessorySourceBalanceId: item.accessorySourceBalanceId,
         componentParentAssetId: item.componentParentAssetId,
@@ -33,6 +35,7 @@ export function buildRequestItems(items: RequestItemInput[]) {
 
     if (item.type === 'free') {
       return {
+        ...(item.sourceWarehouseId ? { sourceWarehouseId: item.sourceWarehouseId } : {}),
         requestedTag: item.requestedTag ?? item.name,
         quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
         ownerWarehouseId: item.ownerWarehouseId ?? undefined,
@@ -42,6 +45,7 @@ export function buildRequestItems(items: RequestItemInput[]) {
 
     if (item.type === 'bulk') {
       return {
+        ...(item.sourceWarehouseId ? { sourceWarehouseId: item.sourceWarehouseId } : {}),
         skuId: item.skuId,
         quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
         componentParentAssetId: item.componentParentAssetId,
@@ -51,6 +55,7 @@ export function buildRequestItems(items: RequestItemInput[]) {
     }
 
     return {
+      ...(item.sourceWarehouseId ? { sourceWarehouseId: item.sourceWarehouseId } : {}),
       assetId: item.assetId,
       componentParentAssetId: item.componentParentAssetId,
       ownerWarehouseId: item.ownerWarehouseId ?? undefined,

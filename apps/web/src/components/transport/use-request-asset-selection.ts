@@ -83,6 +83,7 @@ export function useRequestAssetSelection({
           name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
           ownerWarehouseId: item.ownerWarehouseId,
+          sourceWarehouseId: item.sourceWarehouseId,
           associatedMixerId,
         },
       ];
@@ -186,6 +187,7 @@ export function useRequestAssetSelection({
           name: getSerialDisplayName(parent),
           serial: parent.serialOrEngine,
           ownerWarehouseId: parent.ownerWarehouseId,
+          sourceWarehouseId: parent.sourceWarehouseId,
         },
       ];
       selections.forEach((selection) => {
@@ -193,12 +195,13 @@ export function useRequestAssetSelection({
           additions.push({
             selectionId: createSelectionId(),
             type: 'bulk',
-            bulkKey: buildBulkKey(selection.item),
+            bulkKey: buildBulkKey({ ...selection.item, sourceWarehouseId: parent.sourceWarehouseId }),
             skuId: selection.item.skuId,
             name: `${selection.item.skuName ?? 'Componente'} · con ${getSerialDisplayName(parent)}`,
             quantity: selection.quantity,
             availableQuantity: selection.item.quantity,
             ownerWarehouseId: selection.item.ownerWarehouseId,
+            sourceWarehouseId: parent.sourceWarehouseId,
             componentParentAssetId: parent.assetId,
           });
         } else if (!selectedAssetIds.has(selection.item.assetId)) {
@@ -209,6 +212,7 @@ export function useRequestAssetSelection({
             name: `${getSerialDisplayName(selection.item)} · con ${getSerialDisplayName(parent)}`,
             serial: selection.item.serialOrEngine,
             ownerWarehouseId: selection.item.ownerWarehouseId,
+            sourceWarehouseId: parent.sourceWarehouseId,
             componentParentAssetId: parent.assetId,
           });
         }
@@ -256,6 +260,7 @@ export function useRequestAssetSelection({
             name: getSerialDisplayName(activePendingMixer),
             serial: activePendingMixer.serialOrEngine,
             ownerWarehouseId: activePendingMixer.ownerWarehouseId,
+            sourceWarehouseId: activePendingMixer.sourceWarehouseId,
           },
           {
             selectionId: createSelectionId(),
@@ -264,6 +269,7 @@ export function useRequestAssetSelection({
             name: `${getSerialDisplayName(motor)} · motor asociado`,
             serial: motor.serialOrEngine,
             ownerWarehouseId: motor.ownerWarehouseId,
+            sourceWarehouseId: activePendingMixer.sourceWarehouseId,
             associatedMixerId: activePendingMixer.assetId,
           },
         ];

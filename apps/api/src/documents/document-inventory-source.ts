@@ -1,5 +1,14 @@
 import { InventorySourceMode } from '@prisma/client';
 
+export function resolveDocumentItemSourceWarehouseId(
+  document: { inventorySourceMode?: InventorySourceMode | null; notes?: string | null; warehouseId?: string | null },
+  item: { sourceWarehouseId?: string | null; condition?: string | null },
+): string | null {
+  return item.sourceWarehouseId?.trim() ||
+    (resolveDocumentInventorySourceMode(document) === InventorySourceMode.WAREHOUSE
+      ? document.warehouseId ?? null : item.condition?.trim() || null);
+}
+
 /** Delivery arrangements are only a compatibility fallback for legacy requests. */
 export function resolveDocumentInventorySourceMode(document: {
   inventorySourceMode?: InventorySourceMode | null;

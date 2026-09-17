@@ -24,6 +24,7 @@ import { getSerialDisplayName } from '@/lib/serial-assets';
 import { getSelectablePickerRows, isPickerQuantityAvailable, togglePickerRows } from '@/components/transport/inventory-picker-availability';
 
 export type InventoryItemPickerBulkItem = {
+  sourceWarehouseId?: string | null;
   skuId: string;
   skuName: string | null;
   ownerWarehouseId: string | null;
@@ -57,7 +58,7 @@ type InventoryItemPickerModalProps = {
 };
 
 function buildBulkItemKey(item: InventoryItemPickerBulkItem) {
-  return `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
+  return `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}`;
 }
 
 type PickerRow =

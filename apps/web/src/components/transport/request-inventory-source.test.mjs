@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getRequestInventorySourceMode, getRequestSourceWarehouseId, loadRequestSourceInventories } from './request-inventory-source.ts';
+import { getRequestInventorySourceMode, getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source.ts';
+
+test('un mismo propietario puede tener ítems de dos ubicaciones sin mezclar existencias', async () => {
+  const doc = { type: 'REMISSION', inventorySourceMode: 'WAREHOUSE', warehouse: { id: 'own' }, items: [
+    { condition: 'provider', sourceWarehouseId: 'own' },
+    { condition: 'provider', sourceWarehouseId: 'provider' },
+  ] };
+  const calls = [];
+  const result = await loadRequestSourceInventories(doc, ['provider'], async id => {
+    calls.push(id);
+    return { bulk: [{ skuId: 'shared', ownerWarehouseId: 'provider', quantity: id === 'own' ? 2 : 3 }], serial: [] };
+  });
+  assert.deepEqual(calls.sort(), ['own', 'provider']);
+  assert.equal(result[getRequestItemInventoryKey(doc, doc.items[0])].bulk[0].quantity, 2);
+  assert.equal(result[getRequestItemInventoryKey(doc, doc.items[1])].bulk[0].quantity, 3);
+  assert.equal(getRequestSourceWarehouseId(doc, 'provider', 'own'), 'own');
+});
 
 test('la ubicación física explícita no cambia por entregar en obra ni por el propietario', () => {
   const doc = { type: 'REMISSION', inventorySourceMode: 'WAREHOUSE', warehouse: { id: 'principal' }, notes: 'Entrega: ON_SITE' };
