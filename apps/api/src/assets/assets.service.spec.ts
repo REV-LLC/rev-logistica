@@ -158,6 +158,8 @@ describe('AssetsService asset deletion', () => {
   it('archives an asset without deleting its ledger or document history', async () => {
     const deletedAt = new Date('2026-08-24T18:00:00.000Z');
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'asset-1' }]),
+      accessoryBalance: { count: jest.fn().mockResolvedValue(0) },
       asset: {
         update: jest.fn().mockResolvedValue({
           id: 'asset-1',

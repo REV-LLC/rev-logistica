@@ -21,6 +21,12 @@ function formatHours(value: number | string) {
     : `${value} h`;
 }
 
+function meterReportedHours(reading: MaintenanceReading) {
+  return reading.previousHours == null
+    ? 'Sin lectura anterior'
+    : formatHours(Number(reading.hours) - Number(reading.previousHours));
+}
+
 function recordedByLabel(reading: MaintenanceReading) {
   const employeeName = [
     reading.recordedBy?.employee?.name,
@@ -59,7 +65,7 @@ function EvidenceAction({
   );
 }
 
-export default function HourReadingHistory({ readings }: { readings: MaintenanceReading[] }) {
+export default function HourReadingHistory({ readings, showReportedHours = false }: { readings: MaintenanceReading[]; showReportedHours?: boolean }) {
   const [evidence, setEvidence] = useState<{ reading: MaintenanceReading; url: string } | null>(null);
   const [loadingEvidenceId, setLoadingEvidenceId] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
@@ -113,6 +119,10 @@ export default function HourReadingHistory({ readings }: { readings: Maintenance
             <Table.Tr>
               <Table.Th>Fecha</Table.Th>
               <Table.Th>Lectura</Table.Th>
+              {showReportedHours ? <>
+                <Table.Th>Horas reportadas horómetro</Table.Th>
+                <Table.Th>Horas reportadas operario</Table.Th>
+              </> : null}
               <Table.Th>Nota</Table.Th>
               <Table.Th>Registrado por</Table.Th>
               <Table.Th>Evidencia</Table.Th>
@@ -125,6 +135,10 @@ export default function HourReadingHistory({ readings }: { readings: Maintenance
                 <Table.Td>
                   <Badge color="blue" variant="light">{formatHours(reading.hours)}</Badge>
                 </Table.Td>
+                {showReportedHours ? <>
+                  <Table.Td>{meterReportedHours(reading)}</Table.Td>
+                  <Table.Td>{reading.operatorReportedHours == null ? 'Sin reportar' : formatHours(reading.operatorReportedHours)}</Table.Td>
+                </> : null}
                 <Table.Td>
                   <Text size="sm" c={reading.note ? undefined : 'dimmed'}>
                     {reading.note || 'Sin nota'}
@@ -154,6 +168,10 @@ export default function HourReadingHistory({ readings }: { readings: Maintenance
                 <Text size="sm" fw={600}>{formatDate(reading.recordedAt)}</Text>
                 <Badge color="blue" variant="light">{formatHours(reading.hours)}</Badge>
               </Group>
+              {showReportedHours ? <>
+                <Text size="sm">Horas reportadas horómetro: {meterReportedHours(reading)}</Text>
+                <Text size="sm">Horas reportadas operario: {reading.operatorReportedHours == null ? 'Sin reportar' : formatHours(reading.operatorReportedHours)}</Text>
+              </> : null}
               <Text size="sm" c={reading.note ? undefined : 'dimmed'}>
                 {reading.note || 'Sin nota'}
               </Text>

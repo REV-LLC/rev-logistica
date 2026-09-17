@@ -17,6 +17,7 @@ import {
 import type { Cache } from 'cache-manager';
 import { physicalWarehouseLedgerWhere } from '../inventory/warehouse-stock-balance';
 import { PrismaService } from '../prisma/prisma.service';
+import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { CreateProviderPickupDto } from './dto/create-provider-pickup.dto';
 
 const PROVIDER_DOCUMENT_CATEGORY = 'COMPROBANTE_SALIDA_PROVEEDOR';
@@ -301,6 +302,7 @@ export class ProviderPickupsService {
             }
 
             const items = this.normalizeItems(document.providerPickupItems);
+            await lockBulkStock(tx, items.flatMap((item) => item.skuId ? [item.skuId] : []));
             await this.assertAvailable(document.providerWarehouseId, items, tx);
 
             await tx.stockLedger.createMany({

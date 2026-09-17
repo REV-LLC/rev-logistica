@@ -32,7 +32,7 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   list() {
     return this.customersService.list();
   }
@@ -56,7 +56,7 @@ export class CustomersController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   getById(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.customersService.getById(id);
   }
@@ -99,7 +99,7 @@ export class CustomersController {
   }
 
   @Get(':id/worksites')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   listWorksites(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.customersService.listWorksites(id);
   }

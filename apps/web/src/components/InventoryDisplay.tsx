@@ -90,7 +90,7 @@ type SerialItem = {
   minimumChargeHours?: number | string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   location?: {
-    type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT';
+    type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN';
     name: string | null;
   } | null;
   internalNumber?: string | number | null;
@@ -187,6 +187,9 @@ export default function InventoryDisplay({
     });
   };
   const serialLocationLabel = (item: SerialItem) => {
+    if (item.location?.type === 'UNKNOWN' || item.status === 'UNKNOWN') {
+      return 'Sin ubicación registrada';
+    }
     if (item.location?.type === 'WORKSITE') {
       return `En obra${item.location.name ? ` · ${item.location.name}` : ''}`;
     }
@@ -584,6 +587,9 @@ export default function InventoryDisplay({
                       }
                       compact={compactSerialCards}
                       isWorksiteView={isWorksiteView}
+                      statusBadge={item.status === 'UNKNOWN' || item.location?.type === 'UNKNOWN'
+                        ? { label: 'SIN UBICACIÓN', color: 'gray' }
+                        : undefined}
                       display={{
                         showOwnerChip: isWorksiteView || showSerialOwnerChip,
                         showCharge: false,

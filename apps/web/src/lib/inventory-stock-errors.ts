@@ -1,6 +1,7 @@
 export type InventoryStockShortage = {
   skuId: string;
   ownerWarehouseId: string;
+  warehouseId?: string;
   requestedQuantity: number;
   availableQuantity: number;
   missingQuantity: number;
@@ -18,6 +19,7 @@ function isInventoryStockShortage(value: unknown): value is InventoryStockShorta
   return (
     typeof shortage.skuId === 'string' &&
     typeof shortage.ownerWarehouseId === 'string' &&
+    (shortage.warehouseId == null || typeof shortage.warehouseId === 'string') &&
     typeof shortage.requestedQuantity === 'number' &&
     typeof shortage.availableQuantity === 'number' &&
     typeof shortage.missingQuantity === 'number' &&
@@ -32,6 +34,24 @@ export function extractInventoryStockShortages(data: unknown) {
     return [];
   }
   return response.shortages.filter(isInventoryStockShortage);
+}
+
+export function getStockShortageReviewAction({
+  ownerWarehouseId,
+  warehouseId,
+  warehouseType,
+}: { ownerWarehouseId?: string | null; warehouseId?: string | null; warehouseType?: string | null }) {
+  if (warehouseId && ownerWarehouseId && warehouseId === ownerWarehouseId) {
+    const params = new URLSearchParams({ ownerWarehouseId, warehouseId });
+    return { label: 'Crear o ajustar existencias', href: `/inventory/bulk-adjustments?${params.toString()}` };
+  }
+  if (warehouseId && warehouseType === 'OWN') {
+    return { label: 'Revisar inventario de origen', href: '/inventory/warehouse?scope=own&view=bulk' };
+  }
+  if (warehouseId && warehouseType === 'ALLY') {
+    return { label: 'Revisar inventario de origen', href: `/inventory/warehouse/provider/${encodeURIComponent(warehouseId)}?providerView=available&view=bulk` };
+  }
+  return { label: 'Volver y revisar el origen', href: null };
 }
 
 function formatQuantity(value: number) {
@@ -51,13 +71,17 @@ export function buildInventoryStockShortageMessage(
   const unitLabel = totalMissing === 1 ? 'unidad' : 'unidades';
   const lines = shortages.map((shortage) => {
     const skuName = getSkuName(shortage.skuId);
-    const warehouseName = getWarehouseName(shortage.ownerWarehouseId);
+    const ownerName = getWarehouseName(shortage.ownerWarehouseId);
+    const location = shortage.warehouseId
+      ? `en "${getWarehouseName(shortage.warehouseId)}"`
+      : 'en el origen físico del documento';
+    const identity = `${skuName} (propietario: ${ownerName})`;
     const requested = formatQuantity(shortage.requestedQuantity);
     const missing = formatQuantity(shortage.missingQuantity);
     if (!shortage.existsInWarehouse) {
-      return `- ${skuName}: no existe en "${warehouseName}". Solicitadas: ${requested}; faltan: ${missing}.`;
+      return `- ${identity}: sin existencias ${location}. Solicitadas: ${requested}; faltan: ${missing}.`;
     }
-    return `- ${skuName}: disponibles ${formatQuantity(shortage.availableQuantity)} de ${requested}; faltan: ${missing}.`;
+    return `- ${identity}: disponibles ${formatQuantity(shortage.availableQuantity)} de ${requested} ${location}; faltan: ${missing}.`;
   });
 
   return [

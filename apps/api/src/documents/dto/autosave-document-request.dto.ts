@@ -11,7 +11,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 class AutosaveDocumentRequestItemDto {
@@ -22,6 +22,14 @@ class AutosaveDocumentRequestItemDto {
   @IsOptional()
   @IsUUID()
   assetId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accessoryId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accessorySourceBalanceId?: string;
 
   @IsOptional()
   @IsUUID()
@@ -47,6 +55,9 @@ class AutosaveDocumentRequestItemDto {
 }
 
 export class AutosaveDocumentRequestDto {
+  @IsOptional()
+  @IsString()
+  tabletEmployeeToken?: string;
   @IsEnum(DocumentType)
   type: DocumentType;
 
@@ -57,6 +68,10 @@ export class AutosaveDocumentRequestDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @IsOptional()
+  @IsEnum(InventorySourceMode)
+  inventorySourceMode?: InventorySourceMode;
 
   @IsOptional()
   @IsUUID()

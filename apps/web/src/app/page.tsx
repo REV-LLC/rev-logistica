@@ -153,6 +153,7 @@ export default function HomePage() {
   const due = notifications.filter((item) => item.status === 'DUE');
   const criticalDamageCount = notifications.filter((item) => /daño|falla|avería/i.test(`${item.title} ${item.message}`) && item.status !== 'UPCOMING').length;
   const roleDescription: Record<AppRole, string> = {
+    WAREHOUSE_TABLET: 'Crea remisiones y devoluciones desde tu bodega.',
     ADMIN: 'Lo que requiere atención en toda la operación.', OFFICE: 'Lo que tienes pendiente por revisar, aprobar o gestionar.', DRIVER: 'Tu jornada, próximas tareas y alertas asignadas.', OPERATOR: 'Registra y reporta rápidamente desde tu equipo asignado.',
   };
   const adminAttention = [

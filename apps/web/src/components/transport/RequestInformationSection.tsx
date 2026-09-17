@@ -1,4 +1,5 @@
 'use client';
+import type { RequestInventorySourceMode } from './request-inventory-source';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import {
@@ -27,6 +28,9 @@ import {
 import { helpLabel } from './RequestHelpLabel';
 
 type Props = {
+  inventorySourceMode: RequestInventorySourceMode;
+  principalWarehouse: Warehouse | null;
+  changePhysicalSource: (mode: RequestInventorySourceMode, warehouseId: string | null) => void;
   docType: 'REMISSION' | 'RETURN';
   editingRequestId: string | null;
   autosaveDraftId: string | null;
@@ -74,6 +78,9 @@ type Props = {
 };
 
 export default function RequestInformationSection({
+  inventorySourceMode,
+  principalWarehouse,
+  changePhysicalSource,
   docType,
   editingRequestId,
   autosaveDraftId,
@@ -293,7 +300,7 @@ export default function RequestInformationSection({
                     error={generateFieldErrors.docTime}
                   />
                 </SimpleGrid>
-                {editingRequestId && isAdminRole ? (
+                {editingRequestId && isAdminRole && docType === 'RETURN' ? (
                   <WarehouseSelect
                     label={
                       docType === 'RETURN'
@@ -327,6 +334,27 @@ export default function RequestInformationSection({
               </Stack>
             </Paper>
 
+            {docType === 'REMISSION' ? (
+              <Paper withBorder radius="lg" p="md">
+                <Stack gap="sm">
+                  <Text fw={800}>Salida física del inventario</Text>
+                  <Text size="sm" c="dimmed">Indica dónde están los equipos. El propietario y el transporte se seleccionan por separado.</Text>
+                  <Radio.Group value={inventorySourceMode}
+                    onChange={value => changePhysicalSource(value as RequestInventorySourceMode, warehouseId ?? principalWarehouse?.id ?? null)}
+                    label="Origen físico">
+                    <Stack gap="xs" mt="xs">
+                      <Radio value="WAREHOUSE" label="Desde una bodega" />
+                      <Radio value="OWNER_WAREHOUSES" label="Directo desde bodegas de propietarios" />
+                    </Stack>
+                  </Radio.Group>
+                  {inventorySourceMode === 'WAREHOUSE' ? (
+                    <WarehouseSelect label="Bodega de salida" value={warehouseId ?? principalWarehouse?.id ?? null}
+                      onChange={value => changePhysicalSource('WAREHOUSE', value)}
+                      warehouses={warehouses} formatLabels={false} clearable={false} required width="100%" />
+                  ) : null}
+                </Stack>
+              </Paper>
+            ) : null}
             <Paper withBorder radius="lg" p="md">
               <Stack gap="sm">
                 <Text fw={800}>
@@ -351,7 +379,7 @@ export default function RequestInformationSection({
                       value="WAREHOUSE"
                       label={
                         docType === 'REMISSION'
-                          ? 'Despacho desde bodega'
+                          ? 'Cliente retira en bodega'
                           : 'Cliente entrega en bodega'
                       }
                     />
@@ -359,7 +387,7 @@ export default function RequestInformationSection({
                       value="ON_SITE"
                       label={
                         docType === 'REMISSION'
-                          ? 'Entrega en obra'
+                          ? 'REV entrega en obra'
                           : 'Recogida en obra'
                       }
                     />

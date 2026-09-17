@@ -28,6 +28,8 @@ import WarehouseSelect from '@/components/WarehouseSelect';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import { getRequestSourceWarehouseId, type RequestInventorySourceMode } from '@/components/transport/request-inventory-source';
+import { buildDirectDocumentItems } from '@/components/transport/direct-document-items';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import { buildDocumentDateTime, getDocumentDateTimeInput } from '@/lib/document-date-time';
 
@@ -120,6 +122,7 @@ export default function RemisionDevolucionPage() {
   const [docTime, setDocTime] = useState(() => getDocumentDateTimeInput().time);
   const [cutOffDate, setCutOffDate] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>('WAREHOUSE');
+  const [inventorySourceMode, setInventorySourceMode] = useState<RequestInventorySourceMode>('WAREHOUSE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -147,7 +150,39 @@ export default function RemisionDevolucionPage() {
   const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhotoDraft[]>([]);
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
   const evidencePhotosRef = useRef<EvidencePhotoDraft[]>([]);
+  const inventoryRequestRef = useRef<AbortController | null>(null);
+  const inventoryRequestVersionRef = useRef(0);
   const sourceMode: 'warehouse' | 'on-site' = docType === 'REMISSION' ? 'warehouse' : 'on-site';
+  const physicalSourceWarehouseId = docType === 'REMISSION' ? getRequestSourceWarehouseId({
+    type: docType,
+    inventorySourceMode,
+    warehouse: warehouseId ? { id: warehouseId } : null,
+  }, sourceOwnerWarehouseId) : null;
+  const physicalSourceName = warehouses.find((warehouse) => warehouse.id === physicalSourceWarehouseId)?.name ?? 'Sin seleccionar';
+
+  const invalidateInventory = () => {
+    inventoryRequestVersionRef.current += 1;
+    inventoryRequestRef.current?.abort();
+    inventoryRequestRef.current = null;
+    setLoadingInventory(false);
+    setItemsModalOpen(false);
+    setBulkItems([]);
+    setSerialItems([]);
+    setSelectedItems([]);
+  };
+
+  const changePhysicalSource = (nextMode: RequestInventorySourceMode, nextWarehouseId: string | null) => {
+    if (nextMode === inventorySourceMode && nextWarehouseId === warehouseId) return;
+    if (selectedItems.length && !window.confirm('Al cambiar la salida física se quitarán los ítems seleccionados para comprobar su disponibilidad en el nuevo origen. ¿Continuar?')) return;
+    invalidateInventory();
+    setInventorySourceMode(nextMode);
+    setWarehouseId(nextWarehouseId);
+  };
+
+  useEffect(() => () => {
+    inventoryRequestVersionRef.current += 1;
+    inventoryRequestRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -217,15 +252,21 @@ export default function RemisionDevolucionPage() {
   }, [customerId]);
 
   const loadInventory = async () => {
+    inventoryRequestRef.current?.abort();
+    const controller = new AbortController();
+    inventoryRequestRef.current = controller;
+    const version = ++inventoryRequestVersionRef.current;
     setLoadingInventory(true);
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
         if (!sourceOwnerWarehouseId) throw new Error('Selecciona la bodega dueña para filtrar items.');
+        if (!physicalSourceWarehouseId) throw new Error('Selecciona la bodega de salida del inventario.');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
-          `/inventory/warehouse/${sourceOwnerWarehouseId}`,
-          { method: 'GET' }
+          `/inventory/warehouse/${physicalSourceWarehouseId}`,
+          { method: 'GET', signal: controller.signal }
         );
+        if (controller.signal.aborted || version !== inventoryRequestVersionRef.current) return;
         setBulkItems(
           data.bulk.filter((item) => item.ownerWarehouseId === sourceOwnerWarehouseId),
         );
@@ -238,13 +279,15 @@ export default function RemisionDevolucionPage() {
         if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
         const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/on-site/${sourceWorksiteId}`,
-          { method: 'GET' }
+          { method: 'GET', signal: controller.signal }
         );
+        if (controller.signal.aborted || version !== inventoryRequestVersionRef.current) return;
         setBulkItems(data.bulk);
         setSerialItems(data.serial.filter((item) => item.quantity === 1));
       }
       setItemsModalOpen(true);
     } catch (err) {
+      if (controller.signal.aborted || version !== inventoryRequestVersionRef.current) return;
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -253,26 +296,18 @@ export default function RemisionDevolucionPage() {
         setError('Error loading inventory');
       }
     } finally {
-      setLoadingInventory(false);
+      if (version === inventoryRequestVersionRef.current) setLoadingInventory(false);
     }
   };
 
   useEffect(() => {
-    setBulkItems([]);
-    setSerialItems([]);
-    setSelectedItems([]);
+    invalidateInventory();
     if (docType === 'REMISSION') {
       setSourceWorksiteId(null);
     } else {
       setSourceOwnerWarehouseId(null);
     }
   }, [docType]);
-
-  useEffect(() => {
-    setBulkItems([]);
-    setSerialItems([]);
-    setSelectedItems([]);
-  }, [sourceOwnerWarehouseId, sourceWorksiteId]);
 
   useEffect(() => {
     evidencePhotosRef.current = evidencePhotos;
@@ -459,16 +494,13 @@ export default function RemisionDevolucionPage() {
         throw new Error('Ingresa un teléfono de contacto de exactamente 10 dígitos.');
       }
       const providerOwnerIds = new Set(warehouses.filter((item) => item.type === 'ALLY').map((item) => item.id));
-      const providerReturnItems = docType === 'RETURN'
-        ? selectedItems.filter((item) => item.ownerWarehouseId && providerOwnerIds.has(item.ownerWarehouseId))
-        : [];
       const ownReturnItems = docType === 'RETURN'
         ? selectedItems.filter((item) => !item.ownerWarehouseId || !providerOwnerIds.has(item.ownerWarehouseId))
         : [];
       if (docType === 'RETURN' && ownReturnItems.length && !warehouseId) {
         throw new Error('Selecciona la bodega REV que recibirá los equipos propios.');
       }
-      if (docType === 'REMISSION' && deliveryMode === 'WAREHOUSE' && !warehouseId) {
+      if (docType === 'REMISSION' && inventorySourceMode === 'WAREHOUSE' && !warehouseId) {
         throw new Error('Selecciona la bodega de despacho.');
       }
 
@@ -477,6 +509,7 @@ export default function RemisionDevolucionPage() {
         status: 'CONFIRMED',
         number: withDocPrefix(consecutive, docType),
         warehouseId: warehouseId ?? undefined,
+        inventorySourceMode: docType === 'REMISSION' ? inventorySourceMode : undefined,
         customerWorksiteId: customerWorksiteId || undefined,
         recipientPhone,
         notes: [
@@ -489,73 +522,12 @@ export default function RemisionDevolucionPage() {
         ].filter(Boolean).join(' | ')
       } as const;
 
-      const created = await api<{ id: string }>('/documents', {
+      const movementItems = buildDirectDocumentItems(selectedItems);
+      const created = await api<{ id: string; consecutive: string | null }>('/documents/direct', {
         method: 'POST',
-        json: documentPayload
+        json: { ...documentPayload, items: movementItems }
       });
-
-      const movementItems = selectedItems.map((item) => {
-        if (!item.ownerWarehouseId) {
-          throw new Error(`Missing owner warehouse for item ${item.name}`);
-        }
-        return item.type === 'bulk'
-          ? {
-              skuId: item.skuId,
-              quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
-              ownerWarehouseId: item.ownerWarehouseId
-            }
-          : {
-              assetId: item.assetId,
-              ownerWarehouseId: item.ownerWarehouseId
-            };
-      });
-
-      if (docType === 'REMISSION') {
-        if (deliveryMode === 'WAREHOUSE') {
-          await api('/inventory/out', {
-            method: 'POST',
-            json: {
-              warehouseId,
-              customerWorksiteId,
-              items: movementItems,
-              documentId: created.id
-            }
-          });
-        } else {
-          await api('/inventory/on-site', {
-            method: 'POST',
-            json: {
-              customerWorksiteId,
-              items: movementItems,
-              documentId: created.id
-            }
-          });
-        }
-      } else {
-        const providerMovementItems = movementItems.filter((_, index) => providerReturnItems.includes(selectedItems[index]));
-        const ownMovementItems = movementItems.filter((_, index) => ownReturnItems.includes(selectedItems[index]));
-        if (providerMovementItems.length) {
-          await api('/inventory/return-transit', {
-            method: 'POST',
-            json: {
-              customerWorksiteId,
-              items: providerMovementItems,
-              documentId: created.id
-            }
-          });
-        }
-        if (ownMovementItems.length) {
-        await api('/inventory/in', {
-          method: 'POST',
-          json: {
-            warehouseId,
-            customerWorksiteId,
-            items: ownMovementItems,
-            documentId: created.id
-          }
-        });
-        }
-      }
+      const documentLabel = created.consecutive || documentPayload.number;
 
       try {
         await uploadEvidencePhotos(created.id);
@@ -573,11 +545,11 @@ export default function RemisionDevolucionPage() {
               ? uploadError.message
               : 'No se pudieron subir las evidencias.';
         setError(`Documento creado y movimiento registrado, pero fallaron las fotos: ${message}`);
-        setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
+        setSubmitResult(`Documento creado y movimiento registrado (${documentLabel}).`);
         return;
       }
 
-      setSubmitResult(`Documento creado y movimiento registrado (${created.id}).`);
+      setSubmitResult(`Documento creado y movimiento registrado (${documentLabel}).`);
       setConsecutive('');
       setCustomerId(null);
       setRecipientPhone('');
@@ -585,6 +557,7 @@ export default function RemisionDevolucionPage() {
       setDocTime(getDocumentDateTimeInput().time);
       setCutOffDate('');
       setDeliveryMode('WAREHOUSE');
+      setInventorySourceMode('WAREHOUSE');
       setCustomerWorksiteId('');
       setWarehouseId(null);
       setVehicleId(null);
@@ -657,7 +630,11 @@ export default function RemisionDevolucionPage() {
           <Radio.Group
             mt="md"
             value={docType}
-            onChange={(value) => setDocType(value as 'REMISSION' | 'RETURN')}
+            onChange={(value) => {
+              if (value === docType) return;
+              invalidateInventory();
+              setDocType(value as 'REMISSION' | 'RETURN');
+            }}
             label="Tipo"
           >
             <Group mt="xs">
@@ -727,32 +704,58 @@ export default function RemisionDevolucionPage() {
           </SimpleGrid>
 
           {docType === 'REMISSION' && (
-            <Radio.Group
-              mt="md"
-              value={deliveryMode}
-              onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
-              label="Entrega"
-            >
-              <Group mt="xs">
-                <Radio value="WAREHOUSE" label="Despacho en bodega" />
-                <Radio value="ON_SITE" label="Entrega on-site" />
-              </Group>
-            </Radio.Group>
+            <Paper withBorder radius="md" p="md" mt="md">
+              <Stack gap="sm">
+                <Text fw={700}>Salida física del inventario</Text>
+                <Text size="sm" c="dimmed">El propietario y el transporte no determinan dónde están los equipos antes del despacho.</Text>
+                <Radio.Group
+                  value={inventorySourceMode}
+                  onChange={(value) => changePhysicalSource(value as RequestInventorySourceMode, warehouseId)}
+                  label="Origen físico"
+                >
+                  <Stack mt="xs" gap="xs">
+                    <Radio value="WAREHOUSE" label="Desde una bodega" />
+                    <Radio value="OWNER_WAREHOUSES" label="Directo desde bodegas de propietarios" />
+                  </Stack>
+                </Radio.Group>
+                {inventorySourceMode === 'WAREHOUSE' ? (
+                  <WarehouseSelect
+                    label="Bodega de salida"
+                    formatLabels={false}
+                    value={warehouseId}
+                    onChange={(value) => changePhysicalSource('WAREHOUSE', value)}
+                    warehouses={warehouses}
+                    defaultName="Bodega propia"
+                    clearable={false}
+                    required
+                  />
+                ) : <Text size="sm" c="dimmed">Cada ítem sale de la bodega de su propietario; no pasa por nuestra bodega.</Text>}
+                <Divider />
+                <Radio.Group
+                  value={deliveryMode}
+                  onChange={(value) => setDeliveryMode(value as 'WAREHOUSE' | 'ON_SITE')}
+                  label="Modo de entrega"
+                >
+                  <Group mt="xs">
+                    <Radio value="WAREHOUSE" label="Cliente retira en bodega" />
+                    <Radio value="ON_SITE" label="REV entrega en obra" />
+                  </Group>
+                </Radio.Group>
+                <Text size="sm" c="dimmed">La entrega al cliente no cambia el origen físico seleccionado.</Text>
+              </Stack>
+            </Paper>
           )}
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
-            <WarehouseSelect
+            {docType === 'RETURN' ? <WarehouseSelect
               value={warehouseId}
               onChange={setWarehouseId}
-              warehouses={docType === 'RETURN' ? warehouses.filter((item) => item.type === 'OWN') : warehouses}
-              defaultName={docType === 'REMISSION' ? 'Bodega propia' : undefined}
+              warehouses={warehouses.filter((item) => item.type === 'OWN')}
               label={helpLabel(
-                docType === 'RETURN' ? 'Bodega REV para equipos propios' : 'Bodega de ubicación',
-                docType === 'RETURN'
-                  ? 'Los equipos de proveedores quedan En transición y se reciben desde Entregas a proveedor.'
-                  : 'Bodega física desde donde se despacha inventario.',
+                'Bodega REV para equipos propios',
+                'Los equipos de proveedores quedan En transición y se reciben desde Entregas a proveedor.',
               )}
-            />
+            /> : null}
             <Select
               label={helpLabel('Obra', 'Obra destino del movimiento.')}
               value={customerWorksiteId}
@@ -871,24 +874,35 @@ export default function RemisionDevolucionPage() {
         <Paper shadow="sm" p="xl" radius="md" withBorder mt="lg">
           <Title order={4}>Items del documento</Title>
           <Text c="dimmed">Busca y agrega; la tabla se llena abajo.</Text>
+          {docType === 'REMISSION' ? <Text size="sm" mt="xs">
+            Salida física: {inventorySourceMode === 'WAREHOUSE' ? physicalSourceName : 'bodega de cada propietario'}.
+          </Text> : null}
 
           <Group mt="md" align="flex-end" wrap="wrap">
             {sourceMode === 'warehouse' && (
               <WarehouseSelect
-                label={helpLabel('Origen', 'Dueño del inventario a despachar. Este filtro no cambia la bodega de ubicacion.')}
+                label={helpLabel('Propietario', 'Filtra a quién pertenecen los equipos, sin cambiar la salida física del documento.')}
                 value={sourceOwnerWarehouseId}
-                onChange={(value) => setSourceOwnerWarehouseId(value)}
+                onChange={(value) => {
+                  if (value === sourceOwnerWarehouseId) return;
+                  invalidateInventory();
+                  setSourceOwnerWarehouseId(value);
+                }}
                 warehouses={warehouses}
                 clearable
                 placeholder="Seleccionar dueño"
-                width={320}
+                width="min(320px, 100%)"
               />
             )}
             {sourceMode === 'on-site' && (
               <Select
                 label={helpLabel('Obra origen', 'Obra desde la cual se devolveran items a bodega.')}
                 value={sourceWorksiteId}
-                onChange={(value) => setSourceWorksiteId(value)}
+                onChange={(value) => {
+                  if (value === sourceWorksiteId) return;
+                  invalidateInventory();
+                  setSourceWorksiteId(value);
+                }}
                 data={worksites.map((item) => ({
                   value: item.id,
                   label: item.alias

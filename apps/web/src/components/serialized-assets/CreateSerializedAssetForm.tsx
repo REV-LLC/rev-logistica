@@ -25,6 +25,7 @@ import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import UppercaseTextInput, { uppercaseInputValue } from '@/components/UppercaseTextInput';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 
 type AssetFamily = {
@@ -203,11 +204,12 @@ const inferBrandModelFromSkuName = (
 type Props = {
   initialFamilyId?: string;
   initialWarehouseId?: string;
+  initialCurrentWarehouseId?: string;
   onCreated?: (assetId: string) => void;
   onSavingChange?: (saving: boolean) => void;
 };
 
-export default function CreateSerializedAssetForm({ initialFamilyId, initialWarehouseId, onCreated, onSavingChange }: Props) {
+export default function CreateSerializedAssetForm({ initialFamilyId, initialWarehouseId, initialCurrentWarehouseId, onCreated, onSavingChange }: Props) {
   const router = useRouter();
   const [families, setFamilies] = useState<AssetFamily[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -220,6 +222,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   useEffect(() => { onSavingChange?.(saving); }, [saving, onSavingChange]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [createdAssetId, setCreatedAssetId] = useState<string | null>(null);
 
   const [familyMode, setFamilyMode] = useState<'existing' | 'new'>('existing');
   const [familyId, setFamilyId] = useState<string | null>(initialFamilyId ?? null);
@@ -268,7 +271,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(initialWarehouseId ?? null);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(
-    initialWarehouseId ?? null,
+    initialCurrentWarehouseId ?? initialWarehouseId ?? null,
   );
   const [manualInternalNumber, setManualInternalNumber] = useState<number | ''>(
     '',
@@ -977,6 +980,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         onCreated(response.asset.id);
         return;
       }
+      setCreatedAssetId(response.asset.id);
       resetForm();
       router.refresh();
     } catch (err) {
@@ -1059,7 +1063,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
         </PageHeaderCard> : null}
 
-        {familyId ? (
+        {onCreated && familyId ? (
           <Alert color="blue" title="Compatibilidad del accesorio">
             {compatibilities.some((rule) => rule.active && rule.componentAssetFamilyId === familyId)
               ? `Esta familia es compatible con: ${compatibilities.filter((rule) => rule.active && rule.componentAssetFamilyId === familyId).map((rule) => rule.parentAssetFamily.name).join(', ')}. El vínculo con un equipo concreto se realiza en la remisión.`
@@ -1076,6 +1080,18 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         {success ? (
           <Alert color="green" variant="light" title="Equipo registrado" role="status" aria-live="polite">
             {success}
+          </Alert>
+        ) : null}
+
+        {createdAssetId ? (
+          <Alert color="blue" title="¿Este equipo tiene accesorios?">
+            <Stack gap="sm">
+              <Text size="sm">El equipo ya está guardado. Puedes agregar accesorios ahora o hacerlo después desde su card.</Text>
+              <Group>
+                <Button component={Link} href={`/inventory/accessories/equipment/${createdAssetId}?create=1`}>Agregar accesorios al equipo creado</Button>
+                <Button variant="subtle" onClick={() => setCreatedAssetId(null)}>Ahora no</Button>
+              </Group>
+            </Stack>
           </Alert>
         ) : null}
 

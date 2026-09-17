@@ -9,6 +9,8 @@ import {
   SkuControlType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
+import { serializedBalanceConsistency } from '../inventory/serialized-balance-consistency';
 import {
   getCanonicalJackReference,
   isCanonicalJackSubfamily,
@@ -675,7 +677,7 @@ export class AssetsService {
             assetId: createdAsset.id,
             ownerWarehouseId: payload.warehouseOwnerId,
             quantity: 1,
-            isOpeningBalance: warehouseOwner.type === 'ALLY' && warehouseCurrentId === payload.warehouseOwnerId,
+            isOpeningBalance: true,
             createdBy: userId,
           },
         });
@@ -754,6 +756,9 @@ export class AssetsService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        if (payload.active === false) {
+          await this.assertNoAssignedAccessories(tx, assetId);
+        }
         if (payload.hourMeter !== undefined) {
           const current = await tx.asset.findUniqueOrThrow({
             where: { id: assetId },
@@ -769,6 +774,7 @@ export class AssetsService {
               data: {
                 assetId,
                 hours: payload.hourMeter,
+                previousHours: current.hourMeter,
                 note: 'ACTUALIZACIÓN DESDE FICHA DEL ACTIVO',
                 recordedByUserId: userId,
               },
@@ -888,6 +894,12 @@ export class AssetsService {
     return result;
   }
 
+  private async assertNoAssignedAccessories(tx: Prisma.TransactionClient, assetId: string) {
+    await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${assetId} FOR UPDATE`;
+    const assigned = await tx.accessoryBalance.count({ where: { assetId, quantity: { gt: 0 } } });
+    if (assigned) throw new BadRequestException('Devuelve o traslada los accesorios asignados antes de desactivar o eliminar el equipo.');
+  }
+
   async deleteAsset(assetId: string, reason: string, userId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
@@ -916,6 +928,7 @@ export class AssetsService {
 
     const normalizedReason = reason.trim();
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.assertNoAssignedAccessories(tx, assetId);
       const maintenanceItems = await tx.maintenanceItem.findMany({
         where: { plan: { assetId } },
         select: { id: true },
@@ -974,16 +987,26 @@ export class AssetsService {
   async getAssetLocation(assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true },
+      select: { id: true, warehouseOwnerId: true, warehouseOwner: { select: { type: true } } },
     });
     if (!asset) {
       throw new NotFoundException('Asset not found');
     }
 
-    const lastLedger = await this.prisma.stockLedger.findFirst({
+    const ledgerRows = await this.prisma.stockLedger.findMany({
       where: { assetId },
-      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
       select: {
+        id: true,
+        appendOrder: true,
+        assetId: true,
+        ownerWarehouseId: true,
+        warehouseId: true,
+        customerWorksiteId: true,
+        refDocumentId: true,
+        refDocumentType: true,
+        quantity: true,
+        isOpeningBalance: true,
         movementType: true,
         warehouse: { select: { id: true, name: true } },
         customerWorksite: {
@@ -997,6 +1020,17 @@ export class AssetsService {
         createdAt: true,
       },
     });
+    const lastLedger = resolveLatestSerializedMovements(ledgerRows).get(asset.id)?.locationMovement;
+    const balance = asset.warehouseOwner?.type === 'OWN'
+      ? serializedBalanceConsistency(ledgerRows, asset.warehouseOwnerId, lastLedger)
+      : undefined;
+    if (balance && !balance.isConsistent) {
+      return {
+        assetId,
+        locationType: balance.issue === 'NO_MOVEMENTS' ? 'UNKNOWN' : 'INCONSISTENT',
+        warehouse: null, customerWorksite: null, balance,
+      };
+    }
 
     if (!lastLedger) {
       return {
@@ -1015,6 +1049,7 @@ export class AssetsService {
       return {
         assetId,
         locationType: 'CUSTOMER_WORKSITE',
+        ...(balance ? { balance } : {}),
         warehouse: null,
         customerWorksite: lastLedger.customerWorksite,
       };
@@ -1023,11 +1058,13 @@ export class AssetsService {
     if (
       (lastLedger.movementType === MovementType.IN
         || lastLedger.movementType === MovementType.ADJUST)
+      && Number(lastLedger.quantity) > 0
       && lastLedger.warehouse
     ) {
       return {
         assetId,
         locationType: 'WAREHOUSE',
+        ...(balance ? { balance } : {}),
         warehouse: lastLedger.warehouse,
         customerWorksite: null,
       };
@@ -1035,7 +1072,7 @@ export class AssetsService {
 
     return {
       assetId,
-      locationType: 'IN_TRANSIT',
+      locationType: lastLedger.movementType === MovementType.TRANSIT ? 'IN_TRANSIT' : 'UNKNOWN',
       warehouse: null,
       customerWorksite: null,
     };

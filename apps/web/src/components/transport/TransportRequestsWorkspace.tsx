@@ -1,4 +1,5 @@
 'use client';
+import { getRequestInventorySourceMode, getRequestSourceWarehouseId, type RequestInventorySourceMode } from './request-inventory-source';
 
 import AssetComponentsSelectionModal from '@/components/AssetComponentsSelectionModal';
 import InventoryItemPickerModal from '@/components/InventoryItemPickerModal';
@@ -60,6 +61,7 @@ import ProviderRemissionDialog from './ProviderRemissionDialog';
 import RequestDocumentsDialog from './RequestDocumentsDialog';
 import RequestInformationSection from './RequestInformationSection';
 import RequestItemsSection from './RequestItemsSection';
+import RequestAccessorySelector from './RequestAccessorySelector';
 import RequestSignatureDialog from './RequestSignatureDialog';
 import RequestSigningSection from './RequestSigningSection';
 import RequestsListSection from './RequestsListSection';
@@ -74,10 +76,17 @@ import { useRequestRecipients } from './use-request-recipients';
 import { useRequestSignature } from './use-request-signature';
 import { useRequestSubmission } from './use-request-submission';
 import { useRequestsList } from './use-requests-list';
+import type { TabletEmployeeContext } from './TabletDocumentGate';
 export default function TransportRequestsWorkspace({
   mode = 'requests',
+  tabletEmployee = null,
+  onTabletReset,
+  onTabletReidentify,
 }: {
   mode?: RequestsPageMode;
+  tabletEmployee?: TabletEmployeeContext | null;
+  onTabletReset?: () => void;
+  onTabletReidentify?: () => void;
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isTabletOrMobile = useMediaQuery('(max-width: 1024px)');
@@ -98,15 +107,16 @@ export default function TransportRequestsWorkspace({
   const [originalDocumentTimestamp, setOriginalDocumentTimestamp] = useState<string | null>(null);
   const documentTimestamp = buildDocumentDateTime(docDate, docTime, originalDocumentTimestamp);
   const [deliveryMode, setDeliveryMode] = useState<'WAREHOUSE' | 'ON_SITE'>(
-    'ON_SITE',
+    tabletEmployee ? 'WAREHOUSE' : 'ON_SITE',
   );
+  const [inventorySourceMode, setInventorySourceMode] = useState<RequestInventorySourceMode>('WAREHOUSE');
   const [customerWorksiteId, setCustomerWorksiteId] = useState('');
-  const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [warehouseId, setWarehouseId] = useState<string | null>(tabletEmployee?.warehouseId ?? null);
   const [observations, setObservations] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [driverId, setDriverId] = useState<string | null>(null);
-  const [dispatcherId, setDispatcherId] = useState<string | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(tabletEmployee?.employee.id ?? null);
+  const [dispatcherId, setDispatcherId] = useState<string | null>(tabletEmployee?.employee.id ?? null);
 
   const [sourceOwnerWarehouseId, setSourceOwnerWarehouseId] = useState<
     string | null
@@ -189,6 +199,7 @@ export default function TransportRequestsWorkspace({
   const userRole = useMemo(() => getCurrentUserRole(), []);
   const isAdminRole = userRole === 'ADMIN';
   const isDriverRole = userRole === 'DRIVER';
+  const isTabletRole = userRole === 'WAREHOUSE_TABLET';
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
   const {
@@ -208,6 +219,7 @@ export default function TransportRequestsWorkspace({
     resolvingApprove,
     createSerialOpen,
     setCreateSerialOpen,
+    createSerialIndex,
     setCreateSerialIndex,
     createSerialSerialOrEngine,
     setCreateSerialSerialOrEngine,
@@ -224,6 +236,8 @@ export default function TransportRequestsWorkspace({
     createSerialSaving,
     createSerialError,
     setCreateSerialError,
+    adjustWarningWarehouseId,
+    setAdjustWarningWarehouseId,
     adjustWarningModalOpen,
     setAdjustWarningModalOpen,
     adjustWarningMessage,
@@ -267,6 +281,7 @@ export default function TransportRequestsWorkspace({
     sourceMode === 'warehouse' && isAlternateOwnerMode;
   const principalWarehouse = useMemo(
     () =>
+      (tabletEmployee ? warehouses.find((warehouse) => warehouse.id === tabletEmployee.warehouseId) : null) ??
       warehouses.find((warehouse) => warehouse.type === 'OWN') ??
       warehouses.find(
         (warehouse) =>
@@ -276,7 +291,7 @@ export default function TransportRequestsWorkspace({
         warehouse.name.toUpperCase().includes('PRINCIPAL'),
       ) ??
       null,
-    [warehouses],
+    [warehouses, tabletEmployee],
   );
   const worksiteOptions = worksites.map((item) => ({
     value: item.id,
@@ -323,10 +338,12 @@ export default function TransportRequestsWorkspace({
   });
   const { autosaveStatus, setAutosaveStatus, autosavePayload } =
     useRequestAutosave({
+      tabletEmployeeToken: tabletEmployee?.token,
       docType,
       documentNumber,
       setConsecutive,
       setSavedConsecutive,
+      inventorySourceMode,
       warehouseId,
       principalWarehouse,
       customerWorksiteId,
@@ -357,6 +374,15 @@ export default function TransportRequestsWorkspace({
   const sourceOwnerWarehouseName =
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)
       ?.name ?? '-';
+  const physicalSourceWarehouseId = getRequestSourceWarehouseId({
+    type: docType, inventorySourceMode,
+    warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null,
+  }, sourceOwnerWarehouseId);
+  const physicalSourceWarehouseName = warehouses.find(w => w.id === physicalSourceWarehouseId)?.name ?? 'Sin seleccionar';
+  const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null) =>
+    warehouses.find(w => w.id === getRequestSourceWarehouseId(doc, ownerId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+      ?? 'Sin seleccionar';
   const effectiveSourceWorksiteId =
     sourceMode === 'on-site'
       ? customerWorksiteId || sourceWorksiteId || null
@@ -375,9 +401,11 @@ export default function TransportRequestsWorkspace({
     availableBulkItems,
     pickerSerialItems,
     loadInventory,
+    clearLoadedInventory: clearInventoryCache,
   } = useRequestInventory({
     selectedItems,
     docType,
+    physicalSourceWarehouseId,
     sourceMode,
     principalWarehouse,
     sourceOwnerWarehouseId,
@@ -507,6 +535,7 @@ export default function TransportRequestsWorkspace({
   });
 
   const resetGenerateForm = () => {
+    if (tabletEmployee && onTabletReset) { onTabletReset(); return; }
     if (currentUserId) {
       window.localStorage.removeItem(`rev:transport-draft:${currentUserId}`);
     }
@@ -528,6 +557,7 @@ export default function TransportRequestsWorkspace({
     setDocTime(now.time);
     setOriginalDocumentTimestamp(null);
     setDeliveryMode('ON_SITE');
+    setInventorySourceMode('WAREHOUSE');
     setCustomerWorksiteId('');
     setWarehouseId(null);
     setObservations('');
@@ -547,7 +577,32 @@ export default function TransportRequestsWorkspace({
     clearEvidencePhotos();
     clearProviderRemissionDocuments();
   };
+  const clearLoadedInventory = () => {
+    clearInventoryCache();
+    setPendingMixerQueue([]);
+    setComponentParent(null);
+    setComponentOptions([]);
+  };
+  const changePhysicalSource = (nextMode: RequestInventorySourceMode, nextWarehouseId: string | null) => {
+    const settingsChanged = nextMode !== inventorySourceMode
+      || (nextMode === 'WAREHOUSE' && nextWarehouseId !== warehouseId);
+    if (!settingsChanged) return;
+    const currentSource = { type: docType, inventorySourceMode, warehouse: warehouseId ? { id: warehouseId } : principalWarehouse };
+    const nextSource = { type: docType, inventorySourceMode: nextMode, warehouse: nextWarehouseId ? { id: nextWarehouseId } : null };
+    const selectedOriginChanges = selectedItems.some((item) =>
+      getRequestSourceWarehouseId(currentSource, item.ownerWarehouseId) !== getRequestSourceWarehouseId(nextSource, item.ownerWarehouseId));
+    if (selectedOriginChanges && !window.confirm('Al cambiar la salida física se quitarán los ítems seleccionados para volver a comprobar su disponibilidad. ¿Continuar?')) return;
+    clearLoadedInventory();
+    if (selectedOriginChanges) {
+      setSelectedItems([]);
+      clearProviderRemissionDocuments();
+    }
+    setInventorySourceMode(nextMode);
+    setWarehouseId(nextWarehouseId);
+  };
+
   const { handleSubmit } = useRequestSubmission({
+    tabletEmployeeToken: tabletEmployee?.token,
     setSubmitting,
     observations,
     vehicleId,
@@ -569,6 +624,7 @@ export default function TransportRequestsWorkspace({
     principalWarehouse,
     docType,
     deliveryMode,
+    inventorySourceMode,
     isDriverRole,
     driverId,
     documentNumber,
@@ -592,6 +648,10 @@ export default function TransportRequestsWorkspace({
   });
 
   const editRequest = async (documentId: string, autosaved = false) => {
+    if (isTabletRole && mode === 'requests') {
+      router.push(`/transport/generate?draft=${documentId}`);
+      return;
+    }
     if (mode === 'requests' && !autosaved) {
       router.push(`/transport/generate?edit=${documentId}`);
       return;
@@ -634,6 +694,7 @@ export default function TransportRequestsWorkspace({
       );
       setCustomerWorksiteId(doc.customerWorksite?.id ?? '');
       setWarehouseId(doc.warehouse?.id ?? null);
+      setInventorySourceMode(getRequestInventorySourceMode(doc));
       setObservations(extractUserObservations(doc.notes ?? null));
       setVehicleId(parsed.vehicleId ?? null);
       setDriverId(parsed.receiverId || parsed.driverId || null);
@@ -645,6 +706,18 @@ export default function TransportRequestsWorkspace({
       setSelectedItems(
         doc.items.map((item) => {
           const ownerWarehouseId = item.condition ?? null;
+          if (item.accessoryId) {
+            return {
+              selectionId: createSelectionId(), type: 'accessory' as const,
+              accessoryId: item.accessoryId,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
+              accessoryKind: item.accessoryKind ?? undefined,
+              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              name: item.requestedTag ?? item.accessoryName ?? 'Accesorio',
+              quantity: Number(item.quantity ?? 1), ownerWarehouseId,
+              isDamaged: Boolean(item.conditionNote?.trim()), damageDescription: item.conditionNote ?? '',
+            };
+          }
           if (!item.skuId && !item.assetId && item.requestedTag) {
             return {
               selectionId: createSelectionId(),
@@ -731,7 +804,7 @@ export default function TransportRequestsWorkspace({
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
     const explicitDraftId = params.get('draft');
-    const storedDraftId = currentUserId
+    const storedDraftId = currentUserId && !isTabletRole
       ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
       : null;
     const draftId = explicitDraftId ?? (editId ? null : storedDraftId);
@@ -752,6 +825,7 @@ export default function TransportRequestsWorkspace({
   }, [autosaveDraftId, currentUserId, editingRequestId, mode]);
 
   const goToItemsStep = async () => {
+    if (isTabletRole && !tabletEmployee) { setError('Ingresa tu PIN antes de crear el documento.'); return; }
     setError(null);
     const nextFieldErrors: GenerateFieldErrors = {};
     if (!customerId) nextFieldErrors.customerId = 'Selecciona la razon social.';
@@ -918,6 +992,7 @@ export default function TransportRequestsWorkspace({
   };
 
   const renderAdminItemFields = (item: SelectedItem, index: number) => {
+    if (item.type === 'accessory') return null;
     if (!editingRequestId || !canDecide) return null;
     return (
       <Stack gap="xs" mt="xs">
@@ -976,7 +1051,7 @@ export default function TransportRequestsWorkspace({
     : 'Solicitudes de documentos';
   const pageDescription = isGeneratePage
     ? 'Completa informacion, items y firma para crear una solicitud de documento.'
-    : isDriverRole
+    : isDriverRole || isTabletRole
       ? 'Consulta tus borradores y anexa fotografías que hayan quedado pendientes.'
       : 'Revisa borradores, abre detalles y controla aprobaciones del flujo operativo.';
   const requestColumns: DataTableColumn<RequestDocument>[] = [
@@ -999,7 +1074,7 @@ export default function TransportRequestsWorkspace({
             </Badge>
           </div>
           <Badge hiddenFrom="md" color="yellow" variant="light">
-            {row.status}
+            {row.status === 'IN_PROGRESS' ? 'En preparación' : row.status === 'DRAFT' ? 'Por aprobar' : row.status}
           </Badge>
         </Group>
       ),
@@ -1033,7 +1108,7 @@ export default function TransportRequestsWorkspace({
       header: 'Creado por',
       width: '19%',
       mobile: { label: 'Creado por', priority: 'detail' },
-      cell: (row) => row.creator?.name ?? row.creator?.email ?? '-',
+      cell: (row) => <div><Text size="sm">{row.performedByEmployeeName ?? row.creator?.name ?? row.creator?.email ?? '-'}</Text>{row.performedByEmployeeName ? <Text size="xs" c="dimmed">Perfil: {row.creator?.email}</Text> : null}</div>,
     },
     {
       id: 'createdAt',
@@ -1059,6 +1134,7 @@ export default function TransportRequestsWorkspace({
     <main>
       <Container size="xl" py="xl">
         <Stack gap="lg">
+          {tabletEmployee ? <Alert color="blue"><Group justify="space-between"><div><Text fw={700}>Documento realizado por: {tabletEmployee.employee.name}</Text><Text size="sm">Bodega: {principalWarehouse?.name ?? 'Cargando…'}</Text></div><Group>{autosaveDraftId ? <Button variant="subtle" onClick={onTabletReidentify}>Validar PIN de nuevo</Button> : null}<Button variant="light" onClick={onTabletReset}>Salir y pedir otro PIN</Button></Group></Group></Alert> : null}
           <Paper shadow="sm" p="xl" radius="xl" withBorder>
             <Group
               justify="space-between"
@@ -1084,7 +1160,7 @@ export default function TransportRequestsWorkspace({
             </Group>
             <Tabs value={activeTab} variant="pills">
               <RequestsListSection
-                isDriverRole={isDriverRole}
+                isDriverRole={isDriverRole || isTabletRole}
                 loadRequests={loadRequests}
                 requestsLoading={requestsLoading}
                 requestsError={requestsError}
@@ -1129,6 +1205,9 @@ export default function TransportRequestsWorkspace({
                 warehouses={warehouses}
                 observations={observations}
                 setObservations={setObservations}
+                inventorySourceMode={inventorySourceMode}
+                principalWarehouse={principalWarehouse}
+                changePhysicalSource={changePhysicalSource}
                 deliveryMode={deliveryMode}
                 setDeliveryMode={setDeliveryMode}
                 isMobile={isMobile}
@@ -1150,6 +1229,10 @@ export default function TransportRequestsWorkspace({
 
           {activeTab === 'generate' && generateStep === 'items' ? (
             <RequestItemsSection
+              accessorySelector={!isTabletRole ? <RequestAccessorySelector docType={docType} deliveryMode={inventorySourceMode === 'OWNER_WAREHOUSES' ? 'ON_SITE' : 'WAREHOUSE'} warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
+              clearLoadedInventory={clearLoadedInventory}
+              inventorySourceMode={inventorySourceMode}
+              physicalSourceWarehouseName={physicalSourceWarehouseName}
               sourceMode={sourceMode}
               setGenerateStep={setGenerateStep}
               renderGenerateError={renderGenerateError}
@@ -1262,6 +1345,9 @@ export default function TransportRequestsWorkspace({
       />
 
       <InventoryAdjustmentDialog
+        adjustWarningWarehouseId={adjustWarningWarehouseId}
+        setAdjustWarningWarehouseId={setAdjustWarningWarehouseId}
+        warehouses={warehouses}
         adjustWarningModalOpen={adjustWarningModalOpen}
         setAdjustWarningModalOpen={setAdjustWarningModalOpen}
         setAdjustWarningOwnerWarehouseId={setAdjustWarningOwnerWarehouseId}
@@ -1271,6 +1357,7 @@ export default function TransportRequestsWorkspace({
       />
 
       <ApprovalResolutionDialog
+        getDocumentSourceName={getDocumentSourceName}
         resolveModalOpen={resolveModalOpen}
         closeResolveModal={closeResolveModal}
         resolveDocument={resolveDocument}
@@ -1350,6 +1437,7 @@ export default function TransportRequestsWorkspace({
         bulkItems={bulkItems}
         serialItems={serialItems}
         ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
+        physicalWarehouseId={getRequestSourceWarehouseId({ type: docType, inventorySourceMode, warehouse: (warehouseId ?? principalWarehouse?.id) ? { id: (warehouseId ?? principalWarehouse?.id)! } : null }, componentParent?.ownerWarehouseId)}
         restrictOwnerWarehouse={sourceMode === 'warehouse'}
         canCreate={
           canDecide && sourceMode === 'warehouse' && docType === 'REMISSION'
@@ -1375,6 +1463,8 @@ export default function TransportRequestsWorkspace({
       />
 
       <ApprovalCreateAssetDialog
+        ownerName={warehouses.find(w => w.id === (createSerialIndex == null ? null : resolveDocument?.items[createSerialIndex]?.condition))?.name ?? 'Sin seleccionar'}
+        physicalSourceName={resolveDocument ? getDocumentSourceName(resolveDocument, createSerialIndex == null ? null : resolveDocument.items[createSerialIndex]?.condition) : 'Sin seleccionar'}
         createSerialOpen={createSerialOpen}
         createSerialSaving={createSerialSaving}
         setCreateSerialOpen={setCreateSerialOpen}

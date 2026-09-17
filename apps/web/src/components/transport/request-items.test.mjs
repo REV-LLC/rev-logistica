@@ -3,6 +3,24 @@ import test from 'node:test';
 
 import { buildRequestItems } from './request-items.ts';
 
+test('las mangueras retornables conservan la cantidad parcial en el documento', () => {
+  const [item] = buildRequestItems([{ type: 'accessory', accessoryKind: 'RETURNABLE', accessoryId: 'mangueras',
+    accessorySourceBalanceId: 'saldo-obra', componentParentAssetId: 'compresor', quantity: 2,
+    name: 'Mangueras', ownerWarehouseId: 'own' }]);
+  assert.equal(item.quantity, 2);
+  assert.equal(item.accessoryId, 'mangueras');
+  assert.equal(item.componentParentAssetId, 'compresor');
+  assert.equal(item.skuId, undefined);
+});
+
+test('el accesorio conserva origen, equipo, cantidad y daño sin convertirse en equipo o tag libre', () => {
+  const [item] = buildRequestItems([{ type: 'accessory', accessoryId: 'puntas', accessorySourceBalanceId: 'saldo-obra', componentParentAssetId: 'martillo', quantity: 4, name: 'Puntas', ownerWarehouseId: 'own', isDamaged: true, damageDescription: ' Dos melladas ' }]);
+  assert.deepEqual(item, { accessoryId: 'puntas', accessorySourceBalanceId: 'saldo-obra', componentParentAssetId: 'martillo', quantity: 4, ownerWarehouseId: 'own', conditionNote: 'Dos melladas' });
+  assert.equal(item.assetId, undefined);
+  assert.equal(item.skuId, undefined);
+  assert.equal(item.requestedTag, undefined);
+});
+
 test('permite enviar un item consolidado con asignación de dueño pendiente', () => {
   const [item] = buildRequestItems([
     {

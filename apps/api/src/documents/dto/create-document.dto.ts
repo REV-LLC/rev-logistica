@@ -8,7 +8,7 @@ import {
   IsUUID,
   Matches,
 } from 'class-validator';
-import { DocumentStatus, DocumentType } from '@prisma/client';
+import { DocumentStatus, DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 export class CreateDocumentDto {
@@ -26,6 +26,10 @@ export class CreateDocumentDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @IsOptional()
+  @IsEnum(InventorySourceMode)
+  inventorySourceMode?: InventorySourceMode;
 
   @IsOptional()
   @IsUUID()

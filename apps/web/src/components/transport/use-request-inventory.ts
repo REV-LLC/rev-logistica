@@ -17,6 +17,7 @@ type Options = {
   selectedItems: SelectedItem[];
   docType: 'REMISSION' | 'RETURN';
   sourceMode: 'warehouse' | 'on-site';
+  physicalSourceWarehouseId: string | null;
   principalWarehouse: Warehouse | null;
   sourceOwnerWarehouseId: string | null;
   setSourceOwnerWarehouseId: Dispatch<SetStateAction<string | null>>;
@@ -37,6 +38,7 @@ export function useRequestInventory({
   selectedItems,
   docType,
   sourceMode,
+  physicalSourceWarehouseId,
   principalWarehouse,
   sourceOwnerWarehouseId,
   setSourceOwnerWarehouseId,
@@ -64,6 +66,18 @@ export function useRequestInventory({
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
 
   const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
+
+  const inventoryLoadVersionRef = useRef(0);
+  const clearLoadedInventory = () => {
+    inventoryLoadVersionRef.current += 1;
+    setLoadingInventory(false);
+    setBulkItems([]);
+    setSerialItems([]);
+    setItemsModalOpen(false);
+    lastAutoOpenedWarehouseRef.current = null;
+  };
+  useEffect(() => () => { inventoryLoadVersionRef.current += 1; },
+    [docType, physicalSourceWarehouseId, sourceOwnerWarehouseId, effectiveSourceWorksiteId]);
 
   const selectedBulkKeys = useMemo(
     () =>
@@ -115,12 +129,14 @@ export function useRequestInventory({
   }, [principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
 
   const loadInventory = async (openSelector = true) => {
+    const version = ++inventoryLoadVersionRef.current;
     setLoadingInventory(true);
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
         if (!sourceOwnerWarehouseId)
           throw new Error('Selecciona la bodega dueña para filtrar items.');
+        if (!physicalSourceWarehouseId) throw new Error('Selecciona la bodega de salida del documento.');
         const selectedOwner = warehouses.find(
           (warehouse) => warehouse.id === sourceOwnerWarehouseId,
         );
@@ -130,7 +146,8 @@ export function useRequestInventory({
         const data = await api<{
           bulk: InventoryBulk[];
           serial: InventorySerial[];
-        }>(`/inventory/warehouse/${sourceOwnerWarehouseId}`, { method: 'GET' });
+        }>(`/inventory/warehouse/${physicalSourceWarehouseId}`, { method: 'GET' });
+        if (version !== inventoryLoadVersionRef.current) return;
         setBulkItems(
           data.bulk.filter(
             (item) => item.ownerWarehouseId === sourceOwnerWarehouseId,
@@ -155,6 +172,7 @@ export function useRequestInventory({
         setItemsModalOpen(true);
       }
     } catch (err) {
+      if (version !== inventoryLoadVersionRef.current) return;
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
       } else if (err instanceof Error) {
@@ -163,7 +181,7 @@ export function useRequestInventory({
         setError('Error loading inventory');
       }
     } finally {
-      setLoadingInventory(false);
+      if (version === inventoryLoadVersionRef.current) setLoadingInventory(false);
     }
   };
 
@@ -184,10 +202,11 @@ export function useRequestInventory({
       lastAutoOpenedWarehouseRef.current = null;
       return;
     }
-    if (lastAutoOpenedWarehouseRef.current === sourceOwnerWarehouseId) return;
-    lastAutoOpenedWarehouseRef.current = sourceOwnerWarehouseId;
+    const inventoryKey = `${physicalSourceWarehouseId}:${sourceOwnerWarehouseId}`;
+    if (lastAutoOpenedWarehouseRef.current === inventoryKey) return;
+    lastAutoOpenedWarehouseRef.current = inventoryKey;
     void loadInventory(true);
-  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, warehouses]);
+  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, physicalSourceWarehouseId, warehouses]);
 
   useEffect(() => {
     if (sourceMode !== 'on-site') return;
@@ -214,6 +233,7 @@ export function useRequestInventory({
     }
   }, [docType]);
   return {
+    clearLoadedInventory,
     bulkItems,
     setBulkItems,
     serialItems,

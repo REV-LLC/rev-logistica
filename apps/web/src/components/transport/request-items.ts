@@ -1,5 +1,7 @@
 export type RequestItemInput = {
-  type: 'bulk' | 'serial' | 'free';
+  type: 'bulk' | 'serial' | 'free' | 'accessory';
+  accessoryId?: string;
+  accessorySourceBalanceId?: string;
   skuId?: string;
   assetId?: string;
   name: string;
@@ -17,6 +19,17 @@ export function buildRequestItems(items: RequestItemInput[]) {
       item.isDamaged && item.damageDescription?.trim()
         ? item.damageDescription.trim()
         : undefined;
+
+    if (item.type === 'accessory') {
+      return {
+        accessoryId: item.accessoryId,
+        accessorySourceBalanceId: item.accessorySourceBalanceId,
+        componentParentAssetId: item.componentParentAssetId,
+        quantity: item.quantity,
+        ownerWarehouseId: item.ownerWarehouseId ?? undefined,
+        conditionNote,
+      };
+    }
 
     if (item.type === 'free') {
       return {

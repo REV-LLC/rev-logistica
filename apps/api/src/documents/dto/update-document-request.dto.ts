@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
 class UpdateDocumentRequestItemDto {
@@ -23,6 +23,14 @@ class UpdateDocumentRequestItemDto {
   @IsOptional()
   @IsUUID()
   assetId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accessoryId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accessorySourceBalanceId?: string;
 
   @IsOptional()
   @IsUUID()
@@ -59,6 +67,10 @@ export class UpdateDocumentRequestDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @IsOptional()
+  @IsEnum(InventorySourceMode)
+  inventorySourceMode?: InventorySourceMode;
 
   @IsOptional()
   @IsUUID()

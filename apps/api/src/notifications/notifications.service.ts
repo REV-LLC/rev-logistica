@@ -7,10 +7,12 @@ import {
   NotificationChannel,
   NotificationDeliveryStatus,
   Prisma,
+  Role,
   TaskStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { hourMeterReminderOccurrence } from './hour-meter-reminder';
 import {
   ConfigureNotificationTopicDto,
   NotificationRecipientDto,
@@ -652,6 +654,66 @@ export class NotificationsService {
     };
     const [singular, plural] = labels[unit] ?? ['intervalo', 'intervalos'];
     return `cada ${value} ${value === 1 ? singular : plural}`;
+  }
+
+  async dispatchHourMeterReminders(now = new Date()) {
+    const totals = { reminders: 0, sent: 0, skipped: 0, failed: 0 };
+    const occurrenceKey = hourMeterReminderOccurrence(now);
+    if (!occurrenceKey) return totals;
+
+    const baseUrl = process.env.PUBLIC_WEB_URL?.trim();
+    if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
+      throw new Error('Configura PUBLIC_WEB_URL para enviar el enlace de horómetros.');
+    }
+    const link = new URL('/inventory/hour-meter', baseUrl).toString();
+    const users = await this.prisma.user.findMany({
+      where: {
+        active: true,
+        role: Role.OPERATOR,
+        employee: { is: { active: true, phone: { not: null } } },
+      },
+      select: {
+        id: true,
+        employee: { select: { name: true, lastName: true, phone: true } },
+      },
+    });
+    if (!users.length) return totals;
+
+    const key = {
+      entityType: NOTIFICATION_ENTITY.SYSTEM,
+      entityId: 'hour-meter-daily',
+      eventType: NOTIFICATION_EVENT.HOUR_METER_DAILY,
+    };
+    const topic = await this.prisma.notificationTopic.upsert({
+      where: { entityType_entityId_eventType: key },
+      create: key,
+      update: {},
+    });
+    if (!topic.active) return totals;
+    const appName = process.env.HOUR_METER_REMINDER_APP_NAME?.trim() || 'REV Logística';
+    const reminder = {
+      topicId: topic.id,
+      occurrenceKey,
+      title: 'Recordatorio diario de horómetros',
+      message: `¿Ya registraste el horómetro de hoy en ${appName}? Si aún no lo has hecho, ingresa a la página de horómetros y registra la lectura de tu equipo.`,
+      link,
+    };
+    for (const user of users) {
+      const employee = user.employee;
+      const phone = employee?.phone?.replace(/\D/g, '') ?? '';
+      if (!employee || !/^[1-9]\d{7,14}$/.test(phone)) {
+        totals.skipped += 1;
+        continue;
+      }
+      totals.reminders += 1;
+      const result = await this.dispatchOne(
+        reminder,
+        { userId: user.id, name: `${employee.name} ${employee.lastName}`.trim(), phone },
+        NotificationChannel.WHATSAPP,
+      );
+      totals[result] += 1;
+    }
+    return totals;
   }
 
   async dispatchNotifications() {

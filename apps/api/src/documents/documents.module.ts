@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AccessoriesModule } from '../accessories/accessories.module';
 import { DocumentEmailsModule } from '../document-emails/document-emails.module';
 import { DocumentMessagesModule } from '../document-messages/document-messages.module';
 import { InventoryModule } from '../inventory/inventory.module';
@@ -12,6 +13,7 @@ import { PublicDocumentsController } from './public-documents.controller';
   imports: [
     PrismaModule,
     AuthModule,
+    AccessoriesModule,
     InventoryModule,
     DocumentEmailsModule,
     DocumentMessagesModule,
