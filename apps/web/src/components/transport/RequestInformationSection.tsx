@@ -1,5 +1,6 @@
 'use client';
 import WarehouseSelect from '@/components/WarehouseSelect';
+import FormGrid from '@/components/FormGrid';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import {
   Badge,
@@ -9,7 +10,6 @@ import {
   Paper,
   Radio,
   Select,
-  SimpleGrid,
   Stack,
   Tabs,
   Text,
@@ -230,7 +230,7 @@ export default function RequestInformationSection({
                   </Group>
                 </Radio.Group>
 
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <FormGrid>
                   {!isDriverRole ? (
                     <TextInput
                       label={helpLabel(
@@ -244,6 +244,7 @@ export default function RequestInformationSection({
                   ) : null}
                   <Select
                     label="Razón social"
+                    data-full-width={isDriverRole || undefined}
                     value={customerId}
                     onChange={(value) => {
                       setCustomerId(value);
@@ -292,7 +293,7 @@ export default function RequestInformationSection({
                     }}
                     error={generateFieldErrors.docTime}
                   />
-                </SimpleGrid>
+                </FormGrid>
                 {editingRequestId && isAdminRole && docType === 'RETURN' ? (
                   <WarehouseSelect
                     label={
@@ -347,22 +348,18 @@ export default function RequestInformationSection({
                   label={docType === 'REMISSION' ? 'Entrega' : 'Devolución'}
                 >
                   <Group mt="xs">
-                    <Radio
-                      value="WAREHOUSE"
-                      label={
-                        docType === 'REMISSION'
-                          ? 'Cliente retira'
-                          : 'Cliente entrega en bodega'
-                      }
-                    />
-                    <Radio
-                      value="ON_SITE"
-                      label={
-                        docType === 'REMISSION'
-                          ? 'Entrega a obra'
-                          : 'Recogida en obra'
-                      }
-                    />
+                    {(docType === 'RETURN'
+                      ? [
+                          { value: 'ON_SITE', label: 'Recogida en obra' },
+                          { value: 'WAREHOUSE', label: 'Cliente entrega en bodega' },
+                        ]
+                      : [
+                          { value: 'WAREHOUSE', label: 'Cliente retira' },
+                          { value: 'ON_SITE', label: 'Entrega a obra' },
+                        ]
+                    ).map((option) => (
+                      <Radio key={option.value} value={option.value} label={option.label} />
+                    ))}
                   </Group>
                 </Radio.Group>
               </Stack>
@@ -378,7 +375,7 @@ export default function RequestInformationSection({
                       : 'Selecciona el origen y quién recibe o recoge la devolución.'}
                   </Text>
                 </div>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <FormGrid>
                   {isMobile ? (
                     <NativeSelect
                       label={helpLabel('Obra', 'Obra destino del movimiento.')}
@@ -588,7 +585,7 @@ export default function RequestInformationSection({
                         disabled={isDriverRole}
                       />
                     ))}
-                </SimpleGrid>
+                </FormGrid>
               </Stack>
             </Paper>
           </Stack>

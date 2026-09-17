@@ -19,7 +19,7 @@ import SerialAssetCard from '@/components/SerialAssetCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import classes from '@/components/WarehouseAssetsView.module.css';
 
-type AssetStatusFilter = 'ALL' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN' | 'INCONSISTENT';
+type AssetStatusFilter = 'ALL' | 'DAMAGED' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN' | 'INCONSISTENT';
 type AssetOrder = 'NAME' | 'INTERNAL_ASC' | 'INTERNAL_DESC';
 
 export type WarehouseAssetItem = {
@@ -35,6 +35,7 @@ export type WarehouseAssetItem = {
   model?: string | null;
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   active?: boolean;
+  isDamaged?: boolean;
   isAvailableInOwnerWarehouse?: boolean;
   balance?: {
     warehouseQuantity: number;
@@ -67,6 +68,7 @@ type EquipmentFilter = AssetStatusFilter | CatalogStatusFilter;
 
 const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }> = [
   { value: 'ALL', label: 'Todos' },
+  { value: 'DAMAGED', label: 'Averiados', color: '#e8590c' },
   { value: 'AVAILABLE', label: 'Disponibles', color: '#16a34a' },
   { value: 'WORKSITE', label: 'En obra', color: '#1677ed' },
   { value: 'WORKSHOP', label: 'En taller', color: '#f36a0a' },
@@ -78,6 +80,7 @@ const FILTERS: Array<{ value: AssetStatusFilter; label: string; color?: string }
 
 const CATALOG_FILTERS: Array<{ value: EquipmentFilter; label: string; color?: string }> = [
   { value: 'ALL', label: 'Todos' },
+  { value: 'DAMAGED', label: 'Averiados', color: '#e8590c' },
   { value: 'OWNER_WAREHOUSE', label: 'En bodega del proveedor', color: '#16a34a' },
   { value: 'CUSTODY', label: 'En nuestra bodega / custodia', color: '#0891b2' },
   { value: 'WORKSITE', label: 'En obra', color: '#1677ed' },
@@ -92,6 +95,7 @@ function normalized(value: unknown) {
 }
 
 function statusFor(item: WarehouseAssetItem): AssetStatusFilter {
+  if (item.isDamaged) return 'DAMAGED';
   const status = normalized(item.status).toUpperCase();
   const locationName = normalized(item.location?.name);
   if (status === 'INACTIVE') return 'INACTIVE';
@@ -107,6 +111,7 @@ function statusFor(item: WarehouseAssetItem): AssetStatusFilter {
 
 function statusBadge(item: WarehouseAssetItem) {
   const status = statusFor(item);
+  if (status === 'DAMAGED') return { label: 'AVERIADO', color: 'orange' };
   if (status === 'WORKSITE') return { label: 'EN OBRA', color: 'blue' };
   if (status === 'WORKSHOP') return { label: 'EN TALLER', color: 'orange' };
   if (status === 'RESERVED') return { label: 'RESERVADO', color: 'violet' };
@@ -118,6 +123,7 @@ function statusBadge(item: WarehouseAssetItem) {
 }
 
 function catalogStatusFor(item: WarehouseAssetItem): EquipmentFilter {
+  if (item.isDamaged) return 'DAMAGED';
   if (item.active === false || item.status === 'INACTIVE') return 'INACTIVE';
   if (item.location?.type === 'TRANSIT' || item.status === 'TRANSIT') return 'TRANSIT';
   if (item.location?.type === 'WORKSITE') return 'WORKSITE';
@@ -133,6 +139,7 @@ function catalogStatusBadge(item: WarehouseAssetItem) {
   const status = catalogStatusFor(item);
   if (status === 'OWNER_WAREHOUSE') return { label: 'EN BODEGA DEL PROVEEDOR', color: 'green' };
   if (status === 'CUSTODY') return { label: 'EN NUESTRA BODEGA', color: 'cyan' };
+  if (status === 'DAMAGED') return { label: 'AVERIADO', color: 'orange' };
   if (status === 'WORKSITE') return { label: 'EN OBRA', color: 'blue' };
   if (status === 'TRANSIT') return { label: 'EN TRÁNSITO', color: 'yellow' };
   if (status === 'INACTIVE') return { label: 'INACTIVO', color: 'gray' };

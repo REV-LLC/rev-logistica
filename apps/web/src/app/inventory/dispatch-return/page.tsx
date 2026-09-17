@@ -31,6 +31,7 @@ import type { DataTableColumn } from '@/components/tables/table.types';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import { getRequestSourceWarehouseId, type RequestInventorySourceMode } from '@/components/transport/request-inventory-source';
 import { buildDirectDocumentItems } from '@/components/transport/direct-document-items';
+import FormGrid from '@/components/FormGrid';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import { buildDocumentDateTime, getDocumentDateTimeInput } from '@/lib/document-date-time';
 
@@ -644,7 +645,7 @@ export default function RemisionDevolucionPage() {
             </Group>
           </Radio.Group>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
+          <FormGrid mt="md">
             <TextInput
               label={helpLabel('Consecutivo', 'Numero interno del documento. El prefijo RM o DV se agrega automaticamente al guardar.', true)}
               withAsterisk={false}
@@ -702,7 +703,7 @@ export default function RemisionDevolucionPage() {
                 onChange={(event) => setCutOffDate(event.target.value)}
               />
             )}
-          </SimpleGrid>
+          </FormGrid>
 
           {docType === 'REMISSION' && (
             <Paper withBorder radius="md" p="md" mt="md">

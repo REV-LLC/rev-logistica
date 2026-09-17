@@ -120,6 +120,15 @@ describe('owner asset catalogue', () => {
     expect(transferFind).not.toHaveBeenCalled();
   });
 
+  it('keeps damaged equipment in physical stock without offering it as available', async () => {
+    const { service } = setup([asset({ isDamaged: true, damageNote: 'No enciende', ledger: [movement({ warehouse: provider })] })]);
+    expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({
+      isDamaged: true, damageNote: 'No enciende', quantity: 1,
+      isAvailableInOwnerWarehouse: false,
+      location: { type: 'WAREHOUSE', id: provider.id },
+    });
+  });
+
   it('retains ownership in custody without claiming provider stock', async () => {
     const { service } = setup([asset({ ledger: [movement({ warehouse: custody })] })]);
     expect((await service.getOwnerAssetCatalog(provider.id)).serial[0]).toMatchObject({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -9,6 +9,8 @@ import {
   Group,
   Paper,
   Stack,
+  SimpleGrid,
+  ThemeIcon,
   Tabs,
   Text,
 } from '@mantine/core';
@@ -21,14 +23,16 @@ import {
   IconInfoCircle,
   IconMapPin,
   IconPencil,
+  IconPlus,
   IconTrash,
   IconTool,
 } from '@tabler/icons-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
-import { getSerialDisplayName } from '@/lib/serial-assets';
+import { getAssetDisplayLabel, getSerialDisplayName } from '@/lib/serial-assets';
+import AssetConditionAction, { type AssetConditionEvent } from '@/components/serialized-assets/AssetConditionAction';
 import AssetDetailsPanel from '@/components/serialized-assets/AssetDetailsPanel';
 import AssetMovementSummary from '@/components/serialized-assets/AssetMovementSummary';
 import SerializedAssetEditForm from '@/components/serialized-assets/SerializedAssetEditForm';
@@ -41,6 +45,7 @@ const AccessoriesWorkspace = dynamic(() => import('@/components/accessories/Acce
 type AssetResponse = {
   id: string;
   publicCode: string;
+  internalNumber?: number | null;
   serialOrEngine: string | null;
   registrationNumber: string | null;
   brand: string | null;
@@ -52,6 +57,9 @@ type AssetResponse = {
   imageFileObjectId?: string | null;
   imageUrl?: string | null;
   active: boolean;
+  isDamaged: boolean;
+  damageNote: string | null;
+  conditionEvents: AssetConditionEvent[];
   deletedAt?: string | null;
   deletionReason?: string | null;
   deletedBy?: {
@@ -68,6 +76,7 @@ type AssetResponse = {
     replacementValue?: number | string | null;
     chargeType?: 'DAY' | 'HOUR' | string | null;
     minimumChargeHours?: number | string | null;
+    assetSubfamily?: { id: string; name: string | null } | null;
     size?: string | null;
     areaM2?: number | string | null;
     unitWeight?: number | string | null;
@@ -171,10 +180,15 @@ const formatCharge = (
   return EMPTY_VALUE;
 };
 
-export default function EditSerializedAssetPage() {
+export default function SerializedAssetPage() {
+  return <Suspense fallback={<Text p="xl">Cargando equipo...</Text>}><EditSerializedAssetPage /></Suspense>;
+}
+
+function EditSerializedAssetPage() {
   const params = useParams<{ assetId: string }>();
   const router = useRouter();
   const assetId = params?.assetId;
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -195,7 +209,28 @@ export default function EditSerializedAssetPage() {
   const [imageUploading, setImageUploading] = useState(false);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(null);
   const [active, setActive] = useState(true);
-  const [editing, setEditing] = useState(false);
+  const [conditionOpened, setConditionOpened] = useState(false);
+  const conditionRequested = searchParams.get('condition') === '1';
+  const closeCondition = () => {
+    setConditionOpened(false);
+    if (conditionRequested) {
+      const query = new URLSearchParams(window.location.search);
+      query.delete('condition');
+      router.replace(`/inventory/serialized-assets/${assetId}?${query.toString()}`, { scroll: false });
+    }
+  };
+  const editing = searchParams.get('edit') === '1';
+  const [activeTab, setActiveTab] = useState<string | null>('details');
+  const setEditing = (value: boolean) => {
+    const query = new URLSearchParams(window.location.search);
+    if (value) {
+      query.set('edit', '1');
+      setActiveTab('details');
+    } else {
+      query.delete('edit');
+    }
+    router.replace(`/inventory/serialized-assets/${assetId}?${query.toString()}`, { scroll: false });
+  };
   const [worksiteLocationName, setWorksiteLocationName] = useState<string | null>(null);
   const [assetLocation, setAssetLocation] = useState<AssetLocationResponse | null>(null);
   const [recentMovements, setRecentMovements] = useState<AssetLedgerItem[]>([]);
@@ -298,13 +333,7 @@ export default function EditSerializedAssetPage() {
 
   const autoDescription = useMemo(() => {
     if (!asset) return EMPTY_VALUE;
-    return getSerialDisplayName({
-      assetId: asset.id,
-      skuName: asset.sku?.name,
-      brand,
-      model,
-      serialOrEngine: asset.serialOrEngine,
-    });
+    return getAssetDisplayLabel({ ...asset, brand, model });
   }, [asset, brand, model]);
   const fuelLabel = useMemo(
     () => displayValue(FUEL_OPTIONS.find((option) => option.value === fuel)?.label ?? fuel),
@@ -329,7 +358,7 @@ export default function EditSerializedAssetPage() {
         icon: <IconEngine size={18} />,
       },
       {
-        label: 'Codigo publico',
+        label: 'Código público',
         value: displayValue(asset?.publicCode),
         icon: <IconBarcode size={18} />,
       },
@@ -339,7 +368,7 @@ export default function EditSerializedAssetPage() {
         icon: <IconBuildingWarehouse size={18} />,
       },
       {
-        label: 'Ubicacion actual',
+        label: 'Ubicación actual',
         value: locationBadge.label,
         icon: <IconMapPin size={18} />,
       },
@@ -353,7 +382,7 @@ export default function EditSerializedAssetPage() {
         fields: [
           { label: 'Referencia / plantilla', value: displayValue(asset?.sku?.name) },
           { label: 'Familia', value: displayValue(asset?.assetFamily?.name) },
-          { label: 'Estado', value: active ? 'Activo' : 'Inactivo' },
+          { label: 'Estado', value: asset?.isDamaged ? 'Averiado' : active ? 'Operativo' : 'Inactivo' },
           { label: 'Numero de registro', value: displayValue(registrationNumber) },
         ],
       },
@@ -539,6 +568,21 @@ export default function EditSerializedAssetPage() {
         </Button>
         {asset && !asset.deletedAt ? (
           <Group gap="xs">
+            <Button component={Link} href={`/inventory/accessories/equipment/${asset.id}?create=1`} variant="light" leftSection={<IconPlus size={16} />}>
+              Agregar accesorio
+            </Button>
+            <AssetConditionAction
+              assetId={asset.id}
+              name={autoDescription}
+              isDamaged={asset.isDamaged ?? false}
+              opened={conditionOpened || conditionRequested}
+              onOpen={() => setConditionOpened(true)}
+              onClose={closeCondition}
+              onUpdated={(updated) => {
+                setAsset((current) => current ? { ...current, ...updated } : current);
+                setSuccess(updated.isDamaged ? 'Equipo marcado como averiado.' : 'Reparación registrada. El equipo está operativo.');
+              }}
+            />
             <ActionIcon
               variant={editing ? 'filled' : 'light'}
               color={editing ? 'blue' : 'gray'}
@@ -547,7 +591,8 @@ export default function EditSerializedAssetPage() {
               onClick={() => {
                 setSuccess(null);
                 setError(null);
-                setEditing((prev) => !prev);
+                if (editing) handleCancelEdit();
+                else setEditing(true);
               }}
             >
               <IconPencil size={18} />
@@ -601,12 +646,36 @@ export default function EditSerializedAssetPage() {
 
       {asset ? (
         <Stack gap="lg">
-          {assetLocation?.balance && (
-            <Alert color={assetLocation.balance.isConsistent ? 'blue' : 'orange'} variant="light">
-              Saldo registrado: bodega {assetLocation.balance.warehouseQuantity} · obras {assetLocation.balance.worksiteQuantity}.
-              {assetLocation.locationType === 'INCONSISTENT' && ' El saldo y los movimientos no coinciden. Confirmar ubicación antes de despachar.'}
+          {assetLocation?.balance ? (
+            <Paper withBorder radius="lg" p="md">
+              <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="sm">Saldo del equipo</Text>
+              <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
+                {[
+                  { label: 'BODEGA', quantity: assetLocation.balance.warehouseQuantity, icon: <IconBuildingWarehouse size={22} />, color: 'teal' },
+                  { label: 'OBRA', quantity: assetLocation.balance.worksiteQuantity, icon: <IconMapPin size={22} />, color: 'blue' },
+                ].map((balance) => (
+                  <Group key={balance.label} gap="sm" wrap="nowrap">
+                    <ThemeIcon size={44} radius="md" variant="light" color={balance.color}>{balance.icon}</ThemeIcon>
+                    <div>
+                      <Text size="xs" fw={600} c="dimmed">{balance.label}</Text>
+                      <Text size="xl" fw={700} lh={1.2}>{balance.quantity}</Text>
+                    </div>
+                  </Group>
+                ))}
+              </SimpleGrid>
+              {!assetLocation.balance.isConsistent || assetLocation.locationType === 'INCONSISTENT' ? (
+                <Alert mt="md" color="orange" variant="light" title="Revisar ubicación">
+                  El saldo y los movimientos no coinciden. Confirmar ubicación antes de despachar.
+                </Alert>
+              ) : null}
+            </Paper>
+          ) : null}
+          {asset.isDamaged ? (
+            <Alert color="orange" title="Equipo averiado">
+              <Text size="sm">{asset.damageNote}</Text>
+              <Text size="sm" mt={4}>No disponible para despacho hasta registrar su reparación.</Text>
             </Alert>
-          )}
+          ) : null}
           <SerializedAssetHero
             active={active}
             description={autoDescription}
@@ -615,9 +684,7 @@ export default function EditSerializedAssetPage() {
             location={locationBadge}
           />
 
-          {!asset.deletedAt ? <Button component={Link} href={`/inventory/accessories/equipment/${asset.id}?create=1`} variant="light" style={{ alignSelf: 'flex-start' }}>Agregar accesorio</Button> : null}
-
-          <Tabs defaultValue="details" keepMounted={false}>
+          <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
             <Tabs.List mb="lg">
               <Tabs.Tab value="details" leftSection={<IconInfoCircle size={17} />}>
                 Informacion
@@ -635,7 +702,7 @@ export default function EditSerializedAssetPage() {
 
             <Tabs.Panel value="details">
               <Stack gap="lg">
-                {editing ? (
+                {editing && !asset.deletedAt ? (
                   <SerializedAssetEditForm
                     active={active}
                     brand={brand}
@@ -680,9 +747,28 @@ export default function EditSerializedAssetPage() {
             </Tabs.Panel>
 
             <Tabs.Panel value="maintenance">
+              <Stack gap="lg">
               <MaintenancePanel
-                subject={{ type: 'ASSET', id: asset.id, label: asset.publicCode }}
+                subject={{ type: 'ASSET', id: asset.id, label: autoDescription }}
               />
+              {asset.conditionEvents?.length ? (
+                <Paper withBorder radius="xl" p="lg">
+                  <Text fw={700} mb="md">Historial de averías y reparaciones</Text>
+                  <Stack gap="md">
+                    {asset.conditionEvents.map((event) => (
+                      <Paper key={event.id} withBorder radius="md" p="md">
+                        <Group justify="space-between">
+                          <Text fw={600} c={event.isDamaged ? 'orange.8' : 'teal.8'}>{event.isDamaged ? 'Avería reportada' : 'Reparación registrada'}</Text>
+                          <Text size="xs" c="dimmed">{new Date(event.createdAt).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</Text>
+                        </Group>
+                        <Text size="sm" mt={4} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{event.note}</Text>
+                        <Text size="xs" c="dimmed" mt={4}>{event.changedBy.employee ? `${event.changedBy.employee.name} ${event.changedBy.employee.lastName ?? ''}`.trim() : event.changedBy.email}</Text>
+                      </Paper>
+                    ))}
+                  </Stack>
+                </Paper>
+              ) : null}
+              </Stack>
             </Tabs.Panel>
             <Tabs.Panel value="accessories">
               <AccessoriesWorkspace equipmentId={asset.id} />

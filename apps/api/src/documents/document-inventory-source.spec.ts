@@ -70,6 +70,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
       { id: 'bulk-sku', assetFamily: { controlType: 'BULK' } },
     ]) },
     asset: { findMany: jest.fn().mockResolvedValue([]) },
+    assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
     warehouse: {
       findFirst: jest.fn().mockResolvedValue({ id: 'our-warehouse', type: 'OWN' }),
       findMany: jest.fn().mockResolvedValue([]),
@@ -199,6 +200,19 @@ describe('Document physical inventory origin', () => {
     const { service, document, inventory } = fixture({ inventorySourceMode: null, notes });
     await service['approveLoadedRequestDocument'](document, 'office-1');
     expect(inventory[method as 'moveOut' | 'moveOnSite']).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks a remission of damaged equipment before moving inventory', async () => {
+    const { service, document, inventory, database } = fixture({
+      items: [{ ...baseItem, skuId: null, assetId: 'asset-5' }],
+    });
+    database.asset.findMany.mockResolvedValue([{
+      id: 'asset-5', isDamaged: true, internalNumber: 5,
+      sku: { name: 'DEMOLEDOR MEDIANO', assetFamilyId: 'family-1' },
+    }] as never);
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toThrow('está averiado');
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+    expect(inventory.moveOnSite).not.toHaveBeenCalled();
   });
 
   it('does not reinterpret returns using a remission origin', async () => {

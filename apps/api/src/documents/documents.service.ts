@@ -513,12 +513,18 @@ export class DocumentsService {
           where: { id: { in: assetIds } },
           select: {
             id: true,
+            isDamaged: true,
+            internalNumber: true,
             kind: true,
             motorConfiguration: true,
             assignedMotorId: true,
             sku: { select: { name: true } },
           },
         });
+        const damagedAsset = assets.find((asset) => asset.isDamaged);
+        if (damagedAsset) {
+          throw new BadRequestException(`No se puede despachar ${damagedAsset.sku.name} #${damagedAsset.internalNumber}: está averiado. Registra la reparación antes de despacharlo.`);
+        }
         const selectedAssetIds = new Set(assetIds);
         const missingMotor = assets.find(
           (asset) =>
