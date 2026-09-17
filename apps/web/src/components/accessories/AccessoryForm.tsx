@@ -221,9 +221,15 @@ export default function AccessoryForm({
             </Text>
             {kind === "INDIVIDUAL" ? (
               <TextInput
-                label="Código propio del accesorio"
-                placeholder="CAN-001"
-                required
+                label="Código del accesorio (opcional)"
+                placeholder={
+                  item ? "Conservar código actual" : "Se genera al guardar"
+                }
+                description={
+                  item
+                    ? "Si lo dejas vacío, se conserva el código actual."
+                    : "Déjalo vacío para generar un código automáticamente, o escribe el que ya tiene el accesorio."
+                }
                 maxLength={80}
                 value={internalCode}
                 onChange={(e) => setInternalCode(e.currentTarget.value)}

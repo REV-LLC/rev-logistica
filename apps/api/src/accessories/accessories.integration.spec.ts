@@ -217,6 +217,58 @@ if (testUrl) {
       ).rejects.toThrow('otros datos');
     });
 
+    it.each([undefined, '', '  '])(
+      'generates and preserves identity for blank code %j, including concurrent retries',
+      async (internalCode) => {
+        const dto = payload({ internalCode });
+        const [first, replay] = await Promise.all([
+          service.create(dto, userId),
+          service.create(dto, userId),
+        ]);
+        accessoryIds.push(first.id);
+        expect(first.internalCode).toMatch(/^ACC-[A-F0-9]{12}$/);
+        expect(replay.id).toBe(first.id);
+        expect(replay.internalCode).toBe(first.internalCode);
+        expect(
+          await prisma.accessoryMovement.count({
+            where: { accessoryId: first.id },
+          }),
+        ).toBe(1);
+        expect(first.balances.map((b) => b.quantity)).toEqual([1]);
+        const updated = await service.update(
+          first.id,
+          updateDto(first, { name: 'QA RENAMED', internalCode: '' }),
+          userId,
+        );
+        expect(updated.internalCode).toBe(first.internalCode);
+        await expect(
+          service.create({ ...dto, name: 'CHANGED' }, userId),
+        ).rejects.toThrow('otros datos');
+      },
+    );
+
+    it('generates different codes for separate units and still rejects duplicate manual codes', async () => {
+      const items = await Promise.all(
+        Array.from({ length: 5 }, () => create({ internalCode: '' })),
+      );
+      expect(new Set(items.map((item) => item.internalCode)).size).toBe(
+        items.length,
+      );
+      await expect(
+        create({ internalCode: items[0].internalCode! }),
+      ).rejects.toThrow('ya existe');
+      const customCode = `QA-MANUAL-${randomUUID()}`;
+      const manual = await create({ internalCode: customCode.toLowerCase() });
+      expect(manual.internalCode).toBe(customCode.toUpperCase());
+      await expect(
+        service.update(
+          manual.id,
+          updateDto(manual, { internalCode: items[0].internalCode! }),
+          userId,
+        ),
+      ).rejects.toThrow('ya existe');
+    });
+
     it('delivers ten, consumes six and returns four without losing stock history', async () => {
       const item = await create({
         kind: 'CONSUMABLE',
