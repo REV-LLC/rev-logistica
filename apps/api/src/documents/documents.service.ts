@@ -474,6 +474,7 @@ export class DocumentsService {
         componentParentAssetId: string | null;
         quantity: Prisma.Decimal | null;
         condition: string | null;
+        conditionNote?: string | null;
         requestedTag?: string | null;
       }>;
     },
@@ -638,6 +639,19 @@ export class DocumentsService {
           userId,
           tx,
         );
+      }
+      // A return's damage report changes the equipment condition atomically
+      // with its receipt. An unchecked return never implies a repair.
+      for (const item of document.items) {
+        const note = item.conditionNote?.trim();
+        if (!item.assetId || !note) continue;
+        await tx.asset.update({
+          where: { id: item.assetId },
+          data: { isDamaged: true, damageNote: note },
+        });
+        await tx.assetConditionEvent.create({
+          data: { assetId: item.assetId, isDamaged: true, note, changedByUserId: userId },
+        });
       }
       await tx.documentItem.updateMany({
         where: {

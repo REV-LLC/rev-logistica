@@ -354,6 +354,14 @@ export default function SerialAssetCard({
               ) : null}
             </Group>
           </Group>
+          <Text size="xs" fw={600} c={item.isDamaged ? 'orange.8' : 'teal.8'}>
+            Condición: {item.isDamaged ? 'Averiado' : 'Operativo'}
+          </Text>
+          {item.isDamaged && item.damageNote ? (
+            <Text size="xs" c="orange.9" lineClamp={3} title={item.damageNote}>
+              Último daño: {item.damageNote}
+            </Text>
+          ) : null}
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
               <Badge

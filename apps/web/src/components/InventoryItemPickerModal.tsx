@@ -21,7 +21,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { IconCheck, IconChevronLeft, IconPackage, IconSearch } from '@tabler/icons-react';
 import type { SerialAssetCardItem } from '@/components/SerialAssetCard';
 import { getSerialDisplayName } from '@/lib/serial-assets';
-import { getSelectablePickerRows, isPickerQuantityAvailable, togglePickerRows } from '@/components/transport/inventory-picker-availability';
+import { getSelectablePickerRows, isPickerQuantityAvailable, isPickerSerialAvailable, togglePickerRows } from '@/components/transport/inventory-picker-availability';
 
 export type InventoryItemPickerBulkItem = {
   sourceWarehouseId?: string | null;
@@ -42,6 +42,7 @@ export type InventoryItemPickerSerialItem = SerialAssetCardItem & {
 
 type InventoryItemPickerModalProps = {
   opened: boolean;
+  allowDamaged?: boolean;
   onClose: () => void;
   title?: string;
   bulkItems: InventoryItemPickerBulkItem[];
@@ -83,6 +84,7 @@ type PickerRow =
 
 export default function InventoryItemPickerModal({
   opened,
+  allowDamaged = false,
   onClose,
   title = 'Seleccionar items',
   bulkItems,
@@ -137,7 +139,7 @@ export default function InventoryItemPickerModal({
           name: getSerialDisplayName(item),
           family: skuMeta?.category ?? 'Sin familia',
           ownerWarehouseName: item.ownerWarehouseName ?? 'Sin bodega dueña',
-          disabled: selectedSerialIds.has(item.assetId) || !isPickerQuantityAvailable('serial', item.quantity),
+          disabled: selectedSerialIds.has(item.assetId) || !isPickerSerialAvailable(item, allowDamaged),
           item,
         };
       }),
@@ -152,7 +154,7 @@ export default function InventoryItemPickerModal({
       }
       return groups;
     }, []);
-  }, [bulkItems, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById]);
+  }, [bulkItems, serialItems, selectedBulkKeys, selectedSerialIds, skuMetaById, allowDamaged]);
 
   useEffect(() => {
     setSelectedRowKeys(new Set());
@@ -324,12 +326,18 @@ export default function InventoryItemPickerModal({
                               {row.name}
                             </Text>
                             <Text component="span" className="inventory-picker-mobile-row-meta">
-                              {row.type === 'bulk' ? 'Masivo' : 'Equipo'} · {quantity}{' '}
-                              {quantity === 1 ? 'disponible' : 'disponibles'}
+                              {row.type === 'serial' && row.item.isDamaged ? 'Equipo averiado' : `${row.type === 'bulk' ? 'Masivo' : 'Equipo'} · ${quantity} ${quantity === 1 ? 'disponible' : 'disponibles'}`}
                             </Text>
+                            {row.type === 'serial' && row.item.isDamaged && row.item.damageNote ? (
+                              <Text component="span" size="xs" c="orange.8">
+                                Último daño: {row.item.damageNote}
+                              </Text>
+                            ) : null}
                             {row.disabled ? (
                               <Text component="span" className="inventory-picker-mobile-row-status">
-                                {!isPickerQuantityAvailable(row.type, row.item.quantity)
+                                {row.type === 'serial' && row.item.isDamaged && !allowDamaged
+                                  ? 'Averiado · No disponible'
+                                  : !isPickerQuantityAvailable(row.type, row.item.quantity)
                                   ? 'No disponible'
                                   : 'Ya agregado'}
                               </Text>
@@ -582,9 +590,16 @@ export default function InventoryItemPickerModal({
                                             {row.ownerWarehouseName}
                                           </Text>
                                         ) : null}
+                                        {row.type === 'serial' ? (
+                                          <Text size="xs" c={row.item.isDamaged ? 'orange.8' : 'teal.8'}>
+                                            {row.item.isDamaged ? `Averiado${row.item.damageNote ? `: ${row.item.damageNote}` : ''}` : 'Operativo'}
+                                          </Text>
+                                        ) : null}
                                         {row.disabled ? (
                                           <Text size="xs" c="dimmed">
-                                            {!isPickerQuantityAvailable(row.type, row.item.quantity)
+                                            {row.type === 'serial' && row.item.isDamaged && !allowDamaged
+                                              ? 'Averiado · No disponible'
+                                              : !isPickerQuantityAvailable(row.type, row.item.quantity)
                                               ? 'No disponible'
                                               : 'Ya agregado'}
                                           </Text>

@@ -69,7 +69,8 @@ function fixture(overrides: Record<string, unknown> = {}) {
     sku: { findMany: jest.fn().mockResolvedValue([
       { id: 'bulk-sku', assetFamily: { controlType: 'BULK' } },
     ]) },
-    asset: { findMany: jest.fn().mockResolvedValue([]) },
+    asset: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
+    assetConditionEvent: { create: jest.fn() },
     assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
     warehouse: {
       findFirst: jest.fn().mockResolvedValue({ id: 'our-warehouse', type: 'OWN' }),
@@ -102,6 +103,35 @@ function fixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Document physical inventory origin', () => {
+  it.each(['OWN', 'ALLY'])('a damaged return to %s records condition and latest note in the receipt transaction', async type => {
+    const { service, document, database, inventory } = fixture({ type: DocumentType.RETURN,
+      items: [{ ...baseItem, skuId: null, assetId: 'asset-5', conditionNote: '  Falla de motor  ' }] });
+    database.warehouse.findFirst.mockResolvedValue({ id: 'provider-warehouse', type });
+    await service['approveLoadedRequestDocument'](document, 'office-1');
+    expect(type === 'OWN' ? inventory.moveIn : inventory.moveReturnTransit).toHaveBeenCalled();
+    expect(database.asset.update).toHaveBeenCalledWith({ where: { id: 'asset-5' },
+      data: { isDamaged: true, damageNote: 'Falla de motor' } });
+    expect(database.assetConditionEvent.create).toHaveBeenCalledWith({ data: {
+      assetId: 'asset-5', isDamaged: true, note: 'Falla de motor', changedByUserId: 'office-1',
+    } });
+  });
+
+  it('a return without a damage report does not implicitly repair equipment', async () => {
+    const { service, document, database } = fixture({ type: DocumentType.RETURN,
+      items: [{ ...baseItem, skuId: null, assetId: 'asset-5', conditionNote: '  ' }] });
+    await service['approveLoadedRequestDocument'](document, 'office-1');
+    expect(database.asset.update).not.toHaveBeenCalled();
+    expect(database.assetConditionEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('a failed receipt cannot persist the damage or confirm the document', async () => {
+    const { service, document, database, inventory } = fixture({ type: DocumentType.RETURN,
+      items: [{ ...baseItem, skuId: null, assetId: 'asset-5', conditionNote: 'Falla de motor' }] });
+    inventory.moveIn.mockRejectedValue(new Error('No se recibió'));
+    await expect(service['approveLoadedRequestDocument'](document, 'office-1')).rejects.toThrow('No se recibió');
+    expect(database.asset.update).not.toHaveBeenCalled();
+    expect(database.document.update).not.toHaveBeenCalled();
+  });
   it.each(['autosave', 'request'])('an older client cannot erase saved item origins through %s', async route => {
     const { service, database } = fixture({
       status: route === 'autosave' ? DocumentStatus.IN_PROGRESS : DocumentStatus.DRAFT,

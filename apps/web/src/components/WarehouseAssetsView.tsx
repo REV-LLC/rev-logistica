@@ -36,6 +36,7 @@ export type WarehouseAssetItem = {
   status?: 'IN' | 'OUT' | 'TRANSIT' | string | null;
   active?: boolean;
   isDamaged?: boolean;
+  damageNote?: string | null;
   isAvailableInOwnerWarehouse?: boolean;
   balance?: {
     warehouseQuantity: number;

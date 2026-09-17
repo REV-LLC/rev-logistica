@@ -973,6 +973,7 @@ export default function RemisionDevolucionPage() {
       </Container>
 
       <InventoryItemPickerModal
+        allowDamaged={docType === 'RETURN'}
         opened={itemsModalOpen}
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"
