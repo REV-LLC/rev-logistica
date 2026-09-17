@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -374,11 +375,13 @@ export default function FileAttachmentsPanel({
         centered
       >
         {preview?.file.mimeType?.startsWith('image/') ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <AppImage
+            width={1200}
+            height={900}
+            sizes="90vw"
             src={preview.url}
             alt={fileLabel(preview.file)}
-            style={{ display: 'block', maxWidth: '100%', maxHeight: '75vh', margin: '0 auto', objectFit: 'contain' }}
+            style={{ width: '100%', display: 'block', maxWidth: '100%', maxHeight: '75vh', margin: '0 auto', objectFit: 'contain' }}
           />
         ) : preview ? (
           <iframe

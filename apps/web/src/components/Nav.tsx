@@ -1,5 +1,6 @@
 "use client";
 
+import AppImage from '@/components/AppImage';
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -799,7 +800,10 @@ export default function Nav({ onNavigate }: NavProps) {
           onClick={onNavigate}
           style={{ display: "block", flexShrink: 0 }}
         >
-          <img
+          <AppImage
+            width={108}
+            height={54}
+            sizes="108px"
             src="/fiesta.svg?v=silver"
             alt="Rev Logistica"
             style={{

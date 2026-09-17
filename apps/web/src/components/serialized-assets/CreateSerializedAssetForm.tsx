@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -1021,7 +1022,10 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
               }}
             >
               <Group gap="sm" wrap="nowrap">
-                <img
+                <AppImage
+                  width={72}
+                  height={58}
+                  sizes="72px"
                   src="/inventory/certified-scaffold.png"
                   alt=""
                   aria-hidden="true"
@@ -1047,7 +1051,10 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
               }}
             >
               <Group gap="sm" wrap="nowrap">
-                <img
+                <AppImage
+                  width={72}
+                  height={58}
+                  sizes="72px"
                   src="/inventory/skid-steer-loader.png"
                   alt=""
                   aria-hidden="true"

@@ -1,10 +1,10 @@
 'use client';
 
+import AppAvatar from '@/components/AppAvatar';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Avatar,
   Badge,
   Button,
   Container,
@@ -79,11 +79,6 @@ const providerLogoStyles = {
     objectFit: 'contain' as const,
     padding: 4,
   },
-};
-
-const providerLogoImageProps = {
-  decoding: 'async' as const,
-  loading: 'lazy' as const,
 };
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -257,14 +252,15 @@ export default function ProvidersPage() {
       mobile: { priority: 'primary' },
       cell: (provider) => (
         <Group gap="sm" wrap="nowrap">
-          <Avatar
+          <AppAvatar
             src={provider.logoUrl}
             alt={`Logo de ${provider.name}`}
             name={provider.name}
             color="yellow"
             radius="md"
             size={64}
-            imageProps={providerLogoImageProps}
+            imageSizes="64px"
+            imageStyle={providerLogoStyles.image}
             styles={providerLogoStyles}
           />
           <div style={{ minWidth: 0 }}>
@@ -488,7 +484,7 @@ export default function ProvidersPage() {
           <Stack gap="lg">
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <Group gap="md" wrap="nowrap">
-                <Avatar src={detailsProvider.logoUrl} name={detailsProvider.name} size="lg" radius="md" color="yellow" />
+                <AppAvatar src={detailsProvider.logoUrl} name={detailsProvider.name} size="lg" radius="md" color="yellow" />
                 <div style={{ minWidth: 0 }}>
                   <Text fw={800} size="lg" lineClamp={2}>{detailsProvider.name}</Text>
                   <Text size="sm" c="dimmed">{detailsProvider.nitOrId || 'Sin identificación'}</Text>

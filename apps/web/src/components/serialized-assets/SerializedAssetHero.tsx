@@ -1,3 +1,4 @@
+import AppImage from '@/components/AppImage';
 import { Badge, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title, Divider } from '@mantine/core';
 import { IconEngine, IconMapPin } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
@@ -51,8 +52,10 @@ export default function SerializedAssetHero({
           }}
         >
           {imageUrl.trim() ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <AppImage
+              width={360}
+              height={260}
+              sizes="(max-width: 400px) 90vw, 360px"
               src={imageUrl}
               alt={description}
               style={{
