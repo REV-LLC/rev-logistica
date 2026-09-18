@@ -286,20 +286,21 @@ export default function RequestItemsSection({
           </Text>
         </Paper>
       ) : !isTabletOrMobile ? (
-        <Table striped highlightOnHover mt="md">
+        <Table striped highlightOnHover mt="md" style={{ tableLayout: 'fixed' }}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Desc.</Table.Th>
+              <Table.Th>Descripción</Table.Th>
               <Table.Th style={{ width: 120, textAlign: 'center' }}>
                 Cantidad
               </Table.Th>
+              <Table.Th style={{ width: 96, textAlign: 'center' }}>Acciones</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {selectedItems.map((item, index) => (
               <Table.Tr key={item.selectionId}>
-                <Table.Td>
-                  <Text fw={600}>{item.name}</Text>
+                 <Table.Td style={{ verticalAlign: 'top' }}>
+                   <Text fw={600} style={{ minHeight: 36, display: 'flex', alignItems: 'center', overflowWrap: 'anywhere' }}>{item.name}</Text>
                   {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
                   {item.serial && (
                     <Text size="xs" c="dimmed">
@@ -308,10 +309,25 @@ export default function RequestItemsSection({
                   )}
                   {renderDamageFields(item, index)}
                   {renderAdminItemFields(item, index)}
+                  {canResolveInline && item.type === 'free' ? (
+                    <Select
+                      mt="xs"
+                      label="Resolver a SKU"
+                      placeholder="Seleccionar SKU"
+                      searchable
+                      clearable
+                      data={skuOptions.map((sku) => ({
+                        value: sku.id,
+                        label: sku.name,
+                      }))}
+                      onChange={(value) => resolveFreeItemToSku(index, value)}
+                    />
+                  ) : null}
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ verticalAlign: 'top', textAlign: 'center' }}>
                   {item.type === 'bulk' || item.type === 'free' || (item.type === 'accessory' && (item.accessoryKind === 'CONSUMABLE' || item.accessoryKind === 'RETURNABLE')) ? (
                     <NumberInput
+                      styles={{ input: { textAlign: 'center', fontVariantNumeric: 'tabular-nums' } }}
                       aria-label={`Cantidad de ${item.name}`}
                       allowDecimal={item.type !== 'accessory'}
                       max={item.type === 'accessory' ? item.availableQuantity : undefined}
@@ -327,25 +343,14 @@ export default function RequestItemsSection({
                       }
                     />
                   ) : (
-                    <Text>1</Text>
+                    <Text fw={600} aria-label={`Cantidad de ${item.name}: 1`} style={{ minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>1</Text>
                   )}
-                  {canResolveInline && item.type === 'free' ? (
-                    <Select
-                      mt="xs"
-                      label="Resolver a SKU"
-                      placeholder="Seleccionar SKU"
-                      searchable
-                      clearable
-                      data={skuOptions.map((sku) => ({
-                        value: sku.id,
-                        label: sku.name,
-                      }))}
-                      onChange={(value) => resolveFreeItemToSku(index, value)}
-                    />
-                  ) : null}
+                </Table.Td>
+                <Table.Td style={{ verticalAlign: 'top', textAlign: 'center' }}>
                   <Button
-                    size="xs"
-                    mt="xs"
+                    size="sm"
+                    px="xs"
+                    aria-label={`Quitar ${item.name}`}
                     variant="subtle"
                     color="red"
                     onClick={() => removeSelected(item.selectionId)}

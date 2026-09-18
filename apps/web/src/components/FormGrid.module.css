@@ -1,0 +1,52 @@
+.container {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--mantine-spacing-md);
+  row-gap: 0;
+}
+
+.grid > :global(.mantine-InputWrapper-root) {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  min-width: 0;
+  padding-bottom: var(--mantine-spacing-md);
+}
+
+.grid > [data-full-width] {
+  grid-column: 1 / -1;
+}
+
+.grid > :global(.mantine-InputWrapper-root) > :global(.mantine-InputWrapper-label) {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: 4px;
+}
+
+.grid > :global(.mantine-InputWrapper-root) > :global(.mantine-Input-wrapper) {
+  grid-row: 2;
+  align-self: start;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.grid > :global(.mantine-InputWrapper-root) > :global(.mantine-InputWrapper-description) {
+  grid-row: 3;
+  margin-top: 4px;
+}
+
+.grid > :global(.mantine-InputWrapper-root) > :global(.mantine-InputWrapper-error) {
+  grid-row: 4;
+  margin-top: 4px;
+}
+
+@container (min-width: 40rem) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

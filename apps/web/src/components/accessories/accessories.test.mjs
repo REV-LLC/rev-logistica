@@ -8,6 +8,7 @@ import { loadTransportModule } from "../transport/test-support.cjs";
 const { MantineProvider } = createRequire(import.meta.url)("@mantine/core");
 
 const {
+  equipmentLabel,
   compatibleWith,
   balanceLabel,
   includeEquipmentCompatibility,
@@ -101,7 +102,7 @@ test("equipment card distinguishes compatibility from current assignment", () =>
   };
   assert.match(render(assigned), /1 asignado\(s\) a este equipo/);
   assert.match(render(assigned), /CAN-001/);
-  assert.equal(balanceLabel(assigned.balances[0]), "PLUMA 200 KG · PL-001");
+  assert.equal(balanceLabel(assigned.balances[0]), "PLUMA 200 KG");
 });
 
 test("consumable card displays quantities without a per-unit identity", () => {
@@ -163,4 +164,14 @@ test("linking an existing accessory preserves other equipment and subfamilies", 
   assert.throws(() =>
     includeEquipmentCompatibility({ ...item, familyId: "retro" }, equipment),
   );
+});
+
+test("equipment labels use readable family, subfamily, brand and internal number instead of import codes", () => {
+  const label = equipmentLabel({
+    ...equipment, publicCode: "CUT-20260729-BODEGA_PRINCIPAL_D-VIBROCOMPACTADOR-770395CF",
+    internalNumber: 2, brand: "INGERSOLL RAND", model: "DD-30",
+    sku: { ...equipment.sku, name: "INGERSOLL RAND DD-30", assetFamily: { name: "VIBROCOMPACTADOR" }, assetSubfamily: { name: "3 TONELADAS" } },
+  });
+  assert.equal(label, "VIBROCOMPACTADOR · 3 TONELADAS · INGERSOLL RAND · DD-30 #2");
+  assert.equal(equipmentLabel(equipment), "PLUMA 200 KG");
 });

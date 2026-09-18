@@ -1362,6 +1362,7 @@ export default function TransportRequestsWorkspace({
       />
 
       <InventoryItemPickerModal
+        allowDamaged={docType === 'RETURN'}
         opened={
           activeTab === 'generate' &&
           generateStep === 'items' &&

@@ -99,6 +99,8 @@ export class AssetsService {
         active: true,
         deletedAt: true,
         deletionReason: true,
+        isDamaged: true,
+        damageNote: true,
         deletedByUserId: true,
         kind: true,
         motorConfiguration: true,
@@ -463,7 +465,16 @@ export class AssetsService {
         active: true,
         deletedAt: true,
         deletionReason: true,
+        isDamaged: true,
+        damageNote: true,
         deletedByUserId: true,
+        conditionEvents: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true, isDamaged: true, note: true, createdAt: true,
+            changedBy: { select: { email: true, employee: { select: { name: true, lastName: true } } } },
+          },
+        },
         deletedBy: {
           select: {
             id: true,
@@ -814,6 +825,46 @@ export class AssetsService {
       throw error;
     }
 
+    return this.getAssetById(assetId);
+  }
+
+  async updateAssetCondition(
+    assetId: string,
+    payload: { isDamaged: boolean; note: string },
+    userId: string,
+  ) {
+    const note = payload.note?.trim();
+    if (typeof payload.isDamaged !== 'boolean' || !note || note.length > 2000) {
+      throw new BadRequestException('Describe la avería o la reparación (máximo 2000 caracteres).');
+    }
+    const cacheKeys = await this.prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.findUnique({
+        where: { id: assetId },
+        select: { id: true, isDamaged: true, deletedAt: true, warehouseCurrentId: true, warehouseOwnerId: true },
+      });
+      if (!asset) throw new NotFoundException('Equipo no encontrado');
+      if (asset.deletedAt) throw new BadRequestException('No se puede cambiar el estado de un equipo eliminado.');
+      if (asset.isDamaged === payload.isDamaged) {
+        throw new BadRequestException(payload.isDamaged ? 'El equipo ya está averiado.' : 'El equipo ya está operativo.');
+      }
+      await tx.asset.update({
+        where: { id: assetId },
+        data: { isDamaged: payload.isDamaged, damageNote: payload.isDamaged ? note : null },
+      });
+      await tx.assetConditionEvent.create({
+        data: { assetId, isDamaged: payload.isDamaged, note, changedByUserId: userId },
+      });
+      const worksites = await tx.stockLedger.findMany({
+        where: { assetId, customerWorksiteId: { not: null } },
+        distinct: ['customerWorksiteId'],
+        select: { customerWorksiteId: true },
+      });
+      const warehouseKeys = [asset.warehouseCurrentId, asset.warehouseOwnerId]
+        .filter((id): id is string => Boolean(id))
+        .flatMap((id) => [`inventory:warehouse:${id}`, `inventory:warehouse:${id}:default`, `inventory:warehouse:${id}:include-zero`]);
+      return [...warehouseKeys, ...worksites.map((row) => `inventory:on-site:${row.customerWorksiteId}`)];
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await Promise.all([...new Set(cacheKeys)].map((key) => this.cacheManager.del(key)));
     return this.getAssetById(assetId);
   }
 

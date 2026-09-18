@@ -1,3 +1,5 @@
+import { getAssetDisplayLabel } from '@/lib/serial-assets';
+
 export type AccessoryKind = "INDIVIDUAL" | "RETURNABLE" | "CONSUMABLE";
 export type AccessoryScope = "FAMILY" | "SUBFAMILIES" | "ASSETS";
 export type MovementType =
@@ -13,9 +15,18 @@ export type Equipment = {
   id: string;
   publicCode: string;
   description?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  internalNumber?: number | null;
   warehouseOwnerId: string;
   warehouseCurrentId: string | null;
-  sku: { name: string; assetFamilyId: string; assetSubfamilyId: string | null };
+  sku: {
+    name: string;
+    assetFamilyId: string;
+    assetSubfamilyId: string | null;
+    assetFamily?: { name: string } | null;
+    assetSubfamily?: { name: string } | null;
+  };
 };
 export type Family = {
   id: string;
@@ -96,7 +107,7 @@ export const movementLabels: Record<MovementType, string> = {
   PROVIDER_RECEIVE: "Recepción de proveedor",
 };
 export const equipmentLabel = (asset: Equipment) =>
-  `${asset.sku.name} · ${asset.publicCode}`;
+  getAssetDisplayLabel(asset);
 export const balanceLabel = (balance: Accessory["balances"][number]) =>
   balance.transitDocumentId
     ? `En tránsito a proveedor · ${balance.transitDocument?.consecutive ?? "Devolución pendiente de recepción"}`

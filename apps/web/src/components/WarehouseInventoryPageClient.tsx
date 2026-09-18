@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
@@ -182,8 +183,8 @@ function WarehouseIdentityMark({
           flexShrink: 0,
         }}
       >
-        <Box
-          component="img"
+        <AppImage
+          width={size} height={size} sizes={`${size}px`}
           src={logoUrl}
           alt={`${name} logo`}
           style={{
@@ -1064,8 +1065,8 @@ export default function WarehouseInventoryPageClient({
                 }}
               >
                 {owner?.logoUrl ? (
-                  <Box
-                    component="img"
+                  <AppImage
+                    width={56} height={56} sizes="56px"
                     src={owner.logoUrl}
                     alt={`${ownerName} logo`}
                     style={{
@@ -2031,8 +2032,8 @@ export default function WarehouseInventoryPageClient({
                           }}
                         >
                           {visibleEditOwnerLogo ? (
-                            <Box
-                              component="img"
+                            <AppImage
+                              width={72} height={72} sizes="72px"
                               src={visibleEditOwnerLogo}
                               alt={`Logo de ${editOwner?.name ?? 'proveedor'}`}
                               style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 7 }}

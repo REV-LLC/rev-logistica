@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -30,6 +31,7 @@ import type { DataTableColumn } from '@/components/tables/table.types';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import { getRequestSourceWarehouseId, type RequestInventorySourceMode } from '@/components/transport/request-inventory-source';
 import { buildDirectDocumentItems } from '@/components/transport/direct-document-items';
+import FormGrid from '@/components/FormGrid';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import { buildDocumentDateTime, getDocumentDateTimeInput } from '@/lib/document-date-time';
 
@@ -643,7 +645,7 @@ export default function RemisionDevolucionPage() {
             </Group>
           </Radio.Group>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
+          <FormGrid mt="md">
             <TextInput
               label={helpLabel('Consecutivo', 'Numero interno del documento. El prefijo RM o DV se agrega automaticamente al guardar.', true)}
               withAsterisk={false}
@@ -701,7 +703,7 @@ export default function RemisionDevolucionPage() {
                 onChange={(event) => setCutOffDate(event.target.value)}
               />
             )}
-          </SimpleGrid>
+          </FormGrid>
 
           {docType === 'REMISSION' && (
             <Paper withBorder radius="md" p="md" mt="md">
@@ -840,7 +842,10 @@ export default function RemisionDevolucionPage() {
               {evidencePhotos.map((photo) => (
                 <Paper key={photo.id} withBorder radius="md" p={6}>
                   <div style={{ position: 'relative' }}>
-                    <img
+                    <AppImage
+                      width={400}
+                      height={300}
+                      sizes="(max-width: 768px) 45vw, 300px"
                       src={photo.previewUrl}
                       alt="Vista previa de evidencia"
                       style={{
@@ -968,6 +973,7 @@ export default function RemisionDevolucionPage() {
       </Container>
 
       <InventoryItemPickerModal
+        allowDamaged={docType === 'RETURN'}
         opened={itemsModalOpen}
         onClose={() => setItemsModalOpen(false)}
         title="Seleccionar items"

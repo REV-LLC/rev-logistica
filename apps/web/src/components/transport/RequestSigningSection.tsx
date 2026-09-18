@@ -1,4 +1,5 @@
 'use client';
+import AppImage from '@/components/AppImage';
 import {
   Alert,
   Badge,
@@ -428,7 +429,10 @@ export default function RequestSigningSection({
           )}
         </Group>
         {receivedSignature ? (
-          <img
+          <AppImage
+            width={420}
+            height={110}
+            sizes="(max-width: 480px) 90vw, 420px"
             src={receivedSignature}
             alt={customerSignatureLabel}
             style={{
@@ -492,7 +496,10 @@ export default function RequestSigningSection({
               {evidencePhotos.map((photo) => (
                 <Paper key={photo.id} withBorder radius="md" p={6}>
                   <div style={{ position: 'relative' }}>
-                    <img
+                    <AppImage
+                      width={400}
+                      height={300}
+                      sizes="(max-width: 768px) 45vw, 300px"
                       src={photo.previewUrl}
                       alt="Vista previa de evidencia"
                       style={{
