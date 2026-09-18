@@ -1,5 +1,6 @@
 "use client";
 
+import AppImage from '@/components/AppImage';
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppShell, Burger, Group, Text } from "@mantine/core";
@@ -232,7 +233,10 @@ export default function ResponsiveShell({
                 "opacity 170ms ease, transform 240ms cubic-bezier(0.4, 0, 0.2, 1)",
             }}
           >
-            <img
+            <AppImage
+              width={60}
+              height={30}
+              sizes="60px"
               src="/fiesta.svg?v=silver"
               alt="Rev Logistica"
               style={{

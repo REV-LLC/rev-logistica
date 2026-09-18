@@ -6,13 +6,12 @@ import {
   NumberInput,
   Paper,
   Select,
-  SimpleGrid,
   Stack,
-  Switch,
   Text,
   TextInput,
 } from '@mantine/core';
 import { IconCheck, IconUpload, IconX } from '@tabler/icons-react';
+import FormGrid from '@/components/FormGrid';
 import UppercaseTextInput from '@/components/UppercaseTextInput';
 
 type Option = { value: string; label: string };
@@ -73,7 +72,7 @@ export default function SerializedAssetEditForm({
           <Text className="ui-text-title" style={{ fontSize: '1rem' }}>
             Datos del equipo
           </Text>
-          <Text className="ui-text-body">Informacion tecnica y comercial visible para operacion.</Text>
+          <Text className="ui-text-body">Información técnica y comercial del equipo.</Text>
         </div>
         <Badge color="blue" variant="light">
           Editando
@@ -81,10 +80,11 @@ export default function SerializedAssetEditForm({
       </Group>
 
       <Stack gap="md">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        <FormGrid>
           <UppercaseTextInput
-            label="Numero de registro"
-            description="Si lo asignas, el activo requerira guia de movilidad."
+            label="Número de registro"
+            description="Si lo asignas, el activo requerirá guía de movilidad."
+            inputWrapperOrder={['label', 'input', 'description', 'error']}
             value={registrationNumber}
             onChange={onRegistrationNumberChange}
           />
@@ -105,14 +105,14 @@ export default function SerializedAssetEditForm({
             clearable
           />
           <Select
-            label="Ubicacion en bodega"
+            label="Ubicación en bodega"
             value={warehouseCurrentId}
             onChange={onWarehouseChange}
             data={warehouseOptions}
             placeholder={worksiteLocationName ?? 'Equipo en obra'}
             clearable
           />
-        </SimpleGrid>
+        </FormGrid>
 
         <Paper withBorder radius="lg" p="md" bg="gray.0">
           <Group justify="space-between" align="center" gap="md">

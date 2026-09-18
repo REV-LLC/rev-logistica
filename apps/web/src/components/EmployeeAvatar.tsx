@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Avatar } from "@mantine/core";
+import AppAvatar from "./AppAvatar";
 import { apiBlob, ApiError } from "@/lib/api";
 
 type EmployeeAvatarRecord = {
@@ -190,14 +190,15 @@ export default function EmployeeAvatar({
   const photoUrl = useEmployeePhotoUrl(employee.id, version);
 
   return (
-    <Avatar
+    <AppAvatar
       src={photoUrl}
       radius="xl"
       size={size}
+      imageSizes={`${size}px`}
       color="blue"
       alt={getEmployeeFullName(employee)}
     >
       {getEmployeeInitials(employee)}
-    </Avatar>
+    </AppAvatar>
   );
 }

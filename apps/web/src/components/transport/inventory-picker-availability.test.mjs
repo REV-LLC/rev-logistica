@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getSelectablePickerRows, isPickerQuantityAvailable, togglePickerRows } from './inventory-picker-availability.ts';
+import { getSelectablePickerRows, isPickerQuantityAvailable, isPickerSerialAvailable, togglePickerRows } from './inventory-picker-availability.ts';
 
 const cases = [[0, false], [-1, false], [NaN, false], [Infinity, false], [-Infinity, false], [0.5, true], [12, true]];
 const rows = cases.map(([quantity], index) => ({
@@ -58,4 +58,11 @@ test('el criterio de equipos serializados sigue requiriendo exactamente una unid
     assert.equal(isPickerQuantityAvailable('serial', quantity), false);
   }
   assert.equal(isPickerQuantityAvailable('serial', 1), true);
+});
+
+test('averiados se bloquean para despacho y se permiten para devolución', () => {
+  assert.equal(isPickerSerialAvailable({ quantity: 1, isDamaged: true }), false);
+  assert.equal(isPickerSerialAvailable({ quantity: 1, isDamaged: true }, true), true);
+  assert.equal(isPickerSerialAvailable({ quantity: 0, isDamaged: true }, true), false);
+  assert.equal(isPickerSerialAvailable({ quantity: 1, isDamaged: false }), true);
 });

@@ -337,6 +337,7 @@ model User {
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
   notificationDeliveries        NotificationDelivery[]
+  assetConditionEvents          AssetConditionEvent[]
   assetsDeleted                 Asset[]                 @relation("AssetDeletedBy")
   appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
   worksiteFuelReceipts          WorksiteFuelReceipt[]   @relation("WorksiteFuelReceiptCreatedBy")
@@ -638,6 +639,8 @@ model Asset {
   warehouseOwnerId   String
   warehouseCurrentId String?
   active             Boolean                 @default(true)
+  isDamaged          Boolean                 @default(false)
+  damageNote         String?
   deletedAt          DateTime?
   deletedByUserId    String?
   deletionReason     String?
@@ -654,6 +657,7 @@ model Asset {
   assignedToMixer  Asset?      @relation("MixerAssignedMotor")
   deletedBy        User?       @relation("AssetDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
 
+  conditionEvents        AssetConditionEvent[]
   documentItems          DocumentItem[]
   ledger                 StockLedger[]
   mobilityGuides         MobilityGuide[]
@@ -670,6 +674,20 @@ model Asset {
   @@index([registrationNumber])
   @@index([deletedAt])
   @@index([deletedByUserId])
+}
+
+model AssetConditionEvent {
+  id              String   @id @default(uuid())
+  assetId         String
+  isDamaged       Boolean
+  note            String
+  changedByUserId String
+  createdAt       DateTime @default(now())
+
+  asset     Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  changedBy User  @relation(fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([assetId, createdAt])
 }
 
 model ProviderMobilityGuide {

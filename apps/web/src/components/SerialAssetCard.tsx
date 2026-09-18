@@ -1,5 +1,6 @@
 "use client";
 
+import AppImage from '@/components/AppImage';
 import {
   ActionIcon,
   Badge,
@@ -15,6 +16,8 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import {
   IconDotsVertical,
+  IconAlertTriangle,
+  IconCheck,
   IconPencil,
   IconPhotoOff,
   IconTrash,
@@ -28,6 +31,8 @@ import { getCurrentUserRole } from "@/lib/auth";
 
 export type SerialAssetCardItem = {
   assetId: string;
+  isDamaged?: boolean;
+  damageNote?: string | null;
   ownerWarehouseId?: string | null;
   serialOrEngine?: string | null;
   description?: string | null;
@@ -136,16 +141,10 @@ export default function SerialAssetCard({
     const role = getCurrentUserRole();
     setCanManageAccessories(role === 'ADMIN' || role === 'OFFICE');
   }, []);
-  const [useOriginalImage, setUseOriginalImage] = useState(false);
-  const cardImageUrl = item.imageUrl
-    ? useOriginalImage || !item.imageFileObjectId
-      ? item.imageUrl
-      : `${item.imageUrl}.thumbnail.webp`
-    : null;
+  const cardImageUrl = item.imageUrl;
 
   useEffect(() => {
     setBrokenImage(false);
-    setUseOriginalImage(false);
   }, [item.imageUrl]);
   const isMobile = useMediaQuery("(max-width: 48em)");
   const description = getSerialDisplayName(item);
@@ -194,7 +193,7 @@ export default function SerialAssetCard({
         maxWidth: "100%",
         minWidth: 0,
         overflow: "hidden",
-        minHeight: showcase ? 460 : isContentSized ? "auto" : 320,
+        minHeight: showcase || isContentSized ? "auto" : 320,
         height: hasFooterContent && !compact ? "100%" : "auto",
         aspectRatio: showcase ? undefined : isContentSized ? "auto" : "1 / 1",
         gap: isMobile ? (compact ? "0.625rem" : "0.75rem") : 0,
@@ -203,11 +202,11 @@ export default function SerialAssetCard({
     >
       <Box
         style={{
-          flex: showcase ? "0 0 48%" : isContentSized ? "0 0 auto" : "0 0 62%",
+          flex: showcase ? "0 0 auto" : isContentSized ? "0 0 auto" : "0 0 62%",
           width: "100%",
           minWidth: 0,
-          height: showcase ? "48%" : isContentSized ? "auto" : "62%",
-          aspectRatio: showcase ? undefined : isContentSized ? "16 / 9" : undefined,
+          height: showcase ? "auto" : isContentSized ? "auto" : "62%",
+          aspectRatio: showcase || isContentSized ? "16 / 9" : undefined,
           background: "#ffffff",
           display: "flex",
           alignItems: "center",
@@ -218,22 +217,23 @@ export default function SerialAssetCard({
           position: "relative",
         }}
       >
+        {href ? (
+          <Link
+            href={href}
+            aria-label={`Ver equipo: ${description}`}
+            className={classes.imageLink}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
+        ) : null}
         {cardImageUrl && !brokenImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <AppImage
+            width={640}
+            height={480}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 400px"
             src={cardImageUrl}
             alt={description}
-            onError={() => {
-              if (
-                !useOriginalImage &&
-                item.imageUrl &&
-                item.imageFileObjectId
-              ) {
-                setUseOriginalImage(true);
-                return;
-              }
-              setBrokenImage(true);
-            }}
+            onError={() => setBrokenImage(true)}
             style={{
               width: "100%",
               height: "100%",
@@ -254,7 +254,7 @@ export default function SerialAssetCard({
         {showcase ? (
           <Badge
             size="sm"
-            color={statusBadge?.color ?? getStatusColor(item.status)}
+            color={item.isDamaged ? "orange" : statusBadge?.color ?? getStatusColor(item.status)}
             variant="light"
             className={classes.showcaseStatusBadge}
             style={{
@@ -263,7 +263,7 @@ export default function SerialAssetCard({
               top: 12,
             }}
           >
-            {statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
+            {item.isDamaged ? "AVERIADO" : statusBadge?.label ?? getStatusLabel(item.status, isWorksiteView)}
           </Badge>
         ) : null}
       </Box>
@@ -291,17 +291,17 @@ export default function SerialAssetCard({
               {!showcase ? (
                 <Badge
                   size={compact ? "xs" : "sm"}
-                  color={statusBadge?.color ?? getStatusColor(item.status)}
+                  color={item.isDamaged ? "orange" : statusBadge?.color ?? getStatusColor(item.status)}
                   variant="light"
                 >
-                  {statusBadge?.label ??
+                  {item.isDamaged ? "AVERIADO" : statusBadge?.label ??
                     getStatusLabel(item.status, isWorksiteView)}
                 </Badge>
               ) : null}
               {showMenu ? (
                 <Menu
                   shadow="md"
-                  width={160}
+                  width={190}
                   position="bottom-end"
                   withinPortal
                 >
@@ -319,10 +319,24 @@ export default function SerialAssetCard({
                     {href ? (
                       <Menu.Item
                         component={Link}
-                        href={href}
+                        href={`${href}${href.includes("?") ? "&" : "?"}edit=1`}
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
                         leftSection={<IconPencil size={16} />}
                       >
                         Editar
+                      </Menu.Item>
+                    ) : null}
+                    {href && canManageAccessories ? (
+                      <Menu.Item
+                        component={Link}
+                        href={`${href}${href.includes("?") ? "&" : "?"}condition=1`}
+                        color={item.isDamaged ? "teal" : "orange"}
+                        leftSection={item.isDamaged ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {item.isDamaged ? 'Marcar reparado' : 'Marcar averiado'}
                       </Menu.Item>
                     ) : null}
                     {onDelete ? (
@@ -340,6 +354,14 @@ export default function SerialAssetCard({
               ) : null}
             </Group>
           </Group>
+          <Text size="xs" fw={600} c={item.isDamaged ? 'orange.8' : 'teal.8'}>
+            Condición: {item.isDamaged ? 'Averiado' : 'Operativo'}
+          </Text>
+          {item.isDamaged && item.damageNote ? (
+            <Text size="xs" c="orange.9" lineClamp={3} title={item.damageNote}>
+              Último daño: {item.damageNote}
+            </Text>
+          ) : null}
           {shouldShowOwnerChip && ownerChipLabel ? (
             <Group gap={6} wrap="wrap">
               <Badge

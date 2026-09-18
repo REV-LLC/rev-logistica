@@ -474,6 +474,7 @@ export class DocumentsService {
         componentParentAssetId: string | null;
         quantity: Prisma.Decimal | null;
         condition: string | null;
+        conditionNote?: string | null;
         requestedTag?: string | null;
       }>;
     },
@@ -513,12 +514,18 @@ export class DocumentsService {
           where: { id: { in: assetIds } },
           select: {
             id: true,
+            isDamaged: true,
+            internalNumber: true,
             kind: true,
             motorConfiguration: true,
             assignedMotorId: true,
             sku: { select: { name: true } },
           },
         });
+        const damagedAsset = assets.find((asset) => asset.isDamaged);
+        if (damagedAsset) {
+          throw new BadRequestException(`No se puede despachar ${damagedAsset.sku.name} #${damagedAsset.internalNumber}: está averiado. Registra la reparación antes de despacharlo.`);
+        }
         const selectedAssetIds = new Set(assetIds);
         const missingMotor = assets.find(
           (asset) =>
@@ -632,6 +639,19 @@ export class DocumentsService {
           userId,
           tx,
         );
+      }
+      // A return's damage report changes the equipment condition atomically
+      // with its receipt. An unchecked return never implies a repair.
+      for (const item of document.items) {
+        const note = item.conditionNote?.trim();
+        if (!item.assetId || !note) continue;
+        await tx.asset.update({
+          where: { id: item.assetId },
+          data: { isDamaged: true, damageNote: note },
+        });
+        await tx.assetConditionEvent.create({
+          data: { assetId: item.assetId, isDamaged: true, note, changedByUserId: userId },
+        });
       }
       await tx.documentItem.updateMany({
         where: {

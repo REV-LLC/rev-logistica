@@ -2,6 +2,10 @@ export function isPickerQuantityAvailable(type: 'bulk' | 'serial', quantity: num
   return type === 'bulk' ? Number.isFinite(quantity) && quantity > 0 : quantity === 1;
 }
 
+export function isPickerSerialAvailable(item: { quantity: number; isDamaged?: boolean }, allowDamaged = false) {
+  return isPickerQuantityAvailable('serial', item.quantity) && (allowDamaged || !item.isDamaged);
+}
+
 type PickerSelectionRow = { key: string; disabled: boolean };
 
 export function getSelectablePickerRows<T extends PickerSelectionRow>(rows: readonly T[]): T[] {

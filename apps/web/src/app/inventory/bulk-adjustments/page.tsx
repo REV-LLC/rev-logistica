@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -1644,7 +1645,10 @@ export default function AddBulkStockPage() {
                   className="bulk-flow-card"
                   onClick={() => chooseFlow('bulk')}
                 >
-                  <img
+                  <AppImage
+                    width={640}
+                    height={420}
+                    sizes="(max-width: 768px) 90vw, 50vw"
                     src="/inventory/certified-scaffold-cutout.svg"
                     alt=""
                     aria-hidden="true"
@@ -1673,7 +1677,10 @@ export default function AddBulkStockPage() {
                   className="bulk-flow-card bulk-flow-card-yellow"
                   onClick={() => chooseFlow('yellow-machinery')}
                 >
-                  <img
+                  <AppImage
+                    width={640}
+                    height={420}
+                    sizes="(max-width: 768px) 90vw, 50vw"
                     src="/inventory/skid-steer-loader-cutout.svg"
                     alt=""
                     aria-hidden="true"

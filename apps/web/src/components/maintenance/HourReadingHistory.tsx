@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useState } from 'react';
 import { ActionIcon, Alert, Badge, Group, Modal, Paper, Stack, Table, Text } from '@mantine/core';
 import { IconPhoto } from '@tabler/icons-react';
@@ -201,8 +202,10 @@ export default function HourReadingHistory({ readings, showReportedHours = false
         centered
       >
         {evidence ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <AppImage
+            width={800}
+            height={600}
+            sizes="(max-width: 800px) 90vw, 720px"
             src={evidence.url}
             alt={`Evidencia del horómetro en ${formatHours(evidence.reading.hours)}`}
             style={{
