@@ -36,7 +36,8 @@ export type FileEntityType =
   | 'VEHICLE'
   | 'CUSTOMER'
   | 'WAREHOUSE'
-  | 'ASSET';
+  | 'ASSET'
+  | 'SKU';
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 12;
@@ -54,6 +55,7 @@ const ENTITY_TYPES = new Set<FileEntityType>([
   'CUSTOMER',
   'WAREHOUSE',
   'ASSET',
+  'SKU',
 ]);
 
 const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
@@ -96,6 +98,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'OTRO',
   ]),
   WAREHOUSE: new Set(['GUIA_MOVILIDAD_PROVEEDOR', 'OTRO']),
+  SKU: new Set(['PHOTO']),
   ASSET: new Set([
     'PHOTO',
     'TARJETA_PROPIEDAD',
@@ -663,6 +666,12 @@ export class FilesService {
           'La bodega seleccionada no es un proveedor',
         );
       }
+      return;
+    }
+
+    if (entityType === 'SKU') {
+      const found = await this.prisma.sku.findUnique({ where: { id: entityId }, select: { id: true } });
+      if (!found) throw new NotFoundException('Referencia no encontrada');
       return;
     }
 

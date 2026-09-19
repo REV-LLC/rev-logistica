@@ -83,3 +83,26 @@ describe('SkusService provider prices', () => {
     expect(result[0].price).toBe(42000);
   });
 });
+
+describe('SKU image changes', () => {
+  it('persists the image and invalidates all affected warehouse and worksite inventories', async () => {
+    const prisma = {
+      sku: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'sku', assetFamilyId: 'family', chargeType: 'DAY' }),
+        update: jest.fn().mockResolvedValue({ id: 'sku', imageUrl: 'https://images.example/photo.webp', assetFamily: { controlType: 'BULK', name: 'Andamios' } }),
+      },
+      assetFamily: { findUnique: jest.fn().mockResolvedValue({ id: 'family', controlType: 'BULK' }) },
+      stockLedger: { findMany: jest.fn().mockResolvedValue([
+        { warehouseId: 'physical', ownerWarehouseId: 'owner', customerWorksiteId: 'site' },
+        { warehouseId: 'physical', ownerWarehouseId: 'owner', customerWorksiteId: 'site' },
+      ]) },
+    };
+    const inventory = { invalidateDocumentMovementCaches: jest.fn().mockResolvedValue(undefined) };
+    const service = new SkusService(prisma as never, inventory as never);
+    await service.updateSku('sku', { imageUrl: 'https://images.example/photo.webp' });
+    expect(prisma.sku.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ imageUrl: 'https://images.example/photo.webp' }) }));
+    expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledWith(['physical', 'owner'], null);
+    expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledWith([], 'site');
+    expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledTimes(2);
+  });
+});
