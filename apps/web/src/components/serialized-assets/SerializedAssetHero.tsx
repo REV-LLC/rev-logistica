@@ -1,5 +1,6 @@
-import { Badge, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title, Divider } from '@mantine/core';
-import { IconEngine, IconMapPin } from '@tabler/icons-react';
+import AppImage from '@/components/AppImage';
+import { Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title, Divider } from '@mantine/core';
+import { IconEngine } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 
 export type SerializedAssetFact = {
@@ -51,8 +52,10 @@ export default function SerializedAssetHero({
           }}
         >
           {imageUrl.trim() ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <AppImage
+              width={360}
+              height={260}
+              sizes="(max-width: 400px) 90vw, 360px"
               src={imageUrl}
               alt={description}
               style={{
@@ -75,14 +78,6 @@ export default function SerializedAssetHero({
 
         <Stack gap="lg" justify="center">
           <div>
-            <Group gap="xs" mb="sm" wrap="wrap">
-              <Badge color={accent} variant="light" radius="xl">
-                {active ? 'Activo' : 'Inactivo'}
-              </Badge>
-              <Badge color={location.color} variant="light" radius="xl" leftSection={<IconMapPin size={14} />}>
-                {location.label}
-              </Badge>
-            </Group>
             <Title order={2} className="ui-text-title">
               {description}
             </Title>
@@ -93,7 +88,7 @@ export default function SerializedAssetHero({
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
             {facts.map((item) => (
               <Group key={item.label} gap="sm" align="flex-start" wrap="nowrap">
-                <ThemeIcon color={accent} variant="light" radius="xl" size={30}>
+                <ThemeIcon color={item.label === 'Ubicación actual' ? location.color : accent} variant="light" radius="xl" size={30}>
                   {item.icon}
                 </ThemeIcon>
                 <div style={{ minWidth: 0 }}>

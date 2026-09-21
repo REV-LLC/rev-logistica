@@ -298,3 +298,20 @@ describe('FilesService document access', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('SKU image access', () => {
+  const prisma = { sku: { findUnique: jest.fn() } };
+  const service = new FilesService(prisma as never, {} as never, {} as never);
+  it.each([Role.ADMIN, Role.OFFICE])('allows %s to upload images for an existing reference', async role => {
+    prisma.sku.findUnique.mockResolvedValue({ id: 'sku-1' });
+    await expect(service['assertEntityAccess']('SKU', 'sku-1', { id: 'user', role }, 'write')).resolves.toBeUndefined();
+    expect(service.getCategories('SKU')).toContainEqual(expect.objectContaining({ value: 'PHOTO' }));
+  });
+  it.each([Role.DRIVER, Role.WAREHOUSE_TABLET, Role.OPERATOR])('blocks uploads by %s', async role => {
+    await expect(service['assertEntityAccess']('SKU', 'sku-1', { id: 'user', role }, 'write')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('rejects an unknown reference', async () => {
+    prisma.sku.findUnique.mockResolvedValue(null);
+    await expect(service['assertEntityAccess']('SKU', 'missing', { id: 'user', role: Role.OFFICE }, 'write')).rejects.toThrow('Referencia no encontrada');
+  });
+});

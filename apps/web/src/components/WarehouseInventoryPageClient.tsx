@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
@@ -182,8 +183,8 @@ function WarehouseIdentityMark({
           flexShrink: 0,
         }}
       >
-        <Box
-          component="img"
+        <AppImage
+          width={size} height={size} sizes={`${size}px`}
           src={logoUrl}
           alt={`${name} logo`}
           style={{
@@ -961,11 +962,13 @@ export default function WarehouseInventoryPageClient({
     );
   }, [data, deferredInventorySearch]);
   const showInventorySearch = isOwnInventory || isProviderDetail;
+  const filteredBulkCount = new Set(filteredBulkInventory.map(item => item.skuId)).size;
+  const totalBulkCount = new Set((data?.bulk ?? []).map(item => item.skuId)).size;
   const filteredInventoryCount =
-    isProviderDetail ? filteredBulkInventory.length + filteredSerialInventory.length
-      : inventoryView === 'BULK' ? filteredBulkInventory.length : filteredSerialInventory.length;
-  const totalInventoryCount = isProviderDetail ? (data?.bulk.length ?? 0) + (data?.serial.length ?? 0)
-    : inventoryView === 'BULK' ? (data?.bulk.length ?? 0) : (data?.serial.length ?? 0);
+    isProviderDetail ? filteredBulkCount + filteredSerialInventory.length
+      : inventoryView === 'BULK' ? filteredBulkCount : filteredSerialInventory.length;
+  const totalInventoryCount = isProviderDetail ? totalBulkCount + (data?.serial.length ?? 0)
+    : inventoryView === 'BULK' ? totalBulkCount : (data?.serial.length ?? 0);
   const inventoryItemLabel = isProviderDetail ? 'referencias y equipos' : inventoryView === 'BULK' ? 'referencias' : 'equipos';
 
   const warehouseCards = useMemo(
@@ -1064,8 +1067,8 @@ export default function WarehouseInventoryPageClient({
                 }}
               >
                 {owner?.logoUrl ? (
-                  <Box
-                    component="img"
+                  <AppImage
+                    width={56} height={56} sizes="56px"
                     src={owner.logoUrl}
                     alt={`${ownerName} logo`}
                     style={{
@@ -1461,7 +1464,7 @@ export default function WarehouseInventoryPageClient({
               <Group justify="space-between" align="center" wrap="wrap">
                 <div>
                   <Text fw={700}>
-                    {inventoryView === 'BULK' ? 'Bulk propio' : 'Equipos propios'}
+                    {inventoryView === 'BULK' ? 'Inventario masivo' : 'Equipos propios'}
                   </Text>
                   <Text size="sm" c="dimmed">
                     {warehouses[0]
@@ -1582,7 +1585,7 @@ export default function WarehouseInventoryPageClient({
                   <Stack gap={6}>
                     <TextInput
                       type="search"
-                      aria-label={isProviderDetail ? 'Buscar disponibles en bodega' : inventoryView === 'BULK' ? 'Buscar inventario bulk' : 'Buscar equipos propios'}
+                      aria-label={isProviderDetail ? 'Buscar disponibles en bodega' : inventoryView === 'BULK' ? 'Buscar inventario masivo' : 'Buscar equipos propios'}
                       placeholder={
                         isProviderDetail ? 'Buscar por referencia, equipo, familia, serial o número interno' : inventoryView === 'BULK'
                           ? 'Buscar por referencia o nombre'
@@ -1618,7 +1621,7 @@ export default function WarehouseInventoryPageClient({
                   <Paper withBorder radius="md" p="xl">
                     <Stack align="center" gap={6}>
                       <Text fw={700}>
-                        {isProviderDetail ? 'No encontramos inventario con esta búsqueda' : inventoryView === 'BULK' ? 'No encontramos referencias bulk' : 'No encontramos equipos'}
+                        {isProviderDetail ? 'No encontramos inventario con esta búsqueda' : inventoryView === 'BULK' ? 'No encontramos referencias masivas' : 'No encontramos equipos'}
                       </Text>
                       <Text size="sm" c="dimmed" ta="center">
                         {inventoryView === 'BULK'
@@ -1632,6 +1635,7 @@ export default function WarehouseInventoryPageClient({
                   </Paper>
                 ) : (
                 <InventoryDisplay
+                  warehouseId={currentInventory.warehouseId}
                   bulk={showInventorySearch ? filteredBulkInventory : currentInventory.bulk}
                   serial={showInventorySearch ? filteredSerialInventory : currentInventory.serial}
                   onAdjust={openAdjust}
@@ -1642,7 +1646,7 @@ export default function WarehouseInventoryPageClient({
                   compactSerialCards={isOwnInventory && inventoryView === 'SERIAL'}
                   showSerialOwnerChip={isOwnInventory}
                   serialAssetScope={isOwnInventory ? 'own' : 'allied'}
-                  showWorksiteQuantities={!isOwnInventory}
+                  showWorksiteQuantities
                 />
                 )}
               </Stack>
@@ -2031,8 +2035,8 @@ export default function WarehouseInventoryPageClient({
                           }}
                         >
                           {visibleEditOwnerLogo ? (
-                            <Box
-                              component="img"
+                            <AppImage
+                              width={72} height={72} sizes="72px"
                               src={visibleEditOwnerLogo}
                               alt={`Logo de ${editOwner?.name ?? 'proveedor'}`}
                               style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 7 }}

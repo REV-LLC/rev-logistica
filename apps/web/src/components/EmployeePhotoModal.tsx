@@ -1,5 +1,6 @@
 "use client";
 
+import AppImage from '@/components/AppImage';
 import { Center, Modal, Stack, Text } from "@mantine/core";
 import EmployeeAvatar, {
   useEmployeePhotoUrl,
@@ -21,8 +22,10 @@ function EmployeePhotoPreview({ employee }: { employee: EmployeePhotoRecord }) {
   return (
     <Stack align="center" gap="md">
       {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <AppImage
+          width={512}
+          height={544}
+          sizes="(max-width: 576px) 90vw, 512px"
           src={photoUrl}
           alt={`Foto ampliada de ${employeeName(employee)}`}
           className="employee-photo-preview"

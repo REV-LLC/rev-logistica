@@ -1,11 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional, Logger } from '@nestjs/common';
 import { ChargeType, Prisma, SkuControlType, WarehouseType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { SKU_WEIGHT_UNITS } from './skus.constants';
 
 @Injectable()
 export class SkusService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly inventory?: InventoryService) {}
 
   async listSkus(params: {
     search?: string;
@@ -369,6 +370,19 @@ export class SkusService {
         },
       });
 
+      if (payload.imageUrl !== undefined && this.inventory) {
+        // Images are shared by SKU across owners and physical locations.
+        const locations = await this.prisma.stockLedger.findMany({
+          where: { skuId }, distinct: ['warehouseId', 'ownerWarehouseId', 'customerWorksiteId'],
+          select: { warehouseId: true, ownerWarehouseId: true, customerWorksiteId: true },
+        });
+        const warehouses = [...new Set(locations.flatMap(row => [row.warehouseId, row.ownerWarehouseId]).filter((id): id is string => Boolean(id)))];
+        const worksites = [...new Set(locations.map(row => row.customerWorksiteId).filter((id): id is string => Boolean(id)))];
+        await Promise.all([
+          this.inventory.invalidateDocumentMovementCaches(warehouses, null),
+          ...worksites.map(id => this.inventory!.invalidateDocumentMovementCaches([], id)),
+        ]).catch(() => new Logger(SkusService.name).warn('Imagen guardada; la caché se actualizará al vencer su TTL'));
+      }
       return { ...updated, controlType: updated.assetFamily.controlType, category: updated.assetFamily.name };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

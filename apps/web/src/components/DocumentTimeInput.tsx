@@ -13,6 +13,7 @@ export default function DocumentTimeInput({ value, onChange, error }: DocumentTi
     <TextInput
       label="Hora (24 horas)"
       description="HH:mm, de 00:00 a 23:59."
+      inputWrapperOrder={['label', 'input', 'description', 'error']}
       placeholder="14:30"
       inputMode="numeric"
       maxLength={5}

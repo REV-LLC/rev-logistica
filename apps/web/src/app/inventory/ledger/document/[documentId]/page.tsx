@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
@@ -1760,7 +1761,10 @@ export default function DocumentDetailPage() {
                     className={styles.evidenceLink}
                     aria-label={`Abrir evidencia ${index + 1} en una nueva pestaña`}
                   >
-                    <img
+                    <AppImage
+                      width={400}
+                      height={300}
+                      sizes="(max-width: 768px) 45vw, 300px"
                       src={file.storageKey}
                       alt={`Evidencia ${index + 1}`}
                       className={styles.evidenceImage}
@@ -1896,10 +1900,14 @@ export default function DocumentDetailPage() {
                 <br />
                 {isReturn ? (
                   hasRenderableSignature ? (
-                    <img
-                      src={receivedSignature ?? undefined}
+                    <AppImage
+                      width={420}
+                      height={110}
+                      sizes="420px"
+                      src={receivedSignature ?? ''}
                       alt="Firma de quien entrega"
                       className={styles.signatureImage}
+                      loading="eager"
                     />
                   ) : (
                     '_____________________'
@@ -1912,10 +1920,14 @@ export default function DocumentDetailPage() {
                 {isReturn ? (
                   receiverDisplay
                 ) : hasRenderableSignature ? (
-                  <img
-                    src={receivedSignature ?? undefined}
+                  <AppImage
+                    width={420}
+                    height={110}
+                    sizes="420px"
+                    src={receivedSignature ?? ''}
                     alt="Firma de recibido"
                     className={styles.signatureImage}
+                    loading="eager"
                   />
                 ) : (
                   '_____________________'
@@ -1971,7 +1983,10 @@ export default function DocumentDetailPage() {
                     leftSection={<IconCamera size={16} />}
                   />
                   {draft ? (
-                    <img
+                    <AppImage
+                      width={360}
+                      height={270}
+                      sizes="(max-width: 400px) 90vw, 360px"
                       src={draft.previewUrl}
                       alt={`Remisión física de ${provider.providerName}`}
                       style={{

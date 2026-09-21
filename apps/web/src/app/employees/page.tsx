@@ -1,10 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Container,
   Group,
@@ -13,207 +13,157 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  ThemeIcon,
+  Title,
 } from '@mantine/core';
 import {
-  IconBriefcase2,
-  IconCar,
-  IconEye,
-  IconFileDescription,
-  IconMail,
+  IconCurrencyDollar,
   IconPencil,
-  IconPhone,
   IconPlus,
-  IconTrash,
-  IconUserCheck,
   IconUsers,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
-import EntityDataTable from '@/components/tables/EntityDataTable';
-import type { DataTableColumn } from '@/components/tables/table.types';
-import { useClientTableData } from '@/components/tables/useClientTableData';
+import EmployeeCard, {
+  employeeCardRoleLabelByValue,
+  getEmployeeCardFullName,
+  type EmployeeCardRecord,
+} from '@/components/EmployeeCard';
 import EmployeeFormModal, {
   appRoleLabelByValue,
   emptyEmployeeForm,
-  roleLabelByValue,
   toUppercaseInput,
-  type AppRoleValue,
   type EmployeeForm,
-  type RoleValue,
   type VehicleOption,
 } from '@/components/EmployeeFormModal';
+import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 import EmployeePhotoModal from '@/components/EmployeePhotoModal';
-import EmployeeViewMenu, { usePreferredEmployeeView } from '@/components/EmployeeViewMenu';
-import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
-import StatCard from '@/components/dashboard/StatCard';
-import { api, ApiError } from '@/lib/api';
+import { api, apiBlob, ApiError } from '@/lib/api';
 
-type Employee = {
+const EMPLOYEE_IDENTITY_CATEGORY = 'CEDULA';
+
+type EmployeeAttachedFile = {
   id: string;
-  name: string;
-  lastName: string;
-  role: RoleValue;
-  phone: string | null;
-  email: string | null;
-  documentId: string | null;
-  active: boolean;
-  createdAt: string;
-  vehicles: VehicleOption[];
-  user: {
-    id: string;
-    email: string;
-    role: AppRoleValue;
-    active: boolean;
-  } | null;
+  fileType: string;
+  category: string | null;
+  displayName: string | null;
+  originalName: string | null;
 };
 
+const roleSortWeight: Partial<Record<EmployeeCardRecord['role'], number>> = {
+  MANAGER: 0,
+  OFFICE: 1,
+  DRIVER: 2,
+};
 
-function getVehicleSummary(vehicles: VehicleOption[]) {
-  if (!vehicles.length) return 'Sin vehículos asignados';
-  return vehicles.map((entry) => entry.plate).join(', ');
+function compareEmployeeCards(a: EmployeeCardRecord, b: EmployeeCardRecord) {
+  const roleDelta = (roleSortWeight[a.role] ?? 3) - (roleSortWeight[b.role] ?? 3);
+  if (roleDelta !== 0) {
+    return roleDelta;
+  }
+
+  return getEmployeeCardFullName(a).localeCompare(getEmployeeCardFullName(b), 'es', {
+    sensitivity: 'base',
+  });
 }
 
-function getEmployeeFullName(employee: Pick<Employee, 'name' | 'lastName'>) {
-  return `${employee.name} ${employee.lastName}`.trim();
+function fileLabel(file: EmployeeAttachedFile) {
+  return file.displayName?.trim() || file.originalName?.trim() || file.fileType;
 }
 
-function EmployeeStatusBadge({ active }: { active: boolean }) {
-  return (
-    <Badge
-      color={active ? 'green' : 'gray'}
-      variant="light"
-      style={{ minWidth: 76, flexShrink: 0, textAlign: 'center' }}
-    >
-      {active ? 'Activo' : 'Inactivo'}
-    </Badge>
-  );
-}
-
-function EmployeeDetails({
+function EmployeeCardDetails({
   employee,
   onEdit,
-  onDelete,
   onPhotoPreview,
 }: {
-  employee: Employee;
-  onEdit?: (employee: Employee) => void;
-  onDelete?: (employee: Employee) => void;
-  onPhotoPreview?: (employee: Employee) => void;
+  employee: EmployeeCardRecord;
+  onEdit: (employee: EmployeeCardRecord) => void;
+  onPhotoPreview: (employee: EmployeeCardRecord) => void;
 }) {
   return (
-    <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <Group align="flex-start" gap="sm" wrap="nowrap">
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Group gap="md" align="flex-start" wrap="nowrap">
           <EmployeePhotoControl
             employee={employee}
-            size={52}
+            size={76}
             editable
-            onPreview={() => onPhotoPreview?.(employee)}
+            onPreview={() => onPhotoPreview(employee)}
           />
           <div>
-            <Text fw={700} size="lg">
-              {getEmployeeFullName(employee)}
-            </Text>
+            <Text fw={800} size="lg">{getEmployeeCardFullName(employee)}</Text>
             <Text size="sm" c="dimmed">
-              {roleLabelByValue[employee.role] ?? employee.role}
+              {employeeCardRoleLabelByValue[employee.role] ?? employee.role}
             </Text>
+            <Text size="xs" c="dimmed">{employee.documentId ?? 'Sin documento'}</Text>
           </div>
         </Group>
-        <EmployeeStatusBadge active={employee.active} />
+        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
+          {employee.active ? 'Activo' : 'Inactivo'}
+        </Badge>
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Contacto
-          </Text>
-          <Stack gap={6} mt={8}>
-            <Group gap={8} wrap="nowrap">
-              <IconPhone size={14} />
-              <Text size="sm">{employee.phone ?? '-'}</Text>
-            </Group>
-            <Group gap={8} wrap="nowrap">
-              <IconMail size={14} />
-              <Text size="sm">{employee.email ?? '-'}</Text>
-            </Group>
-          </Stack>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Teléfono</Text>
+          <Text size="sm" mt={6}>{employee.phone ?? '-'}</Text>
         </Paper>
-
         <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Identificación
-          </Text>
-          <Text size="sm" mt={8}>
-            {employee.documentId ?? '-'}
-          </Text>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Correo</Text>
+          <Text size="sm" mt={6}>{employee.email ?? '-'}</Text>
         </Paper>
-
         <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Acceso a la app
-          </Text>
-          <Stack gap={4} mt={8}>
-            <Text size="sm">{employee.user?.email ?? 'Sin acceso creado'}</Text>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Acceso a la app</Text>
+          <Text size="sm" mt={6}>{employee.user?.email ?? 'Sin acceso creado'}</Text>
+          {employee.user ? (
             <Text size="xs" c="dimmed">
-              {employee.user
-                ? `${appRoleLabelByValue[employee.user.role]} · ${
-                    employee.user.active ? 'Activo' : 'Inactivo'
-                  }`
-                : 'Este empleado no tiene usuario asociado'}
+              {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
             </Text>
-          </Stack>
+          ) : null}
         </Paper>
-
         <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Vehículos asignados
-          </Text>
-          <Text size="sm" mt={8}>
-            {getVehicleSummary(employee.vehicles)}
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Vehículos</Text>
+          <Text size="sm" mt={6}>
+            {employee.vehicles.length
+              ? employee.vehicles.map((vehicle) => vehicle.plate).join(', ')
+              : 'Sin vehículos asignados'}
           </Text>
         </Paper>
       </SimpleGrid>
 
-      {onEdit || onDelete ? (
-        <Group className="mobile-actions">
-          {onDelete ? (
-            <Button color="red" variant="light" onClick={() => onDelete(employee)}>
-              Eliminar
-            </Button>
-          ) : null}
-          {onEdit ? (
-            <Button variant="light" onClick={() => onEdit(employee)}>
-              Editar
-            </Button>
-          ) : null}
-        </Group>
-      ) : null}
+      <Group justify="flex-end">
+        <Button
+          variant="light"
+          leftSection={<IconPencil size={16} />}
+          onClick={() => onEdit(employee)}
+        >
+          Editar empleado
+        </Button>
+      </Group>
     </Stack>
   );
 }
 
-export default function EmployeesPage() {
-  usePreferredEmployeeView('list');
+export default function EmployeeCardsPage() {
 
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<EmployeeCardRecord[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [modalOpen, setModalOpen] = useState(false);
-  const [detailsEmployee, setDetailsEmployee] = useState<Employee | null>(null);
-  const [photoEmployee, setPhotoEmployee] = useState<Employee | null>(null);
-  const [documentsEmployee, setDocumentsEmployee] = useState<Employee | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeCardRecord | null>(null);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
+  const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
+  const [detailsEmployee, setDetailsEmployee] = useState<EmployeeCardRecord | null>(null);
+  const [photoEmployee, setPhotoEmployee] = useState<EmployeeCardRecord | null>(null);
+  const [downloadingIdentityEmployeeId, setDownloadingIdentityEmployeeId] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
       const [employeesData, vehiclesData] = await Promise.all([
-        api<Employee[]>('/employees', { method: 'GET' }),
+        api<EmployeeCardRecord[]>('/employees', { method: 'GET' }),
         api<VehicleOption[]>('/vehicles', { method: 'GET' }),
       ]);
       setEmployees(employeesData);
@@ -235,35 +185,27 @@ export default function EmployeesPage() {
     loadData();
   }, []);
 
-  const metrics = useMemo(() => {
-    const activeCount = employees.filter((employee) => employee.active).length;
-    const withAccessCount = employees.filter((employee) => employee.user).length;
-    const assignedVehicleCount = employees.filter((employee) => employee.vehicles.length > 0).length;
-    return {
-      total: employees.length,
-      active: activeCount,
-      withAccess: withAccessCount,
-      assignedVehicle: assignedVehicleCount,
-    };
-  }, [employees]);
+  const sortedEmployees = useMemo(() => [...employees].sort(compareEmployeeCards), [employees]);
 
   const openCreate = () => {
+    setError(null);
     setEditingEmployee(null);
     setForm(emptyEmployeeForm);
     setModalOpen(true);
   };
 
-  const openEdit = (employee: Employee) => {
+  const openEdit = (employee: EmployeeCardRecord) => {
+    setError(null);
     setEditingEmployee(employee);
     setForm({
       name: toUppercaseInput(employee.name),
       lastName: toUppercaseInput(employee.lastName),
-      role: employee.role ?? 'DRIVER',
+      role: employee.role,
       phone: employee.phone ?? '',
       email: employee.email ?? '',
       documentId: toUppercaseInput(employee.documentId),
       active: employee.active,
-      vehicleIds: employee.vehicles.map((entry) => entry.id),
+      vehicleIds: employee.vehicles.map((vehicle) => vehicle.id),
       loginEnabled: Boolean(employee.user),
       loginIdentifier: employee.user?.email ?? '',
       loginPassword: '',
@@ -300,7 +242,7 @@ export default function EmployeesPage() {
       setError('El usuario o correo de acceso es obligatorio');
       return;
     }
-    if (form.loginEnabled && !editingEmployee && !form.loginPassword.trim()) {
+    if (form.loginEnabled && !editingEmployee?.user && !form.loginPassword.trim()) {
       setError('La contraseña de acceso es obligatoria');
       return;
     }
@@ -317,7 +259,9 @@ export default function EmployeesPage() {
         active: form.active,
         vehicleIds: form.vehicleIds,
         loginEnabled: form.loginEnabled,
-        loginIdentifier: form.loginEnabled ? form.loginIdentifier.trim().toLowerCase() || undefined : undefined,
+        loginIdentifier: form.loginEnabled
+          ? form.loginIdentifier.trim().toLowerCase() || undefined
+          : undefined,
         loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
         loginRole: form.loginEnabled ? form.loginRole : undefined,
         loginActive: form.loginEnabled ? form.loginActive : undefined,
@@ -362,164 +306,58 @@ export default function EmployeesPage() {
     }
   };
 
-  const deleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`Eliminar empleado ${getEmployeeFullName(employee)}?`)) return;
+  const openDocuments = (employee: EmployeeCardRecord) => {
+    setDocumentsEmployee(employee);
+  };
 
+  const downloadIdentityCard = async (employee: EmployeeCardRecord) => {
     setError(null);
+    setDownloadingIdentityEmployeeId(employee.id);
     try {
-      await api(`/employees/${employee.id}`, { method: 'DELETE' });
-      await loadData();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error eliminando empleado');
+      const files = await api<EmployeeAttachedFile[]>(`/files/entities/EMPLOYEE/${employee.id}`);
+      const identityFile = files.find(
+        (file) => (file.category ?? file.fileType) === EMPLOYEE_IDENTITY_CATEGORY,
+      );
+
+      if (!identityFile) {
+        setError(`No hay documento de identidad cargado para ${getEmployeeCardFullName(employee)}`);
+        return;
       }
+
+      const blob = await apiBlob(`/files/${identityFile.id}/download`, { redirectOnAuthError: false });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileLabel(identityFile);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? `${err.status}: ${err.message}` : 'No se pudo descargar la cedula');
+    } finally {
+      setDownloadingIdentityEmployeeId(null);
     }
   };
 
-  const employeeColumns: DataTableColumn<Employee>[] = [
-    {
-      id: 'employee',
-      header: 'Empleado',
-      ariaLabel: 'empleado',
-      width: '20%',
-      sortValue: (employee) => getEmployeeFullName(employee),
-      mobile: { priority: 'primary' },
-      cell: (employee) => (
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
-            <EmployeePhotoControl
-              employee={employee}
-              size={44}
-              editable
-              onPreview={() => setPhotoEmployee(employee)}
-            />
-            <Stack gap={2}>
-              <Text fw={700}>{getEmployeeFullName(employee)}</Text>
-              <Text size="sm" c="dimmed">{roleLabelByValue[employee.role] ?? employee.role}</Text>
-            </Stack>
-          </Group>
-          <Box hiddenFrom="md">
-            <EmployeeStatusBadge active={employee.active} />
-          </Box>
-        </Group>
-      ),
-    },
-    {
-      id: 'contact',
-      header: 'Contacto',
-      width: '15%',
-      mobile: { label: 'Contacto', priority: 'secondary' },
-      cell: (employee) => (
-        <Stack gap={2}>
-          <Text size="sm">{employee.phone ?? '-'}</Text>
-          <Text size="xs" c="dimmed">{employee.email ?? 'Sin correo'}</Text>
-        </Stack>
-      ),
-    },
-    {
-      id: 'document',
-      header: 'Documento',
-      width: '12%',
-      sortValue: (employee) => employee.documentId,
-      mobile: false,
-      cell: (employee) => employee.documentId ?? '-',
-    },
-    {
-      id: 'access',
-      header: 'Acceso',
-      width: '21%',
-      mobile: { label: 'Acceso', priority: 'detail' },
-      cell: (employee) => employee.user ? (
-        <Stack gap={2}>
-          <Text size="sm">{employee.user.email}</Text>
-          <Badge
-            color={employee.user.active ? 'blue' : 'gray'}
-            variant="light"
-            size="sm"
-            style={{ width: 'fit-content' }}
-          >
-            {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
-          </Badge>
-        </Stack>
-      ) : <Text size="sm" c="dimmed">Sin acceso</Text>,
-    },
-    {
-      id: 'vehicles',
-      header: 'Vehículos',
-      width: '16%',
-      mobile: { label: 'Vehículos', priority: 'detail' },
-      cell: (employee) => <Text size="sm" maw={260}>{getVehicleSummary(employee.vehicles)}</Text>,
-    },
-    {
-      id: 'status',
-      header: 'Estado',
-      ariaLabel: 'estado',
-      width: '10%',
-      sortValue: (employee) => employee.active,
-      mobile: { priority: 'hidden' },
-      cell: (employee) => <EmployeeStatusBadge active={employee.active} />,
-    },
-  ];
-
-  const employeeTable = useClientTableData({
-    rows: employees,
-    columns: employeeColumns,
-    initialPageSize: 20,
-  });
+  const closeDocuments = () => {
+    setDocumentsEmployee(null);
+  };
 
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Empleados"
-          description="Administra empleados, accesos y asignaciones de vehículos desde una sola vista."
-          icon={<IconUsers size={20} />}
-          iconColor="blue"
-          accentColor="rgba(14,165,233,0.14)"
-          aside={
-            <Group gap="xs">
-              <EmployeeViewMenu currentView="list" />
-              <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-                Nuevo empleado
-              </Button>
-            </Group>
-          }
-        >
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <StatCard
-              label="Total"
-              value={String(metrics.total)}
-              hint="Empleados registrados"
-              color="blue"
-              icon={<IconUsers size={20} />}
-            />
-            <StatCard
-              label="Activos"
-              value={String(metrics.active)}
-              hint={`${Math.max(metrics.total - metrics.active, 0)} inactivos`}
-              color="green"
-              icon={<IconUserCheck size={20} />}
-            />
-            <StatCard
-              label="Con acceso"
-              value={String(metrics.withAccess)}
-              hint="Usuarios con login habilitado"
-              color="violet"
-              icon={<IconBriefcase2 size={20} />}
-            />
-            <StatCard
-              label="Con vehículo"
-              value={String(metrics.assignedVehicle)}
-              hint="Asignaciones vigentes"
-              color="teal"
-              icon={<IconCar size={20} />}
-            />
-          </SimpleGrid>
-        </PageHeaderCard>
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Title order={1}>Empleados</Title>
+          <Group gap="xs" wrap="wrap">
+            <Button component={Link} href="/employees/loans" variant="light" leftSection={<IconCurrencyDollar size={16} />}>
+              Préstamos
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              Nuevo empleado
+            </Button>
+          </Group>
+        </Group>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">
@@ -527,71 +365,59 @@ export default function EmployeesPage() {
           </Alert>
         ) : null}
 
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <EntityDataTable
-            rows={employeeTable.rows}
-            columns={employeeColumns}
-            getRowId={(employee) => employee.id}
-            loading={loading}
-            sort={employeeTable.sort}
-            onSortChange={employeeTable.onSortChange}
-            pagination={employeeTable.pagination}
-            onPageSizeChange={employeeTable.onPageSizeChange}
-            emptyState={{
-              title: 'No hay empleados registrados',
-              description: 'Crea un nuevo empleado para empezar.',
-              icon: <IconUsers size={20} />,
-            }}
-            actions={(employee) => [
-              {
-                key: 'view',
-                label: `Ver detalle de ${getEmployeeFullName(employee)}`,
-                icon: <IconEye size={16} />,
-                color: 'blue',
-                onClick: () => setDetailsEmployee(employee),
-              },
-              {
-                key: 'documents',
-                label: `Documentos de ${getEmployeeFullName(employee)}`,
-                icon: <IconFileDescription size={16} />,
-                color: 'violet',
-                onClick: () => setDocumentsEmployee(employee),
-              },
-              {
-                key: 'edit',
-                label: `Editar ${getEmployeeFullName(employee)}`,
-                icon: <IconPencil size={16} />,
-                onClick: () => openEdit(employee),
-              },
-              {
-                key: 'delete',
-                label: `Eliminar ${getEmployeeFullName(employee)}`,
-                icon: <IconTrash size={16} />,
-                color: 'red',
-                onClick: () => deleteEmployee(employee),
-              },
-            ]}
-          />
-        </Paper>
+        {loading ? (
+          <Paper withBorder radius="lg" p="xl">
+            <Text c="dimmed" ta="center">
+              Cargando...
+            </Text>
+          </Paper>
+        ) : null}
+
+        {!loading && employees.length === 0 ? (
+          <Paper withBorder radius="lg" p="xl">
+            <Stack align="center" gap="xs">
+              <ThemeIcon color="gray" variant="light" size={40} radius="xl">
+                <IconUsers size={20} />
+              </ThemeIcon>
+              <Text fw={700}>No hay empleados registrados</Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Crea un nuevo empleado para empezar.
+              </Text>
+            </Stack>
+          </Paper>
+        ) : null}
+
+        {!loading && employees.length > 0 ? (
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {sortedEmployees.map((employee) => (
+              <EmployeeCard
+                key={employee.id}
+                employee={employee}
+                onDocuments={openDocuments}
+                onIdentityCard={downloadIdentityCard}
+                onDetails={setDetailsEmployee}
+                onEdit={openEdit}
+                onPhotoPreview={setPhotoEmployee}
+                identityCardLoading={downloadingIdentityEmployeeId === employee.id}
+              />
+            ))}
+          </SimpleGrid>
+        ) : null}
       </Stack>
 
       <Modal
-        opened={!!detailsEmployee}
+        opened={Boolean(detailsEmployee)}
         onClose={() => setDetailsEmployee(null)}
-        title="Detalle de empleado"
+        title="Información del empleado"
         centered
         size="lg"
       >
         {detailsEmployee ? (
-          <EmployeeDetails
+          <EmployeeCardDetails
             employee={detailsEmployee}
             onEdit={(employee) => {
               setDetailsEmployee(null);
               openEdit(employee);
-            }}
-            onDelete={(employee) => {
-              setDetailsEmployee(null);
-              deleteEmployee(employee);
             }}
             onPhotoPreview={setPhotoEmployee}
           />
@@ -602,8 +428,12 @@ export default function EmployeesPage() {
 
       <Modal
         opened={!!documentsEmployee}
-        onClose={() => setDocumentsEmployee(null)}
-        title={documentsEmployee ? `Documentos de ${getEmployeeFullName(documentsEmployee)}` : 'Documentos'}
+        onClose={closeDocuments}
+        title={
+          documentsEmployee
+            ? `Documentos de ${getEmployeeCardFullName(documentsEmployee)}`
+            : 'Documentos'
+        }
         centered
         size="xl"
       >

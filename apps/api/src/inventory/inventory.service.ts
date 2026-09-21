@@ -1245,9 +1245,13 @@ export class InventoryService {
       const assets = serialIds.length
         ? await tx.asset.findMany({
             where: { id: { in: serialIds }, active: true, deletedAt: null },
-            select: { id: true, warehouseOwnerId: true },
+            select: { id: true, warehouseOwnerId: true, isDamaged: true, internalNumber: true, sku: { select: { name: true } } },
           })
         : [];
+      const damagedAsset = assets.find((asset) => asset.isDamaged);
+      if (damagedAsset) {
+        throw new BadRequestException(`No se puede despachar ${damagedAsset.sku.name} #${damagedAsset.internalNumber}: está averiado.`);
+      }
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
@@ -1431,9 +1435,13 @@ export class InventoryService {
       const assets = serialIds.length
         ? await tx.asset.findMany({
             where: { id: { in: serialIds }, active: true, deletedAt: null },
-            select: { id: true, warehouseOwnerId: true },
+            select: { id: true, warehouseOwnerId: true, isDamaged: true, internalNumber: true, sku: { select: { name: true } } },
           })
         : [];
+      const damagedAsset = assets.find((asset) => asset.isDamaged);
+      if (damagedAsset) {
+        throw new BadRequestException(`No se puede despachar ${damagedAsset.sku.name} #${damagedAsset.internalNumber}: está averiado.`);
+      }
       const ownerWarehouseByAsset = new Map(
         assets.map((asset) => [asset.id, asset.warehouseOwnerId] as const),
       );
@@ -1898,6 +1906,8 @@ export class InventoryService {
         skuId: true,
         warehouseOwnerId: true,
         serialOrEngine: true,
+        isDamaged: true,
+        damageNote: true,
         registrationNumber: true,
         description: true,
         brand: true,
@@ -2014,10 +2024,11 @@ export class InventoryService {
         status = balance.issue === 'NO_MOVEMENTS' ? 'UNKNOWN' : 'INCONSISTENT';
         location = { type: 'UNKNOWN', id: null, name: null, warehouseType: null };
       }
-      const isAvailableInOwnerWarehouse = asset.active
+      const isInOwnerWarehouse = asset.active
         && (!balance || balance.isConsistent)
         && location.type === 'WAREHOUSE'
         && location.id === warehouseId;
+      const isAvailableInOwnerWarehouse = isInOwnerWarehouse && !asset.isDamaged;
       if (!asset.active) status = 'INACTIVE';
 
       return {
@@ -2026,6 +2037,8 @@ export class InventoryService {
         ownerWarehouseId: asset.warehouseOwnerId,
         ownerWarehouseName,
         serialOrEngine: asset.serialOrEngine,
+        isDamaged: asset.isDamaged,
+        damageNote: asset.damageNote,
         registrationNumber: asset.registrationNumber,
         description: asset.description,
         skuName: asset.sku.name,
@@ -2051,7 +2064,7 @@ export class InventoryService {
         isAvailableInOwnerWarehouse,
         ...(balance ? { balance } : {}),
         // This catalogue is for management. Dispatches use the stock endpoints.
-        quantity: balance ? balance.warehouseQuantity : isAvailableInOwnerWarehouse ? 1 : 0,
+        quantity: balance ? balance.warehouseQuantity : isInOwnerWarehouse ? 1 : 0,
       };
     }).sort((a, b) => this.compareSerialInventoryRows(a, b));
 
@@ -2309,6 +2322,8 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isDamaged: true,
+            damageNote: true,
             description: true,
             brand: true,
             model: true,
@@ -2441,6 +2456,8 @@ export class InventoryService {
             ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
             : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
+          isDamaged: asset?.isDamaged ?? false,
+          damageNote: asset?.damageNote ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,
           chargeType: sku?.chargeType ?? null,
@@ -2619,6 +2636,8 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isDamaged: true,
+            damageNote: true,
             description: true,
             brand: true,
             model: true,
@@ -2734,6 +2753,8 @@ export class InventoryService {
             ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
             : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
+          isDamaged: asset?.isDamaged ?? false,
+          damageNote: asset?.damageNote ?? null,
           description: asset?.description ?? null,
           skuName: sku?.name ?? null,
           chargeType: sku?.chargeType ?? null,
@@ -2867,6 +2888,8 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isDamaged: true,
+            damageNote: true,
             description: true,
             deletedAt: true,
             deletionReason: true,
@@ -3057,6 +3080,8 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isDamaged: true,
+            damageNote: true,
             description: true,
             internalNumber: true,
             weight: true,
@@ -3107,6 +3132,8 @@ export class InventoryService {
         return {
           assetId,
           serialOrEngine: asset?.serialOrEngine ?? null,
+          isDamaged: asset?.isDamaged ?? false,
+          damageNote: asset?.damageNote ?? null,
           description: asset?.description ?? null,
           internalNumber: asset?.internalNumber ?? null,
           assetFamily: asset?.sku?.assetFamily ?? null,

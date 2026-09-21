@@ -28,9 +28,16 @@ const equipmentSelect = {
   id: true,
   publicCode: true,
   description: true,
+  brand: true,
+  model: true,
+  internalNumber: true,
   warehouseOwnerId: true,
   warehouseCurrentId: true,
-  sku: { select: { assetFamilyId: true, assetSubfamilyId: true, name: true } },
+  sku: { select: {
+    assetFamilyId: true, assetSubfamilyId: true, name: true,
+    assetFamily: { select: { name: true } },
+    assetSubfamily: { select: { name: true } },
+  } },
 } satisfies Prisma.AssetSelect;
 const detailInclude = {
   family: { select: { id: true, name: true } },

@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -798,7 +799,7 @@ export default function QuotationPage() {
           </Group>
           <div className="quote-sheet">
             <div className="quote-top">
-              <img src="/rev-logo-clean.svg" alt="REV" className="quote-logo" />
+              <AppImage width={175} height={175} sizes="175px" loading="eager" src="/rev-logo-clean.svg" alt="REV" className="quote-logo" />
               <div className="quote-meta">
                 <div className="quote-meta-label">COTIZACION</div>
                 <div className="quote-meta-value">{quoteNumber || '-'}</div>

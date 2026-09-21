@@ -63,3 +63,25 @@ export function getSerialDisplayName(item: SerialDisplayItem) {
   const internal = item.internalNumber != null ? ` #${item.internalNumber}` : '';
   return `${base}${internal}`.trim();
 }
+
+/** Human-facing identity shared by the asset detail and its accessories. */
+export function getAssetDisplayLabel(asset: {
+  brand?: string | null;
+  model?: string | null;
+  internalNumber?: string | number | null;
+  assetFamily?: { name?: string | null } | null;
+  sku?: {
+    name?: string | null;
+    assetFamily?: { name?: string | null } | null;
+    assetSubfamily?: { name?: string | null } | null;
+  } | null;
+}) {
+  const family = asset.assetFamily?.name ?? asset.sku?.assetFamily?.name;
+  const parts: string[] = [];
+  appendUniqueDisplayPart(parts, family || asset.sku?.name);
+  appendUniqueDisplayPart(parts, asset.sku?.assetSubfamily?.name);
+  appendUniqueDisplayPart(parts, asset.brand);
+  appendUniqueDisplayPart(parts, asset.model);
+  const name = parts.length ? parts.join(' · ') : 'Equipo';
+  return `${name}${asset.internalNumber != null ? ` #${asset.internalNumber}` : ''}`.toLocaleUpperCase('es-CO');
+}

@@ -338,6 +338,7 @@ export default function ObraDetailPage() {
                   </Text>
                 </div>
                 <InventoryDisplay
+                  customerWorksiteId={worksiteId}
                   bulk={inventory.bulk}
                   serial={inventory.serial}
                   bulkOwnerStackMode

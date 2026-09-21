@@ -1,3 +1,4 @@
+import { ReleasesController } from './releases.controller';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
@@ -27,7 +28,7 @@ const resolveJwtExpiresIn = (value?: string): number | StringValue =>
       },
     }),
   ],
-  controllers: [AuthController, TabletController],
+  controllers: [AuthController, TabletController, ReleasesController],
   providers: [AuthService, JwtAuthGuard, RolesGuard, TabletService],
   exports: [AuthService, JwtModule, JwtAuthGuard, RolesGuard],
 })

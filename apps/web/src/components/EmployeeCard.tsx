@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { ActionIcon, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 import {
   IconCar,
+  IconCurrencyDollar,
   IconEye,
   IconFileDescription,
   IconIdBadge2,
@@ -188,6 +190,12 @@ export default function EmployeeCard({
           >
             <IconPencil style={iconSize14Style} />
           </ActionIcon>
+          <Tooltip label="Préstamos">
+            <ActionIcon component={Link} href={`/employees/${employee.id}/loans`}
+              color="teal" variant="light" aria-label={`Préstamos de ${getEmployeeCardFullName(employee)}`}>
+              <IconCurrencyDollar style={iconSize14Style} />
+            </ActionIcon>
+          </Tooltip>
           <Tooltip label="Ver información completa">
             <ActionIcon
               color="blue"

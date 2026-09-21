@@ -1,5 +1,6 @@
 'use client';
 
+import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActionIcon, Alert, Button, Loader, Select, TextInput } from '@mantine/core';
 import { IconArrowLeft, IconArrowRight, IconBrandWhatsapp, IconCheck, IconCircleCheckFilled, IconClock, IconLock, IconMail, IconPlus, IconTrash, IconUser } from '@tabler/icons-react';
@@ -169,7 +170,7 @@ export default function CustomerUpdateForm({ token }: { token: string }) {
   if (done) return <main className={styles.success}><div className={styles.successIcon}><IconCheck size={38} /></div><h1>Datos actualizados</h1><p>Gracias, {updatedBy}. La información quedó guardada y usaremos estos destinos para los próximos documentos.</p></main>;
 
   return <main className={styles.page}>
-    <header className={styles.topbar}><img src="/fiesta.svg" alt="Rev Logística" /><span /> <p>Actualización de datos</p></header>
+    <header className={styles.topbar}><AppImage width={108} height={54} sizes="108px" src="/fiesta.svg" alt="Rev Logística" /><span /> <p>Actualización de datos</p></header>
     <div className={styles.shell}>
       <section className={styles.intro}>
         <h1>Mantengamos tus datos al día</h1><p>Confirma la información de tu empresa y elige dónde quieres recibir tus documentos.</p><small><IconClock size={17} /> Te tomará cerca de 3 minutos</small>

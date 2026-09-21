@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ReleaseAnnouncement from '@/components/ReleaseAnnouncement';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button, Center, Loader, Stack, Text } from '@mantine/core';
 import {
@@ -116,5 +117,5 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
     );
   }
 
-  return <>{children}</>;
+  return <>{children}<ReleaseAnnouncement /></>;
 }
