@@ -299,8 +299,8 @@ export default function RequestItemsSection({
           <Table.Tbody>
             {selectedItems.map((item, index) => (
               <Table.Tr key={item.selectionId}>
-                <Table.Td style={{ verticalAlign: 'top' }}>
-                  <Text fw={600} style={{ minHeight: 36, display: 'flex', alignItems: 'center', overflowWrap: 'anywhere' }}>{item.name}</Text>
+                 <Table.Td style={{ verticalAlign: 'top' }}>
+                   <Text fw={600} style={{ minHeight: 36, display: 'flex', alignItems: 'center', overflowWrap: 'anywhere' }}>{item.name}</Text>
                   {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
                   {item.serial && (
                     <Text size="xs" c="dimmed">
