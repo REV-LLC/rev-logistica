@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Skeleton } from "@mantine/core";
 import AppAvatar from "./AppAvatar";
 import { apiBlob, ApiError } from "@/lib/api";
 
@@ -134,16 +135,18 @@ function getEmployeeInitials(
   return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}` || "E";
 }
 
-export function useEmployeePhotoUrl(
+function useEmployeePhotoState(
   employeeId: string,
   version = 0,
   fullSize = false,
 ) {
   const [epoch, setEpoch] = useState(() => getEmployeePhotoEpoch(employeeId));
   const cacheKey = `${employeePhotoCacheKey(employeeId, version, epoch)}:${fullSize ? "full" : "thumbnail"}`;
-  const [photoUrl, setPhotoUrl] = useState<string | null>(() =>
-    getCachedEmployeePhotoUrl(cacheKey),
-  );
+  const [photo, setPhoto] = useState(() => ({
+    key: cacheKey,
+    url: getCachedEmployeePhotoUrl(cacheKey),
+    loading: employeePhotoCache.get(cacheKey)?.status !== 'ready',
+  }));
 
   useEffect(() => {
     setEpoch(getEmployeePhotoEpoch(employeeId));
@@ -163,11 +166,11 @@ export function useEmployeePhotoUrl(
 
   useEffect(() => {
     let cancelled = false;
-    setPhotoUrl(getCachedEmployeePhotoUrl(cacheKey));
+    setPhoto({ key: cacheKey, url: getCachedEmployeePhotoUrl(cacheKey), loading: employeePhotoCache.get(cacheKey)?.status !== 'ready' });
 
     loadEmployeePhoto(employeeId, version, epoch, fullSize).then((url) => {
       if (cancelled) return;
-      setPhotoUrl(url);
+      setPhoto({ key: cacheKey, url, loading: false });
     });
 
     return () => {
@@ -175,7 +178,14 @@ export function useEmployeePhotoUrl(
     };
   }, [cacheKey, employeeId, epoch, fullSize, version]);
 
-  return photoUrl;
+  return photo.key === cacheKey ? photo : {
+    key: cacheKey, url: getCachedEmployeePhotoUrl(cacheKey),
+    loading: employeePhotoCache.get(cacheKey)?.status !== 'ready',
+  };
+}
+
+export function useEmployeePhotoUrl(employeeId: string, version = 0, fullSize = false) {
+  return useEmployeePhotoState(employeeId, version, fullSize).url;
 }
 
 export default function EmployeeAvatar({
@@ -187,11 +197,12 @@ export default function EmployeeAvatar({
   size?: number;
   version?: number;
 }) {
-  const photoUrl = useEmployeePhotoUrl(employee.id, version);
+  const photo = useEmployeePhotoState(employee.id, version);
 
   return (
+    <Skeleton visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
     <AppAvatar
-      src={photoUrl}
+      src={photo.url}
       radius="xl"
       size={size}
       imageSizes={`${size}px`}
@@ -200,5 +211,6 @@ export default function EmployeeAvatar({
     >
       {getEmployeeInitials(employee)}
     </AppAvatar>
+    </Skeleton>
   );
 }

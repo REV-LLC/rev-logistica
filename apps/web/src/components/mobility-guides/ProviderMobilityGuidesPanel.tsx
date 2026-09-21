@@ -1,11 +1,12 @@
 "use client";
 
+import CollectionLoading from '@/components/CollectionLoading';
+
 import {
   ActionIcon,
   Alert,
   Button,
   Group,
-  Loader,
   Modal,
   Paper,
   Select,
@@ -196,9 +197,7 @@ export default function ProviderMobilityGuidesPanel({
         </SimpleGrid>
         {error ? <Alert color="red">{error}</Alert> : null}
         {loading ? (
-          <Group justify="center" py="xl">
-            <Loader />
-          </Group>
+          <CollectionLoading label="Cargando guías de proveedores" variant="rows" count={4} />
         ) : null}
         {!loading && guides.length === 0 ? (
           <Paper withBorder p="xl" radius="lg">
@@ -208,7 +207,7 @@ export default function ProviderMobilityGuidesPanel({
           </Paper>
         ) : null}
         <Stack gap="sm">
-          {guides.map((guide) => (
+          {!loading && guides.map((guide) => (
             <Paper key={guide.id} withBorder p="md" radius="lg">
               <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Stack gap={3}>
