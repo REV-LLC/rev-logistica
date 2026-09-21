@@ -1,5 +1,7 @@
 'use client';
 
+import CollectionLoading from '@/components/CollectionLoading';
+
 import AppImage from '@/components/AppImage';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
@@ -255,7 +257,7 @@ export default function WarehouseInventoryPageClient({
   const [inventorySearch, setInventorySearchState] = useState(inventorySearchParam);
   const deferredInventorySearch = useDeferredValue(inventorySearch);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [warehousesLoading, setWarehousesLoading] = useState(false);
+  const [warehousesLoading, setWarehousesLoading] = useState(true);
   const [warehousesError, setWarehousesError] = useState<string | null>(null);
   const [warehouseSearch, setWarehouseSearch] = useState('');
   const [warehouseStatusFilter, setWarehouseStatusFilter] =
@@ -1135,7 +1137,7 @@ export default function WarehouseInventoryPageClient({
     <main>
       {inventoryView === 'SERIAL' && isOwnInventory ? (
         <>
-        {(ownerAssetsLoading || warehousesLoading) && !currentOwnerAssets ? <Text role="status" p="md">Cargando equipos propios...</Text> : null}
+        {(ownerAssetsLoading || warehousesLoading) && !currentOwnerAssets ? <Container size="xl" py="xl"><CollectionLoading label="Cargando equipos propios" /></Container> : null}
         {ownerAssetsError ? <Alert color="red" title="No se pudieron cargar los equipos propios">{ownerAssetsError}</Alert> : null}
         {warehousesError ? <Alert color="red" title="No se pudieron cargar bodegas">{warehousesError}</Alert> : null}
         {currentOwnerAssets ? <WarehouseAssetsView
@@ -1326,7 +1328,7 @@ export default function WarehouseInventoryPageClient({
                       }`}
                 </Text>
 
-                <Paper withBorder radius="md" p={0} className={classes.tableSurface}>
+                <>{warehousesLoading ? <CollectionLoading label="Cargando bodegas" variant="rows" /> : <Paper withBorder radius="md" p={0} className={classes.tableSurface}>
                   <Table visibleFrom="sm" verticalSpacing="md" horizontalSpacing="lg">
                     <Table.Thead>
                       <Table.Tr>
@@ -1456,7 +1458,7 @@ export default function WarehouseInventoryPageClient({
                       ) : null}
                     </Stack>
                   ) : null}
-                </Paper>
+                </Paper>}</>
               </Stack>
             </section>
           ) : (
@@ -1542,7 +1544,7 @@ export default function WarehouseInventoryPageClient({
                     <Alert color="red" title="No se pudieron cargar los equipos del proveedor">{ownerAssetsError}</Alert>
                   ) : null}
                   {ownerAssetsLoading || (warehousesLoading && !selectedWarehouse) ? (
-                    <Text role="status" c="dimmed" py="md">Cargando equipos del proveedor...</Text>
+                    <CollectionLoading label="Cargando equipos del proveedor" />
                   ) : null}
                   {currentOwnerAssets ? (
                     <WarehouseAssetsView
@@ -1560,6 +1562,10 @@ export default function WarehouseInventoryPageClient({
                 <Text role="status" c="dimmed" py="md">Actualizando disponibles en bodega...</Text>
               ) : null}
             </Stack>
+          ) : null}
+
+          {(isOwnInventory || isProviderDetail) && (loading || warehousesLoading) && !currentInventory && (!isProviderDetail || providerView === 'AVAILABLE') ? (
+            <CollectionLoading label="Cargando inventario" />
           ) : null}
 
           {currentInventory && (!isProviderDetail || providerView === 'AVAILABLE') ? (

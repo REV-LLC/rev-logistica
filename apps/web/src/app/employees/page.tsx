@@ -1,5 +1,7 @@
 'use client';
 
+import CollectionLoading from '@/components/CollectionLoading';
+
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -366,11 +368,7 @@ export default function EmployeeCardsPage() {
         ) : null}
 
         {loading ? (
-          <Paper withBorder radius="lg" p="xl">
-            <Text c="dimmed" ta="center">
-              Cargando...
-            </Text>
-          </Paper>
+          <CollectionLoading label="Cargando empleados" variant="employees" />
         ) : null}
 
         {!loading && employees.length === 0 ? (
