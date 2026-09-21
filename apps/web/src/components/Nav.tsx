@@ -278,7 +278,7 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/employees/empleado-card",
+        href: "/employees",
         label: "Empleados",
         icon: IconUser,
         roles: ["ADMIN", "OFFICE"],

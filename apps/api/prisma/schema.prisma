@@ -337,6 +337,7 @@ model User {
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
   notificationDeliveries        NotificationDelivery[]
+  employeeLoanEntries           EmployeeLoanEntry[]
   assetConditionEvents          AssetConditionEvent[]
   assetsDeleted                 Asset[]                 @relation("AssetDeletedBy")
   appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
@@ -1276,6 +1277,7 @@ model Owner {
 }
 
 model Employee {
+  loanEntries EmployeeLoanEntry[]
   id         String       @id @default(uuid())
   name       String
   lastName   String       @default("")
@@ -1456,4 +1458,23 @@ model FileObject {
   @@index([category])
   @@index([providerWarehouseId, category, createdAt(sort: Desc)])
   @@index([expiresAt])
+}
+
+model EmployeeLoanEntry {
+  id String @id @default(uuid())
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type String
+  date DateTime? @db.Date
+  detail String
+  amount Decimal @db.Decimal(14, 2)
+  requestId String
+  createdById String?
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  sourceReference String?
+  sourceRow Int?
+  createdAt DateTime @default(now())
+  @@unique([employeeId, requestId])
+  @@unique([sourceReference, sourceRow])
+  @@index([employeeId, date, createdAt])
 }
