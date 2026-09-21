@@ -1,5 +1,7 @@
 'use client';
 
+import CollectionLoading from '@/components/CollectionLoading';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -160,9 +162,7 @@ export default function HourMeterPage() {
         />
 
         {loading ? (
-          <Paper withBorder radius="xl" p="xl">
-            <Text c="dimmed" ta="center">Cargando equipos...</Text>
-          </Paper>
+          <CollectionLoading label="Cargando equipos y horómetros" cols={{ base: 1, md: 2, xl: 3 }} />
         ) : visibleAssets.length ? (
           <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
             {visibleAssets.map((asset) => (

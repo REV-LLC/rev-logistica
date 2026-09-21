@@ -1,11 +1,12 @@
 "use client";
 
+import CollectionLoading from '@/components/CollectionLoading';
+
 import {
   Alert,
   Button,
   Container,
   Group,
-  Loader,
   Paper,
   SimpleGrid,
   Stack,
@@ -165,9 +166,7 @@ export default function MobilityGuidesPage() {
 
               {error ? <Alert color="red">{error}</Alert> : null}
               {loading ? (
-                <Group justify="center" py="xl">
-                  <Loader />
-                </Group>
+                <CollectionLoading label="Cargando guías de movilidad" cols={{ base: 1, sm: 2, md: 3, lg: 4 }} count={8} />
               ) : null}
               {!loading && assets.length === 0 ? (
                 <Paper withBorder p="xl" radius="lg">
@@ -181,7 +180,7 @@ export default function MobilityGuidesPage() {
                 spacing={{ base: "sm", sm: "md", lg: "lg" }}
                 verticalSpacing={{ base: "sm", sm: "md", lg: "lg" }}
               >
-                {assets.map((asset) => (
+                {!loading && assets.map((asset) => (
                   <SerialAssetCard
                     key={asset.assetId}
                     item={asset}
