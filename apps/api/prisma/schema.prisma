@@ -313,6 +313,7 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  releaseAcknowledgements ReleaseAcknowledgement[]
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
@@ -1477,4 +1478,13 @@ model EmployeeLoanEntry {
   @@unique([employeeId, requestId])
   @@unique([sourceReference, sourceRow])
   @@index([employeeId, date, createdAt])
+}
+
+model ReleaseAcknowledgement {
+  userId String
+  releaseId String
+  acknowledgedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, releaseId])
 }

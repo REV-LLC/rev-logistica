@@ -1,3 +1,8 @@
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+const { buildReleaseAnnouncement } = require('./scripts/release-announcement.cjs');
+const releaseAnnouncement = buildReleaseAnnouncement(readFileSync(join(__dirname, 'UPDATE.md'), 'utf8'));
+
 // Public inventory storage. Override for deployments using another bucket/CDN.
 const imageBases = (process.env.NEXT_PUBLIC_IMAGE_BASE_URLS
   || process.env.R2_PUBLIC_BASE_URL
@@ -14,6 +19,7 @@ const nextConfig = {
   reactStrictMode: true,
   typedRoutes: false,
   env: {
+    RELEASE_ANNOUNCEMENT_JSON: JSON.stringify(releaseAnnouncement),
     NEXT_PUBLIC_IMAGE_BASE_URLS: imageBases.map((base) => base.href).join(','),
   },
   images: {
