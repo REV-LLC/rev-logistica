@@ -200,7 +200,7 @@ export default function EmployeeAvatar({
   const photo = useEmployeePhotoState(employee.id, version);
 
   return (
-    <Skeleton visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
+    <Skeleton data-page-image-loading={photo.loading ? "true" : "false"} visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
     <AppAvatar
       src={photo.url}
       radius="xl"

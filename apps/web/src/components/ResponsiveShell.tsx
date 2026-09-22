@@ -7,6 +7,7 @@ import { AppShell, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useState } from "react";
 import Nav from "@/components/Nav";
+import PageLoadingBoundary from "@/components/PageLoadingBoundary";
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
@@ -258,7 +259,7 @@ export default function ResponsiveShell({
       >
         <Nav onNavigate={close} />
       </AppShell.Navbar>
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main><PageLoadingBoundary>{children}</PageLoadingBoundary></AppShell.Main>
     </AppShell>
   );
 }
