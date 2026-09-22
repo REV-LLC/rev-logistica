@@ -1,0 +1,28 @@
+.boundary { position: relative; min-height: calc(100dvh - 100px); }
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--mantine-color-body);
+  min-height: calc(100dvh - 100px);
+  padding: 24px;
+}
+.message {
+  position: sticky;
+  top: 35dvh;
+  text-align: center;
+}
+
+.logo {
+  width: 80px;
+  height: 80px;
+  animation: logo-spin 2s linear infinite;
+}
+
+@keyframes logo-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo { animation: none; }
+}

@@ -26,7 +26,7 @@ export default function CollectionLoading({ label = 'Cargando contenido', varian
       </Stack>}
     </Paper>
   ));
-  return <Box className={styles.root} role="status" aria-label={label} aria-live="polite" aria-busy="true">
+  return <Box data-page-loading="true" className={styles.root} role="status" aria-label={label} aria-live="polite" aria-busy="true">
     <Text size="sm" c="dimmed" mb="sm">{label}…</Text>
     {variant === 'rows' ? <Stack gap="sm">{placeholders}</Stack> : <SimpleGrid cols={cols} spacing="md">{placeholders}</SimpleGrid>}
   </Box>;
