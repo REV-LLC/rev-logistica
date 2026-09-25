@@ -27,8 +27,8 @@ export default function RecordHoursModal({
   onClose,
   onSaved,
 }: Props) {
-  const [hours, setHours] = useState<number | ''>(currentHours);
-  const [operatorReportedHours, setOperatorReportedHours] = useState<number | ''>('');
+  const [hours, setHours] = useState<number | string>(currentHours);
+  const [operatorReportedHours, setOperatorReportedHours] = useState<number | string>('');
   const [recordedAt, setRecordedAt] = useState(currentLocalDateTime);
   const [note, setNote] = useState('');
   const [evidence, setEvidence] = useState<File | null>(null);
@@ -46,13 +46,15 @@ export default function RecordHoursModal({
   }, [currentHours, opened]);
 
   const save = async () => {
-    if (hours === '' || hours < currentHours || (subject.type !== 'ASSET' && hours === currentHours)) {
+    const reading = hours === '' ? NaN : Number(hours);
+    const reportedHours = operatorReportedHours === '' ? NaN : Number(operatorReportedHours);
+    if (!Number.isFinite(reading) || reading < currentHours || (subject.type !== 'ASSET' && reading === currentHours)) {
       setError(subject.type === 'ASSET'
         ? `La nueva lectura no puede ser inferior a ${currentHours} horas.`
         : `La nueva lectura debe ser superior a ${currentHours} horas.`);
       return;
     }
-    if (subject.type === 'ASSET' && (operatorReportedHours === '' || !Number.isFinite(operatorReportedHours) || operatorReportedHours < 0)) {
+    if (subject.type === 'ASSET' && (!Number.isFinite(reportedHours) || reportedHours < 0)) {
       setError('Ingresa las horas reportadas por el operario (cero o más).');
       return;
     }
@@ -85,8 +87,8 @@ export default function RecordHoursModal({
       await api(`/maintenance/${route}/${subject.id}/hours`, {
         method: 'POST',
         json: {
-          hours,
-          operatorReportedHours: subject.type === 'ASSET' ? operatorReportedHours : undefined,
+          hours: reading,
+          operatorReportedHours: subject.type === 'ASSET' ? reportedHours : undefined,
           recordedAt: recordedAt ? new Date(recordedAt).toISOString() : undefined,
           note: note.trim() || undefined,
           evidenceFileObjectId,
@@ -112,11 +114,16 @@ export default function RecordHoursModal({
         <NumberInput
           label="Nueva lectura"
           value={hours}
-          onChange={(value) => setHours(typeof value === 'number' ? value : '')}
+          onChange={setHours}
+          onFocus={(event) => event.currentTarget.select()}
           min={currentHours}
           decimalScale={2}
           step={0.1}
-          suffix=" horas"
+          hideControls
+          rightSection={<Text size="sm" c="dimmed" aria-hidden="true">horas</Text>}
+          rightSectionWidth={64}
+          rightSectionPointerEvents="none"
+          allowedDecimalSeparators={['.', ',']}
           required
         />
         {subject.type === 'ASSET' ? (
@@ -124,11 +131,16 @@ export default function RecordHoursModal({
             label="Horas reportadas por el operario"
             description="Horas a cobrar por esta jornada, incluyendo mínima o esperas en obra. Pueden diferir del horómetro."
             value={operatorReportedHours}
-            onChange={(value) => setOperatorReportedHours(typeof value === 'number' ? value : '')}
+            onChange={setOperatorReportedHours}
+            onFocus={(event) => event.currentTarget.select()}
             min={0}
             decimalScale={2}
             step={0.5}
-            suffix=" horas"
+            hideControls
+            rightSection={<Text size="sm" c="dimmed" aria-hidden="true">horas</Text>}
+            rightSectionWidth={64}
+            rightSectionPointerEvents="none"
+            allowedDecimalSeparators={['.', ',']}
             required
           />
         ) : null}
