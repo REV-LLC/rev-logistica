@@ -410,6 +410,9 @@ export default function SerialAssetCard({
         ) : null}
         {footer}
         {href && canManageAccessories ? (
+          <Group gap="xs">
+          <Button component={Link} href={`/inventory/equipment-configuration/assets/${item.assetId}`} variant="default" size="xs"
+            onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>Configurar</Button>
           <Button
             component={Link}
             href={`/inventory/accessories/equipment/${item.assetId}?create=1`}
@@ -420,6 +423,7 @@ export default function SerialAssetCard({
           >
             Agregar accesorio
           </Button>
+          </Group>
         ) : null}
       </Stack>
     </Card>

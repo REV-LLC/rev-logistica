@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -14,7 +15,7 @@ import {
   ValidationPipe,
   BadRequestException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, EquipmentPartRole } from '@prisma/client';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -69,8 +70,9 @@ export class AccessoriesController {
     @Query('familyId', new ParseUUIDPipe({ optional: true }))
     familyId: string | undefined,
     @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query('purpose', new ParseEnumPipe(EquipmentPartRole, { optional: true })) purpose?: EquipmentPartRole,
   ) {
-    return this.accessories.list(assetId, search, validPage(page), familyId);
+    return this.accessories.list(assetId, search, validPage(page), familyId, purpose);
   }
 
   @Post()

@@ -18,9 +18,12 @@ import {
   AccessoryKind,
   AccessoryScope,
   AccessoryMovementType,
+  EquipmentPartRole,
 } from '@prisma/client';
 
 export class AccessoryDetailsDto {
+  @IsOptional() @IsEnum(EquipmentPartRole) purpose?: EquipmentPartRole;
+  @IsOptional() @IsUUID() exclusiveAssetId?: string;
   @IsString() @MaxLength(160) name!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsEnum(AccessoryKind) kind!: AccessoryKind;
@@ -37,6 +40,8 @@ export class AccessoryDetailsDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   assetIds!: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @ArrayUnique()
+  @IsUUID('all', { each: true }) parentAccessoryIds?: string[];
 }
 
 export class CreateAccessoryDto extends AccessoryDetailsDto {

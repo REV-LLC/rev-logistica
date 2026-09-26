@@ -33,7 +33,6 @@ type Option = {
   sourceLabel: string;
 };
 type Props = {
-  docType: "REMISSION" | "RETURN";
   deliveryMode: "WAREHOUSE" | "ON_SITE";
   warehouseId: string | null;
   customerWorksiteId: string;
@@ -51,9 +50,7 @@ export default function RequestAccessorySelector(props: Props) {
           disabled={!props.customerWorksiteId}
           onClick={() => setOpened(true)}
         >
-          {props.docType === "RETURN"
-            ? "Devolver accesorios"
-            : "Agregar accesorios"}
+          Agregar accesorios
         </Button>
         <Text size="sm" c="dimmed">
           Opcional. Se registran por separado del equipo.
@@ -62,11 +59,7 @@ export default function RequestAccessorySelector(props: Props) {
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title={
-          props.docType === "RETURN"
-            ? "Accesorios pendientes en la obra"
-            : "Accesorios del documento"
-        }
+        title="Accesorios del documento"
         size="lg"
       >
         {opened ? <AccessoryOptions {...props} /> : null}
@@ -76,7 +69,6 @@ export default function RequestAccessorySelector(props: Props) {
 }
 
 function AccessoryOptions({
-  docType,
   deliveryMode,
   warehouseId,
   customerWorksiteId,
@@ -110,7 +102,6 @@ function AccessoryOptions({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    if (docType !== "REMISSION") return;
     const controller = new AbortController();
     api<{
       serial: Array<{
@@ -137,21 +128,21 @@ function AccessoryOptions({
           );
       });
     return () => controller.abort();
-  }, [customerWorksiteId, docType]);
+  }, [customerWorksiteId]);
   useEffect(() => {
-    if (docType === "REMISSION" && !assetId) return;
+    if (!assetId) return;
     const controller = new AbortController();
     setLoading(true);
     setError("");
     const params = new URLSearchParams({
-      type: docType,
+      type: "REMISSION",
       deliveryMode,
       customerWorksiteId,
       page: String(page),
       search: query,
     });
     if (warehouseId) params.set("warehouseId", warehouseId);
-    if (docType === "REMISSION" && assetId) params.set("assetId", assetId);
+    params.set("assetId", assetId);
     api<typeof result>(`/accessories/document-options?${params}`, {
       signal: controller.signal,
     })
@@ -168,15 +159,7 @@ function AccessoryOptions({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [
-    assetId,
-    customerWorksiteId,
-    deliveryMode,
-    docType,
-    page,
-    query,
-    warehouseId,
-  ]);
+  }, [assetId, customerWorksiteId, deliveryMode, page, query, warehouseId]);
 
   const add = (option: Option) =>
     setSelectedItems((current) => {
@@ -201,7 +184,7 @@ function AccessoryOptions({
           quantity: 1,
           availableQuantity: option.quantity,
           ownerWarehouseId: option.ownerWarehouseId,
-          sourceWarehouseId: docType === 'REMISSION' ? warehouseId : undefined,
+          sourceWarehouseId: warehouseId,
         },
       ];
     });
@@ -213,27 +196,24 @@ function AccessoryOptions({
         en su card.
       </Text>
       {parentError ? <Alert color="yellow">{parentError}</Alert> : null}
-      {docType === "REMISSION" ? (
-        <Select
-          label="Equipo que usará el accesorio"
-          data={parents.map((item) => ({
-            value: item.assetId!,
-            label: item.name,
-          }))}
-          value={assetId}
-          onChange={(value) => {
-            setAssetId(value);
-            setPage(0);
-            setResult({ items: [], hasMore: false });
-          }}
-          searchable
-        />
-      ) : null}
-      {docType === "REMISSION" && !parents.length ? (
+      <Select
+        label="Equipo que usará el accesorio"
+        data={parents.map((item) => ({
+          value: item.assetId!,
+          label: item.name,
+        }))}
+        value={assetId}
+        onChange={(value) => {
+          setAssetId(value);
+          setPage(0);
+          setResult({ items: [], hasMore: false });
+        }}
+        searchable
+      />
+      {!parents.length ? (
         <Alert color="blue">
           Agrega el equipo a la remisión o espera a que se carguen los que ya
-          están en esta obra. Para devolver accesorios no es necesario devolver
-          también el equipo.
+          están en esta obra.
         </Alert>
       ) : (
         <>

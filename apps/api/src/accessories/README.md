@@ -57,6 +57,21 @@ La integración está separada en `accessory-document-items.ts` (capturas del do
 
 ## Límites deliberados de esta implementación
 
+### Configuración de equipos: primera etapa (septiembre 2026)
+
+La configuración nueva distingue **componentes** (piezas de configuración del equipo, como techo o motor) de **accesorios** (implementos de trabajo). No se clasifican según si tienen tarifa ni por ser necesarios para operar. Cada fila registra una cantidad habitual, inclusión predeterminada y necesidad operativa como preferencias independientes.
+
+- `EquipmentConfiguration` pertenece a un equipo o accesorio individualizado; cada entrada apunta a una identidad existente (`Asset` o `Accessory`) sin copiarla. Admite configuraciones anidadas y rechaza ciclos, duplicados y más de 16 niveles.
+- Los registros de piezas nuevos usan `Accessory.purpose` (`COMPONENT`/`ACCESSORY`) y su inventario existente. Los componentes se identifican individualmente; `exclusiveAssetId` conserva su pertenencia a una unidad aunque no acompañen una entrega. Los accesorios mantienen control individual, retornable por cantidad o consumible por cantidad.
+- El alcance `ACCESSORIES` expresa compatibilidad con accesorios principales individualizados; no amplía implícitamente la compatibilidad a todos los equipos de su familia.
+- El alta sin plantilla tiene un paso opcional para crear piezas o vincular inventario existente. Equipo, piezas nuevas y existencias iniciales se guardan en una misma transacción. Vincular, quitar o editar preferencias no registra movimientos.
+- Las tarjetas enlazan el configurador reutilizable. Guardar exige versión vigente, conserva revisiones y evita que una edición de compatibilidad invalide una configuración vinculada. La configuración de motor anterior sigue visible y no se duplica.
+- Los endpoints `/equipment-configurations` exigen JWT y rol OFFICE/ADMIN. La búsqueda de equipos está paginada y devuelve únicamente los campos de selección.
+
+**Todavía no conecta estas preferencias con remisiones/devoluciones.** La inclusión automática, sustitución de un requerido por otra unidad compatible, configuración por entrega y salida independiente de un accesorio del modelo nuevo pertenecen a la siguiente etapa documental. No interpretar un `required` guardado como una validación documental ya activa. El editor muestra este límite expresamente. Los APT que ya son `Asset` conservan su identidad y su flujo anterior; no se convierten automáticamente.
+
+Aplicar `20260923120000_equipment_configuration` únicamente en QA antes de publicar. Es aditiva; no modifica documentos ni convierte accesorios/equipos anteriores. Las pruebas `equipment-configuration*.spec.ts` verifican transacciones reales, rollback del alta completa, edición concurrente, conservación de stock/historial, exclusividad, anidamiento, compatibilidad y permisos. Para ejecutarlas usar la misma variable local protegida `ACCESSORY_TEST_DATABASE_URL` descrita abajo.
+
 No se agregan tarifas ni cobros automáticos de accesorios: la facturación existente sigue usando equipos/SKUs y omite estas nuevas referencias sin tarifa. Definir alquiler o cobro por consumo requiere reglas comerciales aparte. El ledger general de equipos no mezcla accesorios; su trazabilidad está en el módulo específico y en los documentos.
 
 Las relaciones `AssetFamilyComponent`, sus equipos/SKUs anteriores y los documentos permanecen intactos. Migrarlos exige identificar las unidades y saldos existentes y definir equivalencias sin duplicar inventario. No se hace conversión automática. Tampoco se implementa seguimiento de desgaste porcentual: consumo es disminución explícita por unidades.

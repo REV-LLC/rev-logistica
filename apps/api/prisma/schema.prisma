@@ -13,10 +13,74 @@ enum AccessoryKind {
   CONSUMABLE
 }
 
+enum EquipmentPartRole {
+  COMPONENT
+  ACCESSORY
+}
+
+// Configuration is not custody: these links never move or reserve stock.
+model EquipmentConfiguration {
+  id          String @id @default(uuid())
+  assetId     String? @unique
+  accessoryId String? @unique
+  version     Int @default(0)
+  notes       String?
+  updatedAt   DateTime @updatedAt
+  asset       Asset? @relation("AssetConfiguration", fields: [assetId], references: [id], onDelete: Restrict)
+  accessory   Accessory? @relation("AccessoryConfiguration", fields: [accessoryId], references: [id], onDelete: Restrict)
+  entries     EquipmentConfigurationEntry[]
+  revisions   EquipmentConfigurationRevision[]
+}
+
+model EquipmentConfigurationEntry {
+  id                String @id @default(uuid())
+  configurationId   String
+  role              EquipmentPartRole
+  assetId           String?
+  accessoryId       String?
+  familyId          String?
+  maximumQuantity   Int?
+  quantity          Int @default(1)
+  defaultIncluded   Boolean @default(false)
+  required          Boolean @default(false)
+  sortOrder         Int @default(0)
+  configuration     EquipmentConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  asset             Asset? @relation("ConfiguredAsset", fields: [assetId], references: [id], onDelete: Restrict)
+  accessory         Accessory? @relation("ConfiguredAccessory", fields: [accessoryId], references: [id], onDelete: Restrict)
+  family            AssetFamily? @relation("ConfiguredFamily", fields: [familyId], references: [id], onDelete: Restrict)
+  @@index([configurationId, sortOrder])
+  @@unique([configurationId, assetId])
+  @@unique([configurationId, accessoryId])
+  @@unique([configurationId, familyId])
+  @@index([familyId])
+  @@index([assetId])
+  @@index([accessoryId])
+}
+
+model EquipmentConfigurationRevision {
+  id              String @id @default(uuid())
+  configurationId String
+  before          Json
+  after           Json
+  createdBy       String
+  createdAt       DateTime @default(now())
+  configuration   EquipmentConfiguration @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  @@index([configurationId, createdAt])
+}
+
 enum AccessoryScope {
   FAMILY
   SUBFAMILIES
   ASSETS
+  ACCESSORIES
+}
+
+// Immutable cutover evidence; never consulted by live selection or validation.
+model EquipmentConfigurationArchive {
+  id        String @id
+  source    String
+  payload   Json
+  createdAt DateTime @default(now())
 }
 
 enum AccessoryMovementType {
@@ -35,6 +99,8 @@ model Accessory {
   name                String
   description         String?
   kind                AccessoryKind
+  purpose             EquipmentPartRole @default(ACCESSORY)
+  exclusiveAssetId    String?
   internalCode        String?        @unique
   familyId            String
   scope               AccessoryScope
@@ -48,6 +114,11 @@ model Accessory {
   updatedAt           DateTime       @updatedAt
 
   family         AssetFamily          @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  exclusiveAsset Asset? @relation("ExclusiveAssetComponents", fields: [exclusiveAssetId], references: [id], onDelete: Restrict)
+  configuration EquipmentConfiguration? @relation("AccessoryConfiguration")
+  configurationEntries EquipmentConfigurationEntry[] @relation("ConfiguredAccessory")
+  compatibleParents AccessoryParent[] @relation("CompatibleChildAccessory")
+  compatibleChildren AccessoryParent[] @relation("CompatibleParentAccessory")
   ownerWarehouse Warehouse            @relation(fields: [ownerWarehouseId], references: [id], onDelete: Restrict)
   subfamilies    AccessorySubfamily[]
   assets         AccessoryAsset[]
@@ -58,7 +129,17 @@ model Accessory {
 
   @@index([familyId, active])
   @@index([ownerWarehouseId])
+  @@index([exclusiveAssetId])
   @@index([name, id])
+}
+
+model AccessoryParent {
+  accessoryId String
+  parentAccessoryId String
+  accessory Accessory @relation("CompatibleChildAccessory", fields: [accessoryId], references: [id], onDelete: Cascade)
+  parentAccessory Accessory @relation("CompatibleParentAccessory", fields: [parentAccessoryId], references: [id], onDelete: Restrict)
+  @@id([accessoryId, parentAccessoryId])
+  @@index([parentAccessoryId])
 }
 
 model AccessorySubfamily {
@@ -518,6 +599,7 @@ model AssetFamily {
   componentRules         AssetFamilyComponent[] @relation("ComponentRuleParent")
   usedAsComponentInRules AssetFamilyComponent[] @relation("ComponentRuleComponent")
   accessories            Accessory[]
+  configurationEntries   EquipmentConfigurationEntry[] @relation("ConfiguredFamily")
 }
 
 model AssetFamilyComponent {
@@ -623,6 +705,16 @@ model CatalogOption {
   @@index([groupKey])
 }
 
+model AssetMotorCompatibility {
+  motorAssetId     String
+  equipmentAssetId String
+  motor           Asset @relation("CompatibleMotor", fields: [motorAssetId], references: [id], onDelete: Restrict, map: "AssetMotorCompatibility_motor_fkey")
+  equipment       Asset @relation("CompatibleEquipment", fields: [equipmentAssetId], references: [id], onDelete: Restrict, map: "AssetMotorCompatibility_equipment_fkey")
+
+  @@id([motorAssetId, equipmentAssetId])
+  @@index([equipmentAssetId])
+}
+
 model Asset {
   id                 String                  @id @default(uuid())
   skuId              String
@@ -649,6 +741,10 @@ model Asset {
   kind               AssetKind               @default(STANDARD)
   motorConfiguration AssetMotorConfiguration @default(NONE)
   assignedMotorId    String?                 @unique
+  motorPowerHp       Decimal?                @db.Decimal(8, 2)
+  motorVersion       Int                     @default(0)
+  motorCompatibility AssetMotorCompatibility[] @relation("CompatibleMotor")
+  compatibleMotors   AssetMotorCompatibility[] @relation("CompatibleEquipment")
   createdAt          DateTime                @default(now())
 
   sku              Sku         @relation(fields: [skuId], references: [id])
@@ -671,6 +767,9 @@ model Asset {
   documentItemsAsParent  DocumentItem[]        @relation("DocumentItemComponentParentAsset")
   accessoryCompatibility AccessoryAsset[]
   accessoryBalances      AccessoryBalance[]
+  configuration          EquipmentConfiguration? @relation("AssetConfiguration")
+  configurationEntries   EquipmentConfigurationEntry[] @relation("ConfiguredAsset")
+  exclusiveComponents    Accessory[] @relation("ExclusiveAssetComponents")
 
   @@index([skuId])
   @@index([registrationNumber])

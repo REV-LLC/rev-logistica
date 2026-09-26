@@ -70,6 +70,9 @@ export async function accessoryDocumentOptions(
           }),
       accessory: {
         active: true,
+        ...(query.configuredOnly === 'true'
+          ? { configurationEntries: { some: { configuration: { assetId: query.assetId ?? '00000000-0000-0000-0000-000000000000' } } } }
+          : {}),
         AND: [
           ...(query.type === 'REMISSION' ? [compatibility] : []),
           ...(query.search?.trim()

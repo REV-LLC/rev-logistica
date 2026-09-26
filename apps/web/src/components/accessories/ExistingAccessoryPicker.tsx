@@ -38,6 +38,7 @@ export default function ExistingAccessoryPicker({
     setError("");
     const params = new URLSearchParams({
       familyId,
+      purpose: 'ACCESSORY',
       search: query,
       page: String(page),
     });
@@ -91,10 +92,10 @@ export default function ExistingAccessoryPicker({
             <Button
               mt="sm"
               variant="light"
-              disabled={!item.active}
+              disabled={!item.active || item.scope === 'ACCESSORIES'}
               onClick={() => onSelect(item)}
             >
-              {item.active ? "Revisar vinculación" : "Archivado"}
+              {!item.active ? "Archivado" : item.scope === 'ACCESSORIES' ? 'Vincular desde su accesorio principal' : 'Revisar vinculación'}
             </Button>
           </Card>
         ))

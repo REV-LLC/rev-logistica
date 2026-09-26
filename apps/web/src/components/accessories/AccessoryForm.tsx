@@ -57,6 +57,9 @@ export default function AccessoryForm({
     item?.assets.map((a) => a.assetId) ?? (equipment ? [equipment.id] : []),
   );
   const [active, setActive] = useState(item?.active ?? true);
+  const [parentAccessoryIds, setParentAccessoryIds] = useState(item?.compatibleParents?.map(p => p.parentAccessoryId) ?? []);
+  const [parentOptions, setParentOptions] = useState(item?.compatibleParents?.map(p => ({ value: p.parentAccessoryId, label: `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}` })) ?? []);
+  const [parentSearch, setParentSearch] = useState('');
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(
     equipment?.warehouseOwnerId ?? null,
   );
@@ -113,6 +116,23 @@ export default function AccessoryForm({
     return () => controller.abort();
   }, [familyId]);
 
+  useEffect(() => {
+    if (scope !== 'ACCESSORIES' || !familyId) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ familyId, purpose: 'ACCESSORY', search: parentSearch.trim() });
+      void api<{ items: Accessory[] }>(`/accessories?${params}`, { signal: controller.signal }).then(result => {
+        if (controller.signal.aborted) return;
+        setParentOptions(previous => Array.from(new Map([
+          ...previous.filter(option => parentAccessoryIds.includes(option.value)),
+          ...result.items.filter(p => p.active && p.kind === 'INDIVIDUAL' && p.id !== item?.id)
+            .map(p => ({ value: p.id, label: `${p.name} · ${p.internalCode ?? ''}` })),
+        ].map(option => [option.value, option])).values()));
+      }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [scope, familyId, parentSearch, parentAccessoryIds, item?.id]);
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting.current) return;
@@ -120,7 +140,8 @@ export default function AccessoryForm({
       !familyId ||
       !name.trim() ||
       (scope === "ASSETS" && !assetIds.length) ||
-      (scope === "SUBFAMILIES" && !subfamilyIds.length)
+      (scope === "SUBFAMILIES" && !subfamilyIds.length) ||
+      (scope === "ACCESSORIES" && !parentAccessoryIds.length)
     ) {
       setError(
         "Completa el nombre, la familia y los destinos de compatibilidad.",
@@ -143,6 +164,9 @@ export default function AccessoryForm({
       scope,
       subfamilyIds: scope === "SUBFAMILIES" ? subfamilyIds : [],
       assetIds: scope === "ASSETS" ? assetIds : [],
+      parentAccessoryIds: scope === 'ACCESSORIES' ? parentAccessoryIds : [],
+      purpose: item?.purpose ?? 'ACCESSORY',
+      ...(item?.exclusiveAssetId ? { exclusiveAssetId: item.exclusiveAssetId } : {}),
     };
     const body = item
       ? { ...details, active, version: item.version }
@@ -195,7 +219,7 @@ export default function AccessoryForm({
         >
           <Stack>
             <TextInput
-              label="Nombre del accesorio"
+              label={item?.purpose === 'COMPONENT' ? 'Nombre del componente' : 'Nombre del accesorio'}
               placeholder="CANASTA PARA PLUMA"
               required
               maxLength={160}
@@ -247,10 +271,13 @@ export default function AccessoryForm({
               searchable
               data={families.map((f) => ({ value: f.id, label: f.name }))}
               value={familyId}
+              disabled={!!item?.exclusiveAssetId}
               onChange={(value) => {
                 setFamilyId(value);
                 setSubfamilyIds([]);
                 setAssetIds([]);
+                setParentAccessoryIds([]);
+                setParentOptions([]);
               }}
             />
             <Select
@@ -261,6 +288,7 @@ export default function AccessoryForm({
                 label,
               }))}
               value={scope}
+              disabled={!!item?.exclusiveAssetId}
               onChange={(value) => setScope(value as AccessoryScope)}
             />
             {scope === "FAMILY" ? (
@@ -285,7 +313,7 @@ export default function AccessoryForm({
                 required
                 searchable
                 value={assetIds}
-                disabled={loadingAssets}
+                disabled={loadingAssets || !!item?.exclusiveAssetId}
                 data={assets.map((a) => ({
                   value: a.id,
                   label: equipmentLabel(a),
@@ -293,6 +321,10 @@ export default function AccessoryForm({
                 onChange={setAssetIds}
               />
             ) : null}
+            {scope === 'ACCESSORIES' ? <MultiSelect label="Accesorios principales compatibles" description="Busca por nombre o código. Solo se incluyen accesorios individualizados de la familia elegida."
+              required searchable value={parentAccessoryIds} data={parentOptions} onChange={setParentAccessoryIds}
+              searchValue={parentSearch} onSearchChange={setParentSearch} /> : null}
+            {item?.exclusiveAssetId ? <Text size="sm">Este componente pertenece exclusivamente a su equipo. Omitirlo en una entrega no cambia esa pertenencia.</Text> : null}
             <Alert color="blue">
               La compatibilidad no es una entrega. Después de guardar puedes
               asignar existencias desde la card.
@@ -304,7 +336,7 @@ export default function AccessoryForm({
                   ubicaciones se modifican mediante movimientos.
                 </Text>
                 <Checkbox
-                  label="Accesorio activo"
+                  label={item?.purpose === 'COMPONENT' ? 'Componente activo' : 'Accesorio activo'}
                   checked={active}
                   onChange={(e) => setActive(e.currentTarget.checked)}
                 />
@@ -351,7 +383,7 @@ export default function AccessoryForm({
             Cancelar
           </Button>
           <Button type="submit" loading={saving} disabled={loadingAssets}>
-            Guardar accesorio
+            Guardar {item?.purpose === 'COMPONENT' ? 'componente' : 'accesorio'}
           </Button>
         </Group>
       </Stack>
