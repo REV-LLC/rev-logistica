@@ -13,6 +13,7 @@ export class SkusService {
     controlType?: SkuControlType;
     assetFamilyId?: string;
     assetSubfamilyId?: string;
+    ownOnly?: boolean;
   }) {
     const where: Prisma.SkuWhereInput = {};
 
@@ -33,6 +34,14 @@ export class SkusService {
 
     if (params.assetSubfamilyId) {
       where.assetSubfamilyId = params.assetSubfamilyId;
+    }
+
+    if (params.ownOnly) {
+      // Ownership is independent of the equipment's current physical location.
+      where.AND = [{ OR: [
+        { assetFamily: { is: { controlType: SkuControlType.SERIAL } }, assets: { some: { deletedAt: null, warehouseOwner: { is: { type: WarehouseType.OWN } } } } },
+        { assetFamily: { is: { controlType: SkuControlType.BULK } }, ledger: { some: { ownerWarehouse: { is: { type: WarehouseType.OWN } } } } },
+      ] }];
     }
 
     const items = await this.prisma.sku.findMany({
