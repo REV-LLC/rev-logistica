@@ -21,7 +21,6 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetConditionDto } from './dto/update-asset-condition.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
-import { AssignAssetMotorDto } from './dto/assign-asset-motor.dto';
 import { DeleteAssetDto } from './dto/delete-asset.dto';
 import { AssetsService } from './assets.service';
 
@@ -106,22 +105,6 @@ export class AssetsController {
     @Req() request: Request & { user: JwtPayload },
   ) {
     return this.assetsService.updateAssetCondition(assetId, payload, request.user.sub);
-  }
-
-  @Patch(':assetId/assigned-motor')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
-  assignMotor(
-    @Param('assetId', new ParseUUIDPipe()) assetId: string,
-    @Body(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    )
-    payload: AssignAssetMotorDto,
-  ) {
-    return this.assetsService.assignMotor(assetId, payload.motorId);
   }
 
   @Get(':assetId')

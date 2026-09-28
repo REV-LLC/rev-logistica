@@ -1,12 +1,15 @@
 'use client';
 
 import AppImage from '@/components/AppImage';
+import ConfigurationEditor from '@/components/equipment-configuration/ConfigurationEditor';
+import { type EquipmentConfiguration, configurationError, configurationPayload } from '@/components/equipment-configuration/types';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Autocomplete,
   Badge,
   Button,
+  Checkbox,
   Container,
   FileButton,
   Group,
@@ -47,7 +50,7 @@ type Warehouse = {
   type?: 'OWN' | 'ALLY' | string;
 };
 
-type AssetWorkflowStep = 'template' | 'commercial' | 'asset' | 'review';
+type AssetWorkflowStep = 'template' | 'commercial' | 'asset' | 'configuration' | 'review';
 
 type Sku = {
   id: string;
@@ -137,7 +140,6 @@ const BASE_BRAND_OPTIONS = [
   'MAKITA',
   'WACKER NEUSON',
 ];
-const MIXER_FAMILY_CODE = 'MEZCLADORA';
 const getWorkflowStepClassName = (isActive: boolean) =>
   `workflow-step-card ${isActive ? 'is-active' : 'is-muted'}`;
 
@@ -224,6 +226,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [createdAssetId, setCreatedAssetId] = useState<string | null>(null);
+  const [configuration, setConfiguration] = useState<EquipmentConfiguration>({ version: 0, entries: [] });
 
   const [familyMode, setFamilyMode] = useState<'existing' | 'new'>('existing');
   const [familyId, setFamilyId] = useState<string | null>(initialFamilyId ?? null);
@@ -235,7 +238,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [subfamilyId, setSubfamilyId] = useState<string | null>(null);
   const [subfamilyName, setSubfamilyName] = useState('ESTÁNDAR');
 
+  const [interchangeableMotor, setInterchangeableMotor] = useState(false);
   const [skuSuggestionId, setSkuSuggestionId] = useState<string | null>(null);
+  useEffect(() => { setInterchangeableMotor(false); }, [skuSuggestionId, familyId, subfamilyId]);
   const [skuName, setSkuName] = useState('');
   const [skuBrand, setSkuBrand] = useState('');
   const [skuModel, setSkuModel] = useState('');
@@ -260,16 +265,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [copiedImageFileObjectId, setCopiedImageFileObjectId] = useState<string | null>(null);
   const [copiedImageLabel, setCopiedImageLabel] = useState('');
   const [active, setActive] = useState(true);
-  const [motorConfiguration, setMotorConfiguration] = useState<
-    'NONE' | 'FIXED' | 'INTERCHANGEABLE'
-  >('NONE');
-  const [motorSource, setMotorSource] = useState<'NONE' | 'EXISTING' | 'NEW'>('NONE');
-  const [assignedMotorId, setAssignedMotorId] = useState<string | null>(null);
-  const [newMotorFuel, setNewMotorFuel] = useState<'ELECTRICO' | 'GASOLINA'>('GASOLINA');
-  const [newMotorSerial, setNewMotorSerial] = useState('');
-  const [newMotorBrand, setNewMotorBrand] = useState('');
-  const [newMotorModel, setNewMotorModel] = useState('');
-
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(initialWarehouseId ?? null);
   const [warehouseCurrentId, setWarehouseCurrentId] = useState<string | null>(
     initialCurrentWarehouseId ?? initialWarehouseId ?? null,
@@ -286,6 +281,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [assetAttempted, setAssetAttempted] = useState(false);
 
   const familySelectRef = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
   const familyNameRef = useRef<HTMLInputElement>(null);
   const skuBrandRef = useRef<HTMLInputElement>(null);
   const serialOrEngineRef = useRef<HTMLInputElement>(null);
@@ -482,26 +478,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
     return (selectedFamily?.name ?? familyName.trim()).trim();
   }, [familyName, selectedFamily?.name, skuBrand, skuById, skuModel, skuName, skuSuggestionId]);
-  const isMixerAsset = selectedFamily
-    ? uppercaseInputValue(selectedFamily.code) === MIXER_FAMILY_CODE
-    : uppercaseInputValue(familyCode.trim()) === MIXER_FAMILY_CODE;
-  const availableMotorOptions = useMemo(
-    () =>
-      assets
-        .filter(
-          (asset) =>
-            asset.kind === 'MOTOR'
-            && asset.warehouseCurrentId === warehouseCurrentId
-            && !asset.assignedToMixer,
-        )
-        .map((asset) => ({
-          value: asset.id,
-          label: `${[asset.brand, asset.model].filter(Boolean).join(' ') || asset.sku?.name || 'MOTOR'}${
-            asset.internalNumber ? ` #${asset.internalNumber}` : ''
-          }${asset.serialOrEngine ? ` · ${asset.serialOrEngine}` : ''}`,
-        })),
-    [assets, warehouseCurrentId],
-  );
   const hasTemplateData = Boolean(resolvedSkuName && skuUnit);
   const hasCommercialData =
     skuPrice !== '' &&
@@ -522,6 +498,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const isAssetStepActive = canEditAssetDetails && assetWorkflowStep === 'asset';
   const isReviewStepActive = canEditAssetDetails && assetWorkflowStep === 'review';
   const resetForm = () => {
+    setConfiguration({ version: 0, entries: [] });
     setFamilyMode('existing');
     setFamilyId(null);
     setFamilyName('');
@@ -546,26 +523,12 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
     setSkuReplacementValue('');
     setSkuChargeType('DAY');
     setSkuMinimumChargeHours('');
-    setMotorConfiguration('NONE');
-    setMotorSource('NONE');
-    setAssignedMotorId(null);
-    setNewMotorFuel('GASOLINA');
-    setNewMotorSerial('');
-    setNewMotorBrand('');
-    setNewMotorModel('');
     setSerialOrEngine('');
     setRegistrationNumber('');
     setAssetImageFile(null);
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
     setActive(true);
-    setMotorConfiguration('NONE');
-    setMotorSource('NONE');
-    setAssignedMotorId(null);
-    setNewMotorFuel('GASOLINA');
-    setNewMotorSerial('');
-    setNewMotorBrand('');
-    setNewMotorModel('');
     setOwnerWarehouseId(null);
     setWarehouseCurrentId(null);
     setManualInternalNumber('');
@@ -606,13 +569,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
     setCopiedImageFileObjectId(null);
     setCopiedImageLabel('');
     setActive(true);
-    setMotorConfiguration('NONE');
-    setMotorSource('NONE');
-    setAssignedMotorId(null);
-    setNewMotorFuel('GASOLINA');
-    setNewMotorSerial('');
-    setNewMotorBrand('');
-    setNewMotorModel('');
     setManualInternalNumber('');
     setFamilyLocked(false);
     setAssetWorkflowStep('template');
@@ -764,25 +720,13 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       setValidationError('Ingresa el número interno de la bodega alterna.', manualInternalNumberRef);
       return;
     }
-    if (isMixerAsset && motorConfiguration === 'NONE') {
-      setValidationError('Selecciona el tipo de motor de la mezcladora.');
-      return;
-    }
-    if (
-      isMixerAsset
-      && motorConfiguration === 'INTERCHANGEABLE'
-      && motorSource === 'EXISTING'
-      && !assignedMotorId
-    ) {
-      setValidationError('Selecciona el motor que se asignará a la mezcladora.');
-      return;
-    }
     setAssetAttempted(false);
-    setAssetWorkflowStep('review');
+    setAssetWorkflowStep('configuration');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting.current) return;
     setError(null);
     setSuccess(null);
 
@@ -869,9 +813,11 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       return;
     }
 
+    submitting.current = true;
     setSaving(true);
     try {
       const payload = {
+        configuration: configurationPayload(configuration),
         family:
           familyMode === 'existing'
             ? { id: familyId }
@@ -901,6 +847,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
           extendedLengthMeters: toOptionalNumber(skuExtendedLengthMeters),
         },
         asset: {
+          interchangeableMotor: !skuSuggestionId && interchangeableMotor,
           description: resolvedSkuName || undefined,
           serialOrEngine: serialOrEngine.trim() || undefined,
           registrationNumber: registrationNumber.trim() || undefined,
@@ -910,13 +857,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
           fuel: skuFuel || undefined,
           imageFileObjectId: assetImageFile ? undefined : copiedImageFileObjectId || undefined,
           active,
-          motorConfiguration: isMixerAsset ? motorConfiguration : 'NONE',
-          assignedMotorId:
-            isMixerAsset
-            && motorConfiguration === 'INTERCHANGEABLE'
-            && motorSource === 'EXISTING'
-              ? assignedMotorId || undefined
-              : undefined,
           internalNumber:
             isAlternateOwnerWarehouse && manualInternalNumber !== ''
               ? manualInternalNumber
@@ -928,17 +868,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
           isAlternateOwnerWarehouse && providerPrice !== ''
             ? providerPrice
             : undefined,
-        newMotor:
-          isMixerAsset
-          && motorConfiguration === 'INTERCHANGEABLE'
-          && motorSource === 'NEW'
-            ? {
-                fuel: newMotorFuel,
-                serialOrEngine: newMotorSerial.trim() || undefined,
-                brand: newMotorBrand.trim() || undefined,
-                model: newMotorModel.trim() || undefined,
-              }
-            : undefined,
       };
 
       const response = await api<CreateSerializedResponse>(
@@ -949,7 +878,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         },
       );
 
+      let imageWarning = '';
       if (assetImageFile) {
+        try {
         const formData = new FormData();
         formData.append('files', assetImageFile);
         formData.append('category', 'PHOTO');
@@ -968,6 +899,10 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
             json: { imageFileObjectId: uploadedImage.id },
           });
         }
+        } catch {
+          // Equipment and its parts are already committed. Never invite a second creation.
+          imageWarning = ' La imagen no se guardó. Puedes cargarla desde la ficha del equipo, sin crearlo otra vez.';
+        }
       }
 
       const resolvedFamilyName =
@@ -975,7 +910,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
           ? familyNameById.get(familyId ?? '')?.name
           : familyName.trim();
       setSuccess(
-        `Created: ${resolvedFamilyName ?? 'Equipment'} #${response.asset.internalNumber}`,
+        `Creado: ${resolvedFamilyName ?? 'Equipo'} #${response.asset.internalNumber}.${imageWarning}`,
       );
       if (onCreated) {
         onCreated(response.asset.id);
@@ -993,6 +928,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         setError('Error creando equipo');
       }
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
@@ -1002,7 +938,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       <Stack gap="lg">
         {!onCreated ? <PageHeaderCard
           title="Registrar equipo unico"
-          description="Crea la plantilla del equipo y registra la unidad fisica con su ubicacion inicial."
+          description="Crea un equipo desde cero o usa una referencia existente. Configura sus componentes, accesorios y ubicación inicial."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -1093,8 +1029,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         {createdAssetId ? (
           <Alert color="blue" title="¿Este equipo tiene accesorios?">
             <Stack gap="sm">
-              <Text size="sm">El equipo ya está guardado. Puedes agregar accesorios ahora o hacerlo después desde su card.</Text>
+              <Text size="sm">El equipo y su configuración están guardados. Puedes revisar componentes y accesorios desde su card.</Text>
               <Group>
+                <Button component={Link} href={`/inventory/equipment-configuration/assets/${createdAssetId}`}>Ver configuración del equipo</Button>
                 <Button component={Link} href={`/inventory/accessories/equipment/${createdAssetId}?create=1`}>Agregar accesorios al equipo creado</Button>
                 <Button variant="subtle" onClick={() => setCreatedAssetId(null)}>Ahora no</Button>
               </Group>
@@ -1638,6 +1575,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     </Text>
                   </div>
 
+                  {!skuSuggestionId ? <Checkbox label="Este equipo admite motor intercambiable" checked={interchangeableMotor}
+                    onChange={event => setInterchangeableMotor(event.currentTarget.checked)}
+                    description="Después de crear el equipo, asigna su motor desde el botón de motor en su ficha." /> : null}
                   <UppercaseTextInput
                     ref={serialOrEngineRef}
                     label="Serial o motor"
@@ -1657,118 +1597,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     placeholder="Solo si requiere guia de movilidad"
                     description="Los activos con este campo aparecen en Guias de movilidad."
                   />
-                  {isMixerAsset ? (
-                    <Paper withBorder radius="md" p="md">
-                      <Stack gap="md">
-                        <div>
-                          <Text fw={700}>Motor de la mezcladora</Text>
-                          <Text size="sm" c="dimmed">
-                            Define si el motor es fijo o si puede intercambiarse con motores del inventario.
-                          </Text>
-                        </div>
-                        <Select
-                          label="Tipo de motor"
-                          data={[
-                            { value: 'FIXED_ELECTRICO', label: 'Fijo eléctrico' },
-                            { value: 'FIXED_GASOLINA', label: 'Fijo a gasolina' },
-                            { value: 'INTERCHANGEABLE', label: 'Motor intercambiable' },
-                          ]}
-                          value={
-                            motorConfiguration === 'INTERCHANGEABLE'
-                              ? 'INTERCHANGEABLE'
-                              : motorConfiguration === 'FIXED'
-                                ? skuFuel === 'ELECTRICO'
-                                  ? 'FIXED_ELECTRICO'
-                                  : 'FIXED_GASOLINA'
-                                : null
-                          }
-                          onChange={(value) => {
-                            if (value === 'INTERCHANGEABLE') {
-                              setMotorConfiguration('INTERCHANGEABLE');
-                              setSkuFuel('');
-                            } else if (value === 'FIXED_ELECTRICO') {
-                              setMotorConfiguration('FIXED');
-                              setSkuFuel('ELECTRICO');
-                              setMotorSource('NONE');
-                              setAssignedMotorId(null);
-                            } else if (value === 'FIXED_GASOLINA') {
-                              setMotorConfiguration('FIXED');
-                              setSkuFuel('GASOLINA');
-                              setMotorSource('NONE');
-                              setAssignedMotorId(null);
-                            } else {
-                              setMotorConfiguration('NONE');
-                            }
-                          }}
-                          required
-                        />
-
-                        {motorConfiguration === 'INTERCHANGEABLE' ? (
-                          <>
-                            <Select
-                              label="Motor inicial"
-                              data={[
-                                { value: 'NONE', label: 'Crear mezcladora sin motor asignado' },
-                                { value: 'EXISTING', label: 'Asignar un motor disponible de bodega' },
-                                { value: 'NEW', label: 'La mezcladora viene con un motor nuevo' },
-                              ]}
-                              value={motorSource}
-                              onChange={(value) => {
-                                const source = (value ?? 'NONE') as 'NONE' | 'EXISTING' | 'NEW';
-                                setMotorSource(source);
-                                if (source !== 'EXISTING') setAssignedMotorId(null);
-                              }}
-                            />
-                            {motorSource === 'EXISTING' ? (
-                              <Select
-                                label="Motor disponible"
-                                placeholder="Buscar motor"
-                                data={availableMotorOptions}
-                                value={assignedMotorId}
-                                onChange={setAssignedMotorId}
-                                searchable
-                                nothingFoundMessage="No hay motores disponibles en esta bodega"
-                                required
-                              />
-                            ) : null}
-                            {motorSource === 'NEW' ? (
-                              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                                <Select
-                                  label="Combustible del motor nuevo"
-                                  data={[
-                                    { value: 'GASOLINA', label: 'Gasolina' },
-                                    { value: 'ELECTRICO', label: 'Eléctrico' },
-                                  ]}
-                                  value={newMotorFuel}
-                                  onChange={(value) =>
-                                    setNewMotorFuel(
-                                      value === 'ELECTRICO' ? 'ELECTRICO' : 'GASOLINA',
-                                    )
-                                  }
-                                  required
-                                />
-                                <UppercaseTextInput
-                                  label="Serial del motor"
-                                  value={newMotorSerial}
-                                  onChange={setNewMotorSerial}
-                                />
-                                <UppercaseTextInput
-                                  label="Marca del motor"
-                                  value={newMotorBrand}
-                                  onChange={setNewMotorBrand}
-                                />
-                                <UppercaseTextInput
-                                  label="Modelo del motor"
-                                  value={newMotorModel}
-                                  onChange={setNewMotorModel}
-                                />
-                              </SimpleGrid>
-                            ) : null}
-                          </>
-                        ) : null}
-                      </Stack>
-                    </Paper>
-                  ) : null}
                   <Paper withBorder radius="md" p="sm" bg="gray.0">
                     <Group justify="space-between" align="center" gap="md">
                       <div>
@@ -1814,15 +1642,25 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                 </Stack>
               </Paper>
 
-              <Paper
-                withBorder
-                radius="lg"
-                p="md"
-                className={getWorkflowStepClassName(isReviewStepActive)}
-              >
+              <Paper withBorder radius="lg" p="md" className={getWorkflowStepClassName(assetWorkflowStep === 'configuration')}>
+                <Stack gap="md">
+                  <Text fw={700}>6. Componentes y accesorios</Text>
+                  <Text size="sm" c="dimmed">Opcional. Crea los elementos que realmente ingresan o vincula los existentes sin duplicar inventario.</Text>
+                  <ConfigurationEditor  value={configuration} onChange={setConfiguration} disabled={saving || assetWorkflowStep !== 'configuration'} />
+                  <Group justify="space-between">
+                    <Button type="button" variant="default" onClick={() => setAssetWorkflowStep('asset')}>Volver a datos del equipo</Button>
+                    <Button type="button" onClick={() => {
+                      const issue = configurationError(configuration);
+                      if (issue) { setValidationError(issue); return; }
+                      setError(null); setAssetWorkflowStep('review');
+                    }}>Revisar equipo y configuración</Button>
+                  </Group>
+                </Stack>
+              </Paper>
+              <Paper withBorder radius="lg" p="md" className={getWorkflowStepClassName(isReviewStepActive)}>
                 <Stack gap="md">
                   <div>
-                    <Text fw={700}>6. Revision</Text>
+                    <Text fw={700}>7. Revisión</Text>
                     <Text size="sm" c="dimmed">
                       Confirma la plantilla, el activo y la ubicacion.
                     </Text>
@@ -1854,6 +1692,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                       </Text>
                     </Paper>
                   </SimpleGrid>
+                  <Text size="sm">Componentes: {configuration.entries.filter(row => row.role === 'COMPONENT').length} · Accesorios: {configuration.entries.filter(row => row.role === 'ACCESSORY').length}.</Text>
+                  <Text size="sm" c="dimmed">Los nuevos se registran junto al equipo. Los existentes conservan identidad, propietario, ubicación e historial.</Text>
+                  <Button type="button" variant="subtle" onClick={() => setAssetWorkflowStep('configuration')}>Editar configuración</Button>
                 </Stack>
               </Paper>
               </>

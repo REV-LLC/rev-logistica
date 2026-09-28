@@ -1,5 +1,6 @@
 'use client';
 import type { Dispatch, SetStateAction } from 'react';
+import { removeRequestItem } from './request-item-groups';
 import { buildBulkKey, createSelectionId } from './request-formatting';
 import type { Warehouse } from './request-types';
 import { InventoryBulk, SelectedItem, SkuOption } from './request-types';
@@ -196,39 +197,7 @@ export function useRequestItemEditing({
   };
 
   const removeSelected = (selectionId: string) => {
-    setSelectedItems((current) => {
-      const removed = current.find((item) => item.selectionId === selectionId);
-      if (!removed) return current;
-
-      if (
-        removed.assetId &&
-        current.some((item) => item.componentParentAssetId === removed.assetId)
-      ) {
-        return current.filter(
-          (item) =>
-            item.selectionId !== selectionId &&
-            item.componentParentAssetId !== removed.assetId,
-        );
-      }
-
-      const mixerAssetId =
-        removed.associatedMixerId ??
-        (removed.assetId &&
-        current.some((item) => item.associatedMixerId === removed.assetId)
-          ? removed.assetId
-          : null);
-
-      if (!mixerAssetId) {
-        return current.filter((item) => item.selectionId !== selectionId);
-      }
-
-      return current.filter(
-        (item) =>
-          item.selectionId !== selectionId &&
-          item.assetId !== mixerAssetId &&
-          item.associatedMixerId !== mixerAssetId,
-      );
-    });
+    setSelectedItems(current => removeRequestItem(current, selectionId));
   };
   return {
     addBulkItem,

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateAssetConditionDto {
   @IsBoolean()
@@ -10,4 +10,9 @@ export class UpdateAssetConditionDto {
   @IsNotEmpty()
   @MaxLength(2000)
   note!: string;
+
+  // Supplied when reporting a motor from its equipment card.
+  @IsOptional()
+  @IsUUID()
+  expectedParentAssetId?: string;
 }

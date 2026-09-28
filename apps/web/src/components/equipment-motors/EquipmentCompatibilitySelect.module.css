@@ -1,0 +1,95 @@
+.input {
+  padding: 8px;
+  border-radius: 12px;
+  min-height: 60px;
+}
+
+.pill {
+  height: auto;
+  max-width: 100%;
+  padding: 4px 5px 4px 4px;
+  border: 1px solid var(--mantine-color-blue-2);
+  border-radius: 10px;
+  background: var(--mantine-color-blue-0);
+}
+
+.pillLabel {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: min(260px, 100%);
+  padding: 0;
+  height: auto;
+  line-height: 1.25;
+}
+
+.identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.name,
+.owner {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mantine-color-dark-6);
+}
+
+.owner {
+  font-size: 10px;
+  color: var(--mantine-color-gray-7);
+}
+
+.thumbnail {
+  display: inline-flex;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mantine-color-gray-2);
+  border-radius: 7px;
+  overflow: hidden;
+  background: white;
+  color: var(--mantine-color-gray-5);
+}
+
+.image {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border-radius: 9px;
+}
+
+.option[data-combobox-active] {
+  background: var(--mantine-color-blue-0);
+}
+
+.check {
+  flex: 0 0 18px;
+  color: var(--mantine-color-blue-6);
+}
+
+.field {
+  min-width: 130px;
+  min-height: 38px;
+  font-size: 13px;
+}

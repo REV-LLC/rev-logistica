@@ -8,6 +8,7 @@ import {
   Loader,
   Modal,
   SimpleGrid,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -52,6 +53,7 @@ export default function AccessoriesWorkspace({
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
+  const [purpose, setPurpose] = useState('ACCESSORY');
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,7 +65,7 @@ export default function AccessoriesWorkspace({
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ page: String(page), search: query });
+    const params = new URLSearchParams({ page: String(page), search: query, purpose });
     if (equipmentId) params.set("assetId", equipmentId);
     Promise.all([
       api<{ items: Accessory[]; hasMore: boolean }>(`/accessories?${params}`, {
@@ -87,7 +89,7 @@ export default function AccessoriesWorkspace({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [equipmentId, page, query, revision]);
+  }, [equipmentId, page, query, revision, purpose]);
 
   useEffect(() => {
     if (
@@ -127,7 +129,7 @@ export default function AccessoriesWorkspace({
       <Group justify="space-between">
         <div>
           <Text fw={700} size="xl">
-            Accesorios
+            Componentes y accesorios
           </Text>
           <Text size="sm" c="dimmed">
             {equipment
@@ -136,7 +138,7 @@ export default function AccessoriesWorkspace({
           </Text>
         </div>
         <Group>
-          {equipment ? (
+          {equipment && purpose === 'ACCESSORY' ? (
             <Button
               variant="default"
               disabled={loading}
@@ -146,7 +148,7 @@ export default function AccessoriesWorkspace({
             </Button>
           ) : null}
           <Button
-            disabled={loading || !!error}
+            disabled={loading || !!error || purpose === 'COMPONENT'}
             onClick={() => {
               setSuccess("");
               setDialog({ type: "create" });
@@ -170,6 +172,10 @@ export default function AccessoriesWorkspace({
         componentes anteriores conservan su flujo y no se convierten
         automáticamente.
       </Alert>
+      <SegmentedControl aria-label="Clasificación" value={purpose} onChange={value => { setPurpose(value); setPage(0); }} data={[
+        { value: 'ACCESSORY', label: 'Accesorios de trabajo' }, { value: 'COMPONENT', label: 'Componentes del equipo' },
+      ]} />
+      {purpose === 'COMPONENT' ? <Text size="sm">Los componentes nuevos se crean desde «Configurar» en la tarjeta del equipo. Aquí puedes editar su ficha y consultar sus existencias.</Text> : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -179,7 +185,7 @@ export default function AccessoriesWorkspace({
       >
         <Group align="flex-end">
           <TextInput
-            label="Buscar accesorio"
+            label={purpose === 'COMPONENT' ? 'Buscar componente' : 'Buscar accesorio'}
             placeholder="Nombre o código"
             maxLength={160}
             value={search}

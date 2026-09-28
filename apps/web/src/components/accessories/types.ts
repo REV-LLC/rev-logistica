@@ -1,7 +1,7 @@
 import { getAssetDisplayLabel } from '@/lib/serial-assets';
 
 export type AccessoryKind = "INDIVIDUAL" | "RETURNABLE" | "CONSUMABLE";
-export type AccessoryScope = "FAMILY" | "SUBFAMILIES" | "ASSETS";
+export type AccessoryScope = "FAMILY" | "SUBFAMILIES" | "ASSETS" | "ACCESSORIES";
 export type MovementType =
   | "RECEIVE"
   | "ASSIGN"
@@ -41,6 +41,9 @@ export type Location = {
   label?: string;
 };
 export type Accessory = {
+  purpose?: 'COMPONENT' | 'ACCESSORY';
+  exclusiveAssetId?: string | null;
+  compatibleParents?: Array<{ parentAccessoryId: string; parentAccessory: { id: string; name: string; internalCode: string | null } }>;
   id: string;
   name: string;
   description: string | null;
@@ -83,7 +86,7 @@ export const kindDescriptions: Record<AccessoryKind, string> = {
   RETURNABLE:
     "Se entrega y devuelve por unidades, incluso parcialmente. No tiene código por unidad ni se registra como consumo.",
   CONSUMABLE:
-    "Se maneja por unidades. La entrega no descuenta consumo: registra lo utilizado y devuelve el sobrante.",
+    "Se maneja por unidades y puede regresar aprovechable. La entrega no consume: registra como consumo la cantidad que se confirma que no regresa.",
 };
 export function allowsManualMovement(kind: AccessoryKind, type: MovementType) {
   if (type === "TRANSIT" || type === "PROVIDER_RECEIVE") return false;
@@ -95,6 +98,7 @@ export const scopeLabels: Record<AccessoryScope, string> = {
   FAMILY: "Toda la familia",
   SUBFAMILIES: "Subfamilias seleccionadas",
   ASSETS: "Equipos específicos",
+  ACCESSORIES: "Accesorios específicos",
 };
 export const movementLabels: Record<MovementType, string> = {
   RECEIVE: "Ingreso",
@@ -116,6 +120,7 @@ export const balanceLabel = (balance: Accessory["balances"][number]) =>
         ? `${equipmentLabel(balance.asset)}${balance.customerWorksite ? ` · Obra: ${balance.customerWorksite.worksite.name}` : ""}`
         : "Ubicación desconocida"));
 export function compatibleWith(item: Accessory, equipment: Equipment) {
+  if (item.exclusiveAssetId && item.exclusiveAssetId !== equipment.id) return false;
   return (
     item.familyId === equipment.sku.assetFamilyId &&
     (item.scope === "FAMILY" ||

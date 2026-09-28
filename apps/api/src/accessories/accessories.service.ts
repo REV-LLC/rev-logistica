@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, EquipmentPartRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { accessoryDocumentOptions } from './accessory-document-options';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
@@ -44,6 +44,7 @@ const detailInclude = {
   ownerWarehouse: { select: { id: true, name: true } },
   subfamilies: { include: { subfamily: { select: { name: true } } } },
   assets: { include: { asset: { select: equipmentSelect } } },
+  compatibleParents: { include: { parentAccessory: { select: { id: true, name: true, internalCode: true } } } },
   balances: {
     where: { quantity: { gt: 0 } },
     include: {
@@ -93,7 +94,7 @@ export class AccessoriesService {
     return asset;
   }
 
-  async list(assetId?: string, search?: string, page = 0, familyId?: string) {
+  async list(assetId?: string, search?: string, page = 0, familyId?: string, purpose?: EquipmentPartRole) {
     if (
       search !== undefined &&
       (typeof search !== 'string' || search.length > 160)
@@ -101,7 +102,7 @@ export class AccessoriesService {
       throw new BadRequestException(
         'La búsqueda debe ser un texto de máximo 160 caracteres.',
       );
-    const where: Prisma.AccessoryWhereInput = { familyId };
+    const where: Prisma.AccessoryWhereInput = { familyId, purpose };
     if (search?.trim())
       where.OR = [
         { name: { contains: search.trim(), mode: 'insensitive' } },
@@ -191,6 +192,18 @@ export class AccessoriesService {
         'Los accesorios por cantidad se registran sin código individual.',
       );
     validateScope(dto);
+    if (dto.purpose === 'COMPONENT' && dto.kind !== 'INDIVIDUAL')
+      throw new BadRequestException('Un componente de configuración debe identificarse individualmente.');
+    if (dto.exclusiveAssetId && (dto.purpose !== 'COMPONENT' || dto.scope !== 'ASSETS' ||
+      dto.assetIds.length !== 1 || dto.assetIds[0] !== dto.exclusiveAssetId))
+      throw new BadRequestException('El componente exclusivo solo puede pertenecer a su equipo.');
+    if (dto.scope === 'ACCESSORIES') {
+      const count = await tx.accessory.count({ where: {
+        id: { in: dto.parentAccessoryIds ?? [] }, familyId: dto.familyId, active: true, kind: 'INDIVIDUAL', purpose: 'ACCESSORY',
+      } });
+      if (count !== dto.parentAccessoryIds?.length)
+        throw new BadRequestException('Selecciona accesorios principales individualizados y activos.');
+    }
     const family = await tx.assetFamily.findUnique({
       where: { id: dto.familyId },
     });
@@ -234,6 +247,8 @@ export class AccessoriesService {
     internalCode?: string | null;
     familyId: string;
     scope: AccessoryDetailsDto['scope'];
+    purpose?: AccessoryDetailsDto['purpose'];
+    exclusiveAssetId?: string | null;
   }) {
     return {
       name: dto.name.trim(),
@@ -245,6 +260,8 @@ export class AccessoriesService {
           : null,
       familyId: dto.familyId,
       scope: dto.scope,
+      purpose: dto.purpose ?? 'ACCESSORY',
+      exclusiveAssetId: dto.exclusiveAssetId ?? null,
     };
   }
 
@@ -261,9 +278,12 @@ export class AccessoriesService {
   private async locked<T>(
     id: string,
     fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    configurationWrite = false,
   ): Promise<T> {
     return this.withErrors(() =>
       this.prisma.$transaction(async (tx) => {
+        // Same order as configuration saves: topology lock before inventory rows.
+        if (configurationWrite) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('equipment-configuration', 0))::text`;
         // All stock and compatibility writes share this lock; competing deliveries cannot oversell.
         const rows = await tx.$queryRaw<
           Array<{ id: string }>
@@ -305,11 +325,14 @@ export class AccessoriesService {
   }
 
   async create(dto: CreateAccessoryDto, userId: string) {
+    return this.withErrors(() => this.prisma.$transaction(tx => this.createInTransaction(tx, dto, userId)),
+      dto.kind === 'INDIVIDUAL' && !dto.internalCode?.trim());
+  }
+
+  /** The caller may atomically register equipment and its new parts. */
+  async createInTransaction(tx: Prisma.TransactionClient, dto: CreateAccessoryDto, userId: string) {
     const hash = fingerprint({ ...dto, userId });
     const generateCode = dto.kind === 'INDIVIDUAL' && !dto.internalCode?.trim();
-    return this.withErrors(
-      () =>
-        this.prisma.$transaction(async (tx) => {
           // Serialize retries even before the accessory exists.
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${dto.requestId}, 0))::text`;
           const prior = await tx.accessory.findUnique({
@@ -357,6 +380,7 @@ export class AccessoriesService {
                 })),
               },
               assets: { create: dto.assetIds.map((assetId) => ({ assetId })) },
+              compatibleParents: { create: (dto.parentAccessoryIds ?? []).map(parentAccessoryId => ({ parentAccessoryId })) },
               balances: {
                 create: {
                   locationKey: locationKey({ warehouseId: dto.warehouseId }),
@@ -378,9 +402,6 @@ export class AccessoriesService {
             },
             include: detailInclude,
           });
-        }),
-      generateCode,
-    );
   }
 
   async update(id: string, dto: UpdateAccessoryDto, userId: string) {
@@ -397,8 +418,13 @@ export class AccessoriesService {
         throw new BadRequestException(
           'No puedes cambiar el tipo de un accesorio con historial. Registra uno nuevo.',
         );
+      if ((dto.purpose && dto.purpose !== item.purpose) ||
+        (dto.exclusiveAssetId && dto.exclusiveAssetId !== item.exclusiveAssetId))
+        throw new BadRequestException('La clasificación y pertenencia exclusiva se conservan con el historial.');
       const details = {
         ...dto,
+        purpose: item.purpose,
+        exclusiveAssetId: item.exclusiveAssetId ?? undefined,
         internalCode:
           dto.kind === 'INDIVIDUAL'
             ? dto.internalCode?.trim() || item.internalCode!
@@ -414,8 +440,18 @@ export class AccessoriesService {
         throw new BadRequestException(
           'Primero devuelve o traslada los accesorios asignados a equipos que dejarían de ser compatibles.',
         );
+      const configured = await tx.equipmentConfigurationEntry.findMany({ where: { accessoryId: id },
+        include: { configuration: { include: { asset: { include: { sku: true } } } } } });
+      if (configured.some(({ configuration }) => !dto.active || (configuration.asset
+        ? !isCompatible(details, configuration.asset)
+        : details.scope !== 'ACCESSORIES' || !details.parentAccessoryIds?.includes(configuration.accessoryId!))))
+        throw new BadRequestException('El elemento está vinculado a una configuración que dejaría de ser compatible. Quita primero ese vínculo; sus existencias e historial se conservan.');
       await tx.accessorySubfamily.deleteMany({ where: { accessoryId: id } });
       await tx.accessoryAsset.deleteMany({ where: { accessoryId: id } });
+      if (dto.parentAccessoryIds !== undefined || item.scope === 'ACCESSORIES') {
+        if (dto.parentAccessoryIds?.includes(id)) throw new BadRequestException('Un accesorio no puede ser su propio padre.');
+        await tx.accessoryParent.deleteMany({ where: { accessoryId: id } });
+      }
       const updated = await tx.accessory.update({
         where: { id },
         data: {
@@ -426,6 +462,7 @@ export class AccessoriesService {
             create: dto.subfamilyIds.map((subfamilyId) => ({ subfamilyId })),
           },
           assets: { create: dto.assetIds.map((assetId) => ({ assetId })) },
+          compatibleParents: { create: (dto.parentAccessoryIds ?? []).map(parentAccessoryId => ({ parentAccessoryId })) },
         },
         include: detailInclude,
       });
@@ -435,11 +472,14 @@ export class AccessoriesService {
         familyName: value.family.name,
         subfamilyIds: value.subfamilies.map((s) => s.subfamilyId),
         assetIds: value.assets.map((a) => a.assetId),
+        parentAccessoryIds: value.compatibleParents?.map(p => p.parentAccessoryId) ?? [],
         compatibilityNames:
           value.scope === 'FAMILY'
             ? [value.family.name]
             : value.scope === 'SUBFAMILIES'
               ? value.subfamilies.map((s) => s.subfamily.name)
+              : value.scope === 'ACCESSORIES'
+                ? value.compatibleParents.map(p => `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}`)
               : value.assets.map(
                   (a) => `${a.asset.sku.name} · ${a.asset.publicCode}`,
                 ),
@@ -453,7 +493,7 @@ export class AccessoriesService {
         },
       });
       return updated;
-    });
+    }, true);
   }
 
   private async resolveLocation(

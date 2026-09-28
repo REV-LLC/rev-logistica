@@ -1,6 +1,7 @@
 import { DocumentType, MovementType, StockLedger, WarehouseType } from '@prisma/client';
 import { AssetsService } from '../assets/assets.service';
 import { InventoryService } from './inventory.service';
+import { createEquipmentMotor } from '../accessories/equipment-motor';
 
 describe('serialized catalogue creation followed by historical delivery', () => {
   const registered = new Date('2026-09-04T16:00:00.000Z');
@@ -25,8 +26,8 @@ describe('serialized catalogue creation followed by historical delivery', () => 
     const tx = {
       warehouse,
       accessoryBalance: { findFirst: jest.fn().mockResolvedValue(null) },
-      assetFamily: { findUnique: jest.fn().mockResolvedValue(family) },
-      assetSubfamily: { findUnique: jest.fn().mockResolvedValue(subfamily) },
+      assetFamily: { findUnique: jest.fn().mockResolvedValue(family), upsert: jest.fn().mockResolvedValue(family) },
+      assetSubfamily: { findUnique: jest.fn().mockResolvedValue(subfamily), upsert: jest.fn().mockResolvedValue(subfamily) },
       sku: {
         findUnique: jest.fn().mockResolvedValue(sku),
         findMany: jest.fn().mockResolvedValue([sku]),
@@ -96,8 +97,8 @@ describe('serialized catalogue creation followed by historical delivery', () => 
       family: { id: 'family' }, subfamily: { id: 'subfamily' }, sku: { id: 'sku' },
       ownerWarehouseId, warehouseCurrentId, asset: { brand: 'ECOMAX' },
     }, 'operator')],
-    ['InventoryService.createMotorAsset', ({ inventory, tx, warehouseCurrentId }) => inventory['createMotorAsset'](
-      { fuel: 'GASOLINA', brand: 'HONDA' }, ownerWarehouseId, warehouseCurrentId, 'operator', tx as never,
+    ['unified configurator motor creation', ({ tx, warehouseCurrentId }) => createEquipmentMotor(
+      tx as never, { warehouseOwnerId: ownerWarehouseId, warehouseCurrentId } as never, { fuel: 'GASOLINA', brand: 'HONDA' }, 'operator',
     )],
     ['AssetsService.createAsset', ({ assets, warehouseCurrentId }) => assets.createAsset({
       skuId: 'sku', warehouseOwnerId: ownerWarehouseId, warehouseCurrentId, brand: 'ECOMAX',

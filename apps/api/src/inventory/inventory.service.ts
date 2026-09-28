@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -31,6 +32,7 @@ import { CreateInventoryInDto } from './dto/create-inventory-in.dto';
 import { CreateInventoryOnSiteDto } from './dto/create-inventory-on-site.dto';
 import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
+import { EquipmentConfigurationService } from '../accessories/equipment-configuration.service';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
 import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
 import { normalizeAssetFamilyIdentity } from './asset-family-normalization';
@@ -100,6 +102,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    @Optional() private readonly configurations?: EquipmentConfigurationService,
   ) {}
 
   private throwInsufficientStock(shortages: InventoryStockShortage[]): never {
@@ -154,93 +157,6 @@ export class InventoryService {
     transaction?: Prisma.TransactionClient,
   ): Promise<T> {
     return transaction ? execute(transaction) : this.prisma.$transaction(execute);
-  }
-
-  private async createMotorAsset(
-    input: NonNullable<CreateSerializedAssetDto['newMotor']>,
-    ownerWarehouseId: string,
-    warehouseCurrentId: string,
-    userId: string,
-    tx: Prisma.TransactionClient,
-  ) {
-    const family = await this.resolveAssetFamily(
-      { code: 'MOTORES', name: 'MOTORES' },
-      SkuControlType.SERIAL,
-      tx,
-    );
-    const fuelLabel = input.fuel === 'ELECTRICO' ? 'ELÉCTRICO' : 'GASOLINA';
-    const subfamily = await this.resolveAssetSubfamily(
-      { code: `MOTOR_${input.fuel}`, name: `MOTOR ${fuelLabel}` },
-      family.id,
-      tx,
-    );
-    const reference = [input.brand?.trim(), input.model?.trim()].filter(Boolean).join(' ')
-      || `MOTOR ${fuelLabel}`;
-    const sku = await this.resolveSku(
-      { name: reference, chargeType: ChargeType.DAY },
-      family.id,
-      tx,
-      subfamily.id,
-    );
-    const counter = await tx.assetInternalCounter.upsert({
-      where: {
-        ownerWarehouseId_assetSubfamilyId: {
-          ownerWarehouseId,
-          assetSubfamilyId: subfamily.id,
-        },
-      },
-      create: {
-        ownerWarehouseId,
-        assetSubfamilyId: subfamily.id,
-        nextNumber: 2,
-      },
-      update: { nextNumber: { increment: 1 } },
-      select: { nextNumber: true },
-    });
-    const internalNumber = counter.nextNumber - 1;
-    const motor = await tx.asset.create({
-      data: {
-        skuId: sku.id,
-        publicCode: this.buildAssetPublicCode(
-          family.code,
-          subfamily.code,
-          ownerWarehouseId,
-          internalNumber,
-        ),
-        internalNumber,
-        serialOrEngine: input.serialOrEngine?.trim() || null,
-        description: reference,
-        brand: input.brand?.trim() || null,
-        model: input.model?.trim() || null,
-        year: input.year ?? null,
-        fuel: input.fuel,
-        kind: AssetKind.MOTOR,
-        warehouseOwnerId: ownerWarehouseId,
-        warehouseCurrentId,
-        active: true,
-      },
-      select: {
-        id: true,
-        internalNumber: true,
-        skuId: true,
-        warehouseOwnerId: true,
-        warehouseCurrentId: true,
-      },
-    });
-    await tx.stockLedger.create({
-      data: {
-        movementType: MovementType.ADJUST,
-        warehouseId: warehouseCurrentId,
-        ownerWarehouseId,
-        customerWorksiteId: null,
-        skuId: null,
-        assetId: motor.id,
-        quantity: 1,
-        isOpeningBalance: true,
-        createdBy: userId,
-      },
-    });
-    return motor;
   }
 
   private async assertDocumentExists(
@@ -562,6 +478,8 @@ export class InventoryService {
   }
 
   async createSerializedAsset(payload: CreateSerializedAssetDto, userId: string) {
+    if (payload.sku.id && payload.asset.interchangeableMotor)
+      throw new BadRequestException('El motor intercambiable se habilita al crear un equipo desde cero, sin plantilla.');
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
@@ -600,66 +518,6 @@ export class InventoryService {
       });
       if (!currentWarehouse) {
         throw new NotFoundException('Current warehouse not found');
-      }
-
-      const motorConfiguration =
-        payload.asset.motorConfiguration ?? AssetMotorConfiguration.NONE;
-      const hasMotorAssociation = Boolean(payload.asset.assignedMotorId || payload.newMotor);
-      if (
-        assetFamily.code !== 'MEZCLADORA'
-        && (motorConfiguration !== AssetMotorConfiguration.NONE || hasMotorAssociation)
-      ) {
-        throw new BadRequestException(
-          'Solo los activos de la familia MEZCLADORA pueden configurar un motor',
-        );
-      }
-      if (
-        motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE
-        && hasMotorAssociation
-      ) {
-        throw new BadRequestException(
-          'Solo los equipos con motor intercambiable pueden tener un motor asociado',
-        );
-      }
-      if (payload.asset.assignedMotorId && payload.newMotor) {
-        throw new BadRequestException(
-          'Selecciona un motor existente o crea uno nuevo, no ambos',
-        );
-      }
-
-      let assignedMotorId = payload.asset.assignedMotorId ?? null;
-      let createdMotor: {
-        id: string;
-        internalNumber: number;
-        skuId: string;
-        warehouseOwnerId: string;
-        warehouseCurrentId: string | null;
-      } | null = null;
-      if (assignedMotorId) {
-        const motor = await tx.asset.findFirst({
-          where: {
-            id: assignedMotorId,
-            kind: AssetKind.MOTOR,
-            active: true,
-            warehouseCurrentId: payload.warehouseCurrentId,
-            assignedToMixer: null,
-          },
-          select: { id: true },
-        });
-        if (!motor) {
-          throw new BadRequestException(
-            'El motor seleccionado no está disponible en la bodega actual',
-          );
-        }
-      } else if (payload.newMotor) {
-        createdMotor = await this.createMotorAsset(
-          payload.newMotor,
-          payload.ownerWarehouseId,
-          payload.warehouseCurrentId,
-          userId,
-          tx,
-        );
-        assignedMotorId = createdMotor.id;
       }
 
       const serialOrEngine = payload.asset.serialOrEngine?.trim();
@@ -743,6 +601,7 @@ export class InventoryService {
           ),
           internalNumber,
           serialOrEngine: serialOrEngine || null,
+          motorConfiguration: payload.asset.interchangeableMotor ? 'INTERCHANGEABLE' : 'NONE',
           registrationNumber: payload.asset.registrationNumber?.trim().toUpperCase() || null,
           description: payload.asset.description ?? null,
           brand: payload.asset.brand ?? null,
@@ -754,8 +613,6 @@ export class InventoryService {
           warehouseOwnerId: payload.ownerWarehouseId,
           warehouseCurrentId: payload.warehouseCurrentId,
           active: payload.asset.active ?? true,
-          motorConfiguration,
-          assignedMotorId,
         },
         select: {
           id: true,
@@ -792,8 +649,13 @@ export class InventoryService {
         });
       }
 
-      return { asset, ledger, providerPrice, motor: createdMotor };
-      });
+      if (payload.configuration) {
+        if (!this.configurations) throw new InternalServerErrorException('El configurador no está disponible.');
+        if (payload.configuration.version !== 0) throw new BadRequestException('Un equipo nuevo debe iniciar con versión de configuración cero.');
+        await this.configurations.saveInTransaction(tx, { assetId: asset.id }, payload.configuration, userId);
+      }
+      return { asset, ledger, providerPrice };
+      }, { timeout: 20000 });
       // The contextual accessory picker reloads this inventory immediately.
       await this.invalidateInventoryCache({ warehouseId: payload.warehouseCurrentId }).catch(() => {
         // Creation is already committed: a cache failure must not invite duplicate creation.

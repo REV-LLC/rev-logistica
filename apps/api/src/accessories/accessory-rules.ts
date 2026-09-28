@@ -10,6 +10,8 @@ export type Compatibility = {
   scope: AccessoryScope;
   subfamilyIds: string[];
   assetIds: string[];
+  parentAccessoryIds?: string[];
+  exclusiveAssetId?: string | null;
 };
 export type Equipment = {
   id: string;
@@ -23,6 +25,8 @@ export type Location = {
 };
 
 export function isCompatible(rule: Compatibility, asset: Equipment) {
+  if (rule.exclusiveAssetId && rule.exclusiveAssetId !== asset.id) return false;
+  if (rule.scope === 'ACCESSORIES') return false;
   if (rule.familyId !== asset.sku.assetFamilyId) return false;
   if (rule.scope === 'FAMILY') return true;
   if (rule.scope === 'SUBFAMILIES')
@@ -34,12 +38,15 @@ export function isCompatible(rule: Compatibility, asset: Equipment) {
 }
 
 export function validateScope(rule: Compatibility) {
-  const valid =
+  const parents = rule.parentAccessoryIds ?? [];
+  const valid = rule.scope === 'ACCESSORIES'
+    ? !!parents.length && !rule.assetIds.length && !rule.subfamilyIds.length
+    : !parents.length && (
     rule.scope === 'FAMILY'
       ? !rule.subfamilyIds.length && !rule.assetIds.length
       : rule.scope === 'SUBFAMILIES'
         ? !!rule.subfamilyIds.length && !rule.assetIds.length
-        : !!rule.assetIds.length && !rule.subfamilyIds.length;
+        : !!rule.assetIds.length && !rule.subfamilyIds.length);
   if (!valid)
     throw new BadRequestException(
       'Selecciona únicamente los destinos del alcance elegido.',

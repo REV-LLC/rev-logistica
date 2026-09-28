@@ -28,6 +28,8 @@ import {
   IconTool,
 } from '@tabler/icons-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { getCurrentUserRole } from '@/lib/auth';
+import { motorLabel, type MotorAsset } from '@/components/equipment-configuration/types';
 import { api, ApiError } from '@/lib/api';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
@@ -41,8 +43,14 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
 const AccessoriesWorkspace = dynamic(() => import('@/components/accessories/AccessoriesWorkspace'));
+const EquipmentMotorModal = dynamic(() => import('@/components/equipment-motors/EquipmentMotorModal'));
+const ConfigurationPanel = dynamic(() => import('@/components/equipment-configuration/ConfigurationPanel'));
 
 type AssetResponse = {
+  kind: string;
+  description?: string | null;
+  motorConfiguration: 'NONE' | 'FIXED' | 'INTERCHANGEABLE';
+  assignedMotor?: (MotorAsset & { isDamaged: boolean; damageNote: string | null }) | null;
   id: string;
   publicCode: string;
   internalNumber?: number | null;
@@ -350,11 +358,26 @@ function EditSerializedAssetPage() {
     if (assetLocation?.locationType === 'IN_TRANSIT') return { color: 'yellow', label: 'En tránsito' };
     return { color: 'gray', label: 'Sin ubicación registrada' };
   }, [assetLocation, worksiteLocationName]);
+  const [motorOpened, setMotorOpened] = useState(false);
+  const [canManageMotors, setCanManageMotors] = useState(false);
+  useEffect(() => { const role = getCurrentUserRole(); setCanManageMotors(role === 'ADMIN' || role === 'OFFICE'); }, []);
+  useEffect(() => {
+    if (asset?.kind === 'MOTOR' && editing && canManageMotors) { setMotorOpened(true); setEditing(false); }
+  }, [asset?.kind, editing, canManageMotors]);
+  const refreshMotor = async () => {
+    try {
+      const refreshed = await api<AssetResponse>(`/assets/${assetId}`);
+      setAsset(refreshed); setBrand(refreshed.brand ?? ''); setModel(refreshed.model ?? ''); setFuel(refreshed.fuel ?? '');
+    } catch {
+      // The mutation already succeeded. Never retry it merely because refreshing failed.
+      setError('El motor se guardó, pero no pudimos actualizar la ficha. Recarga la página para ver el cambio.');
+    }
+  };
   const detailCards = useMemo(
     () => [
       {
-        label: 'Serial / motor',
-        value: displayValue(asset?.serialOrEngine),
+        label: asset?.motorConfiguration === 'INTERCHANGEABLE' ? 'Motor asignado' : 'Serial / motor',
+        value: asset?.motorConfiguration === 'INTERCHANGEABLE' ? (asset.assignedMotor ? `${motorLabel(asset.assignedMotor)}${asset.assignedMotor.isDamaged ? ' · Averiado' : ''}` : 'Sin motor asignado') : displayValue(asset?.serialOrEngine),
         icon: <IconEngine size={18} />,
       },
       {
@@ -568,6 +591,7 @@ function EditSerializedAssetPage() {
         </Button>
         {asset && !asset.deletedAt ? (
           <Group gap="xs">
+            {canManageMotors && asset.motorConfiguration === 'INTERCHANGEABLE' ? <ActionIcon variant="light" size="lg" aria-label="Gestionar motor" title="Gestionar motor" onClick={() => setMotorOpened(true)}><IconEngine size={20} /></ActionIcon> : null}
             <Button component={Link} href={`/inventory/accessories/equipment/${asset.id}?create=1`} variant="light" leftSection={<IconPlus size={16} />}>
               Agregar accesorio
             </Button>
@@ -575,12 +599,18 @@ function EditSerializedAssetPage() {
               assetId={asset.id}
               name={autoDescription}
               isDamaged={asset.isDamaged ?? false}
+              assignedMotor={asset.motorConfiguration === 'INTERCHANGEABLE' && asset.assignedMotor ? {
+                id: asset.assignedMotor.id, name: motorLabel(asset.assignedMotor), isDamaged: asset.assignedMotor.isDamaged,
+              } : null}
               opened={conditionOpened || conditionRequested}
               onOpen={() => setConditionOpened(true)}
               onClose={closeCondition}
-              onUpdated={(updated) => {
-                setAsset((current) => current ? { ...current, ...updated } : current);
-                setSuccess(updated.isDamaged ? 'Equipo marcado como averiado.' : 'Reparación registrada. El equipo está operativo.');
+              onUpdated={(updated, target) => {
+                const condition = { isDamaged: updated.isDamaged, damageNote: updated.damageNote, conditionEvents: updated.conditionEvents };
+                setAsset((current) => current ? target === 'motor'
+                  ? { ...current, assignedMotor: current.assignedMotor ? { ...current.assignedMotor, ...condition } : null }
+                  : { ...current, ...condition } : current);
+                setSuccess(`${target === 'motor' ? 'Motor' : 'Equipo'}: ${updated.isDamaged ? 'avería registrada.' : 'reparación registrada.'}`);
               }}
             />
             <ActionIcon
@@ -591,6 +621,7 @@ function EditSerializedAssetPage() {
               onClick={() => {
                 setSuccess(null);
                 setError(null);
+                if (asset.kind === 'MOTOR' && canManageMotors) { setMotorOpened(true); return; }
                 if (editing) handleCancelEdit();
                 else setEditing(true);
               }}
@@ -696,13 +727,13 @@ function EditSerializedAssetPage() {
                 Mantenimiento
               </Tabs.Tab>
               <Tabs.Tab value="accessories" leftSection={<IconTool size={17} />}>
-                Accesorios
+                Componentes y accesorios
               </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="details">
               <Stack gap="lg">
-                {editing && !asset.deletedAt ? (
+                {editing && asset.kind !== 'MOTOR' && !asset.deletedAt ? (
                   <SerializedAssetEditForm
                     active={active}
                     brand={brand}
@@ -771,11 +802,13 @@ function EditSerializedAssetPage() {
               </Stack>
             </Tabs.Panel>
             <Tabs.Panel value="accessories">
-              <AccessoriesWorkspace equipmentId={asset.id} />
+              <Stack gap="xl"><ConfigurationPanel assetId={asset.id} /><AccessoriesWorkspace equipmentId={asset.id} /></Stack>
             </Tabs.Panel>
           </Tabs>
         </Stack>
       ) : null}
+      {asset && motorOpened ? <EquipmentMotorModal asset={{ id: asset.id, publicCode: asset.publicCode, internalNumber: asset.internalNumber ?? 0, description: asset.description, imageUrl: assetImageUrl, warehouseOwner: asset.warehouseOwner?.name ? { name: asset.warehouseOwner.name } : undefined, sku: { name: asset.sku?.name ?? autoDescription } }}
+        isMotor={asset.kind === 'MOTOR'} onClose={() => setMotorOpened(false)} onSaved={refreshMotor} /> : null}
     </Container>
   );
 }
