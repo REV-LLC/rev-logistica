@@ -7,6 +7,7 @@ import { UpdateAssetConditionDto } from './dto/update-asset-condition.dto';
 function fixture(overrides = {}) {
   const asset = { id: 'asset-1', isDamaged: false, deletedAt: null, warehouseCurrentId: 'warehouse-1', warehouseOwnerId: 'warehouse-1', ...overrides };
   const tx = {
+    $queryRaw: jest.fn(),
     asset: { findUnique: jest.fn().mockResolvedValue(asset), update: jest.fn() },
     assetConditionEvent: { create: jest.fn() },
     stockLedger: { findMany: jest.fn().mockResolvedValue([{ customerWorksiteId: 'site-1' }]) },
@@ -19,6 +20,22 @@ function fixture(overrides = {}) {
 }
 
 describe('Asset damage condition', () => {
+  it('reports only the assigned motor after verifying the equipment relationship', async () => {
+    const { service, tx } = fixture();
+    tx.asset.findUnique.mockResolvedValueOnce({ assignedMotorId: 'motor-1', deletedAt: null });
+    await service.updateAssetCondition('motor-1', { isDamaged: true, note: 'Motor no enciende', expectedParentAssetId: 'asset-1' }, 'user-1');
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.asset.update).toHaveBeenCalledTimes(1);
+    expect(tx.asset.update).toHaveBeenCalledWith({ where: { id: 'motor-1' }, data: { isDamaged: true, damageNote: 'Motor no enciende' } });
+    expect(tx.assetConditionEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ assetId: 'motor-1' }) }));
+  });
+  it.each([null, { assignedMotorId: 'other', deletedAt: null }, { assignedMotorId: 'motor-1', deletedAt: new Date() }])('rejects a stale motor selection without touching either unit', async parent => {
+    const { service, tx } = fixture();
+    tx.asset.findUnique.mockResolvedValueOnce(parent);
+    await expect(service.updateAssetCondition('motor-1', { isDamaged: true, note: 'Falla', expectedParentAssetId: 'asset-1' }, 'user-1')).rejects.toThrow('motor asignado cambió');
+    expect(tx.asset.update).not.toHaveBeenCalled();
+    expect(tx.assetConditionEvent.create).not.toHaveBeenCalled();
+  });
   it('records the damage and its author without changing activity or physical location', async () => {
     const { service, tx, cache } = fixture();
     await service.updateAssetCondition('asset-1', { isDamaged: true, note: '  No enciende  ' }, 'user-1');
@@ -54,5 +71,6 @@ describe('Asset damage condition', () => {
     expect(await validate(valid)).toHaveLength(0);
     expect(valid.note).toBe('Reparado');
     expect((await validate(plainToInstance(UpdateAssetConditionDto, { isDamaged: 'false', note: '  ' }))).length).toBeGreaterThan(0);
+    expect((await validate(plainToInstance(UpdateAssetConditionDto, { isDamaged: true, note: 'Falla', expectedParentAssetId: 'invalid' }))).length).toBeGreaterThan(0);
   });
 });

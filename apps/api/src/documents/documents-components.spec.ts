@@ -1,113 +1,70 @@
-import { DocumentsService } from './documents.service';
+import { validateDocumentConfiguration } from '../accessories/document-configuration';
 
-const assetFamilies: Record<string, string> = {
-  loader: 'loaders', loader2: 'loaders', bucket: 'loader-buckets',
-  hammer: 'loader-hammers', forks: 'loader-forks', backhoeBucket: 'backhoe-buckets',
-};
-const rules = ['loader-buckets', 'loader-hammers', 'loader-forks'].map((id) => ({
-  parentAssetFamilyId: 'loaders', componentAssetFamilyId: id,
-  required: false, minimumQuantity: 0, maximumQuantity: 1, exclusiveGroup: 'IMPLEMENTO FRONTAL',
-  componentAssetFamily: { name: 'IMPLEMENTOS' },
-}));
-const item = (assetId: string, parent: string | null = null) => ({
-  assetId, componentParentAssetId: parent, skuId: null, quantity: null,
-});
-
-function createValidator(customRules = rules, includeAssetLabels = true) {
-  const prisma = {
-    asset: { findMany: jest.fn().mockResolvedValue(Object.entries(assetFamilies).map(([id, family]) => ({
-      id,
-      internalNumber: includeAssetLabels ? 3 : null,
-      sku: { assetFamilyId: family, name: includeAssetLabels ? 'MINICARGADOR' : '' },
-    }))) },
+const item = (assetId: string, parent?: string) => ({ assetId, componentParentAssetId: parent, quantity: null });
+function fixture(required = false) {
+  const entry = { familyId: 'buckets', family: { name: 'BALDES' }, quantity: 1, required, maximumQuantity: 1 };
+  const config = { assetId: 'loader', entries: [entry] };
+  const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    equipmentConfiguration: { findMany: jest.fn().mockResolvedValue([config]) },
+    asset: { findMany: jest.fn().mockResolvedValue([
+      { id: 'loader', internalNumber: 3, sku: { name: 'MINICARGADOR', assetFamilyId: 'loaders' } },
+      { id: 'bucket', sku: { assetFamilyId: 'buckets' } },
+      { id: 'bucket2', sku: { assetFamilyId: 'buckets' } },
+      { id: 'wrong', sku: { assetFamilyId: 'backhoes' } },
+    ]) },
     sku: { findMany: jest.fn().mockResolvedValue([]) },
-    assetFamilyComponent: { findMany: jest.fn().mockResolvedValue(customRules) },
+    documentItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
-  const service = new DocumentsService(prisma as never, {} as never, {} as never, {} as never, {} as never);
-  return (items: ReturnType<typeof item>[]) => service['validateDocumentComponentRelations'](items);
+  return { tx, config, entry, validate: (items: ReturnType<typeof item>[], type = 'REMISSION') =>
+    validateDocumentConfiguration(tx as never, { items, type, customerWorksiteId: 'site' }) };
 }
-
-describe('Document accessory compatibility and exclusive groups', () => {
-  it('accepts a compatible bucket linked to its loader', async () => {
-    await expect(createValidator()([item('loader'), item('bucket', 'loader')])).resolves.toBeUndefined();
+describe('Document component contract after unified configuration cutover', () => {
+  it('accepts a unit from the configured family', async () => {
+    await expect(fixture().validate([item('loader'), item('bucket', 'loader')])).resolves.toBeUndefined();
   });
-  it('allows a loader without optional attachments', async () => {
-    await expect(createValidator()([item('loader')])).resolves.toBeUndefined();
+  it('allows an optional piece to be omitted', async () => {
+    await expect(fixture().validate([item('loader')])).resolves.toBeUndefined();
   });
-  it('rejects a backhoe bucket linked to a loader', async () => {
-    await expect(createValidator()([item('loader'), item('backhoeBucket', 'loader')]))
-      .rejects.toThrow('no está permitido');
+  it('rejects an incompatible piece', async () => {
+    await expect(fixture().validate([item('loader'), item('wrong', 'loader')])).rejects.toThrow('no está permitida');
   });
-  it('rejects bucket and forks together in the same front-attachment group', async () => {
-    await expect(createValidator()([item('loader'), item('bucket', 'loader'), item('forks', 'loader')]))
-      .rejects.toThrow('Selecciona solo un implemento');
+  it('requires the referenced parent in the document', async () => {
+    await expect(fixture().validate([item('bucket', 'loader')])).rejects.toThrow('equipo principal');
   });
-  it('allows one implement per loader in the same document', async () => {
-    await expect(createValidator()([
-      item('loader'), item('loader2'), item('bucket', 'loader'), item('forks', 'loader2'),
-    ])).resolves.toBeUndefined();
+  it('never duplicates a physical identity', async () => {
+    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket')])).rejects.toThrow('dos veces');
   });
-  it('rejects the same accessory linked to two parents', async () => {
-    await expect(createValidator()([
-      item('loader'), item('loader2'), item('bucket', 'loader'), item('bucket', 'loader2'),
-    ])).rejects.toThrow('más de una vez');
+  it('preserves quantity limits', async () => {
+    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).rejects.toThrow('máximo 1');
   });
-  it('rejects an absent parent', async () => {
-    await expect(createValidator()([item('bucket', 'loader')])).rejects.toThrow('equipo principal incluido');
+  it('names a missing required part and the equipment number', async () => {
+    await expect(fixture(true).validate([item('loader')])).rejects.toThrow('MINICARGADOR #3 requiere 1 de BALDES');
   });
-  it('keeps independent optional component rules independent', async () => {
-    const independent = rules.map((rule) => ({ ...rule, exclusiveGroup: null })) as unknown as typeof rules;
-    await expect(createValidator(independent)([
-      item('loader'), item('bucket', 'loader'), item('forks', 'loader'),
-    ])).resolves.toBeUndefined();
+  it('accepts a required part with its parent reference', async () => {
+    await expect(fixture(true).validate([item('loader'), item('bucket', 'loader')])).resolves.toBeUndefined();
   });
-
-  it('identifies a missing required component by family name and parent internal number, not its UUID', async () => {
-    const componentFamilyId = '5270915e-4ca2-4e13-b553-a9994c89da4f';
-    const requiredRules = [{
-      ...rules[0],
-      componentAssetFamilyId: componentFamilyId,
-      required: true,
-      minimumQuantity: 1,
-      componentAssetFamily: { name: 'CUCHARONES' },
-    }];
-    await expect(createValidator(requiredRules)([item('loader')])).rejects.toMatchObject({
-      status: 400,
-      message: 'MINICARGADOR #3 requiere al menos 1 componente(s) de CUCHARONES.',
-    });
+  it('does not apply remission requirements to a partial return', async () => {
+    await expect(fixture(true).validate([item('loader')], 'RETURN')).resolves.toBeUndefined();
   });
-
-  it('uses readable fallbacks when the required component or parent labels are blank', async () => {
-    const requiredRules = [{
-      ...rules[0],
-      componentAssetFamilyId: '5270915e-4ca2-4e13-b553-a9994c89da4f',
-      required: true,
-      minimumQuantity: 1,
-      componentAssetFamily: { name: '  ' },
-    }];
-    await expect(createValidator(requiredRules, false)([item('loader')])).rejects.toThrow(
-      'El equipo seleccionado requiere al menos 1 componente(s) de la familia de componentes requerida.',
-    );
+  it('rejects self-reference', async () => {
+    await expect(fixture().validate([item('loader', 'loader')])).rejects.toThrow('contenerse');
   });
-
-  it('still accepts the same required component when its minimum quantity is met', async () => {
-    const requiredRules = [{ ...rules[0], required: true, minimumQuantity: 1 }];
-    await expect(createValidator(requiredRules)([item('loader'), item('bucket', 'loader')]))
-      .resolves.toBeUndefined();
+  it('reads a configuration instead of global legacy family rules', async () => {
+    const f = fixture();
+    await f.validate([item('loader')]);
+    expect(f.tx.equipmentConfiguration.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { assetId: { in: ['loader'] } },
+    }));
   });
-
-  it('preserves structured recovery identifiers for incompatible simultaneous implements', async () => {
-    await expect(createValidator()([
-      item('loader'), item('bucket', 'loader'), item('forks', 'loader'),
-    ])).rejects.toMatchObject({
-      response: {
-        code: 'EXCLUSIVE_COMPONENT_GROUP',
-        recovery: {
-          type: 'SELECT_ASSET_COMPONENT',
-          parentAssetId: 'loader',
-          group: 'IMPLEMENTO FRONTAL',
-        },
-      },
+  it('supports a historically documented return after reconfiguration', async () => {
+    const f = fixture();
+    f.tx.documentItem.findMany.mockResolvedValue([{ assetId: 'wrong', componentParentAssetId: 'loader' }] as never);
+    await expect(f.validate([item('loader'), item('wrong', 'loader')], 'RETURN')).resolves.toBeUndefined();
+  });
+  it('exposes a general correction error, not a motor-only recovery workflow', async () => {
+    await expect(fixture(true).validate([item('loader')])).rejects.toMatchObject({
+      response: { code: 'MISSING_EQUIPMENT_PART' },
     });
   });
 });

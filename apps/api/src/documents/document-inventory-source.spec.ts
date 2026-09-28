@@ -71,7 +71,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     ]) },
     asset: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
     assetConditionEvent: { create: jest.fn() },
-    assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
+    equipmentConfiguration: { findMany: jest.fn().mockResolvedValue([]) },
     warehouse: {
       findFirst: jest.fn().mockResolvedValue({ id: 'our-warehouse', type: 'OWN' }),
       findMany: jest.fn().mockResolvedValue([]),

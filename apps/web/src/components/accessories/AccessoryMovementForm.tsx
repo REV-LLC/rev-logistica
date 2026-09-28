@@ -38,7 +38,7 @@ export default function AccessoryMovementForm({
   onCancel: () => void;
 }) {
   const [type, setType] = useState<MovementType>(
-    item.balances.some((b) => b.warehouseId)
+    item.scope === 'ACCESSORIES' ? 'TRANSFER' : item.balances.some((b) => b.warehouseId)
       ? "ASSIGN"
       : item.balances.some(
             (balance) =>
@@ -212,6 +212,7 @@ export default function AccessoryMovementForm({
               allowDeselect={false}
               value={type}
               data={Object.entries(movementLabels)
+                .filter(([key]) => item.scope !== 'ACCESSORIES' || (key !== 'ASSIGN' && key !== 'RETURN'))
                 .filter(([key]) =>
                   allowsManualMovement(item.kind, key as MovementType),
                 )
@@ -222,6 +223,7 @@ export default function AccessoryMovementForm({
                 setTarget(null);
               }}
             />
+            {item.scope === 'ACCESSORIES' ? <Alert color="yellow">Este elemento es compatible con un accesorio principal. Su entrega y devolución anidadas estarán disponibles en la siguiente etapa; por ahora puedes gestionar existencias en bodega.</Alert> : null}
             {needsFrom ? (
               <Select
                 label="Origen con existencias"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -13,6 +13,7 @@ import {
   ScrollArea,
   Stack,
   Table,
+  Tabs,
   Text,
   TextInput,
   UnstyledButton,
@@ -40,7 +41,7 @@ export type InventoryItemPickerSerialItem = SerialAssetCardItem & {
   assetFamily?: { id?: string; code: string; name: string } | null;
 };
 
-type InventoryItemPickerModalProps = {
+export type InventoryItemPickerModalProps = {
   opened: boolean;
   allowDamaged?: boolean;
   onClose: () => void;
@@ -56,6 +57,12 @@ type InventoryItemPickerModalProps = {
   showOwnerWarehouse?: boolean;
   emptyStateText?: string | null;
   onItemAddedNotice?: (message: string) => void;
+  extraTab?: {
+    label: string;
+    content: ReactNode;
+    selectedCount: number;
+    onConfirm: () => number;
+  };
 };
 
 function buildBulkItemKey(item: InventoryItemPickerBulkItem) {
@@ -98,11 +105,13 @@ export default function InventoryItemPickerModal({
   showOwnerWarehouse = true,
   emptyStateText,
   onItemAddedNotice,
+  extraTab,
 }: InventoryItemPickerModalProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string | null>('inventory');
 
   const skuMetaById = useMemo(() => {
     const map = new Map<string, { name: string; category: string }>();
@@ -162,6 +171,10 @@ export default function InventoryItemPickerModal({
     setMobileSearchOpen(false);
   }, [opened, bulkItems, serialItems]);
 
+  useEffect(() => {
+    setActiveTab('inventory');
+  }, [opened]);
+
   const filteredGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase('es');
     if (!query) return groupedRows;
@@ -205,6 +218,7 @@ export default function InventoryItemPickerModal({
       const added = row.type === 'bulk' ? onAddBulk(row.item) : onAddSerial(row.item);
       if (added) addedCount += 1;
     });
+    addedCount += extraTab?.onConfirm() ?? 0;
     if (addedCount > 0 && onItemAddedNotice) {
       onItemAddedNotice(
         `${addedCount} item${addedCount === 1 ? '' : 's'} agregado${addedCount === 1 ? '' : 's'} a la lista.`,
@@ -214,7 +228,7 @@ export default function InventoryItemPickerModal({
     onClose();
   };
 
-  const selectedCount = selectedRows.length;
+  const selectedCount = selectedRows.length + (extraTab?.selectedCount ?? 0);
   const hasItems = groupedRows.some((group) => group.rows.length > 0);
   const availableCount = selectableRows.length;
   const ownerWarehouseNames = useMemo(
@@ -228,6 +242,21 @@ export default function InventoryItemPickerModal({
     visibleSelectableRows.length > 0 && visibleSelectedCount === visibleSelectableRows.length;
   const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
   const showTableColumns = !isMobile;
+  const navigation = extraTab ? (
+    <Tabs.List grow>
+      <Tabs.Tab value="inventory">Equipos y materiales</Tabs.Tab>
+      <Tabs.Tab value="extra">{extraTab.label}</Tabs.Tab>
+    </Tabs.List>
+  ) : null;
+  const withTabs = (content: ReactNode) => extraTab ? (
+    <Tabs value={activeTab} onChange={setActiveTab}
+      style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, width: '100%', height: isMobile ? '100%' : undefined }}>
+      {content}
+    </Tabs>
+  ) : content;
+  const inventoryPanel = (content: ReactNode) => extraTab ? (
+    <Tabs.Panel value="inventory" className="inventory-picker-content">{content}</Tabs.Panel>
+  ) : content;
 
   if (isMobile) {
     return (
@@ -243,7 +272,7 @@ export default function InventoryItemPickerModal({
           body: 'inventory-picker-mobile-modal-body',
         }}
       >
-        <div className="inventory-picker-mobile-shell" tabIndex={-1} data-autofocus>
+        {withTabs(<div className="inventory-picker-mobile-shell" tabIndex={-1} data-autofocus>
           <header className="inventory-picker-mobile-header">
             <ActionIcon
               variant="transparent"
@@ -263,6 +292,7 @@ export default function InventoryItemPickerModal({
               variant="transparent"
               color="dark"
               size="xl"
+              style={activeTab === 'extra' ? { visibility: 'hidden' } : undefined}
               onClick={() => {
                 setMobileSearchOpen((current) => !current);
                 if (mobileSearchOpen) setSearchQuery('');
@@ -273,7 +303,9 @@ export default function InventoryItemPickerModal({
             </ActionIcon>
           </header>
 
-          {mobileSearchOpen ? (
+          {navigation}
+
+          {mobileSearchOpen && activeTab === 'inventory' ? (
             <div className="inventory-picker-mobile-search">
               <TextInput
                 autoFocus
@@ -287,7 +319,9 @@ export default function InventoryItemPickerModal({
           ) : null}
 
           <ScrollArea className="inventory-picker-mobile-list" type="auto" offsetScrollbars>
-            {hasItems && filteredGroups.length ? (
+            {extraTab && activeTab === 'extra' ? (
+              <Tabs.Panel value="extra" p="md">{extraTab.content}</Tabs.Panel>
+            ) : inventoryPanel(hasItems && filteredGroups.length ? (
               <div>
                 {filteredGroups.map((group) => (
                   <section key={group.family} className="inventory-picker-mobile-family">
@@ -360,7 +394,7 @@ export default function InventoryItemPickerModal({
                     : 'Revisa el origen e intenta cargar el inventario nuevamente.'}
                 </Text>
               </div>
-            )}
+            ))}
           </ScrollArea>
 
           <footer className="inventory-picker-mobile-footer">
@@ -375,7 +409,7 @@ export default function InventoryItemPickerModal({
               Agregar
             </Button>
           </footer>
-        </div>
+        </div>)}
       </Modal>
     );
   }
@@ -395,7 +429,7 @@ export default function InventoryItemPickerModal({
         body: 'inventory-picker-modal-body',
       }}
     >
-      <Stack gap={isMobile ? 'xs' : 'md'} className="inventory-picker">
+      {withTabs(<Stack gap={isMobile ? 'xs' : 'md'} className="inventory-picker">
         <div className="inventory-picker-intro">
           <Text className="ui-text-body">
             Busca y selecciona los items que quieres agregar al documento.
@@ -407,13 +441,19 @@ export default function InventoryItemPickerModal({
           ) : null}
         </div>
 
+        {navigation}
+
         {itemsAddedNotice ? (
           <Alert color="green" variant="light">
             {itemsAddedNotice}
           </Alert>
         ) : null}
 
-        {emptyStateText ? (
+        {extraTab && activeTab === 'extra' ? (
+          <ScrollArea className="inventory-picker-scroll" type="auto" offsetScrollbars>
+            <Tabs.Panel value="extra" pr="xs">{extraTab.content}</Tabs.Panel>
+          </ScrollArea>
+        ) : inventoryPanel(emptyStateText ? (
           <Text size="sm" c="dimmed">
             {emptyStateText}
           </Text>
@@ -662,7 +702,7 @@ export default function InventoryItemPickerModal({
               </Paper>
             )}
           </Stack>
-        )}
+        ))}
 
         <Group justify="space-between" className="inventory-picker-actions">
           <Text size="sm" c="dimmed">
@@ -693,7 +733,7 @@ export default function InventoryItemPickerModal({
             </Button>
           </Group>
         </Group>
-      </Stack>
+      </Stack>)}
     </Modal>
   );
 }

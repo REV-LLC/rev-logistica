@@ -66,6 +66,8 @@ export function getSerialDisplayName(item: SerialDisplayItem) {
 
 /** Human-facing identity shared by the asset detail and its accessories. */
 export function getAssetDisplayLabel(asset: {
+  kind?: string;
+  description?: string | null;
   brand?: string | null;
   model?: string | null;
   internalNumber?: string | number | null;
@@ -76,6 +78,7 @@ export function getAssetDisplayLabel(asset: {
     assetSubfamily?: { name?: string | null } | null;
   } | null;
 }) {
+  if (asset.kind === 'MOTOR' && asset.description?.trim()) return getSerialDisplayName(asset);
   const family = asset.assetFamily?.name ?? asset.sku?.assetFamily?.name;
   const parts: string[] = [];
   appendUniqueDisplayPart(parts, family || asset.sku?.name);

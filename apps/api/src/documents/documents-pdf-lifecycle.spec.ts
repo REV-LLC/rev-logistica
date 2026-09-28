@@ -101,7 +101,7 @@ describe('DocumentsService PDF lifecycle', () => {
         ]),
       },
       sku: { findMany: jest.fn().mockResolvedValue([]) },
-      assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
+      equipmentConfiguration: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const inventory = {
       moveOut: jest.fn().mockResolvedValue({ ok: true }),
@@ -175,7 +175,7 @@ describe('DocumentsService PDF lifecycle', () => {
         ]),
       },
       sku: { findMany: jest.fn().mockResolvedValue([]) },
-      assetFamilyComponent: { findMany: jest.fn().mockResolvedValue([]) },
+      equipmentConfiguration: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const inventory = {
       moveOut: jest.fn().mockResolvedValue({ ok: true }),

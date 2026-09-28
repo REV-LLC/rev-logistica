@@ -3,7 +3,6 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
   AssetKind,
-  AssetMotorConfiguration,
   MovementType,
   Prisma,
   SkuControlType,
@@ -103,16 +102,21 @@ export class AssetsService {
         damageNote: true,
         deletedByUserId: true,
         kind: true,
+        motorPowerHp: true,
         motorConfiguration: true,
         assignedMotorId: true,
         assignedMotor: {
           select: {
             id: true,
             internalNumber: true,
+            publicCode: true,
+            description: true,
             serialOrEngine: true,
             brand: true,
             model: true,
             fuel: true,
+            isDamaged: true,
+            damageNote: true,
             sku: { select: { name: true } },
           },
         },
@@ -483,16 +487,21 @@ export class AssetsService {
           },
         },
         kind: true,
+        motorPowerHp: true,
         motorConfiguration: true,
         assignedMotorId: true,
         assignedMotor: {
           select: {
             id: true,
             internalNumber: true,
+            publicCode: true,
+            description: true,
             serialOrEngine: true,
             brand: true,
             model: true,
             fuel: true,
+            isDamaged: true,
+            damageNote: true,
             sku: { select: { name: true } },
           },
         },
@@ -733,12 +742,15 @@ export class AssetsService {
   ) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true },
+      select: { id: true, kind: true },
     });
 
     if (!asset) {
       throw new NotFoundException('Asset not found');
     }
+
+    if (asset.kind === 'MOTOR' && ['brand', 'model', 'fuel', 'description'].some(key => Object.prototype.hasOwnProperty.call(payload, key)))
+      throw new BadRequestException('Edita los datos del motor desde su modal para conservar descripción, compatibilidad e historial.');
 
     if (payload.warehouseCurrentId != null) {
       const warehouse = await this.prisma.warehouse.findUnique({
@@ -830,7 +842,7 @@ export class AssetsService {
 
   async updateAssetCondition(
     assetId: string,
-    payload: { isDamaged: boolean; note: string },
+    payload: { isDamaged: boolean; note: string; expectedParentAssetId?: string },
     userId: string,
   ) {
     const note = payload.note?.trim();
@@ -838,6 +850,16 @@ export class AssetsService {
       throw new BadRequestException('Describe la avería o la reparación (máximo 2000 caracteres).');
     }
     const cacheKeys = await this.prisma.$transaction(async (tx) => {
+      if (payload.expectedParentAssetId) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended('equipment-configuration', 0))::text`;
+        const parent = await tx.asset.findUnique({
+          where: { id: payload.expectedParentAssetId },
+          select: { assignedMotorId: true, deletedAt: true },
+        });
+        if (!parent || parent.deletedAt || parent.assignedMotorId !== assetId) {
+          throw new BadRequestException('El motor asignado cambió. Actualiza el equipo antes de registrar la avería o reparación.');
+        }
+      }
       const asset = await tx.asset.findUnique({
         where: { id: assetId },
         select: { id: true, isDamaged: true, deletedAt: true, warehouseCurrentId: true, warehouseOwnerId: true },
@@ -868,85 +890,13 @@ export class AssetsService {
     return this.getAssetById(assetId);
   }
 
-  async assignMotor(assetId: string, motorId: string) {
-    if (assetId === motorId) {
-      throw new BadRequestException('Un equipo no puede ser su propio motor');
-    }
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const [mixer, motor] = await Promise.all([
-        tx.asset.findUnique({
-          where: { id: assetId },
-          select: {
-            id: true,
-            kind: true,
-            motorConfiguration: true,
-            warehouseCurrentId: true,
-          },
-        }),
-        tx.asset.findUnique({
-          where: { id: motorId },
-          select: {
-            id: true,
-            kind: true,
-            active: true,
-            warehouseCurrentId: true,
-            assignedToMixer: { select: { id: true } },
-          },
-        }),
-      ]);
-
-      if (!mixer) throw new NotFoundException('Mezcladora no encontrada');
-      if (mixer.kind === AssetKind.MOTOR) {
-        throw new BadRequestException('Un motor no puede tener otro motor asociado');
-      }
-      if (mixer.motorConfiguration !== AssetMotorConfiguration.INTERCHANGEABLE) {
-        throw new BadRequestException('Este equipo no usa motor intercambiable');
-      }
-      if (!motor || motor.kind !== AssetKind.MOTOR || !motor.active) {
-        throw new BadRequestException('El motor seleccionado no está disponible');
-      }
-      if (!mixer.warehouseCurrentId || motor.warehouseCurrentId !== mixer.warehouseCurrentId) {
-        throw new BadRequestException('La mezcladora y el motor deben estar en la misma bodega');
-      }
-      if (motor.assignedToMixer && motor.assignedToMixer.id !== mixer.id) {
-        throw new BadRequestException('El motor ya está asignado a otra mezcladora');
-      }
-
-      return tx.asset.update({
-        where: { id: mixer.id },
-        data: { assignedMotorId: motor.id },
-        select: {
-          id: true,
-          assignedMotorId: true,
-          warehouseCurrentId: true,
-          assignedMotor: {
-            select: {
-              id: true,
-              internalNumber: true,
-              serialOrEngine: true,
-              brand: true,
-              model: true,
-              fuel: true,
-              sku: { select: { name: true } },
-            },
-          },
-        },
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (result.warehouseCurrentId) {
-      const baseKey = `inventory:warehouse:${result.warehouseCurrentId}`;
-      await Promise.all([
-        this.cacheManager.del(baseKey),
-        this.cacheManager.del(`${baseKey}:default`),
-        this.cacheManager.del(`${baseKey}:include-zero`),
-      ]);
-    }
-    return result;
-  }
-
   private async assertNoAssignedAccessories(tx: Prisma.TransactionClient, assetId: string) {
-    await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${assetId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('equipment-configuration', 0))::text`;
+    const [motorState] = await tx.$queryRaw<Array<{ assignedMotorId: string | null; isAssignedMotor: boolean }>>`SELECT a."assignedMotorId",
+      EXISTS (SELECT 1 FROM "Asset" parent WHERE parent."assignedMotorId" = a.id) AS "isAssignedMotor"
+      FROM "Asset" a WHERE a.id = ${assetId} FOR UPDATE`;
+    if (motorState?.assignedMotorId || motorState?.isAssignedMotor)
+      throw new BadRequestException('Desasigna el motor desde el botón Motor de la ficha antes de desactivar o dar de baja el equipo. Así queda registrado el historial.');
     const assigned = await tx.accessoryBalance.count({ where: { assetId, quantity: { gt: 0 } } });
     if (assigned) throw new BadRequestException('Devuelve o traslada los accesorios asignados antes de desactivar o eliminar el equipo.');
   }
@@ -995,15 +945,6 @@ export class AssetsService {
             entityId: { in: maintenanceItems.map((item) => item.id) },
           },
           data: { active: false },
-        });
-      }
-      if (asset.assignedMotorId) {
-        await tx.asset.update({ where: { id: asset.id }, data: { assignedMotorId: null } });
-      }
-      if (asset.assignedToMixer) {
-        await tx.asset.update({
-          where: { id: asset.assignedToMixer.id },
-          data: { assignedMotorId: null },
         });
       }
       return tx.asset.update({
@@ -1073,7 +1014,8 @@ export class AssetsService {
     });
     const lastLedger = resolveLatestSerializedMovements(ledgerRows).get(asset.id)?.locationMovement;
     const balance = asset.warehouseOwner?.type === 'OWN'
-      ? serializedBalanceConsistency(ledgerRows, asset.warehouseOwnerId, lastLedger)
+      // The card reports the physical location, not stock only at its owner's warehouse.
+      ? serializedBalanceConsistency(ledgerRows, lastLedger?.warehouseId ?? asset.warehouseOwnerId, lastLedger)
       : undefined;
     if (balance && !balance.isConsistent) {
       return {

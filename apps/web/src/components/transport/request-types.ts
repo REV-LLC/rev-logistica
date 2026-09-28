@@ -68,7 +68,6 @@ export type SelectedItem = {
   ownerWarehouseId?: string | null;
   isDamaged?: boolean;
   damageDescription?: string;
-  associatedMixerId?: string;
   componentParentAssetId?: string;
 };
 

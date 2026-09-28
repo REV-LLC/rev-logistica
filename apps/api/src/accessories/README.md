@@ -23,9 +23,9 @@ Las mangueras retornables permiten reposición y devolución parcial, pero nunca
 - Inventario → Accesorios: cards, búsqueda y paginación.
 - Card/ficha de equipo → Agregar accesorio: formulario propio con familia y equipo precargados.
 - Alta estándar de equipo: invitación opcional después de guardar, sin repetir el alta ni obligar a registrar accesorios.
-- Pestaña Accesorios de la ficha del equipo: compatibles y asignados. Vincular uno existente amplía su alcance sin borrar los destinos anteriores; requiere revisar y guardar. No mueve existencias.
+- Pestaña Componentes y accesorios de la ficha del equipo: configuración, compatibles y asignados. Los equipos existentes (por ejemplo APT) se vinculan sin cambiar su identidad ni su historial. No mueve existencias.
 - Card de accesorio: edición, movimientos e historial.
-- Transporte → generar documento → Items → Agregar accesorios / Devolver accesorios. Se puede remitir junto con el equipo o abastecer uno que ya está en la obra. La devolución puede ser solo de accesorios y parcial para retornables por cantidad o consumibles.
+- Transporte → generar documento → Items: la tuerca de cada equipo permite revisar su configuración. Agregar accesorios permite abastecer también un equipo que ya está en obra. Para devoluciones, Seleccionar existencias tiene las pestañas Equipos y materiales / Accesorios; no existe un botón separado Devolver accesorios. La devolución puede ser solo de accesorios y parcial.
 - Entregas a proveedor: incluye accesorios devueltos directamente y los que quedaron primero en custodia de una bodega propia; mantiene la evidencia y el comprobante exigidos por el flujo existente.
 
 Formularios, movimientos, historial, selector de existentes y cards tienen componentes separados bajo `apps/web/src/components/accessories`. Los modales se cargan bajo demanda.
@@ -57,9 +57,24 @@ La integración está separada en `accessory-document-items.ts` (capturas del do
 
 ## Límites deliberados de esta implementación
 
+### Configuración de equipos: primera etapa (septiembre 2026)
+
+La configuración nueva distingue **componentes** (piezas de configuración del equipo, como techo o motor) de **accesorios** (implementos de trabajo). No se clasifican según si tienen tarifa ni por ser necesarios para operar. Cada fila registra una cantidad habitual, inclusión predeterminada y necesidad operativa como preferencias independientes.
+
+- `EquipmentConfiguration` pertenece a un equipo o accesorio individualizado; cada entrada apunta a una identidad existente (`Asset` o `Accessory`) sin copiarla. Admite configuraciones anidadas y rechaza ciclos, duplicados y más de 16 niveles.
+- Los registros de piezas nuevos usan `Accessory.purpose` (`COMPONENT`/`ACCESSORY`) y su inventario existente. Los componentes se identifican individualmente; `exclusiveAssetId` conserva su pertenencia a una unidad aunque no acompañen una entrega. Los accesorios mantienen control individual, retornable por cantidad o consumible por cantidad.
+- El alcance `ACCESSORIES` expresa compatibilidad con accesorios principales individualizados; no amplía implícitamente la compatibilidad a todos los equipos de su familia.
+- El alta sin plantilla tiene un paso opcional para crear piezas o vincular inventario existente. Equipo, piezas nuevas y existencias iniciales se guardan en una misma transacción. Vincular, quitar o editar preferencias no registra movimientos.
+- Las tarjetas enlazan el configurador reutilizable. Guardar exige versión vigente y conserva revisiones. El motor se asigna persistentemente desde el botón Motor de la ficha, no desde el documento; los cambios entre equipos generan ambas revisiones en una transacción, sin inventar traslados físicos.
+- Los endpoints `/equipment-configurations` exigen JWT: OFFICE/ADMIN editan; DRIVER puede consultar lo necesario para documentos. La búsqueda administrativa de equipos permanece restringida y paginada.
+
+Las preferencias están conectadas con remisiones: se proponen identidades predeterminadas disponibles y se validan requisitos/máximos al aprobar. Una familia compatible no selecciona una unidad por defecto. El motor asignado es obligatorio para equipos intercambiables; Office debe asignarlo antes de remitir. Las devoluciones parciales se basan en existencias e historial, no exigen la configuración actual. Los APT que ya son `Asset` conservan identidad, existencias e historial, vinculados con rol accesorio.
+
+Ensayar primero las migraciones en una copia local. Las cinco migraciones de configuración/motores del 23–25 de septiembre preparan el esquema. `20260928120000_configuration_cutover` archiva reglas anteriores y copia las opciones de familia y vínculos explícitos de accesorios a configuraciones nuevas, sin sobrescribir configuraciones editadas, crear stock ni asignar unidades por inferencia. Conserva el grupo exclusivo en el archivo, pero permite transportar balde y uñas juntos. `20260928121000_confirmed_mixer_half_bag` corrige solamente el UUID confirmado de la mezcladora #6, con guardas de identidad, propietario y motor; conserva precios y el historial. Las pruebas `equipment-configuration*.spec.ts` y `configuration-cutover.integration.spec.ts` usan la variable local protegida `ACCESSORY_TEST_DATABASE_URL`.
+
 No se agregan tarifas ni cobros automáticos de accesorios: la facturación existente sigue usando equipos/SKUs y omite estas nuevas referencias sin tarifa. Definir alquiler o cobro por consumo requiere reglas comerciales aparte. El ledger general de equipos no mezcla accesorios; su trazabilidad está en el módulo específico y en los documentos.
 
-Las relaciones `AssetFamilyComponent`, sus equipos/SKUs anteriores y los documentos permanecen intactos. Migrarlos exige identificar las unidades y saldos existentes y definir equivalencias sin duplicar inventario. No se hace conversión automática. Tampoco se implementa seguimiento de desgaste porcentual: consumo es disminución explícita por unidades.
+Las tablas históricas `AssetFamilyComponent`, sus equipos/SKUs y documentos permanecen intactos para trazabilidad; los flujos activos usan el nuevo configurador. Este empalme de configuración NO convierte inventario legacy a `Accessory`, no cambia tipos existentes (por ejemplo mangueras individualizadas) ni concilia custodia pendiente. Esa conversión sigue separada. Tampoco se implementa desgaste porcentual: consumo es disminución explícita por unidades.
 
 ## Migración y verificación
 

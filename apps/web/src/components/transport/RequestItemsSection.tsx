@@ -7,16 +7,14 @@ import {
   Group,
   NumberInput,
   Paper,
-  Select,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
 import type { Dispatch, JSX, ReactNode, SetStateAction } from 'react';
-import { normalizeQuantityInput } from './request-formatting';
+import RequestSelectedItems from './RequestSelectedItems';
 import {
   Customer,
   Employee,
@@ -29,6 +27,7 @@ import {
 import { helpLabel } from './RequestHelpLabel';
 
 type Props = {
+  renderConfiguration?: (item: SelectedItem) => ReactNode;
   accessorySelector?: ReactNode;
   clearLoadedInventory: () => void;
   originWarehouses: Warehouse[];
@@ -78,6 +77,7 @@ type Props = {
 };
 
 export default function RequestItemsSection({
+  renderConfiguration,
   accessorySelector,
   clearLoadedInventory,
   originWarehouses,
@@ -232,7 +232,7 @@ export default function RequestItemsSection({
             onClick={() => void loadInventory()}
             loading={loadingInventory}
           >
-            Seleccionar equipos
+            {docType === 'RETURN' ? 'Seleccionar existencias' : 'Seleccionar equipos'}
           </Button>
         )}
       </Group>
@@ -270,159 +270,20 @@ export default function RequestItemsSection({
 
       {useManualWarehouseCapture ? null : (
         <Text size="sm" c="dimmed">
-          Pulsa "Seleccionar equipos" para consultar el inventario de esta bodega.
+          {docType === 'RETURN'
+            ? 'Pulsa "Seleccionar existencias" para consultar los equipos, materiales y accesorios de esta obra.'
+            : 'Pulsa "Seleccionar equipos" para consultar el inventario de esta bodega.'}
         </Text>
       )}
       <Divider my="md" />
 
       <Title order={4}>Seleccionados</Title>
       {accessorySelector}
-      {selectedItems.length === 0 ? (
-        <Paper radius="lg" p="lg" bg="gray.0" mt="md">
-          <Text fw={700}>No hay equipos agregados</Text>
-          <Text size="sm" c="dimmed" mt={4}>
-            Carga items desde el origen o agrega manualmente para continuar con
-            la firma.
-          </Text>
-        </Paper>
-      ) : !isTabletOrMobile ? (
-        <Table striped highlightOnHover mt="md" style={{ tableLayout: 'fixed' }}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Descripción</Table.Th>
-              <Table.Th style={{ width: 120, textAlign: 'center' }}>
-                Cantidad
-              </Table.Th>
-              <Table.Th style={{ width: 96, textAlign: 'center' }}>Acciones</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {selectedItems.map((item, index) => (
-              <Table.Tr key={item.selectionId}>
-                 <Table.Td style={{ verticalAlign: 'top' }}>
-                   <Text fw={600} style={{ minHeight: 36, display: 'flex', alignItems: 'center', overflowWrap: 'anywhere' }}>{item.name}</Text>
-                  {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
-                  {item.serial && (
-                    <Text size="xs" c="dimmed">
-                      {item.serial}
-                    </Text>
-                  )}
-                  {renderDamageFields(item, index)}
-                  {renderAdminItemFields(item, index)}
-                  {canResolveInline && item.type === 'free' ? (
-                    <Select
-                      mt="xs"
-                      label="Resolver a SKU"
-                      placeholder="Seleccionar SKU"
-                      searchable
-                      clearable
-                      data={skuOptions.map((sku) => ({
-                        value: sku.id,
-                        label: sku.name,
-                      }))}
-                      onChange={(value) => resolveFreeItemToSku(index, value)}
-                    />
-                  ) : null}
-                </Table.Td>
-                <Table.Td style={{ verticalAlign: 'top', textAlign: 'center' }}>
-                  {item.type === 'bulk' || item.type === 'free' || (item.type === 'accessory' && (item.accessoryKind === 'CONSUMABLE' || item.accessoryKind === 'RETURNABLE')) ? (
-                    <NumberInput
-                      styles={{ input: { textAlign: 'center', fontVariantNumeric: 'tabular-nums' } }}
-                      aria-label={`Cantidad de ${item.name}`}
-                      allowDecimal={item.type !== 'accessory'}
-                      max={item.type === 'accessory' ? item.availableQuantity : undefined}
-                      min={1}
-                      value={item.quantity ?? 1}
-                      onChange={(value) =>
-                        updateSelected(index, {
-                          quantity: normalizeQuantityInput(
-                            value,
-                            item.quantity ?? 1,
-                          ),
-                        })
-                      }
-                    />
-                  ) : (
-                    <Text fw={600} aria-label={`Cantidad de ${item.name}: 1`} style={{ minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>1</Text>
-                  )}
-                </Table.Td>
-                <Table.Td style={{ verticalAlign: 'top', textAlign: 'center' }}>
-                  <Button
-                    size="sm"
-                    px="xs"
-                    aria-label={`Quitar ${item.name}`}
-                    variant="subtle"
-                    color="red"
-                    onClick={() => removeSelected(item.selectionId)}
-                  >
-                    Quitar
-                  </Button>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      ) : (
-        <Stack mt="md" gap="sm">
-          {selectedItems.map((item, index) => (
-            <Paper key={item.selectionId} withBorder radius="md" p="sm">
-              <Stack gap="xs">
-                <div>
-                  <Text fw={600}>{item.name}</Text>
-                  {docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
-                  {item.serial ? (
-                    <Text size="xs" c="dimmed">
-                      {item.serial}
-                    </Text>
-                  ) : null}
-                </div>
-                {item.type === 'bulk' || item.type === 'free' || (item.type === 'accessory' && (item.accessoryKind === 'CONSUMABLE' || item.accessoryKind === 'RETURNABLE')) ? (
-                  <NumberInput
-                    allowDecimal={item.type !== 'accessory'}
-                    max={item.type === 'accessory' ? item.availableQuantity : undefined}
-                    label="Cantidad"
-                    min={1}
-                    value={item.quantity ?? 1}
-                    onChange={(value) =>
-                      updateSelected(index, {
-                        quantity: normalizeQuantityInput(
-                          value,
-                          item.quantity ?? 1,
-                        ),
-                      })
-                    }
-                  />
-                ) : (
-                  <Text size="sm">Cantidad: 1</Text>
-                )}
-                {renderDamageFields(item, index)}
-                {renderAdminItemFields(item, index)}
-                {canResolveInline && item.type === 'free' ? (
-                  <Select
-                    label="Resolver a SKU"
-                    placeholder="Seleccionar SKU"
-                    searchable
-                    clearable
-                    data={skuOptions.map((sku) => ({
-                      value: sku.id,
-                      label: sku.name,
-                    }))}
-                    onChange={(value) => resolveFreeItemToSku(index, value)}
-                  />
-                ) : null}
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="red"
-                  onClick={() => removeSelected(item.selectionId)}
-                >
-                  Quitar
-                </Button>
-              </Stack>
-            </Paper>
-          ))}
-        </Stack>
-      )}
+      <RequestSelectedItems selectedItems={selectedItems} isTabletOrMobile={isTabletOrMobile}
+        docType={docType} warehouses={warehouses} renderDamageFields={renderDamageFields}
+        renderAdminItemFields={renderAdminItemFields} renderConfiguration={renderConfiguration}
+        updateSelected={updateSelected} canResolveInline={canResolveInline} skuOptions={skuOptions}
+        resolveFreeItemToSku={resolveFreeItemToSku} removeSelected={removeSelected} />
 
       <Group mt="md" justify="space-between" className="mobile-actions">
         <Button

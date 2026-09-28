@@ -185,59 +185,30 @@ test('devolución consulta saldo de obra y conserva la presentación de dueños 
   assert.equal(hook.current.pickerSerialItems[0].assetId, 'motor');
 });
 
-test('selección preserva grupos exclusivos y vincula un implemento recién creado con su equipo y dueño', async () => {
-  const parent = {
-    assetId: 'loader',
-    sourceWarehouseId: 'physical-origin',
-    ownerWarehouseId: 'ally',
-    description: 'Minicargador',
-  };
-  const bucket = {
-    assetId: 'new-bucket',
-    ownerWarehouseId: 'ally',
-    description: 'Balde',
-  };
-  const option = {
-    id: 'rule',
-    family: { id: 'buckets', controlType: 'SERIAL' },
-    exclusiveGroup: 'IMPLEMENTO FRONTAL',
-  };
+test('selección usa solo el configurador, sin modal antiguo ni reasignación de inventario', async () => {
+  const calls = [];
   let selected = [];
-  const { useRequestAssetSelection } = loadTransportModule(
-    'use-request-asset-selection.ts',
-    {
-      '@/lib/api': { ApiError, api: async () => ({ components: [option] }) },
-    },
-  );
-  const options = {
-    serialItems: [parent],
-    selectedSerialIds: new Set(),
-    setSelectedItems: (update) => {
-      selected = update(selected);
-    },
-    setItemsModalOpen: noop,
-    docType: 'REMISSION',
-    setError: noop,
-    setItemsAddedNotice: noop,
-    setSerialItems: noop,
-  };
-  const hook = await mountHook(useRequestAssetSelection, options);
-  await act(async () => {
-    hook.current.addSerialItem(parent);
+  const parent = { assetId: 'loader', sourceWarehouseId: 'origin', ownerWarehouseId: 'ally', description: 'Minicargador' };
+  const { useRequestAssetSelection } = loadTransportModule('use-request-asset-selection.ts', {
+    '@/lib/api': { api: async (path, options) => {
+      calls.push({path,options});
+      if (path.startsWith('/equipment-configurations')) return { entries: [{ id: 'entry', assetId: 'bucket', role: 'ACCESSORY', quantity: 1, defaultIncluded: true, required: false, asset: { sku: {name: 'Balde'} } }] };
+      if (path.startsWith('/inventory/warehouse/')) return { serial: [{assetId: 'bucket', quantity: 1, ownerWarehouseId: 'own', description: 'Balde'}], bulk: [] };
+      throw new Error('Unexpected API '+path);
+    } },
   });
-  assert.equal(
-    hook.current.componentOptions[0].exclusiveGroup,
-    'IMPLEMENTO FRONTAL',
-  );
-  await hook.update({ ...options, serialItems: [parent, bucket] });
-  await act(() =>
-    hook.current.confirmAssetComponents([{ type: 'serial', item: bucket }]),
-  );
-  assert.equal(selected[1].assetId, 'new-bucket');
+  const hook = await mountHook(useRequestAssetSelection, {
+    configurationWorksiteId: 'site', docType: 'REMISSION',
+    setSelectedItems: update => { selected = update(selected); },
+    setError: noop, setItemsAddedNotice: noop,
+  });
+  await act(async () => hook.current.addSerialItem(parent));
+  assert.equal(selected.length, 2);
   assert.equal(selected[1].componentParentAssetId, 'loader');
-  assert.equal(selected[1].ownerWarehouseId, 'ally');
-  assert.equal(selected[0].sourceWarehouseId, 'physical-origin');
-  assert.equal(selected[1].sourceWarehouseId, 'physical-origin');
+  assert.equal(selected[1].sourceWarehouseId, 'origin');
+  assert.equal(selected[1].ownerWarehouseId, 'own');
+  assert.ok(calls.every(({path,options}) => !path.includes('component-options') && !path.includes('assigned-motor') && !options?.method));
+  assert.equal(hook.current.confirmAssetComponents, undefined);
 });
 
 test('autoguardado conserva firma, destinatarios y vínculo del implemento en su payload', async () => {

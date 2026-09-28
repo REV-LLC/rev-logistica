@@ -1,9 +1,7 @@
 'use client';
 import { getRequestInventorySourceMode, getRequestSourceWarehouseId, type RequestInventorySourceMode } from './request-inventory-source';
 
-import AssetComponentsSelectionModal from '@/components/AssetComponentsSelectionModal';
-import InventoryItemPickerModal from '@/components/InventoryItemPickerModal';
-import MixerMotorSelectionModal from '@/components/MixerMotorSelectionModal';
+import RequestInventoryPickerModal from './RequestInventoryPickerModal';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
@@ -62,6 +60,7 @@ import RequestDocumentsDialog from './RequestDocumentsDialog';
 import RequestInformationSection from './RequestInformationSection';
 import RequestItemsSection from './RequestItemsSection';
 import RequestAccessorySelector from './RequestAccessorySelector';
+import RequestEquipmentConfiguration from './RequestEquipmentConfiguration';
 import RequestSignatureDialog from './RequestSignatureDialog';
 import RequestSigningSection from './RequestSigningSection';
 import RequestsListSection from './RequestsListSection';
@@ -203,11 +202,6 @@ export default function TransportRequestsWorkspace({
   const currentUserId = userSession?.sub ?? null;
   const canDecide = userRole === 'ADMIN' || userRole === 'OFFICE';
   const {
-    motorRecovery,
-    setMotorRecovery,
-    motorRecoveryLoading,
-    motorRecoveryError,
-    setMotorRecoveryError,
     decidingId,
     resolveModalOpen,
     resolveDocument,
@@ -250,7 +244,6 @@ export default function TransportRequestsWorkspace({
     openCreateSerialForRow,
     createMissingSerialFromResolve,
     uploadMissingProviderRemissionsAndApprove,
-    confirmRecoveredMixerMotor,
     decideRequest,
     resolveAndApprove,
   } = useRequestApproval({
@@ -420,30 +413,10 @@ export default function TransportRequestsWorkspace({
     clearProviderRemissionDocuments,
     setSourceWorksiteId,
   });
-  const {
-    setPendingMixerQueue,
-    componentParent,
-    setComponentParent,
-    componentOptions,
-    setComponentOptions,
-    assigningMotor,
-    assignMotorError,
-    setAssignMotorError,
-    activePendingMixer,
-    availableMotorsForMixer,
-    addSerialItem,
-    confirmAssetComponents,
-    cancelPendingMixer,
-    confirmMixerMotor,
-  } = useRequestAssetSelection({
-    serialItems,
-    selectedSerialIds,
-    setSelectedItems,
-    setItemsModalOpen,
-    docType,
-    setError,
-    setItemsAddedNotice,
-    setSerialItems,
+  const { addSerialItem, cancelPendingSelections } = useRequestAssetSelection({
+    configurationWorksiteId: customerWorksiteId,
+    motorOnly: isTabletRole,
+    setSelectedItems, docType, setError, setItemsAddedNotice,
   });
 
   const sourceWorksiteName =
@@ -541,8 +514,7 @@ export default function TransportRequestsWorkspace({
     setAutosaveDraftId(null);
     setAutosaveReady(false);
     setAutosaveStatus('idle');
-    setPendingMixerQueue([]);
-    setAssignMotorError(null);
+    cancelPendingSelections();
     setError(null);
     setConsecutive('');
     setSavedConsecutive(null);
@@ -577,9 +549,7 @@ export default function TransportRequestsWorkspace({
   };
   const clearLoadedInventory = () => {
     clearInventoryCache();
-    setPendingMixerQueue([]);
-    setComponentParent(null);
-    setComponentOptions([]);
+    cancelPendingSelections();
   };
 
   const { handleSubmit } = useRequestSubmission({
@@ -748,7 +718,6 @@ export default function TransportRequestsWorkspace({
               'Serial',
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
-            associatedMixerId: item.asset?.assignedToMixer?.id,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             isDamaged: Boolean(item.conditionNote?.trim()),
             damageDescription: item.conditionNote ?? '',
@@ -1215,7 +1184,11 @@ export default function TransportRequestsWorkspace({
 
           {activeTab === 'generate' && generateStep === 'items' ? (
             <RequestItemsSection
-              accessorySelector={!isTabletRole ? <RequestAccessorySelector docType={docType} deliveryMode="WAREHOUSE" warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
+              renderConfiguration={!isTabletRole ? item => <RequestEquipmentConfiguration
+                key={`${item.selectionId}:${docType}:${customerWorksiteId}:${item.sourceWarehouseId}`}
+                parent={item} docType={docType} customerWorksiteId={customerWorksiteId}
+                selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
+              accessorySelector={docType === 'REMISSION' && !isTabletRole ? <RequestAccessorySelector deliveryMode="WAREHOUSE" warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
               clearLoadedInventory={clearLoadedInventory}
               physicalSourceWarehouseName={physicalSourceWarehouseName}
               sourceMode={sourceMode}
@@ -1361,7 +1334,10 @@ export default function TransportRequestsWorkspace({
         resolveAndApprove={resolveAndApprove}
       />
 
-      <InventoryItemPickerModal
+      <RequestInventoryPickerModal
+        returnWorksiteId={docType === 'RETURN' && !isTabletRole ? customerWorksiteId : undefined}
+        selectedItems={selectedItems}
+        setSelectedItems={setSelectedItems}
         allowDamaged={docType === 'RETURN'}
         opened={
           activeTab === 'generate' &&
@@ -1388,59 +1364,6 @@ export default function TransportRequestsWorkspace({
             : null
         }
         onItemAddedNotice={setItemsAddedNotice}
-      />
-
-      <MixerMotorSelectionModal
-        opened={Boolean(activePendingMixer)}
-        mixer={activePendingMixer}
-        motors={availableMotorsForMixer}
-        loading={assigningMotor}
-        error={assignMotorError}
-        onCancel={cancelPendingMixer}
-        onConfirm={confirmMixerMotor}
-      />
-
-      <MixerMotorSelectionModal
-        opened={Boolean(motorRecovery)}
-        mixer={motorRecovery?.mixer ?? null}
-        motors={motorRecovery?.motors ?? []}
-        loading={motorRecoveryLoading}
-        error={motorRecoveryError}
-        onCancel={() => {
-          if (!motorRecoveryLoading) {
-            setMotorRecovery(null);
-            setMotorRecoveryError(null);
-          }
-        }}
-        onConfirm={(motor) => void confirmRecoveredMixerMotor(motor)}
-      />
-
-      <AssetComponentsSelectionModal
-        opened={Boolean(componentParent)}
-        parentName={
-          componentParent ? getSerialDisplayName(componentParent) : ''
-        }
-        options={componentOptions}
-        bulkItems={bulkItems}
-        serialItems={serialItems}
-        ownerWarehouseId={componentParent?.ownerWarehouseId ?? null}
-        physicalWarehouseId={componentParent?.sourceWarehouseId ?? physicalSourceWarehouseId}
-        restrictOwnerWarehouse={sourceMode === 'warehouse'}
-        canCreate={
-          canDecide && sourceMode === 'warehouse' && docType === 'REMISSION'
-        }
-        excludedAssetIds={selectedSerialIds}
-        onAssetCreated={(asset) =>
-          setSerialItems((current) => [
-            ...current.filter((item) => item.assetId !== asset.assetId),
-            asset,
-          ])
-        }
-        onClose={() => {
-          setComponentParent(null);
-          setComponentOptions([]);
-        }}
-        onConfirm={(selections) => void confirmAssetComponents(selections)}
       />
 
       <RequestDocumentsDialog
