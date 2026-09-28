@@ -9,7 +9,6 @@ import {
   Group,
   Paper,
   SegmentedControl,
-  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -37,7 +36,6 @@ type PriceListSku = {
   id: string;
   name: string;
   price: number | string | null;
-  subrentalPrice: number | string | null;
   replacementValue: number | string | null;
   chargeType: 'DAY' | 'HOUR' | string;
   minimumChargeHours: number | string | null;
@@ -50,18 +48,6 @@ type PriceListSku = {
   };
   controlType: ControlType;
   category: string;
-};
-
-type Warehouse = {
-  id: string;
-  name: string;
-  type: 'OWN' | 'ALLY';
-};
-
-type ProviderSkuPrice = {
-  providerWarehouseId: string;
-  skuId: string;
-  price: number;
 };
 
 const controlTypeOptions = [
@@ -105,9 +91,6 @@ function csvEscape(value: string | number | null | undefined) {
 export default function PriceListPage() {
   const [controlType, setControlType] = useState<ControlType>('BULK');
   const [items, setItems] = useState<PriceListSku[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [providerWarehouseId, setProviderWarehouseId] = useState<string | null>(null);
-  const [providerPrices, setProviderPrices] = useState<ProviderSkuPrice[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,13 +100,9 @@ export default function PriceListPage() {
     setError(null);
 
     try {
-      const params = new URLSearchParams({ controlType: targetControlType });
-      const [response, priceResponse] = await Promise.all([
-        api<PriceListSku[]>(`/skus?${params.toString()}`, { method: 'GET' }),
-        api<ProviderSkuPrice[]>('/skus/provider-prices', { method: 'GET' }),
-      ]);
+      const params = new URLSearchParams({ controlType: targetControlType, ownOnly: 'true' });
+      const response = await api<PriceListSku[]>(`/skus?${params.toString()}`, { method: 'GET' });
       setItems(response);
-      setProviderPrices(priceResponse);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`${err.status}: ${err.message}`);
@@ -141,12 +120,6 @@ export default function PriceListPage() {
     loadItems(controlType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlType]);
-
-  useEffect(() => {
-    api<Warehouse[]>('/warehouses')
-      .then((rows) => setWarehouses(rows.filter((row) => row.type === 'ALLY')))
-      .catch(() => setWarehouses([]));
-  }, []);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -169,21 +142,12 @@ export default function PriceListPage() {
     [filteredItems],
   );
 
-  const providerPriceBySku = useMemo(
-    () =>
-      new Map(
-        providerPrices
-          .filter((row) => row.providerWarehouseId === providerWarehouseId)
-          .map((row) => [row.skuId, row.price]),
-      ),
-    [providerPrices, providerWarehouseId],
-  );
   const priceColumns = useMemo<DataTableColumn<PriceListSku>[]>(() => [
     {
       id: 'reference',
       header: 'Referencia',
       ariaLabel: 'referencia',
-      width: '19%',
+      width: '25%',
       sortValue: (item) => item.name,
       mobile: { priority: 'primary' },
       cell: (item) => (
@@ -204,7 +168,7 @@ export default function PriceListPage() {
       id: 'family',
       header: 'Familia',
       ariaLabel: 'familia',
-      width: '14%',
+      width: '18%',
       sortValue: (item) => item.assetFamily.name,
       mobile: { label: 'Familia', priority: 'detail' },
       cell: (item) => item.assetFamily.name,
@@ -213,27 +177,17 @@ export default function PriceListPage() {
       id: 'customerPrice',
       header: 'Precio cliente',
       ariaLabel: 'precio cliente',
-      width: '13%',
+      width: '15%',
       align: 'right',
       sortValue: (item) => toNumber(item.price),
       mobile: { label: 'Precio cliente', priority: 'detail' },
       cell: (item) => formatMoney(item.price),
     },
     {
-      id: 'providerPrice',
-      header: 'Costo proveedor',
-      ariaLabel: 'costo proveedor',
-      width: '14%',
-      align: 'right',
-      sortValue: (item) => providerPriceBySku.get(item.id),
-      mobile: { label: 'Costo proveedor', priority: 'detail' },
-      cell: (item) => formatMoney(providerPriceBySku.get(item.id)),
-    },
-    {
       id: 'replacementValue',
       header: 'Reposición',
       ariaLabel: 'valor de reposición',
-      width: '13%',
+      width: '15%',
       align: 'right',
       sortValue: (item) => toNumber(item.replacementValue),
       mobile: { label: 'Reposición', priority: 'detail' },
@@ -261,34 +215,21 @@ export default function PriceListPage() {
         </Badge>
       ),
     },
-  ], [providerPriceBySku]);
+  ], []);
 
   const priceTable = useClientTableData({
     rows: filteredItems,
     columns: priceColumns,
     initialPageSize: 20,
   });
-  const providerPricedCount = useMemo(
-    () => filteredItems.filter((item) => providerPriceBySku.has(item.id)).length,
-    [filteredItems, providerPriceBySku],
-  );
-
-  const inactiveCount = useMemo(
-    () => filteredItems.filter((item) => !item.active).length,
-    [filteredItems],
-  );
-
   const exportCsv = () => {
-    const selectedProvider = warehouses.find((warehouse) => warehouse.id === providerWarehouseId);
-    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio cliente', 'Proveedor', 'Costo proveedor', 'Valor reposicion', 'Tipo de cobro', 'Estado'];
+    const headers = ['Tipo', 'Referencia', 'Codigo', 'Familia', 'Precio cliente', 'Valor reposicion', 'Tipo de cobro', 'Estado'];
     const rows = filteredItems.map((item) => [
       item.controlType,
       item.name,
       item.assetFamily.code,
       item.assetFamily.name,
       toNumber(item.price) ?? '',
-      selectedProvider?.name ?? '',
-      providerPriceBySku.get(item.id) ?? '',
       toNumber(item.replacementValue) ?? '',
       formatChargeType(item.chargeType, item.minimumChargeHours),
       item.active ? 'Activo' : 'Inactivo',
@@ -299,7 +240,7 @@ export default function PriceListPage() {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lista-precios-${controlType.toLowerCase()}.csv`;
+    link.download = `lista-precios-propios-${controlType.toLowerCase()}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -311,7 +252,7 @@ export default function PriceListPage() {
       <Stack gap="lg">
         <PageHeaderCard
           title="Lista de precios"
-          description="Compara el precio al cliente con el costo específico de cada proveedor."
+          description="Tarifas de alquiler de equipos propios. No incluye referencias exclusivas de subalquiler."
           icon={<IconFileDollar size={20} />}
           iconColor="yellow"
           accentColor="rgba(217, 154, 24, 0.16)"
@@ -352,16 +293,7 @@ export default function PriceListPage() {
               onChange={(event) => setSearch(event.currentTarget.value)}
               style={{ flex: '1 1 320px' }}
             />
-            <Select
-              label="Proveedor"
-              placeholder="Seleccionar proveedor"
-              data={warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
-              value={providerWarehouseId}
-              onChange={setProviderWarehouseId}
-              searchable
-              clearable
-              style={{ minWidth: 260 }}
-            />
+
           </Group>
         </PageHeaderCard>
 
@@ -371,7 +303,7 @@ export default function PriceListPage() {
           </Alert>
         ) : null}
 
-        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
           <StatCard
             label="Referencias"
             value={filteredItems.length}
@@ -386,19 +318,7 @@ export default function PriceListPage() {
             icon={<IconTag size={20} />}
             color="green"
           />
-          <StatCard
-            label="Con costo proveedor"
-            value={providerPricedCount}
-            hint={
-              providerWarehouseId
-                ? inactiveCount
-                  ? `${inactiveCount} inactivas en filtro`
-                  : 'Costo específico registrado'
-                : 'Selecciona un proveedor'
-            }
-            icon={<IconFileDollar size={20} />}
-            color="blue"
-          />
+
         </SimpleGrid>
 
         <Paper withBorder radius="md" p="md">
@@ -425,7 +345,7 @@ export default function PriceListPage() {
               tableMinWidth={860}
               emptyState={{
                 title: 'No hay referencias para mostrar',
-                description: 'Prueba cambiando el tipo, proveedor o búsqueda.',
+                description: 'Prueba cambiando el tipo o búsqueda.',
               }}
             />
           </Stack>
