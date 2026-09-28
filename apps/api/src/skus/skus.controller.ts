@@ -35,11 +35,13 @@ export class SkusController {
     @Query('controlType') controlType?: SkuControlType,
     @Query('assetFamilyId') assetFamilyId?: string,
     @Query('assetSubfamilyId') assetSubfamilyId?: string,
+    @Query('ownOnly') ownOnly?: string,
   ) {
     if (controlType && !Object.values(SkuControlType).includes(controlType)) {
       throw new BadRequestException('Invalid controlType');
     }
-    return this.skusService.listSkus({ search, controlType, assetFamilyId, assetSubfamilyId });
+    if (ownOnly && !['true', 'false'].includes(ownOnly)) throw new BadRequestException('Invalid ownOnly');
+    return this.skusService.listSkus({ search, controlType, assetFamilyId, assetSubfamilyId, ownOnly: ownOnly === 'true' });
   }
 
   @Get('units')
