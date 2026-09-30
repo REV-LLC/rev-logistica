@@ -36,7 +36,7 @@ type Option = {
   parentSourceDocumentItemId?: string;
   sourceDocumentItemId?: string;
 };
-type ParentOption = { key: string; assetId: string; accessoryId?: string; name: string; selectionId?: string; sourceDocumentItemId?: string };
+type ParentOption = { key: string; assetId: string; accessoryId?: string; name: string; selectionId?: string; sourceDocumentItemId?: string; legacyOriginId?: string };
 type Props = {
   deliveryMode: "WAREHOUSE" | "ON_SITE";
   warehouseId: string | null;
@@ -128,18 +128,22 @@ function AccessoryOptions({
       }>;
     }>(`/inventory/on-site/${customerWorksiteId}/request-options`, {
       signal: controller.signal,
-    }), getOnsiteAccessories(), api<ReturnDocumentOrigin[]>(`/equipment-configurations/return-origins?customerWorksiteId=${customerWorksiteId}`, { signal: controller.signal })])
-      .then(([data, accessories, origins]) => {
+    }), getOnsiteAccessories(), api<ReturnDocumentOrigin[]>(`/equipment-configurations/return-origins?customerWorksiteId=${customerWorksiteId}`, { signal: controller.signal }),
+      api<Array<{ id: string; assetId: string }>>(`/legacy-equipment-origins/active?customerWorksiteId=${customerWorksiteId}`, { signal: controller.signal })])
+      .then(([data, accessories, origins, bridges]) => {
         if (!controller.signal.aborted)
           setOnsiteParents(
-            [...data.serial.map((item) => ({
+            [...data.serial.filter(item => origins.some(origin => origin.assetId === item.assetId) || bridges.some(origin => origin.assetId === item.assetId)).map((item) => ({
               key: `asset:${item.assetId}`,
               assetId: item.assetId,
               sourceDocumentItemId: origins.find(origin => origin.assetId === item.assetId)?.sourceDocumentItemId,
+              legacyOriginId: bridges.find(origin => origin.assetId === item.assetId)?.id,
               name: `${item.skuName ?? "Equipo"} · ${item.publicCode ?? item.assetId} (ya en obra)`,
             })), ...accessories.map(item => ({ key: `source:${item.sourceDocumentItemId}`, assetId: item.parentAssetId,
               accessoryId: item.accessoryId, sourceDocumentItemId: item.sourceDocumentItemId, name: `${item.name} (ya en obra)` }))],
           );
+        if (!controller.signal.aborted && data.serial.some(item => !origins.some(origin => origin.assetId === item.assetId) && !bridges.some(origin => origin.assetId === item.assetId)))
+          setParentError('Hay equipos de entregas antiguas pendientes de empalme individual. Office debe revisar su origen antes de agregarles accesorios nuevos.');
       })
       .catch((err: Error) => {
         if (!controller.signal.aborted)
@@ -187,6 +191,7 @@ function AccessoryOptions({
       if (!parent) return current;
       const belongsToParent = (item: SelectedItem) => parent.selectionId
         ? item.parentCompositionNodeId === parent.selectionId
+        : parent.legacyOriginId ? item.parentLegacyOriginId === parent.legacyOriginId
         : item.parentSourceDocumentItemId === (parent.sourceDocumentItemId ?? option.parentSourceDocumentItemId) && item.componentParentAssetId === option.parentAssetId;
       if (
         current.some(
@@ -207,6 +212,7 @@ function AccessoryOptions({
           accessoryPurpose: option.purpose,
           componentParentAssetId: option.parentAssetId,
           ...(parent.selectionId ? { parentCompositionNodeId: parent.selectionId }
+            : parent.legacyOriginId ? { parentLegacyOriginId: parent.legacyOriginId }
             : { parentSourceDocumentItemId: parent.sourceDocumentItemId ?? option.parentSourceDocumentItemId }),
           name: `${option.name}${option.code ? ` · ${option.code}` : ""} · Accesorio de ${option.parentName}`,
           quantity: 1,

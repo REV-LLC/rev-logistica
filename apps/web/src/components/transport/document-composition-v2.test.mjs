@@ -15,6 +15,17 @@ const attachment = { selectionId: 'attachment-node', type: 'accessory', accessor
 const tip = { ...attachment, selectionId: 'tip-node', accessoryId: 'tip', accessorySourceBalanceId: 'tip-stock',
   parentCompositionNodeId: 'attachment-node', quantity: 3, name: 'Puntas' };
 
+test('el empalme histórico se conserva al guardar, reabrir y devolver una pieza', () => {
+  const linked = { ...tip, parentCompositionNodeId: undefined, parentLegacyOriginId: 'reviewed-origin' };
+  const payload = buildRequestItems([linked])[0];
+  assert.equal(payload.parentLegacyOriginId, 'reviewed-origin');
+  assert.equal(restoreDocumentComposition({ ...payload, id: 'row' }).parentLegacyOriginId, 'reviewed-origin');
+  assert.equal(buildDirectDocumentItems([linked])[0].parentLegacyOriginId, 'reviewed-origin');
+  const returned = addReturnAccessories([], [{ accessoryId: 'tip', sourceBalanceId: 'stock', kind: 'CONSUMABLE',
+    quantity: 2, parentAssetId: 'machine', sourceDocumentItemId: 'delivered-line', parentLegacyOriginId: 'reviewed-origin' }]);
+  assert.equal(returned[0].parentLegacyOriginId, 'reviewed-origin');
+});
+
 test('payload y reapertura conservan el padre inmediato en tres niveles, sin convertirlo al equipo raíz', () => {
   const input = [root, attachment, tip];
   const payload = buildRequestItems(input);

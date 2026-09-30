@@ -61,6 +61,7 @@ export function useRequestItemEditing({
           ownerWarehouseId: item.ownerWarehouseId,
           sourceDocumentItemId: item.sourceDocumentItemId,
           parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+          parentLegacyOriginId: item.parentLegacyOriginId,
           componentParentAssetId: item.componentParentAssetId,
         },
       ];
@@ -130,6 +131,7 @@ export function useRequestItemEditing({
               parentCompositionNodeId: item.parentCompositionNodeId,
               sourceDocumentItemId: item.sourceDocumentItemId,
               parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+              parentLegacyOriginId: item.parentLegacyOriginId,
               componentParentAssetId: item.componentParentAssetId,
               type: 'bulk',
               bulkKey: buildBulkKey({

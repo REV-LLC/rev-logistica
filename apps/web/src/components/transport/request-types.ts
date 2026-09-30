@@ -56,6 +56,7 @@ export type SelectedItem = {
   parentCompositionNodeId?: string;
   sourceDocumentItemId?: string;
   parentSourceDocumentItemId?: string;
+  parentLegacyOriginId?: string;
   type: 'bulk' | 'serial' | 'free' | 'accessory';
   accessoryId?: string;
   accessorySourceBalanceId?: string;
@@ -161,6 +162,7 @@ export type RequestDocumentDetail = {
     parentCompositionNodeId?: string | null;
     sourceDocumentItemId?: string | null;
     parentSourceDocumentItemId?: string | null;
+    parentLegacyOriginId?: string | null;
     assetId?: string | null;
     accessoryId?: string | null;
     accessorySourceBalanceId?: string | null;
