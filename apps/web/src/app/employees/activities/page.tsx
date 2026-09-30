@@ -263,7 +263,7 @@ export default function EmployeeActivitiesPage() {
     setMonth(nextMonth);
     setSelectedDate(`${nextMonth}-01`);
   }
-  function openNote(note?: Note) {
+  function openNote(note?: Note, date = selectedDate) {
     setEditing(note ?? null);
     setFormError(null);
     setSearch("");
@@ -276,7 +276,7 @@ export default function EmployeeActivitiesPage() {
             description: note.description,
           }
         : {
-            date: selectedDate,
+            date,
             customerWorksiteId: "",
             assetId: "",
             description: "",
@@ -476,39 +476,54 @@ export default function EmployeeActivitiesPage() {
                   {days.map((date) => {
                     const dayNotes = notesByDay.get(date) ?? [];
                     return (
-                      <button
-                        key={date}
-                        type="button"
-                        aria-label={`${dayLabel(date)}, ${dayNotes.length} notas`}
-                        aria-pressed={selectedDate === date}
-                        className={`${styles.day} ${date.slice(0, 7) !== month ? styles.outside : ""} ${selectedDate === date ? styles.selected : ""}`}
-                        onClick={() => {
-                          setSelectedDate(date);
-                          if (date.slice(0, 7) !== month)
-                            setMonth(date.slice(0, 7));
-                        }}
-                      >
-                        <span
-                          className={
-                            date === todayKey() ? styles.today : styles.number
-                          }
+                      <div key={date} className={styles.dayContainer}>
+                        <button
+                          type="button"
+                          aria-label={`${dayLabel(date)}, ${dayNotes.length} notas`}
+                          aria-pressed={selectedDate === date}
+                          className={`${styles.day} ${date.slice(0, 7) !== month ? styles.outside : ""} ${selectedDate === date ? styles.selected : ""}`}
+                          onClick={() => {
+                            setSelectedDate(date);
+                            if (date.slice(0, 7) !== month)
+                              setMonth(date.slice(0, 7));
+                          }}
                         >
-                          {Number(date.slice(8))}
-                        </span>
-                        <span className={styles.previews}>
-                          {dayNotes.slice(0, 2).map((note) => (
-                            <span key={note.id} className={styles.preview}>
-                              {note.description}
-                            </span>
-                          ))}
-                        </span>
-                        {dayNotes.length ? (
-                          <span className={styles.count}>
-                            {dayNotes.length}{" "}
-                            {dayNotes.length === 1 ? "nota" : "notas"}
+                          <span
+                            className={
+                              date === todayKey() ? styles.today : styles.number
+                            }
+                          >
+                            {Number(date.slice(8))}
                           </span>
-                        ) : null}
-                      </button>
+                          <span className={styles.previews}>
+                            {dayNotes.slice(0, 2).map((note) => (
+                              <span key={note.id} className={styles.preview}>
+                                {note.description}
+                              </span>
+                            ))}
+                          </span>
+                          {dayNotes.length ? (
+                            <span className={styles.count}>
+                              {dayNotes.length}{" "}
+                              {dayNotes.length === 1 ? "nota" : "notas"}
+                            </span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.addNote}
+                          aria-label={`Agregar nota para ${dayLabel(date)}`}
+                          title="Agregar nota"
+                          onClick={() => {
+                            setSelectedDate(date);
+                            if (date.slice(0, 7) !== month)
+                              setMonth(date.slice(0, 7));
+                            openNote(undefined, date);
+                          }}
+                        >
+                          <IconPlus size={16} aria-hidden="true" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -523,13 +538,6 @@ export default function EmployeeActivitiesPage() {
                       {dayLabel(selectedDate)}
                     </Text>
                   </div>
-                  <Button
-                    variant="light"
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => openNote()}
-                  >
-                    Agregar nota para este día
-                  </Button>
                   {notesLoading ? (
                     <Loader size="sm" />
                   ) : listError ? (
@@ -541,8 +549,8 @@ export default function EmployeeActivitiesPage() {
                       <IconClipboardText size={36} color="#a6adb6" />
                       <Text fw={600}>Un día por registrar</Text>
                       <Text size="sm" c="dimmed" ta="center">
-                        Agrega una nota para dejar constancia de la actividad
-                        del empleado.
+                        No hay actividades registradas para este empleado en
+                        este día.
                       </Text>
                     </Stack>
                   ) : (
