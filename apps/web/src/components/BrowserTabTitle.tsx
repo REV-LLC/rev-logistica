@@ -15,6 +15,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/inventory/dispatch-return', 'Remisión y devolución'],
   ['/inventory/scaffold-modulations', 'Modulaciones'],
   ['/inventory/bulk-adjustments', 'Agregar inventario'],
+  ['/inventory/maintenance', 'Mantenimientos'],
   ['/inventory/hour-meter', 'Horómetros'],
   ['/inventory/serialized-assets', 'Agregar inventario'],
   ['/inventory/accessories', 'Accesorios'],

@@ -59,6 +59,7 @@ export type MaintenanceReading = {
 };
 
 export type MaintenanceItem = {
+  completions?: MaintenanceCompletion[];
   id: string;
   planId: string;
   name: string;
