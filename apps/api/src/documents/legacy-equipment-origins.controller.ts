@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -20,12 +31,28 @@ export class LegacyEquipmentOriginsController {
   constructor(private readonly origins: LegacyEquipmentOriginsService) {}
   @Get('active')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
-  active(@Query('customerWorksiteId', ParseUUIDPipe) siteId: string) { return this.origins.active(siteId); }
+  active(@Query('customerWorksiteId', ParseUUIDPipe) siteId: string) {
+    return this.origins.active(siteId);
+  }
   @Get('inspect/:sourceLedgerId')
-  inspect(@Param('sourceLedgerId', ParseUUIDPipe) id: string, @Query('effectiveFrom') effectiveFrom = '2026-10-01') {
+  inspect(
+    @Param('sourceLedgerId', ParseUUIDPipe) id: string,
+    @Query('effectiveFrom') effectiveFrom = '2026-10-01',
+  ) {
     return this.origins.inspect(id, effectiveFrom);
   }
   @Post('review')
-  review(@Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) input: ReviewLegacyOriginDto,
-    @Req() request: { user: { sub: string } }) { return this.origins.review(input, request.user.sub); }
+  review(
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    input: ReviewLegacyOriginDto,
+    @Req() request: { user: { sub: string } },
+  ) {
+    return this.origins.review(input, request.user.sub);
+  }
 }
