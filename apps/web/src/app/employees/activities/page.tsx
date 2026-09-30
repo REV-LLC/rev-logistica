@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Accordion,
@@ -14,7 +14,6 @@ import {
   Modal,
   Paper,
   ScrollArea,
-  Select,
   Stack,
   Text,
   Textarea,
@@ -35,15 +34,18 @@ import {
 } from "@tabler/icons-react";
 import { api } from "@/lib/api";
 import styles from "./activities.module.css";
+import EmployeeCalendarPicker, {
+  type CalendarEmployee,
+} from "./EmployeeCalendarPicker";
 
-type Employee = { id: string; name: string; lastName: string; active: boolean };
-type Asset = {
-  id: string;
-  publicCode: string;
-  description: string | null;
-  serialOrEngine: string | null;
-  sku: { name: string };
-};
+import EquipmentSelect from "@/components/equipment/EquipmentSelect";
+import {
+  equipmentName,
+  type EquipmentIdentity,
+} from "@/components/equipment/types";
+
+type Employee = CalendarEmployee;
+type Asset = EquipmentIdentity;
 type Worksite = {
   id: string;
   alias: string | null;
@@ -76,8 +78,7 @@ type Form = {
 };
 const fullName = (employee: { name: string; lastName: string }) =>
   `${employee.name} ${employee.lastName}`.trim();
-const assetLabel = (asset: Asset) =>
-  `${asset.publicCode} · ${asset.sku.name}${asset.serialOrEngine ? ` · ${asset.serialOrEngine}` : ""}${asset.description ? ` · ${asset.description}` : ""}`;
+const assetLabel = equipmentName;
 const normalize = (value: string) =>
   value
     .normalize("NFD")
@@ -239,10 +240,7 @@ export default function EmployeeActivitiesPage() {
     const assets = [...options.assets];
     if (editing && !assets.some((item) => item.id === editing.assetId))
       assets.push(editing.asset);
-    return assets.map((asset) => ({
-      value: asset.id,
-      label: assetLabel(asset),
-    }));
+    return assets;
   }, [options.assets, editing]);
   const chosenSite = options.customers
     .flatMap((customer) =>
@@ -333,7 +331,7 @@ export default function EmployeeActivitiesPage() {
   }
 
   return (
-    <Container size="xl" py="md">
+    <Container size="xl" py="md" className={styles.page}>
       <Stack gap="lg">
         <Group justify="space-between">
           <Group>
@@ -367,21 +365,12 @@ export default function EmployeeActivitiesPage() {
           </Alert>
         ) : null}
         <Paper withBorder radius="lg" p="md">
-          <Group justify="space-between" align="end">
-            <Select
-              label="Calendario del empleado"
-              placeholder="Selecciona un empleado"
-              searchable
-              nothingFoundMessage="No se encontraron empleados"
-              data={employees.map((person) => ({
-                value: person.id,
-                label: `${fullName(person)}${person.active ? "" : " · Inactivo"}`,
-              }))}
-              value={employeeId}
+          <Group justify="space-between" align="center">
+            <EmployeeCalendarPicker
+              employees={employees}
+              employee={employee}
               onChange={setEmployeeId}
-              allowDeselect={false}
               disabled={loading || opened || Boolean(deleting)}
-              w={{ base: "100%", sm: 340 }}
             />
             <Group gap="xs">
               <ActionIcon
@@ -451,6 +440,7 @@ export default function EmployeeActivitiesPage() {
                 withBorder
                 radius="lg"
                 className={styles.calendar}
+                style={{ "--calendar-weeks": days.length / 7 } as CSSProperties}
                 aria-busy={notesLoading}
               >
                 <Group justify="space-between" p="md">
@@ -528,7 +518,12 @@ export default function EmployeeActivitiesPage() {
                   })}
                 </div>
               </Paper>
-              <Paper withBorder radius="lg" p="md">
+              <Paper
+                withBorder
+                radius="lg"
+                p="md"
+                className={styles.dayDetails}
+              >
                 <Stack gap="md">
                   <div>
                     <Text size="xs" fw={700} c="orange" tt="uppercase">
@@ -747,13 +742,11 @@ export default function EmployeeActivitiesPage() {
                 </ScrollArea.Autosize>
               </Paper>
             </div>
-            <Select
+            <EquipmentSelect
               label="Activo / equipo"
               placeholder="Busca por código, equipo o serie"
-              searchable
               required
-              nothingFoundMessage="No se encontraron activos"
-              data={assetOptions}
+              items={assetOptions}
               value={form.assetId || null}
               disabled={saving}
               onChange={(value) => setForm({ ...form, assetId: value ?? "" })}
