@@ -1,3 +1,4 @@
+import { legacyCommercialBridge } from './commercial-legacy-bridge';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { commercialBusinessDate, usesCommercialV2 } from './commercial-cutoff';
@@ -35,7 +36,10 @@ export function commercialNodesAt(
         ? doc.items.find(
             (p) => p.compositionNodeId === item.parentCompositionNodeId,
           )?.id
-        : (item.parentSourceDocumentItemId ?? undefined);
+        : (item.parentSourceDocumentItemId ??
+          (item.parentLegacyOriginId
+            ? `legacy-origin:${item.parentLegacyOriginId}`
+            : undefined));
       const returned = documents
         .filter(
           (d) =>
@@ -140,8 +144,11 @@ export async function documentCommercialSnapshotsV2(
     };
     item.commercialSnapshot = snapshot as unknown as Prisma.JsonValue;
   }
+  const bridge = doc.customerWorksiteId
+    ? await legacyCommercialBridge(tx, doc.customerWorksiteId, date)
+    : { documents: [] };
   const snapshots = resolveComposition(
-    commercialNodesAt([...documents, doc], date),
+    commercialNodesAt([...documents, ...bridge.documents, doc], date),
   );
   const result = new Map<string, CommercialSnapshot>();
   for (const item of doc.items) {

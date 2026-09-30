@@ -318,6 +318,22 @@ export default function AnnexesPage() {
     setDirty(true);
     setMessage(null);
   }
+  async function changeBillingMode(rentalId: string, modeId: string) {
+    if (!input || !editing || busy) return;
+    setBusy(true);
+    try {
+      const next = await api<AnnexInput>("/annexes/select-mode", {
+        method: "POST",
+        json: { input, rentalId, modeId },
+      });
+      setInput(next);
+      setResult(null);
+      setDirty(true);
+      setMessage(null);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function prepare(refresh = false) {
     if (!site) return;
     setBusy(true);
@@ -775,6 +791,7 @@ export default function AnnexesPage() {
                 </Group>
               }
               onChange={edit}
+              onModeChange={changeBillingMode}
               onConfigureCalendar={() => setCalendarOpened(true)}
               onReport={(i) => {
                 setReportIndex(i);
