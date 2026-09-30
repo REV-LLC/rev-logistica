@@ -226,6 +226,7 @@ export function prepareCommercialV2(
         snapshot = {
           ...snapshot,
           status: 'REVIEW',
+          minimumReview: true,
           reason:
             'Confirma cómo distribuir los mínimos entre las modalidades utilizadas en este alquiler',
         };
@@ -256,6 +257,12 @@ export function prepareCommercialV2(
       };
       // Explicit zero is a priced presence row, not an inferred report and not an omitted part.
       if (snapshot.contextualZero) rental.pricing = { basePrice: '0.00' };
+      if (snapshot.mode?.unit === 'METER')
+        rental.metering = {
+          minimumMeters: snapshot.mode.minimum.value,
+          pricing: rental.pricing,
+          reports: old?.metering?.reports ?? [],
+        };
       if (snapshot.status !== 'RESOLVED') {
         issues.push({
           code: 'COMMERCIAL_REVIEW',
@@ -297,6 +304,7 @@ export function prepareCommercialV2(
               : {}),
             pricing: rental.pricing,
             commercial: snapshot,
+            rentalContext: rental,
           });
         }
       } else {

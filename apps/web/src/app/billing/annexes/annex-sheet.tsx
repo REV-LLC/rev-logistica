@@ -29,10 +29,12 @@ import {
   applySheetChanges,
   editableKeys,
   sheetRows,
+  sheetModeOptions,
   groupMachineRows,
   type SheetChange,
   type SheetRow,
 } from "@/lib/annex-sheet";
+import { api } from "@/lib/api";
 import type { AnnexInput, Result } from "./types";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
@@ -190,6 +192,7 @@ export default function AnnexSheet({
     };
   }, [expanded]);
   const [mode, setMode] = useState<string | null>("all");
+  const [changingMode, setChangingMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState(result);
   useEffect(() => {
@@ -207,12 +210,28 @@ export default function AnnexSheet({
     [input, result, lastResult, mode],
   );
   const apply = (changes: SheetChange[]) => {
-    if (!editing || busy || !changes.length) return;
+    if (!editing || busy || changingMode || !changes.length) return;
     try {
       onChange(applySheetChanges(input, changes));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const selectMode = async (row: SheetRow, modeId: string | null) => {
+    if (!modeId || !row.rentalId || !editing || busy || changingMode) return;
+    setChangingMode(true);
+    try {
+      const next = await api<AnnexInput>("/annexes/select-mode", {
+        method: "POST",
+        json: { input, rentalId: row.rentalId, modeId },
+      });
+      onChange(next);
+      setError(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChangingMode(false);
     }
   };
   const employeeNames = new Map(
@@ -226,7 +245,41 @@ export default function AnnexSheet({
       frozen: true,
       renderCell: ({ row }: { row: SheetRow }) => <CellText text={row.label} />,
     },
-    { key: "mode", name: "Cobro", width: 55 },
+    {
+      key: "mode",
+      name: "Cobro",
+      width: 64,
+      renderCell: ({ row }: { row: SheetRow }) => {
+        const options = sheetModeOptions(input, row);
+        if (!editing || !row.rentalId || options.length < 2 || row.supplement)
+          return row.mode;
+        return (
+          <Select
+            aria-label={`Cobro: ${row.label}, ${row.from}`}
+            size="xs"
+            variant="unstyled"
+            data={options}
+            value={input[row.kind][row.index].commercial?.mode?.id ?? null}
+            placeholder={row.mode}
+            allowDeselect={false}
+            disabled={busy || changingMode}
+            comboboxProps={{ withinPortal: true, width: 320 }}
+            styles={{
+              input: { fontSize: 12, minHeight: 28, paddingLeft: 3 },
+              section: { width: 16 },
+            }}
+            renderOption={({ option }) => (
+              <span>
+                {option.label} ·{" "}
+                {options.find((m) => m.value === option.value)?.name}
+              </span>
+            )}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(value) => void selectMode(row, value)}
+          />
+        );
+      },
+    },
     {
       key: "from",
       name: "Desde",

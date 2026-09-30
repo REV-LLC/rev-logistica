@@ -97,6 +97,7 @@ export class AppModule implements NestModule {
         { path: 'auth/login', method: RequestMethod.POST },
         { path: 'commercial-profiles', method: RequestMethod.PUT },
         { path: 'annexes/preview', method: RequestMethod.POST },
+        { path: 'annexes/select-mode', method: RequestMethod.POST },
         { path: 'annexes/drafts', method: RequestMethod.POST },
         { path: 'office-assistant/chat', method: RequestMethod.POST },
         { path: 'webhooks/whatsapp', method: RequestMethod.GET },

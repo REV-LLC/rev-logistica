@@ -104,7 +104,13 @@ export class AnnexesService {
           'Hay operarios que no existen en el registro de empleados',
         );
       }
-      const skuIds = [...new Set(input.rentals.map((rental) => rental.skuId))];
+      const skuIds = [
+        ...new Set(
+          input.rentals
+            .filter((rental) => !rental.accessoryId)
+            .map((rental) => rental.skuId),
+        ),
+      ];
       if (
         skuIds.length &&
         (await tx.sku.count({ where: { id: { in: skuIds } } })) !==
@@ -114,9 +120,29 @@ export class AnnexesService {
           'Hay referencias que no existen en el catálogo',
         );
       }
+      const accessoryIds = [
+        ...new Set([
+          ...input.rentals.flatMap((r) =>
+            r.accessoryId ? [r.accessoryId] : [],
+          ),
+          ...input.machineDays.flatMap((d) =>
+            d.rentalContext?.accessoryId ? [d.rentalContext.accessoryId] : [],
+          ),
+        ]),
+      ];
+      if (
+        accessoryIds.length &&
+        (await tx.accessory.count({ where: { id: { in: accessoryIds } } })) !==
+          accessoryIds.length
+      )
+        throw new BadRequestException(
+          'Hay accesorios inexistentes en el anexo',
+        );
       const assetIds = [
         ...new Set([
-          ...input.machineDays.map((day) => day.assetId),
+          ...input.machineDays
+            .filter((day) => !day.rentalContext?.accessoryId)
+            .map((day) => day.assetId),
           ...input.rentals.flatMap((rental) =>
             rental.assetId ? [rental.assetId] : [],
           ),

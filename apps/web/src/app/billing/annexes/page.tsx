@@ -331,6 +331,19 @@ export default function AnnexesPage() {
         `/annexes/prepare?${new URLSearchParams({ customerWorksiteId: site, ...period })}`,
       );
       if (refresh && input) {
+        const selections = new Map(
+          [...input.rentals, ...input.machineDays].flatMap((source) => {
+            const id = "id" in source ? source.id : source.rentalId;
+            return id && source.commercial?.selectedModeId
+              ? [[id, source.commercial.selectedModeId] as const]
+              : [];
+          }),
+        );
+        for (const [rentalId, modeId] of selections)
+          data.input = await api<AnnexInput>("/annexes/select-mode", {
+            method: "POST",
+            json: { input: data.input, rentalId, modeId },
+          });
         const oldLots = new Map(input.rentals.map((r) => [r.id, r]));
         const oldDays = new Map(
           input.machineDays.map((d) => [`${d.assetId}:${d.date}`, d]),
@@ -372,13 +385,15 @@ export default function AnnexesPage() {
                 pricing: old.pricing,
                 waivedDays: old.waivedDays,
                 dayAdjustments: old.dayAdjustments,
+                modeArchive: old.modeArchive,
                 metering: old.metering ?? old.cutting,
               }
             : r;
         });
-        data.input.machineDays = data.input.machineDays.map(
-          (d) => oldDays.get(`${d.assetId}:${d.date}`) ?? d,
-        );
+        data.input.machineDays = data.input.machineDays.map((d) => {
+          const old = oldDays.get(`${d.assetId}:${d.date}`);
+          return old ? { ...d, ...old, rentalContext: d.rentalContext } : d;
+        });
         const refreshedResult = await api<Result>("/annexes/preview", {
           method: "POST",
           json: data.input,

@@ -127,6 +127,8 @@ export type CommercialSnapshot = {
   status: 'RESOLVED' | 'REVIEW';
   schemaVersion?: 2;
   contextualZero?: boolean;
+  selectedModeId?: string;
+  minimumReview?: boolean;
   parentDocumentItemId?: string;
   frozenProfile?: { id: string; version: number; effectiveFrom: string; groups: CommercialGroup[]; modes: CommercialMode[] };
   catalog?: { unit: string; price: string | null };

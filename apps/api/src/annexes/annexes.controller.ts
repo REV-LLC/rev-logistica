@@ -1,3 +1,4 @@
+import { selectAnnexMode } from './annex-mode-selection';
 import { AnnexSourceService } from './annex-source.service';
 import {
   Body,
@@ -31,6 +32,9 @@ export class AnnexesController {
     @Query('through') through: string,
   ) {
     return this.source.prepare(id, from, to, through);
+  }
+  @Post('select-mode') selectMode(@Body() body: unknown) {
+    return selectAnnexMode(body);
   }
   @Post('preview') preview(@Body() body: unknown) {
     return calculateAnnex(body);

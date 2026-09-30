@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const { AnnexSourceService } = require('../dist/src/annexes/annex-source.service');
 const { AnnexesService } = require('../dist/src/annexes/annexes.service');
 const { CommercialProfilesService } = require('../dist/src/commercial-profiles/commercial-profiles.service');
+const { selectAnnexMode } = require('../dist/src/annexes/annex-mode-selection');
 const { calculateAnnex } = require('../dist/src/annexes/annex-engine');
 const connection = new URL(process.env.DATABASE_URL || '');
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(connection.hostname) || !connection.pathname.startsWith('/rev_annex_qa'))
@@ -31,9 +32,9 @@ const origin = 'http://127.0.0.1:3197';
    else if (req.method === 'GET' && url.pathname === '/annexes/prepare') data = await source.prepare(...['customerWorksiteId','from','to','through'].map(k=>url.searchParams.get(k)));
    else if (req.method === 'GET' && url.pathname === '/annexes/drafts') data = await annexes.list(url.searchParams.get('customerWorksiteId'));
    else if (req.method === 'GET' && /^\/annexes\/drafts\/[^/]+$/.test(url.pathname)) data = await annexes.get(url.pathname.split('/').at(-1));
-   else if ((req.method === 'POST' && ['/annexes/preview','/annexes/drafts'].includes(url.pathname)) || (req.method==='PUT' && url.pathname==='/commercial-profiles')) {
+   else if ((req.method === 'POST' && ['/annexes/preview','/annexes/drafts','/annexes/select-mode'].includes(url.pathname)) || (req.method==='PUT' && url.pathname==='/commercial-profiles')) {
     let body=''; for await (const chunk of req) { body+=chunk;if(Buffer.byteLength(body)>2000000)throw new Error('Solicitud demasiado grande'); }
-    const parsed=JSON.parse(body);data=url.pathname==='/commercial-profiles'?await profiles.save(parsed,author.id):url.pathname.endsWith('/preview')?calculateAnnex(parsed):await annexes.save(parsed,author.id);
+    const parsed=JSON.parse(body);data=url.pathname==='/annexes/select-mode'?selectAnnexMode(parsed):url.pathname==='/commercial-profiles'?await profiles.save(parsed,author.id):url.pathname.endsWith('/preview')?calculateAnnex(parsed):await annexes.save(parsed,author.id);
    } else {res.statusCode=404;data={message:'Entorno local para pruebas de anexos sobre copia de producción.'};}
    res.end(JSON.stringify(data));
   } catch(e) {res.statusCode=e.getStatus?.()||400;res.end(JSON.stringify({message:e.message}));}
