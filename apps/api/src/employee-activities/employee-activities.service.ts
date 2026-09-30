@@ -18,17 +18,25 @@ export function parseCalendarDate(value: string): Date {
   return date;
 }
 
-const noteInclude = {
-  customerWorksite: { include: { customer: true, worksite: true } },
-  asset: {
+const activityAssetSelect = {
+  id: true,
+  publicCode: true,
+  description: true,
+  serialOrEngine: true,
+  internalNumber: true,
+  imageFileObject: { select: { storageKey: true } },
+  sku: {
     select: {
-      id: true,
-      publicCode: true,
-      description: true,
-      serialOrEngine: true,
-      sku: { select: { name: true } },
+      name: true,
+      imageUrl: true,
+      imageFileObject: { select: { storageKey: true } },
     },
   },
+} as const;
+
+const noteInclude = {
+  customerWorksite: { include: { customer: true, worksite: true } },
+  asset: { select: activityAssetSelect },
   createdBy: {
     select: { employee: { select: { name: true, lastName: true } } },
   },
@@ -60,13 +68,7 @@ export class EmployeeActivitiesService {
       this.prisma.asset.findMany({
         where: { active: true, deletedAt: null },
         orderBy: { publicCode: 'asc' },
-        select: {
-          id: true,
-          publicCode: true,
-          description: true,
-          serialOrEngine: true,
-          sku: { select: { name: true } },
-        },
+        select: activityAssetSelect,
       }),
     ]);
     return { customers, assets };

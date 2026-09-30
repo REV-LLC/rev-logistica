@@ -1,3 +1,53 @@
+.page {
+  max-width: 1400px;
+}
+.employeeTrigger {
+  padding: 10px 14px;
+  border: 1px solid #e4e9ef;
+  border-radius: 14px;
+  min-width: 280px;
+  max-width: 100%;
+  background: #f9fafc;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.employeeTrigger:hover {
+  border-color: #ed751a;
+  background: #fff7ed;
+}
+.employeeTrigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.employeeTrigger:focus-visible,
+.employeeOption:focus-visible {
+  outline: 2px solid #ed751a;
+  outline-offset: 2px;
+}
+.employeeName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.employeeChevron {
+  flex-shrink: 0;
+  color: #8793a2;
+}
+.employeeOption {
+  padding: 12px;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  background: white;
+}
+.employeeOption:hover {
+  background: #fff7ed;
+  border-color: #efb780;
+}
+.employeeOptionSelected {
+  background: #fff4e8;
+  border-color: #ed751a;
+}
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
@@ -183,5 +233,73 @@
   .day[aria-pressed="true"] + .addNote {
     opacity: 1;
     visibility: visible;
+  }
+}
+
+@media (min-width: 1600px) {
+  .page {
+    max-width: 2100px;
+    padding-inline: clamp(20px, 2vw, 48px);
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+  }
+  .day {
+    min-height: clamp(
+      125px,
+      calc((100dvh - 350px) / var(--calendar-weeks, 6)),
+      210px
+    );
+    padding: 14px;
+    gap: 9px;
+  }
+  .weekday {
+    padding: 16px 6px;
+    font-size: 13px;
+  }
+  .number,
+  .today {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  .preview {
+    font-size: 13px;
+    padding: 5px 7px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .count {
+    font-size: 12px;
+  }
+  .addNote {
+    top: 16px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+  }
+  .dayDetails {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+  }
+  .employeeTrigger {
+    min-width: 340px;
+  }
+}
+@media (min-width: 2200px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 32px;
+  }
+}
+@media (max-width: 600px) {
+  .employeeTrigger {
+    width: 100%;
+    min-width: 0;
   }
 }
