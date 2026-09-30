@@ -292,3 +292,85 @@ describe('document-driven commercial intervals', () => {
     ).toBe(true);
   });
 });
+
+describe('meter minimum continuity', () => {
+  const mode = {
+    id: '00000000-0000-4000-8000-000000000008',
+    name: 'Medición',
+    unit: 'METER' as const,
+    minimum: { value: '40', basis: 'PER_RENTAL' as const },
+    pricing: { source: 'FIXED' as const, amount: '10' },
+    conditions: [],
+    parts: [],
+  };
+  const commercial = {
+    schemaVersion: 2 as const,
+    status: 'RESOLVED' as const,
+    mode,
+    parts: [],
+  };
+  const returns = [
+    {
+      date: '2026-10-05',
+      quantity: '1',
+      source: { reference: 'return', origin: 'INVENTORY' as const },
+    },
+  ];
+  const first = {
+    ...lot,
+    id: 'lot@2026-10-01',
+    commercial,
+    returns,
+    commercialInterval: {
+      rentalId: 'lot',
+      from: '2026-10-01',
+      to: '2026-10-03',
+    },
+    metering: {
+      minimumMeters: '40',
+      pricing: { basePrice: '10' },
+      reports: [
+        {
+          date: '2026-10-02',
+          meters: '20',
+          source: { reference: 'report1', origin: 'PHYSICAL' as const },
+        },
+      ],
+    },
+  };
+  const second = {
+    ...lot,
+    id: 'lot@2026-10-04',
+    commercial,
+    returns,
+    commercialInterval: {
+      rentalId: 'lot',
+      from: '2026-10-04',
+      to: '2026-10-05',
+    },
+    metering: {
+      minimumMeters: '40',
+      pricing: { basePrice: '10' },
+      reports: [
+        {
+          date: '2026-10-04',
+          meters: '10',
+          source: { reference: 'report2', origin: 'PHYSICAL' as const },
+        },
+      ],
+    },
+  };
+  it('settles once using measurements from all same-mode intervals', () => {
+    const result = calculateAnnex(input([first, second]));
+    expect(result.totals.rentalNet).toBe('400.00');
+  });
+  it('credits actual earlier interval measurements across a cut', () => {
+    const next = {
+      ...input([
+        { ...second, metering: { ...second.metering, priorUnits: '20' } },
+      ]),
+      period: { from: '2026-10-04', to: '2026-10-15', through: '2026-10-05' },
+    };
+    expect(calculateAnnex(next).totals.rentalNet).toBe('200.00');
+  });
+});

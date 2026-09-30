@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { AnnexInput } from './annex-input';
 import type { CommercialSnapshot } from '../commercial-profiles/commercial-profile.input';
 import {
@@ -254,12 +255,29 @@ export function prepareCommercialV2(
           });
         }
       } else {
-        if (snapshot.mode?.unit === 'METER')
+        if (snapshot.mode?.unit === 'METER') {
+          const earlierReports = new Map<string, string>();
+          for (const saved of history.flatMap((h) => h.rentals)) {
+            if (
+              saved.commercialInterval?.rentalId !== lot.id ||
+              saved.commercial?.mode?.id !== snapshot.mode.id ||
+              saved.commercialInterval.to >= period.from
+            )
+              continue;
+            for (const report of saved.metering?.reports ?? []) {
+              if (!earlierReports.has(report.source.reference))
+                earlierReports.set(report.source.reference, report.meters);
+            }
+          }
           rental.metering = {
             minimumMeters: snapshot.mode.minimum.value,
+            priorUnits: [...earlierReports.values()]
+              .reduce((sum, value) => sum.plus(value), new Prisma.Decimal(0))
+              .toString(),
             pricing: rental.pricing,
             reports: old?.metering?.reports ?? [],
           };
+        }
         rentals.push(rental);
       }
     }
