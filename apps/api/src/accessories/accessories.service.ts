@@ -501,6 +501,7 @@ export class AccessoriesService {
     location: Location,
     rule: Compatibility,
     destination: boolean,
+    compatibilityParentAccessoryId?: string,
   ) {
     if (location.warehouseId) {
       const warehouse = await this.warehouse(tx, location.warehouseId);
@@ -513,7 +514,9 @@ export class AccessoriesService {
     if (!asset) throw new BadRequestException('Equipo no encontrado.');
     if (
       destination &&
-      (!asset.active || asset.deletedAt || !isCompatible(rule, asset))
+      (!asset.active || asset.deletedAt || !(compatibilityParentAccessoryId
+        ? rule.scope === 'ACCESSORIES' && rule.parentAccessoryIds?.includes(compatibilityParentAccessoryId)
+        : isCompatible(rule, asset)))
     )
       throw new BadRequestException(
         'El equipo de destino no está activo o no es compatible con este accesorio.',
@@ -559,6 +562,7 @@ export class AccessoriesService {
     dto: MoveAccessoryDto,
     userId: string,
     documentId?: string,
+    compatibilityParentAccessoryId?: string,
   ) {
     const hash = fingerprint({ id, ...dto, userId });
     const prior = await tx.accessoryMovement.findUnique({
@@ -573,7 +577,7 @@ export class AccessoriesService {
     }
     const item = await tx.accessory.findUniqueOrThrow({
       where: { id },
-      include: { subfamilies: true, assets: true },
+      include: { subfamilies: true, assets: true, compatibleParents: true },
     });
     if (!item.active)
       throw new BadRequestException('El accesorio está archivado.');
@@ -624,6 +628,7 @@ export class AccessoriesService {
     }
     const rule = {
       ...item,
+      parentAccessoryIds: item.compatibleParents?.map(parent => parent.parentAccessoryId) ?? [],
       subfamilyIds: item.subfamilies.map((s) => s.subfamilyId),
       assetIds: item.assets.map((a) => a.assetId),
     };
@@ -631,7 +636,7 @@ export class AccessoriesService {
       ? await this.resolveLocation(tx, dto.from, rule, false)
       : undefined;
     const to = dto.to
-      ? await this.resolveLocation(tx, dto.to, rule, true)
+      ? await this.resolveLocation(tx, dto.to, rule, true, documentId ? compatibilityParentAccessoryId : undefined)
       : undefined;
     if (dto.from) {
       const result = await tx.accessoryBalance.updateMany({

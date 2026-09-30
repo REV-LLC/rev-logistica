@@ -14,7 +14,9 @@ import {
 import { DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
-class AutosaveDocumentRequestItemDto {
+import { DocumentCompositionItemDto } from './document-composition-item.dto';
+
+class AutosaveDocumentRequestItemDto extends DocumentCompositionItemDto {
   @IsOptional()
   @IsUUID()
   sourceWarehouseId?: string;
