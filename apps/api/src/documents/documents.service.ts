@@ -825,6 +825,10 @@ export class DocumentsService {
     const serializedIds = new Set<string>();
     const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
     for (const item of payload.items) {
+      if (payload.type === DocumentType.REMISSION && item.sourceWarehouseId && item.sourceWarehouseId !==
+        (payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? item.ownerWarehouseId : payload.warehouseId)) {
+        throw new BadRequestException('El origen del ítem no coincide con la salida física seleccionada para el registro directo.');
+      }
       if ([item.skuId, item.assetId, item.accessoryId].filter(Boolean).length !== 1 || !item.ownerWarehouseId
         || ((item.skuId || item.accessoryId) && (!Number.isFinite(item.quantity) || Number(item.quantity) <= 0))
         || (item.assetId && item.quantity !== undefined && item.quantity !== 1)) {
@@ -857,7 +861,7 @@ export class DocumentsService {
           const ownReturnItems = inventoryItems.filter((item) => !providerIds.has(item.ownerWarehouseId));
           const warehouseRequired = payload.type === DocumentType.REMISSION
             ? payload.inventorySourceMode === InventorySourceMode.WAREHOUSE
-            : ownReturnItems.length > 0;
+            : payload.items.some(item => !providerIds.has(item.ownerWarehouseId));
           if (warehouseRequired) {
             const warehouse = payload.warehouseId ? await tx.warehouse.findFirst({
               where: { id: payload.warehouseId, active: true }, select: { id: true, type: true },
@@ -905,8 +909,21 @@ export class DocumentsService {
             const composed = await tx.document.findUniqueOrThrow({ where: { id: created.id }, include: { items: true } });
             await validateDocumentConfiguration(tx, composed);
             if (payload.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx, created.id, true);
-            if (composed.items.some(item => item.accessoryId)) await this.accessoryDocuments.apply(tx, composed, userId,
-              payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? 'ON_SITE' : 'WAREHOUSE');
+            if (payload.type === DocumentType.RETURN) {
+              // Mirror serialized/bulk returns: ally-owned items enter provider transit;
+              // own items enter the selected warehouse, even in one mixed direct return.
+              const destinations = new Set(composed.items.filter(item => item.accessoryId)
+                .map(item => providerIds.has(item.condition!) ? item.condition! : payload.warehouseId!));
+              for (const destination of destinations) {
+                await this.accessoryDocuments.apply(tx, { ...composed, warehouseId: destination,
+                  items: composed.items.filter(item => !item.accessoryId ||
+                    (providerIds.has(item.condition!) ? item.condition : payload.warehouseId) === destination),
+                }, userId);
+              }
+            } else if (composed.items.some(item => item.accessoryId)) {
+              await this.accessoryDocuments.apply(tx, composed, userId,
+                payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? 'ON_SITE' : 'WAREHOUSE');
+            }
           }
           // Pre-cutover direct documents retain their original StockLedger-only representation.
           const common = { documentId: created.id, customerWorksiteId: payload.customerWorksiteId };
@@ -2246,6 +2263,7 @@ export class DocumentsService {
         },
         items: {
           include: {
+            accessory: { select: { purpose: true } },
             sku: {
               select: {
                 id: true,

@@ -122,6 +122,7 @@ export default function CommercialModeCard({
           {mode.pricing.source === "FIXED" ? (
             <NumberInput
               label={`Tarifa por ${mode.unit === "DAY" ? "día" : mode.unit === "HOUR" ? "hora" : "metro"}`}
+              description="Escribe 0 si no tiene cobro. Dejar vacío no significa gratuito."
               required
               min={0}
               max={9999999999.99}
@@ -296,11 +297,11 @@ export default function CommercialModeCard({
                 data={[
                   {
                     value: "INCLUDED",
-                    label: "Incluidos en la tarifa del equipo",
+                    label: "Tarifa $0 en este conjunto",
                   },
                   {
                     value: "INDEPENDENT",
-                    label: "Cobro independiente, con sus propias reglas",
+                    label: "Tarifa propia del elemento",
                   },
                 ]}
                 onChange={(treatment) =>
@@ -324,8 +325,8 @@ export default function CommercialModeCard({
               />
             ))}
             <Text size="xs" c="dimmed">
-              «Incluido» no cambia el precio global del accesorio. Solo evita
-              cobrarlo aparte dentro de este conjunto y modalidad.
+              La tarifa $0 se conserva como una línea del anexo. Solo aplica en
+              este conjunto; no modifica la tarifa propia del elemento.
             </Text>
           </Stack>
         ) : null}

@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { kindLabels, type AccessoryKind } from "../accessories/types";
 import { createSelectionId } from "./request-formatting";
 import type { SelectedItem } from "./request-types";
+import type { ReturnDocumentOrigin } from './return-document-origins';
 
 type Option = {
   accessoryId: string;
@@ -25,13 +26,17 @@ type Option = {
   name: string;
   code: string | null;
   kind: AccessoryKind;
+  purpose?: 'COMPONENT' | 'ACCESSORY';
   quantity: number;
   ownerWarehouseId: string;
   ownerName: string;
   parentAssetId: string;
   parentName: string;
   sourceLabel: string;
+  parentSourceDocumentItemId?: string;
+  sourceDocumentItemId?: string;
 };
+type ParentOption = { key: string; assetId: string; accessoryId?: string; name: string; selectionId?: string; sourceDocumentItemId?: string };
 type Props = {
   deliveryMode: "WAREHOUSE" | "ON_SITE";
   warehouseId: string | null;
@@ -75,23 +80,26 @@ function AccessoryOptions({
   selectedItems,
   setSelectedItems,
 }: Props) {
-  const selectedParents = selectedItems.filter(
-    (item) => item.type === "serial" && item.assetId,
-  );
-  const [onsiteParents, setOnsiteParents] = useState<
-    Array<{ assetId: string; name: string }>
-  >([]);
+  const selectedParents: ParentOption[] = selectedItems.flatMap(item => {
+    const assetId = item.assetId ?? item.componentParentAssetId;
+    return assetId && (item.assetId || (item.accessoryKind === 'INDIVIDUAL' && item.accessoryPurpose !== 'COMPONENT'))
+      ? [{ key: `line:${item.selectionId}`, assetId, accessoryId: item.accessoryId, name: item.name, selectionId: item.selectionId }] : [];
+  });
+  const [onsiteParents, setOnsiteParents] = useState<ParentOption[]>([]);
   const [parentError, setParentError] = useState("");
   const parents = [
     ...selectedParents,
     ...onsiteParents.filter(
       (item) =>
-        !selectedParents.some((parent) => parent.assetId === item.assetId),
+        !selectedParents.some((parent) => parent.assetId === item.assetId && parent.accessoryId === item.accessoryId),
     ),
   ];
   const [assetId, setAssetId] = useState<string | null>(
-    parents[0]?.assetId ?? null,
+    parents[0]?.key ?? null,
   );
+  const parent = parents.find(item => item.key === assetId);
+  const anchorAssetId = parent?.assetId;
+  const parentAccessoryId = parent?.accessoryId;
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -103,7 +111,16 @@ function AccessoryOptions({
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    api<{
+    const getOnsiteAccessories = async () => {
+      const all: Option[] = [];
+      for (let page = 0; page < 20; page++) {
+        const result = await api<{ items: Option[]; hasMore: boolean }>(`/accessories/document-options?type=RETURN&customerWorksiteId=${customerWorksiteId}&page=${page}`, { signal: controller.signal });
+        all.push(...result.items.filter(item => item.kind === 'INDIVIDUAL' && item.purpose !== 'COMPONENT' && item.sourceDocumentItemId));
+        if (!result.hasMore) return all;
+      }
+      throw new Error('Demasiados accesorios: acota la selección desde la configuración del equipo.');
+    };
+    Promise.all([api<{
       serial: Array<{
         assetId: string;
         skuName?: string | null;
@@ -111,14 +128,17 @@ function AccessoryOptions({
       }>;
     }>(`/inventory/on-site/${customerWorksiteId}/request-options`, {
       signal: controller.signal,
-    })
-      .then((data) => {
+    }), getOnsiteAccessories(), api<ReturnDocumentOrigin[]>(`/equipment-configurations/return-origins?customerWorksiteId=${customerWorksiteId}`, { signal: controller.signal })])
+      .then(([data, accessories, origins]) => {
         if (!controller.signal.aborted)
           setOnsiteParents(
-            data.serial.map((item) => ({
+            [...data.serial.map((item) => ({
+              key: `asset:${item.assetId}`,
               assetId: item.assetId,
+              sourceDocumentItemId: origins.find(origin => origin.assetId === item.assetId)?.sourceDocumentItemId,
               name: `${item.skuName ?? "Equipo"} · ${item.publicCode ?? item.assetId} (ya en obra)`,
-            })),
+            })), ...accessories.map(item => ({ key: `source:${item.sourceDocumentItemId}`, assetId: item.parentAssetId,
+              accessoryId: item.accessoryId, sourceDocumentItemId: item.sourceDocumentItemId, name: `${item.name} (ya en obra)` }))],
           );
       })
       .catch((err: Error) => {
@@ -130,7 +150,7 @@ function AccessoryOptions({
     return () => controller.abort();
   }, [customerWorksiteId]);
   useEffect(() => {
-    if (!assetId) return;
+    if (!anchorAssetId) return;
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -142,7 +162,8 @@ function AccessoryOptions({
       search: query,
     });
     if (warehouseId) params.set("warehouseId", warehouseId);
-    params.set("assetId", assetId);
+    params.set("assetId", anchorAssetId);
+    if (parentAccessoryId) params.set('parentAccessoryId', parentAccessoryId);
     api<typeof result>(`/accessories/document-options?${params}`, {
       signal: controller.signal,
     })
@@ -159,15 +180,19 @@ function AccessoryOptions({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [assetId, customerWorksiteId, deliveryMode, page, query, warehouseId]);
+  }, [anchorAssetId, parentAccessoryId, customerWorksiteId, deliveryMode, page, query, warehouseId]);
 
   const add = (option: Option) =>
     setSelectedItems((current) => {
+      if (!parent) return current;
+      const belongsToParent = (item: SelectedItem) => parent.selectionId
+        ? item.parentCompositionNodeId === parent.selectionId
+        : item.parentSourceDocumentItemId === (parent.sourceDocumentItemId ?? option.parentSourceDocumentItemId) && item.componentParentAssetId === option.parentAssetId;
       if (
         current.some(
           (item) =>
             item.accessorySourceBalanceId === option.sourceBalanceId &&
-            item.componentParentAssetId === option.parentAssetId,
+            belongsToParent(item),
         )
       )
         return current;
@@ -179,7 +204,10 @@ function AccessoryOptions({
           accessoryId: option.accessoryId,
           accessorySourceBalanceId: option.sourceBalanceId,
           accessoryKind: option.kind,
+          accessoryPurpose: option.purpose,
           componentParentAssetId: option.parentAssetId,
+          ...(parent.selectionId ? { parentCompositionNodeId: parent.selectionId }
+            : { parentSourceDocumentItemId: parent.sourceDocumentItemId ?? option.parentSourceDocumentItemId }),
           name: `${option.name}${option.code ? ` · ${option.code}` : ""} · Accesorio de ${option.parentName}`,
           quantity: 1,
           availableQuantity: option.quantity,
@@ -197,9 +225,9 @@ function AccessoryOptions({
       </Text>
       {parentError ? <Alert color="yellow">{parentError}</Alert> : null}
       <Select
-        label="Equipo que usará el accesorio"
+        label="Equipo o accesorio que lo usará"
         data={parents.map((item) => ({
-          value: item.assetId!,
+          value: item.key,
           label: item.name,
         }))}
         value={assetId}
@@ -243,7 +271,8 @@ function AccessoryOptions({
               const selected = selectedItems.some(
                 (item) =>
                   item.accessorySourceBalanceId === option.sourceBalanceId &&
-                  item.componentParentAssetId === option.parentAssetId,
+                  (parent?.selectionId ? item.parentCompositionNodeId === parent.selectionId
+                    : item.parentSourceDocumentItemId === (parent?.sourceDocumentItemId ?? option.parentSourceDocumentItemId) && item.componentParentAssetId === option.parentAssetId),
               );
               return (
                 <Card

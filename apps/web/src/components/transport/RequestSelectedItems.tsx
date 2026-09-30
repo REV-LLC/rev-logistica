@@ -37,7 +37,8 @@ export default function RequestSelectedItems(props: RequestSelectedItemsProps) {
 function ItemRow(props: RequestSelectedItemsProps & { node: RequestItemGroup; depth: number }) {
   const { node: { item, index, children }, depth } = props;
   const [expanded, setExpanded] = useState(false);
-  const configurable = Boolean((item.assetId && props.renderConfiguration) || children.length);
+  const canHaveParts = Boolean(item.assetId || (item.accessoryId && item.accessoryKind === 'INDIVIDUAL' && item.accessoryPurpose !== 'COMPONENT'));
+  const configurable = Boolean((canHaveParts && props.renderConfiguration) || children.length);
   const panelId = `configuration-${item.selectionId}`;
   const details = <>
     <Text fw={600} style={{ overflowWrap: 'anywhere' }}>{item.name}</Text>
@@ -63,7 +64,7 @@ function ItemRow(props: RequestSelectedItemsProps & { node: RequestItemGroup; de
     <Button size="xs" px="xs" variant="subtle" color="red" aria-label={`Quitar ${item.name}`} onClick={() => props.removeSelected(item.selectionId)}>Quitar</Button>
   </Group>;
   const configuration = expanded && configurable ? <Box id={panelId} role="region" aria-label={`Configuración de ${item.name}`} p="sm" bg="teal.0" style={{ borderRadius: 8 }}>
-    {item.assetId ? props.renderConfiguration?.(item) : null}
+    {canHaveParts ? props.renderConfiguration?.(item) : null}
     {children.length ? <Text fw={700} size="sm" mt="sm">Piezas incluidas en este documento</Text> : null}
   </Box> : null;
   if (props.isTabletOrMobile) return <Paper withBorder radius="md" p="sm">

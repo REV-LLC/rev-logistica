@@ -204,7 +204,7 @@ test("editor renders Spanish generic configuration, units, inclusion and effecti
     "Modalidades de cobro",
     "Vigente desde",
     "Cuándo aplica",
-    "Incluido",
+    "La tarifa $0",
     "Crear alternativas con / sin",
     "Mínimo de horas",
   ])

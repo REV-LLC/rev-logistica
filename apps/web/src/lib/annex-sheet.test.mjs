@@ -8,6 +8,13 @@ const input = {
 };
 const line = (date, quantity, net='0.10')=>({key:`lot:${date}`,kind:'DAY',date,label:'Plataforma',quantity,net,discountPercent:'0',effectivePrice:'100',waived:false,reason:null});
 const result = {lines:[line('2026-09-16','3'),line('2026-09-17','3'),line('2026-09-18','2'),line('2026-09-20','2')]};
+test('v2 conserva accesorios con tarifa cero como filas visibles del anexo',()=>{
+ const zeroInput={...input,machineDays:[],rentals:[{...input.rentals[0],accessoryId:'part',pricing:{basePrice:'0'},
+  commercial:{schemaVersion:2,status:'RESOLVED',contextualZero:true,parentDocumentItemId:'parent',parts:[]}}]};
+ const rows=sheetRows(zeroInput,{lines:[{...line('2026-09-16','3','0.00'),basePrice:'0',effectivePrice:'0'}]});
+ assert.equal(rows.length,1);assert.equal(rows[0].accessoryId,'part');
+ assert.equal(rows[0].net,'0.00');assert.equal(rows[0].status,'Tarifa $0 en este conjunto');
+});
 test('consecutive days group, partial returns and excluded gaps split; exact cents',()=>{
  const rows=sheetRows(input,result);assert.equal(rows.length,4);
  assert.deepEqual(rows.slice(0,3).map(r=>[r.from,r.to,r.days,r.quantity,r.net]),[

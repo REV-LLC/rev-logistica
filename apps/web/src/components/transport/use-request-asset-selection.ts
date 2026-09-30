@@ -25,6 +25,9 @@ export function useRequestAssetSelection({ configurationWorksiteId, motorOnly, d
     const root: SelectedItem = { selectionId: createSelectionId(), type: 'serial', assetId: item.assetId,
       name: getSerialDisplayName(item), serial: item.serialOrEngine, ownerWarehouseId: item.ownerWarehouseId,
       sourceWarehouseId: item.sourceWarehouseId };
+    root.sourceDocumentItemId = item.sourceDocumentItemId;
+    root.parentSourceDocumentItemId = item.parentSourceDocumentItemId;
+    root.componentParentAssetId = item.componentParentAssetId;
     const controller = new AbortController();
     pending.current.add(controller);
     const load = docType === 'REMISSION' && configurationWorksiteId

@@ -7,6 +7,7 @@ import ReturnAccessoryPickerPanel from "./ReturnAccessoryPickerPanel";
 import {
   addReturnAccessories,
   returnAccessoryAlreadySelected,
+  returnAccessoryKey,
   type ReturnAccessoryOption,
 } from "./return-accessory-selection";
 import { useReturnAccessoryOptions } from "./use-return-accessory-options";
@@ -65,9 +66,9 @@ function ReturnPicker({
             onToggle={(option) =>
               setPending((current) => {
                 const next = new Map(current);
-                if (next.has(option.sourceBalanceId))
-                  next.delete(option.sourceBalanceId);
-                else next.set(option.sourceBalanceId, option);
+                const key = returnAccessoryKey(option);
+                if (next.has(key)) next.delete(key);
+                else next.set(key, option);
                 return next;
               })
             }

@@ -81,6 +81,13 @@ function setup() {
 }
 
 describe('Atomic direct documents', () => {
+  it('rejects a per-line source that disagrees with the actual stock movement before opening a transaction', async () => {
+    const f = setup();
+    await expect(f.service.createDirectDocument(payload({
+      notes: 'Fecha documento: 2026-10-01', items: [{ ...item, sourceWarehouseId: provider }],
+    }), 'operator')).rejects.toThrow(/origen del ítem/);
+    expect(f.prisma.$transaction).not.toHaveBeenCalled();
+  });
   it.each([
     [InventorySourceMode.WAREHOUSE, 'REMISSION', 'moveOut'],
     [InventorySourceMode.WAREHOUSE, 'ON_SITE', 'moveOut'],

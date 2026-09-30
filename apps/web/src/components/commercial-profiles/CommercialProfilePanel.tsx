@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 import { api } from "@/lib/api";
 import type { EquipmentConfiguration } from "../equipment-configuration/types";
+import type { Accessory } from "../accessories/types";
 import CommercialProfileEditor from "./CommercialProfileEditor";
 import {
   type CommercialProfile,
@@ -32,17 +33,20 @@ type AssetMetadata = {
 
 export default function CommercialProfilePanel({
   assetId,
+  accessoryId,
   onSaved,
   onDirtyChange,
 }: {
-  assetId: string;
+  assetId?: string;
+  accessoryId?: string;
   onSaved?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [scopeType, setScopeType] = useState<CommercialScope>("ASSET");
+  const ownScope = accessoryId ? "ACCESSORY" : "ASSET";
+  const [scopeType, setScopeType] = useState<CommercialScope>(ownScope);
   const [scopeIds, setScopeIds] = useState<
     Partial<Record<CommercialScope, string>>
-  >({ ASSET: assetId });
+  >({ [ownScope]: accessoryId ?? assetId });
   const [configuration, setConfiguration] = useState<EquipmentConfiguration>();
   const [value, setValue] = useState<CommercialProfile>();
   const [loading, setLoading] = useState(true);
@@ -52,7 +56,7 @@ export default function CommercialProfilePanel({
   const [success, setSuccess] = useState("");
   const [reload, setReload] = useState(0);
   const inFlight = useRef(false);
-  const scopeId = scopeType === "ASSET" ? assetId : scopeIds[scopeType];
+  const scopeId = scopeType === ownScope ? accessoryId ?? assetId : scopeIds[scopeType];
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -69,16 +73,21 @@ export default function CommercialProfilePanel({
       setLoading(false);
       return;
     }
+    const accessory = accessoryId
+      ? api<Accessory>(`/accessories/${accessoryId}`, { signal: controller.signal })
+      : null;
+    const physical = accessory
+      ? accessory.then(item => item.kind === "INDIVIDUAL" && item.purpose !== "COMPONENT"
+        ? api<EquipmentConfiguration>(`/equipment-configurations/accessories/${accessoryId}`, { signal: controller.signal })
+        : { version: 0, entries: [], parent: { name: item.name, familyId: item.familyId, warehouseId: null } })
+      : api<EquipmentConfiguration>(`/equipment-configurations/assets/${assetId}`, { signal: controller.signal });
     Promise.all([
       api<CommercialProfile>(
         `/commercial-profiles?scopeType=${scopeType}&scopeId=${encodeURIComponent(scopeId)}`,
         { signal: controller.signal },
       ),
-      api<EquipmentConfiguration>(
-        `/equipment-configurations/assets/${assetId}`,
-        { signal: controller.signal },
-      ),
-      api<AssetMetadata>(`/assets/${assetId}`, { signal: controller.signal }),
+      physical,
+      accessory ? Promise.resolve(null) : api<AssetMetadata>(`/assets/${assetId}`, { signal: controller.signal }),
     ])
       .then(([profile, config, asset]) => {
         if (controller.signal.aborted) return;
@@ -87,13 +96,13 @@ export default function CommercialProfilePanel({
           effectiveFrom: profile.effectiveFrom ?? todayInBogota(),
         });
         setConfiguration(config);
-        setScopeIds({
+        setScopeIds(accessoryId ? { ACCESSORY: accessoryId } : {
           ASSET: assetId,
-          SKU: asset.skuId ?? asset.sku?.id,
+          SKU: asset?.skuId ?? asset?.sku?.id,
           FAMILY:
             config.parent?.familyId ??
-            asset.sku?.assetFamilyId ??
-            asset.sku?.assetFamily?.id,
+            asset?.sku?.assetFamilyId ??
+            asset?.sku?.assetFamily?.id,
         });
       })
       .catch((error) => {
@@ -108,7 +117,7 @@ export default function CommercialProfilePanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [assetId, scopeType, scopeId, reload]);
+  }, [assetId, accessoryId, scopeType, scopeId, reload]);
 
   const change = (next: CommercialProfile) => {
     setValue(next);
@@ -172,7 +181,7 @@ export default function CommercialProfilePanel({
         value={scopeType}
         disabled={loading || saving}
         data={(Object.keys(scopeLabels) as CommercialScope[])
-          .filter((scope) => scope === "ASSET" || scopeIds[scope])
+          .filter((scope) => scope === ownScope || scopeIds[scope])
           .map((scope) => ({ value: scope, label: scopeLabels[scope] }))}
         onChange={(scope) => {
           if (
@@ -187,7 +196,7 @@ export default function CommercialProfilePanel({
           setScopeType(scope as CommercialScope);
         }}
       />
-      {scopeType !== "ASSET" ? (
+      {scopeType !== "ASSET" && scopeType !== "ACCESSORY" ? (
         <Alert color="orange">
           Estás configurando{" "}
           {scopeType === "FAMILY"

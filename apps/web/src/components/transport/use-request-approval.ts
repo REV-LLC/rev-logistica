@@ -1,4 +1,5 @@
 'use client';
+import { documentCompositionPayload } from './request-items';
 import { getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source';
 import { api, ApiError } from '@/lib/api';
 import {
@@ -579,8 +580,10 @@ export function useRequestApproval({
     setRequestsError(null);
     try {
       const itemsPayload = resolveDocument.items.map((item, index) => {
+        const composition = documentCompositionPayload(item);
         const ownerWarehouseId = item.condition ?? undefined;
         if (item.accessoryId) return {
+          ...composition,
           sourceWarehouseId: item.sourceWarehouseId ?? undefined,
           accessoryId: item.accessoryId,
           accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
@@ -589,6 +592,7 @@ export function useRequestApproval({
         };
         if (item.assetId) {
           return {
+            ...composition,
             assetId: item.assetId,
             sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -602,6 +606,7 @@ export function useRequestApproval({
           );
           if (existingSku?.controlType === 'SERIAL') {
             return {
+              ...composition,
               assetId: resolveAssetByIndex[index],
               sourceWarehouseId: item.sourceWarehouseId ?? undefined,
               componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -613,6 +618,7 @@ export function useRequestApproval({
         }
         if (item.skuId) {
           return {
+            ...composition,
             skuId: item.skuId,
             sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -628,6 +634,7 @@ export function useRequestApproval({
         );
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
+            ...composition,
             assetId: resolveAssetByIndex[index],
             sourceWarehouseId: item.sourceWarehouseId ?? undefined,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -637,6 +644,7 @@ export function useRequestApproval({
           };
         }
         return {
+          ...composition,
           skuId: resolvedSkuId,
           sourceWarehouseId: item.sourceWarehouseId ?? undefined,
           componentParentAssetId: item.componentParentAssetId ?? undefined,

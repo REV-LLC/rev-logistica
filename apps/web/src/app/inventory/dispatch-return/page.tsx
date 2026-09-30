@@ -34,6 +34,14 @@ import { buildDirectDocumentItems } from '@/components/transport/direct-document
 import FormGrid from '@/components/FormGrid';
 import DocumentTimeInput from '@/components/DocumentTimeInput';
 import { buildDocumentDateTime, getDocumentDateTimeInput } from '@/lib/document-date-time';
+import { useMediaQuery } from '@mantine/hooks';
+import type { SelectedItem } from '@/components/transport/request-types';
+import { buildBulkKey, createSelectionId } from '@/components/transport/request-formatting';
+import { inventoryWithReturnOrigins, type ReturnDocumentOrigin } from '@/components/transport/return-document-origins';
+import RequestSelectedItems from '@/components/transport/RequestSelectedItems';
+import RequestEquipmentConfiguration from '@/components/transport/RequestEquipmentConfiguration';
+import RequestInventoryPickerModal from '@/components/transport/RequestInventoryPickerModal';
+import { removeRequestItem } from '@/components/transport/request-item-groups';
 
 type InventoryBulk = InventoryItemPickerBulkItem;
 type InventorySerial = InventoryItemPickerSerialItem;
@@ -61,17 +69,6 @@ type CustomerWorksite = {
 type Vehicle = { id: string; plate?: string | null; name?: string | null };
 type Warehouse = { id: string; name: string; type?: 'OWN' | 'ALLY' | string };
 
-type SelectedItem = {
-  type: 'bulk' | 'serial';
-  bulkKey?: string;
-  skuId?: string;
-  assetId?: string;
-  name: string;
-  serial?: string | null;
-  quantity?: number;
-  availableQuantity?: number;
-  ownerWarehouseId?: string | null;
-};
 
 type EvidencePhotoDraft = {
   id: string;
@@ -83,8 +80,6 @@ const MAX_EVIDENCE_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_PHOTO_COUNT = 12;
 const ALLOWED_EVIDENCE_PHOTO_TYPES = new Set(['image/png', 'image/webp', 'image/jpeg']);
 
-const buildBulkKey = (item: { skuId: string; ownerWarehouseId: string | null }) =>
-  `${item.skuId}::${item.ownerWarehouseId ?? 'none'}`;
 
 const getEmployeeFullName = (employee: Employee) =>
   `${employee.name} ${employee.lastName ?? ''}`.trim();
@@ -115,6 +110,7 @@ function withDocPrefix(value: string, docType: 'REMISSION' | 'RETURN') {
 }
 
 export default function RemisionDevolucionPage() {
+  const isMobile = useMediaQuery('(max-width: 48em)') ?? false;
   const router = useRouter();
   const [docType, setDocType] = useState<'REMISSION' | 'RETURN'>('REMISSION');
   const [consecutive, setConsecutive] = useState('');
@@ -279,10 +275,11 @@ export default function RemisionDevolucionPage() {
         );
       } else if (sourceMode === 'on-site') {
         if (!sourceWorksiteId) throw new Error('Selecciona una obra origen');
-        const data = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
+        const [stock, origins] = await Promise.all([api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(
           `/inventory/on-site/${sourceWorksiteId}`,
           { method: 'GET', signal: controller.signal }
-        );
+        ), api<ReturnDocumentOrigin[]>(`/equipment-configurations/return-origins?customerWorksiteId=${sourceWorksiteId}`, { signal: controller.signal })]);
+        const data = inventoryWithReturnOrigins(stock, origins);
         if (controller.signal.aborted || version !== inventoryRequestVersionRef.current) return;
         setBulkItems(data.bulk);
         setSerialItems(data.serial.filter((item) => item.quantity === 1));
@@ -403,7 +400,12 @@ export default function RemisionDevolucionPage() {
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'bulk',
+          sourceDocumentItemId: item.sourceDocumentItemId,
+          parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+          componentParentAssetId: item.componentParentAssetId,
+          sourceWarehouseId: docType === 'REMISSION' ? physicalSourceWarehouseId : undefined,
           bulkKey,
           skuId: item.skuId,
           name: item.skuName ?? item.skuId,
@@ -427,7 +429,12 @@ export default function RemisionDevolucionPage() {
       return [
         ...prev,
         {
+          selectionId: createSelectionId(),
           type: 'serial',
+          sourceDocumentItemId: item.sourceDocumentItemId,
+          parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+          componentParentAssetId: item.componentParentAssetId,
+          sourceWarehouseId: docType === 'REMISSION' ? physicalSourceWarehouseId : undefined,
           assetId: item.assetId,
           name: getSerialDisplayName(item),
           serial: item.serialOrEngine,
@@ -932,7 +939,15 @@ export default function RemisionDevolucionPage() {
           <Divider my="md" />
 
           <Title order={4}>Seleccionados</Title>
-          <EntityDataTable
+          {docDate >= '2026-10-01' ? <RequestSelectedItems
+            selectedItems={selectedItems} isTabletOrMobile={isMobile} docType={docType} warehouses={warehouses}
+            renderDamageFields={() => null} renderAdminItemFields={() => null}
+            updateSelected={updateSelected} canResolveInline={false} skuOptions={[]}
+            resolveFreeItemToSku={() => undefined}
+            removeSelected={id => setSelectedItems(current => removeRequestItem(current, id))}
+            renderConfiguration={item => <RequestEquipmentConfiguration parent={item} docType={docType}
+              customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} />}
+          /> : <EntityDataTable
             rows={selectedItems}
             columns={selectedItemColumns}
             getRowId={getSelectedItemKey}
@@ -951,7 +966,7 @@ export default function RemisionDevolucionPage() {
                 onClick: () => removeSelected(index),
               }];
             }}
-          />
+          />}
 
           {error && (
             <Text c="red" mt="sm">
@@ -972,7 +987,10 @@ export default function RemisionDevolucionPage() {
         </Paper>
       </Container>
 
-      <InventoryItemPickerModal
+      <RequestInventoryPickerModal
+        returnWorksiteId={docType === 'RETURN' && docDate >= '2026-10-01' ? sourceWorksiteId ?? undefined : undefined}
+        selectedItems={selectedItems}
+        setSelectedItems={setSelectedItems}
         allowDamaged={docType === 'RETURN'}
         opened={itemsModalOpen}
         onClose={() => setItemsModalOpen(false)}

@@ -1,4 +1,7 @@
 export type CommercialSnapshot = {
+  schemaVersion?: 2;
+  contextualZero?: boolean;
+  parentDocumentItemId?: string;
   status: "RESOLVED" | "REVIEW";
   profileId?: string;
   version?: number;
@@ -20,7 +23,8 @@ export type CommercialSnapshot = {
   };
   parts: {
     documentItemId: string;
-    parentAssetId: string;
+    parentAssetId?: string;
+    parentDocumentItemId?: string;
     assetId?: string;
     skuId?: string;
     familyId?: string;
@@ -31,6 +35,7 @@ export type CommercialSnapshot = {
   }[];
 };
 export type Metering = {
+  priorUnits?: string;
   minimumMeters: string;
   pricing: Pricing;
   reports: { date: string; meters: string; source: Source }[];
@@ -54,6 +59,9 @@ export type Rental = {
   id: string;
   skuId: string;
   assetId?: string;
+  accessoryId?: string;
+  commercialInterval?: { from: string; to: string; rentalId: string };
+  minimumHistoryRanges?: Array<{ from: string; to: string; rentalId: string }>;
   label: string;
   deliveredOn: string;
   quantity: string;

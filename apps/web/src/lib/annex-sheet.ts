@@ -4,6 +4,7 @@ export type SheetRow = {
   id: string;
   group?: boolean;
   assetId?: string;
+  accessoryId?: string;
   skuId?: string;
   supplement?: boolean;
   included?: boolean;
@@ -89,6 +90,8 @@ export function sheetRows(
           kind,
           index,
           skuId: rental?.skuId,
+          assetId: rental?.assetId ?? day?.assetId,
+          accessoryId: rental?.accessoryId,
           rentalId: rental?.id,
           included: Boolean(source.includedIn),
           composition: source.includedIn
@@ -96,7 +99,7 @@ export function sheetRows(
             : source.commercial?.parts
                 .map(
                   (p) =>
-                    `${p.quantity} × ${p.label} · ${p.treatment === "INCLUDED" ? "Incluido" : p.treatment === "INDEPENDENT" ? "Cobro independiente" : "Por revisar"}`,
+                    `${p.quantity} × ${p.label} · ${p.treatment === "INCLUDED" ? "Tarifa $0 en este conjunto" : p.treatment === "INDEPENDENT" ? "Tarifa propia" : "Por revisar"}`,
                 )
                 .join("\n"),
           supplement: first?.key.includes(":minimum:") ?? false,
@@ -111,8 +114,8 @@ export function sheetRows(
                 ? "M"
                 : "D"
               : "HR",
-          from: first?.date ?? day?.date ?? rental!.deliveredOn,
-          to: group.at(-1)?.date ?? day?.date ?? input.period.through,
+          from: first?.date ?? day?.date ?? rental?.commercialInterval?.from ?? rental!.deliveredOn,
+          to: group.at(-1)?.date ?? day?.date ?? rental?.commercialInterval?.to ?? input.period.through,
           quantity: first?.quantity ?? (rental ? "—" : "1"),
           days:
             (rental?.metering ?? rental?.cutting)
@@ -153,6 +156,7 @@ export function sheetRows(
             ? "Incluido"
             : source.commercial?.status === "REVIEW"
               ? "Revisar modalidad"
+              : source.commercial?.contextualZero ? "Tarifa $0 en este conjunto"
               : !result
                 ? "Por calcular"
                 : day?.status === "PENDING"

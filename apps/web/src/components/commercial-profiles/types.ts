@@ -1,7 +1,7 @@
 import type { ConfigurationEntry } from "../equipment-configuration/types";
 import { entryName } from "../equipment-configuration/types";
 
-export type CommercialScope = "ASSET" | "SKU" | "FAMILY";
+export type CommercialScope = "ASSET" | "SKU" | "FAMILY" | "ACCESSORY";
 export type CommercialUnit = "DAY" | "HOUR" | "METER";
 export type CommercialSelector = {
   kind: CommercialScope | "ACCESSORY";
@@ -46,6 +46,7 @@ export const scopeLabels: Record<CommercialScope, string> = {
   ASSET: "Solo este equipo",
   SKU: "Equipos de esta referencia",
   FAMILY: "Toda esta familia",
+  ACCESSORY: "Solo este componente o accesorio",
 };
 export const selectorKey = (selector: CommercialSelector) =>
   `${selector.kind}:${selector.id}`;

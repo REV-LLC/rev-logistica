@@ -263,6 +263,14 @@ export default function ConfigurationEditor({
                         : ""}
                     </Text>
                   )}
+                  {row.assetId || row.accessoryId ? <Button
+                    component="a"
+                    href={`/inventory/equipment-configuration/${row.assetId ? `assets/${row.assetId}` : `accessories/${row.accessoryId}`}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="light"
+                    size="xs"
+                  >Configurar este elemento (otra pestaña)</Button> : null}
                   <NumberInput
                     label="Cantidad habitual"
                     min={1}

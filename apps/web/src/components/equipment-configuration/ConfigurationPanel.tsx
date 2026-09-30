@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Group, Loader, Stack, Tabs, Text } from "@mantine/core";
 import { api } from "@/lib/api";
 import CommercialProfilePanel from "../commercial-profiles/CommercialProfilePanel";
+import type { Accessory } from "../accessories/types";
 import ConfigurationEditor from "./ConfigurationEditor";
 import {
   type EquipmentConfiguration,
@@ -17,9 +18,35 @@ export default function ConfigurationPanel({
   assetId?: string;
   accessoryId?: string;
 }) {
+  return accessoryId ? <AccessoryConfigurationPanel key={accessoryId} accessoryId={accessoryId} />
+    : <ConfigurationTabs key={assetId} assetId={assetId} />;
+}
+
+function AccessoryConfigurationPanel({ accessoryId }: { accessoryId: string }) {
+  const [item, setItem] = useState<Accessory>();
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError("");
+    api<Accessory>(`/accessories/${accessoryId}`, { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) setItem(value); })
+      .catch(error => { if (!controller.signal.aborted) setError(error.message); });
+    return () => controller.abort();
+  }, [accessoryId, revision]);
+  if (error) return <Alert color="red">{error}<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button></Alert>;
+  if (!item) return <Loader aria-label="Cargando accesorio" />;
+  return <Stack>
+    <Text fw={700}>{item.name}</Text>
+    {item.kind === "INDIVIDUAL" && item.purpose !== "COMPONENT"
+      ? <ConfigurationTabs accessoryId={accessoryId} />
+      : <CommercialProfilePanel accessoryId={accessoryId} />}
+  </Stack>;
+}
+
+function ConfigurationTabs({ assetId, accessoryId }: { assetId?: string; accessoryId?: string }) {
   const [tab, setTab] = useState<string | null>("physical");
   const [dirty, setDirty] = useState(false);
-  if (!assetId) return <PhysicalConfigurationPanel accessoryId={accessoryId} />;
   return (
     <Stack>
       <Tabs
@@ -44,14 +71,16 @@ export default function ConfigurationPanel({
       </Tabs>
       {tab === "commercial" ? (
         <CommercialProfilePanel
-          key={assetId}
+          key={assetId ?? accessoryId}
           assetId={assetId}
+          accessoryId={accessoryId}
           onDirtyChange={setDirty}
         />
       ) : (
         <PhysicalConfigurationPanel
-          key={assetId}
+          key={assetId ?? accessoryId}
           assetId={assetId}
+          accessoryId={accessoryId}
           onDirtyChange={setDirty}
         />
       )}

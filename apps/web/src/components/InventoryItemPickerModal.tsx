@@ -24,7 +24,13 @@ import type { SerialAssetCardItem } from '@/components/SerialAssetCard';
 import { getSerialDisplayName } from '@/lib/serial-assets';
 import { getSelectablePickerRows, isPickerQuantityAvailable, isPickerSerialAvailable, togglePickerRows } from '@/components/transport/inventory-picker-availability';
 
-export type InventoryItemPickerBulkItem = {
+export type InventoryDocumentOrigin = {
+  sourceDocumentItemId?: string;
+  parentSourceDocumentItemId?: string;
+  componentParentAssetId?: string;
+  returnSourceLabel?: string;
+};
+export type InventoryItemPickerBulkItem = InventoryDocumentOrigin & {
   sourceWarehouseId?: string | null;
   skuId: string;
   skuName: string | null;
@@ -34,7 +40,7 @@ export type InventoryItemPickerBulkItem = {
   assetFamilyId?: string | null;
 };
 
-export type InventoryItemPickerSerialItem = SerialAssetCardItem & {
+export type InventoryItemPickerSerialItem = SerialAssetCardItem & InventoryDocumentOrigin & {
   quantity: number;
   skuId?: string | null;
   ownerWarehouseId: string | null;
@@ -66,7 +72,7 @@ export type InventoryItemPickerModalProps = {
 };
 
 function buildBulkItemKey(item: InventoryItemPickerBulkItem) {
-  return `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}`;
+  return `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}${item.sourceDocumentItemId ? `::origin:${item.sourceDocumentItemId}` : ''}`;
 }
 
 type PickerRow =
@@ -132,7 +138,7 @@ export default function InventoryItemPickerModal({
         return {
           key,
           type: 'bulk' as const,
-          name: item.skuName ?? skuMeta?.name ?? 'SKU',
+          name: `${item.skuName ?? skuMeta?.name ?? 'SKU'}${item.returnSourceLabel ? ` · ${item.returnSourceLabel}` : ''}`,
           family: skuMeta?.category ?? 'Sin familia',
           ownerWarehouseName: item.ownerWarehouseName ?? 'Sin bodega dueña',
           disabled: selectedBulkKeys.has(buildBulkItemKey(item)) || !isPickerQuantityAvailable('bulk', item.quantity),

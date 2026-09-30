@@ -19,7 +19,8 @@ export const buildBulkKey = (item: {
   skuId: string;
   ownerWarehouseId: string | null;
   sourceWarehouseId?: string | null;
-}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}`;
+  sourceDocumentItemId?: string | null;
+}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}${item.sourceDocumentItemId ? `::origin:${item.sourceDocumentItemId}` : ''}`;
 
 export const normalizeTagBase = (value?: string | null) =>
   (value ?? '')

@@ -116,6 +116,9 @@ export async function accessoryDocumentOptions(
   });
   const origins = await documentReturnOrigins(db, query.customerWorksiteId);
   const parentOrigin = origins.filter(origin => query.parentAccessoryId ? origin.accessoryId === query.parentAccessoryId && origin.componentParentAssetId === query.assetId : origin.assetId === query.assetId);
+  const accessoryParent = query.parentAccessoryId ? await db.accessory.findUnique({
+    where: { id: query.parentAccessoryId }, select: { name: true, internalCode: true },
+  }) : null;
   return {
     items: rows.slice(0, 50).flatMap((row) => {
       const base = {
@@ -124,12 +127,14 @@ export async function accessoryDocumentOptions(
       name: row.accessory.name,
       code: row.accessory.internalCode,
       kind: row.accessory.kind,
+      purpose: row.accessory.purpose,
       quantity: row.quantity,
+      physicalQuantity: row.quantity,
       ownerWarehouseId: row.accessory.ownerWarehouseId,
       ownerName: row.accessory.ownerWarehouse.name,
       parentAssetId: query.type === 'RETURN' ? row.assetId : parent!.id,
       parentAccessoryId: query.parentAccessoryId ?? null,
-      parentName: `${(row.asset ?? parent)?.sku.name} · ${(row.asset ?? parent)?.publicCode}`,
+      parentName: accessoryParent ? `${accessoryParent.name}${accessoryParent.internalCode ? ` · ${accessoryParent.internalCode}` : ''}` : `${(row.asset ?? parent)?.sku.name} · ${(row.asset ?? parent)?.publicCode}`,
       sourceLabel:
         row.warehouse?.name ??
         (row.customerWorksiteId
@@ -144,6 +149,7 @@ export async function accessoryDocumentOptions(
       if (lots.length) return [...lots.map(origin => ({ ...base,
         quantity: Math.min(row.quantity, origin.quantity), sourceDocumentItemId: origin.sourceDocumentItemId,
         parentSourceDocumentItemId: origin.parentSourceDocumentItemId, parentAccessoryId: origin.parentAccessoryId,
+        parentName: origin.parentAccessoryName ?? base.parentName,
         sourceLabel: `${base.sourceLabel} · ${origin.consecutive ?? 'Remisión'}`,
       })), ...(!query.parentAccessoryId && row.quantity > lots.reduce((sum, lot) => sum + lot.quantity, 0)
         ? [{ ...base, quantity: row.quantity - lots.reduce((sum, lot) => sum + lot.quantity, 0), sourceLabel: `${base.sourceLabel} · Saldo anterior` }] : [])];

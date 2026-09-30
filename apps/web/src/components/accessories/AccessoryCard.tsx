@@ -74,7 +74,7 @@ export default function AccessoryCard({
           </Text>
         ))}
         <Group mt="auto">
-          {item.kind === 'INDIVIDUAL' && item.purpose !== 'COMPONENT' ? <Button component={Link} href={`/inventory/equipment-configuration/accessories/${item.id}`} size="xs" variant="default">Configurar</Button> : null}
+          <Button component={Link} href={`/inventory/equipment-configuration/accessories/${item.id}`} size="xs" variant="default">{item.kind === 'INDIVIDUAL' && item.purpose !== 'COMPONENT' ? 'Configurar conjunto y cobro' : 'Configurar cobro'}</Button>
           <Button size="xs" variant="light" onClick={onEdit}>
             Editar {item.purpose === 'COMPONENT' ? 'componente' : 'accesorio'}
           </Button>

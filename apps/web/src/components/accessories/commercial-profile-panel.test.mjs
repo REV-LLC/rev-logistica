@@ -37,7 +37,7 @@ const profile = {
   ],
 };
 
-async function fixture({ failLoad = false, failSave = false } = {}) {
+async function fixture({ failLoad = false, failSave = false, accessoryKind } = {}) {
   const calls = [],
     controls = {},
     dirties = [];
@@ -83,10 +83,11 @@ async function fixture({ failLoad = false, failSave = false } = {}) {
           }
           if (path.startsWith("/commercial-profiles")) {
             if (failLoad) throw Error("No se pudo leer el perfil");
-            return structuredClone(profile);
+            return { ...structuredClone(profile), ...(accessoryKind ? { scopeType: "ACCESSORY", scopeId: "accessory" } : {}) };
           }
           if (path.startsWith("/equipment-configurations"))
             return { version: 1, entries: [], parent: { familyId: "family" } };
+          if (path.startsWith("/accessories/")) return { kind: accessoryKind, purpose: "ACCESSORY", name: "Puntas", familyId: "family" };
           return { skuId: "sku" };
         },
       },
@@ -99,7 +100,7 @@ async function fixture({ failLoad = false, failSave = false } = {}) {
   await act(() =>
     root.render(
       React.createElement(Panel, {
-        assetId: "asset",
+        ...(accessoryKind ? { accessoryId: "accessory" } : { assetId: "asset" }),
         onDirtyChange: (dirty) => dirties.push(dirty),
       }),
     ),
@@ -136,6 +137,24 @@ test("load errors never become an empty version-zero editable profile", async ()
     f.calls.some((call) => call.method !== "GET"),
     false,
   );
+});
+test("consumibles configuran cobro propio sin exigir un conjunto individualizado ni heredar tarifa del equipo", async () => {
+  const f = await fixture({ accessoryKind: "CONSUMABLE" });
+  assert.ok(f.calls.some(call => call.path === "/commercial-profiles?scopeType=ACCESSORY&scopeId=accessory"));
+  assert.ok(f.calls.every(call => !call.path.startsWith("/equipment-configurations") && !call.path.startsWith("/assets")));
+  assert.deepEqual(f.controls.scope.data.map(option => option.value), ["ACCESSORY"]);
+  await act(() => f.controls.editor.onChange({ ...f.controls.editor.value,
+    modes: [{ ...profile.modes[0], pricing: { source: "FIXED", amount: "0" } }] }));
+  await f.click("Guardar modalidades");
+  const saved = f.calls.find(call => call.method === "PUT");
+  assert.equal(saved.json.scopeType, "ACCESSORY");
+  assert.equal(saved.json.scopeId, "accessory");
+  assert.equal(saved.json.modes[0].pricing.amount, "0");
+});
+test("accesorio individual lee su propio conjunto para las condiciones comerciales", async () => {
+  const f = await fixture({ accessoryKind: "INDIVIDUAL" });
+  assert.ok(f.calls.some(call => call.path === "/equipment-configurations/accessories/accessory"));
+  assert.equal(f.controls.editor.value.scopeType, "ACCESSORY");
 });
 test("failed commercial save retains the draft and retries only the same profile, never equipment creation", async () => {
   const f = await fixture({ failSave: true });

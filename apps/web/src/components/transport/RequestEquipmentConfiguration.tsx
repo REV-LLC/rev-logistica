@@ -17,19 +17,19 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
-  const { assetId, sourceWarehouseId, selectionId } = parent;
+  const { assetId, accessoryId, accessoryKind, componentParentAssetId, sourceDocumentItemId, sourceWarehouseId, selectionId } = parent;
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError('');
     setOptions([]);
-    loadDocumentConfiguration({ selectionId, type: 'serial', name: '', assetId, sourceWarehouseId },
+    loadDocumentConfiguration({ selectionId, type: accessoryId ? 'accessory' : 'serial', name: '', assetId, accessoryId, accessoryKind, componentParentAssetId, sourceDocumentItemId, sourceWarehouseId },
       { docType, customerWorksiteId }, controller.signal)
       .then(result => { if (!controller.signal.aborted) setOptions(result); })
       .catch((err: Error) => { if (!controller.signal.aborted) setError(err.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [assetId, sourceWarehouseId, selectionId, docType, customerWorksiteId, revision]);
+  }, [assetId, accessoryId, accessoryKind, componentParentAssetId, sourceDocumentItemId, sourceWarehouseId, selectionId, docType, customerWorksiteId, revision]);
 
   return <Stack gap="sm">
     <Text fw={700}>Configuración de este documento</Text>
@@ -42,8 +42,7 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
       ? 'Este equipo no tiene piezas predeterminadas configuradas. Puedes revisar las piezas ya incluidas abajo o agregar accesorios desde el selector.'
       : 'No hay accesorios pendientes registrados para este equipo en esta obra.'}</Text> : null}
     {options.map(option => {
-      const selected = selectedItems.filter(item => item.componentParentAssetId === parent.assetId &&
-        (option.item ? sameDocumentPart(item, option.item) : false));
+      const selected = selectedItems.filter(item => option.item ? sameDocumentPart(item, option.item) : false);
       const available = option.item ? availableForDocument(option.item, selectedItems) : 0;
       if (option.locked) return <Alert key={option.key} color={option.unavailable ? 'orange' : 'blue'} title="Motor asignado en inventario">
         {option.name}. {option.unavailable ?? 'Se incluye el motor asignado. Para cambiarlo o desasignarlo, edita el equipo en inventario.'}

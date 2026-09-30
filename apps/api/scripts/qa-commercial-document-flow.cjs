@@ -17,6 +17,7 @@ const { locationKey } = require('../dist/src/accessories/accessory-rules');
 const { calculateAnnex } = require('../dist/src/annexes/annex-engine');
 const { actorEmail } = require('./commercial-qa-target.cjs');
 const db = new PrismaClient();
+const directFlow = process.env.QA_DIRECT === '1';
 (async () => {
   const rollback = Error('ROLLBACK');
   try {
@@ -332,7 +333,7 @@ const db = new PrismaClient();
             ),
           );
         }
-        const lateDoc = await tx.document.create({
+        const lateDraft = {
           data: {
             type: 'REMISSION',
             status: 'DRAFT',
@@ -356,8 +357,21 @@ const db = new PrismaClient();
             },
           },
           include: { items: true },
-        });
-        await documentsService.approveLoadedRequestDocument(lateDoc, author.id);
+        };
+        let lateDoc;
+        if (directFlow) {
+          const created = await documentsService.createDirectDocument({
+            type: 'REMISSION', inventorySourceMode: 'WAREHOUSE', warehouseId: warehouse.id,
+            customerWorksiteId: site.id, notes: 'Fecha documento: 2026-10-04', recipientPhone: '3000000000',
+            items: [{ accessoryId: later.id, accessorySourceBalanceId: laterBalance.id,
+              ownerWarehouseId: warehouse.id, quantity: 4, compositionNodeId: randomUUID(),
+              parentSourceDocumentItemId: childItem.id, componentParentAssetId: parent.id }],
+          }, author.id);
+          lateDoc = await tx.document.findUniqueOrThrow({ where: { id: created.id }, include: { items: true } });
+        } else {
+          lateDoc = await tx.document.create(lateDraft);
+          await documentsService.approveLoadedRequestDocument(lateDoc, author.id);
+        }
         const onSite = await tx.accessoryBalance.findFirstOrThrow({
           where: {
             accessoryId: later.id,
@@ -387,8 +401,18 @@ const db = new PrismaClient();
             },
           },
         });
-        const partial = await tx.document.create({ data: returnPayload(2) });
-        await documentsService.approveLoadedRequestDocument(partial, author.id);
+        if (directFlow) {
+          await documentsService.createDirectDocument({
+            type: 'RETURN', customerWorksiteId: site.id, warehouseId: warehouse.id, recipientPhone: '3000000000',
+            notes: 'Fecha documento: 2026-10-05', items: [{ accessoryId: later.id,
+              accessorySourceBalanceId: onSite.id, ownerWarehouseId: warehouse.id,
+              quantity: 2, compositionNodeId: randomUUID(), sourceDocumentItemId: lateDoc.items[0].id,
+              parentSourceDocumentItemId: childItem.id, componentParentAssetId: parent.id }],
+          }, author.id);
+        } else {
+          const partial = await tx.document.create({ data: returnPayload(2) });
+          await documentsService.approveLoadedRequestDocument(partial, author.id);
+        }
         const over = await tx.document.create({ data: returnPayload(3) });
         await assert.rejects(
           () => documentsService.approveLoadedRequestDocument(over, author.id),
@@ -417,6 +441,27 @@ const db = new PrismaClient();
           ['4', '4', '2'],
         );
         assert(laterRows.every((l) => l.net === '0.00'));
+        if (directFlow) {
+          const provider = await tx.warehouse.findFirstOrThrow({ where: { type: 'ALLY', active: true } });
+          const providerPart = await makeAccessory('QA devolución directa proveedor', 'RETURNABLE');
+          await tx.accessory.update({ where: { id: providerPart.id }, data: { ownerWarehouseId: provider.id } });
+          const providerStock = await tx.accessoryBalance.create({ data: {
+            accessoryId: providerPart.id, assetId: parent.id, customerWorksiteId: site.id,
+            locationKey: locationKey({ assetId: parent.id, customerWorksiteId: site.id }), quantity: 2,
+          } });
+          const directReturn = await documentsService.createDirectDocument({
+            type: 'RETURN', customerWorksiteId: site.id, warehouseId: warehouse.id, recipientPhone: '3000000000',
+            notes: 'Fecha documento: 2026-10-06', items: [{ accessoryId: providerPart.id,
+              accessorySourceBalanceId: providerStock.id, ownerWarehouseId: provider.id,
+              quantity: 1, componentParentAssetId: parent.id }],
+          }, author.id);
+          const transit = await tx.accessoryBalance.findFirstOrThrow({ where: {
+            accessoryId: providerPart.id, transitDocumentId: directReturn.id,
+          } });
+          assert.equal(transit.quantity, 1);
+          assert.equal(transit.warehouseId, null);
+          console.log('PASS direct mode: later remission, source-linked partial return and provider-owned accessory transit.');
+        }
         console.log(
           'PASS v2 DOCUMENT APPROVAL real DB: ASSET→ACCESSORY→ACCESSORY, 9 explicit lines including 6 zero rows, immutable tariff after edit, 409 stale revision, historical records untouched; later delivery to accessory parent, partial return4→2, excessive return rejected. All QA changes rolled back.',
         );
