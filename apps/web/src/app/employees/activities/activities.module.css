@@ -303,3 +303,53 @@
     min-width: 0;
   }
 }
+.employeeTriggerName {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.employeeTriggerHint {
+  font-size: 12px;
+  margin-top: 3px;
+}
+.previewABSENCE {
+  background: #fff0f0;
+  border-color: #e03131;
+  color: #c92a2a;
+}
+.previewMEDICAL_LEAVE {
+  background: #f3f0ff;
+  border-color: #7950f2;
+  color: #6741d9;
+}
+.previewVACATION {
+  background: #e6fcf5;
+  border-color: #0ca678;
+  color: #087f5b;
+}
+@media (min-width: 1600px) {
+  .employeeTrigger {
+    min-width: 460px;
+    padding: 18px 22px;
+    border-radius: 22px;
+    background: white;
+  }
+  .employeeTriggerName {
+    font-size: 21px;
+  }
+  .employeeTriggerHint {
+    font-size: 14px;
+    margin-top: 7px;
+  }
+  .employeeChevron {
+    width: 24px;
+    height: 24px;
+    margin-left: 14px;
+  }
+  .day {
+    min-height: clamp(
+      125px,
+      calc((100dvh - 420px) / var(--calendar-weeks, 6)),
+      210px
+    );
+  }
+}

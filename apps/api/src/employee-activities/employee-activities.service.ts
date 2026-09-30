@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EmployeeActivityType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityNoteDto } from './employee-activities.dto';
 
@@ -93,7 +94,11 @@ export class EmployeeActivitiesService {
     const end = new Date(start);
     end.setUTCMonth(end.getUTCMonth() + 1);
     return this.prisma.employeeActivityNote.findMany({
-      where: { employeeId, date: { gte: start, lt: end } },
+      where: {
+        employeeId,
+        date: { lt: end },
+        OR: [{ date: { gte: start } }, { endDate: { gte: start } }],
+      },
       include: noteInclude,
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
     });
@@ -101,9 +106,31 @@ export class EmployeeActivitiesService {
 
   private async data(
     payload: ActivityNoteDto,
-    previous?: { customerWorksiteId: string; assetId: string },
+    previous?: { customerWorksiteId: string | null; assetId: string | null },
   ) {
     const date = parseCalendarDate(payload.date);
+    const type = payload.type ?? EmployeeActivityType.WORKSITE;
+    if (!Object.values(EmployeeActivityType).includes(type))
+      throw new BadRequestException('El tipo de registro no es válido.');
+    const description = payload.description.trim();
+    if (!description) throw new BadRequestException('Escribe una descripción.');
+    if (type !== EmployeeActivityType.WORKSITE) {
+      const endDate = parseCalendarDate(payload.endDate ?? '');
+      if (endDate < date)
+        throw new BadRequestException(
+          'La fecha de fin debe ser igual o posterior al inicio.',
+        );
+      return {
+        date,
+        endDate,
+        type,
+        description,
+        customerWorksiteId: null,
+        assetId: null,
+      };
+    }
+    if (!payload.customerWorksiteId || !payload.assetId)
+      throw new BadRequestException('Selecciona una obra y un equipo.');
     const [worksite, asset] = await Promise.all([
       this.prisma.customerWorksite.findUnique({
         where: { id: payload.customerWorksiteId },
@@ -128,10 +155,10 @@ export class EmployeeActivitiesService {
     ) {
       throw new BadRequestException('Selecciona un activo disponible.');
     }
-    const description = payload.description.trim();
-    if (!description) throw new BadRequestException('Escribe una descripción.');
     return {
       date,
+      endDate: null,
+      type,
       customerWorksiteId: payload.customerWorksiteId,
       assetId: payload.assetId,
       description,

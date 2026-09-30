@@ -70,10 +70,11 @@ describe('Employee activity notes', () => {
     const { where } = prisma.employeeActivityNote.findMany.mock.calls[0][0];
     expect(where).toEqual({
       employeeId: 'employee',
-      date: {
-        gte: new Date('2026-12-01T00:00:00Z'),
-        lt: new Date('2027-01-01T00:00:00Z'),
-      },
+      date: { lt: new Date('2027-01-01T00:00:00Z') },
+      OR: [
+        { date: { gte: new Date('2026-12-01T00:00:00Z') } },
+        { endDate: { gte: new Date('2026-12-01T00:00:00Z') } },
+      ],
     });
   });
   it.each(['2026-00', '2026-13', '2026-9', undefined])(
@@ -93,12 +94,84 @@ describe('Employee activity notes', () => {
           employeeId: 'employee',
           createdByUserId: 'author',
           date: new Date('2026-09-30T00:00:00Z'),
+          type: 'WORKSITE',
+          endDate: null,
           assetId: payload.assetId,
           customerWorksiteId: payload.customerWorksiteId,
           description: 'Trabajo en la obra',
         },
       }),
     );
+  });
+  it.each(['ABSENCE', 'MEDICAL_LEAVE', 'VACATION'] as const)(
+    'stores %s without worksite or equipment and strips stale associations',
+    async (type) => {
+      await service.create(
+        'employee',
+        { ...payload, type, endDate: '2026-10-05' },
+        'author',
+      );
+      const data = prisma.employeeActivityNote.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        type,
+        endDate: new Date('2026-10-05T00:00:00Z'),
+        assetId: null,
+        customerWorksiteId: null,
+      });
+      expect(prisma.asset.findUnique).not.toHaveBeenCalled();
+      expect(prisma.customerWorksite.findUnique).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['2026-09-29', '2026-02-30', undefined])(
+    'rejects invalid report end date %s',
+    async (endDate) => {
+      await expect(
+        service.create(
+          'employee',
+          {
+            date: payload.date,
+            type: 'VACATION',
+            endDate,
+            description: 'Vacaciones',
+          },
+          'author',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.employeeActivityNote.create).not.toHaveBeenCalled();
+    },
+  );
+  it('accepts a one-day report and validates conditional DTO fields', async () => {
+    const report = {
+      date: payload.date,
+      type: 'ABSENCE' as const,
+      endDate: payload.date,
+      description: 'Motivo',
+    };
+    expect(
+      await validate(plainToInstance(ActivityNoteDto, report)),
+    ).toHaveLength(0);
+    const invalid = await validate(
+      plainToInstance(ActivityNoteDto, { ...report, endDate: undefined }),
+    );
+    expect(invalid.map((error) => error.property)).toContain('endDate');
+    await service.create('employee', report, 'author');
+    expect(
+      prisma.employeeActivityNote.create.mock.calls[0][0].data.endDate,
+    ).toEqual(new Date('2026-09-30T00:00:00Z'));
+  });
+  it('clears range fields when replacing a report with a worksite activity', async () => {
+    prisma.employeeActivityNote.findFirst.mockResolvedValue({
+      assetId: null,
+      customerWorksiteId: null,
+    });
+    await service.update('employee', 'report', payload);
+    expect(
+      prisma.employeeActivityNote.update.mock.calls[0][0].data,
+    ).toMatchObject({
+      type: 'WORKSITE',
+      endDate: null,
+      assetId: payload.assetId,
+    });
   });
   it('rejects a missing employee', async () => {
     prisma.employee.findUnique.mockResolvedValue(null);

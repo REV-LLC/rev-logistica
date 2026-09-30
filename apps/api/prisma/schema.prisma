@@ -1597,20 +1597,29 @@ model ReleaseAcknowledgement {
 }
 
 // Dates represent calendar days, stored at midnight UTC without local time conversion.
+enum EmployeeActivityType {
+  WORKSITE
+  ABSENCE
+  MEDICAL_LEAVE
+  VACATION
+}
+
 model EmployeeActivityNote {
   id                 String   @id @default(uuid())
   employeeId         String
   date               DateTime @db.Date
-  customerWorksiteId String
-  assetId            String
+  endDate            DateTime? @db.Date
+  type               EmployeeActivityType @default(WORKSITE)
+  customerWorksiteId String?
+  assetId            String?
   description        String   @db.VarChar(5000)
   createdByUserId     String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  customerWorksite CustomerWorksite @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
-  asset            Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  asset            Asset?            @relation(fields: [assetId], references: [id], onDelete: Restrict)
   createdBy        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([employeeId, date])
