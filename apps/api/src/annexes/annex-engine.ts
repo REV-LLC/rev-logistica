@@ -258,6 +258,22 @@ export function calculateAnnex(value: unknown) {
           fail('El corte requiere un reporte físico o digital');
         accumulated = accumulated.plus(new D(report.meters));
       }
+      if (interval) {
+        const group = input.rentals.filter(
+          (r) =>
+            r.commercialInterval?.rentalId === interval.rentalId &&
+            r.commercial?.mode?.id === rental.commercial?.mode?.id &&
+            r.metering,
+        );
+        const prior = D.max(
+          0,
+          ...group.map((r) => new D(r.metering?.priorUnits ?? 0)),
+        );
+        accumulated = group
+          .flatMap((r) => r.metering!.reports)
+          .filter((report) => !lastReturn || report.date <= lastReturn.date)
+          .reduce((sum, report) => sum.plus(report.meters), prior);
+      }
       for (const date of activeDates) {
         if (
           rental.assetId &&

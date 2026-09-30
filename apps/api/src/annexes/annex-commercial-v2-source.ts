@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { AnnexInput } from './annex-input';
 import type { CommercialSnapshot } from '../commercial-profiles/commercial-profile.input';
 import {
@@ -157,9 +158,7 @@ export function prepareCommercialV2(
       else segments.push({ from, to, snapshot });
     }
     const payableModes = new Set(
-      segments
-        .filter((s) => !s.snapshot.contextualZero && s.snapshot.mode)
-        .map((s) => s.snapshot.mode!.id),
+      segments.filter((s) => s.snapshot.mode).map((s) => s.snapshot.mode!.id),
     );
     const hasUnsettledModeMinimum =
       payableModes.size > 1 &&
@@ -223,11 +222,12 @@ export function prepareCommercialV2(
       }
       if (snapshot.mode?.unit === 'HOUR') {
         const identity = lot.assetId ?? lot.accessoryId;
-        if (!identity) {
+        if (!identity || Number(lot.quantity) !== 1) {
           rental.commercial = {
             ...snapshot,
             status: 'REVIEW',
-            reason: 'La modalidad horaria requiere un elemento identificado',
+            reason:
+              'La modalidad horaria requiere una unidad identificada por línea',
           };
           rentals.push(rental);
           continue;
@@ -255,12 +255,29 @@ export function prepareCommercialV2(
           });
         }
       } else {
-        if (snapshot.mode?.unit === 'METER')
+        if (snapshot.mode?.unit === 'METER') {
+          const earlierReports = new Map<string, string>();
+          for (const saved of history.flatMap((h) => h.rentals)) {
+            if (
+              saved.commercialInterval?.rentalId !== lot.id ||
+              saved.commercial?.mode?.id !== snapshot.mode.id ||
+              saved.commercialInterval.to >= period.from
+            )
+              continue;
+            for (const report of saved.metering?.reports ?? []) {
+              if (!earlierReports.has(report.source.reference))
+                earlierReports.set(report.source.reference, report.meters);
+            }
+          }
           rental.metering = {
             minimumMeters: snapshot.mode.minimum.value,
+            priorUnits: [...earlierReports.values()]
+              .reduce((sum, value) => sum.plus(value), new Prisma.Decimal(0))
+              .toString(),
             pricing: rental.pricing,
             reports: old?.metering?.reports ?? [],
           };
+        }
         rentals.push(rental);
       }
     }

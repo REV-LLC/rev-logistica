@@ -166,3 +166,211 @@ describe('v2 annex charges', () => {
     ).toBe(1);
   });
 });
+
+import { prepareCommercialV2 } from './annex-commercial-v2-source';
+describe('document-driven commercial intervals', () => {
+  const uuid = (n: number) =>
+    `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const makeMode = (unit: 'DAY' | 'METER', presence: 'ABSENT' | 'PRESENT') => ({
+    id: uuid(unit === 'DAY' ? 1 : 2),
+    name: 'Modalidad genérica',
+    unit,
+    minimum: { value: '0', basis: 'PER_RENTAL' as const },
+    pricing: {
+      source: 'FIXED' as const,
+      amount: unit === 'DAY' ? '100' : '10',
+    },
+    conditions: [{ groupId: uuid(3), presence, minimumQuantity: 1 }],
+    parts: [{ groupId: uuid(3), treatment: 'INCLUDED' as const }],
+  });
+  const snapshot = {
+    schemaVersion: 2,
+    status: 'RESOLVED',
+    catalog: { unit: 'DAY', price: '100' },
+    parts: [],
+    frozenProfile: {
+      id: uuid(4),
+      version: 1,
+      effectiveFrom: '2026-10-01',
+      groups: [
+        {
+          id: uuid(3),
+          name: 'Implemento',
+          selectors: [{ kind: 'ACCESSORY', id: uuid(5) }],
+        },
+      ],
+      modes: [makeMode('DAY', 'ABSENT'), makeMode('METER', 'PRESENT')],
+    },
+  };
+  const delivery = {
+    id: 'delivery',
+    type: 'REMISSION',
+    docDate: new Date('2026-10-01T12:00Z'),
+    items: [
+      {
+        id: 'a',
+        assetId: 'machine',
+        compositionNodeId: 'n',
+        asset: { sku: { id: 'sku', name: 'Equipo inventado' } },
+        commercialSnapshot: snapshot,
+      },
+    ],
+  };
+  const addition = {
+    id: 'addition',
+    type: 'REMISSION',
+    docDate: new Date('2026-10-04T12:00Z'),
+    items: [
+      {
+        id: 'b',
+        parentSourceDocumentItemId: 'a',
+        compositionNodeId: 'n2',
+        accessoryId: uuid(5),
+        quantity: 1,
+        accessory: { name: 'Implemento' },
+      },
+    ],
+  };
+  const movement = {
+    requestId: 'document:addition:item:b',
+    documentId: 'addition',
+    accessoryId: uuid(5),
+    quantity: 1,
+    from: { warehouseId: 'warehouse' },
+    to: { customerWorksiteId: 'site' },
+  };
+  it('adds an implement on day four to an earlier delivery without resending the parent', () => {
+    const result = prepareCommercialV2(
+      [delivery, addition] as any,
+      [{ lot, itemId: 'a' }],
+      [movement],
+      input([]).period,
+      'site',
+      [],
+    );
+    const parent = result.rentals.filter((r) => r.assetId === 'machine');
+    expect(
+      parent.map((r) => [
+        r.commercial?.mode?.unit,
+        r.commercialInterval?.from,
+        r.commercialInterval?.to,
+      ]),
+    ).toEqual([
+      ['DAY', '2026-10-01', '2026-10-03'],
+      ['METER', '2026-10-04', '2026-10-05'],
+    ]);
+    parent[1].metering!.reports = [
+      {
+        date: '2026-10-04',
+        meters: '12',
+        source: { reference: 'measurement', origin: 'PHYSICAL' },
+      },
+    ];
+    const calculated = calculateAnnex({
+      ...input(result.rentals),
+      machineDays: result.machineDays,
+    });
+    expect(calculated.totals.rentalNet).toBe('420.00');
+    expect(calculated.lines.filter((l) => l.basePrice === '0.00')).toHaveLength(
+      2,
+    );
+  });
+  it('keeps an accessory without matching movement visible for review', () => {
+    const result = prepareCommercialV2(
+      [delivery, addition] as any,
+      [{ lot, itemId: 'a' }],
+      [],
+      input([]).period,
+      'site',
+      [],
+    );
+    expect(
+      result.rentals.find((r) => r.accessoryId === uuid(5))?.commercial?.status,
+    ).toBe('REVIEW');
+    expect(
+      result.issues.some((i) => i.code === 'COMMERCIAL_MOVEMENT_REVIEW'),
+    ).toBe(true);
+  });
+});
+
+describe('meter minimum continuity', () => {
+  const mode = {
+    id: '00000000-0000-4000-8000-000000000008',
+    name: 'Medición',
+    unit: 'METER' as const,
+    minimum: { value: '40', basis: 'PER_RENTAL' as const },
+    pricing: { source: 'FIXED' as const, amount: '10' },
+    conditions: [],
+    parts: [],
+  };
+  const commercial = {
+    schemaVersion: 2 as const,
+    status: 'RESOLVED' as const,
+    mode,
+    parts: [],
+  };
+  const returns = [
+    {
+      date: '2026-10-05',
+      quantity: '1',
+      source: { reference: 'return', origin: 'INVENTORY' as const },
+    },
+  ];
+  const first = {
+    ...lot,
+    id: 'lot@2026-10-01',
+    commercial,
+    returns,
+    commercialInterval: {
+      rentalId: 'lot',
+      from: '2026-10-01',
+      to: '2026-10-03',
+    },
+    metering: {
+      minimumMeters: '40',
+      pricing: { basePrice: '10' },
+      reports: [
+        {
+          date: '2026-10-02',
+          meters: '20',
+          source: { reference: 'report1', origin: 'PHYSICAL' as const },
+        },
+      ],
+    },
+  };
+  const second = {
+    ...lot,
+    id: 'lot@2026-10-04',
+    commercial,
+    returns,
+    commercialInterval: {
+      rentalId: 'lot',
+      from: '2026-10-04',
+      to: '2026-10-05',
+    },
+    metering: {
+      minimumMeters: '40',
+      pricing: { basePrice: '10' },
+      reports: [
+        {
+          date: '2026-10-04',
+          meters: '10',
+          source: { reference: 'report2', origin: 'PHYSICAL' as const },
+        },
+      ],
+    },
+  };
+  it('settles once using measurements from all same-mode intervals', () => {
+    const result = calculateAnnex(input([first, second]));
+    expect(result.totals.rentalNet).toBe('400.00');
+  });
+  it('credits actual earlier interval measurements across a cut', () => {
+    const next = {
+      ...input([
+        { ...second, metering: { ...second.metering, priorUnits: '20' } },
+      ]),
+      period: { from: '2026-10-04', to: '2026-10-15', through: '2026-10-05' },
+    };
+    expect(calculateAnnex(next).totals.rentalNet).toBe('200.00');
+  });
+});

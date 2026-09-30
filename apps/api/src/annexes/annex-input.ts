@@ -80,6 +80,7 @@ const includedIn = z
 const metering = z
   .object({
     minimumMeters: decimal,
+    priorUnits: decimal.optional(),
     pricing,
     reports: z
       .array(z.object({ date, meters: decimal, source }).strict())
