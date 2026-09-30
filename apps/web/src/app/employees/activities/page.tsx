@@ -44,6 +44,15 @@ import {
   type EquipmentIdentity,
 } from "@/components/equipment/types";
 
+import AddActivityMenu from "./AddActivityMenu";
+import EmployeeReportModal from "./EmployeeReportModal";
+import {
+  activityLabels,
+  activityColors,
+  type ActivityType,
+  type ActivityForm,
+} from "./activity-types";
+
 type Employee = CalendarEmployee;
 type Asset = EquipmentIdentity;
 type Worksite = {
@@ -61,21 +70,18 @@ type Options = { customers: Customer[]; assets: Asset[] };
 type Note = {
   id: string;
   date: string;
+  endDate: string | null;
+  type: ActivityType;
   description: string;
-  assetId: string;
-  customerWorksiteId: string;
-  asset: Asset;
-  customerWorksite: Worksite & { customer: { name: string } };
+  assetId: string | null;
+  customerWorksiteId: string | null;
+  asset: Asset | null;
+  customerWorksite: (Worksite & { customer: { name: string } }) | null;
   createdBy: { employee: { name: string; lastName: string } | null };
   createdAt: string;
   updatedAt: string;
 };
-type Form = {
-  date: string;
-  customerWorksiteId: string;
-  assetId: string;
-  description: string;
-};
+type Form = ActivityForm;
 const fullName = (employee: { name: string; lastName: string }) =>
   `${employee.name} ${employee.lastName}`.trim();
 const assetLabel = equipmentName;
@@ -129,6 +135,8 @@ export default function EmployeeActivitiesPage() {
   const [opened, setOpened] = useState(false);
   const [editing, setEditing] = useState<Note | null>(null);
   const [form, setForm] = useState<Form>({
+    type: "WORKSITE",
+    endDate: "",
     date: "",
     customerWorksiteId: "",
     assetId: "",
@@ -197,12 +205,22 @@ export default function EmployeeActivitiesPage() {
   const employee = employees.find((person) => person.id === employeeId);
   const notesByDay = useMemo(() => {
     const grouped = new Map<string, Note[]>();
+    const monthStart = `${month}-01`;
+    const monthEnd = new Date(`${shiftMonth(month, 1)}-01T00:00:00Z`);
     for (const note of notes) {
-      const key = note.date.slice(0, 10);
-      grouped.set(key, [...(grouped.get(key) ?? []), note]);
+      const start = note.date.slice(0, 10);
+      const end = (note.endDate ?? note.date).slice(0, 10);
+      const cursor = new Date(
+        `${start < monthStart ? monthStart : start}T00:00:00Z`,
+      );
+      while (cursor < monthEnd && cursor.toISOString().slice(0, 10) <= end) {
+        const key = cursor.toISOString().slice(0, 10);
+        grouped.set(key, [...(grouped.get(key) ?? []), note]);
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
     }
     return grouped;
-  }, [notes]);
+  }, [notes, month]);
   const days = useMemo(() => {
     const first = new Date(`${month}-01T00:00:00Z`);
     const start = new Date(first);
@@ -238,7 +256,7 @@ export default function EmployeeActivitiesPage() {
   }, [options.customers, search]);
   const assetOptions = useMemo(() => {
     const assets = [...options.assets];
-    if (editing && !assets.some((item) => item.id === editing.assetId))
+    if (editing?.asset && !assets.some((item) => item.id === editing.assetId))
       assets.push(editing.asset);
     return assets;
   }, [options.assets, editing]);
@@ -253,7 +271,9 @@ export default function EmployeeActivitiesPage() {
   const chosenSiteLabel = chosenSite
     ? `${chosenSite.customerName} · ${chosenSite.alias || chosenSite.worksite.name}`
     : editing?.customerWorksiteId === form.customerWorksiteId
-      ? `${editing.customerWorksite.customer.name} · ${editing.customerWorksite.worksite.name}`
+      ? editing?.customerWorksite
+        ? `${editing.customerWorksite.customer.name} · ${editing.customerWorksite.worksite.name}`
+        : null
       : null;
   const selectedNotes = notesByDay.get(selectedDate) ?? [];
 
@@ -261,19 +281,27 @@ export default function EmployeeActivitiesPage() {
     setMonth(nextMonth);
     setSelectedDate(`${nextMonth}-01`);
   }
-  function openNote(note?: Note, date = selectedDate) {
+  function openNote(
+    note?: Note,
+    date = selectedDate,
+    type: ActivityType = "WORKSITE",
+  ) {
     setEditing(note ?? null);
     setFormError(null);
     setSearch("");
     setForm(
       note
         ? {
+            type: note.type,
+            endDate: (note.endDate ?? note.date).slice(0, 10),
             date: note.date.slice(0, 10),
-            customerWorksiteId: note.customerWorksiteId,
-            assetId: note.assetId,
+            customerWorksiteId: note.customerWorksiteId ?? "",
+            assetId: note.assetId ?? "",
             description: note.description,
           }
         : {
+            type,
+            endDate: date,
             date,
             customerWorksiteId: "",
             assetId: "",
@@ -284,13 +312,21 @@ export default function EmployeeActivitiesPage() {
   }
   async function save() {
     if (!employeeId || saving) return;
+    const worksite = form.type === "WORKSITE";
     if (
       !form.date ||
-      !form.customerWorksiteId ||
-      !form.assetId ||
-      !form.description.trim()
+      (worksite && (!form.customerWorksiteId || !form.assetId)) ||
+      (form.type !== "VACATION" && !form.description.trim())
     ) {
-      setFormError("Completa la fecha, la obra, el activo y la descripción.");
+      setFormError(
+        worksite
+          ? "Completa la fecha, la obra, el equipo y la descripción."
+          : "Completa las fechas y el motivo del reporte.",
+      );
+      return;
+    }
+    if (!worksite && (!form.endDate || form.endDate < form.date)) {
+      setFormError("La fecha de fin debe ser igual o posterior al inicio.");
       return;
     }
     setSaving(true);
@@ -300,7 +336,17 @@ export default function EmployeeActivitiesPage() {
         `/employee-activities/${employeeId}${editing ? `/${editing.id}` : ""}`,
         {
           method: editing ? "PATCH" : "POST",
-          json: { ...form, description: form.description.trim() },
+          json: {
+            type: form.type,
+            date: form.date,
+            ...(worksite
+              ? {
+                  customerWorksiteId: form.customerWorksiteId,
+                  assetId: form.assetId,
+                }
+              : { endDate: form.endDate }),
+            description: form.description.trim() || activityLabels[form.type],
+          },
         },
       );
       setMonth(form.date.slice(0, 7));
@@ -345,13 +391,16 @@ export default function EmployeeActivitiesPage() {
               </Text>
             </div>
           </Group>
-          <Button
-            leftSection={<IconPlus size={18} />}
-            disabled={!employeeId || loading || Boolean(error)}
-            onClick={() => openNote()}
+          <AddActivityMenu
+            onSelect={(type) => openNote(undefined, selectedDate, type)}
           >
-            Nueva nota
-          </Button>
+            <Button
+              leftSection={<IconPlus size={18} />}
+              disabled={!employeeId || loading || Boolean(error)}
+            >
+              Agregar
+            </Button>
+          </AddActivityMenu>
         </Group>
         {error ? (
           <Alert color="red" title="No se pudo cargar la bitácora">
@@ -487,8 +536,13 @@ export default function EmployeeActivitiesPage() {
                           </span>
                           <span className={styles.previews}>
                             {dayNotes.slice(0, 2).map((note) => (
-                              <span key={note.id} className={styles.preview}>
-                                {note.description}
+                              <span
+                                key={note.id}
+                                className={`${styles.preview} ${styles[`preview${note.type}`]}`}
+                              >
+                                {note.type === "WORKSITE"
+                                  ? note.description
+                                  : activityLabels[note.type]}
                               </span>
                             ))}
                           </span>
@@ -499,20 +553,24 @@ export default function EmployeeActivitiesPage() {
                             </span>
                           ) : null}
                         </button>
-                        <button
-                          type="button"
-                          className={styles.addNote}
-                          aria-label={`Agregar nota para ${dayLabel(date)}`}
-                          title="Agregar nota"
-                          onClick={() => {
+                        <AddActivityMenu
+                          onSelect={(type) => {
                             setSelectedDate(date);
                             if (date.slice(0, 7) !== month)
                               setMonth(date.slice(0, 7));
-                            openNote(undefined, date);
+                            openNote(undefined, date, type);
                           }}
                         >
-                          <IconPlus size={16} aria-hidden="true" />
-                        </button>
+                          <button
+                            type="button"
+                            className={styles.addNote}
+                            aria-label={`Agregar registro para ${dayLabel(date)}`}
+                            title="Agregar registro"
+                            disabled={!employeeId}
+                          >
+                            <IconPlus size={16} aria-hidden="true" />
+                          </button>
+                        </AddActivityMenu>
                       </div>
                     );
                   })}
@@ -552,16 +610,38 @@ export default function EmployeeActivitiesPage() {
                     selectedNotes.map((note) => (
                       <Paper key={note.id} withBorder radius="md" p="sm">
                         <Stack gap="xs">
-                          <Text size="xs" fw={700} c="orange">
-                            {note.customerWorksite.customer.name}
-                          </Text>
-                          <Text fw={650} size="sm">
-                            {note.customerWorksite.alias ||
-                              note.customerWorksite.worksite.name}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {assetLabel(note.asset)}
-                          </Text>
+                          <Badge
+                            color={activityColors[note.type]}
+                            variant="light"
+                            style={{ alignSelf: "start" }}
+                          >
+                            {activityLabels[note.type]}
+                          </Badge>
+                          {note.customerWorksite ? (
+                            <>
+                              <Text size="xs" fw={700} c="orange">
+                                {note.customerWorksite.customer.name}
+                              </Text>
+                              <Text fw={650} size="sm">
+                                {note.customerWorksite.alias ||
+                                  note.customerWorksite.worksite.name}
+                              </Text>
+                            </>
+                          ) : (
+                            <Text size="xs" c="dimmed">
+                              {dayLabel(note.date.slice(0, 10))}
+                              {note.endDate &&
+                              note.endDate.slice(0, 10) !==
+                                note.date.slice(0, 10)
+                                ? ` — ${dayLabel(note.endDate.slice(0, 10))}`
+                                : ""}
+                            </Text>
+                          )}
+                          {note.asset ? (
+                            <Text size="xs" c="dimmed">
+                              {assetLabel(note.asset)}
+                            </Text>
+                          ) : null}
                           <Text
                             size="sm"
                             style={{
@@ -614,7 +694,7 @@ export default function EmployeeActivitiesPage() {
         ) : null}
       </Stack>
       <Modal
-        opened={opened}
+        opened={opened && form.type === "WORKSITE"}
         onClose={() => {
           if (!saving) setOpened(false);
         }}
@@ -781,6 +861,19 @@ export default function EmployeeActivitiesPage() {
           </Stack>
         </form>
       </Modal>
+      <EmployeeReportModal
+        opened={opened && form.type !== "WORKSITE"}
+        editing={Boolean(editing)}
+        employeeName={employee ? fullName(employee) : ""}
+        form={form}
+        onChange={setForm}
+        onClose={() => {
+          if (!saving) setOpened(false);
+        }}
+        onSave={() => void save()}
+        saving={saving}
+        error={formError}
+      />
       <Modal
         opened={Boolean(deleting)}
         onClose={() => {
@@ -795,7 +888,17 @@ export default function EmployeeActivitiesPage() {
       >
         <Stack>
           {formError ? <Alert color="red">{formError}</Alert> : null}
-          <Text>¿Quieres eliminar esta nota de la bitácora?</Text>
+          <Text>
+            {deleting && deleting.type !== "WORKSITE"
+              ? `¿Quieres eliminar el reporte de ${activityLabels[deleting.type].toLowerCase()} de todo el período?`
+              : "¿Quieres eliminar esta nota de la bitácora?"}
+          </Text>
+          {deleting?.endDate ? (
+            <Text size="sm" c="dimmed">
+              {dayLabel(deleting.date.slice(0, 10))} —{" "}
+              {dayLabel(deleting.endDate.slice(0, 10))}
+            </Text>
+          ) : null}
           <Text size="sm" c="dimmed" lineClamp={3}>
             {deleting?.description}
           </Text>
