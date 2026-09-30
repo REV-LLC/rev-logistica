@@ -1,0 +1,31 @@
+// Transactional integration checks. Every change is rolled back; local DB only.
+const {PrismaClient}=require('@prisma/client');const {randomUUID}=require('node:crypto');const assert=require('node:assert/strict');
+const {CommercialProfilesService}=require('../dist/src/commercial-profiles/commercial-profiles.service');
+const {documentCommercialSnapshots}=require('../dist/src/commercial-profiles/commercial-history');
+const {AnnexSourceService}=require('../dist/src/annexes/annex-source.service');
+const {calculateAnnex}=require('../dist/src/annexes/annex-engine');
+const url=new URL(process.env.DATABASE_URL||'');if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/rev_annex_qa')throw Error('Local annex QA only');
+const db=new PrismaClient();
+(async()=>{const rollback=Error('ROLLBACK');try{await db.$transaction(async tx=>{
+ const author=await tx.user.findUniqueOrThrow({where:{email:'annex-qa@local.invalid'}});
+ const candidates=await tx.document.findMany({where:{type:'REMISSION',status:'CONFIRMED',customerWorksiteId:{not:null},docDate:{gte:new Date('2026-09-01T05:00:00Z'),lt:new Date('2026-09-29T05:00:00Z')}},include:{items:{where:{assetId:{not:null}},include:{asset:true}}}});
+ const doc=candidates.find(d=>d.items.length>=2&&new Set(d.items.map(i=>i.assetId)).size===d.items.length);assert(doc,'Need local remission with two assets');
+ const [parent,child]=doc.items;await tx.documentItem.update({where:{id:child.id},data:{componentParentAssetId:parent.assetId}});
+ const proxy=new Proxy(tx,{get:(target,key)=>key==='$transaction'?cb=>cb(tx):target[key]});const profiles=new CommercialProfilesService(proxy);
+ const groupId=randomUUID(),modeId=randomUUID();
+ const dto={scopeType:'ASSET',scopeId:parent.assetId,expectedVersion:(await profiles.get('ASSET',parent.assetId)).version,effectiveFrom:'2026-09-01',groups:[{id:groupId,name:'Grupo sin nombre de familia especial',selectors:[{kind:'ASSET',id:child.assetId}]}],modes:[{id:modeId,name:'Con implemento genérico',unit:'METER',minimum:{value:'40',basis:'PER_RENTAL'},pricing:{source:'FIXED',amount:'1000'},conditions:[{groupId,presence:'PRESENT',minimumQuantity:1}],parts:[{groupId,treatment:'INCLUDED'}]}]};
+ const saved=await profiles.save(dto,author.id);assert.equal(saved.version,dto.expectedVersion+1);
+ await assert.rejects(()=>profiles.save(dto,author.id),/cambiaron/);
+ const snapshots=await documentCommercialSnapshots(tx,doc.id,true);const snapshot=snapshots.get(parent.id);assert.equal(snapshot.status,'RESOLVED');assert.equal(snapshot.mode.unit,'METER');assert.equal(snapshot.parts.find(p=>p.assetId===child.assetId).treatment,'INCLUDED');
+ await profiles.save({...dto,expectedVersion:saved.version,modes:[{...dto.modes[0],pricing:{source:'FIXED',amount:'9000'}}]},author.id);
+ assert.equal((await documentCommercialSnapshots(tx,doc.id)).get(parent.id).basePrice,'1000');
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(doc.docDate);
+ const from=date.slice(0,8)+(Number(date.slice(8))>15?'16':'01');const to=date.slice(0,8)+(Number(date.slice(8))>15?'30':'15');
+ const prepared=await new AnnexSourceService(proxy).prepare(doc.customerWorksiteId,from,to,date);
+ const parentLot=prepared.input.rentals.find(r=>r.assetId===parent.assetId&&r.deliveredOn===date);const childLot=prepared.input.rentals.find(r=>r.assetId===child.assetId&&r.deliveredOn===date);
+ assert(parentLot,'Parent lot generated');assert(parentLot.metering,'Generic metering enabled from IDs');assert.equal(parentLot.metering.pricing.basePrice,'1000');assert.equal(childLot?.includedIn?.assetId,parent.assetId);
+ parentLot.metering.reports=[{date,meters:'12',source:{reference:'QA-MEASUREMENT',origin:'PHYSICAL'}}];parentLot.returns=[{date,quantity:'1',source:{reference:'QA-RETURN',origin:'INVENTORY'}}];
+ const input={...prepared.input,rentals:[parentLot,childLot],machineDays:[]};const result=calculateAnnex(input);assert.equal(result.totals.rentalNet,'40000.00');assert(result.lines.every(l=>l.kind==='METER'));
+ console.log('PASS local integration: arbitrary asset + child => METER40, child INCLUDED; stale edit409; immutable delivery rate1000 after profile changes9000; no second child charge. All changes rolled back.');
+ throw rollback;
+},{timeout:60000})}catch(e){if(e!==rollback)throw e}})().finally(()=>db.$disconnect()).catch(e=>{console.error(e.message);process.exitCode=1});

@@ -43,7 +43,6 @@ import {
   IconRulerMeasure,
   IconMap2,
   IconMessageCircle,
-  IconReceipt,
   IconSettings,
   IconTag,
   IconTools,
@@ -264,9 +263,9 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
           },
           {
-            href: "/billing/pre-invoice",
-            label: "Prefactura",
-            icon: IconReceipt,
+            href: "/billing/annexes",
+            label: "Anexos",
+            icon: IconTag,
             roles: ["ADMIN", "OFFICE"],
           },
           {
@@ -334,7 +333,7 @@ const toolLinks: NavLinkItem[] = [
   { href: "/data", label: "Datos", icon: IconDatabaseExport, roles: ["ADMIN"] },
 ];
 
-const prodDisabledRoutes = ["/transport/cost", "/billing/pre-invoice"];
+const prodDisabledRoutes = ["/transport/cost"];
 const isProduction = process.env.NODE_ENV === "production";
 const defaultServiceName = "finge";
 const homeLink: NavLinkItem = {
