@@ -33,6 +33,8 @@ const commercial = z
     status: z.enum(['RESOLVED', 'REVIEW']),
     schemaVersion: z.literal(2).optional(),
     contextualZero: z.boolean().optional(),
+    selectedModeId: z.string().uuid().optional(),
+    minimumReview: z.boolean().optional(),
     parentDocumentItemId: id.optional(),
     frozenProfile: z
       .object({
@@ -87,6 +89,97 @@ const metering = z
       .max(1000),
   })
   .strict();
+const machineSchema = z
+  .object({
+    assetId: id,
+    rentalId: id.optional(),
+    commercial: commercial.optional(),
+    includedIn: includedIn.optional(),
+    label: z.string().trim().min(1).max(200),
+    date,
+    status: z.enum(['REPORTED', 'NO_WORK', 'PENDING']),
+    confirmationReason: reason.optional(),
+    reports: z
+      .array(
+        z
+          .object({
+            source,
+            employeeId: id,
+            hours: decimal,
+          })
+          .strict(),
+      )
+      .max(100),
+    pricing,
+    waiverReason: reason.optional(),
+  })
+  .strict();
+const baseRentalSchema = z
+  .object({
+    id,
+    skuId: id,
+    label: z.string().trim().min(1).max(200),
+    assetId: id.optional(),
+    accessoryId: id.optional(),
+    commercialInterval: z
+      .object({ from: date, to: date, rentalId: id })
+      .strict()
+      .optional(),
+    minimumHistoryRanges: z
+      .array(z.object({ from: date, to: date, rentalId: id }).strict())
+      .max(1000)
+      .optional(),
+    deliveredOn: date,
+    quantity: decimal,
+    source,
+    returns: z
+      .array(z.object({ date, quantity: decimal, source }).strict())
+      .max(200),
+    pricing,
+    commercial: commercial.optional(),
+    includedIn: includedIn.optional(),
+    metering: metering.optional(),
+    allowsCutting: z.boolean().optional(),
+    priorBillableDays: decimal.optional(),
+    cutting: z
+      .object({
+        minimumMeters: decimal,
+        pricing,
+        reports: z
+          .array(z.object({ date, meters: decimal, source }).strict())
+          .max(1000),
+      })
+      .strict()
+      .optional(),
+    waivedDays: z.array(z.object({ date, reason }).strict()).max(31),
+    dayAdjustments: z
+      .array(
+        z
+          .object({
+            from: date,
+            to: date,
+            days: z.number().int().min(0).max(999),
+            quantity: decimal,
+          })
+          .strict(),
+      )
+      .max(31)
+      .optional(),
+  })
+  .strict();
+const rentalSchema = baseRentalSchema
+  .extend({
+    modeArchive: z
+      .object({
+        metering: metering.optional(),
+        dayAdjustments: baseRentalSchema.shape.dayAdjustments,
+        waivedDays: baseRentalSchema.shape.waivedDays.optional(),
+        machineDays: z.array(machineSchema).max(31).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 export const annexInputSchema = z
   .object({
     period: z.object({ from: date, to: date, through: date }).strict(),
@@ -118,89 +211,11 @@ export const annexInputSchema = z
           .optional(),
       })
       .strict(),
-    rentals: z
-      .array(
-        z
-          .object({
-            id,
-            skuId: id,
-            label: z.string().trim().min(1).max(200),
-            assetId: id.optional(),
-            accessoryId: id.optional(),
-            commercialInterval: z
-              .object({ from: date, to: date, rentalId: id })
-              .strict()
-              .optional(),
-            minimumHistoryRanges: z
-              .array(z.object({ from: date, to: date, rentalId: id }).strict())
-              .max(1000)
-              .optional(),
-            deliveredOn: date,
-            quantity: decimal,
-            source,
-            returns: z
-              .array(z.object({ date, quantity: decimal, source }).strict())
-              .max(200),
-            pricing,
-            commercial: commercial.optional(),
-            includedIn: includedIn.optional(),
-            metering: metering.optional(),
-            allowsCutting: z.boolean().optional(),
-            priorBillableDays: decimal.optional(),
-            cutting: z
-              .object({
-                minimumMeters: decimal,
-                pricing,
-                reports: z
-                  .array(z.object({ date, meters: decimal, source }).strict())
-                  .max(1000),
-              })
-              .strict()
-              .optional(),
-            waivedDays: z.array(z.object({ date, reason }).strict()).max(31),
-            dayAdjustments: z
-              .array(
-                z
-                  .object({
-                    from: date,
-                    to: date,
-                    days: z.number().int().min(0).max(999),
-                    quantity: decimal,
-                  })
-                  .strict(),
-              )
-              .max(31)
-              .optional(),
-          })
-          .strict(),
-      )
-      .max(500),
+    rentals: z.array(rentalSchema).max(500),
     machineDays: z
       .array(
-        z
-          .object({
-            assetId: id,
-            rentalId: id.optional(),
-            commercial: commercial.optional(),
-            includedIn: includedIn.optional(),
-            label: z.string().trim().min(1).max(200),
-            date,
-            status: z.enum(['REPORTED', 'NO_WORK', 'PENDING']),
-            confirmationReason: reason.optional(),
-            reports: z
-              .array(
-                z
-                  .object({
-                    source,
-                    employeeId: id,
-                    hours: decimal,
-                  })
-                  .strict(),
-              )
-              .max(100),
-            pricing,
-            waiverReason: reason.optional(),
-          })
+        machineSchema
+          .extend({ rentalContext: rentalSchema.optional() })
           .strict(),
       )
       .max(3000),

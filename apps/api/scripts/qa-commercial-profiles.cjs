@@ -11,6 +11,7 @@ const {
 const {
   AnnexSourceService,
 } = require('../dist/src/annexes/annex-source.service');
+const { AnnexesService } = require('../dist/src/annexes/annexes.service');
 const { calculateAnnex } = require('../dist/src/annexes/annex-engine');
 const { actorEmail } = require('./commercial-qa-target.cjs');
 const db = new PrismaClient();
@@ -213,7 +214,13 @@ const db = new PrismaClient();
           rentals,
           machineDays: [],
         });
-        assert.equal(result.lines.length, 9);
+        const drafts = new AnnexesService(proxy);
+      const existing = await drafts.list(site.id);
+      const current = existing.find(d => d.periodFrom.toISOString().slice(0,10) === '2026-10-01' && d.periodTo.toISOString().slice(0,10) === '2026-10-15');
+      const savedAnnex = await drafts.save({customerWorksiteId:site.id,expectedRevision:current?.revision ?? 0,reason:'QA round-trip with explicit accessory zero',input:{...prepared.input,rentals,machineDays:[]}},author.id);
+      const reloaded = await drafts.get(savedAnnex.id);
+      assert(reloaded.revisions[0].input.rentals.some(r=>r.accessoryId===child.id));
+      assert.equal(result.lines.length, 9);
         assert.equal(result.totals.rentalNet, '300.00');
         assert.equal(
           result.lines.filter((l) => l.basePrice === '0.00').length,

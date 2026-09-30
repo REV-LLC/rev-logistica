@@ -1,6 +1,23 @@
 export type CommercialSnapshot = {
   schemaVersion?: 2;
   contextualZero?: boolean;
+  selectedModeId?: string;
+  minimumReview?: boolean;
+  frozenProfile?: {
+    id: string;
+    version: number;
+    effectiveFrom: string;
+    groups: {
+      id: string;
+      name: string;
+      selectors: {
+        kind: "ASSET" | "SKU" | "FAMILY" | "ACCESSORY";
+        id: string;
+      }[];
+    }[];
+    modes: NonNullable<CommercialSnapshot["mode"]>[];
+  };
+  catalog?: { unit: string; price: string | null };
   parentDocumentItemId?: string;
   status: "RESOLVED" | "REVIEW";
   profileId?: string;
@@ -56,6 +73,12 @@ export type Source = {
   origin: "INVENTORY" | "PHYSICAL" | "DIGITAL";
 };
 export type Rental = {
+  modeArchive?: {
+    metering?: Metering;
+    dayAdjustments?: Rental["dayAdjustments"];
+    waivedDays?: Rental["waivedDays"];
+    machineDays?: Omit<MachineDay, "rentalContext">[];
+  };
   id: string;
   skuId: string;
   assetId?: string;
@@ -87,6 +110,7 @@ export type Rental = {
   }[];
 };
 export type MachineDay = {
+  rentalContext?: Rental;
   rentalId?: string;
   commercial?: CommercialSnapshot;
   includedIn?: Inclusion;

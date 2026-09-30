@@ -38,6 +38,32 @@ const cents = (value: string) => BigInt(value.replace(".", ""));
 const amount = (value: bigint) =>
   `${value / 100n}.${String(value % 100n).padStart(2, "0")}`;
 
+export function sheetModeOptions(input: AnnexInput, row: SheetRow) {
+  const source = input[row.kind][row.index];
+  const snapshot = source.commercial;
+  if (source.includedIn || snapshot?.contextualZero) return [];
+  return (snapshot?.frozenProfile?.modes ?? []).map((mode) => ({
+    value: mode.id,
+    label: { DAY: "D", HOUR: "HR", METER: "M" }[mode.unit],
+    name: mode.name,
+    disabled:
+      mode.pricing.source === "CATALOG" &&
+      (snapshot?.catalog?.unit !== mode.unit ||
+        snapshot?.catalog?.price == null),
+  }));
+}
+function commercialLabel(
+  source: AnnexInput["rentals"][number] | AnnexInput["machineDays"][number],
+) {
+  const snapshot = source.commercial;
+  if (!snapshot?.frozenProfile?.groups.length || snapshot.contextualZero)
+    return source.label;
+  const parts = snapshot.parts
+    .map((part) => `${part.quantity} × ${part.label}`)
+    .join(", ");
+  return `${source.label} · ${parts ? `con ${parts}` : "sin accesorios"}`;
+}
+
 // Group only consecutive server-calculated days with the same charge conditions.
 export function sheetRows(
   input: AnnexInput,
@@ -92,7 +118,7 @@ export function sheetRows(
           skuId: rental?.skuId,
           assetId: rental?.assetId ?? day?.assetId,
           accessoryId: rental?.accessoryId,
-          rentalId: rental?.id,
+          rentalId: rental?.id ?? day?.rentalId,
           included: Boolean(source.includedIn),
           composition: source.includedIn
             ? `Incluido en ${source.includedIn.label}`
@@ -103,19 +129,31 @@ export function sheetRows(
                 )
                 .join("\n"),
           supplement: first?.key.includes(":minimum:") ?? false,
-          label: source.label,
+          label: commercialLabel(source),
           reference:
             rental?.source.reference ??
             day!.reports.map((r) => r.source.reference).join(", "),
           mode: source.includedIn
             ? "Incluido"
-            : rental
-              ? (rental.metering ?? rental.cutting)
-                ? "M"
-                : "D"
-              : "HR",
-          from: first?.date ?? day?.date ?? rental?.commercialInterval?.from ?? rental!.deliveredOn,
-          to: group.at(-1)?.date ?? day?.date ?? rental?.commercialInterval?.to ?? input.period.through,
+            : source.commercial?.mode?.unit
+              ? { DAY: "D", HOUR: "HR", METER: "M" }[
+                  source.commercial.mode.unit
+                ]
+              : rental
+                ? (rental.metering ?? rental.cutting)
+                  ? "M"
+                  : "D"
+                : "HR",
+          from:
+            first?.date ??
+            day?.date ??
+            rental?.commercialInterval?.from ??
+            rental!.deliveredOn,
+          to:
+            group.at(-1)?.date ??
+            day?.date ??
+            rental?.commercialInterval?.to ??
+            input.period.through,
           quantity: first?.quantity ?? (rental ? "—" : "1"),
           days:
             (rental?.metering ?? rental?.cutting)
@@ -156,18 +194,19 @@ export function sheetRows(
             ? "Incluido"
             : source.commercial?.status === "REVIEW"
               ? "Revisar modalidad"
-              : source.commercial?.contextualZero ? "Tarifa $0 en este conjunto"
-              : !result
-                ? "Por calcular"
-                : day?.status === "PENDING"
-                  ? "Falta reporte"
-                  : day?.status === "NO_WORK"
-                    ? "Sin trabajo confirmado"
-                    : first?.waived
-                      ? "Exento"
-                      : first
-                        ? "Calculado"
-                        : "Sin días cobrables",
+              : source.commercial?.contextualZero
+                ? "Tarifa $0 en este conjunto"
+                : !result
+                  ? "Por calcular"
+                  : day?.status === "PENDING"
+                    ? "Falta reporte"
+                    : day?.status === "NO_WORK"
+                      ? "Sin trabajo confirmado"
+                      : first?.waived
+                        ? "Exento"
+                        : first
+                          ? "Calculado"
+                          : "Sin días cobrables",
         };
       });
     }),
@@ -286,10 +325,12 @@ export function groupMachineRows(
   const daily = rows.filter((row) => row.kind === "rentals");
   for (const row of rows) {
     if (row.kind !== "machineDays") continue;
-    const assetId = input.machineDays[row.index].assetId;
-    const days = groups.get(assetId) ?? [];
+    const day = input.machineDays[row.index];
+    const assetId = day.assetId;
+    const key = day.rentalId ?? assetId;
+    const days = groups.get(key) ?? [];
     days.push({ ...row, assetId });
-    groups.set(assetId, days);
+    groups.set(key, days);
   }
   return [
     ...(input.policy?.minimumDaysBySku
@@ -317,7 +358,7 @@ export function groupMachineRows(
       days.sort((a, b) => a.from.localeCompare(b.from));
       const first = days[0];
       return [
-        { ...first, id: `machine-group:${assetId}`, group: true, assetId },
+        { ...first, id: `machine-group:${assetId}`, group: true },
         ...days,
       ];
     }),

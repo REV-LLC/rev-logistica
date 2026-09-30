@@ -130,3 +130,11 @@ test('meter rows use their own base price and discount; cannot edit days',()=>{
  assert.equal(next.rentals[0].cutting.pricing.effectivePrice,'1800');assert.equal(next.rentals[0].pricing.basePrice,'100');
  assert.throws(()=>applySheetChanges(cutting,[{row:rows[0],key:'days',value:'1'}]));
 });
+test('configured modes are offered by ID and physical compositions distinguish the two intervals', async()=>{
+ const {sheetModeOptions}=await import('./annex-sheet.ts');
+ const profile={id:'p',version:1,groups:[{id:'g',name:'Implemento',selectors:[]}],modes:[{id:'day',name:'Alquiler diario',unit:'DAY',pricing:{source:'FIXED',amount:'100'}},{id:'meter',name:'Servicio medido',unit:'METER',pricing:{source:'FIXED',amount:'10'}}]};
+ const data={...input,machineDays:[],rentals:[{...input.rentals[0],commercial:{status:'RESOLVED',frozenProfile:profile,mode:profile.modes[0],parts:[]}},
+ {...input.rentals[0],id:'other',commercial:{status:'REVIEW',frozenProfile:profile,mode:profile.modes[1],parts:[{label:'Implemento libre',quantity:1}]}}]};
+ const rows=sheetRows(data,null);assert.equal(rows[0].label,'Plataforma · sin accesorios');assert.equal(rows[1].label,'Plataforma · con 1 × Implemento libre');
+ assert.equal(rows[1].mode,'M');assert.deepEqual(sheetModeOptions(data,rows[1]).map(o=>[o.value,o.label]),[['day','D'],['meter','M']]);
+});
