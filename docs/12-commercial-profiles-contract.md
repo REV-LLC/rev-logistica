@@ -91,3 +91,11 @@ ACCESSORY es un scope comercial propio, sin heredar tarifas de la familia usada 
 Los snapshots v2 incluyen schemaVersion2, perfil completo congelado y catálogo usado. Los cambios físicos confirmados producen tramos a partir de su fecha; las reglas de ese alquiler proceden del perfil congelado, no de la configuración actual. La modalidad por día/hora/metro es un dato. Ninguna decisión depende del nombre del equipo.
 
 Responsabilidad acordada: schema/migraciones/commercial-profiles/annexes/scripts QA en chat anexos; documents/accessories y todo apps/web en chat flujos logísticos. No desplegar.
+
+### Verificación v2 local
+
+Implementados nodos documentales estables y padre inmediato genérico, referencias a remisiones anteriores, alcance ACCESSORY propio, snapshots de perfil/catálogo y filas contextuales de tarifa cero. Se conservan las reglas históricas al editar perfiles posteriores. Los tramos cambian por fechas civiles de entregas/devoluciones confirmadas; no duplican unidades el día de transición.
+
+Los mínimos de una misma modalidad acumulan días/metros entre tramos y cortes. Está pendiente la decisión comercial sobre mínimos cuando un mismo alquiler cambia de modalidad: mientras tanto ese caso se marca para revisión; no se cobra una combinación supuesta. Agregar piezas nuevas a un padre de una entrega legacy también requiere conciliación de las condiciones nuevas, sin reescribir la entrega anterior.
+
+`qa-commercial-profiles.cjs` prueba snapshots y generación con Prisma real. `qa-commercial-document-flow.cjs` usa DocumentsService, InventoryService y AccessoryDocumentsService reales: aprueba árbol equipo→accesorio→accesorio, suministra piezas a un padre ya en obra, devuelve parcialmente y rechaza exceso. En tres días el conjunto inicial genera nueve filas, seis de tarifa cero, con total 300 a tarifa100. En seis días, suministro posterior y retorno parcial conservan total600 y cantidades4/4/2. Ambas pruebas aceptan exclusivamente las dos bases QA aisladas y revierten toda su transacción; no realizan envíos externos.
