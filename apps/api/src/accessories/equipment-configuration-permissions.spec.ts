@@ -26,6 +26,7 @@ describe('Configuration permissions with real JWT guards', () => {
     'motorHistory',
     'getAsset',
     'returnParts',
+    'returnOrigins',
     'getAccessory',
     'saveAsset',
     'saveAccessory',
@@ -58,7 +59,7 @@ describe('Configuration permissions with real JWT guards', () => {
       for (const method of methods) {
         const ctx = context(method, token);
         await auth.canActivate(ctx);
-        if (['DRIVER', 'WAREHOUSE_TABLET'].includes(role) && ['getAsset', 'returnParts'].includes(method)) {
+        if (['DRIVER', 'WAREHOUSE_TABLET'].includes(role) && ['getAsset', 'getAccessory', 'returnParts', 'returnOrigins'].includes(method)) {
           expect(roles.canActivate(ctx)).toBe(true);
         } else expect(() => roles.canActivate(ctx)).toThrow('Insufficient role');
       }
