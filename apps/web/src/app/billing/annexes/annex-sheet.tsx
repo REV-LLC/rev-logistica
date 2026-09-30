@@ -34,7 +34,6 @@ import {
   type SheetChange,
   type SheetRow,
 } from "@/lib/annex-sheet";
-import { api } from "@/lib/api";
 import type { AnnexInput, Result } from "./types";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
@@ -143,6 +142,7 @@ export default function AnnexSheet({
   editing,
   actions,
   onChange,
+  onModeChange,
   onReport,
   onConfigureCalendar,
   employees,
@@ -158,6 +158,7 @@ export default function AnnexSheet({
   editing: boolean;
   actions: ReactNode;
   onChange: (next: AnnexInput) => void;
+  onModeChange: (rentalId: string, modeId: string) => Promise<void>;
   onReport: (index: number) => void;
   onConfigureCalendar: () => void;
 }) {
@@ -222,11 +223,7 @@ export default function AnnexSheet({
     if (!modeId || !row.rentalId || !editing || busy || changingMode) return;
     setChangingMode(true);
     try {
-      const next = await api<AnnexInput>("/annexes/select-mode", {
-        method: "POST",
-        json: { input, rentalId: row.rentalId, modeId },
-      });
-      onChange(next);
+      await onModeChange(row.rentalId, modeId);
       setError(null);
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));

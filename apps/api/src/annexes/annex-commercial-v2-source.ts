@@ -50,17 +50,19 @@ export function prepareCommercialV2(
     itemId,
     lot: {
       ...lot,
-      returns: documents
-        .filter((d) => d.type === 'RETURN')
-        .flatMap((d) =>
-          d.items
-            .filter((i) => i.sourceDocumentItemId === itemId)
-            .map((i) => ({
-              date: commercialBusinessDate(d.docDate),
-              quantity: String(i.assetId ? 1 : (i.quantity ?? 1)),
-              source: { reference: i.id, origin: 'INVENTORY' as const },
-            })),
-        ),
+      returns: itemId.startsWith('legacy-origin:')
+        ? lot.returns
+        : documents
+            .filter((d) => d.type === 'RETURN')
+            .flatMap((d) =>
+              d.items
+                .filter((i) => i.sourceDocumentItemId === itemId)
+                .map((i) => ({
+                  date: commercialBusinessDate(d.docDate),
+                  quantity: String(i.assetId ? 1 : (i.quantity ?? 1)),
+                  source: { reference: i.id, origin: 'INVENTORY' as const },
+                })),
+            ),
     },
   }));
   const invalidMovement = new Set<string>();
@@ -255,6 +257,18 @@ export function prepareCommercialV2(
             rentalId: `${lot.id}@${s.from}`,
           })),
       };
+      if (
+        itemId.startsWith('legacy-origin:') &&
+        snapshot.mode?.unit === 'DAY'
+      ) {
+        const effective = commercialBusinessDate(origin.doc.docDate);
+        if (lot.deliveredOn < effective)
+          rental.minimumHistoryRanges?.unshift({
+            from: lot.deliveredOn,
+            to: nextDay(effective, -1),
+            rentalId: lot.id,
+          });
+      }
       // Explicit zero is a priced presence row, not an inferred report and not an omitted part.
       if (snapshot.contextualZero) rental.pricing = { basePrice: '0.00' };
       if (snapshot.mode?.unit === 'METER')

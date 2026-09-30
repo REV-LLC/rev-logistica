@@ -1,3 +1,4 @@
+import { legacyCommercialBridge } from '../commercial-profiles/commercial-legacy-bridge';
 import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
 import { prepareCommercialV2 } from './annex-commercial-v2-source';
 import { BadRequestException } from '@nestjs/common';
@@ -98,8 +99,15 @@ export async function applyCommercialComposition(
     throw new BadRequestException(
       'El historial de accesorios requiere procesamiento por lotes',
     );
+  const bridge = await legacyCommercialBridge(tx, siteId, period.through);
+  documents.push(...bridge.documents);
+  const bridgeBySource = new Map(
+    bridge.entries.map((entry) => [entry.sourceLedgerId, entry]),
+  );
   const byDocument = new Map(documents.map((d) => [d.id, d]));
   const mappedV2 = lots.flatMap((lot) => {
+    const reviewed = bridgeBySource.get(lot.source.reference);
+    if (reviewed) return [{ lot, itemId: reviewed.nodeId }];
     const row = rows.find((r) => r.id === lot.source.reference);
     const doc = row?.refDocumentId
       ? byDocument.get(row.refDocumentId)
@@ -127,8 +135,24 @@ export async function applyCommercialComposition(
   const issues: SourceIssue[] = [];
   const rentals: AnnexInput['rentals'] = [],
     machineDays: AnnexInput['machineDays'] = [];
-  for (const lot of lots) {
-    if (handledV2.has(lot.id)) continue;
+  for (let lot of lots) {
+    const reviewed = bridgeBySource.get(lot.source.reference);
+    if (
+      handledV2.has(lot.id) &&
+      (!reviewed || reviewed.effectiveFrom <= period.from)
+    )
+      continue;
+    if (reviewed)
+      lot = {
+        ...lot,
+        commercialInterval: {
+          from: lot.deliveredOn,
+          to: new Date(Date.parse(reviewed.effectiveFrom) - 86400000)
+            .toISOString()
+            .slice(0, 10),
+          rentalId: lot.id,
+        },
+      };
     const row = rows.find((r) => r.id === lot.source.reference);
     const doc = row?.refDocumentId
       ? byDocument.get(row.refDocumentId)
@@ -357,7 +381,7 @@ export async function applyCommercialComposition(
           Date.parse(lot.deliveredOn),
           Date.parse(period.from),
         );
-        time <= Date.parse(period.through);
+        time <= Date.parse(lot.commercialInterval?.to ?? period.through);
         time += 86400000
       ) {
         const date = new Date(time).toISOString().slice(0, 10);
