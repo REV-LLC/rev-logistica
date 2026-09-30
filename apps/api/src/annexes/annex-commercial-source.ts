@@ -13,7 +13,40 @@ type Ledger = {
   skuId: string | null;
   ownerWarehouseId: string;
   effectiveAt: Date;
+  quantity: Prisma.Decimal;
+  movementType: string;
 };
+// Inclusion is contextual, including the physical return day. A child left behind
+// must be reviewed rather than silently billed free in later cuts.
+export function parentCoversRental(
+  lot: AnnexInput['rentals'][number],
+  parentRows: Pick<Ledger, 'quantity' | 'movementType' | 'effectiveAt'>[],
+  period: AnnexInput['period'],
+) {
+  for (
+    let time = Math.max(Date.parse(period.from), Date.parse(lot.deliveredOn));
+    time <= Date.parse(period.through);
+    time += 86400000
+  ) {
+    const date = new Date(time).toISOString().slice(0, 10);
+    if (
+      lot.returns
+        .filter((r) => r.date < date)
+        .reduce((sum, r) => sum + Number(r.quantity), 0) >= Number(lot.quantity)
+    )
+      continue;
+    const balance = parentRows.reduce((sum, r) => {
+      const day = inventoryBusinessDay(r.effectiveAt),
+        delta =
+          r.movementType === 'ON_SITE' ? r.quantity : r.quantity.negated();
+      return day < date || (day === date && delta.gt(0))
+        ? sum.plus(delta)
+        : sum;
+    }, new Prisma.Decimal(0));
+    if (balance.lte(0)) return false;
+  }
+  return true;
+}
 // Inventory creates stable delivery lots first, independently of the eventual billing unit.
 export async function applyCommercialComposition(
   tx: Prisma.TransactionClient,
@@ -190,7 +223,7 @@ export async function applyCommercialComposition(
           };
         const changed = documents.some(
           (d) =>
-            inventoryBusinessDay(d.docDate) >= period.from &&
+            inventoryBusinessDay(d.docDate) >= lot.deliveredOn &&
             inventoryBusinessDay(d.docDate) <= period.through &&
             d.id !== doc.id &&
             d.items.some((i) =>
@@ -238,6 +271,22 @@ export async function applyCommercialComposition(
         reason:
           'El conjunto contiene relaciones entre accesorios sin padre documental suficiente; requiere conciliación',
       };
+    if (
+      includedIn &&
+      !parentCoversRental(
+        lot,
+        rows.filter((r) => r.assetId === includedIn!.assetId),
+        period,
+      )
+    ) {
+      includedIn = undefined;
+      snapshot = {
+        ...snapshot,
+        status: 'REVIEW',
+        reason:
+          'La pieza permanece en obra sin su equipo principal: define su condición comercial para ese tramo',
+      };
+    }
     lot.commercial = snapshot;
     lot.includedIn = includedIn;
     if (snapshot.status === 'REVIEW' && !includedIn)
