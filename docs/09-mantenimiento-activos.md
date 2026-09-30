@@ -148,3 +148,19 @@ POST /notifications/entities/CONTRACT/:contractId/topics
 ```
 
 Las variables disponibles son `{{entityId}}`, `{{dueDate}}`, `{{remainingDays}}` y `{{status}}`. Los temas automáticos de SOAT y tecnomecánica no permiten cambiar lógica o plantilla desde este endpoint; únicamente sus destinatarios.
+
+## Registrar un mantenimiento ya realizado
+
+Desde la ficha del equipo o vehículo, **Mantenimiento → Registrar mantenimiento** permite ingresar fecha, horómetro (cuando aplica), observaciones y varios trabajos en una sola operación. No requiere crear primero un plan.
+
+Cada trabajo puede ser una revisión existente (conserva su intervalo y destinatarios) o un trabajo nuevo. Para los trabajos nuevos se puede activar **Programar próximo cambio**, ingresar un intervalo y margen preventivo propios, y seleccionar destinatarios. La próxima alerta parte de las horas o fecha reales del mantenimiento registrado. Los intervalos los define el usuario, sin valores asumidos del fabricante.
+
+`POST /maintenance/records` acepta un único `assetId` o `vehicleId`, `completedAt`, `completedAtHours`, `notes` y `tasks`. Cada tarea contiene `itemId` o `name`; una tarea nueva puede incluir `recurrence` con los mismos campos de programación y destinatarios de una revisión. Toda la operación se guarda en una transacción serializable. Solo `ADMIN` y `OFFICE` pueden utilizarla.
+
+Un registro por horas superior al horómetro actual lo actualiza y crea una lectura administrativa con usuario, fecha y nota; no exige las horas reportadas ni la fotografía del flujo de operarios. Una ejecución histórica con menos horas no reduce el horómetro actual. Para revisiones existentes, la fecha debe ser posterior a su última ejecución y las horas no pueden ser menores a las de esa ejecución. Se rechazan fechas futuras.
+
+Los trabajos sin programación se conservan como revisiones inactivas sin tema de notificación. En **Mantenimientos realizados** se pueden consultar los últimos 100 trabajos, sus notas, usuario, fecha y horas, incluso si su plan fue archivado. Desde un trabajo sin alertas se puede usar **Configurar próximos cambios**. El panel reutiliza planes y ejecuciones; el campo de referencia requiere la migración `20260929210000_maintenance_completion_reference`.
+
+El trabajo realizado se selecciona de un catálogo de cambios de filtros, aceites, frenos, llantas, batería, zapatos, correas, alineación y balanceo, u **Otro** con descripción libre. La referencia se guarda por ejecución: viscosidad de motor con dos enteros (`15W-40`), aceite hidráulico `AW68` o `ISO68`, y referencia escrita para filtros. Los demás trabajos permiten referencia opcional. Se conserva la referencia histórica aunque posteriormente se cambie el plan.
+
+**Realizado por** permite seleccionar un usuario activo y propone el usuario autenticado por defecto, tanto en registros directos como al completar revisiones existentes. `performedByUserId` identifica a quien realizó el trabajo; `completedByUserId` conserva al usuario que lo registró. Los registros anteriores mantienen el responsable sin especificar, sin atribuirlo automáticamente al registrador. Requiere la migración `20260929220000_maintenance_performer`.

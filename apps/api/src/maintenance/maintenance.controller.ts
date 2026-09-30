@@ -11,6 +11,7 @@ import {
   CreateMaintenanceItemDto,
   CreateMaintenancePlanDto,
   RecordAssetHoursDto,
+  RecordMaintenanceDto,
   UpdateMaintenanceItemDto,
   UpdateMaintenancePlanDto,
 } from './dto/maintenance.dto';
@@ -24,6 +25,21 @@ const validation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: t
 @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
 export class MaintenanceController {
   constructor(private readonly maintenance: MaintenanceService) {}
+
+  @Get('session')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  session(@Req() request: Request & { user: JwtPayload }) {
+    return { userId: request.user.sub };
+  }
+
+  @Post('records')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  recordMaintenance(
+    @Body(validation) payload: RecordMaintenanceDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    return this.maintenance.recordMaintenance(payload, request.user.sub);
+  }
 
   @Get('operator/assets')
   @Roles(Role.ADMIN, Role.OFFICE, Role.OPERATOR)
