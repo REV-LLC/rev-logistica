@@ -120,7 +120,7 @@ export default function MaintenancePlanList({
                         </div>
                         <Group gap="xs">
                           <Badge color={item.active ? presentation.color : 'gray'} variant="light">
-                            {item.active ? presentation.label : 'Archivada'}
+                            {item.active ? presentation.label : item.notificationTopic ? 'Archivada' : 'Sin programación'}
                           </Badge>
                           {reminder?.remainingHours !== undefined ? (
                             <Badge color="blue" variant="outline">
@@ -143,7 +143,7 @@ export default function MaintenancePlanList({
                         <div>
                           <Text size="xs" c="dimmed">Intervalo</Text>
                           <Text size="sm" fw={700}>
-                            {scheduleType === 'HOURS'
+                            {!item.notificationTopic ? 'Sin programación' : scheduleType === 'HOURS'
                               ? `${Number(item.intervalHours)} h`
                               : `${Number(item.intervalDays)} días calendario`}
                           </Text>
@@ -151,7 +151,7 @@ export default function MaintenancePlanList({
                         <div>
                           <Text size="xs" c="dimmed">Aviso preventivo</Text>
                           <Text size="sm" fw={700}>
-                            {scheduleType === 'HOURS'
+                            {!item.notificationTopic ? '—' : scheduleType === 'HOURS'
                               ? `${Number(item.warningHours)} h antes`
                               : `${Number(item.warningDays)} días antes`}
                           </Text>
@@ -168,7 +168,7 @@ export default function MaintenancePlanList({
                                   year: 'numeric',
                                   timeZone: 'UTC',
                                 }).format(new Date(reminder.dueAt))
-                                : 'Calculando'}
+                                : !item.notificationTopic ? 'Sin programación' : 'Calculando'}
                           </Text>
                         </div>
                       </SimpleGrid>

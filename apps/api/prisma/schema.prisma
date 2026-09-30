@@ -418,6 +418,7 @@ model User {
   maintenanceReadings           AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
+  maintenancePerformed          MaintenanceCompletion[] @relation("MaintenancePerformedBy")
   notificationDeliveries        NotificationDelivery[]
   employeeLoanEntries           EmployeeLoanEntry[]
   assetConditionEvents          AssetConditionEvent[]
@@ -925,6 +926,9 @@ model NotificationRecipient {
 }
 
 model MaintenanceCompletion {
+  performedByUserId String?
+  performedBy User? @relation("MaintenancePerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  reference         String?
   id                String   @id @default(uuid())
   itemId            String
   completedAtHours  Decimal? @db.Decimal(12, 2)
