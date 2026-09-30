@@ -18,6 +18,7 @@ export type ReturnAccessoryOption = {
   sourceLabel: string;
   sourceDocumentItemId?: string;
   parentSourceDocumentItemId?: string;
+  parentLegacyOriginId?: string;
 };
 
 export const returnAccessoryKey = (option: ReturnAccessoryOption) =>
@@ -52,6 +53,7 @@ export function addReturnAccessories(
       componentParentAssetId: option.parentAssetId,
       sourceDocumentItemId: option.sourceDocumentItemId,
       parentSourceDocumentItemId: option.parentSourceDocumentItemId,
+      parentLegacyOriginId: option.parentLegacyOriginId,
       name: `${option.name}${option.code ? ` · ${option.code}` : ""} · Accesorio de ${option.parentName}`,
       quantity: 1,
       availableQuantity: option.quantity,

@@ -27,6 +27,7 @@ export function useRequestAssetSelection({ configurationWorksiteId, motorOnly, d
       sourceWarehouseId: item.sourceWarehouseId };
     root.sourceDocumentItemId = item.sourceDocumentItemId;
     root.parentSourceDocumentItemId = item.parentSourceDocumentItemId;
+    root.parentLegacyOriginId = item.parentLegacyOriginId;
     root.componentParentAssetId = item.componentParentAssetId;
     const controller = new AbortController();
     pending.current.add(controller);

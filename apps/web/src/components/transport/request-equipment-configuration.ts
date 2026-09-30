@@ -29,6 +29,8 @@ type AccessoryOption = {
 export function sameDocumentPart(item: SelectedItem, option: SelectedItem) {
   const sameParent = item.parentCompositionNodeId || option.parentCompositionNodeId
     ? item.parentCompositionNodeId === option.parentCompositionNodeId
+    : item.parentLegacyOriginId || option.parentLegacyOriginId
+      ? item.parentLegacyOriginId === option.parentLegacyOriginId
     : item.parentSourceDocumentItemId || option.parentSourceDocumentItemId
       ? item.parentSourceDocumentItemId === option.parentSourceDocumentItemId
       : item.componentParentAssetId === option.componentParentAssetId;

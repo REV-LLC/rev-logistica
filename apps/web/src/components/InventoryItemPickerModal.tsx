@@ -27,6 +27,7 @@ import { getSelectablePickerRows, isPickerQuantityAvailable, isPickerSerialAvail
 export type InventoryDocumentOrigin = {
   sourceDocumentItemId?: string;
   parentSourceDocumentItemId?: string;
+  parentLegacyOriginId?: string;
   componentParentAssetId?: string;
   returnSourceLabel?: string;
 };

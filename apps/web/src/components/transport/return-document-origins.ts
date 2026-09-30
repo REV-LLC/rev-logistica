@@ -2,6 +2,7 @@ import type { InventoryBulk, InventorySerial } from './request-types';
 
 export type ReturnDocumentOrigin = {
   sourceDocumentItemId: string; parentSourceDocumentItemId?: string | null;
+  parentLegacyOriginId?: string | null;
   assetId?: string | null; skuId?: string | null; accessoryId?: string | null;
   componentParentAssetId?: string | null; ownerWarehouseId?: string | null;
   quantity: number; consecutive: string | null;
@@ -10,6 +11,7 @@ export type ReturnDocumentOrigin = {
 export const returnOriginFields = (origin: ReturnDocumentOrigin) => ({
   sourceDocumentItemId: origin.sourceDocumentItemId,
   parentSourceDocumentItemId: origin.parentSourceDocumentItemId ?? undefined,
+  parentLegacyOriginId: origin.parentLegacyOriginId ?? undefined,
   componentParentAssetId: origin.componentParentAssetId ?? undefined,
   returnSourceLabel: origin.consecutive ?? 'Remisión de origen',
 });

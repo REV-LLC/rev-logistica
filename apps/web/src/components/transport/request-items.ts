@@ -4,6 +4,7 @@ export type RequestItemInput = {
   parentCompositionNodeId?: string;
   sourceDocumentItemId?: string;
   parentSourceDocumentItemId?: string;
+  parentLegacyOriginId?: string;
   sourceWarehouseId?: string | null;
   type: 'bulk' | 'serial' | 'free' | 'accessory';
   accessoryId?: string;
@@ -22,6 +23,7 @@ export type RequestItemInput = {
 export function documentCompositionPayload(item: {
   selectionId?: string; compositionNodeId?: string | null; parentCompositionNodeId?: string | null;
   sourceDocumentItemId?: string | null; parentSourceDocumentItemId?: string | null;
+  parentLegacyOriginId?: string | null;
 }) {
   const node = item.compositionNodeId ?? item.selectionId;
   return {
@@ -29,6 +31,7 @@ export function documentCompositionPayload(item: {
     ...(item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
     ...(item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),
     ...(item.parentSourceDocumentItemId ? { parentSourceDocumentItemId: item.parentSourceDocumentItemId } : {}),
+    ...(item.parentLegacyOriginId ? { parentLegacyOriginId: item.parentLegacyOriginId } : {}),
   };
 }
 
@@ -38,6 +41,7 @@ export function restoreDocumentComposition(item: Parameters<typeof documentCompo
     ...(item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
     ...(item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),
     ...(item.parentSourceDocumentItemId ? { parentSourceDocumentItemId: item.parentSourceDocumentItemId } : {}),
+    ...(item.parentLegacyOriginId ? { parentLegacyOriginId: item.parentLegacyOriginId } : {}),
   };
 }
 
