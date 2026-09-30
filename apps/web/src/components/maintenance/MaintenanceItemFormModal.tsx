@@ -117,7 +117,7 @@ export default function MaintenanceItemFormModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={item ? 'Editar revisión' : 'Agregar revisión'}
+      title={item ? 'Configurar revisión' : 'Agregar revisión'}
       size="lg"
       centered
     >

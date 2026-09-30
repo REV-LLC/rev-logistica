@@ -11,10 +11,9 @@ import {
   Text,
 } from '@mantine/core';
 import {
-  IconCheck,
+  IconEye,
   IconPencil,
   IconPlus,
-  IconTrash,
 } from '@tabler/icons-react';
 import type {
   AppUserOption,
@@ -32,10 +31,8 @@ type Props = {
   scheduleType: MaintenanceScheduleType;
   onAddItem: (plan: MaintenancePlan) => void;
   onEditItem: (item: MaintenanceItem) => void;
-  onCompleteItem: (item: MaintenanceItem) => void;
-  onArchiveItem: (item: MaintenanceItem) => void;
+  onViewLatest: (item: MaintenanceItem) => void;
   onEditPlan: (plan: MaintenancePlan) => void;
-  onArchivePlan: (plan: MaintenancePlan) => void;
 };
 
 function statusPresentation(status?: NotificationReminder['status']) {
@@ -51,10 +48,8 @@ export default function MaintenancePlanList({
   scheduleType,
   onAddItem,
   onEditItem,
-  onCompleteItem,
-  onArchiveItem,
+  onViewLatest,
   onEditPlan,
-  onArchivePlan,
 }: Props) {
   const userById = new Map(users.map((user) => [user.id, user]));
 
@@ -93,18 +88,17 @@ export default function MaintenancePlanList({
               {canManage && plan.active ? (
                 <Group justify="flex-end" gap="xs">
                   <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => onAddItem(plan)}>
-                    Agregar revisión
+                    Registrar cambios
                   </Button>
                   <Button size="xs" variant="default" leftSection={<IconPencil size={14} />} onClick={() => onEditPlan(plan)}>
-                    Editar plan
+                    Configurar plan
                   </Button>
-                  <Button size="xs" color="red" variant="light" leftSection={<IconTrash size={14} />} onClick={() => onArchivePlan(plan)}>
-                    Archivar
-                  </Button>
+
                 </Group>
               ) : null}
 
               {plan.items.map((item) => {
+                const latest = item.completions?.[0];
                 const reminder = reminderByItemId.get(item.id);
                 const presentation = statusPresentation(reminder?.status);
                 const recipients = item.notificationTopic?.recipients ?? [];
@@ -138,6 +132,15 @@ export default function MaintenancePlanList({
                           ) : null}
                         </Group>
                       </Group>
+
+                      <div>
+                        <Text size="xs" c="dimmed">Última ejecución</Text>
+                        {latest ? <Stack gap={2}>
+                          <Text size="sm" fw={700}>{new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Bogota' }).format(new Date(latest.completedAt))}{latest.completedAtHours != null ? ` · ${Number(latest.completedAtHours)} h` : ''}</Text>
+                          {latest.reference ? <Text size="sm">Referencia: {latest.reference}</Text> : null}
+                          <Text size="sm">Realizado por: {latest.performedBy ? [latest.performedBy.employee?.name, latest.performedBy.employee?.lastName].filter(Boolean).join(' ') || latest.performedBy.email : 'No registrado'}</Text>
+                        </Stack> : <Text size="sm" c="dimmed">Sin ejecuciones registradas</Text>}
+                      </div>
 
                       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                         <div>
@@ -186,16 +189,16 @@ export default function MaintenancePlanList({
                         </Group>
                       </div>
 
-                      {canManage && item.active && plan.active ? (
+                      {canManage && (item.active || !item.notificationTopic) && plan.active ? (
                         <Group justify="flex-end" gap="xs">
                           <Button
                             size="xs"
                             variant="light"
                             color="green"
-                            leftSection={<IconCheck size={14} />}
-                            onClick={() => onCompleteItem(item)}
+                            leftSection={<IconEye size={14} />}
+                            onClick={() => onViewLatest(item)}
                           >
-                            Registrar realizado
+                            Ver último cambio
                           </Button>
                           <Button
                             size="xs"
@@ -203,16 +206,9 @@ export default function MaintenancePlanList({
                             leftSection={<IconPencil size={14} />}
                             onClick={() => onEditItem(item)}
                           >
-                            Editar
+                            Configurar
                           </Button>
-                          <Button
-                            size="xs"
-                            color="red"
-                            variant="subtle"
-                            onClick={() => onArchiveItem(item)}
-                          >
-                            Archivar
-                          </Button>
+
                         </Group>
                       ) : null}
                     </Stack>

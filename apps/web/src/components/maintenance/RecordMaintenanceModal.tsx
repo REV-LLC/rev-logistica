@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, Group, Modal, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
-import MaintenanceWorkFields, { workKind, workReference, requiresReference, type WorkDetails } from './MaintenanceWorkFields';
+import { Alert, Button, Group, Modal, MultiSelect, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
+import MaintenanceWorkFields, { MAINTENANCE_WORK_OPTIONS, workKind, workLabel, workReference, type WorkDetails } from './MaintenanceWorkFields';
 import NotificationRecipientsEditor from '@/components/notifications/NotificationRecipientsEditor';
 import { api } from '@/lib/api';
 import { apiErrorMessage, type AppUserOption, type MaintenancePlan, type MaintenanceScheduleType, type MaintenanceSubject, type NotificationRecipientInput } from '@/lib/maintenance-types';
@@ -16,6 +16,7 @@ function localNow() {
 }
 
 type Props = {
+  initialItem?: import('@/lib/maintenance-types').MaintenanceItem | null;
   sessionUserId: string | null;
   opened: boolean;
   subject: MaintenanceSubject;
@@ -27,7 +28,7 @@ type Props = {
   onSaved: () => Promise<void>;
 };
 
-export default function RecordMaintenanceModal({ sessionUserId, opened, subject, currentHours, scheduleType, plans, users, onClose, onSaved }: Props) {
+export default function RecordMaintenanceModal({ initialItem, sessionUserId, opened, subject, currentHours, scheduleType, plans, users, onClose, onSaved }: Props) {
   const [completedAt, setCompletedAt] = useState('');
   const [hours, setHours] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
@@ -37,7 +38,21 @@ export default function RecordMaintenanceModal({ sessionUserId, opened, subject,
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const hourly = scheduleType === 'HOURS';
-  const options = plans.filter((plan) => plan.active).flatMap((plan) => plan.items.filter((item) => item.active).map((item) => ({ value: item.id, label: `${item.name} · ${plan.name}` })));
+  const availableItems = plans.filter((plan) => plan.active).flatMap((plan) => plan.items.filter((item) => item.active || !item.notificationTopic));
+  const normalized = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const options = [
+    ...availableItems.map((item) => ({ value: `item:${item.id}`, label: workLabel(item.name) })),
+    ...MAINTENANCE_WORK_OPTIONS.filter((kind) => kind === 'Otro' || !availableItems.some((item) => normalized(item.name) === normalized(kind))).map((kind) => ({ value: `kind:${kind}`, label: kind })),
+  ];
+  function selectTasks(keys: string[]) {
+    setTasks((current) => keys.map((key) => {
+      const previous = current.find((task) => task.key === key);
+      if (previous) return previous;
+      const item = availableItems.find((entry) => `item:${entry.id}` === key);
+      const kind = item ? workKind(item.name) : key.slice(5);
+      return { ...newTask(), key, itemId: item?.id ?? null, kind, name: item?.name ?? (kind === 'Otro' ? '' : kind) };
+    }));
+  }
   const needsRecipients = tasks.some((task) => !task.itemId && task.repeat);
 
   useEffect(() => {
@@ -46,21 +61,27 @@ export default function RecordMaintenanceModal({ sessionUserId, opened, subject,
     setHours(currentHours);
     setNotes('');
     setPerformedByUserId(sessionUserId);
-    setTasks([newTask()]);
+    setTasks(initialItem ? [{ ...newTask(), key: `item:${initialItem.id}`, itemId: initialItem.id, kind: workKind(initialItem.name), name: initialItem.name }] : []);
     setRecipients([]);
     setError(null);
-  }, [opened, currentHours, sessionUserId]);
+  }, [opened, currentHours, sessionUserId, initialItem]);
 
   function updateTask(key: string, update: Partial<Task>) {
+    if (update.name && update.kind !== 'Otro') {
+      const normalized = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      const matches = plans.filter((plan) => plan.active).flatMap((plan) => plan.items).filter((item) => (item.active || !item.notificationTopic) && normalized(item.name) === normalized(update.name!));
+      if (matches.length === 1) update = { ...update, itemId: matches[0].id, repeat: false };
+    }
     setTasks((current) => current.map((task) => task.key === key ? { ...task, ...update } : task));
   }
 
   async function save() {
+    if (!tasks.length) return setError('Selecciona al menos un cambio realizado.');
     const date = new Date(completedAt);
     if (!completedAt || !Number.isFinite(date.getTime()) || date > new Date()) return setError('Selecciona la fecha real del mantenimiento, sin fechas futuras.');
     if (hourly && (hours === '' || hours < 0)) return setError('Ingresa el horómetro al realizar el mantenimiento.');
     if (tasks.some((task) => !task.itemId && (!task.kind || !task.name.trim()))) return setError('Selecciona cada trabajo realizado y describe los que sean Otro.');
-    if (tasks.some((task) => requiresReference(task.kind) && !workReference(task))) return setError('Completa la referencia o viscosidad de cada aceite y filtro.');
+    if (tasks.some((task) => task.kind === 'Cambio de aceite de motor' && (task.viscosityWinter === '') !== (task.viscosityHot === ''))) return setError('Completa ambos números de la viscosidad o deja ambos vacíos.');
     const selectedIds = tasks.flatMap((task) => task.itemId ? [task.itemId] : []);
     if (new Set(selectedIds).size !== selectedIds.length) return setError('No repitas una revisión en el mismo registro.');
     if (tasks.some((task) => !task.itemId && task.repeat && (task.interval === '' || task.interval <= 0 || (!hourly && !Number.isInteger(task.interval))))) return setError('Ingresa un intervalo válido para cada próximo cambio.');
@@ -110,16 +131,14 @@ export default function RecordMaintenanceModal({ sessionUserId, opened, subject,
         <Select label="Realizado por" placeholder="Selecciona quién hizo el mantenimiento" searchable required
           data={users.map((user) => ({ value: user.id, label: `${user.name} · ${user.email}` }))}
           value={performedByUserId} onChange={setPerformedByUserId} />
+        <MultiSelect label="Cambios realizados" description="Selecciona uno o varios. Cada cambio tendrá su propia tarjeta de detalles." placeholder="Selecciona los cambios" searchable data={options} value={tasks.map((task) => task.key)} onChange={selectTasks} hidePickedOptions clearable required />
         {tasks.map((task, index) => (
           <Paper key={task.key} withBorder p="md" radius="md">
             <Stack gap="sm">
-              <Group justify="space-between"><Text fw={700}>Trabajo {index + 1}</Text>{tasks.length > 1 ? <Button size="xs" color="red" variant="subtle" onClick={() => setTasks((current) => current.filter((entry) => entry.key !== task.key))}>Quitar trabajo {index + 1}</Button> : null}</Group>
-              {options.length ? <Select label={`Revisión existente · trabajo ${index + 1}`} placeholder="Trabajo nuevo" data={options} value={task.itemId} onChange={(itemId) => {
-                const item = plans.flatMap((plan) => plan.items).find((candidate) => candidate.id === itemId);
-                updateTask(task.key, { itemId, kind: item ? workKind(item.name) : null, name: item?.name ?? '', reference: '', viscosityWinter: '', viscosityHot: '' });
-              }} clearable searchable /> : null}
-              <MaintenanceWorkFields value={task} index={index} existing={Boolean(task.itemId)} onChange={(update) => updateTask(task.key, update)} />
-              {task.itemId ? <Text size="sm" c="dimmed">Se reiniciará el ciclo de esta revisión desde la fecha y el horómetro indicados, conservando su intervalo y destinatarios.</Text> : <>
+              <Group justify="space-between"><Text fw={700}>{workLabel(task.itemId ? availableItems.find((item) => item.id === task.itemId)?.name ?? task.name : task.kind ?? '')}</Text>{tasks.length > 0 ? <Button size="xs" color="red" variant="subtle" onClick={() => setTasks((current) => current.filter((entry) => entry.key !== task.key))}>Quitar trabajo {index + 1}</Button> : null}</Group>
+              {!task.itemId && task.kind === 'Otro' ? <TextInput label={`Describe el trabajo ${index + 1}`} value={task.name} onChange={(event) => updateTask(task.key, { name: event.currentTarget.value })} required /> : null}
+              <MaintenanceWorkFields value={task} index={index} existing onChange={(update) => updateTask(task.key, update)} />
+              {task.itemId ? <Text size="sm" c="dimmed">Se actualizará la misma tarjeta con esta ejecución. Las anteriores se conservarán en el historial y, si tiene alertas, se recalculará el próximo cambio.</Text> : <>
                 <Switch label={`Programar próximo cambio · trabajo ${index + 1}`} checked={task.repeat} onChange={(event) => updateTask(task.key, { repeat: event.currentTarget.checked })} />
                 {task.repeat ? <>
                   <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -132,7 +151,6 @@ export default function RecordMaintenanceModal({ sessionUserId, opened, subject,
             </Stack>
           </Paper>
         ))}
-        <Button variant="light" onClick={() => setTasks((current) => [...current, newTask()])}>Agregar otro trabajo</Button>
         {needsRecipients ? <NotificationRecipientsEditor users={users} value={recipients} onChange={setRecipients} label="Destinatarios de los próximos cambios" /> : null}
         <Textarea label="Detalle del mantenimiento" placeholder="Aceite utilizado, filtros instalados y observaciones" value={notes} onChange={(event) => setNotes(event.currentTarget.value)} autosize minRows={3} />
         <Group justify="flex-end"><Button variant="default" onClick={onClose} disabled={saving}>Cancelar</Button><Button loading={saving} onClick={save}>Guardar mantenimiento</Button></Group>
