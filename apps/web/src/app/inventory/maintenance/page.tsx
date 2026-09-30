@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Button, Container, Group, Loader, Paper, Select, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { IconGauge } from '@tabler/icons-react';
+import EquipmentSelect from '@/components/equipment/EquipmentSelect';
+import { equipmentName, type EquipmentIdentity } from '@/components/equipment/types';
 import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import { api } from '@/lib/api';
 import { apiErrorMessage, type MaintenanceSubject } from '@/lib/maintenance-types';
 
+type SubjectOption = MaintenanceSubject & { equipment?: EquipmentIdentity };
+
 export default function MaintenancePage() {
-  const [subjects, setSubjects] = useState<MaintenanceSubject[]>([]);
+  const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +23,7 @@ export default function MaintenancePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    api<MaintenanceSubject[]>('/maintenance/subjects')
+    api<SubjectOption[]>('/maintenance/subjects')
       .then((data) => { if (!cancelled) setSubjects(data); })
       .catch((err) => { if (!cancelled) setError(apiErrorMessage(err, 'No se pudieron cargar los equipos y vehículos.')); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -27,10 +31,16 @@ export default function MaintenancePage() {
   }, [attempt]);
 
   const subject = subjects.find((entry) => `${entry.type}:${entry.id}` === selected);
-  const options = (['ASSET', 'VEHICLE'] as const).map((type) => ({
-    group: type === 'ASSET' ? 'Equipos propios' : 'Vehículos',
-    items: subjects.filter((entry) => entry.type === type).map((entry) => ({ value: `${entry.type}:${entry.id}`, label: entry.label })),
-  })).filter((group) => group.items.length);
+  const options: EquipmentIdentity[] = subjects.map((entry) => ({
+    ...(entry.equipment ?? {
+      publicCode: entry.label,
+      internalNumber: 0,
+      displayName: entry.label,
+      sku: { name: entry.label },
+      warehouseOwner: { name: entry.type === 'VEHICLE' ? 'Vehículo' : 'Equipo' },
+    }),
+    id: `${entry.type}:${entry.id}`,
+  }));
 
   return (
     <Container size="xl" py="lg">
@@ -40,8 +50,8 @@ export default function MaintenancePage() {
           <Button component={Link} href="/inventory/hour-meter" variant="light" leftSection={<IconGauge size={18} />}>Horómetros</Button>
         </Group>
         {error ? <Alert color="red" title="No se pudo cargar"><Stack gap="xs"><Text size="sm">{error}</Text><Button variant="light" color="red" onClick={() => setAttempt((value) => value + 1)}>Reintentar</Button></Stack></Alert> : null}
-        <Select label="Equipo o vehículo" placeholder={loading ? 'Cargando...' : 'Busca por nombre, código, marca, modelo o placa'} searchable clearable data={options} value={selected} onChange={setSelected} disabled={loading} rightSection={loading ? <Loader size="xs" /> : undefined} nothingFoundMessage="No hay coincidencias" />
-        {subject ? <MaintenancePanel key={`${subject.type}:${subject.id}`} subject={subject} /> : !loading && !error ? <Paper withBorder p="xl" radius="lg"><Text ta="center" c="dimmed">{subjects.length ? 'Selecciona un equipo o vehículo para consultar y registrar sus mantenimientos.' : 'No hay equipos propios ni vehículos activos disponibles.'}</Text></Paper> : null}
+        <EquipmentSelect label="Equipo o vehículo" placeholder="Buscar por equipo, código, serie o placa" items={options} value={selected} onChange={setSelected} disabled={loading} loading={loading} />
+        {subject ? <MaintenancePanel key={`${subject.type}:${subject.id}`} subject={{ ...subject, label: subject.equipment ? equipmentName(subject.equipment) : subject.label }} /> : !loading && !error ? <Paper withBorder p="xl" radius="lg"><Text ta="center" c="dimmed">{subjects.length ? 'Selecciona un equipo o vehículo para consultar y registrar sus mantenimientos.' : 'No hay equipos propios ni vehículos activos disponibles.'}</Text></Paper> : null}
       </Stack>
     </Container>
   );
