@@ -26,6 +26,12 @@ const validation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: t
 export class MaintenanceController {
   constructor(private readonly maintenance: MaintenanceService) {}
 
+  @Get('subjects')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  listSubjects() {
+    return this.maintenance.listSubjects();
+  }
+
   @Get('session')
   @Roles(Role.ADMIN, Role.OFFICE)
   session(@Req() request: Request & { user: JwtPayload }) {
