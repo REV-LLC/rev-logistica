@@ -1,3 +1,5 @@
+import { EmployeePayrollController } from '../payroll/employee-payroll.controller';
+import { EmployeePayrollService } from '../payroll/employee-payroll.service';
 import { EmployeeLoansController } from './employee-loans.controller';
 import { EmployeeLoansService } from './employee-loans.service';
 import { Module } from '@nestjs/common';
@@ -15,7 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [PrismaModule, AuthModule, NotificationsModule],
-  controllers: [EmployeeLoansController, EmployeesController, VehiclesController, TransportCostController, LocationsController],
-  providers: [EmployeeLoansService, EmployeesService, VehiclesService, TransportCostService, LocationsService],
+  controllers: [EmployeePayrollController, EmployeeLoansController, EmployeesController, VehiclesController, TransportCostController, LocationsController],
+  providers: [EmployeePayrollService, EmployeeLoansService, EmployeesService, VehiclesService, TransportCostService, LocationsService],
 })
 export class TransportModule {}

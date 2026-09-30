@@ -1,0 +1,138 @@
+{
+  "ANDAMIO CERTIFICADO": {
+    "unit": "DAY",
+    "minimum": 10
+  },
+  "ANDAMIO CONVENCIONAL": {
+    "unit": "DAY",
+    "minimum": 10
+  },
+  "ANDAMIO COLGANTE": {
+    "unit": "DAY",
+    "minimum": 10
+  },
+  "ENCOFRADO": {
+    "unit": "DAY",
+    "minimum": 15
+  },
+  "FORMALETA": {
+    "unit": "DAY",
+    "minimum": 15
+  },
+  "PIEZAS CAMARA TIPO B": {
+    "unit": "DAY",
+    "minimum": 6
+  },
+  "ESCALERA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "CONTENEDOR": {
+    "unit": "DAY",
+    "minimum": 30
+  },
+  "COMPRESOR": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "MINI CARGADOR": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "RETRO EXCAVADORA": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "EXCAVADORA": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "VIBROCOMPACTADOR": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "RANA VIBROCOMPACTADORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "SALTARIN": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "MEZCLADORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "MOTOR PARA MEZCLADORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "VIBRADOR DE CONCRETO": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "CORTADORA DE CONCRETO": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "DEMOLEDOR": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "ROTOMARTILLO": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "MARTILLO HIDRAULICO": {
+    "unit": "HOUR",
+    "minimum": 3
+  },
+  "MARTILLO NEUMATICO": {
+    "unit": "HOUR",
+    "minimum": 6
+  },
+  "PULIDORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "SIERRA CIRCULAR": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "TRONZADORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "DIFERENCIAL": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "PLUMA GRUA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "MOTOBOMBA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "HIDROLAVADORA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "MOTOSOLDADOR": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "PLANTA ELECTRICA": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "TABLERO ELECTRICO": {
+    "unit": "DAY",
+    "minimum": 3
+  },
+  "TORRE DE ILUMINACION": {
+    "unit": "DAY",
+    "minimum": 2
+  }
+}

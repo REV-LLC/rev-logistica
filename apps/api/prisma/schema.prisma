@@ -394,6 +394,7 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  annexDraftRevisions AnnexDraftRevision[]
   releaseAcknowledgements ReleaseAcknowledgement[]
   id           String   @id @default(uuid())
   email        String   @unique
@@ -518,6 +519,7 @@ model Worksite {
 }
 
 model CustomerWorksite {
+  annexDrafts AnnexDraft[]
   accessoryBalances AccessoryBalance[]
   id                String             @id @default(uuid())
   customerId        String
@@ -1161,6 +1163,7 @@ model DocumentItem {
   accessoryKind            AccessoryKind?
 
   // Optional grouping: this line accompanied a serialized parent asset.
+  commercialSnapshot Json?
   componentParentAssetId String?
 
   condition          String?
@@ -1377,6 +1380,7 @@ model Owner {
 }
 
 model Employee {
+  salaries EmployeeSalary[]
   loanEntries EmployeeLoanEntry[]
   id         String       @id @default(uuid())
   name       String
@@ -1586,4 +1590,72 @@ model ReleaseAcknowledgement {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, releaseId])
+}
+
+// Append-only salary history; a correction appends a new revision.
+model EmployeeSalary {
+  id            String   @id @default(uuid())
+  employeeId    String
+  effectiveFrom DateTime @db.Date
+  monthlySalary Decimal  @db.Decimal(14, 2)
+  revision      Int
+  note          String
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, revision])
+  @@index([employeeId, effectiveFrom, revision])
+}
+
+model AnnexDraft {
+  id                 String @id @default(uuid())
+  customerWorksiteId String
+  periodFrom         DateTime @db.Date
+  periodTo           DateTime @db.Date
+  revision           Int @default(1)
+  createdAt          DateTime @default(now())
+  customerWorksite    CustomerWorksite @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  revisions          AnnexDraftRevision[]
+
+  @@unique([customerWorksiteId, periodFrom, periodTo])
+}
+
+model AnnexDraftRevision {
+  id           String @id @default(uuid())
+  draftId      String
+  revision     Int
+  through      DateTime @db.Date
+  input        Json
+  result       Json
+  sourceIssues Json @default("[]")
+  reason       String
+  createdBy    String
+  createdAt    DateTime @default(now())
+  draft        AnnexDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  author       User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([draftId, revision])
+}
+
+// Scope IDs are validated against their catalog table by the service.
+model CommercialProfile {
+  id String @id @default(uuid())
+  scopeType String
+  scopeId String
+  version Int @default(0)
+  revisions CommercialProfileRevision[]
+  @@unique([scopeType, scopeId])
+}
+model CommercialProfileRevision {
+  id String @id @default(uuid())
+  profileId String
+  version Int
+  effectiveFrom DateTime @db.Date
+  payload Json
+  createdBy String
+  createdAt DateTime @default(now())
+  profile CommercialProfile @relation(fields:[profileId],references:[id],onDelete:Restrict)
+  @@unique([profileId,version])
+  @@index([profileId,effectiveFrom])
 }

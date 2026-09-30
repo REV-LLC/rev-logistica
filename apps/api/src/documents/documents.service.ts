@@ -1,3 +1,4 @@
+import { documentCommercialSnapshots } from '../commercial-profiles/commercial-history';
 import { validateDocumentConfiguration } from '../accessories/document-configuration';
 import {
   BadRequestException,
@@ -433,6 +434,7 @@ export class DocumentsService {
           }
           await this.assertProviderRemissionEvidence(document, tx);
           await validateDocumentConfiguration(tx, document);
+          if (document.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx,document.id,true);
           if (hasAccessories) {
             this.assertExplicitRemissionInventorySource(document);
             await this.accessoryDocuments.apply(tx, document, userId,
