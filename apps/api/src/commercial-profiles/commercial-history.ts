@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
   CommercialGroup,
@@ -56,7 +57,7 @@ export async function documentCommercialSnapshots(
   documentId: string,
   persist = false,
 ) {
-  const doc = await tx.document.findUniqueOrThrow({
+  const doc = await tx.document.findUnique({
     where: { id: documentId },
     include: {
       items: {
@@ -68,6 +69,10 @@ export async function documentCommercialSnapshots(
       },
     },
   });
+  if (!doc)
+    throw new NotFoundException(
+      'Documento no encontrado al fijar condiciones comerciales',
+    );
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
     year: 'numeric',
