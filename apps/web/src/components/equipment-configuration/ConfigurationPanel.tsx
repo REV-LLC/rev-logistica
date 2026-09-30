@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Group, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Loader, Stack, Tabs, Text } from "@mantine/core";
 import { api } from "@/lib/api";
+import CommercialProfilePanel from "../commercial-profiles/CommercialProfilePanel";
 import ConfigurationEditor from "./ConfigurationEditor";
 import {
   type EquipmentConfiguration,
@@ -15,6 +16,57 @@ export default function ConfigurationPanel({
 }: {
   assetId?: string;
   accessoryId?: string;
+}) {
+  const [tab, setTab] = useState<string | null>("physical");
+  const [dirty, setDirty] = useState(false);
+  if (!assetId) return <PhysicalConfigurationPanel accessoryId={accessoryId} />;
+  return (
+    <Stack>
+      <Tabs
+        value={tab}
+        onChange={(next) => {
+          if (
+            next === tab ||
+            (dirty &&
+              !window.confirm(
+                "Hay cambios sin guardar en esta pestaña. ¿Descartarlos y continuar?",
+              ))
+          )
+            return;
+          setDirty(false);
+          setTab(next);
+        }}
+      >
+        <Tabs.List grow>
+          <Tabs.Tab value="physical">Componentes y accesorios</Tabs.Tab>
+          <Tabs.Tab value="commercial">Modalidades de cobro</Tabs.Tab>
+        </Tabs.List>
+      </Tabs>
+      {tab === "commercial" ? (
+        <CommercialProfilePanel
+          key={assetId}
+          assetId={assetId}
+          onDirtyChange={setDirty}
+        />
+      ) : (
+        <PhysicalConfigurationPanel
+          key={assetId}
+          assetId={assetId}
+          onDirtyChange={setDirty}
+        />
+      )}
+    </Stack>
+  );
+}
+
+function PhysicalConfigurationPanel({
+  assetId,
+  accessoryId,
+  onDirtyChange,
+}: {
+  assetId?: string;
+  accessoryId?: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [value, setValue] = useState<EquipmentConfiguration>();
   const [loading, setLoading] = useState(true);
@@ -59,6 +111,7 @@ export default function ConfigurationPanel({
         json: configurationPayload(value),
       });
       setValue({ ...value, ...saved });
+      onDirtyChange?.(false);
       setSuccess(
         "Configuración guardada. No se registraron entregas ni consumos.",
       );
@@ -94,6 +147,7 @@ export default function ConfigurationPanel({
             onChange={(v) => {
               setValue(v);
               setSuccess("");
+              onDirtyChange?.(true);
             }}
             disabled={saving}
             canCreate={!!value.parent?.warehouseId}
@@ -119,6 +173,7 @@ export default function ConfigurationPanel({
                   )
                 ) {
                   setSuccess("");
+                  onDirtyChange?.(false);
                   setReload((r) => r + 1);
                 }
               }}

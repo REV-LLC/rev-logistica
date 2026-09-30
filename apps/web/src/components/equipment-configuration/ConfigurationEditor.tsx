@@ -343,6 +343,7 @@ export default function ConfigurationEditor({
                 !value.entries.some(
                   (row) =>
                     (entry.assetId && entry.assetId === row.assetId) ||
+                    (entry.familyId && entry.familyId === row.familyId) ||
                     (entry.accessoryId &&
                       entry.accessoryId === row.accessoryId),
                 )
