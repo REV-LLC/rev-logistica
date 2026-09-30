@@ -228,6 +228,22 @@ export async function applyCommercialComposition(
               'Falta confirmar el tratamiento comercial de esta pieza vinculada',
           };
       }
+      if (
+        !usesCommercialV2(doc.docDate) &&
+        documents.some(
+          (d) =>
+            usesCommercialV2(d.docDate) &&
+            d.items.some((i) => i.parentSourceDocumentItemId === item.id),
+        )
+      ) {
+        snapshot = {
+          ...snapshot,
+          status: 'REVIEW',
+          reason:
+            'Se agregó una pieza nueva a una entrega anterior al sistema: confirma las condiciones desde ese cambio, sin modificar el período histórico',
+        };
+        includedIn = undefined;
+      }
       // A later return/replacement needs its own commercial interval; do not keep billing
       // the original composition silently. Historical snapshots remain unchanged.
       if (snapshot.parts.length) {

@@ -64,6 +64,21 @@ export function commercialNodesAt(
       };
     }),
   );
+  const legacyIds = new Set(
+    documents
+      .filter((d) => d.type === 'REMISSION' && !usesCommercialV2(d.docDate))
+      .flatMap((d) => d.items.map((i) => i.id)),
+  );
+  for (const node of nodes) {
+    if (node.parentId && legacyIds.has(node.parentId))
+      node.snapshot = {
+        status: 'REVIEW',
+        schemaVersion: 2,
+        reason:
+          'El padre pertenece a una entrega histórica; confirma las condiciones de este nuevo conjunto',
+        parts: [],
+      };
+  }
   return nodes.filter((node) => node.quantity > 0);
 }
 

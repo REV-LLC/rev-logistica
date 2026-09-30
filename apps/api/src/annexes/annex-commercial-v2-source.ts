@@ -86,6 +86,32 @@ export function prepareCommercialV2(
       });
       invalidMovement.add(id);
     }
+    for (const returnedDoc of documents.filter((d) => d.type === 'RETURN')) {
+      for (const returnedItem of returnedDoc.items.filter(
+        (i) => i.sourceDocumentItemId === id,
+      )) {
+        const returnedMovement = movements.find(
+          (m) =>
+            m.requestId ===
+              `document:${returnedDoc.id}:item:${returnedItem.id}` &&
+            m.accessoryId === item.accessoryId,
+        );
+        if (
+          !returnedMovement ||
+          returnedMovement.quantity !== Number(returnedItem.quantity ?? 1) ||
+          (returnedMovement.from as { customerWorksiteId?: string })
+            ?.customerWorksiteId !== siteId
+        ) {
+          invalidMovement.add(id);
+          issues.push({
+            code: 'COMMERCIAL_MOVEMENT_REVIEW',
+            reference: returnedItem.id,
+            message:
+              'La devolución del accesorio no coincide con su movimiento efectivo',
+          });
+        }
+      }
+    }
     const returns = documents
       .filter((d) => d.type === 'RETURN')
       .flatMap((d) =>
@@ -117,8 +143,27 @@ export function prepareCommercialV2(
     machineDays: AnnexInput['machineDays'] = [];
   const cache = new Map<string, Map<string, CommercialSnapshot>>();
   const at = (date: string) => {
-    if (!cache.has(date))
-      cache.set(date, resolveComposition(commercialNodesAt(documents, date)));
+    if (!cache.has(date)) {
+      const nodes = commercialNodesAt(documents, date);
+      const resolved = resolveComposition(nodes);
+      for (const invalid of invalidMovement) {
+        const seen = new Set<string>();
+        let cursor: string | undefined = invalid;
+        while (cursor && !seen.has(cursor)) {
+          seen.add(cursor);
+          const snapshot = resolved.get(cursor);
+          if (snapshot)
+            resolved.set(cursor, {
+              ...snapshot,
+              status: 'REVIEW',
+              reason:
+                'El movimiento de una pieza de este conjunto está pendiente de conciliación',
+            });
+          cursor = nodes.find((node) => node.id === cursor)?.parentId;
+        }
+      }
+      cache.set(date, resolved);
+    }
     return cache.get(date)!;
   };
   for (const { lot, itemId } of lots) {
