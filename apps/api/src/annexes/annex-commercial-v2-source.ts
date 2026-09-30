@@ -157,9 +157,7 @@ export function prepareCommercialV2(
       else segments.push({ from, to, snapshot });
     }
     const payableModes = new Set(
-      segments
-        .filter((s) => !s.snapshot.contextualZero && s.snapshot.mode)
-        .map((s) => s.snapshot.mode!.id),
+      segments.filter((s) => s.snapshot.mode).map((s) => s.snapshot.mode!.id),
     );
     const hasUnsettledModeMinimum =
       payableModes.size > 1 &&
@@ -223,11 +221,12 @@ export function prepareCommercialV2(
       }
       if (snapshot.mode?.unit === 'HOUR') {
         const identity = lot.assetId ?? lot.accessoryId;
-        if (!identity) {
+        if (!identity || Number(lot.quantity) !== 1) {
           rental.commercial = {
             ...snapshot,
             status: 'REVIEW',
-            reason: 'La modalidad horaria requiere un elemento identificado',
+            reason:
+              'La modalidad horaria requiere una unidad identificada por línea',
           };
           rentals.push(rental);
           continue;
