@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
+import { documentReturnOrigins } from '../documents/document-return-origins';
 
 export async function accessoryDocumentOptions(
   db: Prisma.TransactionClient,
@@ -16,7 +17,9 @@ export async function accessoryDocumentOptions(
     (!parent || !parent.active || parent.deletedAt)
   )
     return { items: [], hasMore: false };
-  const compatibility: Prisma.AccessoryWhereInput = parent
+  const compatibility: Prisma.AccessoryWhereInput = query.parentAccessoryId ? {
+    scope: 'ACCESSORIES', compatibleParents: { some: { parentAccessoryId: query.parentAccessoryId } },
+  } : parent
     ? {
         familyId: parent.sku.assetFamilyId,
         OR: [
@@ -38,7 +41,11 @@ export async function accessoryDocumentOptions(
   // ON_SITE stock must actually be at its owner's warehouse, not any warehouse.
   const ownerStock =
     query.type === 'REMISSION' && query.deliveryMode === 'ON_SITE'
-      ? await db.$queryRaw<
+      ? query.parentAccessoryId ? await db.$queryRaw<Array<{ id: string }>>`
+        SELECT b.id FROM "AccessoryBalance" b JOIN "Accessory" a ON a.id = b."accessoryId"
+        JOIN "AccessoryParent" p ON p."accessoryId" = a.id
+        WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND p."parentAccessoryId" = ${query.parentAccessoryId}`
+      : await db.$queryRaw<
           Array<{ id: string }>
         >`SELECT b.id FROM "AccessoryBalance" b JOIN "Accessory" a ON a.id = b."accessoryId" WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND a."familyId" = ${parent!.sku.assetFamilyId}`
       : [];
@@ -71,7 +78,7 @@ export async function accessoryDocumentOptions(
       accessory: {
         active: true,
         ...(query.configuredOnly === 'true'
-          ? { configurationEntries: { some: { configuration: { assetId: query.assetId ?? '00000000-0000-0000-0000-000000000000' } } } }
+          ? { configurationEntries: { some: { configuration: query.parentAccessoryId ? { accessoryId: query.parentAccessoryId } : { assetId: query.assetId ?? '00000000-0000-0000-0000-000000000000' } } } }
           : {}),
         AND: [
           ...(query.type === 'REMISSION' ? [compatibility] : []),
@@ -107,8 +114,11 @@ export async function accessoryDocumentOptions(
     take: 51,
     skip: query.page * 50,
   });
+  const origins = await documentReturnOrigins(db, query.customerWorksiteId);
+  const parentOrigin = origins.filter(origin => query.parentAccessoryId ? origin.accessoryId === query.parentAccessoryId && origin.componentParentAssetId === query.assetId : origin.assetId === query.assetId);
   return {
-    items: rows.slice(0, 50).map((row) => ({
+    items: rows.slice(0, 50).flatMap((row) => {
+      const base = {
       accessoryId: row.accessoryId,
       sourceBalanceId: row.id,
       name: row.accessory.name,
@@ -118,13 +128,28 @@ export async function accessoryDocumentOptions(
       ownerWarehouseId: row.accessory.ownerWarehouseId,
       ownerName: row.accessory.ownerWarehouse.name,
       parentAssetId: query.type === 'RETURN' ? row.assetId : parent!.id,
+      parentAccessoryId: query.parentAccessoryId ?? null,
       parentName: `${(row.asset ?? parent)?.sku.name} · ${(row.asset ?? parent)?.publicCode}`,
       sourceLabel:
         row.warehouse?.name ??
         (row.customerWorksiteId
           ? 'Pendiente en esta obra'
           : 'Asignado al equipo en bodega'),
-    })),
+      };
+      if (query.type === 'REMISSION') return [{ ...base,
+        parentSourceDocumentItemId: parentOrigin.length === 1 ? parentOrigin[0].sourceDocumentItemId : null,
+      }];
+      const lots = origins.filter(origin => origin.accessoryId === row.accessoryId && origin.componentParentAssetId === row.assetId &&
+        (!query.parentAccessoryId || origin.parentAccessoryId === query.parentAccessoryId));
+      if (lots.length) return [...lots.map(origin => ({ ...base,
+        quantity: Math.min(row.quantity, origin.quantity), sourceDocumentItemId: origin.sourceDocumentItemId,
+        parentSourceDocumentItemId: origin.parentSourceDocumentItemId, parentAccessoryId: origin.parentAccessoryId,
+        sourceLabel: `${base.sourceLabel} · ${origin.consecutive ?? 'Remisión'}`,
+      })), ...(!query.parentAccessoryId && row.quantity > lots.reduce((sum, lot) => sum + lot.quantity, 0)
+        ? [{ ...base, quantity: row.quantity - lots.reduce((sum, lot) => sum + lot.quantity, 0), sourceLabel: `${base.sourceLabel} · Saldo anterior` }] : [])];
+      // Historical custody remains available without fabricating a source line.
+      return query.parentAccessoryId ? [] : [base];
+    }),
     hasMore: rows.length > 50,
   };
 }

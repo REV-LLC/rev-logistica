@@ -15,6 +15,7 @@ export class AccessoryDocumentOptionsDto {
   @IsUUID() customerWorksiteId!: string;
   @IsOptional() @IsUUID() warehouseId?: string;
   @IsOptional() @IsUUID() assetId?: string;
+  @IsOptional() @IsUUID() parentAccessoryId?: string;
   @IsOptional() @IsIn(['true']) configuredOnly?: 'true';
   @IsOptional() @IsIn(['WAREHOUSE', 'ON_SITE']) deliveryMode?:
     | 'WAREHOUSE'

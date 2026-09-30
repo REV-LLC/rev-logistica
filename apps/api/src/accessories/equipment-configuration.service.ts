@@ -18,6 +18,7 @@ import {
 } from './equipment-configuration-rules';
 import { isCompatible } from './accessory-rules';
 import { motorInclude, motorSnapshot } from './equipment-motor';
+import { documentReturnOrigins } from '../documents/document-return-origins';
 
 export type ConfigurationOwner =
   | { assetId: string; accessoryId?: never }
@@ -69,6 +70,10 @@ export class EquipmentConfigurationService {
       orderBy: { createdAt: 'desc' }, take: 50,
       select: { id: true, before: true, after: true, createdAt: true, createdBy: true },
     });
+  }
+
+  returnOrigins(customerWorksiteId: string) {
+    return documentReturnOrigins(this.prisma, customerWorksiteId);
   }
 
   async returnParts(assetId: string, customerWorksiteId: string) {
