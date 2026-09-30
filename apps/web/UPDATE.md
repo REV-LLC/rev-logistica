@@ -1,7 +1,7 @@
-# Nuevo feature: Control de préstamos para colaboradores
+# Nuevo módulo: Bitácora de empleados
 
-Ahora puedes consultar y registrar préstamos, cargos y abonos de tus colaboradores.
+Ahora Office y administración pueden llevar un calendario de actividades por empleado y registrar notas para cada día.
 
-Lo puedes encontrar en las tarjetas de cada empleado, en el módulo Empleados, usando el botón con el símbolo $.
+Encuéntralo en Operación → Bitácora de empleados, o abre la bitácora desde la ficha de un empleado.
 
-También encontrarás una vista general con el valor inicial, la deuda actual y el último pago de cada colaborador.
+Cada nota incluye fecha, obra, activo y descripción. Puedes buscar clientes y obras, editar las notas y eliminarlas cuando sea necesario.
