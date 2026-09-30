@@ -6,4 +6,5 @@ export class DocumentCompositionItemDto {
   @IsOptional() @IsUUID() parentCompositionNodeId?: string;
   @IsOptional() @IsUUID() sourceDocumentItemId?: string;
   @IsOptional() @IsUUID() parentSourceDocumentItemId?: string;
+  @IsOptional() @IsUUID() parentLegacyOriginId?: string;
 }

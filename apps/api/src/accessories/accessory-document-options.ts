@@ -149,6 +149,7 @@ export async function accessoryDocumentOptions(
       if (lots.length) return [...lots.map(origin => ({ ...base,
         quantity: Math.min(row.quantity, origin.quantity), sourceDocumentItemId: origin.sourceDocumentItemId,
         parentSourceDocumentItemId: origin.parentSourceDocumentItemId, parentAccessoryId: origin.parentAccessoryId,
+        parentLegacyOriginId: origin.parentLegacyOriginId,
         parentName: origin.parentAccessoryName ?? base.parentName,
         sourceLabel: `${base.sourceLabel} · ${origin.consecutive ?? 'Remisión'}`,
       })), ...(!query.parentAccessoryId && row.quantity > lots.reduce((sum, lot) => sum + lot.quantity, 0)

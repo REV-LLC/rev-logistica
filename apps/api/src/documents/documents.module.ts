@@ -8,6 +8,8 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { PublicDocumentsController } from './public-documents.controller';
+import { LegacyEquipmentOriginsController } from './legacy-equipment-origins.controller';
+import { LegacyEquipmentOriginsService } from './legacy-equipment-origins.service';
 
 @Module({
   imports: [
@@ -18,7 +20,7 @@ import { PublicDocumentsController } from './public-documents.controller';
     DocumentEmailsModule,
     DocumentMessagesModule,
   ],
-  controllers: [DocumentsController, PublicDocumentsController],
-  providers: [DocumentsService],
+  controllers: [DocumentsController, PublicDocumentsController, LegacyEquipmentOriginsController],
+  providers: [DocumentsService, LegacyEquipmentOriginsService],
 })
 export class DocumentsModule {}

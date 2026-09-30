@@ -21,6 +21,7 @@ export async function documentReturnOrigins(db: Prisma.TransactionClient, custom
     const parent = row.compositionParent ?? row.parentSourceDocumentItem;
     return [{
       sourceDocumentItemId: row.id, parentSourceDocumentItemId: parent?.id ?? null,
+      parentLegacyOriginId: row.parentLegacyOriginId,
       assetId: row.assetId, skuId: row.skuId, accessoryId: row.accessoryId,
       componentParentAssetId: row.componentParentAssetId, parentAccessoryId: parent?.accessoryId ?? null,
       parentAccessoryName: parent?.accessoryName ? `${parent.accessoryName}${parent.accessoryCode ? ` · ${parent.accessoryCode}` : ''}` : null,
