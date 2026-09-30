@@ -91,7 +91,7 @@ export default function EquipmentSelect(props: EquipmentSelectProps) {
   const filtered = [...all.values()].filter(
     (item) =>
       !query ||
-      `${equipmentLabel(item)} ${item.publicCode} ${item.serialOrEngine ?? ""}`
+      `${equipmentLabel(item)} ${item.publicCode} ${item.serialOrEngine ?? ""} ${item.brand ?? ""} ${item.model ?? ""}`
         .toLocaleLowerCase("es-CO")
         .includes(query),
   );
@@ -155,6 +155,15 @@ export default function EquipmentSelect(props: EquipmentSelectProps) {
               <Combobox.EventsTarget>
                 <PillsInput.Field
                   className={classes.field}
+                  inputMode="search"
+                  name="equipment-search"
+                  aria-label={label}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
                   placeholder={
                     value.length && !props.multiple
                       ? "Cambiar equipo…"

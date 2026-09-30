@@ -61,12 +61,12 @@ export class MaintenanceService {
       this.prisma.asset.findMany({
         where: { active: true, warehouseOwner: { type: WarehouseType.OWN } },
         orderBy: { publicCode: 'asc' },
-        select: { id: true, publicCode: true, internalNumber: true, description: true, brand: true, model: true, sku: { select: { name: true } } },
+        select: { id: true, publicCode: true, internalNumber: true, description: true, brand: true, model: true, serialOrEngine: true, imageFileObject: { select: { storageKey: true } }, warehouseOwner: { select: { name: true } }, sku: { select: { name: true, imageUrl: true, imageFileObject: { select: { storageKey: true } } } } },
       }),
       this.prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: 'asc' }, select: { id: true, plate: true, brand: true, model: true } }),
     ]);
     return [
-      ...assets.map((asset) => ({ type: 'ASSET' as const, id: asset.id, label: [asset.description || asset.sku.name, asset.brand, asset.model, asset.publicCode || `#${asset.internalNumber}`].filter(Boolean).join(' · ') })),
+      ...assets.map((asset) => ({ type: 'ASSET' as const, id: asset.id, equipment: asset, label: [asset.description || asset.sku.name, asset.brand, asset.model, asset.publicCode || `#${asset.internalNumber}`].filter(Boolean).join(' · ') })),
       ...vehicles.map((vehicle) => ({ type: 'VEHICLE' as const, id: vehicle.id, label: [vehicle.plate, vehicle.brand, vehicle.model].filter(Boolean).join(' · ') })),
     ];
   }
