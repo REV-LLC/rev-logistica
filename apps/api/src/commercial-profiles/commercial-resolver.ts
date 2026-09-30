@@ -24,7 +24,7 @@ export function resolveCommercialMode(
     modes: CommercialMode[];
   },
   parts: CompositionPart[],
-  catalog: { unit: string; price: string },
+  catalog: { unit: string; price: string | null },
 ): CommercialSnapshot {
   const groups = new Map(profile.groups.map((g) => [g.id, g]));
   const matching = profile.modes.filter((mode) =>
@@ -61,6 +61,8 @@ export function resolveCommercialMode(
     return review(
       'La unidad de la tarifa del catálogo no coincide con la modalidad',
     );
+  if (mode.pricing.source === 'CATALOG' && catalog.price == null)
+    return review('No hay tarifa configurada; registra un precio, incluido cero si corresponde');
   const resolved = parts.map((part) => {
     const treatments = new Set(
       mode.parts
@@ -85,7 +87,7 @@ export function resolveCommercialMode(
     status: 'RESOLVED',
     mode,
     basePrice:
-      mode.pricing.source === 'FIXED' ? mode.pricing.amount : catalog.price,
+      mode.pricing.source === 'FIXED' ? mode.pricing.amount : catalog.price!,
     parts: resolved,
   };
 }

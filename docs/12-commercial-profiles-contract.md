@@ -74,3 +74,20 @@ Anexos preparan lotes físicos antes de resolver la unidad comercial y leen rela
 Límites explícitos: una composición que cambia durante el mismo alquiler requiere conciliación del tramo (no se conserva silenciosamente la tarifa original); accesorio separado sin concepto medible propio queda pendiente; Accessory→Accessory queda pendiente por falta de padre documental. No se inventan estas relaciones.
 Las tarifas/mínimos por nombre de familia se retiraron del código operativo. `scripts/data/rev-commercial-family-defaults.json` es solo dato inicial; `seed-local-commercial-profiles.cjs` crea perfiles FAMILY por IDs exclusivamente en rev_annex_qa local y no sobrescribe perfiles.
 Prueba transaccional reproducible `scripts/qa-commercial-profiles.cjs`: equipo arbitrario + implemento por IDs → METER40, hijo INCLUDED, edición antigua409, snapshot conserva tarifa1000 tras cambio9000, sin cargo adicional del hijo; revierte todos los datos de prueba.
+
+## Contrato v2 — documentos desde 2026-10-01 Bogotá (en implementación local)
+
+- `compositionNodeId`: UUID estable de la línea (selectionId de UI), único por documento.
+- `parentCompositionNodeId`: UUID del padre inmediato en ese mismo documento. FK diferida para permitir crear/autoguardar todo el árbol en una transacción.
+- `sourceDocumentItemId`: ID de una línea confirmada anterior, origen de una devolución. No es el UUID de nodo.
+- `parentSourceDocumentItemId`: ID de línea confirmada anterior que sigue en la misma obra; permite entregar un implemento a un equipo ya entregado. Excluyente con parentCompositionNodeId.
+- `componentParentAssetId`: ancla de custodia derivada del árbol; no expresa el padre inmediato v2.
+- Las referencias a documentos anteriores son restrictivas. No se borran líneas confirmadas referenciadas. Los cuatro campos quedan nulos en registros históricos; no hay backfill.
+- Backend valida unicidad, ciclos, obra/cliente, fecha, cantidades, presencia, compatibilidad y permisos; un ID válido no autoriza acceso.
+- `usesCommercialV2(docDate)` en commercial-cutoff.ts define el corte usando fecha civil Bogotá, nunca fecha de aprobación/servidor. Antes del corte sigue la ruta legacy sin mutaciones históricas.
+
+ACCESSORY es un scope comercial propio, sin heredar tarifas de la familia usada para compatibilidad. INCLUDED significa tarifa contextual explícita 0: se conserva la fila y su composición, sin alterar el catálogo global. INDEPENDENT usa tarifa propia. Precio ausente se marca REVIEW; cero explícito es válido.
+
+Los snapshots v2 incluyen schemaVersion2, perfil completo congelado y catálogo usado. Los cambios físicos confirmados producen tramos a partir de su fecha; las reglas de ese alquiler proceden del perfil congelado, no de la configuración actual. La modalidad por día/hora/metro es un dato. Ninguna decisión depende del nombre del equipo.
+
+Responsabilidad acordada: schema/migraciones/commercial-profiles/annexes/scripts QA en chat anexos; documents/accessories y todo apps/web en chat flujos logísticos. No desplegar.

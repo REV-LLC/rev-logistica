@@ -9,13 +9,14 @@ import type {
 import { resolveCommercialMode } from './commercial-resolver';
 export async function effectiveCommercialProfile(
   tx: Pick<Prisma.TransactionClient, 'commercialProfile'>,
-  target: { assetId?: string; skuId?: string; familyId?: string | null },
+  target: { assetId?: string; skuId?: string; familyId?: string | null; accessoryId?: string },
   date: string,
 ) {
   const scopes = [
+    ['ACCESSORY', target.accessoryId],
     ['ASSET', target.assetId],
     ['SKU', target.skuId],
-    ['FAMILY', target.familyId],
+    ['FAMILY', target.accessoryId ? undefined : target.familyId],
   ].filter(([, id]) => Boolean(id));
   const profiles = await tx.commercialProfile.findMany({
     where: {

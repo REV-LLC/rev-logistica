@@ -2,7 +2,7 @@ import { z } from 'zod';
 const uuid = z.string().uuid();
 const decimal = z.string().regex(/^\d{1,10}(\.\d{1,6})?$/);
 export const scopeSchema = z
-  .object({ scopeType: z.enum(['ASSET', 'SKU', 'FAMILY']), scopeId: uuid })
+  .object({ scopeType: z.enum(['ASSET', 'SKU', 'FAMILY', 'ACCESSORY']), scopeId: uuid })
   .strict();
 export const selectorSchema = z
   .object({ kind: z.enum(['ASSET', 'SKU', 'FAMILY', 'ACCESSORY']), id: uuid })
@@ -114,7 +114,8 @@ export type CommercialProfileInput = z.infer<typeof profileSchema>;
 export type CommercialScope = z.infer<typeof scopeSchema>;
 export type CompositionPart = {
   documentItemId: string;
-  parentAssetId: string;
+  parentAssetId?: string;
+  parentDocumentItemId?: string;
   assetId?: string;
   skuId?: string;
   familyId?: string;
@@ -124,6 +125,11 @@ export type CompositionPart = {
 };
 export type CommercialSnapshot = {
   status: 'RESOLVED' | 'REVIEW';
+  schemaVersion?: 2;
+  contextualZero?: boolean;
+  parentDocumentItemId?: string;
+  frozenProfile?: { id: string; version: number; effectiveFrom: string; groups: CommercialGroup[]; modes: CommercialMode[] };
+  catalog?: { unit: string; price: string | null };
   profileId?: string;
   version?: number;
   effectiveFrom?: string;

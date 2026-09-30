@@ -1164,6 +1164,17 @@ model DocumentItem {
 
   // Optional grouping: this line accompanied a serialized parent asset.
   commercialSnapshot Json?
+  // Stable composition identities for documents from 2026-10-01; legacy rows stay null.
+  compositionNodeId String?
+  parentCompositionNodeId String?
+  sourceDocumentItemId String?
+  parentSourceDocumentItemId String?
+  compositionParent DocumentItem? @relation("DocumentComposition", fields: [documentId, parentCompositionNodeId], references: [documentId, compositionNodeId], onDelete: NoAction, onUpdate: NoAction)
+  compositionChildren DocumentItem[] @relation("DocumentComposition")
+  sourceDocumentItem DocumentItem? @relation("DocumentItemOrigin", fields: [sourceDocumentItemId], references: [id], onDelete: Restrict)
+  derivedDocumentItems DocumentItem[] @relation("DocumentItemOrigin")
+  parentSourceDocumentItem DocumentItem? @relation("DocumentCompositionOrigin", fields: [parentSourceDocumentItemId], references: [id], onDelete: Restrict)
+  laterCompositionChildren DocumentItem[] @relation("DocumentCompositionOrigin")
   componentParentAssetId String?
 
   condition          String?
@@ -1189,6 +1200,10 @@ model DocumentItem {
   @@index([skuId])
   @@index([assetId])
   @@index([componentParentAssetId])
+  @@unique([documentId, compositionNodeId])
+  @@index([documentId, parentCompositionNodeId])
+  @@index([sourceDocumentItemId])
+  @@index([parentSourceDocumentItemId])
   @@index([accessoryId])
   @@index([requestedTag])
 }
