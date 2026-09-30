@@ -8,7 +8,7 @@ import { loadTransportModule } from '../transport/test-support.cjs';
 const { MantineProvider } = createRequire(import.meta.url)('@mantine/core');
 const asset = { id: 'mixer', publicCode: 'QA-MIX-1', description: 'Mezcladora eléctrica', internalNumber: 6,
   sku: { name: 'Mezcladora', imageUrl: '/inventory/skid-steer-loader.png' }, warehouseOwner: { name: 'Bodega Principal' } };
-const cssMocks = { './EquipmentCompatibilitySelect.module.css': {}, './AppImage.module.css': {} };
+const cssMocks = { './EquipmentSelect.module.css': {}, './AppImage.module.css': {} };
 const { equipmentImage } = loadTransportModule('../equipment-motors/types.ts');
 const Thumbnail = loadTransportModule('../equipment-motors/EquipmentThumbnail.tsx', cssMocks).default;
 const render = element => renderToStaticMarkup(React.createElement(MantineProvider, {}, element));
