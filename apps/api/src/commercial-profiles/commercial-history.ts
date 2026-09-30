@@ -1,3 +1,5 @@
+import { usesCommercialV2 } from './commercial-cutoff';
+import { documentCommercialSnapshotsV2 } from './commercial-history-v2';
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
@@ -9,7 +11,12 @@ import type {
 import { resolveCommercialMode } from './commercial-resolver';
 export async function effectiveCommercialProfile(
   tx: Pick<Prisma.TransactionClient, 'commercialProfile'>,
-  target: { assetId?: string; skuId?: string; familyId?: string | null; accessoryId?: string },
+  target: {
+    assetId?: string;
+    skuId?: string;
+    familyId?: string | null;
+    accessoryId?: string;
+  },
   date: string,
 ) {
   const scopes = [
@@ -74,6 +81,10 @@ export async function documentCommercialSnapshots(
     throw new NotFoundException(
       'Documento no encontrado al fijar condiciones comerciales',
     );
+  if (usesCommercialV2(doc.docDate))
+    return documentCommercialSnapshotsV2(tx, doc, persist);
+  // Legacy documents remain untouched even when approved after the rollout date.
+  persist = false;
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
     year: 'numeric',

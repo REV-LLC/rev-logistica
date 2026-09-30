@@ -180,8 +180,12 @@ export class AnnexSourceService {
         source.issues.push(...commercial.issues);
         policy.minimumDaysByRental = {};
         const reconstructedRentals: string[] = [];
+        const creditedHistoryRanges = new Set<string>();
         for (const rental of source.rentals) {
-          if (rental.commercial?.mode?.unit === 'DAY') {
+          if (
+            rental.commercial?.mode?.unit === 'DAY' &&
+            !rental.commercial.contextualZero
+          ) {
             const previousLot = previous?.input.rentals.find(
               (r) =>
                 (r.assetId
@@ -204,11 +208,19 @@ export class AnnexSourceService {
           let priorDays = new Prisma.Decimal(0),
             reconstructed = false;
           for (
-            let time = Date.parse(rental.deliveredOn + 'T00:00:00Z');
+            let time = Date.parse(
+              (rental.commercialInterval?.from ?? rental.deliveredOn) +
+                'T00:00:00Z',
+            );
             time < Date.parse(from + 'T00:00:00Z');
             time += 86400000
           ) {
             const date = new Date(time).toISOString().slice(0, 10);
+            if (
+              rental.commercialInterval &&
+              date > rental.commercialInterval.to
+            )
+              break;
             const cut = history.find(
               (h) =>
                 h.input.period.from <= date && h.input.period.through >= date,
@@ -223,6 +235,36 @@ export class AnnexSourceService {
               reconstructed = true;
               if (!policy.excludedWeekdays.includes(new Date(time).getUTCDay()))
                 priorDays = priorDays.plus(1);
+            }
+          }
+          for (const range of rental.minimumHistoryRanges ?? []) {
+            const key = `${range.rentalId}:${rental.commercial?.mode?.id}`;
+            if (creditedHistoryRanges.has(key)) continue;
+            creditedHistoryRanges.add(key);
+            for (
+              let time = Date.parse(range.from);
+              time <= Date.parse(range.to) && time < Date.parse(from);
+              time += 86400000
+            ) {
+              const date = new Date(time).toISOString().slice(0, 10);
+              const cut = history.find(
+                (h) =>
+                  h.input.period.from <= date && h.input.period.through >= date,
+              );
+              if (cut) {
+                const line = cut.result.lines.find(
+                  (l) =>
+                    l.key === `${range.rentalId}:${date}` && l.kind === 'DAY',
+                );
+                if (line && !line.waived)
+                  priorDays = priorDays.plus(line.billableUnits);
+              } else {
+                reconstructed = true;
+                if (
+                  !policy.excludedWeekdays.includes(new Date(time).getUTCDay())
+                )
+                  priorDays = priorDays.plus(1);
+              }
             }
           }
           rental.priorBillableDays = priorDays.toString();

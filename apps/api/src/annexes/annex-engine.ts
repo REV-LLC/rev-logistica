@@ -106,7 +106,11 @@ export function calculateAnnex(value: unknown) {
     'Alquileres',
   );
   unique(
-    input.rentals.map((r) => r.source.reference),
+    input.rentals.map((r) =>
+      r.commercialInterval
+        ? `${r.source.reference}:${r.commercialInterval.from}`
+        : r.source.reference,
+    ),
     'Origen de alquileres',
   );
   unique(
@@ -170,7 +174,7 @@ export function calculateAnnex(value: unknown) {
     });
   }
   for (const rental of input.rentals) {
-    if (rental.includedIn) continue;
+    if (rental.includedIn && rental.commercial?.schemaVersion !== 2) continue;
     if (rental.commercial?.status === 'REVIEW') {
       issues.push({
         code: 'COMMERCIAL_REVIEW',
@@ -182,11 +186,24 @@ export function calculateAnnex(value: unknown) {
     }
 
     const rentalLineStart = lines.length;
+    const interval = rental.commercialInterval;
+    if (interval) {
+      timestamp(interval.from);
+      timestamp(interval.to);
+      if (interval.from < rental.deliveredOn || interval.from > interval.to)
+        fail('Tramo comercial inválido');
+    }
+    const activeDates = dates.filter(
+      (date) => !interval || (date >= interval.from && date <= interval.to),
+    );
+    const rentalPricing = rental.commercial?.contextualZero
+      ? { basePrice: '0.00' }
+      : rental.pricing;
     timestamp(rental.deliveredOn);
     const initial = positive(rental.quantity, 'Cantidad');
     if (rental.assetId && !initial.eq(1))
       fail('Un activo serializado debe tener cantidad uno');
-    price(rental.pricing);
+    price(rentalPricing);
     unique(
       rental.waivedDays.map((d) => d.date),
       'Excepciones',
@@ -231,6 +248,8 @@ export function calculateAnnex(value: unknown) {
         seenReports.add(report.source.reference);
         if (
           report.date < rental.deliveredOn ||
+          (interval &&
+            (report.date < interval.from || report.date > interval.to)) ||
           report.date > through ||
           (lastReturn && report.date > lastReturn.date)
         )
@@ -239,7 +258,7 @@ export function calculateAnnex(value: unknown) {
           fail('El corte requiere un reporte físico o digital');
         accumulated = accumulated.plus(new D(report.meters));
       }
-      for (const date of dates) {
+      for (const date of activeDates) {
         if (
           rental.assetId &&
           date >= rental.deliveredOn &&
@@ -280,7 +299,7 @@ export function calculateAnnex(value: unknown) {
         });
       continue;
     }
-    for (const date of dates) {
+    for (const date of activeDates) {
       if (date < rental.deliveredOn) continue;
       let balance = initial;
       for (const event of rental.returns) {
@@ -315,7 +334,7 @@ export function calculateAnnex(value: unknown) {
         quantity: balance,
         units: new D(1),
         reportedHours: null,
-        pricing: rental.pricing,
+        pricing: rentalPricing,
         sources: [
           rental.source,
           ...rental.returns.filter((r) => r.date <= date).map((r) => r.source),
@@ -352,7 +371,7 @@ export function calculateAnnex(value: unknown) {
         fail(
           'El tramo del ajuste de días cambió de cantidad o tiene exclusiones; revisa el ajuste antes de guardar',
         );
-      const prices = price(rental.pricing);
+      const prices = price(rentalPricing);
       affected.forEach((line, index) => {
         if (adjustedDates.has(line.date))
           fail('Los ajustes de días no pueden solaparse');
@@ -377,12 +396,13 @@ export function calculateAnnex(value: unknown) {
         line.discount = gross.minus(net).toFixed(2);
       });
     }
-    const minDays =
-      input.policy.minimumDaysByRental?.[rental.id] ??
-      input.policy.minimumDaysBySku?.[rental.skuId] ??
-      (rental.commercial?.mode?.unit === 'DAY'
-        ? Number(rental.commercial.mode.minimum.value)
-        : 0);
+    const minDays = rental.commercial?.contextualZero
+      ? 0
+      : (input.policy.minimumDaysByRental?.[rental.id] ??
+        input.policy.minimumDaysBySku?.[rental.skuId] ??
+        (rental.commercial?.mode?.unit === 'DAY'
+          ? Number(rental.commercial.mode.minimum.value)
+          : 0));
     if (minDays) {
       // A minimum is settled only for returned quantities, once in their return cut.
       // Earlier cuts contribute ordinary billed days, never another return's supplement.
@@ -395,10 +415,34 @@ export function calculateAnnex(value: unknown) {
             'Falta conciliar los días de cortes anteriores para completar el mínimo',
         });
       } else {
-        const ordinary = lines.slice(rentalLineStart);
+        const sameRental = interval
+          ? input.rentals.filter(
+              (r) =>
+                r.commercialInterval?.rentalId === interval.rentalId &&
+                r.commercial?.mode?.id === rental.commercial?.mode?.id,
+            )
+          : [rental];
+        const ordinary = interval
+          ? lines.filter(
+              (line) =>
+                line.kind === 'DAY' &&
+                !line.key.includes(':minimum:') &&
+                sameRental.some((r) => line.key.startsWith(`${r.id}:`)),
+            )
+          : lines.slice(rentalLineStart);
+        if (interval)
+          prior = sameRental.reduce(
+            (sum, r) => sum.plus(r.priorBillableDays ?? 0),
+            new D(0),
+          );
         const returnsByDate = new Map<string, Prisma.Decimal>();
         for (const event of rental.returns) {
-          if (event.date >= from && event.date <= through)
+          if (
+            event.date >= from &&
+            event.date <= through &&
+            (!interval ||
+              (event.date >= interval.from && event.date <= interval.to))
+          )
             returnsByDate.set(
               event.date,
               (returnsByDate.get(event.date) ?? new D(0)).plus(event.quantity),
@@ -425,7 +469,7 @@ export function calculateAnnex(value: unknown) {
             quantity,
             units: extra,
             reportedHours: null,
-            pricing: rental.pricing,
+            pricing: rentalPricing,
             sources: [
               rental.source,
               ...rental.returns
@@ -435,7 +479,7 @@ export function calculateAnnex(value: unknown) {
             reason: 'Completa el mínimo de días del alquiler',
           });
           const supplement = lines[lines.length - 1];
-          const prices = price(rental.pricing);
+          const prices = price(rentalPricing);
           const gross = quantity
             .times(prices.base)
             .toDecimalPlaces(2, D.ROUND_HALF_UP)

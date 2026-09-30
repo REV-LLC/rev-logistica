@@ -1,3 +1,5 @@
+import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
+import { prepareCommercialV2 } from './annex-commercial-v2-source';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AnnexInput } from './annex-input';
@@ -97,11 +99,36 @@ export async function applyCommercialComposition(
       'El historial de accesorios requiere procesamiento por lotes',
     );
   const byDocument = new Map(documents.map((d) => [d.id, d]));
+  const mappedV2 = lots.flatMap((lot) => {
+    const row = rows.find((r) => r.id === lot.source.reference);
+    const doc = row?.refDocumentId
+      ? byDocument.get(row.refDocumentId)
+      : undefined;
+    if (!doc || !usesCommercialV2(doc.docDate)) return [];
+    const items = doc.items.filter((i) =>
+      lot.assetId
+        ? i.assetId === lot.assetId
+        : !i.assetId &&
+          i.skuId === lot.skuId &&
+          (!i.condition || i.condition === row?.ownerWarehouseId),
+    );
+    return items.length === 1 ? [{ lot, itemId: items[0].id }] : [];
+  });
+  const v2 = prepareCommercialV2(
+    documents,
+    mappedV2,
+    accessoryMovements,
+    period,
+    siteId,
+    history,
+  );
+  const handledV2 = new Set(mappedV2.map((entry) => entry.lot.id));
   const snapshots = new Map<string, Map<string, CommercialSnapshot>>();
   const issues: SourceIssue[] = [];
   const rentals: AnnexInput['rentals'] = [],
     machineDays: AnnexInput['machineDays'] = [];
   for (const lot of lots) {
+    if (handledV2.has(lot.id)) continue;
     const row = rows.find((r) => r.id === lot.source.reference);
     const doc = row?.refDocumentId
       ? byDocument.get(row.refDocumentId)
@@ -347,5 +374,9 @@ export async function applyCommercialComposition(
       rentals.push(lot);
     }
   }
-  return { rentals, machineDays, issues };
+  return {
+    rentals: [...rentals, ...v2.rentals],
+    machineDays: [...machineDays, ...v2.machineDays],
+    issues: [...issues, ...v2.issues],
+  };
 }

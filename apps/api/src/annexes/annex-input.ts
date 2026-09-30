@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { z } from 'zod';
-import { modeSchema } from '../commercial-profiles/commercial-profile.input';
+import {
+  modeSchema,
+  groupSchema,
+} from '../commercial-profiles/commercial-profile.input';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const id = z.string().trim().min(1).max(120);
@@ -28,6 +31,23 @@ const source = z
 const commercial = z
   .object({
     status: z.enum(['RESOLVED', 'REVIEW']),
+    schemaVersion: z.literal(2).optional(),
+    contextualZero: z.boolean().optional(),
+    parentDocumentItemId: id.optional(),
+    frozenProfile: z
+      .object({
+        id,
+        version: z.number().int(),
+        effectiveFrom: date,
+        groups: z.array(groupSchema).max(100),
+        modes: z.array(modeSchema).max(100),
+      })
+      .strict()
+      .optional(),
+    catalog: z
+      .object({ unit: z.string(), price: money.nullable() })
+      .strict()
+      .optional(),
     profileId: z.string().optional(),
     version: z.number().int().optional(),
     effectiveFrom: date.optional(),
@@ -39,7 +59,8 @@ const commercial = z
         z
           .object({
             documentItemId: id,
-            parentAssetId: id,
+            parentAssetId: id.optional(),
+            parentDocumentItemId: id.optional(),
             assetId: id.optional(),
             skuId: id.optional(),
             familyId: id.optional(),
@@ -104,6 +125,15 @@ export const annexInputSchema = z
             skuId: id,
             label: z.string().trim().min(1).max(200),
             assetId: id.optional(),
+            accessoryId: id.optional(),
+            commercialInterval: z
+              .object({ from: date, to: date, rentalId: id })
+              .strict()
+              .optional(),
+            minimumHistoryRanges: z
+              .array(z.object({ from: date, to: date, rentalId: id }).strict())
+              .max(1000)
+              .optional(),
             deliveredOn: date,
             quantity: decimal,
             source,
