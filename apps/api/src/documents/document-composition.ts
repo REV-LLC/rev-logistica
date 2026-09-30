@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
 import { documentReturnOrigins } from './document-return-origins';
+import { assertLegacyEquipmentOrigin } from './legacy-equipment-origin';
 import { getWorksiteQuantityDelta, WORKSITE_BALANCE_MOVEMENT_TYPES } from '../inventory/worksite-ledger-balance';
 
 export type CompositionFields = {
@@ -10,10 +11,12 @@ export type CompositionFields = {
   parentCompositionNodeId?: string | null;
   sourceDocumentItemId?: string | null;
   parentSourceDocumentItemId?: string | null;
+  parentLegacyOriginId?: string | null;
 };
 export type CompositionLine = CompositionFields & {
   id?: string; documentId?: string; assetId?: string | null; skuId?: string | null;
   accessoryId?: string | null; componentParentAssetId?: string | null; quantity?: unknown; condition?: string | null;
+  legacyOriginId?: string;
 };
 export const isDocumentCompositionV2 = (date?: Date) =>
   !!date && usesCommercialV2(date);
@@ -24,6 +27,7 @@ export function compositionFields(item: CompositionFields): CompositionFields {
     parentCompositionNodeId: item.parentCompositionNodeId ?? null,
     sourceDocumentItemId: item.sourceDocumentItemId ?? null,
     parentSourceDocumentItemId: item.parentSourceDocumentItemId ?? null,
+    parentLegacyOriginId: item.parentLegacyOriginId ?? null,
   };
 }
 
@@ -33,10 +37,10 @@ export function normalizeComposition<T extends CompositionLine>(items: T[]): T[]
   const nodes = new Map(result.map(item => [item.compositionNodeId, item]));
   if (nodes.size !== result.length) throw new BadRequestException('Dos filas tienen la misma identidad de conjunto. Vuelve a abrir el documento.');
   for (const item of result) {
-    if (item.parentCompositionNodeId && item.parentSourceDocumentItemId)
+    if ([item.parentCompositionNodeId, item.parentSourceDocumentItemId, item.parentLegacyOriginId].filter(Boolean).length > 1)
       throw new BadRequestException('Una pieza solo puede tener un padre: en este documento o en una remisión anterior.');
     // Upgrade an explicit old parent link only when its concrete row is present.
-    if (!item.parentCompositionNodeId && !item.parentSourceDocumentItemId && item.componentParentAssetId) {
+    if (!item.parentCompositionNodeId && !item.parentSourceDocumentItemId && !item.parentLegacyOriginId && item.componentParentAssetId) {
       const candidates = result.filter(parent => parent.assetId === item.componentParentAssetId);
       if (candidates.length === 1) item.parentCompositionNodeId = candidates[0].compositionNodeId;
     }
@@ -59,11 +63,11 @@ export async function prepareDocumentComposition<T extends CompositionLine>(
   tx: Prisma.TransactionClient, items: T[], date?: Date,
 ): Promise<T[]> {
   if (!isDocumentCompositionV2(date)) {
-    if (items.some(item => item.parentSourceDocumentItemId || (item.parentCompositionNodeId &&
+    if (items.some(item => item.parentLegacyOriginId || item.parentSourceDocumentItemId || (item.parentCompositionNodeId &&
       items.find(parent => parent.compositionNodeId === item.parentCompositionNodeId)?.accessoryId)))
       throw new BadRequestException('Los conjuntos entre accesorios aplican a documentos fechados desde el 1 de octubre de 2026.');
     return items.map(item => {
-      const { compositionNodeId, parentCompositionNodeId, sourceDocumentItemId, parentSourceDocumentItemId, ...legacy } = item;
+      const { compositionNodeId, parentCompositionNodeId, sourceDocumentItemId, parentSourceDocumentItemId, parentLegacyOriginId, ...legacy } = item;
       return legacy as T;
     });
   }
@@ -74,8 +78,12 @@ export async function prepareDocumentComposition<T extends CompositionLine>(
   }) : [];
   if (sources.length !== referenceIds.length) throw new BadRequestException('No se encontró una línea de origen del conjunto.');
   const bySource = new Map(sources.map(source => [source.id, source]));
+  const bridgeIds = [...new Set(rows.flatMap(item => item.parentLegacyOriginId ? [item.parentLegacyOriginId] : []))];
+  const bridges = bridgeIds.length ? await tx.legacyEquipmentOrigin.findMany({ where: { id: { in: bridgeIds } }, include: { sourceLedger: true } }) : [];
+  if (bridges.length !== bridgeIds.length) throw new BadRequestException('El empalme histórico debe revisarse antes de usarlo.');
   const byNode = new Map(rows.map(item => [item.compositionNodeId, item]));
   const anchor = (line: CompositionLine): string | null => {
+    if (line.parentLegacyOriginId) return bridges.find(origin => origin.id === line.parentLegacyOriginId)!.sourceLedger.assetId;
     if (line.parentCompositionNodeId) {
       const parent = byNode.get(line.parentCompositionNodeId)!;
       return parent.assetId ?? anchor(parent);
@@ -88,8 +96,9 @@ export async function prepareDocumentComposition<T extends CompositionLine>(
     return line.componentParentAssetId ?? null;
   };
   return rows.map(item => ({ ...item, componentParentAssetId: anchor(item),
-    ...(!item.parentCompositionNodeId && !item.parentSourceDocumentItemId && item.sourceDocumentItemId ? {
+    ...(!item.parentCompositionNodeId && !item.parentSourceDocumentItemId && !item.parentLegacyOriginId && item.sourceDocumentItemId ? {
       parentSourceDocumentItemId: bySource.get(item.sourceDocumentItemId)!.compositionParent?.id ?? bySource.get(item.sourceDocumentItemId)!.parentSourceDocumentItemId,
+      parentLegacyOriginId: bySource.get(item.sourceDocumentItemId)!.parentLegacyOriginId,
     } : {}),
   }));
 }
@@ -148,14 +157,19 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
     .filter(item => item.sourceDocumentItemId === id).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
   const consumed = new Map<string, number>();
   const parents = new Map<string, CompositionLine>();
+  const bridgeParents = new Map<string, CompositionLine>();
+  for (const id of [...new Set(rows.flatMap(item => item.parentLegacyOriginId ? [item.parentLegacyOriginId] : []))]) {
+    const origin = await assertLegacyEquipmentOrigin(tx, id, document.customerWorksiteId, document.docDate, document.type === 'REMISSION');
+    bridgeParents.set(id, { id: `legacy-origin:${id}`, legacyOriginId: id, assetId: origin.sourceLedger.assetId });
+  }
   for (const item of rows) {
     if (item.sourceDocumentItemId) {
       if (document.type !== 'RETURN') throw new BadRequestException('La línea de origen para devolución solo se usa al devolver.');
       const source = bySource.get(item.sourceDocumentItemId)!;
       if ((item.assetId ?? null) !== source.assetId || (item.accessoryId ?? null) !== source.accessoryId || (item.skuId ?? null) !== source.skuId)
         throw new BadRequestException('El elemento devuelto no corresponde a su remisión de origen.');
-      const originalParent = source.compositionParent?.id ?? source.parentSourceDocumentItemId;
-      const selectedParent = item.parentCompositionNodeId ? byNode.get(item.parentCompositionNodeId)?.sourceDocumentItemId : item.parentSourceDocumentItemId;
+      const originalParent = source.compositionParent?.id ?? source.parentSourceDocumentItemId ?? (source.parentLegacyOriginId ? `legacy-origin:${source.parentLegacyOriginId}` : undefined);
+      const selectedParent = item.parentCompositionNodeId ? byNode.get(item.parentCompositionNodeId)?.sourceDocumentItemId : item.parentSourceDocumentItemId ?? (item.parentLegacyOriginId ? `legacy-origin:${item.parentLegacyOriginId}` : undefined);
       if (selectedParent && selectedParent !== originalParent)
         throw new BadRequestException('La devolución no puede cambiar el padre registrado en la remisión.');
       const quantity = (consumed.get(source.id) ?? 0) + Number(item.quantity ?? 1);
@@ -163,7 +177,8 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
       if (quantity > remaining(source.id)) throw new BadRequestException('La devolución supera lo pendiente de esa línea de la remisión.');
     }
     const parent = item.parentCompositionNodeId ? byNode.get(item.parentCompositionNodeId) :
-      item.parentSourceDocumentItemId ? bySource.get(item.parentSourceDocumentItemId) : undefined;
+      item.parentSourceDocumentItemId ? bySource.get(item.parentSourceDocumentItemId) :
+      item.parentLegacyOriginId ? bridgeParents.get(item.parentLegacyOriginId) : undefined;
     if (parent) {
       if (item.parentSourceDocumentItemId && document.type === 'REMISSION' && remaining(item.parentSourceDocumentItemId) <= 0)
         throw new BadRequestException('El padre ya fue devuelto; no puedes agregarle una pieza en esta obra.');

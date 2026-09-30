@@ -82,8 +82,8 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
       const outstanding = await documentReturnOrigins(tx, document.customerWorksiteId, document.id);
       for (const parent of externalParents) {
         const entries = configsByOwner.get(parent.assetId ? `asset:${parent.assetId}` : `accessory:${parent.accessoryId}`) ?? [];
-        const selected = [...composition.items.filter(item => item.parentSourceDocumentItemId === parent.id),
-          ...outstanding.filter(item => item.parentSourceDocumentItemId === parent.id)];
+        const selected = [...composition.items, ...outstanding].filter(item => parent.legacyOriginId
+          ? item.parentLegacyOriginId === parent.legacyOriginId : item.parentSourceDocumentItemId === parent.id);
         for (const entry of entries) {
           if (entry.maximumQuantity == null) continue;
           const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);

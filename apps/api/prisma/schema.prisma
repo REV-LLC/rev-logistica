@@ -394,6 +394,7 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  reviewedLegacyEquipmentOrigins LegacyEquipmentOrigin[]
   annexDraftRevisions AnnexDraftRevision[]
   releaseAcknowledgements ReleaseAcknowledgement[]
   id           String   @id @default(uuid())
@@ -1169,6 +1170,8 @@ model DocumentItem {
   parentCompositionNodeId String?
   sourceDocumentItemId String?
   parentSourceDocumentItemId String?
+  parentLegacyOriginId String?
+  parentLegacyOrigin LegacyEquipmentOrigin? @relation(fields: [parentLegacyOriginId], references: [id], onDelete: Restrict)
   compositionParent DocumentItem? @relation("DocumentComposition", fields: [documentId, parentCompositionNodeId], references: [documentId, compositionNodeId], onDelete: NoAction, onUpdate: NoAction)
   compositionChildren DocumentItem[] @relation("DocumentComposition")
   sourceDocumentItem DocumentItem? @relation("DocumentItemOrigin", fields: [sourceDocumentItemId], references: [id], onDelete: Restrict)
@@ -1204,12 +1207,14 @@ model DocumentItem {
   @@index([documentId, parentCompositionNodeId])
   @@index([sourceDocumentItemId])
   @@index([parentSourceDocumentItemId])
+  @@index([parentLegacyOriginId])
   @@index([accessoryId])
   @@index([requestedTag])
 }
 
 model StockLedger {
   id String @id @default(uuid())
+  legacyEquipmentOrigin LegacyEquipmentOrigin?
 
   // Identificador del item (uno de los dos)
   skuId   String?
@@ -1256,6 +1261,24 @@ model StockLedger {
   @@index([skuId, ownerWarehouseId, effectiveAt(sort: Desc)])
   @@index([warehouseId])
   @@index([ownerWarehouseId])
+}
+
+// An individually reviewed bridge. Original documents and stock movements remain unchanged.
+model LegacyEquipmentOrigin {
+  id String @id @default(uuid())
+  sourceLedgerId String @unique
+  sourceLedger StockLedger @relation(fields: [sourceLedgerId], references: [id], onDelete: Restrict)
+  effectiveFrom DateTime
+  reviewedBy String
+  reviewer User @relation(fields: [reviewedBy], references: [id], onDelete: Restrict)
+  reviewedAt DateTime @default(now())
+  note String
+  evidenceSnapshot Json
+  commercialSnapshot Json
+  children DocumentItem[]
+
+  @@index([reviewedBy])
+  @@index([effectiveFrom])
 }
 
 model InventorySnapshot {
