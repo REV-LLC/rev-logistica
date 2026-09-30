@@ -11,6 +11,7 @@ import PageLoadingBoundary from "@/components/PageLoadingBoundary";
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
+    { prefix: "/employees/activities", title: "Bitácora de empleados", subtitle: "Actividades del equipo" },
     {
       prefix: "/office-assistant",
       title: "Asistente Office",

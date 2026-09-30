@@ -7,6 +7,7 @@ import {
   CreateMaintenanceItemDto,
   CreateMaintenancePlanDto,
   RecordAssetHoursDto,
+  RecordMaintenanceDto,
   UpdateMaintenanceItemDto,
 } from './dto/maintenance.dto';
 
@@ -82,6 +83,112 @@ export class MaintenanceService {
       }
       return this.planWithTopics(plan.id, tx);
     });
+  }
+
+  async recordMaintenance(payload: RecordMaintenanceDto, userId: string) {
+    const performedByUserId = await this.resolvePerformer(payload.performedByUserId, userId);
+    this.assertSingleSubject(payload.assetId, payload.vehicleId);
+    const scheduleType = await this.subjectScheduleType(payload.assetId, payload.vehicleId);
+    const completedAt = payload.completedAt ? new Date(payload.completedAt) : new Date();
+    if (completedAt > new Date()) throw new BadRequestException('La fecha del mantenimiento no puede estar en el futuro');
+    if (scheduleType === 'HOURS' && payload.completedAtHours == null) {
+      throw new BadRequestException('Ingresa el horómetro al realizar el mantenimiento');
+    }
+    const itemIds = payload.tasks.flatMap((task) => task.itemId ? [task.itemId] : []);
+    if (new Set(itemIds).size !== itemIds.length) throw new BadRequestException('No repitas una revisión en el mismo registro');
+
+    return this.prisma.$transaction(async (tx) => {
+      const subjectWhere = payload.assetId ? { assetId: payload.assetId } : { vehicleId: payload.vehicleId! };
+      const completions: Array<{ id: string }> = [];
+      let recordPlanId: string | undefined;
+      for (const task of payload.tasks) {
+        let itemId = task.itemId;
+        const reference = task.reference?.trim() || null;
+        if (itemId) {
+          if (task.recurrence) throw new BadRequestException('Edita el intervalo de la revisión desde su plan');
+          const item = await tx.maintenanceItem.findFirst({
+            where: { id: itemId, active: true, plan: { ...subjectWhere, active: true } },
+          });
+          if (!item) throw new BadRequestException('La revisión no pertenece a un plan activo de este equipo');
+          this.validateRecordReference(item.name, reference);
+          const latest = await tx.maintenanceCompletion.findFirst({ where: { itemId }, orderBy: { completedAt: 'desc' } });
+          if (latest && completedAt <= latest.completedAt) {
+            throw new BadRequestException('La fecha debe ser posterior al último mantenimiento de esta revisión');
+          }
+          if (latest?.completedAtHours != null && payload.completedAtHours! < Number(latest.completedAtHours)) {
+            throw new BadRequestException('Las horas no pueden ser inferiores al mantenimiento anterior');
+          }
+        } else {
+          if (!task.name?.trim()) throw new BadRequestException('Escribe el trabajo realizado');
+          this.validateRecordReference(task.name, reference);
+          if (!recordPlanId) {
+            const plan = await tx.maintenancePlan.findFirst({ where: { ...subjectWhere, name: 'Mantenimientos registrados', active: true } });
+            recordPlanId = plan?.id ?? (await tx.maintenancePlan.create({ data: { ...subjectWhere, name: 'Mantenimientos registrados' } })).id;
+          }
+          const schedule = task.recurrence ? this.createScheduleData({
+            ...task.recurrence,
+            baselineHours: payload.completedAtHours,
+            baselineDate: completedAt.toISOString(),
+          }, scheduleType) : {};
+          const item = await tx.maintenanceItem.create({ data: {
+            planId: recordPlanId, name: task.name.trim(),
+            instructions: task.recurrence?.instructions?.trim() || null,
+            ...schedule, active: Boolean(task.recurrence),
+          } });
+          itemId = item.id;
+          if (task.recurrence) await this.notifications.ensureMaintenanceTopic(item.id, task.recurrence.recipients, tx);
+        }
+        completions.push(await tx.maintenanceCompletion.create({ data: {
+          itemId,
+          completedAt,
+          reference,
+          completedAtHours: scheduleType === 'HOURS' ? payload.completedAtHours : null,
+          notes: payload.notes?.trim() || null,
+          performedByUserId,
+          completedByUserId: userId,
+        } }));
+      }
+      // An administrative service record is also a meter observation. Never roll it back.
+      if (scheduleType === 'HOURS') {
+        const hours = payload.completedAtHours!;
+        const note = 'Lectura registrada al realizar mantenimiento';
+        if (payload.assetId) {
+          const asset = await tx.asset.findUniqueOrThrow({ where: { id: payload.assetId }, select: { hourMeter: true } });
+          if (hours > Number(asset.hourMeter)) {
+            await tx.asset.update({ where: { id: payload.assetId }, data: { hourMeter: hours } });
+            await tx.assetHourReading.create({ data: {
+              assetId: payload.assetId, hours, previousHours: asset.hourMeter, recordedAt: completedAt, note, recordedByUserId: userId,
+            } });
+          }
+        } else {
+          const latest = await tx.vehicleHourReading.findFirst({ where: { vehicleId: payload.vehicleId! }, orderBy: { hours: 'desc' } });
+          if (hours > Number(latest?.hours ?? 0)) await tx.vehicleHourReading.create({ data: {
+            vehicleId: payload.vehicleId!, hours, recordedAt: completedAt, note, recordedByUserId: userId,
+          } });
+        }
+      }
+      return { completions };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  private async resolvePerformer(selectedUserId: string | undefined, sessionUserId: string) {
+    const id = selectedUserId ?? sessionUserId;
+    const user = await this.prisma.user.findFirst({ where: { id, active: true }, select: { id: true } });
+    if (!user) throw new BadRequestException('Selecciona un usuario activo en Realizado por');
+    return user.id;
+  }
+
+  private validateRecordReference(name: string, reference: string | null) {
+    const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    if (normalized === 'cambio de aceite de motor' && !/^\d+W-\d+$/.test(reference ?? '')) {
+      throw new BadRequestException('Ingresa la viscosidad del aceite de motor en formato 15W-40');
+    }
+    if (normalized === 'cambio de aceite hidraulico' && !['AW68', 'ISO68'].includes(reference ?? '')) {
+      throw new BadRequestException('Selecciona AW68 o ISO68 para el aceite hidráulico');
+    }
+    if (['cambio de filtro de aire', 'cambio de filtro de aceite'].includes(normalized) && !reference) {
+      throw new BadRequestException('Escribe la referencia del filtro');
+    }
   }
 
   async addItem(planId: string, payload: CreateMaintenanceItemDto) {
@@ -179,6 +286,7 @@ export class MaintenanceService {
   }
 
   async completeItem(itemId: string, payload: CompleteMaintenanceDto, userId: string) {
+    const performedByUserId = await this.resolvePerformer(payload.performedByUserId, userId);
     const item = await this.prisma.maintenanceItem.findUnique({
       where: { id: itemId },
       include: {
@@ -210,6 +318,7 @@ export class MaintenanceService {
           completedAtHours: null,
           completedAt,
           notes: payload.notes?.trim() || null,
+          performedByUserId,
           completedByUserId: userId,
         },
       });
@@ -234,7 +343,7 @@ export class MaintenanceService {
       data: {
         itemId, completedAtHours,
         completedAt,
-        notes: payload.notes?.trim() || null, completedByUserId: userId,
+        notes: payload.notes?.trim() || null, performedByUserId, completedByUserId: userId,
       },
     });
   }
@@ -290,8 +399,19 @@ export class MaintenanceService {
       include: { recipients: { include: { user: { select: { id: true, email: true, active: true, employee: true } } } } },
     });
     const topicByItem = new Map(topics.map((topic) => [topic.entityId, topic]));
+    const completions = await this.prisma.maintenanceCompletion.findMany({
+      where: { item: { plan: { [subjectField]: subjectId } } },
+      orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 100,
+      include: {
+        item: { select: { id: true, name: true, planId: true } },
+        performedBy: { select: { email: true, employee: { select: { name: true, lastName: true } } } },
+        completedBy: { select: { email: true, employee: { select: { name: true, lastName: true } } } },
+      },
+    });
     return {
       scheduleType,
+      completions,
       currentHours,
       readings,
       plans: plans.map((plan) => ({

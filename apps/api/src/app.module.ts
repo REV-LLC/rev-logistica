@@ -36,6 +36,7 @@ import { ProviderReturnsModule } from './provider-returns/provider-returns.modul
 import { ProviderPickupsModule } from './provider-pickups/provider-pickups.module';
 import { FuelModule } from './fuel/fuel.module';
 import { AccessoriesModule } from './accessories/accessories.module';
+import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
 
 @Module({
@@ -77,6 +78,7 @@ import { OfficeAssistantModule } from './office-assistant/office-assistant.modul
     FuelModule,
     AccessoriesModule,
     OfficeAssistantModule,
+    EmployeeActivitiesModule,
   ],
   controllers: [AppController],
   providers: [

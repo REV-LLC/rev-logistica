@@ -26,6 +26,7 @@ import {
 import OfficeDraftBrowserNotifications from "@/components/OfficeDraftBrowserNotifications";
 import { api } from "@/lib/api";
 import {
+  IconCalendar,
   IconArrowsShuffle,
   IconBell,
   IconBuilding,
@@ -76,6 +77,7 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
       { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },

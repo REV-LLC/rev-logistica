@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 
@@ -186,6 +187,10 @@ export class RecordAssetHoursDto {
 
 export class CompleteMaintenanceDto {
   @IsOptional()
+  @IsUUID()
+  performedByUserId?: string;
+
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   completedAtHours?: number;
@@ -197,4 +202,40 @@ export class CompleteMaintenanceDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+export class MaintenanceRecordTaskDto {
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/\S/, { message: 'Escribe el trabajo realizado' })
+  name?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateMaintenanceItemDto)
+  recurrence?: CreateMaintenanceItemDto;
+}
+
+export class RecordMaintenanceDto extends CompleteMaintenanceDto {
+  @IsOptional()
+  @IsUUID()
+  assetId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => MaintenanceRecordTaskDto)
+  tasks: MaintenanceRecordTaskDto[];
 }
