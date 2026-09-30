@@ -13,7 +13,11 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { IconCheck, IconChevronDown, IconSearch } from "@tabler/icons-react";
-import EmployeeAvatar from "@/components/EmployeeAvatar";
+import EmployeeAvatar, {
+  useEmployeePhotoUrl,
+} from "@/components/EmployeeAvatar";
+import AppAvatar from "@/components/AppAvatar";
+import { useMediaQuery } from "@mantine/hooks";
 import styles from "./activities.module.css";
 
 export type CalendarEmployee = {
@@ -30,6 +34,27 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
+function CalendarPortrait({
+  employee,
+  large,
+}: {
+  employee: CalendarEmployee;
+  large: boolean;
+}) {
+  const photoUrl = useEmployeePhotoUrl(employee.id, 0, large);
+  const size = large ? 96 : 48;
+  return (
+    <AppAvatar
+      src={photoUrl}
+      size={size}
+      imageSizes={`${size}px`}
+      radius={large ? 20 : "xl"}
+      color="blue"
+      alt={nameOf(employee)}
+    >{`${employee.name[0] ?? ""}${employee.lastName[0] ?? ""}`}</AppAvatar>
+  );
+}
+
 export default function EmployeeCalendarPicker({
   employees,
   employee,
@@ -41,6 +66,7 @@ export default function EmployeeCalendarPicker({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
+  const largeScreen = useMediaQuery("(min-width: 1600px)");
   const [opened, setOpened] = useState(false);
   const [search, setSearch] = useState("");
   const filtered = useMemo(
@@ -77,12 +103,17 @@ export default function EmployeeCalendarPicker({
           }}
         >
           <Group wrap="nowrap" gap="sm">
-            {employee ? <EmployeeAvatar employee={employee} size={48} /> : null}
+            {employee ? (
+              <CalendarPortrait
+                employee={employee}
+                large={Boolean(largeScreen)}
+              />
+            ) : null}
             <div className={styles.employeeName}>
-              <Text fw={700} size="sm">
+              <Text fw={700} className={styles.employeeTriggerName}>
                 {employee ? nameOf(employee) : "Selecciona un empleado"}
               </Text>
-              <Text size="xs" c="dimmed">
+              <Text className={styles.employeeTriggerHint} c="dimmed">
                 Cambiar empleado
               </Text>
             </div>
