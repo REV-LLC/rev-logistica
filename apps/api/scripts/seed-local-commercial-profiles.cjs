@@ -2,10 +2,9 @@
 const {PrismaClient}=require('@prisma/client');const {randomUUID}=require('node:crypto');
 const {CommercialProfilesService}=require('../dist/src/commercial-profiles/commercial-profiles.service');
 const defaults=require('./data/rev-commercial-family-defaults.json');
-const url=new URL(process.env.DATABASE_URL||'');
-if(!['localhost','127.0.0.1'].includes(url.hostname)||url.pathname!=='/rev_annex_qa')throw Error('Only isolated local annex QA database');
+const {actorEmail}=require('./commercial-qa-target.cjs');
 const db=new PrismaClient();const normalized=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
-(async()=>{const actor=await db.user.findUniqueOrThrow({where:{email:'annex-qa@local.invalid'}});const service=new CommercialProfilesService(db);let created=0;
+(async()=>{const actor=await db.user.findUniqueOrThrow({where:{email:actorEmail}});const service=new CommercialProfilesService(db);let created=0;
 for(const family of await db.assetFamily.findMany()){
  const rule=defaults[normalized(family.name)];if(!rule)continue;
  const current=await service.get('FAMILY',family.id);if(current.version)continue;

@@ -8,6 +8,7 @@ import {
   Group,
   Loader,
   Select,
+  SimpleGrid,
   Stack,
   Text,
 } from "@mantine/core";
@@ -257,7 +258,7 @@ export default function CommercialProfilePanel({
             disabled={saving}
             onChange={change}
           />
-          <Group grow align="stretch">
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Button
               type="button"
               loading={saving}
@@ -283,7 +284,7 @@ export default function CommercialProfilePanel({
             >
               Recargar modalidades
             </Button>
-          </Group>
+          </SimpleGrid>
           {dirty ? (
             <Text size="sm" c="orange" role="status">
               Hay cambios comerciales sin guardar.

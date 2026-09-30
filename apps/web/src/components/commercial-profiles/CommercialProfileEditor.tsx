@@ -177,7 +177,7 @@ export default function CommercialProfileEditor({
           Una modalidad por situación. Si coinciden varias, el anexo pedirá
           revisión; no sumará ambas.
         </Text>
-        <Group align="end" grow>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} style={{ alignItems: "end" }}>
           <Button
             type="button"
             variant="light"
@@ -244,7 +244,7 @@ export default function CommercialProfileEditor({
               Crear alternativas con / sin
             </Button>
           ) : null}
-        </Group>
+        </SimpleGrid>
         {value.modes.map((mode) => (
           <CommercialModeCard
             key={mode.id}

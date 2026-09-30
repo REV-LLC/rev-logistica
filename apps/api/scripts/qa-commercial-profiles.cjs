@@ -4,10 +4,10 @@ const {CommercialProfilesService}=require('../dist/src/commercial-profiles/comme
 const {documentCommercialSnapshots}=require('../dist/src/commercial-profiles/commercial-history');
 const {AnnexSourceService}=require('../dist/src/annexes/annex-source.service');
 const {calculateAnnex}=require('../dist/src/annexes/annex-engine');
-const url=new URL(process.env.DATABASE_URL||'');if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/rev_annex_qa')throw Error('Local annex QA only');
+const {actorEmail}=require('./commercial-qa-target.cjs');
 const db=new PrismaClient();
 (async()=>{const rollback=Error('ROLLBACK');try{await db.$transaction(async tx=>{
- const author=await tx.user.findUniqueOrThrow({where:{email:'annex-qa@local.invalid'}});
+ const author=await tx.user.findUniqueOrThrow({where:{email:actorEmail}});
  const candidates=await tx.document.findMany({where:{type:'REMISSION',status:'CONFIRMED',customerWorksiteId:{not:null},docDate:{gte:new Date('2026-09-01T05:00:00Z'),lt:new Date('2026-09-29T05:00:00Z')}},include:{items:{where:{assetId:{not:null}},include:{asset:true}}}});
  const doc=candidates.find(d=>d.items.length>=2&&new Set(d.items.map(i=>i.assetId)).size===d.items.length);assert(doc,'Need local remission with two assets');
  const [parent,child]=doc.items;await tx.documentItem.update({where:{id:child.id},data:{componentParentAssetId:parent.assetId}});

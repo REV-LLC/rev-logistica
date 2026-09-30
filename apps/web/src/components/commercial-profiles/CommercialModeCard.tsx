@@ -1,10 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import {
-  Badge,
   Button,
   Card,
-  Group,
   NumberInput,
   Select,
   SimpleGrid,
@@ -32,17 +31,39 @@ export default function CommercialModeCard({
   onChange: (mode: CommercialMode) => void;
   onRemove: () => void;
 }) {
+  const [expanded, setExpanded] = useState(
+    !mode.name || (mode.pricing.source === "FIXED" && !mode.pricing.amount),
+  );
   const options = groups.map((group) => ({
     value: group.id,
     label: group.name || "Grupo sin nombre",
   }));
   return (
-    <Card withBorder radius="md" padding="md">
-      <Stack gap="md">
-        <Group justify="space-between" wrap="wrap">
-          <Text fw={700}>{mode.name || "Nueva modalidad"}</Text>
-          <Badge variant="light">{unitLabels[mode.unit]}</Badge>
-        </Group>
+    <Card
+      component="details"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      withBorder
+      radius="md"
+      padding="md"
+    >
+      <summary style={{ cursor: "pointer" }}>
+        <Text component="span" fw={700}>
+          {mode.name || "Nueva modalidad"} · {unitLabels[mode.unit]}
+        </Text>
+        <Text size="sm" c="dimmed" mt={4}>
+          {mode.pricing.source === "CATALOG"
+            ? "Tarifa de catálogo"
+            : mode.pricing.amount
+              ? `$ ${Number(mode.pricing.amount).toLocaleString("es-CO")}`
+              : "Tarifa pendiente"}
+          {" · Mínimo "}
+          {mode.minimum.value || "0"} {unitLabels[mode.unit].toLowerCase()}
+          {" · "}
+          {expanded ? "Cerrar edición" : "Abrir configuración"}
+        </Text>
+      </summary>
+      <Stack gap="md" mt="md">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput
             label="Nombre de la modalidad"

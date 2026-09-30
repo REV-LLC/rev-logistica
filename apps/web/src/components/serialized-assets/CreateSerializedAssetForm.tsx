@@ -231,9 +231,6 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
   const [familyMode, setFamilyMode] = useState<'existing' | 'new'>('existing');
   const [familyId, setFamilyId] = useState<string | null>(initialFamilyId ?? null);
-  const [compatibilities, setCompatibilities] = useState<Array<{
-    componentAssetFamilyId: string; active: boolean; parentAssetFamily: { name: string };
-  }>>([]);
   const [familyName, setFamilyName] = useState('');
   const [familyCode, setFamilyCode] = useState('');
   const [subfamilyId, setSubfamilyId] = useState<string | null>(null);
@@ -297,16 +294,14 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       setLoading(true);
       setError(null);
       try {
-        const [familyData, warehouseData, unitData, catalogBrandData, compatibilityData] = await Promise.all([
+        const [familyData, warehouseData, unitData, catalogBrandData] = await Promise.all([
           api<AssetFamily[]>('/asset-families?controlType=SERIAL'),
           api<Warehouse[]>('/warehouses'),
           api<string[]>('/skus/units'),
           api<CatalogOption[]>('/catalog/options?groupKey=SERIAL_ASSET_BRANDS').catch(() => []),
-          api<typeof compatibilities>('/asset-families/components'),
         ]);
         if (!mounted) return;
         setFamilies(familyData);
-        setCompatibilities(compatibilityData);
         setWarehouses(warehouseData);
         setUnits(unitData);
         setCatalogBrandOptions(catalogBrandData.filter((option) => option.active));
@@ -1017,9 +1012,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
         {onCreated && familyId ? (
           <Alert color="blue" title="Compatibilidad del accesorio">
-            {compatibilities.some((rule) => rule.active && rule.componentAssetFamilyId === familyId)
-              ? `Esta familia es compatible con: ${compatibilities.filter((rule) => rule.active && rule.componentAssetFamilyId === familyId).map((rule) => rule.parentAssetFamily.name).join(', ')}. El vínculo con un equipo concreto se realiza en la remisión.`
-              : 'Esta familia no tiene compatibilidades configuradas. Puedes definirlas en Configuración → Componentes de equipos.'}
+            Registra esta unidad sin duplicar equipos existentes. Puedes vincularla desde «Componentes y accesorios» en la card del equipo principal; la remisión conserva el conjunto que realmente se entrega.
           </Alert>
         ) : null}
 
@@ -1044,7 +1037,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                 También puedes completarlo más tarde desde su card.
               </Alert>
               <CommercialProfilePanel key={createdAssetId} assetId={createdAssetId} onDirtyChange={setCommercialDirty} />
-              <Group grow>
+              <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 <Button variant="default" onClick={() => {
                   if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Salir y configurarlas más tarde?')) return;
                   router.push(`/inventory/equipment-configuration/assets/${createdAssetId}`);
@@ -1053,7 +1046,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Dejarlas para más tarde?')) return;
                   setCommercialDirty(false); setCreatedAssetId(null); setSuccess(null);
                 }}>Registrar otro equipo</Button>
-              </Group>
+              </SimpleGrid>
             </Stack>
           </Paper>
         ) : (
