@@ -46,6 +46,12 @@ describe('DocumentPdfService', () => {
     expect(buildPdfItemDescription({ quantity: 4, requestedTag: 'Puntas · Accesorio de DEM-001', conditionNote: null, sku: null, asset: null })).toBe('Puntas · Accesorio de DEM-001');
   });
 
+  it('prints the frozen accessory name even when the HTTP client omitted requestedTag', () => {
+    expect(buildPdfItemDescription({ accessoryId: 'accessory', accessoryName: 'Mangueras originales',
+      accessoryCode: 'ACC-123', quantity: 4, requestedTag: null, conditionNote: null, sku: null, asset: null }))
+      .toBe('Mangueras originales');
+  });
+
   it('paginates a large accessory document instead of truncating its lines', async () => {
     const buffer = await new DocumentPdfService().render({ ...document, items: Array.from({ length: 45 }, (_, index) => ({ quantity: 1, requestedTag: `Canasta ${index} · Accesorio de PLU-001`, conditionNote: null, sku: null, asset: null })) });
     expect(pageCount(buffer)).toBeGreaterThan(1);

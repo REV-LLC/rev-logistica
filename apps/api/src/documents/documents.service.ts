@@ -35,6 +35,7 @@ import { resolveDocumentInventorySourceMode, resolveDocumentItemSourceWarehouseI
 import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
 import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { isSerializationConflict } from './document-transaction-conflict';
+import { parseDocumentResponsibleIds } from './document-responsibles';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -2400,6 +2401,9 @@ export class DocumentsService {
         items: {
           select: {
             id: true,
+            accessoryId: true,
+            accessoryName: true,
+            accessoryCode: true,
             quantity: true,
             requestedTag: true,
             conditionNote: true,
@@ -2525,21 +2529,7 @@ export class DocumentsService {
   }
 
   private parseDocumentResponsibleIds(notes?: string | null) {
-    const values = new Map<string, string>();
-    notes
-      ?.split('|')
-      .map((value) => value.trim())
-      .forEach((entry) => {
-        const [key, ...rest] = entry.split(':');
-        if (key && rest.length) {
-          values.set(key.trim().toLowerCase(), rest.join(':').trim());
-        }
-      });
-    return {
-      driverId: values.get('conductor') || null,
-      receiverId: values.get('recibe') || null,
-      dispatcherId: values.get('despachador') || null,
-    };
+    return parseDocumentResponsibleIds(notes);
   }
 
   private normalizeDocumentRecipientPhones(

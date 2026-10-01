@@ -22,6 +22,20 @@ Object.assign(process.env, {
   R2_PUBLIC_BASE_URL: 'http://127.0.0.1:3059/qa-files',
 });
 const objects = new Map();
+const fs = require('node:fs');
+const { createHash } = require('node:crypto');
+const storageDirectory = `/private/tmp/rev-commercial-qa-storage-${databaseName}`;
+fs.mkdirSync(storageDirectory, { recursive: true, mode: 0o700 });
+const storagePath = (key) => path.join(storageDirectory, `${createHash('sha256').update(key).digest('hex')}.json`);
+function getObject(key) {
+  if (objects.has(key)) return objects.get(key);
+  const file = storagePath(key);
+  if (!fs.existsSync(file)) return undefined;
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const object = { data: Buffer.from(saved.data, 'base64'), contentType: saved.contentType };
+  objects.set(key, object);
+  return object;
+}
 const { S3Client } = req('@aws-sdk/client-s3');
 S3Client.prototype.send = async function (command) {
   const input = command.input;
@@ -33,12 +47,14 @@ S3Client.prototype.send = async function (command) {
         data: Buffer.from(input.Body),
         contentType: input.ContentType,
       });
+      fs.writeFileSync(storagePath(input.Key), JSON.stringify({ data: Buffer.from(input.Body).toString('base64'), contentType: input.ContentType }), { mode: 0o600 });
       return {};
     case 'DeleteObjectCommand':
       objects.delete(input.Key);
+      fs.rmSync(storagePath(input.Key), { force: true });
       return {};
     case 'GetObjectCommand': {
-      const object = objects.get(input.Key);
+      const object = getObject(input.Key);
       if (!object) throw new Error('QA object not found');
       const body = req('node:stream').Readable.from(object.data);
       body.transformToByteArray = async () => object.data;
@@ -119,7 +135,7 @@ const { AppModule } = req(path.join(root, 'apps/api/dist/src/app.module.js'));
     logger: ['error', 'warn'],
   });
   app.use('/qa-files', (request, response) => {
-    const object = objects.get(decodeURIComponent(request.url.slice(1)));
+    const object = getObject(decodeURIComponent(request.url.slice(1)));
     if (!object) return response.status(404).end();
     response.type(object.contentType).send(object.data);
   });

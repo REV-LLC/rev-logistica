@@ -26,6 +26,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 import { getSerialDisplayName } from '@/lib/serial-assets';
+import { documentPrintRows, documentItemDescription, documentItemCode } from '@/lib/document-print-rows';
 import {
   buildInventoryStockShortageMessage,
   extractInventoryStockShortages,
@@ -95,6 +96,8 @@ type DocumentDetail = {
     conditionNote?: string | null;
     requestedTag?: string | null;
     accessoryId?: string | null;
+    accessoryName?: string | null;
+    accessoryCode?: string | null;
     accessorySourceBalanceId?: string | null;
     sku?: { id: string; name: string } | null;
     asset?: {
@@ -649,22 +652,15 @@ export default function DocumentDetailPage() {
   );
 
   const linePages = useMemo(() => {
-    const sourceRows = document?.type === 'RETURN'
-      ? document?.items ?? []
-      : (document?.ledger?.length ? document.ledger : document?.items ?? []);
-    const rows = sourceRows.map((entry: any) => {
+    const sourceRows = document ? documentPrintRows(document) : [];
+    const rows = sourceRows.map((entry) => {
       const qty = entry.assetId && entry.quantity == null
         ? 1
         : Math.abs(Number(entry.quantity || 0));
-      const baseDesc =
-        entry.asset?.description ??
-        entry.asset?.sku?.name ??
-        entry.sku?.name ??
-        entry.requestedTag ??
-        '-';
+      const baseDesc = documentItemDescription(entry);
       const damageNote = entry.conditionNote?.trim();
       const desc = damageNote ? `${baseDesc} | Averia: ${damageNote}` : baseDesc;
-      const eq = entry.asset?.internalNumber != null ? `#${entry.asset.internalNumber}` : '';
+      const eq = documentItemCode(entry);
       const origin = entry.ownerWarehouse
         ? entry.ownerWarehouse.ownerCompany?.name
           ? `${entry.ownerWarehouse.ownerCompany.name} | ${entry.ownerWarehouse.name}`
@@ -705,13 +701,7 @@ export default function DocumentDetailPage() {
   };
 
   const describeItem = (item: DocumentDetail['items'][number]) => {
-    return (
-      item.asset?.description ??
-      item.asset?.sku?.name ??
-      item.sku?.name ??
-      item.requestedTag ??
-      '-'
-    );
+    return documentItemDescription(item);
   };
   const displayQuantity = (value?: string | number | null) => {
     if (value == null) return '-';

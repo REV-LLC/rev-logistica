@@ -713,12 +713,11 @@ export default function TransportRequestsWorkspace({
             type: 'serial' as const,
             sourceWarehouseId,
             assetId: item.assetId ?? undefined,
-            name:
-              item.asset?.description ??
-              item.asset?.sku?.name ??
-              item.asset?.serialOrEngine ??
-              item.assetId ??
-              'Serial',
+            name: getSerialDisplayName({
+              ...item.asset,
+              assetId: item.assetId,
+              skuName: item.asset?.sku?.name,
+            }),
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
             componentParentAssetId: item.componentParentAssetId ?? undefined,

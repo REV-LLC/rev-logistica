@@ -111,11 +111,16 @@ export async function loadDocumentConfiguration(
   const accessories = context.docType === 'RETURN' && parent.sourceDocumentItemId
     ? allAccessories.filter(option => option.parentSourceDocumentItemId === parent.sourceDocumentItemId) : allAccessories;
   const returnParts = parent.sourceDocumentItemId ? origins.filter(origin => origin.parentSourceDocumentItemId === parent.sourceDocumentItemId) : legacyReturnParts;
+  // Returns keep the shipment parent, whether selected from the worksite tabs or
+  // this configurator. A new composition parent would make the same lot appear unselected.
+  const parentLink = context.docType === 'RETURN'
+    ? { parentSourceDocumentItemId: parent.sourceDocumentItemId }
+    : { parentCompositionNodeId: parent.selectionId };
   const accessoryItem = (option: AccessoryOption): SelectedItem => ({
     selectionId: '', type: 'accessory', accessoryId: option.accessoryId,
     accessorySourceBalanceId: option.sourceBalanceId, accessoryKind: option.kind,
     accessoryPurpose: option.purpose, physicalAvailableQuantity: option.physicalQuantity,
-    componentParentAssetId: anchorAssetId, parentCompositionNodeId: parent.selectionId,
+    componentParentAssetId: anchorAssetId, ...parentLink,
     sourceDocumentItemId: option.sourceDocumentItemId,
     name: `${option.name}${option.code ? ` · ${option.code}` : ''}`,
     quantity: 1, availableQuantity: option.quantity, ownerWarehouseId: option.ownerWarehouseId,
@@ -125,13 +130,13 @@ export async function loadDocumentConfiguration(
     sourceDocumentItemId: asset.sourceDocumentItemId,
     name: getSerialDisplayName(asset), serial: asset.serialOrEngine, ownerWarehouseId: asset.ownerWarehouseId,
     sourceWarehouseId: context.docType === 'REMISSION' ? parent.sourceWarehouseId : undefined,
-    parentCompositionNodeId: parent.selectionId, componentParentAssetId: anchorAssetId });
+    ...parentLink, componentParentAssetId: anchorAssetId });
   const bulkItem = (bulk: InventoryBulk): SelectedItem => ({ selectionId: '', type: 'bulk', skuId: bulk.skuId,
     sourceDocumentItemId: bulk.sourceDocumentItemId,
     bulkKey: buildBulkKey({ ...bulk, sourceWarehouseId: context.docType === 'REMISSION' ? parent.sourceWarehouseId : undefined }),
     name: bulk.skuName ?? 'Pieza', ownerWarehouseId: bulk.ownerWarehouseId, availableQuantity: bulk.quantity,
     sourceWarehouseId: context.docType === 'REMISSION' ? parent.sourceWarehouseId : undefined,
-    parentCompositionNodeId: parent.selectionId, componentParentAssetId: anchorAssetId });
+    ...parentLink, componentParentAssetId: anchorAssetId });
   if (context.docType === 'RETURN') return [...accessories.map((option): DocumentPartOption => ({
     key: `${option.sourceBalanceId}:${option.sourceDocumentItemId ?? 'legacy'}`, name: option.name, role: 'ACCESSORY', defaultIncluded: false, required: false,
     quantity: option.kind === 'INDIVIDUAL' ? 1 : option.quantity, item: accessoryItem(option),

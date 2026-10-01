@@ -456,6 +456,10 @@ export class DocumentCustomerEmailsService {
   }
 
   private getItemName(item: DocumentForEmail['items'][number], index: number) {
+    if (item.accessoryId) {
+      const name = item.accessoryName || item.requestedTag || `Accesorio ${index + 1}`;
+      return item.accessoryCode ? `${name} · ${item.accessoryCode}` : name;
+    }
     if (item.asset) {
       const internal = item.asset.internalNumber
         ? ` #${item.asset.internalNumber}`

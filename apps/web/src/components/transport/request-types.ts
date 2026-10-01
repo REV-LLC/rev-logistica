@@ -179,6 +179,7 @@ export type RequestDocumentDetail = {
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
+      internalNumber?: number | null;
       serialOrEngine?: string | null;
       description?: string | null;
       kind?: 'STANDARD' | 'MOTOR' | string | null;
