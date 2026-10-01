@@ -56,6 +56,21 @@ export class MaintenanceService {
     }));
   }
 
+  async listSubjects() {
+    const [assets, vehicles] = await Promise.all([
+      this.prisma.asset.findMany({
+        where: { active: true, warehouseOwner: { type: WarehouseType.OWN } },
+        orderBy: { publicCode: 'asc' },
+        select: { id: true, publicCode: true, internalNumber: true, description: true, brand: true, model: true, serialOrEngine: true, imageFileObject: { select: { storageKey: true } }, warehouseOwner: { select: { name: true } }, sku: { select: { name: true, imageUrl: true, imageFileObject: { select: { storageKey: true } } } } },
+      }),
+      this.prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: 'asc' }, select: { id: true, plate: true, brand: true, model: true } }),
+    ]);
+    return [
+      ...assets.map((asset) => ({ type: 'ASSET' as const, id: asset.id, equipment: asset, label: [asset.description || asset.sku.name, asset.brand, asset.model, asset.publicCode || `#${asset.internalNumber}`].filter(Boolean).join(' · ') })),
+      ...vehicles.map((vehicle) => ({ type: 'VEHICLE' as const, id: vehicle.id, label: [vehicle.plate, vehicle.brand, vehicle.model].filter(Boolean).join(' · ') })),
+    ];
+  }
+
   async createPlan(payload: CreateMaintenancePlanDto) {
     this.assertSingleSubject(payload.assetId, payload.vehicleId);
     const scheduleType = await this.subjectScheduleType(payload.assetId, payload.vehicleId);
@@ -100,14 +115,24 @@ export class MaintenanceService {
     return this.prisma.$transaction(async (tx) => {
       const subjectWhere = payload.assetId ? { assetId: payload.assetId } : { vehicleId: payload.vehicleId! };
       const completions: Array<{ id: string }> = [];
+      const reusableWhere = { plan: { ...subjectWhere, active: true }, OR: [{ active: true }, { intervalHours: null, intervalDays: null }] };
+      const normalizeName = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const usedItems = new Set<string>();
       let recordPlanId: string | undefined;
       for (const task of payload.tasks) {
         let itemId = task.itemId;
         const reference = task.reference?.trim() || null;
+        if (!itemId && task.name?.trim()) {
+          const candidates = await tx.maintenanceItem.findMany({ where: reusableWhere });
+          const matches = candidates.filter((item) => normalizeName(item.name) === normalizeName(task.name!));
+          if (matches.length > 1) throw new BadRequestException('Hay varias revisiones con ese nombre. Selecciona la revisión existente que corresponde');
+          itemId = matches[0]?.id;
+        }
+        if (itemId && usedItems.has(itemId)) throw new BadRequestException('No repitas una revisión en el mismo registro');
         if (itemId) {
           if (task.recurrence) throw new BadRequestException('Edita el intervalo de la revisión desde su plan');
           const item = await tx.maintenanceItem.findFirst({
-            where: { id: itemId, active: true, plan: { ...subjectWhere, active: true } },
+            where: { id: itemId, ...reusableWhere },
           });
           if (!item) throw new BadRequestException('La revisión no pertenece a un plan activo de este equipo');
           this.validateRecordReference(item.name, reference);
@@ -138,6 +163,7 @@ export class MaintenanceService {
           itemId = item.id;
           if (task.recurrence) await this.notifications.ensureMaintenanceTopic(item.id, task.recurrence.recipients, tx);
         }
+        usedItems.add(itemId!);
         completions.push(await tx.maintenanceCompletion.create({ data: {
           itemId,
           completedAt,
@@ -179,6 +205,7 @@ export class MaintenanceService {
   }
 
   private validateRecordReference(name: string, reference: string | null) {
+    if (!reference) return;
     const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     if (normalized === 'cambio de aceite de motor' && !/^\d+W-\d+$/.test(reference ?? '')) {
       throw new BadRequestException('Ingresa la viscosidad del aceite de motor en formato 15W-40');
@@ -186,9 +213,7 @@ export class MaintenanceService {
     if (normalized === 'cambio de aceite hidraulico' && !['AW68', 'ISO68'].includes(reference ?? '')) {
       throw new BadRequestException('Selecciona AW68 o ISO68 para el aceite hidráulico');
     }
-    if (['cambio de filtro de aire', 'cambio de filtro de aceite'].includes(normalized) && !reference) {
-      throw new BadRequestException('Escribe la referencia del filtro');
-    }
+
   }
 
   async addItem(planId: string, payload: CreateMaintenanceItemDto) {
@@ -392,7 +417,10 @@ export class MaintenanceService {
         ? Number(readings.reduce((max, reading) => Number(reading.hours) > Number(max.hours) ? reading : max).hours)
         : 0;
     const plans = await this.prisma.maintenancePlan.findMany({
-      where: { [subjectField]: subjectId }, orderBy: { createdAt: 'asc' }, include: { items: true },
+      where: { [subjectField]: subjectId }, orderBy: { createdAt: 'asc' }, include: { items: { include: { completions: {
+        orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }], take: 1,
+        include: { item: { select: { id: true, name: true, planId: true } }, completedBy: { select: { email: true, employee: { select: { name: true, lastName: true } } } }, performedBy: { select: { email: true, employee: { select: { name: true, lastName: true } } } } },
+      } } } },
     });
     const topics = await this.prisma.notificationTopic.findMany({
       where: { entityType: 'MAINTENANCE_ITEM', entityId: { in: plans.flatMap((plan) => plan.items.map((item) => item.id)) } },

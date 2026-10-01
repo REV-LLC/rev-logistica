@@ -78,6 +78,12 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      {
+        href: "/inventory/ledger",
+        label: "Movimientos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN", "OFFICE"],
+      },
       { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
@@ -225,15 +231,15 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/inventory/ledger",
-        label: "Movimientos",
-        icon: IconArrowsShuffle,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
         href: "/inventory/accessories",
         label: "Accesorios",
         icon: IconBox,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
+        href: "/inventory/maintenance",
+        label: "Mantenimientos",
+        icon: IconTools,
         roles: ["ADMIN", "OFFICE"],
       },
       {
