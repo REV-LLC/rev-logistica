@@ -59,8 +59,6 @@ export default function CommercialModeCard({
               : "Tarifa pendiente"}
           {" · Mínimo "}
           {mode.minimum.value || "0"} {unitLabels[mode.unit].toLowerCase()}
-          {" · "}
-          {expanded ? "Cerrar edición" : "Abrir configuración"}
         </Text>
       </summary>
       <Stack gap="md" mt="md">
@@ -98,10 +96,10 @@ export default function CommercialModeCard({
                   pricing: { source: "FIXED", amount: "" },
                 });
             }}
-            description="Cambiar de unidad limpia la tarifa y el mínimo: no se convierten automáticamente."
+            description="Cambiar unidad reinicia tarifa y mínimo."
           />
           <Select
-            label="De dónde sale la tarifa"
+            label="Tipo de tarifa"
             value={mode.pricing.source}
             allowDeselect={false}
             disabled={disabled}
@@ -122,7 +120,7 @@ export default function CommercialModeCard({
           {mode.pricing.source === "FIXED" ? (
             <NumberInput
               label={`Tarifa por ${mode.unit === "DAY" ? "día" : mode.unit === "HOUR" ? "hora" : "metro"}`}
-              description="Escribe 0 si no tiene cobro. Dejar vacío no significa gratuito."
+              description="Sin cobro: escribe 0."
               required
               min={0}
               max={9999999999.99}
@@ -140,9 +138,7 @@ export default function CommercialModeCard({
             />
           ) : (
             <Text size="sm" c="dimmed">
-              El anexo comprobará que la tarifa del catálogo use{" "}
-              {unitLabels[mode.unit].toLowerCase()}. Si falta o no coincide,
-              pedirá revisión.
+              Debe existir una tarifa de catálogo en {unitLabels[mode.unit].toLowerCase()}.
             </Text>
           )}
           <NumberInput
@@ -163,8 +159,8 @@ export default function CommercialModeCard({
             }
             description={
               mode.unit === "HOUR"
-                ? "Por día con trabajo reportado. No se toman horas de otro equipo."
-                : "Por alquiler completo; no vuelve a empezar al cambiar de quincena."
+                ? "Por día trabajado."
+                : "Por alquiler completo."
             }
           />
         </SimpleGrid>
@@ -172,7 +168,7 @@ export default function CommercialModeCard({
           <Text fw={600}>Cuándo aplica</Text>
           {!mode.conditions.length ? (
             <Text size="sm" c="dimmed">
-              Siempre. Usa esta opción solo si hay una única modalidad.
+              Siempre.
             </Text>
           ) : null}
           {mode.conditions.map((condition, index) => (

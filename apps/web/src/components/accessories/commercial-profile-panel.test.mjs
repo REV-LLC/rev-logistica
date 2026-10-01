@@ -142,7 +142,8 @@ test("consumibles configuran cobro propio sin exigir un conjunto individualizado
   const f = await fixture({ accessoryKind: "CONSUMABLE" });
   assert.ok(f.calls.some(call => call.path === "/commercial-profiles?scopeType=ACCESSORY&scopeId=accessory"));
   assert.ok(f.calls.every(call => !call.path.startsWith("/equipment-configurations") && !call.path.startsWith("/assets")));
-  assert.deepEqual(f.controls.scope.data.map(option => option.value), ["ACCESSORY"]);
+  assert.equal(f.controls.scope, undefined, 'An accessory has one scope; no redundant selector is shown');
+  assert.equal(f.controls.editor.value.scopeType, 'ACCESSORY');
   await act(() => f.controls.editor.onChange({ ...f.controls.editor.value,
     modes: [{ ...profile.modes[0], pricing: { source: "FIXED", amount: "0" } }] }));
   await f.click("Guardar modalidades");

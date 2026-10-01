@@ -122,7 +122,7 @@ export async function loadDocumentConfiguration(
     accessoryPurpose: option.purpose, physicalAvailableQuantity: option.physicalQuantity,
     componentParentAssetId: anchorAssetId, ...parentLink,
     sourceDocumentItemId: option.sourceDocumentItemId,
-    name: `${option.name}${option.code ? ` · ${option.code}` : ''}`,
+    name: option.name,
     quantity: 1, availableQuantity: option.quantity, ownerWarehouseId: option.ownerWarehouseId,
     sourceWarehouseId: context.docType === 'REMISSION' ? parent.sourceWarehouseId : undefined,
   });

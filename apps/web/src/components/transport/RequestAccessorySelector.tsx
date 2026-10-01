@@ -15,6 +15,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { api } from "@/lib/api";
+import { getSerialDisplayName, type SerialDisplayItem } from '@/lib/serial-assets';
 import { kindLabels, type AccessoryKind } from "../accessories/types";
 import { createSelectionId } from "./request-formatting";
 import type { SelectedItem } from "./request-types";
@@ -57,9 +58,6 @@ export default function RequestAccessorySelector(props: Props) {
         >
           Agregar accesorios
         </Button>
-        <Text size="sm" c="dimmed">
-          Opcional. Se registran por separado del equipo.
-        </Text>
       </Group>
       <Modal
         opened={opened}
@@ -121,10 +119,9 @@ function AccessoryOptions({
       throw new Error('Demasiados accesorios: acota la selección desde la configuración del equipo.');
     };
     Promise.all([api<{
-      serial: Array<{
+      serial: Array<SerialDisplayItem & {
         assetId: string;
-        skuName?: string | null;
-        publicCode?: string | null;
+        ownerWarehouseName?: string | null;
       }>;
     }>(`/inventory/on-site/${customerWorksiteId}/request-options`, {
       signal: controller.signal,
@@ -138,7 +135,7 @@ function AccessoryOptions({
               assetId: item.assetId,
               sourceDocumentItemId: origins.find(origin => origin.assetId === item.assetId)?.sourceDocumentItemId,
               legacyOriginId: bridges.find(origin => origin.assetId === item.assetId)?.id,
-              name: `${item.skuName ?? "Equipo"} · ${item.publicCode ?? item.assetId} (ya en obra)`,
+              name: `${getSerialDisplayName(item)}${item.ownerWarehouseName ? ` · ${item.ownerWarehouseName}` : ''} · En obra`,
             })), ...accessories.map(item => ({ key: `source:${item.sourceDocumentItemId}`, assetId: item.parentAssetId,
               accessoryId: item.accessoryId, sourceDocumentItemId: item.sourceDocumentItemId, name: `${item.name} (ya en obra)` }))],
           );
@@ -214,7 +211,7 @@ function AccessoryOptions({
           ...(parent.selectionId ? { parentCompositionNodeId: parent.selectionId }
             : parent.legacyOriginId ? { parentLegacyOriginId: parent.legacyOriginId }
             : { parentSourceDocumentItemId: parent.sourceDocumentItemId ?? option.parentSourceDocumentItemId }),
-          name: `${option.name}${option.code ? ` · ${option.code}` : ""} · Accesorio de ${option.parentName}`,
+          name: `${option.name} · ${option.parentName}`,
           quantity: 1,
           availableQuantity: option.quantity,
           ownerWarehouseId: option.ownerWarehouseId,
@@ -225,9 +222,7 @@ function AccessoryOptions({
   return (
     <Stack>
       <Text size="sm">
-        El borrador no reserva existencias. Al aprobar se validarán nuevamente.
-        Los consumibles se entregan por cantidad; el consumo se registra aparte
-        en su card.
+        Disponibilidad sujeta a validación al aprobar.
       </Text>
       {parentError ? <Alert color="yellow">{parentError}</Alert> : null}
       <Select
@@ -287,7 +282,6 @@ function AccessoryOptions({
                 >
                   <Text fw={600}>
                     {option.name}
-                    {option.code ? ` · ${option.code}` : ""}
                   </Text>
                   <Text size="sm">{option.parentName}</Text>
                   <Text size="sm" c="dimmed">

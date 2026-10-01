@@ -68,7 +68,6 @@ export default function ReturnAccessoryPickerPanel({
                   <Stack gap={4}>
                     <Text fw={600} size="sm">
                       {option.name}
-                      {option.code ? ` · ${option.code}` : ""}
                     </Text>
                     <Text size="xs" c="dimmed">
                       Equipo: {option.parentName}

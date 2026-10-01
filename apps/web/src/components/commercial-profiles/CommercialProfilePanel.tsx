@@ -23,7 +23,6 @@ import {
   commercialPayload,
   scopeLabels,
   todayInBogota,
-  unitLabels,
 } from "./types";
 
 type AssetMetadata = {
@@ -146,7 +145,7 @@ export default function CommercialProfilePanel({
       setValue(saved);
       setDirty(false);
       setSuccess(
-        "Modalidades guardadas. No se modificaron existencias ni anexos históricos.",
+        "Modalidades guardadas.",
       );
       onSaved?.();
     } catch (error) {
@@ -169,17 +168,14 @@ export default function CommercialProfilePanel({
           <Text fw={700} size="xl">
             Modalidades de cobro
           </Text>
-          <Text size="sm" c="dimmed">
-            Condiciones compartidas con anexos, sin reglas por nombre de equipo.
-          </Text>
         </div>
         {value ? (
           <Badge variant="light">
-            {value.version ? `Versión ${value.version}` : "Sin perfil propio"}
+            {value.version ? "Configurado" : value.inherited ? "Heredado" : "Pendiente"}
           </Badge>
         ) : null}
       </Group>
-      <Select
+      {!accessoryId ? <Select
         label="Aplicar estas modalidades a"
         allowDeselect={false}
         value={scopeType}
@@ -199,15 +195,14 @@ export default function CommercialProfilePanel({
             return;
           setScopeType(scope as CommercialScope);
         }}
-      />
+      /> : null}
       {scopeType !== "ASSET" && scopeType !== "ACCESSORY" ? (
         <Alert color="orange">
           Estás configurando{" "}
           {scopeType === "FAMILY"
             ? "toda la familia"
             : "todos los equipos de esta referencia"}
-          . Una regla propia de un equipo tiene prioridad. Usa grupos de
-          familias si las unidades varían.
+          . Afecta a todos sus equipos sin configuración propia.
         </Alert>
       ) : null}
       {error ? (
@@ -231,15 +226,7 @@ export default function CommercialProfilePanel({
             >
               <Stack gap="xs">
                 <Text size="sm">
-                  Versión {value.inherited.version}, vigente desde{" "}
-                  {value.inherited.effectiveFrom}.{" "}
-                  {value.inherited.modes
-                    .map((mode) => `${mode.name} (${unitLabels[mode.unit]})`)
-                    .join(" · ")}
-                </Text>
-                <Text size="sm">
-                  Guardar aquí crea una configuración propia y reemplaza
-                  completa la heredada, no la suma.
+                  Guardar aquí reemplaza las modalidades heredadas para este elemento.
                 </Text>
                 <Button
                   type="button"
@@ -255,14 +242,13 @@ export default function CommercialProfilePanel({
                     });
                   }}
                 >
-                  Usar heredadas como punto de partida
+                  Copiar heredadas
                 </Button>
               </Stack>
             </Alert>
           ) : !value.version ? (
             <Text size="sm" c="dimmed">
-              No hay un perfil propio guardado. Sin condiciones suficientes, el
-              anexo pedirá revisión; no asumirá que el alquiler es gratuito.
+              Sin tarifa configurada: requiere revisión en el anexo.
             </Text>
           ) : null}
           <CommercialProfileEditor

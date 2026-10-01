@@ -51,7 +51,7 @@ function AccessoryConfigurationPanel({ accessoryId, ...navigation }: { accessory
     <Text fw={700}>{item.name}</Text>
     {item.kind === "INDIVIDUAL" && item.purpose !== "COMPONENT"
       ? <ConfigurationTabs accessoryId={accessoryId} {...navigation} />
-      : <><Alert color="blue">Este elemento se controla por cantidad o es un componente. Puede tener cobro, pero no un conjunto de piezas hijas.</Alert>
+      : <>
         <CommercialProfilePanel accessoryId={accessoryId} onDirtyChange={navigation.onDirtyChange} onBusyChange={navigation.onBusyChange} /></>}
   </Stack>;
 }
@@ -169,7 +169,7 @@ function PhysicalConfigurationPanel({
       setValue(persisted);
       onDirtyChange?.(false);
       setSuccess(
-        "Configuración guardada. No se registraron entregas ni consumos.",
+        "Configuración guardada.",
       );
       return persisted;
     } catch (e) {
@@ -192,9 +192,6 @@ function PhysicalConfigurationPanel({
   };
   return (
     <Stack>
-      <Text fw={700} size="xl">
-        Configurar componentes y accesorios
-      </Text>
       {error ? (
         <Alert color="red" role="alert">
           {error}
@@ -209,7 +206,7 @@ function PhysicalConfigurationPanel({
         <Loader aria-label="Cargando configuración" />
       ) : value ? (
         <>
-          <Text>{value.parent?.name}</Text>
+          <Text fw={700} size="xl">{value.parent?.name ?? "Configurar conjunto"}</Text>
           <ConfigurationEditor
             value={value}
             onChange={(v) => {
@@ -224,8 +221,7 @@ function PhysicalConfigurationPanel({
           />
           {!value.parent?.warehouseId ? (
             <Text size="sm">
-              El elemento no está en una bodega. Puedes vincular elementos
-              existentes; crea existencias nuevas desde Inventario.
+              Fuera de bodega: solo puedes vincular existencias ya registradas.
             </Text>
           ) : null}
           <Group>

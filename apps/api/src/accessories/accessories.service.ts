@@ -8,6 +8,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma, EquipmentPartRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { accessoryDocumentOptions } from './accessory-document-options';
+import { assetDisplayName } from './asset-display';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
 import {
   AccessoryDetailsDto,
@@ -479,9 +480,9 @@ export class AccessoriesService {
             : value.scope === 'SUBFAMILIES'
               ? value.subfamilies.map((s) => s.subfamily.name)
               : value.scope === 'ACCESSORIES'
-                ? value.compatibleParents.map(p => `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}`)
+                ? value.compatibleParents.map(p => p.parentAccessory.name)
               : value.assets.map(
-                  (a) => `${a.asset.sku.name} · ${a.asset.publicCode}`,
+                  (a) => assetDisplayName(a.asset),
                 ),
       });
       await tx.accessoryRevision.create({
@@ -529,7 +530,7 @@ export class AccessoriesService {
       ...(location.transitDocumentId
         ? { transitDocumentId: location.transitDocumentId }
         : {}),
-      label: `${asset.sku.name} · ${asset.publicCode}${location.transitDocumentId ? ' · En tránsito a proveedor' : ''}${location.customerWorksiteId ? ` · Obra ${(await tx.customerWorksite.findUniqueOrThrow({ where: { id: location.customerWorksiteId }, include: { worksite: true } })).worksite.name}` : ''}`,
+      label: `${assetDisplayName(asset)}${location.transitDocumentId ? ' · En tránsito a proveedor' : ''}${location.customerWorksiteId ? ` · Obra ${(await tx.customerWorksite.findUniqueOrThrow({ where: { id: location.customerWorksiteId }, include: { worksite: true } })).worksite.name}` : ''}`,
     };
   }
 

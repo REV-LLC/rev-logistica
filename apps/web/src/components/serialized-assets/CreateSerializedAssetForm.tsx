@@ -942,7 +942,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       <Stack gap="lg">
         {!onCreated ? <PageHeaderCard
           title="Registrar equipo unico"
-          description="Crea un equipo desde cero o usa una referencia existente. Configura sus componentes, accesorios y ubicación inicial."
+          description="Desde cero o usando una referencia existente."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -1012,7 +1012,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
         {onCreated && familyId ? (
           <Alert color="blue" title="Compatibilidad del accesorio">
-            Registra esta unidad sin duplicar equipos existentes. Puedes vincularla desde «Componentes y accesorios» en la card del equipo principal; la remisión conserva el conjunto que realmente se entrega.
+            Después de crearlo, vincúlalo al conjunto del equipo principal.
           </Alert>
         ) : null}
 
@@ -1031,12 +1031,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         {createdAssetId ? (
           <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
             <Stack gap="lg">
-              <Alert color="blue" title="Continúa con las relaciones y el cobro del conjunto">
-                El equipo y sus piezas ya están guardados. Desde «Continuar configurando conjunto» puedes entrar a cada implemento y agregarle sus propias piezas o consumibles, sin duplicar inventario.
-                También puedes definir aquí las modalidades comerciales.
-                Si este paso falla, reintenta aquí: no necesitas crear el equipo otra vez.
-                También puedes completarlo más tarde desde su card.
-              </Alert>
+              <Text size="sm" c="dimmed">Equipo y piezas guardados. Puedes completar sus cobros y conjuntos ahora o desde su ficha.</Text>
               <CommercialProfilePanel key={createdAssetId} assetId={createdAssetId} onDirtyChange={setCommercialDirty} />
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 <Button variant="default" onClick={() => {
@@ -1705,7 +1700,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     </Paper>
                   </SimpleGrid>
                   <Text size="sm">Componentes: {configuration.entries.filter(row => row.role === 'COMPONENT').length} · Accesorios: {configuration.entries.filter(row => row.role === 'ACCESSORY').length}.</Text>
-                  <Text size="sm" c="dimmed">Los nuevos se registran junto al equipo. Los existentes conservan identidad, propietario, ubicación e historial.</Text>
+                  <Text size="xs" c="dimmed">Crear ingresa existencias; vincular no las duplica.</Text>
                   <Button type="button" variant="subtle" onClick={() => setAssetWorkflowStep('configuration')}>Editar configuración</Button>
                 </Stack>
               </Paper>

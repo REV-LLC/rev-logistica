@@ -80,16 +80,16 @@ export function configuredSelectorOptions(
     if (selector)
       options.set(
         selectorKey(selector),
-        `${entryName(entry)}${entry.familyId ? " · familia (unidad elegida en la remisión)" : ""}`,
+        `${entryName(entry)}${entry.familyId ? " · familia" : ""}`,
       );
   }
   // Existing references must remain editable even if they are no longer in today's physical configuration.
   for (const group of groups)
-    for (const selector of group.selectors) {
+    for (const [index, selector] of group.selectors.entries()) {
       if (!options.has(selectorKey(selector)))
         options.set(
           selectorKey(selector),
-          `${group.name} · referencia guardada ${selector.id}`,
+          `${group.name || 'Grupo'} · elemento fuera del conjunto (${index + 1})`,
         );
     }
   return [...options].map(([value, label]) => ({ value, label }));

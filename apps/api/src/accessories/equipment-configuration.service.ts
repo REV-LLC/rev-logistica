@@ -19,6 +19,7 @@ import {
 import { isCompatible } from './accessory-rules';
 import { motorInclude, motorSnapshot } from './equipment-motor';
 import { documentReturnOrigins } from '../documents/document-return-origins';
+import { assetDisplayName } from './asset-display';
 
 export type ConfigurationOwner =
   | { assetId: string; accessoryId?: never }
@@ -38,6 +39,8 @@ const include = {
           id: true,
           publicCode: true,
           description: true,
+          internalNumber: true,
+          warehouseOwner: { select: { name: true } },
           kind: true,
           sku: { select: { name: true } },
         },
@@ -111,7 +114,8 @@ export class EquipmentConfigurationService {
             }
           : {}),
       },
-      select: { id: true, publicCode: true, sku: { select: { name: true } } },
+      select: { id: true, publicCode: true, description: true, internalNumber: true,
+        warehouseOwner: { select: { name: true } }, sku: { select: { name: true } } },
       orderBy: { id: 'asc' },
       skip: page * 50,
       take: 51,
@@ -128,6 +132,7 @@ export class EquipmentConfigurationService {
         where: { id: owner.assetId, active: true, deletedAt: null },
         include: {
           sku: true,
+          warehouseOwner: { select: { name: true } },
           ...motorInclude,
         },
       });
@@ -135,7 +140,7 @@ export class EquipmentConfigurationService {
       return {
         asset,
         accessory: null,
-        name: `${asset.sku.name} · ${asset.publicCode}`,
+        name: assetDisplayName(asset),
         familyId: asset.sku.assetFamilyId,
         ownerWarehouseId: asset.warehouseOwnerId,
         warehouseId: asset.warehouseCurrentId,
@@ -163,7 +168,7 @@ export class EquipmentConfigurationService {
     return {
       asset: null,
       accessory,
-      name: `${accessory.name} · ${accessory.internalCode}`,
+      name: accessory.name,
       familyId: accessory.familyId,
       ownerWarehouseId: accessory.ownerWarehouseId,
       warehouseId: accessory.balances[0]?.warehouseId ?? null,

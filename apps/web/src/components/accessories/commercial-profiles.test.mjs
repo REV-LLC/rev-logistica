@@ -201,7 +201,7 @@ test("editor renders Spanish generic configuration, units, inclusion and effecti
   );
   for (const label of [
     "Grupos de implementos",
-    "Modalidades de cobro",
+    "Tarifas y mínimos",
     "Vigente desde",
     "Cuándo aplica",
     "La tarifa $0",
@@ -210,4 +210,19 @@ test("editor renders Spanish generic configuration, units, inclusion and effecti
   ])
     assert.ok(markup.includes(label), label);
   assert.equal(markup.includes("Cortadora"), false);
+  assert.match(markup, /Ayuda de cobros/);
+  assert.doesNotMatch(markup, /Composición y cobro son decisiones distintas/);
+  assert.doesNotMatch(markup, /referencia guardada family-1/);
+});
+
+test('selectors show unit names or an explicit outside-set status while preserving stored identities', () => {
+  const options = configuredSelectorOptions([{ assetId: 'asset-1', asset: { publicCode: 'LONG-IMPORT-CODE',
+    description: 'Compresor Atlas', internalNumber: 1, sku: { name: 'Compresor' } } }], [{
+    name: 'Martillos', selectors: [{ kind: 'ASSET', id: 'old-unit-uuid' }, { kind: 'ASSET', id: 'other-unit-uuid' }],
+  }]);
+  assert.deepEqual(options, [
+    { value: 'ASSET:asset-1', label: 'Compresor Atlas #1' },
+    { value: 'ASSET:old-unit-uuid', label: 'Martillos · elemento fuera del conjunto (1)' },
+    { value: 'ASSET:other-unit-uuid', label: 'Martillos · elemento fuera del conjunto (2)' },
+  ]);
 });

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  Alert,
   Button,
   Card,
   Group,
@@ -42,11 +41,6 @@ export default function CommercialProfileEditor({
   }));
   return (
     <Stack gap="lg">
-      <Alert color="blue" title="Composición y cobro son decisiones distintas">
-        Aquí defines cómo se cobra el conjunto. No cambias existencias, entregas
-        ni las tarifas globales de sus piezas. Las condiciones se evalúan con lo
-        que se entregó realmente, no solo con lo configurado en esta ficha.
-      </Alert>
       <TextInput
         label="Vigente desde"
         type="date"
@@ -56,14 +50,13 @@ export default function CommercialProfileEditor({
         onChange={(event) =>
           onChange({ ...value, effectiveFrom: event.currentTarget.value })
         }
-        description="Los anexos conservan la versión aplicada; esta edición no reemplaza sus condiciones históricas automáticamente."
       />
-      <Stack gap="sm">
+      {options.length || value.groups.length ? <Stack gap="sm">
         <Group justify="space-between">
           <div>
-            <Text fw={700}>1. Grupos de implementos</Text>
+            <Text fw={700}>Grupos de implementos</Text>
             <Text size="sm" c="dimmed">
-              Agrupa los elementos que comparten una condición o forma de cobro.
+              Elementos que se cobran de la misma forma.
             </Text>
           </div>
           <Button
@@ -85,9 +78,7 @@ export default function CommercialProfileEditor({
         </Group>
         {!options.length ? (
           <Text size="sm" c="dimmed">
-            Puedes crear una modalidad simple sin implementos. Para condiciones
-            con/sin elementos, guarda primero los componentes y accesorios del
-            equipo.
+            Para cobrar con/sin implementos, guarda primero las piezas del conjunto.
           </Text>
         ) : null}
         {value.groups.map((group) => (
@@ -133,7 +124,6 @@ export default function CommercialProfileEditor({
                       ),
                     })
                   }
-                  description="Una familia abarca las unidades elegidas en la remisión. No selecciona una unidad fija."
                 />
               </SimpleGrid>
               <Button
@@ -163,19 +153,17 @@ export default function CommercialProfileEditor({
                   mode.parts.some((row) => row.groupId === group.id),
               ) ? (
                 <Text size="xs" c="dimmed">
-                  Para quitarlo, desvincúlalo primero de las condiciones y
-                  cobros de las modalidades.
+                  Este grupo está en uso en una modalidad.
                 </Text>
               ) : null}
             </Stack>
           </Card>
         ))}
-      </Stack>
+      </Stack> : null}
       <Stack gap="sm">
-        <Text fw={700}>2. Modalidades de cobro</Text>
+        <Text fw={700}>Tarifas y mínimos</Text>
         <Text size="sm" c="dimmed">
-          Una modalidad por situación. Si coinciden varias, el anexo pedirá
-          revisión; no sumará ambas.
+          Define cuándo aplica cada cobro.
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 3 }} style={{ alignItems: "end" }}>
           <Button
@@ -269,11 +257,18 @@ export default function CommercialProfileEditor({
         ))}
         {!value.modes.length ? (
           <Text size="sm" c="dimmed">
-            No hay modalidades propias. Agrega una para definir tarifa, unidad y
-            mínimo sin depender del nombre del equipo.
+            Agrega una modalidad para definir tarifa y mínimo.
           </Text>
         ) : null}
       </Stack>
+      <details>
+        <Text component="summary" size="sm" c="dimmed" style={{ cursor: 'pointer' }}>Ayuda de cobros</Text>
+        <Stack gap="xs" mt="sm">
+          <Text size="sm">Las condiciones usan lo realmente entregado. Configurar cobros no mueve inventario ni modifica anexos históricos.</Text>
+          <Text size="sm">Una tarifa vacía queda pendiente; escribe 0 si no hay cobro. El mínimo de horas aplica por día trabajado y el de días o metros por alquiler completo.</Text>
+          <Text size="sm">Los grupos pueden incluir piezas concretas o familias cuyas unidades se eligen en la remisión.</Text>
+        </Stack>
+      </details>
     </Stack>
   );
 }

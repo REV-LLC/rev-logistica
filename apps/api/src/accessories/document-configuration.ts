@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { assertAcyclicConfiguration } from './equipment-configuration-rules';
 import { CompositionFields, validateDocumentComposition } from '../documents/document-composition';
 import { documentReturnOrigins } from '../documents/document-return-origins';
+import { assetDisplayName } from './asset-display';
 
 type Line = CompositionFields & { assetId?: string | null; skuId?: string | null; accessoryId?: string | null;
   componentParentAssetId?: string | null; quantity?: unknown };
@@ -26,7 +27,7 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
   const accessoryParentIds = composition ? [...new Set([...composition.parents.values()].flatMap(parent => parent.accessoryId ? [parent.accessoryId] : []))] : [];
   const [configs, assets, skus] = await Promise.all([
     tx.equipmentConfiguration.findMany({ where: accessoryParentIds.length ? { OR: [{ assetId: { in: loadedAssetIds } }, { accessoryId: { in: accessoryParentIds } }] } : { assetId: { in: loadedAssetIds } }, include: { entries: {
-      include: { asset: { select: { publicCode: true } }, accessory: { select: { name: true } }, family: { select: { name: true } } },
+      include: { asset: { select: { description: true, internalNumber: true, sku: { select: { name: true } } } }, accessory: { select: { name: true } }, family: { select: { name: true } } },
     } } }),
     tx.asset.findMany({ where: { id: { in: loadedAssetIds } }, select: { id: true, kind: true, motorConfiguration: true, assignedMotorId: true,
       publicCode: true, internalNumber: true, sku: { select: { assetFamilyId: true, name: true } } } }),
@@ -72,7 +73,7 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
       const selected = composition.items.filter(item => item.parentCompositionNodeId === parent.compositionNodeId);
       for (const entry of entries) {
         const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
-        const label = entry.family?.name ?? entry.accessory?.name ?? entry.asset?.publicCode ?? 'la pieza';
+        const label = entry.family?.name ?? entry.accessory?.name ?? (entry.asset ? assetDisplayName(entry.asset) : 'la pieza');
         if (entry.required && quantity < entry.quantity) throw new BadRequestException(`El conjunto requiere ${entry.quantity} de ${label}. Revisa su configuración.`);
         if (entry.maximumQuantity != null && quantity > entry.maximumQuantity) throw new BadRequestException(`El conjunto permite como máximo ${entry.maximumQuantity} de ${label}.`);
       }
@@ -109,7 +110,7 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
     const selected = document.items.filter(item => item.componentParentAssetId === parentId);
     for (const entry of entries) {
       const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + (item.assetId ? 1 : Number(item.quantity ?? 1)), 0);
-      const label = entry.family?.name ?? entry.accessory?.name ?? entry.asset?.publicCode ?? 'la pieza configurada';
+      const label = entry.family?.name ?? entry.accessory?.name ?? (entry.asset ? assetDisplayName(entry.asset) : 'la pieza configurada');
       const parent = byAsset.get(parentId!);
       const parentLabel = parent?.sku.name?.trim() ? `${parent.sku.name}${parent.internalNumber ? ` #${parent.internalNumber}` : ''}` : 'El equipo seleccionado';
       if (entry.required && quantity < entry.quantity) throw new BadRequestException({

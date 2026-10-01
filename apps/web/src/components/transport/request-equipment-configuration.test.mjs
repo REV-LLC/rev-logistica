@@ -15,7 +15,7 @@ test('devolución reconoce piezas seleccionadas por pestañas bajo su padre docu
   const parent = { ...root, sourceDocumentItemId: 'shipment-root' };
   const { loadDocumentConfiguration } = moduleWithApi(async url => {
     if (url.startsWith('/accessories/document-options?')) return { items: [{
-      accessoryId: 'tip-ref', sourceBalanceId: 'balance', name: 'Piezas', kind: 'RETURNABLE', quantity: 2,
+      accessoryId: 'tip-ref', sourceBalanceId: 'balance', name: 'Piezas', code: 'ACC-LONG-CODE', kind: 'RETURNABLE', quantity: 2,
       sourceDocumentItemId: 'shipment-child', parentSourceDocumentItemId: 'shipment-root',
     }], hasMore: false };
     if (url.startsWith('/inventory/on-site/')) return { serial: [], bulk: [] };
@@ -25,6 +25,7 @@ test('devolución reconoce piezas seleccionadas por pestañas bajo su padre docu
   });
   const [option] = await loadDocumentConfiguration(parent, { ...context, docType: 'RETURN' });
   const fromTabs = { ...option.item, selectionId: 'selected-child' };
+  assert.equal(option.item.name, 'Piezas');
   assert.equal(option.item.parentCompositionNodeId, undefined);
   assert.equal(option.item.parentSourceDocumentItemId, 'shipment-root');
   assert.equal(sameDocumentPart(fromTabs, option.item), true);

@@ -54,7 +54,7 @@ export function addReturnAccessories(
       sourceDocumentItemId: option.sourceDocumentItemId,
       parentSourceDocumentItemId: option.parentSourceDocumentItemId,
       parentLegacyOriginId: option.parentLegacyOriginId,
-      name: `${option.name}${option.code ? ` · ${option.code}` : ""} · Accesorio de ${option.parentName}`,
+      name: `${option.name} · ${option.parentName}`,
       quantity: 1,
       availableQuantity: option.quantity,
       ownerWarehouseId: option.ownerWarehouseId,

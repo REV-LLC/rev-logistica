@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { loadTransportModule } from "../transport/test-support.cjs";
 
 const { MantineProvider } = createRequire(import.meta.url)("@mantine/core");
-const { configurationPayload, configurationError, configurationPartAction, configurationPartLocation } = loadTransportModule(
+const { configurationPayload, configurationError, configurationPartAction, configurationPartLocation, entryName } = loadTransportModule(
   "../equipment-configuration/types.ts",
 );
 const Editor = loadTransportModule(
@@ -29,15 +29,15 @@ const row = {
 
 test('nested configuration uses persistent identities and allows children only on individual implements', () => {
   const individual = { ...row, role: 'ACCESSORY', accessoryId: 'any-y', accessory: { ...row.accessory, name: 'Implemento Y' } };
-  assert.equal(configurationPartAction(individual), 'Configurar conjunto y cobro');
+  assert.equal(configurationPartAction(individual), 'Conjunto y cobro');
   assert.deepEqual(configurationPartLocation(individual), { accessoryId: 'any-y', label: 'Implemento Y' });
-  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'CONSUMABLE' } }), 'Configurar cobro');
-  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'RETURNABLE' } }), 'Configurar cobro');
-  assert.equal(configurationPartAction(row), 'Configurar cobro');
+  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'CONSUMABLE' } }), 'Cobro');
+  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'RETURNABLE' } }), 'Cobro');
+  assert.equal(configurationPartAction(row), 'Cobro');
   assert.equal(configurationPartAction({ id: 'selector', familyId: 'any-family' }), null);
   assert.equal(configurationPartLocation({ id: 'new', newPart: { name: 'Implemento Z' } }), null);
-  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'INDIVIDUAL' } }), 'Configurar conjunto y cobro');
-  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'CONSUMABLE' } }), 'Configurar cobro');
+  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'INDIVIDUAL' } }), 'Conjunto y cobro');
+  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'CONSUMABLE' } }), 'Cobro');
   assert.deepEqual(configurationPartLocation({ assetId: 'any-x', asset: { sku: { name: 'Equipo X' } } }), { assetId: 'any-x', label: 'Equipo X' });
 });
 
@@ -110,4 +110,22 @@ test("renders separate classifications, independent flags and configuration note
     "Notas de configuración",
   ])
     assert.ok(markup.includes(text), text);
+  assert.match(markup, /<details>/);
+  assert.doesNotMatch(markup, /<details[^>]*\bopen/);
+  assert.doesNotMatch(markup, /Cada relación vincula/);
+});
+
+test('part titles and breadcrumbs distinguish units and owners without exposing import codes', () => {
+  const asset = { id: 'asset-id', publicCode: 'MINICARGADOR-ESTANDAR-5353-0003',
+    internalNumber: 3, description: 'New Holland', sku: { name: 'MINICARGADOR' }, warehouseOwner: { name: 'Motavita' } };
+  const entry = { ...row, accessoryId: undefined, accessory: undefined, assetId: asset.id, asset };
+  assert.equal(entryName(entry), 'New Holland #3 · Motavita');
+  assert.deepEqual(configurationPartLocation(entry), { assetId: 'asset-id', label: entryName(entry) });
+  assert.equal(entryName({ ...entry, asset: { ...asset, internalNumber: 2 } }), 'New Holland #2 · Motavita');
+  const markup = renderToStaticMarkup(React.createElement(MantineProvider, {}, React.createElement(Editor, {
+    value: { version: 1, entries: [entry, { ...row, id: 'bucket', accessory: { ...row.accessory, internalCode: 'ACC-CODE-LARGO' } }] }, onChange() {},
+  })));
+  assert.match(markup, /New Holland #3/);
+  assert.doesNotMatch(markup, /MINICARGADOR-ESTANDAR-5353-0003|ACC-CODE-LARGO/);
+  assert.equal(configurationPayload({ version: 1, entries: [entry] }).entries[0].assetId, asset.id);
 });

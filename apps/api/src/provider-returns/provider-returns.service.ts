@@ -25,7 +25,7 @@ export class ProviderReturnsService {
       orderBy: { createdAt: 'desc' },
       include: {
         sku: { select: { id: true, name: true, assetFamily: { select: { controlType: true } } } },
-        asset: { select: { id: true, publicCode: true, serialOrEngine: true, description: true, sku: { select: { name: true } } } },
+        asset: { select: { id: true, publicCode: true, serialOrEngine: true, description: true, internalNumber: true, sku: { select: { name: true } } } },
         ownerWarehouse: { select: { id: true, name: true, type: true } },
         warehouse: { select: { id: true, name: true, type: true } },
         document: { select: {
@@ -70,6 +70,7 @@ export class ProviderReturnsService {
         publicCode: row.asset?.publicCode ?? null,
         serialOrEngine: row.asset?.serialOrEngine ?? null,
         description: row.asset?.description ?? null,
+        internalNumber: row.asset?.internalNumber ?? null,
         pendingQuantity,
       }];
     });

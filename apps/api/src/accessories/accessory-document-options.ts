@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
 import { documentReturnOrigins } from '../documents/document-return-origins';
+import { assetDisplayName } from './asset-display';
 
 export async function accessoryDocumentOptions(
   db: Prisma.TransactionClient,
@@ -134,7 +135,7 @@ export async function accessoryDocumentOptions(
       ownerName: row.accessory.ownerWarehouse.name,
       parentAssetId: query.type === 'RETURN' ? row.assetId : parent!.id,
       parentAccessoryId: query.parentAccessoryId ?? null,
-      parentName: accessoryParent ? `${accessoryParent.name}${accessoryParent.internalCode ? ` · ${accessoryParent.internalCode}` : ''}` : `${(row.asset ?? parent)?.sku.name} · ${(row.asset ?? parent)?.publicCode}`,
+      parentName: accessoryParent ? accessoryParent.name : assetDisplayName(row.asset ?? parent),
       sourceLabel:
         row.warehouse?.name ??
         (row.customerWorksiteId
