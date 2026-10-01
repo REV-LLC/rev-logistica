@@ -20,6 +20,7 @@ import {
   type EquipmentConfiguration,
   type PartRole,
   entryName,
+  configurationPartAction,
   partRoleLabels,
 } from "./types";
 
@@ -29,6 +30,7 @@ type Props = {
   disabled?: boolean;
   canCreate?: boolean;
   accessoryParent?: boolean;
+  onConfigurePart?: (rowId: string) => void;
 };
 
 export default function ConfigurationEditor({
@@ -37,6 +39,7 @@ export default function ConfigurationEditor({
   disabled,
   canCreate = true,
   accessoryParent = false,
+  onConfigurePart,
 }: Props) {
   const [picker, setPicker] = useState<PartRole | null>(null);
   const update = (id: string, changes: Partial<ConfigurationEntry>) =>
@@ -70,11 +73,13 @@ export default function ConfigurationEditor({
   return (
     <Stack gap="lg">
       <Alert color="blue">
-        La configuración propone qué acompaña al equipo. No registra entregas,
+        Cada relación vincula este elemento con una pieza por su identidad, no por
+        el nombre de su familia. Puedes crear o vincular las piezas y después
+        configurar sus propios conjuntos. La configuración no registra entregas,
         consumos ni reservas. Los elementos nuevos sí crean la existencia
         inicial indicada, en la bodega y a nombre del propietario del equipo.
       </Alert>
-      <TextInput label="Notas de configuración" description="Por ejemplo: motor fijo eléctrico integrado; no requiere un motor separado."
+      <TextInput label="Notas de configuración" description="Describe las condiciones del conjunto. Estas notas no reemplazan los vínculos ni la compatibilidad."
         maxLength={1000} value={value.notes ?? ''} disabled={disabled}
         onChange={event => onChange({ ...value, notes: event.currentTarget.value })} />
       {(["COMPONENT", "ACCESSORY"] as const).map((role) => (
@@ -88,7 +93,7 @@ export default function ConfigurationEditor({
               </Text>
               <Text size="sm" c="dimmed">
                 {role === "COMPONENT"
-                  ? "Piezas de su configuración, como techo o motor."
+                  ? "Piezas propias de su configuración. Los motores intercambiables se asignan desde la ficha del equipo."
                   : "Implementos compatibles, retornables o consumibles; también pueden tener accesorios propios."}
               </Text>
             </div>
@@ -263,14 +268,20 @@ export default function ConfigurationEditor({
                         : ""}
                     </Text>
                   )}
-                  {row.assetId || row.accessoryId ? <Button
+                  {onConfigurePart && configurationPartAction(row) ? <Button
+                    type="button" variant="light" size="xs" disabled={disabled}
+                    onClick={() => onConfigurePart(row.id)}
+                  >{row.newPart ? `Guardar y ${configurationPartAction(row)!.toLowerCase()}` : configurationPartAction(row)}</Button>
+                    : row.assetId || row.accessoryId ? <Button
                     component="a"
                     href={`/inventory/equipment-configuration/${row.assetId ? `assets/${row.assetId}` : `accessories/${row.accessoryId}`}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="light"
                     size="xs"
-                  >Configurar este elemento (otra pestaña)</Button> : null}
+                  >{configurationPartAction(row)} (otra pestaña)</Button> : row.newPart ? <Text size="sm" c="dimmed">
+                    Después de crear el equipo podrás configurar el conjunto o cobro de esta pieza desde «Continuar configurando conjunto».
+                  </Text> : null}
                   <NumberInput
                     label="Cantidad habitual"
                     min={1}

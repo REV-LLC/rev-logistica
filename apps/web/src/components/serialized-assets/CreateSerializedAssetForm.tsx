@@ -1031,8 +1031,9 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         {createdAssetId ? (
           <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
             <Stack gap="lg">
-              <Alert color="blue" title="Último paso: cómo se cobra este conjunto">
-                El equipo y sus componentes ya están guardados. Ahora puedes definir las modalidades comerciales.
+              <Alert color="blue" title="Continúa con las relaciones y el cobro del conjunto">
+                El equipo y sus piezas ya están guardados. Desde «Continuar configurando conjunto» puedes entrar a cada implemento y agregarle sus propias piezas o consumibles, sin duplicar inventario.
+                También puedes definir aquí las modalidades comerciales.
                 Si este paso falla, reintenta aquí: no necesitas crear el equipo otra vez.
                 También puedes completarlo más tarde desde su card.
               </Alert>
@@ -1041,7 +1042,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                 <Button variant="default" onClick={() => {
                   if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Salir y configurarlas más tarde?')) return;
                   router.push(`/inventory/equipment-configuration/assets/${createdAssetId}`);
-                }}>Ver equipo y configuración</Button>
+                }}>Continuar configurando conjunto</Button>
                 <Button variant="subtle" onClick={() => {
                   if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Dejarlas para más tarde?')) return;
                   setCommercialDirty(false); setCreatedAssetId(null); setSuccess(null);
@@ -1466,7 +1467,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   </Group>
 
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToCommercialStep}>
+                    <Button type="button" disabled={!isTemplateStepActive} onClick={goToCommercialStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1565,7 +1566,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   </SimpleGrid>
 
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToAssetStep}>
+                    <Button type="button" disabled={!isCommercialStepActive} onClick={goToAssetStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1646,7 +1647,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     />
                   ) : null}
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToReviewStep}>
+                    <Button type="button" disabled={!isAssetStepActive} onClick={goToReviewStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1660,7 +1661,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   <ConfigurationEditor  value={configuration} onChange={setConfiguration} disabled={saving || assetWorkflowStep !== 'configuration'} />
                   <Group justify="space-between">
                     <Button type="button" variant="default" onClick={() => setAssetWorkflowStep('asset')}>Volver a datos del equipo</Button>
-                    <Button type="button" onClick={() => {
+                    <Button type="button" disabled={assetWorkflowStep !== 'configuration'} onClick={() => {
                       const issue = configurationError(configuration);
                       if (issue) { setValidationError(issue); return; }
                       setError(null); setAssetWorkflowStep('review');

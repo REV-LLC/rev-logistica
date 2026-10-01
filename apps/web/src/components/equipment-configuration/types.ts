@@ -1,4 +1,7 @@
 export type PartRole = "COMPONENT" | "ACCESSORY";
+export type ConfigurationLocation =
+  | { assetId: string; accessoryId?: never; label: string }
+  | { accessoryId: string; assetId?: never; label: string };
 export type ConfigurationEntry = {
   id: string;
   role: PartRole;
@@ -52,6 +55,19 @@ export const entryName = (entry: ConfigurationEntry) =>
   entry.asset?.sku.name ||
   entry.family?.name ||
   "Sin nombre";
+
+export function configurationPartLocation(entry: ConfigurationEntry): ConfigurationLocation | null {
+  if (entry.assetId) return { assetId: entry.assetId, label: entryName(entry) };
+  if (entry.accessoryId) return { accessoryId: entry.accessoryId, label: entryName(entry) };
+  return null; // New elements must be saved to obtain their persistent identity.
+}
+
+export function configurationPartAction(entry: ConfigurationEntry) {
+  if (entry.familyId) return null; // A family is a selector, not a physical parent.
+  const hasParts = !!entry.assetId || (entry.role === "ACCESSORY" &&
+    (entry.newPart?.kind ?? entry.accessory?.kind) === "INDIVIDUAL");
+  return hasParts ? "Configurar conjunto y cobro" : "Configurar cobro";
+}
 
 // Strip presentation and Prisma fields. The payload never includes stock movements.
 export function configurationPayload(config: EquipmentConfiguration) {

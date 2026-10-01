@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { loadTransportModule } from "../transport/test-support.cjs";
 
 const { MantineProvider } = createRequire(import.meta.url)("@mantine/core");
-const { configurationPayload, configurationError } = loadTransportModule(
+const { configurationPayload, configurationError, configurationPartAction, configurationPartLocation } = loadTransportModule(
   "../equipment-configuration/types.ts",
 );
 const Editor = loadTransportModule(
@@ -26,6 +26,20 @@ const row = {
     exclusiveAssetId: "roller",
   },
 };
+
+test('nested configuration uses persistent identities and allows children only on individual implements', () => {
+  const individual = { ...row, role: 'ACCESSORY', accessoryId: 'any-y', accessory: { ...row.accessory, name: 'Implemento Y' } };
+  assert.equal(configurationPartAction(individual), 'Configurar conjunto y cobro');
+  assert.deepEqual(configurationPartLocation(individual), { accessoryId: 'any-y', label: 'Implemento Y' });
+  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'CONSUMABLE' } }), 'Configurar cobro');
+  assert.equal(configurationPartAction({ ...individual, accessory: { ...individual.accessory, kind: 'RETURNABLE' } }), 'Configurar cobro');
+  assert.equal(configurationPartAction(row), 'Configurar cobro');
+  assert.equal(configurationPartAction({ id: 'selector', familyId: 'any-family' }), null);
+  assert.equal(configurationPartLocation({ id: 'new', newPart: { name: 'Implemento Z' } }), null);
+  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'INDIVIDUAL' } }), 'Configurar conjunto y cobro');
+  assert.equal(configurationPartAction({ id: 'new', role: 'ACCESSORY', newPart: { kind: 'CONSUMABLE' } }), 'Configurar cobro');
+  assert.deepEqual(configurationPartLocation({ assetId: 'any-x', asset: { sku: { name: 'Equipo X' } } }), { assetId: 'any-x', label: 'Equipo X' });
+});
 
 test("configuration payload strips display and server fields without creating stock or deliveries", () => {
   const payload = configurationPayload({

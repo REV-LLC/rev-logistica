@@ -4,7 +4,9 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../../..');
 const req = createRequire(path.join(root, 'package.json'));
 const freshSnapshot = process.env.QA_FRESH_SNAPSHOT === '1';
-const databaseName = process.env.QA_CUTOVER === '1'
+const databaseName = process.env.QA_CONFIGURATION === '1'
+  ? 'equipment_configuration_qa_20261001'
+  : process.env.QA_CUTOVER === '1'
   ? 'equipment_cutover_qa_20261001_1000'
   : process.env.QA_PAYROLL === '1'
   ? 'equipment_payroll_qa_20261001'

@@ -36,11 +36,13 @@ export default function CommercialProfilePanel({
   accessoryId,
   onSaved,
   onDirtyChange,
+  onBusyChange,
 }: {
   assetId?: string;
   accessoryId?: string;
   onSaved?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const ownScope = accessoryId ? "ACCESSORY" : "ASSET";
   const [scopeType, setScopeType] = useState<CommercialScope>(ownScope);
@@ -133,6 +135,7 @@ export default function CommercialProfilePanel({
     }
     inFlight.current = true;
     setSaving(true);
+    onBusyChange?.(true);
     setError("");
     setSuccess("");
     try {
@@ -155,6 +158,7 @@ export default function CommercialProfilePanel({
     } finally {
       inFlight.current = false;
       setSaving(false);
+      onBusyChange?.(false);
     }
   };
 
