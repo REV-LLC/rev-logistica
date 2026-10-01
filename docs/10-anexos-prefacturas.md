@@ -238,51 +238,15 @@ ese importe. No modificar los reportes originales para representar el mínimo.
   pendiente, no en cero. El salario ordinario ya cubierto no debe cobrarse otra
   vez como un extra. Revisar pago de trabajo en descanso y compensatorios.
 
-## Base salarial implementada en esta etapa
+## Salarios fuera del alcance de esta publicación
 
-Se agrega EmployeeSalary como historial de salarios mensuales con fecha de
-vigencia, revisión, motivo y autor. La migración inicializa a los empleados
-existentes con 1.750.905 COP desde el 16/09/2026. Nuevos empleados creados durante
-2026 reciben el mínimo desde su fecha de creación en America/Bogota. No se
-infieren salarios mínimos de años todavía no configurados.
-
-La pantalla Empleados → Nómina base permite consultar y ajustar salarios. API
-separada y restringida a ADMIN/OFFICE: no expone salarios en el listado general
-que consultan conductores y tablets. Las modificaciones se serializan por
-empleado y rechazan revisiones desactualizadas. Una corrección de la misma
-fecha genera otra revisión; los salarios anteriores se conservan.
-
-Es una configuración salarial, no una liquidación integral de nómina:
-reportes laborales, prestaciones, deducciones, pagos y transferencia de extras
-al anexo aún están pendientes. No se ha aplicado la migración a producción.
-No se presume pago automático del auxilio de transporte ni se suma al salario
-para calcular recargos. Referencia para jornada general completa del sector
-privado; otros tipos de contrato/jornada requieren su configuración.
-
-### Referencias legales verificadas (Colombia, septiembre de 2026)
-
-| Concepto | Referencia |
-| --- | --- |
-| Salario mínimo mensual 2026 | 1.750.905 COP |
-| Auxilio de transporte de referencia, sujeto a condiciones | 249.095 COP |
-| Jornada máxima general desde 15/07/2026 | 42 horas semanales; divisor mensual 210 |
-| Hora nocturna ordinaria | recargo 35%; franja 19:00–06:00 |
-| Hora extra diurna | recargo 25% |
-| Hora extra nocturna | recargo 75%; no sumar otro 35% a la misma hora |
-| Descanso obligatorio o festivo desde 01/07/2026 | recargo 90% |
-
-Domingo (cuando es descanso obligatorio) y festivo tienen la misma tasa. Si
-coinciden, no se duplica ese recargo. Diferenciar el valor total de una hora,
-el recargo incremental y conceptos ya cubiertos por el salario mensual.
-La clasificación exige el horario del empleado y trabajo real; seis horas de
-alquiler mínimas no definen jornada ordinaria ni extras de nómina.
-
-Fuentes oficiales:
-- [Decreto 159 de 2026, salario mínimo transitorio](https://cancilleria.gov.co/normograma/compilacion/docs/decreto_0159_2026.htm).
-- [Decreto 1470 de 2025, auxilio de transporte](https://cancilleria.gov.co/normograma/compilacion/docs/decreto_1470_2025.htm).
-- [Código Sustantivo del Trabajo, artículos 160, 168 y 179](https://cancilleria.gov.co/normograma/compilacion/docs/codigo_sustantivo_trabajo.htm).
-- [Circular 101 de 2025 MinTrabajo, jornada y valor hora](https://cancilleria.gov.co/normograma/compilacion/docs/circular_mintra_0101_2025.htm).
-- [Ley 2466 de 2025, vigencias de reforma laboral](https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=260676).
+El 1 de octubre de 2026 el usuario solicitó retirar el módulo salarial que había
+entrado con la integración de anexos. Se eliminaron su migración, modelo,
+endpoints, pantalla y las dependencias de creación/eliminación de empleados.
+Esta entrega no configura salarios ni inicializa importes para empleados.
+El validador de fechas de anexos permanece como utilidad genérica independiente.
+Los préstamos y actividades existentes no se modifican. Cualquier costo laboral
+futuro necesita una definición y autorización propias; no se deduce del alquiler.
 
 ## Secuencia de implementación
 

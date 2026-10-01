@@ -4,7 +4,9 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../../..');
 const req = createRequire(path.join(root, 'package.json'));
 const freshSnapshot = process.env.QA_FRESH_SNAPSHOT === '1';
-const databaseName = freshSnapshot
+const databaseName = process.env.QA_NO_PAYROLL === '1'
+  ? 'equipment_commercial_no_payroll_20261001'
+  : freshSnapshot
   ? 'equipment_commercial_live_20260930'
   : 'equipment_commercial_qa_20260930';
 Object.assign(process.env, {

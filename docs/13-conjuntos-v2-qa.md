@@ -1,4 +1,4 @@
-# Conjuntos y cobro: control local del 30 de septiembre de 2026
+# Conjuntos y cobro: control local del 30 de septiembre y 1 de octubre de 2026
 
 ## Alcance
 
@@ -11,9 +11,9 @@ Copia consistente de la base vinculada a la API de Railway **producción**, toma
 
 - Dump privado local: `/private/tmp/rev-commercial-live-20260930-7uvLla/production.dump` (3.674.571 bytes).
 - SHA256: `61e3cdea4f0293e55da97363758e0212e8faa7af26c4eda5f8e9a9dfd3315386`.
-- Restauración: `equipment_commercial_live_20260930`, PostgreSQL local 54414. Base anterior preservada.
+- Restauración inicial: `equipment_commercial_live_20260930`, PostgreSQL local 54414. El 1 de octubre se restauró otra copia limpia del mismo dump: `equipment_commercial_no_payroll_20261001`, ahora activa en QA. Ambas bases anteriores se conservaron, sin eliminar sus ensayos.
 - Referencia de código de producción integrada: `704e060`, antes de construir QA.
-- 141 migraciones originales → 147 locales. Comparación de todas las columnas originales antes/después de migrar: mismos hashes y cantidades.
+- 141 migraciones originales → **146 locales** en la copia activa. Las cinco pendientes corresponden a anexos, perfiles comerciales, composición documental y empalmes de orígenes antiguos. La primera restauración había aplicado 147; la migración salarial se retiró antes de construir esta segunda copia. Comparación de todas las columnas originales antes/después de migrar y después de repetir QA: mismos hashes y cantidades.
 - Después de los ensayos se restauró una segunda base de referencia y se compararon los IDs originales: **124 assets, 221 SKU, 2.250 movimientos, 436 documentos, 1.210 líneas documentales y los registros originales de accesorios, configuraciones y obras permanecen idénticos**. Las filas ficticias nuevas no se cuentan como historia original.
 
 - Creación/inventario conservan una configuración reutilizable por identidad, nunca por nombre de familia.
@@ -27,18 +27,18 @@ Copia consistente de la base vinculada a la API de Railway **producción**, toma
 
 ## Pruebas realizadas
 
-- API integrada: **1.039 pruebas activas aprobadas**; 51 omitidas por la suite existente.
+- API integrada después de retirar salarios: **1.044 pruebas activas aprobadas**; 51 omitidas por la suite existente.
 - Web integrada: **165 pruebas aprobadas**, sin omisiones; comprobación de tipos correcta.
 - Compilación API y Next.js de QA correctas.
 - PostgreSQL local aislado: `qa-commercial-profiles.cjs` y `qa-commercial-document-flow.cjs`, transacciones con rollback. Tres niveles, tarifa congelada tras editar catálogo, revisión concurrente obsoleta, entrega adicional, devolución parcial 4→2 y rechazo de devolución excesiva.
 - Repetición con `QA_DIRECT=1`: entrega adicional y devolución por `createDirectDocument`; devolución de accesorio de proveedor a tránsito. Detectó y permitió corregir el doble conteo del documento confirmado dentro del saldo previo.
-- Interfaz Chrome/Office contra el snapshot actual: creación desde cero de familia y equipo genéricos, motor intercambiable, accesorio individual predeterminado y modalidades configurables DAY/METER. Guardado y reapertura conservan la configuración.
+- Interfaz Chrome/Office en la primera restauración del snapshot: creación desde cero de familia y equipo genéricos, motor intercambiable, accesorio individual predeterminado y modalidades configurables DAY/METER. Guardado y reapertura conservan la configuración. Estos ejemplos de UI se conservan en la base anterior, no en la copia activa restaurada el 1 de octubre.
 - Creación/asignación de motor como asset desde su ficha, compatibilidad con el equipo y selector de avería separado para máquina/motor. Aprobar sin motor asignado fue rechazado sin salida física. Después de asignarlo e incorporarlo al borrador, la remisión de tres líneas se confirmó.
 - Devolución por UI: pestañas Equipos y materiales / Accesorios; selección del conjunto, quitar/reincluir desde la tuerca, autosave, reapertura y firma. `DV-APP-000024` devuelve equipo, motor y accesorio, conserva sus tres orígenes documentales y deja el motor asignado. Todos regresan a bodega; saldo del accesorio en obra 0, bodega 1.
 - Selector de devolución a 390×844: ancho de documento 390, sin desbordamiento horizontal, botón Agregar accesible.
 - Regresiones específicas: claves de origen distintas para devoluciones del mismo saldo, cupos físicos y documentales, jerarquía estable al reabrir, eliminación de descendientes, preservación de filas a 0 en anexo.
 - `qa-legacy-equipment-origins.cjs`: origen `CUTOVER` sin líneas documentales → inspección individual → empalme idempotente → entrega posterior → anexo DAY/METER usando servicios reales y PostgreSQL → devolución parcial. Verifica también padre histórico explícito, tarifa cero, historia inmutable y retiro del empalme activo al volver el equipo. Por defecto todo se revierte.
-- `qa-commercial-http-flow.cjs`: JWT real Office/Admin/Driver, permisos y DTOs reales, creación genérica asset → accesorio individual → cuatro piezas retornables. Autosave y envío idempotentes, reapertura, aprobación, entrega posterior, repetición sin movimientos duplicados, devolución parcial 4→2, exceso rechazado sin cambio de saldo y receptor resuelto desde notas normalizadas. Anexo DAY→METER: 100 + 10×200 = 2.100, partes a 0 visibles, guardado/reapertura y revisión obsoleta 409; cambiar el catálogo no cambia la tarifa congelada. Última ejecución completa: `a1bf6523`, nueve verificaciones aprobadas.
+- `qa-commercial-http-flow.cjs`: JWT real Office/Admin/Driver, permisos y DTOs reales, creación genérica asset → accesorio individual → cuatro piezas retornables. Autosave y envío idempotentes, reapertura, aprobación, entrega posterior, repetición sin movimientos duplicados, devolución parcial 4→2, exceso rechazado sin cambio de saldo y receptor resuelto desde notas normalizadas. Anexo DAY→METER: 100 + 10×200 = 2.100, partes a 0 visibles, guardado/reapertura y revisión obsoleta 409; cambiar el catálogo no cambia la tarifa congelada. Última ejecución completa en la copia sin salarios: `31a87541`, nueve verificaciones aprobadas. Los ensayos PostgreSQL con rollback también se repitieron: perfiles, aprobación, modo directo y empalmes.
 - Documento público conserva nombres/código congelados aunque no exista `requestedTag`. PDF real descargado, texto validado y página renderizada inspeccionada: accesorio individual y piezas por cantidad visibles, sin solapamientos. Correo tiene regresión específica para nombre/código congelados (sin envío real).
 - Coordinación con «Rediseñar anexos y prefacturas»: 84 pruebas específicas aprobadas y 650 preparaciones sobre las 325 obras del snapshot para septiembre/octubre sin excepción. Sin perfiles comerciales reales aprobados, los casos requieren `REVIEW`: **esto no valida todavía importes reales de todo el inventario**.
 
@@ -50,6 +50,22 @@ Copia consistente de la base vinculada a la API de Railway **producción**, toma
 4. Las notas se almacenan en mayúsculas y sus UUID dejaban de coincidir con el catálogo al reabrir/resolver responsables. Se restaura solo la forma canónica de UUID, preservando IDs históricos opacos y el texto original. Receptor, conductor, vehículo y despachador tienen regresión.
 
 Los ensayos de movimientos y anexos se ejecutaron contra servicios reales y PostgreSQL; no equivalen a haber recorrido cada uno de esos casos por el navegador con todos los roles.
+
+## Retiro del módulo salarial: 1 de octubre de 2026
+
+Por instrucción expresa del usuario, se retiró el módulo salarial que llegó con
+el commit integrado `e14077d`: migración `20260926120000_employee_salary_history`,
+modelo `EmployeeSalary`, política e importes automáticos, servicio/controlador,
+pantalla y enlace de Nómina base. No se aplicó esa migración a producción ni se
+eliminaron datos productivos. La eliminación del código es recuperable en Git.
+Empleados, préstamos y actividades existentes se conservan; el validador de
+fechas de anexos ahora está en `common/civil-date.ts`, sin política salarial.
+
+`qa-no-payroll-release.cjs` verificó contra la copia activa: ausencia de tabla,
+migración y modelo generado; API y página salarial devuelven 404; crear, editar,
+listar y eliminar un empleado ficticio funciona por HTTP con Office autenticado.
+El empleado ficticio se eliminó al terminar. Compilaciones API/web y todas las
+pruebas citadas se ejecutaron con el modelo salarial ya retirado.
 
 ## Pendientes antes de producción
 
@@ -72,11 +88,13 @@ Los empalmes son inmutables desde estos endpoints. Un padre mal elegido no se co
 
 Frontend local: `http://127.0.0.1:3159`. API local: `http://127.0.0.1:3059`.
 Autenticación real con usuarios exclusivos de QA; servicios externos y envío de mensajes aislados.
-Base local **`equipment_commercial_live_20260930`** en puerto 54414. No es producción. Correo, WhatsApp, almacenamiento y tareas programadas están aislados. Los archivos ficticios ahora sobreviven al reinicio del servidor QA.
+Base local **`equipment_commercial_no_payroll_20261001`** en puerto 54414. No es producción. Correo, WhatsApp, almacenamiento y tareas programadas están aislados. Los archivos ficticios ahora sobreviven al reinicio del servidor QA.
 
-Usuarios exclusivamente locales: `qa-config-office@example.invalid`, `qa-config-admin@example.invalid`, `qa-config-driver@example.invalid`. Clave de QA: `Only-local-QA-20260923!`. No son cuentas ni credenciales de producción. Reinicio API: `QA_FRESH_SNAPSHOT=1 node scripts/run-equipment-commercial-qa.cjs` desde `apps/api`; frontend: `npm run start -- --hostname 127.0.0.1 --port 3159` desde `apps/web`, después de construir con `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3059`.
+Usuarios exclusivamente locales: `qa-config-office@example.invalid`, `qa-config-admin@example.invalid`, `qa-config-driver@example.invalid`. Clave de QA: `Only-local-QA-20260923!`. No son cuentas ni credenciales de producción. Reinicio API: `QA_NO_PAYROLL=1 node scripts/run-equipment-commercial-qa.cjs` desde `apps/api`; frontend: `npm run start -- --hostname 127.0.0.1 --port 3159` desde `apps/web`, después de construir con `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3059`.
 
-Ejemplo actual creado por UI: familia `QA SISTEMA MODULAR 30SEP`, equipo `QA MODULAR #1`, accesorio `QA CABEZAL MODULAR 30SEP`, motor `QA 5 HP MOTOR MODULAR 30SEP #1`. Cliente/obra `QA HTTP CONJUNTOS c7bd6a74` / `QA OBRA CONJUNTOS c7bd6a74`. Remisión `RM-APP-000017` y devolución `DV-APP-000024`. Valores ficticios de 100/día y 200/metro, mínimos 0 para probar el cambio de modalidad, sin modificar tarifas reales. Los ensayos HTTP tienen familias/clientes prefijados `QA HTTP`.
+Ejemplo actual del ensayo HTTP: cliente `QA HTTP CONJUNTOS 31a87541` / obra `QA OBRA CONJUNTOS 31a87541`, con equipo genérico, accesorio individual y piezas retornables. Valores ficticios de 100/día y 200/metro, mínimos 0 para probar el cambio de modalidad, sin modificar tarifas reales. Los ensayos tienen familias/clientes prefijados `QA HTTP`.
+
+Ejemplo por UI preservado solo en `equipment_commercial_live_20260930`: familia `QA SISTEMA MODULAR 30SEP`, equipo `QA MODULAR #1`, accesorio `QA CABEZAL MODULAR 30SEP`, motor `QA 5 HP MOTOR MODULAR 30SEP #1`. Cliente/obra `QA HTTP CONJUNTOS c7bd6a74` / `QA OBRA CONJUNTOS c7bd6a74`; remisión `RM-APP-000017` y devolución `DV-APP-000024`. Sus IDs/enlaces no existen en la copia activa nueva; esto no representa pérdida de documentos productivos.
 
 Los ejemplos anteriores `QA DEMO MULTI-01` y `QA DOS TRAMOS` pertenecen a la copia QA vieja preservada: no son evidencia del snapshot actual ni deben trasladarse a producción.
 

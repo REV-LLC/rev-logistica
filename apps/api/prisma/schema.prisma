@@ -1429,7 +1429,6 @@ model Owner {
 }
 
 model Employee {
-  salaries EmployeeSalary[]
   activityNotes EmployeeActivityNote[]
   loanEntries EmployeeLoanEntry[]
   id         String       @id @default(uuid())
@@ -1640,22 +1639,6 @@ model ReleaseAcknowledgement {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, releaseId])
-}
-
-// Append-only salary history; a correction appends a new revision.
-model EmployeeSalary {
-  id            String   @id @default(uuid())
-  employeeId    String
-  effectiveFrom DateTime @db.Date
-  monthlySalary Decimal  @db.Decimal(14, 2)
-  revision      Int
-  note          String
-  createdBy     String?
-  createdAt     DateTime @default(now())
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-
-  @@unique([employeeId, revision])
-  @@index([employeeId, effectiveFrom, revision])
 }
 
 model AnnexDraft {

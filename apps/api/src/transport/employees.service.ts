@@ -15,7 +15,6 @@ import * as bcrypt from 'bcrypt';
 import sharp from 'sharp';
 import type { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
-import { bogotaDate, civilDate, payrollPolicy } from '../payroll/payroll-policy';
 
 export type EmployeePhotoFile = {
   buffer: Buffer;
@@ -156,17 +155,6 @@ export class EmployeesService {
             userId: createdUserId,
           },
         });
-
-        const salaryDate = bogotaDate();
-        // Do not silently use the 2026 minimum for an unconfigured later year.
-        // Employee creation remains available; payroll explicitly shows missing setup.
-        if (salaryDate >= '2026-01-01' && salaryDate <= '2026-12-31') {
-          await tx.employeeSalary.create({ data: {
-            employeeId: created.id, effectiveFrom: civilDate(salaryDate),
-            monthlySalary: payrollPolicy(salaryDate).minimumMonthlySalary,
-            revision: 1, note: 'Salario mínimo inicial; revisar configuración individual',
-          } });
-        }
 
         if (vehicleIds.length) {
           await tx.employeeVehicle.createMany({
@@ -327,8 +315,6 @@ export class EmployeesService {
 
   async deleteEmployee(employeeId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const salary = await tx.employeeSalary.findFirst({ where: { employeeId }, select: { id: true } });
-      if (salary) throw new BadRequestException('El empleado tiene historial salarial. Desactívalo para conservar sus registros.');
       await tx.employeeVehicle.deleteMany({ where: { employeeId } });
       await tx.employee.delete({ where: { id: employeeId } });
       return { deleted: true };

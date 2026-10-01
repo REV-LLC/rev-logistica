@@ -6,7 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
-import { civilDate } from '../payroll/payroll-policy';
+import { civilDate } from '../common/civil-date';
 import { applyCommercialComposition } from './annex-commercial-source';
 import { inventoryToAnnex } from './annex-inventory';
 import type { AnnexInput } from './annex-input';

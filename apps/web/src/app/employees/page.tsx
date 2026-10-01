@@ -353,7 +353,6 @@ export default function EmployeeCardsPage() {
         <Group justify="space-between" align="center" wrap="wrap">
           <Title order={1}>Empleados</Title>
           <Group gap="xs" wrap="wrap">
-            <Button component={Link} href="/employees/payroll" variant="light">Nómina base</Button>
             <Button component={Link} href="/employees/loans" variant="light" leftSection={<IconCurrencyDollar size={16} />}>
               Préstamos
             </Button>

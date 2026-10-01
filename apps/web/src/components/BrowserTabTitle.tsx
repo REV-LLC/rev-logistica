@@ -33,7 +33,6 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/billing/price-list', 'Lista de precios'],
   ['/customers', 'Clientes'],
   ['/providers', 'Proveedores'],
-  ['/employees/payroll', 'Nómina base'],
   ['/employees/activities', 'Bitácora de empleados'],
   ['/employees', 'Empleados'],
   ['/settings/task-notifications', 'Alertas de tareas'],
