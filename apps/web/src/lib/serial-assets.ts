@@ -59,7 +59,7 @@ export function getSerialDisplayName(item: SerialDisplayItem) {
     appendUniqueDisplayPart(parts, item.brand);
     appendUniqueDisplayPart(parts, item.model);
   }
-  const base = parts.length > 0 ? parts.join(' ') : item.serialOrEngine ?? item.assetId ?? '-';
+  const base = parts.length > 0 ? parts.join(' ') : item.serialOrEngine?.trim() || 'Equipo sin nombre';
   const internal = item.internalNumber != null ? ` #${item.internalNumber}` : '';
   return `${base}${internal}`.trim();
 }

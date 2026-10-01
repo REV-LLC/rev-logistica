@@ -277,6 +277,15 @@ export default function EmployeeActivitiesPage() {
       : null;
   const selectedNotes = notesByDay.get(selectedDate) ?? [];
 
+  function navigateEmployee(offset: number) {
+    if (employees.length < 2) return;
+    setEmployeeId((current) => {
+      const index = employees.findIndex((person) => person.id === current);
+      return employees[
+        (Math.max(index, 0) + offset + employees.length) % employees.length
+      ].id;
+    });
+  }
   function changeMonth(nextMonth: string) {
     setMonth(nextMonth);
     setSelectedDate(`${nextMonth}-01`);
@@ -415,12 +424,50 @@ export default function EmployeeActivitiesPage() {
         ) : null}
         <Paper withBorder radius="lg" p="md">
           <Group justify="space-between" align="center">
-            <EmployeeCalendarPicker
-              employees={employees}
-              employee={employee}
-              onChange={setEmployeeId}
-              disabled={loading || opened || Boolean(deleting)}
-            />
+            <div className={styles.employeeSwitch}>
+              <EmployeeCalendarPicker
+                employees={employees}
+                employee={employee}
+                onChange={setEmployeeId}
+                disabled={loading || opened || Boolean(deleting)}
+              />
+              <Group gap={6} wrap="nowrap">
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="orange"
+                  aria-label="Empleado anterior"
+                  title="Empleado anterior"
+                  disabled={
+                    employees.length < 2 ||
+                    !employeeId ||
+                    loading ||
+                    opened ||
+                    Boolean(deleting)
+                  }
+                  onClick={() => navigateEmployee(-1)}
+                >
+                  <IconChevronLeft size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="orange"
+                  aria-label="Empleado siguiente"
+                  title="Empleado siguiente"
+                  disabled={
+                    employees.length < 2 ||
+                    !employeeId ||
+                    loading ||
+                    opened ||
+                    Boolean(deleting)
+                  }
+                  onClick={() => navigateEmployee(1)}
+                >
+                  <IconChevronRight size={20} />
+                </ActionIcon>
+              </Group>
+            </div>
             <Group gap="xs">
               <ActionIcon
                 variant="light"

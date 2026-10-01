@@ -2,6 +2,7 @@
 
 import AppImage from '@/components/AppImage';
 import ConfigurationEditor from '@/components/equipment-configuration/ConfigurationEditor';
+import CommercialProfilePanel from '@/components/commercial-profiles/CommercialProfilePanel';
 import { type EquipmentConfiguration, configurationError, configurationPayload } from '@/components/equipment-configuration/types';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,7 +30,6 @@ import ChargeTypeSelect from '@/components/ChargeTypeSelect';
 import UppercaseTextInput, { uppercaseInputValue } from '@/components/UppercaseTextInput';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 
 type AssetFamily = {
@@ -226,13 +226,11 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [createdAssetId, setCreatedAssetId] = useState<string | null>(null);
+  const [commercialDirty, setCommercialDirty] = useState(false);
   const [configuration, setConfiguration] = useState<EquipmentConfiguration>({ version: 0, entries: [] });
 
   const [familyMode, setFamilyMode] = useState<'existing' | 'new'>('existing');
   const [familyId, setFamilyId] = useState<string | null>(initialFamilyId ?? null);
-  const [compatibilities, setCompatibilities] = useState<Array<{
-    componentAssetFamilyId: string; active: boolean; parentAssetFamily: { name: string };
-  }>>([]);
   const [familyName, setFamilyName] = useState('');
   const [familyCode, setFamilyCode] = useState('');
   const [subfamilyId, setSubfamilyId] = useState<string | null>(null);
@@ -296,16 +294,14 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       setLoading(true);
       setError(null);
       try {
-        const [familyData, warehouseData, unitData, catalogBrandData, compatibilityData] = await Promise.all([
+        const [familyData, warehouseData, unitData, catalogBrandData] = await Promise.all([
           api<AssetFamily[]>('/asset-families?controlType=SERIAL'),
           api<Warehouse[]>('/warehouses'),
           api<string[]>('/skus/units'),
           api<CatalogOption[]>('/catalog/options?groupKey=SERIAL_ASSET_BRANDS').catch(() => []),
-          api<typeof compatibilities>('/asset-families/components'),
         ]);
         if (!mounted) return;
         setFamilies(familyData);
-        setCompatibilities(compatibilityData);
         setWarehouses(warehouseData);
         setUnits(unitData);
         setCatalogBrandOptions(catalogBrandData.filter((option) => option.active));
@@ -541,6 +537,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   };
 
   const clearFamilyAndAssetInputs = () => {
+    setConfiguration({ version: 0, entries: [] });
     setFamilyId(null);
     setFamilyName('');
     setFamilyCode('');
@@ -636,6 +633,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
   const unlockFamilySelection = () => {
     if (initialFamilyId) return;
+    setConfiguration({ version: 0, entries: [] });
     setFamilyLocked(false);
     setSkuSuggestionId(null);
     setSkuName('');
@@ -745,6 +743,12 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
     if (assetWorkflowStep !== 'review') {
       setValidationError('Avanza hasta la revisión antes de guardar el activo.');
+      return;
+    }
+
+    const configurationIssue = configurationError(configuration);
+    if (configurationIssue) {
+      setValidationError(configurationIssue);
       return;
     }
 
@@ -938,7 +942,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
       <Stack gap="lg">
         {!onCreated ? <PageHeaderCard
           title="Registrar equipo unico"
-          description="Crea un equipo desde cero o usa una referencia existente. Configura sus componentes, accesorios y ubicación inicial."
+          description="Desde cero o usando una referencia existente."
           icon={<IconTruck size={20} />}
           iconColor="blue"
           accentColor="rgba(14,165,233,0.12)"
@@ -1008,9 +1012,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
         {onCreated && familyId ? (
           <Alert color="blue" title="Compatibilidad del accesorio">
-            {compatibilities.some((rule) => rule.active && rule.componentAssetFamilyId === familyId)
-              ? `Esta familia es compatible con: ${compatibilities.filter((rule) => rule.active && rule.componentAssetFamilyId === familyId).map((rule) => rule.parentAssetFamily.name).join(', ')}. El vínculo con un equipo concreto se realiza en la remisión.`
-              : 'Esta familia no tiene compatibilidades configuradas. Puedes definirlas en Configuración → Componentes de equipos.'}
+            Después de crearlo, vincúlalo al conjunto del equipo principal.
           </Alert>
         ) : null}
 
@@ -1027,18 +1029,23 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
         ) : null}
 
         {createdAssetId ? (
-          <Alert color="blue" title="¿Este equipo tiene accesorios?">
-            <Stack gap="sm">
-              <Text size="sm">El equipo y su configuración están guardados. Puedes revisar componentes y accesorios desde su card.</Text>
-              <Group>
-                <Button component={Link} href={`/inventory/equipment-configuration/assets/${createdAssetId}`}>Ver configuración del equipo</Button>
-                <Button component={Link} href={`/inventory/accessories/equipment/${createdAssetId}?create=1`}>Agregar accesorios al equipo creado</Button>
-                <Button variant="subtle" onClick={() => setCreatedAssetId(null)}>Ahora no</Button>
-              </Group>
+          <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+            <Stack gap="lg">
+              <Text size="sm" c="dimmed">Equipo y piezas guardados. Puedes completar sus cobros y conjuntos ahora o desde su ficha.</Text>
+              <CommercialProfilePanel key={createdAssetId} assetId={createdAssetId} onDirtyChange={setCommercialDirty} />
+              <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                <Button variant="default" onClick={() => {
+                  if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Salir y configurarlas más tarde?')) return;
+                  router.push(`/inventory/equipment-configuration/assets/${createdAssetId}`);
+                }}>Continuar configurando conjunto</Button>
+                <Button variant="subtle" onClick={() => {
+                  if (commercialDirty && !window.confirm('Hay modalidades sin guardar. ¿Dejarlas para más tarde?')) return;
+                  setCommercialDirty(false); setCreatedAssetId(null); setSuccess(null);
+                }}>Registrar otro equipo</Button>
+              </SimpleGrid>
             </Stack>
-          </Alert>
-        ) : null}
-
+          </Paper>
+        ) : (
         <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
           <form onSubmit={handleSubmit}>
             <Stack gap="lg">
@@ -1455,7 +1462,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   </Group>
 
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToCommercialStep}>
+                    <Button type="button" disabled={!isTemplateStepActive} onClick={goToCommercialStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1554,7 +1561,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   </SimpleGrid>
 
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToAssetStep}>
+                    <Button type="button" disabled={!isCommercialStepActive} onClick={goToAssetStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1635,7 +1642,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     />
                   ) : null}
                   <Group justify="flex-end" className="mobile-actions">
-                    <Button type="button" onClick={goToReviewStep}>
+                    <Button type="button" disabled={!isAssetStepActive} onClick={goToReviewStep}>
                       Siguiente
                     </Button>
                   </Group>
@@ -1649,7 +1656,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   <ConfigurationEditor  value={configuration} onChange={setConfiguration} disabled={saving || assetWorkflowStep !== 'configuration'} />
                   <Group justify="space-between">
                     <Button type="button" variant="default" onClick={() => setAssetWorkflowStep('asset')}>Volver a datos del equipo</Button>
-                    <Button type="button" onClick={() => {
+                    <Button type="button" disabled={assetWorkflowStep !== 'configuration'} onClick={() => {
                       const issue = configurationError(configuration);
                       if (issue) { setValidationError(issue); return; }
                       setError(null); setAssetWorkflowStep('review');
@@ -1662,7 +1669,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   <div>
                     <Text fw={700}>7. Revisión</Text>
                     <Text size="sm" c="dimmed">
-                      Confirma la plantilla, el activo y la ubicacion.
+                      Confirma la referencia, el equipo y su ubicación. Después de crearlo podrás definir cómo se cobra el conjunto.
                     </Text>
                   </div>
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -1693,7 +1700,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     </Paper>
                   </SimpleGrid>
                   <Text size="sm">Componentes: {configuration.entries.filter(row => row.role === 'COMPONENT').length} · Accesorios: {configuration.entries.filter(row => row.role === 'ACCESSORY').length}.</Text>
-                  <Text size="sm" c="dimmed">Los nuevos se registran junto al equipo. Los existentes conservan identidad, propietario, ubicación e historial.</Text>
+                  <Text size="xs" c="dimmed">Crear ingresa existencias; vincular no las duplica.</Text>
                   <Button type="button" variant="subtle" onClick={() => setAssetWorkflowStep('configuration')}>Editar configuración</Button>
                 </Stack>
               </Paper>
@@ -1709,12 +1716,13 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                   Cancelar
                 </Button>
                 <Button type="submit" loading={saving} disabled={assetWorkflowStep !== 'review'}>
-                  Guardar activo
+                  {onCreated ? 'Guardar equipo' : 'Crear equipo y continuar'}
                 </Button>
               </Group>
             </Stack>
           </form>
         </Paper>
+        )}
       </Stack>
     </Container>
   );

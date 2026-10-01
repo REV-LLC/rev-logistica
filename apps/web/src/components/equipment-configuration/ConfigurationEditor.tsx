@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -10,16 +9,19 @@ import {
   Modal,
   NumberInput,
   Select,
+  SimpleGrid,
   Stack,
   Text,
   TextInput,
 } from "@mantine/core";
+import { IconSettings } from '@tabler/icons-react';
 import ExistingPartPicker from "./ExistingPartPicker";
 import {
   type ConfigurationEntry,
   type EquipmentConfiguration,
   type PartRole,
   entryName,
+  configurationPartAction,
   partRoleLabels,
 } from "./types";
 
@@ -29,6 +31,7 @@ type Props = {
   disabled?: boolean;
   canCreate?: boolean;
   accessoryParent?: boolean;
+  onConfigurePart?: (rowId: string) => void;
 };
 
 export default function ConfigurationEditor({
@@ -37,6 +40,7 @@ export default function ConfigurationEditor({
   disabled,
   canCreate = true,
   accessoryParent = false,
+  onConfigurePart,
 }: Props) {
   const [picker, setPicker] = useState<PartRole | null>(null);
   const update = (id: string, changes: Partial<ConfigurationEntry>) =>
@@ -69,12 +73,7 @@ export default function ConfigurationEditor({
     });
   return (
     <Stack gap="lg">
-      <Alert color="blue">
-        La configuración propone qué acompaña al equipo. No registra entregas,
-        consumos ni reservas. Los elementos nuevos sí crean la existencia
-        inicial indicada, en la bodega y a nombre del propietario del equipo.
-      </Alert>
-      <TextInput label="Notas de configuración" description="Por ejemplo: motor fijo eléctrico integrado; no requiere un motor separado."
+      <TextInput label="Notas de configuración" placeholder="Opcional"
         maxLength={1000} value={value.notes ?? ''} disabled={disabled}
         onChange={event => onChange({ ...value, notes: event.currentTarget.value })} />
       {(["COMPONENT", "ACCESSORY"] as const).map((role) => (
@@ -85,11 +84,6 @@ export default function ConfigurationEditor({
                 {role === "COMPONENT"
                   ? "Componentes del equipo"
                   : "Accesorios de trabajo"}
-              </Text>
-              <Text size="sm" c="dimmed">
-                {role === "COMPONENT"
-                  ? "Piezas de su configuración, como techo o motor."
-                  : "Implementos compatibles, retornables o consumibles; también pueden tener accesorios propios."}
               </Text>
             </div>
             <Group>
@@ -107,7 +101,7 @@ export default function ConfigurationEditor({
                 disabled={disabled || value.entries.length >= 100}
                 onClick={() => setPicker(role)}
               >
-                Vincular {partRoleLabels[role].toLowerCase()} existente
+                Vincular existente
               </Button>
             </Group>
           </Group>
@@ -117,18 +111,29 @@ export default function ConfigurationEditor({
               {role === "COMPONENT"
                 ? "componentes adicionales"
                 : "accesorios configurados"}
-              . Puedes dejarlo vacío.
+              .
             </Text>
           ) : null}
           {value.entries
             .filter((row) => row.role === role)
             .map((row) => (
-              <Card withBorder key={row.id}>
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Text fw={600}>{entryName(row)}</Text>
-                    <Badge>{row.newPart ? "Nuevo" : "Existente"}</Badge>
+              <Card component="details" open={!!row.newPart} withBorder key={row.id}>
+                <summary style={{ cursor: 'pointer', display: 'block' }}>
+                  <Group justify="space-between" wrap="nowrap">
+                    <div style={{ minWidth: 0 }}>
+                      <Text component="span" fw={600}>{row.newPart && !row.newPart.name ? `Nuevo ${partRoleLabels[role].toLowerCase()}` : entryName(row)}</Text>
+                      <Group gap={4} mt={4}>
+                        {row.newPart ? <Badge size="xs">Nuevo</Badge> : null}
+                        {row.quantity > 1 ? <Badge size="xs" variant="light">× {row.quantity}</Badge> : null}
+                        {row.defaultIncluded ? <Badge size="xs" variant="light">Predeterminado</Badge> : null}
+                        {row.required ? <Badge size="xs" color="orange" variant="light">Requerido</Badge> : null}
+                        {row.familyId ? <Badge size="xs" color="gray" variant="light">Elegir unidad</Badge> : null}
+                      </Group>
+                    </div>
+                    <IconSettings size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
                   </Group>
+                </summary>
+                <Stack gap="sm" mt="sm">
                   {row.newPart ? (
                     <>
                       <TextInput
@@ -180,16 +185,9 @@ export default function ConfigurationEditor({
                           }
                         />
                       ) : null}
-                      {row.newPart.kind === "CONSUMABLE" ? (
-                        <Text size="sm">
-                          Puede regresar aprovechable. Solo se registra consumo
-                          cuando se confirma la cantidad que no regresa.
-                        </Text>
-                      ) : null}
                       {row.newPart.kind === "INDIVIDUAL" ? (
-                        <Text size="sm" c="dimmed">
-                          Una unidad con identidad y código generado
-                          automáticamente.
+                        <Text size="xs" c="dimmed">
+                          Se registrará 1 unidad en bodega.
                         </Text>
                       ) : (
                         <NumberInput
@@ -209,6 +207,7 @@ export default function ConfigurationEditor({
                           }
                         />
                       )}
+                      <Text size="xs" c="dimmed">Al guardar, ingresa esta existencia a nombre del propietario del equipo.</Text>
                       {role === "COMPONENT" && !accessoryParent ? (
                         <Checkbox
                           label="Exclusivo de este equipo (no intercambiable)"
@@ -249,20 +248,28 @@ export default function ConfigurationEditor({
                           }
                         />
                       ) : (
-                        <Text size="sm">
+                        <Text size="xs" c="dimmed">
                           Compatible con este accesorio principal.
                         </Text>
                       )}
                     </>
                   ) : (
-                    <Text size="sm" c="dimmed">
-                      {row.accessory?.internalCode ?? row.asset?.publicCode} ·
-                      Vincular no crea otra unidad ni mueve sus existencias.
-                      {row.accessory?.exclusiveAssetId
-                        ? " Componente exclusivo de su equipo."
-                        : ""}
-                    </Text>
+                    row.familyId ? <Badge variant="light">Elegir unidad en la remisión</Badge>
+                      : <Badge variant="light" color="gray">{row.accessory?.exclusiveAssetId ? "Exclusivo" : row.accessory?.kind === "CONSUMABLE" ? "Consumible" : row.accessory?.kind === "RETURNABLE" ? "Por cantidad" : "Individual"}</Badge>
                   )}
+                  {onConfigurePart && configurationPartAction(row) ? <Button
+                    type="button" variant="light" size="xs" disabled={disabled}
+                    onClick={() => onConfigurePart(row.id)}
+                  >{row.newPart ? `Guardar y ${configurationPartAction(row)!.toLowerCase()}` : configurationPartAction(row)}</Button>
+                    : row.assetId || row.accessoryId ? <Button
+                    component="a"
+                    href={`/inventory/equipment-configuration/${row.assetId ? `assets/${row.assetId}` : `accessories/${row.accessoryId}`}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="light"
+                    size="xs"
+                  >{configurationPartAction(row)} ↗</Button> : null}
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                   <NumberInput
                     label="Cantidad habitual"
                     min={1}
@@ -278,6 +285,9 @@ export default function ConfigurationEditor({
                     value={row.quantity}
                     onChange={(v) => update(row.id, { quantity: Number(v) })}
                   />
+                  <NumberInput label="Cantidad máxima (opcional)" min={row.quantity} allowDecimal={false}
+                    disabled={disabled} value={row.maximumQuantity ?? ''}
+                    onChange={value => update(row.id, { maximumQuantity: typeof value === 'number' ? value : null })} />
                   <Checkbox
                     label="Incluido por defecto"
                     checked={row.defaultIncluded}
@@ -288,10 +298,6 @@ export default function ConfigurationEditor({
                       })
                     }
                   />
-                  {row.familyId ? <Text size="sm">Permite elegir unidades de esta familia desde la tuerca del documento; no elige una unidad automáticamente.</Text> : null}
-                  <NumberInput label="Cantidad máxima (opcional)" min={row.quantity} allowDecimal={false}
-                    disabled={disabled} value={row.maximumQuantity ?? ''}
-                    onChange={value => update(row.id, { maximumQuantity: typeof value === 'number' ? value : null })} />
                   <Checkbox
                     label="Requerido para operar"
                     checked={row.required}
@@ -300,10 +306,7 @@ export default function ConfigurationEditor({
                       update(row.id, { required: e.currentTarget.checked })
                     }
                   />
-                  <Text size="xs" c="dimmed">
-                    Predeterminado propone la selección; requerido expresa una
-                    necesidad. No son lo mismo.
-                  </Text>
+                  </SimpleGrid>
                   <Button
                     type="button"
                     color="red"
@@ -318,21 +321,26 @@ export default function ConfigurationEditor({
                       })
                     }
                   >
-                    Quitar de esta configuración
+                    Quitar del conjunto
                   </Button>
                 </Stack>
               </Card>
             ))}
         </Stack>
       ))}
-      <Text size="sm" c="dimmed">
-        Quitar una fila no elimina el elemento existente ni borra su historial o
-        ubicación.
-      </Text>
+      <details>
+        <Text component="summary" size="sm" c="dimmed" style={{ cursor: 'pointer' }}>Ayuda del conjunto</Text>
+        <Stack gap="xs" mt="sm">
+          <Text size="sm">Crear registra existencias iniciales. Vincular usa inventario existente, sin duplicarlo ni moverlo.</Text>
+          <Text size="sm">Incluido por defecto lo propone en la remisión. Requerido para operar impide enviarlo sin esa pieza.</Text>
+          <Text size="sm">Los motores intercambiables se asignan desde la ficha del equipo. Los consumibles pueden regresar; solo lo que no vuelve se registra como consumo.</Text>
+          <Text size="sm">Quitar del conjunto no elimina el elemento ni su historial. Las entregas y devoluciones se hacen en Transporte.</Text>
+        </Stack>
+      </details>
       <Modal
         opened={!!picker}
         onClose={() => setPicker(null)}
-        title="Vincular sin duplicar inventario"
+        title="Vincular existente"
         size="lg"
       >
         {picker ? (
@@ -343,6 +351,7 @@ export default function ConfigurationEditor({
                 !value.entries.some(
                   (row) =>
                     (entry.assetId && entry.assetId === row.assetId) ||
+                    (entry.familyId && entry.familyId === row.familyId) ||
                     (entry.accessoryId &&
                       entry.accessoryId === row.accessoryId),
                 )

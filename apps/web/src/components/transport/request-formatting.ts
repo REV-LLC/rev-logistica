@@ -19,7 +19,8 @@ export const buildBulkKey = (item: {
   skuId: string;
   ownerWarehouseId: string | null;
   sourceWarehouseId?: string | null;
-}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}`;
+  sourceDocumentItemId?: string | null;
+}) => `${item.skuId}::${item.ownerWarehouseId ?? 'none'}${item.sourceWarehouseId ? `::${item.sourceWarehouseId}` : ''}${item.sourceDocumentItemId ? `::origin:${item.sourceDocumentItemId}` : ''}`;
 
 export const normalizeTagBase = (value?: string | null) =>
   (value ?? '')
@@ -96,12 +97,13 @@ export function parseNotes(notes: string | null) {
     if (!k || rest.length === 0) return;
     map.set(k.trim().toLowerCase(), rest.join(':').trim());
   });
+  const restoreId = (value = '') => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value) ? value.toLowerCase() : value;
   return {
     deliveryMode: map.get('entrega') ?? '',
-    vehicleId: map.get('vehículo') ?? map.get('vehiculo') ?? '',
-    driverId: map.get('conductor') ?? '',
-    receiverId: map.get('recibe') ?? '',
-    dispatcherId: map.get('despachador') ?? '',
+    vehicleId: restoreId(map.get('vehículo') ?? map.get('vehiculo')),
+    driverId: restoreId(map.get('conductor')),
+    receiverId: restoreId(map.get('recibe')),
+    dispatcherId: restoreId(map.get('despachador')),
   };
 }
 

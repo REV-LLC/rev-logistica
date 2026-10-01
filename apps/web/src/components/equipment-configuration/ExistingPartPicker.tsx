@@ -124,14 +124,15 @@ export default function ExistingPartPicker({
           },
           {
             value: "assets",
-            label: "Equipos existentes (conservan identidad e historial)",
+            label: "Equipos existentes",
           },
-          { value: 'families', label: 'Familia de equipos/referencias compatibles (elegir unidad en el documento)' },
+          { value: 'families', label: 'Familias compatibles' },
         ]}
       />
       <Group align="end">
         <TextInput
-          label="Nombre o código"
+          label="Buscar elemento"
+          placeholder="Nombre, serial o código"
           value={search}
           maxLength={160}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -159,9 +160,7 @@ export default function ExistingPartPicker({
             <Group justify="space-between">
               <div>
                 <Text>{entryName(row)}</Text>
-                <Text size="xs">
-                  {row.accessory?.internalCode ?? row.asset?.publicCode}
-                </Text>
+                {row.familyId ? <Text size="xs" c="dimmed">Elegir unidad en la remisión</Text> : null}
               </div>
               <Button type="button" onClick={() => onSelect(row)}>
                 Vincular

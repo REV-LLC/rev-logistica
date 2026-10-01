@@ -1,4 +1,6 @@
+import { documentCommercialSnapshots } from '../commercial-profiles/commercial-history';
 import { validateDocumentConfiguration } from '../accessories/document-configuration';
+import { compositionFields, CompositionFields, isDocumentCompositionV2 } from './document-composition';
 import {
   BadRequestException,
   ConflictException,
@@ -33,6 +35,7 @@ import { resolveDocumentInventorySourceMode, resolveDocumentItemSourceWarehouseI
 import { CreateDirectDocumentDto } from './dto/create-direct-document.dto';
 import { lockBulkStock } from '../inventory/bulk-stock-lock';
 import { isSerializationConflict } from './document-transaction-conflict';
+import { parseDocumentResponsibleIds } from './document-responsibles';
 
 const REMISSION_ITEMS_PER_DOCUMENT = 20;
 
@@ -433,6 +436,7 @@ export class DocumentsService {
           }
           await this.assertProviderRemissionEvidence(document, tx);
           await validateDocumentConfiguration(tx, document);
+          if (document.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx,document.id,true);
           if (hasAccessories) {
             this.assertExplicitRemissionInventorySource(document);
             await this.accessoryDocuments.apply(tx, document, userId,
@@ -820,19 +824,25 @@ export class DocumentsService {
       throw new BadRequestException('La obra y al menos un ítem son obligatorios');
     }
     const serializedIds = new Set<string>();
+    const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
     for (const item of payload.items) {
-      if (Boolean(item.skuId) === Boolean(item.assetId) || !item.ownerWarehouseId
-        || (item.skuId && (!Number.isFinite(item.quantity) || Number(item.quantity) <= 0))
+      if (payload.type === DocumentType.REMISSION && item.sourceWarehouseId && item.sourceWarehouseId !==
+        (payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? item.ownerWarehouseId : payload.warehouseId)) {
+        throw new BadRequestException('El origen del ítem no coincide con la salida física seleccionada para el registro directo.');
+      }
+      if ([item.skuId, item.assetId, item.accessoryId].filter(Boolean).length !== 1 || !item.ownerWarehouseId
+        || ((item.skuId || item.accessoryId) && (!Number.isFinite(item.quantity) || Number(item.quantity) <= 0))
         || (item.assetId && item.quantity !== undefined && item.quantity !== 1)) {
         throw new BadRequestException('Cada ítem debe identificar su dueño y un artículo con cantidad positiva o un solo equipo');
       }
+      if (item.accessoryId && (!isDocumentCompositionV2(documentDate) || !item.accessorySourceBalanceId))
+        throw new BadRequestException('Los accesorios en registro directo requieren origen y fecha desde el 1 de octubre de 2026.');
       if (item.assetId) {
         if (serializedIds.has(item.assetId)) throw new BadRequestException('Un equipo no puede repetirse en el documento');
         serializedIds.add(item.assetId);
       }
     }
     const ownerWarehouseIds = [...new Set(payload.items.map((item) => item.ownerWarehouseId))];
-    const documentDate = this.parseDocumentDateFromNotes(payload.notes) ?? new Date();
     const recipientPhones = this.normalizeDocumentRecipientPhones(payload.recipientPhones, payload.recipientPhone);
     const warehouseIdsToInvalidate = [...ownerWarehouseIds, ...(payload.warehouseId ? [payload.warehouseId] : [])];
 
@@ -847,11 +857,12 @@ export class DocumentsService {
             throw new BadRequestException('Uno de los propietarios no tiene una bodega activa válida');
           }
           const providerIds = new Set(owners.filter((owner) => owner.type === 'ALLY').map((owner) => owner.id));
-          const providerReturnItems = payload.items.filter((item) => providerIds.has(item.ownerWarehouseId));
-          const ownReturnItems = payload.items.filter((item) => !providerIds.has(item.ownerWarehouseId));
+          const inventoryItems = payload.items.filter(item => !item.accessoryId);
+          const providerReturnItems = inventoryItems.filter((item) => providerIds.has(item.ownerWarehouseId));
+          const ownReturnItems = inventoryItems.filter((item) => !providerIds.has(item.ownerWarehouseId));
           const warehouseRequired = payload.type === DocumentType.REMISSION
             ? payload.inventorySourceMode === InventorySourceMode.WAREHOUSE
-            : ownReturnItems.length > 0;
+            : payload.items.some(item => !providerIds.has(item.ownerWarehouseId));
           if (warehouseRequired) {
             const warehouse = payload.warehouseId ? await tx.warehouse.findFirst({
               where: { id: payload.warehouseId, active: true }, select: { id: true, type: true },
@@ -863,6 +874,9 @@ export class DocumentsService {
             }
           }
 
+          // Accessories always lock before equipment, including mixed direct documents.
+          for (const id of [...new Set(payload.items.flatMap(item => item.accessoryId ? [item.accessoryId] : []))].sort())
+            await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR UPDATE`;
           // Lock every item in the usual SKU -> serialized-asset order before
           // splitting a mixed return. Each existing writer reuses these locks.
           await lockBulkStock(tx, payload.items.flatMap((item) => item.skuId ? [item.skuId] : []));
@@ -882,14 +896,43 @@ export class DocumentsService {
             },
             select: { id: true, consecutive: true, status: true, docDate: true },
           });
-          // Preserve legacy representation: its items come from StockLedger.
-          // Do not introduce DocumentItem billing rows alongside those entries.
+          if (isDocumentCompositionV2(documentDate)) {
+            const items = await prepareAccessoryDocumentItems(tx, payload.items.map(item => ({
+              documentId: created.id, ...compositionFields(item), assetId: item.assetId ?? null,
+              skuId: item.skuId ?? null, accessoryId: item.accessoryId ?? null,
+              accessorySourceBalanceId: item.accessorySourceBalanceId ?? null,
+              componentParentAssetId: item.componentParentAssetId ?? null,
+              sourceWarehouseId: item.sourceWarehouseId ?? (payload.type === DocumentType.REMISSION
+                ? payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? item.ownerWarehouseId : payload.warehouseId : null),
+              condition: item.ownerWarehouseId, quantity: item.quantity ?? (item.assetId ? null : 1),
+            })), documentDate);
+            await tx.documentItem.createMany({ data: items });
+            const composed = await tx.document.findUniqueOrThrow({ where: { id: created.id }, include: { items: true } });
+            await validateDocumentConfiguration(tx, composed);
+            if (payload.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx, created.id, true);
+            if (payload.type === DocumentType.RETURN) {
+              // Mirror serialized/bulk returns: ally-owned items enter provider transit;
+              // own items enter the selected warehouse, even in one mixed direct return.
+              const destinations = new Set(composed.items.filter(item => item.accessoryId)
+                .map(item => providerIds.has(item.condition!) ? item.condition! : payload.warehouseId!));
+              for (const destination of destinations) {
+                await this.accessoryDocuments.apply(tx, { ...composed, warehouseId: destination,
+                  items: composed.items.filter(item => !item.accessoryId ||
+                    (providerIds.has(item.condition!) ? item.condition : payload.warehouseId) === destination),
+                }, userId);
+              }
+            } else if (composed.items.some(item => item.accessoryId)) {
+              await this.accessoryDocuments.apply(tx, composed, userId,
+                payload.inventorySourceMode === InventorySourceMode.OWNER_WAREHOUSES ? 'ON_SITE' : 'WAREHOUSE');
+            }
+          }
+          // Pre-cutover direct documents retain their original StockLedger-only representation.
           const common = { documentId: created.id, customerWorksiteId: payload.customerWorksiteId };
           if (payload.type === DocumentType.REMISSION) {
             if (payload.inventorySourceMode === InventorySourceMode.WAREHOUSE) {
-              await this.inventoryService.moveOut({ ...common, warehouseId: payload.warehouseId!, items: payload.items }, userId, tx);
+              if (inventoryItems.length) await this.inventoryService.moveOut({ ...common, warehouseId: payload.warehouseId!, items: inventoryItems }, userId, tx);
             } else {
-              await this.inventoryService.moveOnSite({ ...common, items: payload.items }, userId, tx);
+              if (inventoryItems.length) await this.inventoryService.moveOnSite({ ...common, items: inventoryItems }, userId, tx);
             }
           } else {
             if (providerReturnItems.length) {
@@ -934,7 +977,7 @@ export class DocumentsService {
     sendWhatsapp?: boolean;
     receivedSignature?: string;
     createdBy: string;
-    items: Array<{
+    items: Array<CompositionFields & {
       skuId?: string;
       assetId?: string;
       accessoryId?: string;
@@ -996,6 +1039,7 @@ export class DocumentsService {
             await tx.documentItem.createMany({
               data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
+                ...compositionFields(item),
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
                 accessoryId: item.accessoryId ?? null,
@@ -1011,7 +1055,7 @@ export class DocumentsService {
                   defaultBillingCutoffDate,
                   null,
                 ),
-              }))),
+              })), documentDate),
             });
           }
 
@@ -1094,6 +1138,7 @@ export class DocumentsService {
             await tx.documentItem.createMany({
               data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
                 documentId: document.id,
+                ...compositionFields(item),
                 skuId: item.skuId ?? null,
                 assetId: item.assetId ?? null,
                 accessoryId: item.accessoryId ?? null,
@@ -1110,7 +1155,7 @@ export class DocumentsService {
                   payload.type === DocumentType.RETURN ? documentDate : null,
                   null,
                 ),
-              }))),
+              })), documentDate),
             });
           }
 
@@ -1219,6 +1264,7 @@ export class DocumentsService {
           await tx.documentItem.createMany({
             data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
+              ...compositionFields(item),
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
               accessoryId: item.accessoryId ?? null,
@@ -1231,7 +1277,7 @@ export class DocumentsService {
               conditionNote: item.conditionNote?.trim() || null,
               billingCutoffDate: cutoffDate,
               billingStatus: this.getBillingStatus(cutoffDate, null),
-            }))),
+            })), nextDocDate),
           });
         }
       }
@@ -1333,7 +1379,7 @@ export class DocumentsService {
       recipientPhone?: string;
       recipientPhones?: string[];
       receivedSignature?: string;
-      items: Array<{
+      items: Array<CompositionFields & {
         skuId?: string;
         assetId?: string;
         accessoryId?: string;
@@ -1460,6 +1506,7 @@ export class DocumentsService {
           await tx.documentItem.createMany({
             data: await prepareAccessoryDocumentItems(tx, payload.items.map((item) => ({
               documentId,
+              ...compositionFields(item),
               skuId: item.skuId ?? null,
               assetId: item.assetId ?? null,
               accessoryId: item.accessoryId ?? null,
@@ -1475,7 +1522,7 @@ export class DocumentsService {
                 defaultBillingCutoffDate,
                 null,
               ),
-            }))),
+            })), nextDocDate),
           });
         }
 
@@ -2079,6 +2126,7 @@ export class DocumentsService {
 
     if (
       document.type === DocumentType.REMISSION &&
+      !isDocumentCompositionV2(document.docDate) &&
       document.items.length > REMISSION_ITEMS_PER_DOCUMENT
     ) {
       const splitDocumentIds = await this.splitRemissionDraftDocument(document);
@@ -2216,6 +2264,7 @@ export class DocumentsService {
         },
         items: {
           include: {
+            accessory: { select: { purpose: true } },
             sku: {
               select: {
                 id: true,
@@ -2352,6 +2401,9 @@ export class DocumentsService {
         items: {
           select: {
             id: true,
+            accessoryId: true,
+            accessoryName: true,
+            accessoryCode: true,
             quantity: true,
             requestedTag: true,
             conditionNote: true,
@@ -2477,21 +2529,7 @@ export class DocumentsService {
   }
 
   private parseDocumentResponsibleIds(notes?: string | null) {
-    const values = new Map<string, string>();
-    notes
-      ?.split('|')
-      .map((value) => value.trim())
-      .forEach((entry) => {
-        const [key, ...rest] = entry.split(':');
-        if (key && rest.length) {
-          values.set(key.trim().toLowerCase(), rest.join(':').trim());
-        }
-      });
-    return {
-      driverId: values.get('conductor') || null,
-      receiverId: values.get('recibe') || null,
-      dispatcherId: values.get('despachador') || null,
-    };
+    return parseDocumentResponsibleIds(notes);
   }
 
   private normalizeDocumentRecipientPhones(

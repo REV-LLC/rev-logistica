@@ -24,6 +24,11 @@ import { EquipmentConfigurationService } from './equipment-configuration.service
 @Roles(Role.ADMIN, Role.OFFICE)
 export class EquipmentConfigurationController {
   constructor(private readonly configurations: EquipmentConfigurationService) {}
+  @Get('return-origins')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
+  returnOrigins(@Query('customerWorksiteId', ParseUUIDPipe) customerWorksiteId: string) {
+    return this.configurations.returnOrigins(customerWorksiteId);
+  }
   @Get('assets/:id/motor-history') motorHistory(@Param('id', ParseUUIDPipe) id: string) {
     return this.configurations.motorHistory(id);
   }
@@ -43,7 +48,9 @@ export class EquipmentConfigurationController {
   getAsset(@Param('id', ParseUUIDPipe) id: string) {
     return this.configurations.get({ assetId: id });
   }
-  @Get('accessories/:id') getAccessory(@Param('id', ParseUUIDPipe) id: string) {
+  @Get('accessories/:id')
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
+  getAccessory(@Param('id', ParseUUIDPipe) id: string) {
     return this.configurations.get({ accessoryId: id });
   }
   @Put('assets/:id') saveAsset(

@@ -1,0 +1,17 @@
+.table table th:first-child,
+.table table td:first-child {
+  min-width: 210px;
+}
+
+.table table th:last-child,
+.table table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+  box-shadow: -6px 0 10px -10px rgba(0, 0, 0, 0.3);
+}
+
+.table table td {
+  font-variant-numeric: tabular-nums;
+}

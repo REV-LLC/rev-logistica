@@ -1,11 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { prepareDocumentComposition } from '../documents/document-composition';
 
 /** Capture catalogue labels server-side. Drafts do not reserve or move stock. */
 export async function prepareAccessoryDocumentItems(
   tx: Prisma.TransactionClient,
   items: Prisma.DocumentItemCreateManyInput[],
+  documentDate?: Date,
 ) {
+  items = await prepareDocumentComposition(tx, items, documentDate);
   const lines = items.filter((item) => item.accessoryId);
   if (!lines.length) return items;
   const accessories = await tx.accessory.findMany({

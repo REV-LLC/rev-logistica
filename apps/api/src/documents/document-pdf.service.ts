@@ -26,6 +26,7 @@ export type SharedDocument = {
   } | null;
   items: Array<{
     accessoryId?: string | null;
+    accessoryName?: string | null;
     accessoryCode?: string | null;
     quantity: { toString(): string } | string | number | null;
     requestedTag: string | null;
@@ -68,6 +69,7 @@ export function formatDocumentDateTime(docDate: Date) {
 }
 
 export function buildPdfItemDescription(item: PdfItem) {
+  if (item.accessoryId) return item.accessoryName || item.requestedTag || 'Accesorio';
   const reference =
     item.asset?.sku?.name ||
     item.sku?.name ||

@@ -53,10 +53,16 @@ export type Warehouse = {
 export type SelectedItem = {
   sourceWarehouseId?: string | null;
   selectionId: string;
+  parentCompositionNodeId?: string;
+  sourceDocumentItemId?: string;
+  parentSourceDocumentItemId?: string;
+  parentLegacyOriginId?: string;
   type: 'bulk' | 'serial' | 'free' | 'accessory';
   accessoryId?: string;
   accessorySourceBalanceId?: string;
   accessoryKind?: 'INDIVIDUAL' | 'RETURNABLE' | 'CONSUMABLE';
+  accessoryPurpose?: 'COMPONENT' | 'ACCESSORY';
+  physicalAvailableQuantity?: number;
   bulkKey?: string;
   skuId?: string;
   assetId?: string;
@@ -152,10 +158,16 @@ export type RequestDocumentDetail = {
     sourceWarehouseId?: string | null;
     id: string;
     skuId?: string | null;
+    compositionNodeId?: string | null;
+    parentCompositionNodeId?: string | null;
+    sourceDocumentItemId?: string | null;
+    parentSourceDocumentItemId?: string | null;
+    parentLegacyOriginId?: string | null;
     assetId?: string | null;
     accessoryId?: string | null;
     accessorySourceBalanceId?: string | null;
     accessoryKind?: 'INDIVIDUAL' | 'RETURNABLE' | 'CONSUMABLE' | null;
+    accessory?: { purpose: 'COMPONENT' | 'ACCESSORY' } | null;
     accessoryName?: string | null;
     accessoryCode?: string | null;
     componentParentAssetId?: string | null;
@@ -167,6 +179,7 @@ export type RequestDocumentDetail = {
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
+      internalNumber?: number | null;
       serialOrEngine?: string | null;
       description?: string | null;
       kind?: 'STANDARD' | 'MOTOR' | string | null;

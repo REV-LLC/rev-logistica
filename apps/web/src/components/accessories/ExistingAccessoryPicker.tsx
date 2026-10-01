@@ -55,8 +55,7 @@ export default function ExistingAccessoryPicker({
   return (
     <Stack>
       <Text size="sm">
-        Selecciona un accesorio de esta familia. Podrás revisar y guardar su
-        compatibilidad antes de asignar existencias.
+        Selecciona el accesorio que quieres vincular.
       </Text>
       <form
         onSubmit={(event) => {
@@ -83,7 +82,7 @@ export default function ExistingAccessoryPicker({
         result.items.map((item) => (
           <Card key={item.id} withBorder>
             <Text fw={600}>
-              {item.name} {item.internalCode ?? ""}
+              {item.name}
             </Text>
             <Text size="sm">
               {kindLabels[item.kind]} · {scopeLabels[item.scope]} ·{" "}

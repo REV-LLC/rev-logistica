@@ -44,7 +44,6 @@ import {
   IconRulerMeasure,
   IconMap2,
   IconMessageCircle,
-  IconReceipt,
   IconSettings,
   IconTag,
   IconTools,
@@ -272,9 +271,9 @@ const sections: NavSection[] = [
             roles: ["ADMIN", "OFFICE"],
           },
           {
-            href: "/billing/pre-invoice",
-            label: "Prefactura",
-            icon: IconReceipt,
+            href: "/billing/annexes",
+            label: "Anexos",
+            icon: IconTag,
             roles: ["ADMIN", "OFFICE"],
           },
           {
@@ -292,6 +291,10 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
         activePrefixes: ["/employees"],
         excludedPrefixes: ["/employees/activities"],
+        children: [
+          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities"] },
+          { href: "/employees/payroll", label: "Nómina", icon: IconFileDollar, roles: ["ADMIN", "OFFICE"] },
+        ],
       },
       { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
     ],
@@ -310,12 +313,6 @@ const sections: NavSection[] = [
         href: "/settings/catalog-options",
         label: "Catálogo de ítems",
         icon: IconSettings,
-        roles: ["ADMIN"],
-      },
-      {
-        href: "/settings/asset-components",
-        label: "Componentes de equipos",
-        icon: IconArrowsShuffle,
         roles: ["ADMIN"],
       },
     ],
@@ -344,7 +341,7 @@ const toolLinks: NavLinkItem[] = [
   { href: "/data", label: "Datos", icon: IconDatabaseExport, roles: ["ADMIN"] },
 ];
 
-const prodDisabledRoutes = ["/transport/cost", "/billing/pre-invoice"];
+const prodDisabledRoutes = ["/transport/cost"];
 const isProduction = process.env.NODE_ENV === "production";
 const defaultServiceName = "finge";
 const homeLink: NavLinkItem = {

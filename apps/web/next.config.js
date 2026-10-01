@@ -37,11 +37,6 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/billing/prefactura',
-        destination: '/billing/pre-invoice',
-        permanent: true,
-      },
-      {
         source: '/inventory/remision-devolucion',
         destination: '/inventory/dispatch-return',
         permanent: true,

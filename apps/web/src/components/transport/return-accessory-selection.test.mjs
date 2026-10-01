@@ -20,7 +20,8 @@ test('devolución de accesorio solo conserva su custodia y relación sin agregar
   assert.equal(items[0].sourceWarehouseId, undefined);
   assert.equal(items[0].accessoryKind, 'RETURNABLE');
   assert.equal(items[0].quantity, 1);
-  assert.match(items[0].name, /Bache · AC-01 · Accesorio de Pluma #1/);
+  assert.equal(items[0].name, 'Bache · Pluma #1');
+  assert.equal(items[0].name.includes(option.code), false);
 });
 
 test('confirmación conjunta conserva el equipo e inicia consumibles en uno con su máximo real', () => {

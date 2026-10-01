@@ -6,6 +6,7 @@ import { IconCamera, IconCheck, IconChevronRight, IconRefresh } from '@tabler/ic
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { api, ApiError } from '@/lib/api';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type PendingItem = {
   sourceLedgerId: string;
@@ -23,6 +24,7 @@ type PendingItem = {
   publicCode: string | null;
   serialOrEngine: string | null;
   description: string | null;
+  internalNumber?: number | null;
   pendingQuantity: number;
 };
 
@@ -234,7 +236,7 @@ export default function ProviderReturnsPage() {
                 const quantity = selected[item.sourceLedgerId] ?? 0;
                 return <Paper key={item.sourceLedgerId} withBorder p="sm" radius="sm">
                   <Group justify="space-between" align="center" wrap="nowrap">
-                    <Checkbox checked={quantity > 0} onChange={(event) => { const checked = event.currentTarget.checked; setSelected((current) => ({ ...current, [item.sourceLedgerId]: checked ? item.pendingQuantity : 0 })); }} label={<div><Text fw={600}>{item.skuName ?? 'Equipo'}</Text><Text size="xs" c="dimmed">{item.publicCode || item.serialOrEngine || item.description || (item.type === 'BULK' ? `${item.pendingQuantity} pendientes` : 'Serial')}</Text></div>} />
+                    <Checkbox checked={quantity > 0} onChange={(event) => { const checked = event.currentTarget.checked; setSelected((current) => ({ ...current, [item.sourceLedgerId]: checked ? item.pendingQuantity : 0 })); }} label={<div><Text fw={600}>{item.type === 'SERIAL' && !item.sourceAccessoryMovementId ? getSerialDisplayName(item) : item.skuName ?? 'Accesorio'}</Text><Text size="xs" c="dimmed">{item.pendingQuantity} pendiente(s){item.serialOrEngine ? ` · Serial: ${item.serialOrEngine}` : ''}</Text></div>} />
                     {item.type === 'BULK' && quantity > 0 && <NumberInput w={100} min={1} max={item.pendingQuantity} value={quantity} onChange={(value) => setSelected((current) => ({ ...current, [item.sourceLedgerId]: Number(value) || 0 }))} />}
                   </Group>
                 </Paper>;

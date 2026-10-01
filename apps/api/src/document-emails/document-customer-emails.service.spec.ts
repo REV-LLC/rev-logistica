@@ -48,7 +48,13 @@ describe('DocumentCustomerEmailsService', () => {
         mimeType: 'image/png',
       },
     ],
-    items: [],
+    items: [{
+      accessoryId: 'accessory-1',
+      accessoryName: 'Manguera de funcionamiento',
+      accessoryCode: 'ACC-001',
+      requestedTag: null,
+      quantity: 1,
+    }],
   };
 
   it('sends the confirmed document PDF, evidence and receiver signature', async () => {
@@ -88,6 +94,7 @@ describe('DocumentCustomerEmailsService', () => {
     expect(mail.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'documentos@cliente.test',
+        html: expect.stringContaining('Manguera de funcionamiento'),
         attachments: [
           expect.objectContaining({
             filename: 'remision-RM000001.pdf',
@@ -99,6 +106,7 @@ describe('DocumentCustomerEmailsService', () => {
         ],
       }),
     );
+    expect(mail.sendMail.mock.calls[0][0].html).toContain('ACC-001');
     expect(prisma.document.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: document.id },

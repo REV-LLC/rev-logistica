@@ -1,4 +1,5 @@
 'use client';
+import { restoreDocumentComposition } from './request-items';
 import { getRequestInventorySourceMode, getRequestSourceWarehouseId, type RequestInventorySourceMode } from './request-inventory-source';
 
 import RequestInventoryPickerModal from './RequestInventoryPickerModal';
@@ -661,11 +662,12 @@ export default function TransportRequestsWorkspace({
             ? getRequestSourceWarehouseId(doc, ownerWarehouseId, item.sourceWarehouseId) : undefined;
           if (item.accessoryId) {
             return {
-              selectionId: createSelectionId(), type: 'accessory' as const,
+              ...restoreDocumentComposition(item), type: 'accessory' as const,
               sourceWarehouseId,
               accessoryId: item.accessoryId,
               accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
               accessoryKind: item.accessoryKind ?? undefined,
+              accessoryPurpose: item.accessory?.purpose,
               componentParentAssetId: item.componentParentAssetId ?? undefined,
               name: item.requestedTag ?? item.accessoryName ?? 'Accesorio',
               quantity: Number(item.quantity ?? 1), ownerWarehouseId,
@@ -674,7 +676,7 @@ export default function TransportRequestsWorkspace({
           }
           if (!item.skuId && !item.assetId && item.requestedTag) {
             return {
-              selectionId: createSelectionId(),
+              ...restoreDocumentComposition(item),
               type: 'free' as const,
               sourceWarehouseId,
               name: item.requestedTag,
@@ -688,12 +690,13 @@ export default function TransportRequestsWorkspace({
           }
           if (item.skuId) {
             return {
-              selectionId: createSelectionId(),
+              ...restoreDocumentComposition(item),
               type: 'bulk' as const,
               sourceWarehouseId,
               bulkKey: buildBulkKey({
                 skuId: item.skuId,
                 sourceWarehouseId,
+                sourceDocumentItemId: item.sourceDocumentItemId,
                 ownerWarehouseId,
               }),
               skuId: item.skuId,
@@ -706,16 +709,15 @@ export default function TransportRequestsWorkspace({
             };
           }
           return {
-            selectionId: createSelectionId(),
+            ...restoreDocumentComposition(item),
             type: 'serial' as const,
             sourceWarehouseId,
             assetId: item.assetId ?? undefined,
-            name:
-              item.asset?.description ??
-              item.asset?.sku?.name ??
-              item.asset?.serialOrEngine ??
-              item.assetId ??
-              'Serial',
+            name: getSerialDisplayName({
+              ...item.asset,
+              assetId: item.assetId,
+              skuName: item.asset?.sku?.name,
+            }),
             serial: item.asset?.serialOrEngine ?? null,
             ownerWarehouseId,
             componentParentAssetId: item.componentParentAssetId ?? undefined,

@@ -110,7 +110,11 @@ export default function EmployeeCalendarPicker({
               />
             ) : null}
             <div className={styles.employeeName}>
-              <Text fw={700} className={styles.employeeTriggerName}>
+              <Text
+                fw={700}
+                className={styles.employeeTriggerName}
+                title={employee ? nameOf(employee) : undefined}
+              >
                 {employee ? nameOf(employee) : "Selecciona un empleado"}
               </Text>
               <Text className={styles.employeeTriggerHint} c="dimmed">

@@ -11,6 +11,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { parseDocumentResponsibleIds } from './document-responsibles';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DocumentPdfService,
@@ -186,6 +187,7 @@ export class DocumentPdfSnapshotService {
         items: {
           select: {
             accessoryId: true,
+            accessoryName: true,
             accessoryCode: true,
             quantity: true,
             requestedTag: true,
@@ -278,20 +280,7 @@ export class DocumentPdfSnapshotService {
   }
 
   private parseResponsibleIds(notes?: string | null) {
-    const values = new Map<string, string>();
-    notes
-      ?.split('|')
-      .map((value) => value.trim())
-      .forEach((entry) => {
-        const [key, ...rest] = entry.split(':');
-        if (key && rest.length)
-          values.set(key.trim().toLowerCase(), rest.join(':').trim());
-      });
-    return {
-      driverId: values.get('conductor') || null,
-      receiverId: values.get('recibe') || null,
-      dispatcherId: values.get('despachador') || null,
-    };
+    return parseDocumentResponsibleIds(notes);
   }
 
   private parseDeliveryMode(notes?: string | null) {

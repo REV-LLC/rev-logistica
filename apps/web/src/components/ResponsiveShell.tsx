@@ -14,6 +14,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
     { prefix: "/inventory/maintenance", title: "Mantenimientos", subtitle: "Historial y próximos cambios" },
     { prefix: "/inventory/hour-meter", title: "Horómetros", subtitle: "Lecturas de equipos" },
     { prefix: "/employees/activities", title: "Bitácora de empleados", subtitle: "Actividades del equipo" },
+    { prefix: "/employees/payroll", title: "Nómina", subtitle: "Salarios y comprobantes" },
     {
       prefix: "/office-assistant",
       title: "Asistente Office",
@@ -119,11 +120,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       title: "Proveedores",
       subtitle: "Datos y bodegas",
     },
-    {
-      prefix: "/billing/pre-invoice",
-      title: "Prefactura",
-      subtitle: "Resumen del periodo",
-    },
+    { prefix: "/billing/annexes", title: "Anexos", subtitle: "Cobro por obra" },
     { prefix: "/customers", title: "Clientes", subtitle: "Relacion comercial" },
     { prefix: "/employees", title: "Empleados", subtitle: "Equipo interno" },
     { prefix: "/data", title: "Datos", subtitle: "Backups y exportaciones" },

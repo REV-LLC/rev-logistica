@@ -1,3 +1,4 @@
+import { provisionalSalaryData } from '../payroll/payroll-policy';
 import {
   GetObjectCommand,
   NoSuchKey,
@@ -155,6 +156,9 @@ export class EmployeesService {
             userId: createdUserId,
           },
         });
+
+        const provisionalSalary = provisionalSalaryData(created.id);
+        if (provisionalSalary) await tx.employeeSalary.create({ data: provisionalSalary });
 
         if (vehicleIds.length) {
           await tx.employeeVehicle.createMany({
@@ -315,6 +319,8 @@ export class EmployeesService {
 
   async deleteEmployee(employeeId: string) {
     return this.prisma.$transaction(async (tx) => {
+      const salaryHistory = await tx.employeeSalary.count({ where: { employeeId } });
+      if (salaryHistory) throw new BadRequestException('El empleado tiene historial salarial. Desactívalo para conservar sus registros.');
       await tx.employeeVehicle.deleteMany({ where: { employeeId } });
       await tx.employee.delete({ where: { id: employeeId } });
       return { deleted: true };
