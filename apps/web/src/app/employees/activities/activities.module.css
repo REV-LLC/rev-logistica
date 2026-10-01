@@ -353,3 +353,23 @@
     );
   }
 }
+
+.employeeSwitch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  .employeeSwitch {
+    width: 100%;
+    gap: 8px;
+  }
+  .employeeSwitch .employeeTrigger {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+}
