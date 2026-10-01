@@ -163,6 +163,7 @@ test('devolución consulta saldo de obra y conserva la presentación de dueños 
         ApiError,
         api: async (url) => {
           calls.push(url);
+          if (url.includes('/return-origins?')) return [];
           return {
             bulk: [],
             serial: [{ assetId: 'motor', kind: 'MOTOR' }],
@@ -179,8 +180,9 @@ test('devolución consulta saldo de obra y conserva la presentación de dueños 
     effectiveSourceWorksiteId: 'site',
     useManualWarehouseCapture: false,
   });
+  calls.length = 0; // The mount has already performed its initial inventory load.
   await act(() => hook.current.loadInventory());
-  assert.equal(calls.at(-1), '/inventory/on-site/site/request-options');
+  assert.deepEqual(calls, ['/inventory/on-site/site/request-options', '/equipment-configurations/return-origins?customerWorksiteId=site']);
   assert.equal(hook.current.showInventoryOwnerWarehouse, false);
   assert.equal(hook.current.pickerSerialItems[0].assetId, 'motor');
 });

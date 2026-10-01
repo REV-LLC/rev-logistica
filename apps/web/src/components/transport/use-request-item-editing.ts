@@ -59,6 +59,10 @@ export function useRequestItemEditing({
           availableQuantity: item.quantity,
           sourceWarehouseId: item.sourceWarehouseId,
           ownerWarehouseId: item.ownerWarehouseId,
+          sourceDocumentItemId: item.sourceDocumentItemId,
+          parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+          parentLegacyOriginId: item.parentLegacyOriginId,
+          componentParentAssetId: item.componentParentAssetId,
         },
       ];
     });
@@ -124,6 +128,11 @@ export function useRequestItemEditing({
         i === index
           ? {
               selectionId: item.selectionId,
+              parentCompositionNodeId: item.parentCompositionNodeId,
+              sourceDocumentItemId: item.sourceDocumentItemId,
+              parentSourceDocumentItemId: item.parentSourceDocumentItemId,
+              parentLegacyOriginId: item.parentLegacyOriginId,
+              componentParentAssetId: item.componentParentAssetId,
               type: 'bulk',
               bulkKey: buildBulkKey({
                 skuId,
@@ -160,7 +169,7 @@ export function useRequestItemEditing({
           ...item,
           ownerWarehouseId,
           ...(item.type === 'bulk' && item.skuId
-            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId, sourceWarehouseId: item.sourceWarehouseId }) }
+            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId, sourceWarehouseId: item.sourceWarehouseId, sourceDocumentItemId: item.sourceDocumentItemId }) }
             : {}),
         };
       }),

@@ -16,7 +16,9 @@ import { Type } from 'class-transformer';
 import { DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
 
-class CreateDocumentRequestItemDto {
+import { DocumentCompositionItemDto } from './document-composition-item.dto';
+
+class CreateDocumentRequestItemDto extends DocumentCompositionItemDto {
   @IsOptional()
   @IsUUID()
   sourceWarehouseId?: string;

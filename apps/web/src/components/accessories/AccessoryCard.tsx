@@ -37,9 +37,6 @@ export default function AccessoryCard({
         </Group>
         <Badge variant="light" color={item.purpose === 'COMPONENT' ? 'violet' : 'blue'}>{item.purpose === 'COMPONENT' ? 'Componente' : 'Accesorio'}</Badge>
         {item.exclusiveAssetId ? <Text size="sm">Exclusivo de su equipo; no intercambiable.</Text> : null}
-        {item.internalCode ? (
-          <Text size="sm">Código: {item.internalCode}</Text>
-        ) : null}
         {!item.active ? <Badge color="gray">Archivado</Badge> : null}
         {item.description ? <Text size="sm">{item.description}</Text> : null}
         <Text size="sm">Propietario: {item.ownerWarehouse.name}</Text>
@@ -56,7 +53,7 @@ export default function AccessoryCard({
             {item.assets.map((a) => equipmentLabel(a.asset)).join(", ")}
           </Text>
         ) : null}
-        {item.scope === 'ACCESSORIES' ? <Text size="sm">{item.compatibleParents?.map(p => `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}`).join(', ')}</Text> : null}
+        {item.scope === 'ACCESSORIES' ? <Text size="sm">{item.compatibleParents?.map(p => p.parentAccessory.name).join(', ')}</Text> : null}
         {equipmentId ? (
           <Badge color={assigned ? "green" : "gray"} variant="light">
             {assigned
@@ -74,7 +71,7 @@ export default function AccessoryCard({
           </Text>
         ))}
         <Group mt="auto">
-          {item.kind === 'INDIVIDUAL' && item.purpose !== 'COMPONENT' ? <Button component={Link} href={`/inventory/equipment-configuration/accessories/${item.id}`} size="xs" variant="default">Configurar</Button> : null}
+          <Button component={Link} href={`/inventory/equipment-configuration/accessories/${item.id}`} size="xs" variant="default">{item.kind === 'INDIVIDUAL' && item.purpose !== 'COMPONENT' ? 'Conjunto y cobro' : 'Cobro'}</Button>
           <Button size="xs" variant="light" onClick={onEdit}>
             Editar {item.purpose === 'COMPONENT' ? 'componente' : 'accesorio'}
           </Button>
@@ -92,6 +89,7 @@ export default function AccessoryCard({
             Historial
           </Button>
         </Group>
+        {item.internalCode ? <details><Text component="summary" size="xs" c="dimmed" style={{ cursor: 'pointer' }}>Datos internos</Text><Text size="xs">Código: {item.internalCode}</Text></details> : null}
       </Stack>
     </Card>
   );

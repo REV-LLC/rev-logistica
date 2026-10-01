@@ -15,6 +15,7 @@ import { IconSearch } from "@tabler/icons-react";
 import { kindLabels } from "../accessories/types";
 import {
   returnAccessoryAlreadySelected,
+  returnAccessoryKey,
   type ReturnAccessoryOption,
 } from "./return-accessory-selection";
 import type { SelectedItem } from "./request-types";
@@ -58,16 +59,15 @@ export default function ReturnAccessoryPickerPanel({
         options.items.map((option) => {
           const added = returnAccessoryAlreadySelected(selectedItems, option);
           return (
-            <Paper key={option.sourceBalanceId} withBorder radius="md" p="sm">
+            <Paper key={returnAccessoryKey(option)} withBorder radius="md" p="sm">
               <Checkbox
-                checked={added || pending.has(option.sourceBalanceId)}
+                checked={added || pending.has(returnAccessoryKey(option))}
                 disabled={added || option.quantity < 1}
                 onChange={() => onToggle(option)}
                 label={
                   <Stack gap={4}>
                     <Text fw={600} size="sm">
                       {option.name}
-                      {option.code ? ` · ${option.code}` : ""}
                     </Text>
                     <Text size="xs" c="dimmed">
                       Equipo: {option.parentName}
@@ -75,6 +75,7 @@ export default function ReturnAccessoryPickerPanel({
                     <Text size="xs" c="dimmed">
                       Dueño: {option.ownerName}
                     </Text>
+                    <Text size="xs" c="dimmed">{option.sourceLabel}</Text>
                     <Group gap="xs">
                       <Badge variant="light">{kindLabels[option.kind]}</Badge>
                       <Text size="xs">

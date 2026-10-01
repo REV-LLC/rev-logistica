@@ -6,20 +6,26 @@ import {
 } from 'class-validator';
 import { DocumentStatus, DocumentType, InventorySourceMode } from '@prisma/client';
 import { COLOMBIAN_PHONE_INPUT_PATTERN } from '../../messaging/colombian-phone';
+import { DocumentCompositionItemDto } from './document-composition-item.dto';
 
 @ValidatorConstraint({ name: 'directDocumentItemShape', async: false })
 class DirectDocumentItemShape implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments) {
     const item = args.object as DirectDocumentItemDto;
-    return Boolean(item.skuId) !== Boolean(item.assetId)
-      && (!item.assetId || item.quantity === undefined || item.quantity === 1);
+    return [item.skuId, item.assetId, item.accessoryId].filter(Boolean).length === 1
+      && (!item.assetId || item.quantity === undefined || item.quantity === 1)
+      && (!item.accessoryId || !!item.accessorySourceBalanceId);
   }
   defaultMessage() {
     return 'Cada ítem debe identificar un artículo por cantidad o un solo equipo, no ambos';
   }
 }
 
-export class DirectDocumentItemDto {
+export class DirectDocumentItemDto extends DocumentCompositionItemDto {
+  @IsOptional() @IsUUID() accessoryId?: string;
+  @IsOptional() @IsUUID() accessorySourceBalanceId?: string;
+  @IsOptional() @IsUUID() componentParentAssetId?: string;
+  @IsOptional() @IsUUID() sourceWarehouseId?: string;
   @IsOptional()
   @IsUUID()
   skuId?: string;
@@ -28,7 +34,7 @@ export class DirectDocumentItemDto {
   @IsUUID()
   assetId?: string;
 
-  @ValidateIf((item: DirectDocumentItemDto) => Boolean(item.skuId) || item.quantity !== undefined)
+  @ValidateIf((item: DirectDocumentItemDto) => Boolean(item.skuId || item.accessoryId) || item.quantity !== undefined)
   @IsNumber()
   @IsPositive()
   quantity?: number;

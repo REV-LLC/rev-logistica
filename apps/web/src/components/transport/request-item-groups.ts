@@ -3,18 +3,29 @@ import type { SelectedItem } from './request-types';
 export type RequestItemGroup = { item: SelectedItem; index: number; children: RequestItemGroup[] };
 export const parentAssetId = (item: SelectedItem) => item.componentParentAssetId;
 
+// A line ID identifies the immediate parent. Asset custody is only a legacy fallback.
+function parentOf(item: SelectedItem, items: SelectedItem[]) {
+  if (item.parentCompositionNodeId) return items.find(candidate => candidate.selectionId === item.parentCompositionNodeId);
+  if (item.parentSourceDocumentItemId) return items.find(candidate => candidate.sourceDocumentItemId === item.parentSourceDocumentItemId);
+  return items.find(candidate => candidate.assetId && candidate.assetId === item.componentParentAssetId);
+}
+
 /** Presentation only: the saved document remains a flat list with parent references. */
 export function groupRequestItems(items: SelectedItem[]): RequestItemGroup[] {
   const nodes = items.map((item, index) => ({ item, index, children: [] as RequestItemGroup[] }));
-  const byAsset = new Map(nodes.filter(node => node.item.assetId).map(node => [node.item.assetId!, node]));
+  const byId = new Map(nodes.map(node => [node.item.selectionId, node]));
+  const parentNode = (item: SelectedItem) => {
+    const parent = parentOf(item, items);
+    return parent ? byId.get(parent.selectionId) : undefined;
+  };
   const roots: RequestItemGroup[] = [];
   for (const node of nodes) {
-    const parent = byAsset.get(parentAssetId(node.item) ?? '');
+    const parent = parentNode(node.item);
     const seen = new Set([node.item.selectionId]);
     let ancestor = parent;
     while (ancestor && !seen.has(ancestor.item.selectionId)) {
       seen.add(ancestor.item.selectionId);
-      ancestor = byAsset.get(parentAssetId(ancestor.item) ?? '');
+      ancestor = parentNode(ancestor.item);
     }
     // Unresolved/historical links and cycles must never hide a document line.
     if (!parent || ancestor) roots.push(node);
@@ -30,9 +41,9 @@ export function removeRequestItem(items: SelectedItem[], selectionId: string) {
   let changed = true;
   while (changed) {
     changed = false;
-    const assets = new Set(items.filter(item => removedIds.has(item.selectionId)).map(item => item.assetId).filter(Boolean));
     for (const item of items) {
-      if (!removedIds.has(item.selectionId) && assets.has(parentAssetId(item))) {
+      const parent = parentOf(item, items);
+      if (!removedIds.has(item.selectionId) && parent && removedIds.has(parent.selectionId)) {
         removedIds.add(item.selectionId);
         changed = true;
       }

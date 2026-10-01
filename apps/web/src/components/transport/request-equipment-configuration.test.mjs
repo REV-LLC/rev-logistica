@@ -11,6 +11,29 @@ const context = { docType: 'REMISSION', customerWorksiteId: 'site' };
 const moduleWithApi = api => loadTransportModule('request-equipment-configuration.ts', { '@/lib/api': { api } });
 const { addDocumentParts, availableForDocument, sameDocumentPart } = moduleWithApi(() => { throw Error('Unexpected I/O'); });
 
+test('devolución reconoce piezas seleccionadas por pestañas bajo su padre documental original', async () => {
+  const parent = { ...root, sourceDocumentItemId: 'shipment-root' };
+  const { loadDocumentConfiguration } = moduleWithApi(async url => {
+    if (url.startsWith('/accessories/document-options?')) return { items: [{
+      accessoryId: 'tip-ref', sourceBalanceId: 'balance', name: 'Piezas', code: 'ACC-LONG-CODE', kind: 'RETURNABLE', quantity: 2,
+      sourceDocumentItemId: 'shipment-child', parentSourceDocumentItemId: 'shipment-root',
+    }], hasMore: false };
+    if (url.startsWith('/inventory/on-site/')) return { serial: [], bulk: [] };
+    if (url.includes('/return-parts?')) return [];
+    if (url.includes('/return-origins?')) return [];
+    throw Error(`Unexpected ${url}`);
+  });
+  const [option] = await loadDocumentConfiguration(parent, { ...context, docType: 'RETURN' });
+  const fromTabs = { ...option.item, selectionId: 'selected-child' };
+  assert.equal(option.item.name, 'Piezas');
+  assert.equal(option.item.parentCompositionNodeId, undefined);
+  assert.equal(option.item.parentSourceDocumentItemId, 'shipment-root');
+  assert.equal(sameDocumentPart(fromTabs, option.item), true);
+  assert.deepEqual(addDocumentParts([parent, fromTabs], parent, [option]), [parent, fromTabs]);
+  assert.deepEqual(removeRequestItem([parent, fromTabs], 'selected-child'), [parent]);
+  assert.equal(sameDocumentPart(fromTabs, { ...option.item, sourceDocumentItemId: 'another-lot' }), false);
+});
+
 test('agrupación conserva índices y lista plana sin mutar el documento', () => {
   const items = [tip, root, child];
   const groups = groupRequestItems(items);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Checkbox, Container, Group, Loader, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title } from '@mantine/core';
 import { IconBuildingWarehouse, IconGasStation, IconTool, IconTruck } from '@tabler/icons-react';
 import { ApiError, api } from '@/lib/api';
+import { getSerialDisplayName } from '@/lib/serial-assets';
 
 type OptionData = {
   worksites: Array<{ id: string; name: string }>;
@@ -12,6 +13,8 @@ type OptionData = {
     publicCode: string;
     serialOrEngine: string;
     description: string | null;
+    internalNumber?: number | null;
+    warehouseOwner?: { name: string } | null;
     sku: { name: string };
   }>;
   vehicles: Array<{
@@ -47,6 +50,8 @@ type DashboardData = {
     asset: {
       publicCode: string;
       description: string | null;
+      internalNumber?: number | null;
+      warehouseOwner?: { name: string } | null;
       sku: { name: string };
     };
     operator: { name: string; lastName: string } | null;
@@ -155,7 +160,7 @@ export default function FuelPage() {
     () =>
       options?.assets.map((item) => ({
         value: item.id,
-        label: `${item.publicCode} · ${item.sku.name}`,
+        label: `${getSerialDisplayName({ ...item, skuName: item.sku.name })}${item.warehouseOwner?.name ? ` · ${item.warehouseOwner.name}` : ''}`,
       })) ?? [],
     [options],
   );
@@ -644,10 +649,10 @@ export default function FuelPage() {
                           <Table.Td>{row.worksite.name}</Table.Td>
                           <Table.Td>
                             <Text fw={600} size="sm">
-                              {row.asset.publicCode}
+                              {getSerialDisplayName({ ...row.asset, skuName: row.asset.sku.name })}
                             </Text>
                             <Text c="dimmed" size="xs">
-                              {row.asset.sku.name}
+                              {row.asset.warehouseOwner?.name}
                             </Text>
                           </Table.Td>
                           <Table.Td ta="right">{formatNumber(row.quantityCans)}</Table.Td>

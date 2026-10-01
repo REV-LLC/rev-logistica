@@ -23,6 +23,7 @@ describe('Accessory physical source after production integration', () => {
       accessoryBalance: { findUnique: jest.fn().mockResolvedValue(source), findMany: jest.fn().mockResolvedValue([]) },
       accessoryMovement: { findFirst: jest.fn().mockResolvedValue(null) },
       stockLedger: { findMany: jest.fn().mockResolvedValue([movement]) },
+      documentItem: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const moveInTransaction = jest.fn();
     const service = new AccessoryDocumentsService({ moveInTransaction } as never);

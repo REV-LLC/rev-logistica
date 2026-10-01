@@ -1,3 +1,4 @@
+import * as commercialHistory from '../commercial-profiles/commercial-history';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   DocumentStatus,
@@ -103,6 +104,19 @@ function fixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Document physical inventory origin', () => {
+  it('captures commercial conditions inside approval before moving physical stock',async()=>{
+    const spy=jest.spyOn(commercialHistory,'documentCommercialSnapshots');
+    try {const {service,document,database,inventory}=fixture();await service['approveLoadedRequestDocument'](document,'office-1');
+      expect(spy).toHaveBeenCalledWith(database,document.id,true);
+      expect(spy.mock.invocationCallOrder[0]).toBeLessThan(inventory.moveOut.mock.invocationCallOrder[0]);
+    } finally {spy.mockRestore();}
+  });
+  it('does not move stock if freezing commercial conditions fails',async()=>{
+    const spy=jest.spyOn(commercialHistory,'documentCommercialSnapshots').mockRejectedValueOnce(new Error('snapshot write failed'));
+    try {const {service,document,inventory}=fixture();await expect(service['approveLoadedRequestDocument'](document,'office-1')).rejects.toThrow('snapshot write failed');expect(inventory.moveOut).not.toHaveBeenCalled();}
+    finally {spy.mockRestore();}
+  });
+
   it.each(['OWN', 'ALLY'])('a damaged return to %s records condition and latest note in the receipt transaction', async type => {
     const { service, document, database, inventory } = fixture({ type: DocumentType.RETURN,
       items: [{ ...baseItem, skuId: null, assetId: 'asset-5', conditionNote: '  Falla de motor  ' }] });
@@ -360,7 +374,8 @@ describe('Document physical inventory origin', () => {
     }));
     await expect(service['approveLoadedRequestDocument'](document, 'office-1')).resolves.toMatchObject({ status: DocumentStatus.CONFIRMED });
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-    expect(database.document.findUnique).toHaveBeenCalledTimes(2);
+    // Each attempt rereads the locked document and then its commercial composition.
+    expect(database.document.findUnique).toHaveBeenCalledTimes(4);
     expect(database.$queryRaw).toHaveBeenCalledTimes(2);
     expect(inventory.invalidateDocumentMovementCaches).toHaveBeenCalledTimes(1);
   });

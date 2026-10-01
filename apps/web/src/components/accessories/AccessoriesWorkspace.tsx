@@ -160,22 +160,14 @@ export default function AccessoriesWorkspace({
       </Group>
       {equipmentId ? (
         <Text size="sm">
-          Aquí aparecen los accesorios compatibles y los asignados a este
-          equipo. Puedes crear uno nuevo o entregar existencias de una card
-          existente.
+          Accesorios compatibles y asignados a este equipo.
         </Text>
       ) : null}
-      <Alert color="blue" variant="light">
-        Crea y edita accesorios aquí. Para entregarlos o devolverlos de una
-        obra, agrégalos en la remisión o devolución de Transporte. El consumo se
-        registra desde su card; una entrega no consume existencias. Los
-        componentes anteriores conservan su flujo y no se convierten
-        automáticamente.
-      </Alert>
+      <Text size="sm" c="dimmed">Entregas y devoluciones: en Transporte. Consumos: desde el accesorio.</Text>
       <SegmentedControl aria-label="Clasificación" value={purpose} onChange={value => { setPurpose(value); setPage(0); }} data={[
         { value: 'ACCESSORY', label: 'Accesorios de trabajo' }, { value: 'COMPONENT', label: 'Componentes del equipo' },
       ]} />
-      {purpose === 'COMPONENT' ? <Text size="sm">Los componentes nuevos se crean desde «Configurar» en la tarjeta del equipo. Aquí puedes editar su ficha y consultar sus existencias.</Text> : null}
+      {purpose === 'COMPONENT' ? <Text size="sm">Crea componentes desde la configuración del equipo.</Text> : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();

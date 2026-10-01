@@ -58,7 +58,7 @@ export default function AccessoryForm({
   );
   const [active, setActive] = useState(item?.active ?? true);
   const [parentAccessoryIds, setParentAccessoryIds] = useState(item?.compatibleParents?.map(p => p.parentAccessoryId) ?? []);
-  const [parentOptions, setParentOptions] = useState(item?.compatibleParents?.map(p => ({ value: p.parentAccessoryId, label: `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}` })) ?? []);
+  const [parentOptions, setParentOptions] = useState(item?.compatibleParents?.map(p => ({ value: p.parentAccessoryId, label: p.parentAccessory.name })) ?? []);
   const [parentSearch, setParentSearch] = useState('');
   const [ownerWarehouseId, setOwnerWarehouseId] = useState<string | null>(
     equipment?.warehouseOwnerId ?? null,
@@ -126,7 +126,7 @@ export default function AccessoryForm({
         setParentOptions(previous => Array.from(new Map([
           ...previous.filter(option => parentAccessoryIds.includes(option.value)),
           ...result.items.filter(p => p.active && p.kind === 'INDIVIDUAL' && p.id !== item?.id)
-            .map(p => ({ value: p.id, label: `${p.name} · ${p.internalCode ?? ''}` })),
+            .map(p => ({ value: p.id, label: `${p.name} · ${p.ownerWarehouse.name}` })),
         ].map(option => [option.value, option])).values()));
       }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
     }, 250);
@@ -252,7 +252,7 @@ export default function AccessoryForm({
                 description={
                   item
                     ? "Si lo dejas vacío, se conserva el código actual."
-                    : "Déjalo vacío para generar un código automáticamente, o escribe el que ya tiene el accesorio."
+                    : "Opcional; se genera automáticamente."
                 }
                 maxLength={80}
                 value={internalCode}
@@ -321,14 +321,11 @@ export default function AccessoryForm({
                 onChange={setAssetIds}
               />
             ) : null}
-            {scope === 'ACCESSORIES' ? <MultiSelect label="Accesorios principales compatibles" description="Busca por nombre o código. Solo se incluyen accesorios individualizados de la familia elegida."
+            {scope === 'ACCESSORIES' ? <MultiSelect label="Accesorios principales compatibles" placeholder="Buscar por nombre"
               required searchable value={parentAccessoryIds} data={parentOptions} onChange={setParentAccessoryIds}
               searchValue={parentSearch} onSearchChange={setParentSearch} /> : null}
             {item?.exclusiveAssetId ? <Text size="sm">Este componente pertenece exclusivamente a su equipo. Omitirlo en una entrega no cambia esa pertenencia.</Text> : null}
-            <Alert color="blue">
-              La compatibilidad no es una entrega. Después de guardar puedes
-              asignar existencias desde la card.
-            </Alert>
+            <Text size="xs" c="dimmed">La compatibilidad no registra una entrega.</Text>
             {item ? (
               <>
                 <Text size="sm">

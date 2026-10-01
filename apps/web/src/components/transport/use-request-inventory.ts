@@ -3,6 +3,7 @@ import { api, ApiError } from '@/lib/api';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildBulkKey } from './request-formatting';
+import { inventoryWithReturnOrigins, type ReturnDocumentOrigin } from './return-document-origins';
 import type { Warehouse } from './request-types';
 import {
   GenerateStep,
@@ -150,10 +151,12 @@ export function useRequestInventory({
         setSerialItems(data.serial.map(item => ({ ...item, sourceWarehouseId: physicalSourceWarehouseId })));
       } else if (sourceMode === 'on-site') {
         if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
-        const data = await api<RequestInventoryResponse>(
+        const [stock, origins] = await Promise.all([api<RequestInventoryResponse>(
           `/inventory/on-site/${effectiveSourceWorksiteId}/request-options`,
           { method: 'GET' },
-        );
+        ), docType === 'RETURN' ? api<ReturnDocumentOrigin[]>(`/equipment-configurations/return-origins?customerWorksiteId=${encodeURIComponent(effectiveSourceWorksiteId)}`) : Promise.resolve([])]);
+        if (version !== inventoryLoadVersionRef.current) return;
+        const data = inventoryWithReturnOrigins(stock, origins);
         setBulkItems(data.bulk);
         setSerialItems(data.serial);
         setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);

@@ -39,6 +39,12 @@ describe('Unified document composition', () => {
   it('allows simultaneous transport of different compatible implements', async () => {
     await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('forks', 'loader')])).resolves.toBeUndefined();
   });
+  it('missing part errors identify the equipment by its readable name, not its generated code', async () => {
+    const f = fixture();
+    f.configs[1].entries.push({ assetId: 'bucket', asset: { publicCode: 'BUCKET-IMPORT-LONG-CODE',
+      internalNumber: 3, sku: { name: 'Balde New Holland' } }, required: true, quantity: 1 } as never);
+    await expect(f.validate([item('loader')])).rejects.toThrow('Balde New Holland #3');
+  });
   it('rejects incompatible equipment and absent parents', async () => {
     await expect(fixture().validate([item('loader'), item('wrong', 'loader')])).rejects.toThrow('no está permitida');
     await expect(fixture().validate([item('motor', 'mixer')])).rejects.toThrow('equipo principal');

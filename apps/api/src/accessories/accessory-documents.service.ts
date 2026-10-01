@@ -3,6 +3,7 @@ import { Document, DocumentItem, Prisma } from '@prisma/client';
 import { AccessoriesService } from './accessories.service';
 import { isCompatible, Location } from './accessory-rules';
 import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
+import { isDocumentCompositionV2 } from '../documents/document-composition';
 
 type AccessoryDocument = Document & { items: DocumentItem[] };
 
@@ -40,7 +41,7 @@ export class AccessoryDocumentsService {
       await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR UPDATE`;
     }
     const parentIds = [
-      ...new Set(lines.map((line) => line.componentParentAssetId!)),
+      ...new Set(lines.flatMap((line) => line.componentParentAssetId ? [line.componentParentAssetId] : [])),
     ].sort();
     const allEquipmentIds = [
       ...new Set([
@@ -62,15 +63,21 @@ export class AccessoryDocumentsService {
         .filter((item) => !item.accessoryId)
         .map((item) => item.assetId),
     );
+    const externalIds = [...new Set(lines.flatMap(line => line.parentSourceDocumentItemId ? [line.parentSourceDocumentItemId] : []))];
+    const externalParents = externalIds.length ? await tx.documentItem.findMany({ where: { id: { in: externalIds } } }) : [];
 
     for (const line of lines) {
       const accessory = await tx.accessory.findUniqueOrThrow({
         where: { id: line.accessoryId! },
-        include: { subfamilies: true, assets: true },
+        include: { subfamilies: true, assets: true, compatibleParents: true },
       });
       const parent = parents.find(
         (asset) => asset.id === line.componentParentAssetId,
       );
+      const immediateParent = isDocumentCompositionV2(document.docDate) ? line.parentCompositionNodeId
+        ? document.items.find(item => item.compositionNodeId === line.parentCompositionNodeId)
+        : externalParents.find(item => item.id === line.parentSourceDocumentItemId) : undefined;
+      const compatibilityParentAccessoryId = immediateParent?.accessoryId ?? undefined;
       if (!parent || !parent.active || parent.deletedAt)
         throw new BadRequestException(
           'El equipo asociado al accesorio no está activo.',
@@ -107,14 +114,14 @@ export class AccessoryDocumentsService {
       if (document.type === 'REMISSION') {
         if (
           !accessory.active ||
-          !isCompatible(
+          !(compatibilityParentAccessoryId ? accessory.scope === 'ACCESSORIES' && accessory.compatibleParents.some(link => link.parentAccessoryId === compatibilityParentAccessoryId) : isCompatible(
             {
               ...accessory,
               subfamilyIds: accessory.subfamilies.map((s) => s.subfamilyId),
               assetIds: accessory.assets.map((a) => a.assetId),
             },
             parent,
-          )
+          ))
         ) {
           throw new BadRequestException(
             `El accesorio ${accessory.name} no es compatible con el equipo.`,
@@ -213,6 +220,7 @@ export class AccessoryDocumentsService {
         },
         userId,
         document.id,
+        compatibilityParentAccessoryId,
       );
     }
   }

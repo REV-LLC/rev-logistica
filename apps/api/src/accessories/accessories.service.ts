@@ -8,6 +8,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma, EquipmentPartRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { accessoryDocumentOptions } from './accessory-document-options';
+import { assetDisplayName } from './asset-display';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
 import {
   AccessoryDetailsDto,
@@ -479,9 +480,9 @@ export class AccessoriesService {
             : value.scope === 'SUBFAMILIES'
               ? value.subfamilies.map((s) => s.subfamily.name)
               : value.scope === 'ACCESSORIES'
-                ? value.compatibleParents.map(p => `${p.parentAccessory.name} · ${p.parentAccessory.internalCode ?? ''}`)
+                ? value.compatibleParents.map(p => p.parentAccessory.name)
               : value.assets.map(
-                  (a) => `${a.asset.sku.name} · ${a.asset.publicCode}`,
+                  (a) => assetDisplayName(a.asset),
                 ),
       });
       await tx.accessoryRevision.create({
@@ -501,6 +502,7 @@ export class AccessoriesService {
     location: Location,
     rule: Compatibility,
     destination: boolean,
+    compatibilityParentAccessoryId?: string,
   ) {
     if (location.warehouseId) {
       const warehouse = await this.warehouse(tx, location.warehouseId);
@@ -513,7 +515,9 @@ export class AccessoriesService {
     if (!asset) throw new BadRequestException('Equipo no encontrado.');
     if (
       destination &&
-      (!asset.active || asset.deletedAt || !isCompatible(rule, asset))
+      (!asset.active || asset.deletedAt || !(compatibilityParentAccessoryId
+        ? rule.scope === 'ACCESSORIES' && rule.parentAccessoryIds?.includes(compatibilityParentAccessoryId)
+        : isCompatible(rule, asset)))
     )
       throw new BadRequestException(
         'El equipo de destino no está activo o no es compatible con este accesorio.',
@@ -526,7 +530,7 @@ export class AccessoriesService {
       ...(location.transitDocumentId
         ? { transitDocumentId: location.transitDocumentId }
         : {}),
-      label: `${asset.sku.name} · ${asset.publicCode}${location.transitDocumentId ? ' · En tránsito a proveedor' : ''}${location.customerWorksiteId ? ` · Obra ${(await tx.customerWorksite.findUniqueOrThrow({ where: { id: location.customerWorksiteId }, include: { worksite: true } })).worksite.name}` : ''}`,
+      label: `${assetDisplayName(asset)}${location.transitDocumentId ? ' · En tránsito a proveedor' : ''}${location.customerWorksiteId ? ` · Obra ${(await tx.customerWorksite.findUniqueOrThrow({ where: { id: location.customerWorksiteId }, include: { worksite: true } })).worksite.name}` : ''}`,
     };
   }
 
@@ -559,6 +563,7 @@ export class AccessoriesService {
     dto: MoveAccessoryDto,
     userId: string,
     documentId?: string,
+    compatibilityParentAccessoryId?: string,
   ) {
     const hash = fingerprint({ id, ...dto, userId });
     const prior = await tx.accessoryMovement.findUnique({
@@ -573,7 +578,7 @@ export class AccessoriesService {
     }
     const item = await tx.accessory.findUniqueOrThrow({
       where: { id },
-      include: { subfamilies: true, assets: true },
+      include: { subfamilies: true, assets: true, compatibleParents: true },
     });
     if (!item.active)
       throw new BadRequestException('El accesorio está archivado.');
@@ -624,6 +629,7 @@ export class AccessoriesService {
     }
     const rule = {
       ...item,
+      parentAccessoryIds: item.compatibleParents?.map(parent => parent.parentAccessoryId) ?? [],
       subfamilyIds: item.subfamilies.map((s) => s.subfamilyId),
       assetIds: item.assets.map((a) => a.assetId),
     };
@@ -631,7 +637,7 @@ export class AccessoriesService {
       ? await this.resolveLocation(tx, dto.from, rule, false)
       : undefined;
     const to = dto.to
-      ? await this.resolveLocation(tx, dto.to, rule, true)
+      ? await this.resolveLocation(tx, dto.to, rule, true, documentId ? compatibilityParentAccessoryId : undefined)
       : undefined;
     if (dto.from) {
       const result = await tx.accessoryBalance.updateMany({

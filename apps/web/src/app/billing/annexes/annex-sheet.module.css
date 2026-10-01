@@ -1,0 +1,107 @@
+.sheet {
+  min-width: 0;
+  overflow: hidden;
+}
+.grid {
+  height: clamp(380px, calc(100dvh - 300px), 900px);
+  max-width: 100%;
+  font-size: 12px;
+  --rdg-header-background-color: #edf2f7;
+  --rdg-border-color: #dce3eb;
+  --rdg-selection-color: #1971c2;
+}
+.editable {
+  background-color: #f0f8ff;
+}
+@media (max-width: 600px) {
+  .grid {
+    height: 420px;
+  }
+}
+
+.content {
+  min-height: 0;
+  height: 100%;
+}
+.gridContainer {
+  min-height: 0;
+}
+.expanded {
+  position: fixed;
+  inset: 8px;
+  z-index: 150;
+  background: var(--mantine-color-body);
+  box-shadow: 0 0 0 16px var(--mantine-color-body);
+}
+.expanded .gridContainer {
+  flex: 1;
+}
+.expanded .grid {
+  height: 100%;
+}
+.toolbar {
+  flex-shrink: 0;
+}
+.cellText {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.machineGroup {
+  --rdg-background-color: #e7f0fa;
+  --rdg-row-hover-background-color: #e7f0fa;
+  font-weight: 700;
+}
+.machineGroup > [role="gridcell"] {
+  background: #e7f0fa;
+}
+.groupTitle {
+  height: 100%;
+}
+
+.daysControl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+}
+.daysInput {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.daysInput:focus-visible {
+  outline: 1px solid var(--mantine-color-blue-6);
+  border-radius: 2px;
+}
+.daysArrows {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.daysArrows button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 13px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--mantine-color-blue-7);
+  cursor: pointer;
+}
+.daysArrows button:hover:not(:disabled) {
+  background: var(--mantine-color-blue-1);
+}
+.daysArrows button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

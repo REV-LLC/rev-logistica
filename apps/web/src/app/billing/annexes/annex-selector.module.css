@@ -1,0 +1,31 @@
+.card {
+  overflow: hidden;
+}
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+}
+.summary {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chevron {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+  transition: transform 180ms ease;
+}
+.fields {
+  padding: 16px;
+  border-top: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-default-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

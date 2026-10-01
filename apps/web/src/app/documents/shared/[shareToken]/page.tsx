@@ -15,6 +15,7 @@ import {
 } from '@mantine/core';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { documentItemDescription, documentItemCode } from '@/lib/document-print-rows';
 
 type SharedDocument = {
   id: string;
@@ -30,6 +31,9 @@ type SharedDocument = {
   } | null;
   items: Array<{
     id: string;
+    accessoryId?: string | null;
+    accessoryName?: string | null;
+    accessoryCode?: string | null;
     quantity?: string | number | null;
     requestedTag?: string | null;
     conditionNote?: string | null;
@@ -44,11 +48,7 @@ type SharedDocument = {
 };
 
 function itemName(item: SharedDocument['items'][number]) {
-  return item.asset?.description
-    || item.asset?.sku?.name
-    || item.sku?.name
-    || item.requestedTag
-    || 'Ítem';
+  return documentItemDescription(item);
 }
 
 export default function SharedDocumentPage() {
@@ -120,7 +120,7 @@ export default function SharedDocumentPage() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Ítem</Table.Th>
-                    <Table.Th>Serial</Table.Th>
+                    <Table.Th>Serial / código</Table.Th>
                     <Table.Th>Cantidad</Table.Th>
                     <Table.Th>Observación</Table.Th>
                   </Table.Tr>
@@ -129,7 +129,7 @@ export default function SharedDocumentPage() {
                   {document.items.map((item) => (
                     <Table.Tr key={item.id}>
                       <Table.Td>{itemName(item)}</Table.Td>
-                      <Table.Td>{item.asset?.serialOrEngine ?? '-'}</Table.Td>
+                      <Table.Td>{item.asset?.serialOrEngine || documentItemCode(item) || '-'}</Table.Td>
                       <Table.Td>{item.quantity ?? 1}</Table.Td>
                       <Table.Td>{item.conditionNote ?? '-'}</Table.Td>
                     </Table.Tr>

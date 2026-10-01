@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDirectDocumentItems } from './direct-document-items.ts';
+import { loadTransportModule } from './test-support.cjs';
+const { buildDirectDocumentItems } = loadTransportModule('direct-document-items.ts');
 
 test('la confirmación directa conserva propietarios mixtos e identidad de los equipos', () => {
   const selected = [

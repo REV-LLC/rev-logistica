@@ -1,3 +1,5 @@
+import { CommercialProfilesModule } from './commercial-profiles/commercial-profiles.module';
+import { AnnexesModule } from './annexes/annexes.module';
 import {
   MiddlewareConsumer,
   Module,
@@ -24,7 +26,6 @@ import { UsersModule } from './users/users.module';
 import { AssetsModule } from './assets/assets.module';
 import { SkusModule } from './skus/skus.module';
 import { OwnersModule } from './owners/owners.module';
-import { BillingModule } from './billing/billing.module';
 import { BackupsModule } from './backups/backups.module';
 import { UppercaseBodyMiddleware } from './common/middleware/uppercase-body.middleware';
 import { MaintenanceModule } from './maintenance/maintenance.module';
@@ -41,6 +42,7 @@ import { OfficeAssistantModule } from './office-assistant/office-assistant.modul
 
 @Module({
   imports: [
+    CommercialProfilesModule,
     CacheModule.register({
       isGlobal: true,
     }),
@@ -55,6 +57,7 @@ import { OfficeAssistantModule } from './office-assistant/office-assistant.modul
     PrismaModule,
     SettingsModule,
     AuthModule,
+    AnnexesModule,
     CatalogModule,
     PartnersModule,
     CustomersModule,
@@ -68,7 +71,6 @@ import { OfficeAssistantModule } from './office-assistant/office-assistant.modul
     AssetsModule,
     SkusModule,
     OwnersModule,
-    BillingModule,
     BackupsModule,
     MaintenanceModule,
     NotificationsModule,
@@ -95,6 +97,10 @@ export class AppModule implements NestModule {
       .apply(UppercaseBodyMiddleware)
       .exclude(
         { path: 'auth/login', method: RequestMethod.POST },
+        { path: 'commercial-profiles', method: RequestMethod.PUT },
+        { path: 'annexes/preview', method: RequestMethod.POST },
+        { path: 'annexes/select-mode', method: RequestMethod.POST },
+        { path: 'annexes/drafts', method: RequestMethod.POST },
         { path: 'office-assistant/chat', method: RequestMethod.POST },
         { path: 'webhooks/whatsapp', method: RequestMethod.GET },
         { path: 'webhooks/whatsapp', method: RequestMethod.POST },

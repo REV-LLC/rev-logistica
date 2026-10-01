@@ -200,7 +200,6 @@ export default function AccessoryMovementForm({
         ) : null}
         <Text fw={600}>
           {item.name}
-          {item.internalCode ? ` · ${item.internalCode}` : ""}
         </Text>
         <fieldset
           disabled={saving}

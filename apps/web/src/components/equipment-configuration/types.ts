@@ -1,4 +1,9 @@
+import { getSerialDisplayName } from '@/lib/serial-assets';
+
 export type PartRole = "COMPONENT" | "ACCESSORY";
+export type ConfigurationLocation =
+  | { assetId: string; accessoryId?: never; label: string }
+  | { accessoryId: string; assetId?: never; label: string };
 export type ConfigurationEntry = {
   id: string;
   role: PartRole;
@@ -17,7 +22,9 @@ export type ConfigurationEntry = {
     exclusive: boolean;
     compatibility?: "PARENT" | "SUBFAMILY" | "FAMILY";
   };
-  asset?: { id: string; publicCode: string; sku: { name: string } } | null;
+  asset?: { id: string; publicCode: string; description?: string | null;
+    internalNumber?: number | null; warehouseOwner?: { name: string } | null;
+    sku: { name: string } } | null;
   accessory?: {
     id: string;
     name: string;
@@ -49,9 +56,22 @@ export const partRoleLabels: Record<PartRole, string> = {
 export const entryName = (entry: ConfigurationEntry) =>
   entry.newPart?.name ||
   entry.accessory?.name ||
-  entry.asset?.sku.name ||
+  (entry.asset ? `${getSerialDisplayName({ ...entry.asset, skuName: entry.asset.sku.name })}${entry.asset.warehouseOwner?.name ? ` · ${entry.asset.warehouseOwner.name}` : ''}` : '') ||
   entry.family?.name ||
   "Sin nombre";
+
+export function configurationPartLocation(entry: ConfigurationEntry): ConfigurationLocation | null {
+  if (entry.assetId) return { assetId: entry.assetId, label: entryName(entry) };
+  if (entry.accessoryId) return { accessoryId: entry.accessoryId, label: entryName(entry) };
+  return null; // New elements must be saved to obtain their persistent identity.
+}
+
+export function configurationPartAction(entry: ConfigurationEntry) {
+  if (entry.familyId) return null; // A family is a selector, not a physical parent.
+  const hasParts = !!entry.assetId || (entry.role === "ACCESSORY" &&
+    (entry.newPart?.kind ?? entry.accessory?.kind) === "INDIVIDUAL");
+  return hasParts ? "Conjunto y cobro" : "Cobro";
+}
 
 // Strip presentation and Prisma fields. The payload never includes stock movements.
 export function configurationPayload(config: EquipmentConfiguration) {

@@ -1,27 +1,35 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { assertAcyclicConfiguration } from './equipment-configuration-rules';
+import { CompositionFields, validateDocumentComposition } from '../documents/document-composition';
+import { documentReturnOrigins } from '../documents/document-return-origins';
+import { assetDisplayName } from './asset-display';
 
-type Line = { assetId?: string | null; skuId?: string | null; accessoryId?: string | null;
+type Line = CompositionFields & { assetId?: string | null; skuId?: string | null; accessoryId?: string | null;
   componentParentAssetId?: string | null; quantity?: unknown };
-type Document = { type: string; customerWorksiteId?: string | null; items: Line[] };
+type Document = { id?: string; docDate?: Date; type: string; customerWorksiteId?: string | null; items: Line[] };
 
 /** The only composition validator. Stock/ownership is validated by the existing movement transaction. */
 export async function validateDocumentConfiguration(tx: Prisma.TransactionClient, document: Document) {
+  const composition = document.id && document.docDate ? await validateDocumentComposition(tx, {
+    ...document, id: document.id, docDate: document.docDate, customerWorksiteId: document.customerWorksiteId ?? null,
+  }) : null;
   const assetIds = document.items.flatMap(item => item.assetId ? [item.assetId] : []);
-  if (!assetIds.length) return; // Independent accessory returns/supplies retain their custody validation.
+  if (!assetIds.length && !composition) return; // Legacy independent supplies retain custody validation.
   const uniqueIds = [...new Set(assetIds)];
   if (assetIds.length !== uniqueIds.length) throw new BadRequestException('Un equipo no puede aparecer dos veces en el documento.');
-  if (document.type === 'RETURN' && !document.items.some(item => item.componentParentAssetId && !item.accessoryId)) return;
+  if (document.type === 'RETURN' && (composition || !document.items.some(item => item.componentParentAssetId && !item.accessoryId))) return;
   // Hold the assignment stable until the movement transaction commits.
   // Inventory edits use the exclusive version of the same advisory lock.
   await tx.$queryRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended('equipment-configuration', 0))::text`;
   const parentIds = new Set(uniqueIds);
+  const loadedAssetIds = [...new Set([...uniqueIds, ...(composition ? [...composition.parents.values()].flatMap(parent => parent.assetId ? [parent.assetId] : []) : [])])];
+  const accessoryParentIds = composition ? [...new Set([...composition.parents.values()].flatMap(parent => parent.accessoryId ? [parent.accessoryId] : []))] : [];
   const [configs, assets, skus] = await Promise.all([
-    tx.equipmentConfiguration.findMany({ where: { assetId: { in: uniqueIds } }, include: { entries: {
-      include: { asset: { select: { publicCode: true } }, accessory: { select: { name: true } }, family: { select: { name: true } } },
+    tx.equipmentConfiguration.findMany({ where: accessoryParentIds.length ? { OR: [{ assetId: { in: loadedAssetIds } }, { accessoryId: { in: accessoryParentIds } }] } : { assetId: { in: loadedAssetIds } }, include: { entries: {
+      include: { asset: { select: { description: true, internalNumber: true, sku: { select: { name: true } } } }, accessory: { select: { name: true } }, family: { select: { name: true } } },
     } } }),
-    tx.asset.findMany({ where: { id: { in: uniqueIds } }, select: { id: true, kind: true, motorConfiguration: true, assignedMotorId: true,
+    tx.asset.findMany({ where: { id: { in: loadedAssetIds } }, select: { id: true, kind: true, motorConfiguration: true, assignedMotorId: true,
       publicCode: true, internalNumber: true, sku: { select: { assetFamilyId: true, name: true } } } }),
     tx.sku.findMany({ where: { id: { in: document.items.flatMap(item => item.skuId ? [item.skuId] : []) } }, select: { id: true, assetFamilyId: true } }),
   ]);
@@ -49,6 +57,43 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
         throw new BadRequestException('La remisión debe incluir el motor asignado al equipo en inventario. Actualiza la configuración del documento; el motor no se cambia aquí.');
     }
   }
+  if (composition) {
+    const configsByOwner = new Map(configs.map(config => [config.assetId ? `asset:${config.assetId}` : `accessory:${config.accessoryId}`, config.entries]));
+    for (const item of composition.items) {
+      const parent = composition.parents.get(item.compositionNodeId!);
+      if (!parent || item.accessoryId) continue; // Accessory compatibility also checks its immediate parent at movement time.
+      const parentAsset = parent.assetId ? byAsset.get(parent.assetId) : undefined;
+      const motor = item.assetId && byAsset.get(item.assetId)?.kind === 'MOTOR';
+      const allowed = motor ? parentAsset?.assignedMotorId === item.assetId :
+        (configsByOwner.get(parent.assetId ? `asset:${parent.assetId}` : `accessory:${parent.accessoryId}`) ?? []).some(entry => matches(entry, item));
+      if (!allowed) throw new BadRequestException('La pieza no está permitida en la configuración de su padre inmediato.');
+    }
+    for (const parent of composition.items) {
+      const entries = configsByOwner.get(parent.assetId ? `asset:${parent.assetId}` : `accessory:${parent.accessoryId}`) ?? [];
+      const selected = composition.items.filter(item => item.parentCompositionNodeId === parent.compositionNodeId);
+      for (const entry of entries) {
+        const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
+        const label = entry.family?.name ?? entry.accessory?.name ?? (entry.asset ? assetDisplayName(entry.asset) : 'la pieza');
+        if (entry.required && quantity < entry.quantity) throw new BadRequestException(`El conjunto requiere ${entry.quantity} de ${label}. Revisa su configuración.`);
+        if (entry.maximumQuantity != null && quantity > entry.maximumQuantity) throw new BadRequestException(`El conjunto permite como máximo ${entry.maximumQuantity} de ${label}.`);
+      }
+    }
+    const externalParents = [...new Map([...composition.parents.values()].filter(parent => parent.id && parent.documentId !== document.id).map(parent => [parent.id!, parent])).values()];
+    if (externalParents.length && document.customerWorksiteId) {
+      const outstanding = await documentReturnOrigins(tx, document.customerWorksiteId, document.id);
+      for (const parent of externalParents) {
+        const entries = configsByOwner.get(parent.assetId ? `asset:${parent.assetId}` : `accessory:${parent.accessoryId}`) ?? [];
+        const selected = [...composition.items, ...outstanding].filter(item => parent.legacyOriginId
+          ? item.parentLegacyOriginId === parent.legacyOriginId : item.parentSourceDocumentItemId === parent.id);
+        for (const entry of entries) {
+          if (entry.maximumQuantity == null) continue;
+          const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
+          if (quantity > entry.maximumQuantity) throw new BadRequestException(`La entrega adicional supera el máximo ${entry.maximumQuantity} permitido, contando lo que ya está en la obra.`);
+        }
+      }
+    }
+    return;
+  }
   for (const item of document.items.filter(item => item.componentParentAssetId && !item.accessoryId)) {
     const parentId = item.componentParentAssetId!;
     if (!parentIds.has(parentId)) throw new BadRequestException('El equipo principal de una pieza debe estar incluido en el documento.');
@@ -65,7 +110,7 @@ export async function validateDocumentConfiguration(tx: Prisma.TransactionClient
     const selected = document.items.filter(item => item.componentParentAssetId === parentId);
     for (const entry of entries) {
       const quantity = selected.filter(item => matches(entry, item)).reduce((sum, item) => sum + (item.assetId ? 1 : Number(item.quantity ?? 1)), 0);
-      const label = entry.family?.name ?? entry.accessory?.name ?? entry.asset?.publicCode ?? 'la pieza configurada';
+      const label = entry.family?.name ?? entry.accessory?.name ?? (entry.asset ? assetDisplayName(entry.asset) : 'la pieza configurada');
       const parent = byAsset.get(parentId!);
       const parentLabel = parent?.sku.name?.trim() ? `${parent.sku.name}${parent.internalNumber ? ` #${parent.internalNumber}` : ''}` : 'El equipo seleccionado';
       if (entry.required && quantity < entry.quantity) throw new BadRequestException({
