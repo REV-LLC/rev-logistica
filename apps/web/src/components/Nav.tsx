@@ -26,6 +26,7 @@ import {
 import OfficeDraftBrowserNotifications from "@/components/OfficeDraftBrowserNotifications";
 import { api } from "@/lib/api";
 import {
+  IconCalendar,
   IconArrowsShuffle,
   IconBell,
   IconBuilding,
@@ -57,6 +58,7 @@ type NavLinkItem = {
   icon: typeof IconClipboardList;
   roles: AppRole[];
   activePrefixes?: string[];
+  excludedPrefixes?: string[];
   activeHrefs?: string[];
   activeRoutes?: Array<{
     pathnamePrefix: string;
@@ -75,6 +77,12 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      {
+        href: "/inventory/ledger",
+        label: "Movimientos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN", "OFFICE"],
+      },
       { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
@@ -222,15 +230,15 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/inventory/ledger",
-        label: "Movimientos",
-        icon: IconArrowsShuffle,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
         href: "/inventory/accessories",
         label: "Accesorios",
         icon: IconBox,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
+        href: "/inventory/maintenance",
+        label: "Mantenimientos",
+        icon: IconTools,
         roles: ["ADMIN", "OFFICE"],
       },
       {
@@ -282,7 +290,9 @@ const sections: NavSection[] = [
         icon: IconUser,
         roles: ["ADMIN", "OFFICE"],
         activePrefixes: ["/employees"],
+        excludedPrefixes: ["/employees/activities"],
       },
+      { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
     ],
   },
   {
@@ -477,6 +487,7 @@ export default function Nav({ onNavigate }: NavProps) {
     return children.length ? { ...link, children } : null;
   };
   const isLinkActive = (link: NavLinkItem) => {
+    if (link.excludedPrefixes?.some((prefix) => pathname === prefix || pathname?.startsWith(`${prefix}/`))) return false;
     if (link.children?.some(isLinkActive)) {
       return true;
     }

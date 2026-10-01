@@ -396,6 +396,7 @@ enum InventorySnapshotDestinationType {
 model User {
   reviewedLegacyEquipmentOrigins LegacyEquipmentOrigin[]
   annexDraftRevisions AnnexDraftRevision[]
+  activityNotes EmployeeActivityNote[]
   releaseAcknowledgements ReleaseAcknowledgement[]
   id           String   @id @default(uuid())
   email        String   @unique
@@ -420,6 +421,7 @@ model User {
   maintenanceReadings           AssetHourReading[]      @relation("MaintenanceReadingRecordedBy")
   vehicleMaintenanceReadings    VehicleHourReading[]    @relation("VehicleMaintenanceReadingRecordedBy")
   maintenanceCompletions        MaintenanceCompletion[] @relation("MaintenanceCompletedBy")
+  maintenancePerformed          MaintenanceCompletion[] @relation("MaintenancePerformedBy")
   notificationDeliveries        NotificationDelivery[]
   employeeLoanEntries           EmployeeLoanEntry[]
   assetConditionEvents          AssetConditionEvent[]
@@ -521,6 +523,7 @@ model Worksite {
 
 model CustomerWorksite {
   annexDrafts AnnexDraft[]
+  activityNotes EmployeeActivityNote[]
   accessoryBalances AccessoryBalance[]
   id                String             @id @default(uuid())
   customerId        String
@@ -719,6 +722,7 @@ model AssetMotorCompatibility {
 }
 
 model Asset {
+  activityNotes EmployeeActivityNote[]
   id                 String                  @id @default(uuid())
   skuId              String
   publicCode         String                  @unique
@@ -928,6 +932,9 @@ model NotificationRecipient {
 }
 
 model MaintenanceCompletion {
+  performedByUserId String?
+  performedBy User? @relation("MaintenancePerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  reference         String?
   id                String   @id @default(uuid())
   itemId            String
   completedAtHours  Decimal? @db.Decimal(12, 2)
@@ -1423,6 +1430,7 @@ model Owner {
 
 model Employee {
   salaries EmployeeSalary[]
+  activityNotes EmployeeActivityNote[]
   loanEntries EmployeeLoanEntry[]
   id         String       @id @default(uuid())
   name       String
@@ -1700,4 +1708,33 @@ model CommercialProfileRevision {
   profile CommercialProfile @relation(fields:[profileId],references:[id],onDelete:Restrict)
   @@unique([profileId,version])
   @@index([profileId,effectiveFrom])
+}
+
+// Dates represent calendar days, stored at midnight UTC without local time conversion.
+enum EmployeeActivityType {
+  WORKSITE
+  ABSENCE
+  MEDICAL_LEAVE
+  VACATION
+}
+
+model EmployeeActivityNote {
+  id                 String   @id @default(uuid())
+  employeeId         String
+  date               DateTime @db.Date
+  endDate            DateTime? @db.Date
+  type               EmployeeActivityType @default(WORKSITE)
+  customerWorksiteId String?
+  assetId            String?
+  description        String   @db.VarChar(5000)
+  createdByUserId     String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  asset            Asset?            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, date])
 }

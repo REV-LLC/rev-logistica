@@ -1,0 +1,355 @@
+.page {
+  max-width: 1400px;
+}
+.employeeTrigger {
+  padding: 10px 14px;
+  border: 1px solid #e4e9ef;
+  border-radius: 14px;
+  min-width: 280px;
+  max-width: 100%;
+  background: #f9fafc;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.employeeTrigger:hover {
+  border-color: #ed751a;
+  background: #fff7ed;
+}
+.employeeTrigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.employeeTrigger:focus-visible,
+.employeeOption:focus-visible {
+  outline: 2px solid #ed751a;
+  outline-offset: 2px;
+}
+.employeeName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.employeeChevron {
+  flex-shrink: 0;
+  color: #8793a2;
+}
+.employeeOption {
+  padding: 12px;
+  border: 1px solid #e4e9ef;
+  border-radius: 12px;
+  background: white;
+}
+.employeeOption:hover {
+  background: #fff7ed;
+  border-color: #efb780;
+}
+.employeeOptionSelected {
+  background: #fff4e8;
+  border-color: #ed751a;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 20px;
+  align-items: start;
+}
+.calendar {
+  overflow: hidden;
+  min-width: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.weekday {
+  padding: 12px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #748292;
+  background: #f7f9fb;
+  border-top: 1px solid #e8edf2;
+}
+.dayContainer {
+  position: relative;
+  min-width: 0;
+  display: flex;
+}
+.day {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  min-height: 116px;
+  background: white;
+  border: 0;
+  border-top: 1px solid #e8edf2;
+  border-right: 1px solid #e8edf2;
+  padding: 9px;
+  cursor: pointer;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 130ms ease;
+}
+.dayContainer:nth-child(7n) .day {
+  border-right: 0;
+}
+.dayContainer:hover .day {
+  background: #fff6ed;
+}
+.day:focus-visible {
+  outline: 2px solid #ed751a;
+  outline-offset: -3px;
+}
+.outside {
+  background: #f8fafc;
+  color: #aab3be;
+}
+.selected {
+  background: #fff4e8;
+  box-shadow: inset 0 0 0 2px #ed751a;
+}
+.number,
+.today {
+  width: 27px;
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+.today {
+  background: #ef7517;
+  color: white;
+}
+.previews {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.preview {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #fff0dc;
+  border-left: 2px solid #ed751a;
+  border-radius: 4px;
+  padding: 3px 4px;
+  color: #955312;
+  font-size: 11px;
+}
+.count {
+  font-size: 10px;
+  color: #996030;
+  margin-top: auto;
+}
+.worksite {
+  width: 100%;
+  border: 1px solid #e8edf2;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.worksite:hover {
+  background: #fff7ed;
+}
+.chosen {
+  border-color: #ed751a;
+  background: #fff4e8;
+}
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .day {
+    min-height: 73px;
+    padding: 5px 3px;
+    gap: 3px;
+  }
+  .previews {
+    display: none;
+  }
+  .count {
+    font-size: 9px;
+  }
+  .weekday {
+    font-size: 11px;
+  }
+}
+
+.addNote {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #ed751a;
+  border-radius: 7px;
+  background: #fff4e8;
+  color: #bd570e;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 130ms ease;
+}
+.dayContainer:hover .addNote,
+.dayContainer:focus-within .addNote {
+  opacity: 1;
+  visibility: visible;
+}
+.addNote:hover {
+  background: #ed751a;
+  color: white;
+}
+.addNote:focus-visible {
+  outline: 2px solid #ed751a;
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .addNote {
+    top: 6px;
+    right: 3px;
+    width: 18px;
+    height: 20px;
+  }
+  .number,
+  .today {
+    width: 20px;
+    height: 20px;
+  }
+}
+@media (hover: none) {
+  .day[aria-pressed="true"] + .addNote {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (min-width: 1600px) {
+  .page {
+    max-width: 2100px;
+    padding-inline: clamp(20px, 2vw, 48px);
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+  }
+  .day {
+    min-height: clamp(
+      125px,
+      calc((100dvh - 350px) / var(--calendar-weeks, 6)),
+      210px
+    );
+    padding: 14px;
+    gap: 9px;
+  }
+  .weekday {
+    padding: 16px 6px;
+    font-size: 13px;
+  }
+  .number,
+  .today {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  .preview {
+    font-size: 13px;
+    padding: 5px 7px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .count {
+    font-size: 12px;
+  }
+  .addNote {
+    top: 16px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+  }
+  .dayDetails {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+  }
+  .employeeTrigger {
+    min-width: 340px;
+  }
+}
+@media (min-width: 2200px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 32px;
+  }
+}
+@media (max-width: 600px) {
+  .employeeTrigger {
+    width: 100%;
+    min-width: 0;
+  }
+}
+.employeeTriggerName {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.employeeTriggerHint {
+  font-size: 12px;
+  margin-top: 3px;
+}
+.previewABSENCE {
+  background: #fff0f0;
+  border-color: #e03131;
+  color: #c92a2a;
+}
+.previewMEDICAL_LEAVE {
+  background: #f3f0ff;
+  border-color: #7950f2;
+  color: #6741d9;
+}
+.previewVACATION {
+  background: #e6fcf5;
+  border-color: #0ca678;
+  color: #087f5b;
+}
+@media (min-width: 1600px) {
+  .employeeTrigger {
+    min-width: 460px;
+    padding: 18px 22px;
+    border-radius: 22px;
+    background: white;
+  }
+  .employeeTriggerName {
+    font-size: 21px;
+  }
+  .employeeTriggerHint {
+    font-size: 14px;
+    margin-top: 7px;
+  }
+  .employeeChevron {
+    width: 24px;
+    height: 24px;
+    margin-left: 14px;
+  }
+  .day {
+    min-height: clamp(
+      125px,
+      calc((100dvh - 420px) / var(--calendar-weeks, 6)),
+      210px
+    );
+  }
+}

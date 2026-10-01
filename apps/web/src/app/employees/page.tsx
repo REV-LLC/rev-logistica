@@ -133,6 +133,7 @@ function EmployeeCardDetails({
       </SimpleGrid>
 
       <Group justify="flex-end">
+        <Button component={Link} href={`/employees/activities?employeeId=${employee.id}`} variant="light">Abrir bitácora</Button>
         <Button
           variant="light"
           leftSection={<IconPencil size={16} />}

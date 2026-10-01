@@ -59,6 +59,7 @@ export type MaintenanceReading = {
 };
 
 export type MaintenanceItem = {
+  completions?: MaintenanceCompletion[];
   id: string;
   planId: string;
   name: string;
@@ -86,7 +87,19 @@ export type MaintenancePlan = {
   items: MaintenanceItem[];
 };
 
+export type MaintenanceCompletion = {
+  performedBy?: { email: string; employee?: { name?: string | null; lastName?: string | null } | null } | null;
+  reference?: string | null;
+  id: string;
+  completedAt: string;
+  completedAtHours: number | string | null;
+  notes: string | null;
+  item: { id: string; name: string; planId: string };
+  completedBy: { email: string; employee?: { name?: string | null; lastName?: string | null } | null };
+};
+
 export type MaintenanceResponse = {
+  completions: MaintenanceCompletion[];
   scheduleType: MaintenanceScheduleType;
   currentHours: number | null;
   readings: MaintenanceReading[];

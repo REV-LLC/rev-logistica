@@ -23,7 +23,8 @@ import {
   IconSettings,
   IconTool,
 } from '@tabler/icons-react';
-import CompleteMaintenanceModal from './CompleteMaintenanceModal';
+import RecordMaintenanceModal from './RecordMaintenanceModal';
+import MaintenanceHistory from './MaintenanceHistory';
 import HourReadingHistory from './HourReadingHistory';
 import MaintenanceItemFormModal from './MaintenanceItemFormModal';
 import MaintenancePlanFormModal from './MaintenancePlanFormModal';
@@ -46,14 +47,17 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
   const canManage = role === 'ADMIN' || role === 'OFFICE';
   const [data, setData] = useState<MaintenanceResponse | null>(null);
   const [users, setUsers] = useState<AppUserOption[]>([]);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [reminders, setReminders] = useState<NotificationReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hoursOpened, setHoursOpened] = useState(false);
+  const [recordOpened, setRecordOpened] = useState(false);
+  const [activeTab, setActiveTab] = useState<string | null>('completions');
   const [planOpened, setPlanOpened] = useState(false);
-  const [itemPlan, setItemPlan] = useState<MaintenancePlan | null>(null);
   const [editingItem, setEditingItem] = useState<MaintenanceItem | null>(null);
+  const [viewingItem, setViewingItem] = useState<MaintenanceItem | null>(null);
   const [completingItem, setCompletingItem] = useState<MaintenanceItem | null>(null);
   const [editingPlan, setEditingPlan] = useState<MaintenancePlan | null>(null);
   const [planName, setPlanName] = useState('');
@@ -69,13 +73,15 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
     setLoading(true);
     setError(null);
     try {
-      const [maintenance, activeUsers, allReminders] = await Promise.all([
+      const [maintenance, activeUsers, allReminders, session] = await Promise.all([
         api<MaintenanceResponse>(`/maintenance/${routeSegment}/${subject.id}`),
         api<AppUserOption[]>('/users?active=true'),
         api<NotificationReminder[]>('/notifications/reminders'),
+        api<{ userId: string }>('/maintenance/session'),
       ]);
       setData(maintenance);
       setUsers(activeUsers);
+      setSessionUserId(session.userId);
       setReminders(allReminders);
     } catch (err) {
       setError(apiErrorMessage(err, 'No se pudo cargar el mantenimiento.'));
@@ -98,28 +104,6 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
   const refreshWithSuccess = async (message: string) => {
     await load();
     setSuccess(message);
-  };
-
-  const archivePlan = async (plan: MaintenancePlan) => {
-    if (!window.confirm(`¿Archivar el plan "${plan.name}"? El historial se conservará.`)) return;
-    setError(null);
-    try {
-      await api(`/maintenance/plans/${plan.id}`, { method: 'DELETE' });
-      await refreshWithSuccess('Plan archivado.');
-    } catch (err) {
-      setError(apiErrorMessage(err, 'No se pudo archivar el plan.'));
-    }
-  };
-
-  const archiveItem = async (item: MaintenanceItem) => {
-    if (!window.confirm(`¿Archivar la revisión "${item.name}"? El historial se conservará.`)) return;
-    setError(null);
-    try {
-      await api(`/maintenance/items/${item.id}`, { method: 'DELETE' });
-      await refreshWithSuccess('Revisión archivada.');
-    } catch (err) {
-      setError(apiErrorMessage(err, 'No se pudo archivar la revisión.'));
-    }
   };
 
   const savePlanName = async () => {
@@ -168,6 +152,9 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
             </div>
           </Group>
           <Group gap="xs">
+            <Button leftSection={<IconTool size={16} />} onClick={() => setRecordOpened(true)} disabled={!data}>
+              Registrar mantenimiento
+            </Button>
             {isHourly ? (
               <Button
                 variant="light"
@@ -179,6 +166,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
               </Button>
             ) : null}
             <Button
+              variant="default"
               leftSection={<IconPlus size={16} />}
               onClick={() => setPlanOpened(true)}
               disabled={!data}
@@ -226,13 +214,17 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
           <Text c="dimmed" ta="center">Cargando mantenimiento...</Text>
         </Paper>
       ) : data ? (
-        <Tabs defaultValue="plans" keepMounted={false}>
+        <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
           <Tabs.List>
+            <Tabs.Tab value="completions" leftSection={<IconTool size={16} />}>Mantenimientos realizados</Tabs.Tab>
             <Tabs.Tab value="plans" leftSection={<IconSettings size={16} />}>Planes</Tabs.Tab>
             {isHourly ? (
               <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Historial de horas</Tabs.Tab>
             ) : null}
           </Tabs.List>
+          <Tabs.Panel value="completions" pt="md">
+            <MaintenanceHistory completions={data.completions ?? []} plans={data.plans} onConfigure={setEditingItem} onComplete={canManage ? setCompletingItem : undefined} />
+          </Tabs.Panel>
           <Tabs.Panel value="plans" pt="md">
             <MaintenancePlanList
               plans={data.plans}
@@ -240,15 +232,13 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
               reminderByItemId={reminderByItemId}
               canManage={canManage}
               scheduleType={scheduleType}
-              onAddItem={setItemPlan}
-              onEditItem={setEditingItem}
-              onCompleteItem={setCompletingItem}
-              onArchiveItem={(item) => void archiveItem(item)}
+              onAddItem={() => setRecordOpened(true)}
+              onEditItem={(item) => setEditingItem({ ...item, active: true })}
+              onViewLatest={setViewingItem}
               onEditPlan={(plan) => {
                 setEditingPlan(plan);
                 setPlanName(plan.name);
               }}
-              onArchivePlan={(plan) => void archivePlan(plan)}
             />
           </Tabs.Panel>
           {isHourly ? (
@@ -259,6 +249,36 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         </Tabs>
       ) : null}
 
+      <Modal opened={!!viewingItem} onClose={() => setViewingItem(null)} title={`Último cambio · ${viewingItem?.name ?? ''}`} centered>
+        {viewingItem?.completions?.[0] ? (() => {
+          const latest = viewingItem.completions[0];
+          const performer = latest.performedBy;
+          return <Stack gap="sm">
+            <Text fw={700}>{new Date(latest.completedAt).toLocaleString('es-CO')}</Text>
+            {latest.completedAtHours != null ? <Text>Horómetro: {Number(latest.completedAtHours)} h</Text> : null}
+            {latest.reference ? <Text>Referencia: {latest.reference}</Text> : null}
+            <Text>Realizado por: {performer ? [performer.employee?.name, performer.employee?.lastName].filter(Boolean).join(' ') || performer.email : 'No registrado'}</Text>
+            <Text size="sm">Registrado por: {[latest.completedBy.employee?.name, latest.completedBy.employee?.lastName].filter(Boolean).join(' ') || latest.completedBy.email}</Text>
+            <Text style={{ whiteSpace: 'pre-wrap' }}>{latest.notes || 'Sin observaciones'}</Text>
+          </Stack>;
+        })() : <Text c="dimmed">Todavía no hay cambios registrados para esta revisión.</Text>}
+      </Modal>
+
+      <RecordMaintenanceModal
+        sessionUserId={sessionUserId}
+        opened={recordOpened || !!completingItem}
+        initialItem={completingItem}
+        subject={subject}
+        currentHours={data?.currentHours ?? 0}
+        scheduleType={scheduleType}
+        plans={data?.plans ?? []}
+        users={users}
+        onClose={() => { setRecordOpened(false); setCompletingItem(null); }}
+        onSaved={async () => {
+          setActiveTab('completions');
+          await refreshWithSuccess('Mantenimiento guardado. Puedes consultar el detalle en el historial.');
+        }}
+      />
       <RecordHoursModal
         opened={hoursOpened}
         subject={subject}
@@ -275,30 +295,22 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
         onSaved={() => refreshWithSuccess('Plan creado correctamente.')}
       />
       <MaintenanceItemFormModal
-        opened={!!itemPlan || !!editingItem}
-        planId={itemPlan?.id ?? editingItem?.planId ?? null}
+        opened={!!editingItem}
+        planId={editingItem?.planId ?? null}
         item={editingItem}
         users={users}
         scheduleType={scheduleType}
         onClose={() => {
-          setItemPlan(null);
           setEditingItem(null);
         }}
         onSaved={() => refreshWithSuccess(editingItem ? 'Revisión actualizada.' : 'Revisión agregada.')}
       />
-      <CompleteMaintenanceModal
-        opened={!!completingItem}
-        item={completingItem}
-        currentHours={data?.currentHours ?? 0}
-        scheduleType={scheduleType}
-        onClose={() => setCompletingItem(null)}
-        onSaved={() => refreshWithSuccess('Mantenimiento registrado como realizado.')}
-      />
+
 
       <Modal
         opened={!!editingPlan}
         onClose={() => setEditingPlan(null)}
-        title="Editar plan"
+        title="Configurar plan"
         centered
       >
         <Stack gap="md">
