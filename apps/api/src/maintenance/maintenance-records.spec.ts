@@ -8,6 +8,7 @@ function setup(chargeType = 'HOUR', currentHours = 100) {
   const tx = {
     maintenancePlan: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'plan' }) },
     maintenanceItem: {
+      findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue({ id: 'existing', name: 'Revisión existente' }),
       create: jest.fn().mockImplementation(async ({ data }) => ({ ...data, id: data.name })),
     },
@@ -63,9 +64,26 @@ describe('Direct maintenance records', () => {
     const { service, tx, notifications, payload } = setup();
     payload.tasks = [{ itemId: 'existing' }];
     await service.recordMaintenance(payload, 'admin');
-    expect(tx.maintenanceItem.findFirst).toHaveBeenCalledWith({ where: { id: 'existing', active: true, plan: { assetId: 'asset', active: true } } });
+    expect(tx.maintenanceItem.findFirst).toHaveBeenCalledWith({ where: { id: 'existing', OR: [{ active: true }, { intervalHours: null, intervalDays: null }], plan: { assetId: 'asset', active: true } } });
     expect(tx.maintenancePlan.create).not.toHaveBeenCalled();
     expect(notifications.ensureMaintenanceTopic).not.toHaveBeenCalled();
+  });
+
+  it('reuses the existing card when the next service is submitted by name', async () => {
+    const { service, tx, payload } = setup();
+    tx.maintenanceItem.findMany.mockResolvedValue([{ id: 'existing', name: 'Cambio de filtro de combustible' }]);
+    tx.maintenanceItem.findFirst.mockResolvedValue({ id: 'existing', name: 'Cambio de filtro de combustible' });
+    payload.tasks = [{ name: ' CAMBIO DE FILTRO DE COMBUSTIBLE ', reference: 'FF-2' }];
+    await service.recordMaintenance(payload, 'admin');
+    expect(tx.maintenanceItem.create).not.toHaveBeenCalled();
+    expect(tx.maintenanceCompletion.create).toHaveBeenCalledWith({ data: expect.objectContaining({ itemId: 'existing', reference: 'FF-2' }) });
+  });
+
+  it('requires an explicit existing revision when matching names are ambiguous', async () => {
+    const { service, tx, payload } = setup();
+    tx.maintenanceItem.findMany.mockResolvedValue([{ id: 'one', name: 'Cambio de aceite' }, { id: 'two', name: 'Cambio de aceite' }]);
+    await expect(service.recordMaintenance(payload, 'admin')).rejects.toThrow('varias revisiones');
+    expect(tx.maintenanceCompletion.create).not.toHaveBeenCalled();
   });
 
   it('rejects a revision belonging to another subject or an archived plan', async () => {
@@ -132,6 +150,7 @@ describe('Direct maintenance records', () => {
     ['Cambio de aceite hidráulico', 'ISO68'],
     ['Cambio de filtro de aire', 'AF-123'],
     ['Cambio de filtro de aceite', 'OF-456'],
+    ['Cambio de filtro de combustible', 'FF-789'],
   ])('preserves the reference for %s in the execution history', async (name, reference) => {
     const { service, tx, payload } = setup();
     payload.tasks = [{ name, reference }];
@@ -142,13 +161,18 @@ describe('Direct maintenance records', () => {
   it.each([
     ['Cambio de aceite de motor', '15.5W-40'],
     ['Cambio de aceite hidráulico', 'OTHER'],
-    ['Cambio de filtro de aire', ''],
-    ['Cambio de filtro de aceite', '  '],
-  ])('rejects invalid or missing references for %s', async (name, reference) => {
+  ])('rejects invalid provided references for %s', async (name, reference) => {
     const { service, payload, tx } = setup();
     payload.tasks = [{ name, reference }];
     await expect(service.recordMaintenance(payload, 'admin')).rejects.toThrow();
     expect(tx.maintenanceCompletion.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['Cambio de aceite de motor', 'Cambio de aceite hidráulico', 'Cambio de filtro de aire', 'Cambio de filtro de aceite', 'Cambio de filtro de combustible'])('allows %s without a reference', async (name) => {
+    const { service, tx, payload } = setup();
+    payload.tasks = [{ name }];
+    await service.recordMaintenance(payload, 'admin');
+    expect(tx.maintenanceCompletion.create).toHaveBeenCalledWith({ data: expect.objectContaining({ reference: null }) });
   });
 
   it('defaults the performer to the session user while retaining the recorder', async () => {

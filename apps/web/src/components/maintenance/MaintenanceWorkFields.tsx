@@ -5,6 +5,7 @@ import { Group, NumberInput, Select, Stack, Text, TextInput } from '@mantine/cor
 export const MAINTENANCE_WORK_OPTIONS = [
   'Cambio de filtro de aire',
   'Cambio de filtro de aceite',
+  'Cambio de filtro de combustible',
   'Cambio de aceite hidráulico',
   'Cambio de aceite de motor',
   'Cambio de pastillas',
@@ -23,6 +24,14 @@ export function workKind(name: string) {
   return MAINTENANCE_WORK_OPTIONS.find((option) => normalize(option) === normalize(name)) ?? 'Otro';
 }
 
+export function workLabel(name: string) {
+  const kind = workKind(name);
+  if (kind !== 'Otro') return kind;
+  const label = name.trim();
+  if (!label) return 'Otro';
+  return label.charAt(0).toLocaleUpperCase('es') + label.slice(1).toLocaleLowerCase('es');
+}
+
 export type WorkDetails = {
   kind: string | null;
   name: string;
@@ -37,10 +46,6 @@ export function workReference(work: WorkDetails) {
     return `${work.viscosityWinter}W-${work.viscosityHot}`;
   }
   return work.reference.trim();
-}
-
-export function requiresReference(kind: string | null) {
-  return ['Cambio de aceite de motor', 'Cambio de aceite hidráulico', 'Cambio de filtro de aire', 'Cambio de filtro de aceite'].includes(kind ?? '');
 }
 
 export default function MaintenanceWorkFields({ value, index, existing, onChange }: {
@@ -64,17 +69,17 @@ export default function MaintenanceWorkFields({ value, index, existing, onChange
       {!existing && value.kind === 'Otro' ? <TextInput label={`Describe el trabajo${suffix}`} placeholder="Escribe el mantenimiento realizado" value={value.name} onChange={(event) => onChange({ name: event.currentTarget.value })} required /> : null}
       {value.kind === 'Cambio de aceite de motor' ? (
         <div>
-          <Text size="sm" fw={500} mb={4}>Viscosidad del aceite de motor <Text span c="red">*</Text></Text>
+          <Text size="sm" fw={500} mb={4}>Viscosidad del aceite de motor (opcional)</Text>
           <Group gap="xs" wrap="nowrap" align="center">
-            <NumberInput aria-label={`Viscosidad antes de W${suffix}`} placeholder="15" value={value.viscosityWinter} onChange={(next) => onChange({ viscosityWinter: typeof next === 'number' ? next : '' })} min={0} allowDecimal={false} hideControls style={{ flex: 1, minWidth: 0 }} required />
+            <NumberInput aria-label={`Viscosidad antes de W${suffix}`} placeholder="15" value={value.viscosityWinter} onChange={(next) => onChange({ viscosityWinter: typeof next === 'number' ? next : '' })} min={0} allowDecimal={false} hideControls style={{ flex: 1, minWidth: 0 }} />
             <Text fw={700}>W-</Text>
-            <NumberInput aria-label={`Viscosidad después de W${suffix}`} placeholder="40" value={value.viscosityHot} onChange={(next) => onChange({ viscosityHot: typeof next === 'number' ? next : '' })} min={0} allowDecimal={false} hideControls style={{ flex: 1, minWidth: 0 }} required />
+            <NumberInput aria-label={`Viscosidad después de W${suffix}`} placeholder="40" value={value.viscosityHot} onChange={(next) => onChange({ viscosityHot: typeof next === 'number' ? next : '' })} min={0} allowDecimal={false} hideControls style={{ flex: 1, minWidth: 0 }} />
           </Group>
         </div>
       ) : value.kind === 'Cambio de aceite hidráulico' ? (
-        <Select label={`Referencia del aceite hidráulico${suffix}`} placeholder="Selecciona la referencia" data={['AW68', 'ISO68']} value={value.reference || null} onChange={(reference) => onChange({ reference: reference ?? '' })} required />
+        <Select label={`Referencia del aceite hidráulico (opcional)${suffix}`} placeholder="Selecciona la referencia" data={['AW68', 'ISO68']} value={value.reference || null} onChange={(reference) => onChange({ reference: reference ?? '' })} clearable />
       ) : value.kind ? (
-        <TextInput label={`${value.kind.startsWith('Cambio de filtro') ? 'Referencia del filtro' : 'Referencia'}${suffix}`} placeholder={value.kind.startsWith('Cambio de filtro') ? 'Escribe la referencia del filtro instalado' : 'Referencia del repuesto o servicio (opcional)'} value={value.reference} onChange={(event) => onChange({ reference: event.currentTarget.value })} required={requiresReference(value.kind)} />
+        <TextInput label={`${value.kind.startsWith('Cambio de filtro') ? 'Referencia del filtro (opcional)' : 'Referencia (opcional)'}${suffix}`} placeholder={value.kind.startsWith('Cambio de filtro') ? 'Escribe la referencia del filtro instalado' : 'Referencia del repuesto o servicio (opcional)'} value={value.reference} onChange={(event) => onChange({ reference: event.currentTarget.value })} />
       ) : null}
     </Stack>
   );

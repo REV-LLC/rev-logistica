@@ -1,6 +1,9 @@
 export type EquipmentIdentity = {
   id: string;
   publicCode: string;
+  displayName?: string;
+  brand?: string | null;
+  model?: string | null;
   description?: string | null;
   internalNumber: number;
   serialOrEngine?: string | null;
@@ -14,9 +17,9 @@ export type EquipmentIdentity = {
   warehouseOwner?: { name: string };
 };
 export const equipmentLabel = (asset: EquipmentIdentity) =>
-  `${asset.description || asset.sku.name} #${asset.internalNumber}${asset.warehouseOwner?.name ? ` · ${asset.warehouseOwner.name}` : ""}`;
+  `${equipmentName(asset)}${asset.warehouseOwner?.name ? ` · ${asset.warehouseOwner.name}` : ""}`;
 export const equipmentName = (asset: EquipmentIdentity) =>
-  `${asset.description || asset.sku.name} #${asset.internalNumber}`;
+  asset.displayName || `${asset.description || asset.sku.name} #${asset.internalNumber}`;
 export const equipmentImage = (asset: EquipmentIdentity) =>
   asset.imageUrl?.trim() ||
   asset.imageFileObject?.storageKey?.trim() ||
