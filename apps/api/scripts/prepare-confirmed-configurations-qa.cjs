@@ -204,7 +204,7 @@ async function historicalHash() {
     );
     report.originalHistoryAndStockUnchanged = true;
     report.pending =
-      'Other six mini buckets require physical-unit confirmation; no new stock created. Legacy bulk references remain bulk until separately reconciled.';
+      'Default buckets are prepared separately by prepare-default-buckets-qa.cjs after physical confirmation. Legacy bulk references remain bulk until separately reconciled.';
     console.log(JSON.stringify(report, null, 2));
   } finally {
     await db.$disconnect();
