@@ -34,6 +34,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/customers', 'Clientes'],
   ['/providers', 'Proveedores'],
   ['/employees/activities', 'Bitácora de empleados'],
+  ['/employees/payroll', 'Nómina'],
   ['/employees', 'Empleados'],
   ['/settings/task-notifications', 'Alertas de tareas'],
   ['/settings/catalog-options', 'Catálogo de ítems'],

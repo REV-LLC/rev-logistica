@@ -238,15 +238,20 @@ ese importe. No modificar los reportes originales para representar el mínimo.
   pendiente, no en cero. El salario ordinario ya cubierto no debe cobrarse otra
   vez como un extra. Revisar pago de trabajo en descanso y compensatorios.
 
-## Salarios fuera del alcance de esta publicación
+## Nómina recuperada y ampliada por instrucción del usuario
 
-El 1 de octubre de 2026 el usuario solicitó retirar el módulo salarial que había
-entrado con la integración de anexos. Se eliminaron su migración, modelo,
-endpoints, pantalla y las dependencias de creación/eliminación de empleados.
-Esta entrega no configura salarios ni inicializa importes para empleados.
+El 1 de octubre de 2026 el usuario corrigió la instrucción anterior de retirar
+salarios y autorizó completar primero la nómina básica en REV, coordinando con
+«Crear módulo de nomina». La nueva migración inicializa salario y auxilio
+provisionales desde 2026-10-01; Office debe confirmar las condiciones individuales.
+Contrato, cálculo, permisos, historial, comprobantes y límites:
+[14-nomina.md](14-nomina.md). No se reintegra la antigua migración que asignaba
+salarios retroactivos desde septiembre.
+
 El validador de fechas de anexos permanece como utilidad genérica independiente.
-Los préstamos y actividades existentes no se modifican. Cualquier costo laboral
-futuro necesita una definición y autorización propias; no se deduce del alquiler.
+Los préstamos y actividades existentes no se modifican. Los extras laborales en
+anexos siguen pendientes de clasificación e integración (`LABOR_PENDING`): no
+se calculan usando mínimos de alquiler ni porcentajes sobre la tarifa del equipo.
 
 ## Secuencia de implementación
 

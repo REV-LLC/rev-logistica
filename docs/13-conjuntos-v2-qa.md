@@ -5,6 +5,15 @@
 Implementación integrada con el módulo de anexos en `codex/equipment-commercial-ui`.
 No se publicó ni se modificaron datos de producción. Contrato común: [12-commercial-profiles-contract.md](12-commercial-profiles-contract.md).
 
+Actualización del 1 de octubre: el usuario pidió recuperar y completar nómina.
+QA activa ahora usa `equipment_payroll_qa_20261001`, restaurada del mismo dump:
+147 migraciones (141 originales + cinco de conjuntos/anexos + una nueva de nómina).
+Las comprobaciones de las copias anteriores, incluido el retiro transitorio de
+salarios, se conservan abajo como historial; no describen el código final de nómina.
+Ver [14-nomina.md](14-nomina.md). Los flujos PostgreSQL de perfiles, composición
+documental y empalmes se repitieron con nómina integrada y rollback: todos pasaron.
+Los 12 grupos de registros originales y los 16 empleados conservan sus datos.
+
 ## Snapshot actual verificado
 
 Copia consistente de la base vinculada a la API de Railway **producción**, tomada el 30/sep/2026 a las **19:50:08 Bogotá** (`2026-10-01T00:50:08.994Z`). La conexión y transacción de origen fueron de solo lectura. No se usó la copia anterior para las conclusiones de este control.
@@ -88,11 +97,11 @@ Los empalmes son inmutables desde estos endpoints. Un padre mal elegido no se co
 
 Frontend local: `http://127.0.0.1:3159`. API local: `http://127.0.0.1:3059`.
 Autenticación real con usuarios exclusivos de QA; servicios externos y envío de mensajes aislados.
-Base local **`equipment_commercial_no_payroll_20261001`** en puerto 54414. No es producción. Correo, WhatsApp, almacenamiento y tareas programadas están aislados. Los archivos ficticios ahora sobreviven al reinicio del servidor QA.
+Base local activa **`equipment_payroll_qa_20261001`** en puerto 54414. No es producción. Correo, WhatsApp, almacenamiento y tareas programadas están aislados. Los archivos ficticios ahora sobreviven al reinicio del servidor QA. Las copias de ensayos anteriores se conservaron por separado.
 
-Usuarios exclusivamente locales: `qa-config-office@example.invalid`, `qa-config-admin@example.invalid`, `qa-config-driver@example.invalid`. Clave de QA: `Only-local-QA-20260923!`. No son cuentas ni credenciales de producción. Reinicio API: `QA_NO_PAYROLL=1 node scripts/run-equipment-commercial-qa.cjs` desde `apps/api`; frontend: `npm run start -- --hostname 127.0.0.1 --port 3159` desde `apps/web`, después de construir con `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3059`.
+Usuarios exclusivamente locales: `qa-config-office@example.invalid`, `qa-config-admin@example.invalid`, `qa-config-driver@example.invalid`. Clave de QA: `Only-local-QA-20260923!`. No son cuentas ni credenciales de producción. Reinicio API: `QA_PAYROLL=1 node scripts/run-equipment-commercial-qa.cjs` desde `apps/api`; frontend: `npm run start -- --hostname 127.0.0.1 --port 3159` desde `apps/web`, después de construir con `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3059`.
 
-Ejemplo actual del ensayo HTTP: cliente `QA HTTP CONJUNTOS 31a87541` / obra `QA OBRA CONJUNTOS 31a87541`, con equipo genérico, accesorio individual y piezas retornables. Valores ficticios de 100/día y 200/metro, mínimos 0 para probar el cambio de modalidad, sin modificar tarifas reales. Los ensayos tienen familias/clientes prefijados `QA HTTP`.
+Ejemplo del ensayo HTTP preservado en `equipment_commercial_no_payroll_20261001`: cliente `QA HTTP CONJUNTOS 31a87541` / obra `QA OBRA CONJUNTOS 31a87541`, con equipo genérico, accesorio individual y piezas retornables. Valores ficticios de 100/día y 200/metro, mínimos 0 para probar el cambio de modalidad, sin modificar tarifas reales. Los ensayos tienen familias/clientes prefijados `QA HTTP`; en la copia activa deben recrearse si se desea recorrerlos por UI.
 
 Ejemplo por UI preservado solo en `equipment_commercial_live_20260930`: familia `QA SISTEMA MODULAR 30SEP`, equipo `QA MODULAR #1`, accesorio `QA CABEZAL MODULAR 30SEP`, motor `QA 5 HP MOTOR MODULAR 30SEP #1`. Cliente/obra `QA HTTP CONJUNTOS c7bd6a74` / `QA OBRA CONJUNTOS c7bd6a74`; remisión `RM-APP-000017` y devolución `DV-APP-000024`. Sus IDs/enlaces no existen en la copia activa nueva; esto no representa pérdida de documentos productivos.
 

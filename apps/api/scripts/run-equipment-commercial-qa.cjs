@@ -4,7 +4,9 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../../..');
 const req = createRequire(path.join(root, 'package.json'));
 const freshSnapshot = process.env.QA_FRESH_SNAPSHOT === '1';
-const databaseName = process.env.QA_NO_PAYROLL === '1'
+const databaseName = process.env.QA_PAYROLL === '1'
+  ? 'equipment_payroll_qa_20261001'
+  : process.env.QA_NO_PAYROLL === '1'
   ? 'equipment_commercial_no_payroll_20261001'
   : freshSnapshot
   ? 'equipment_commercial_live_20260930'
@@ -57,7 +59,13 @@ S3Client.prototype.send = async function (command) {
       return {};
     case 'GetObjectCommand': {
       const object = getObject(input.Key);
-      if (!object) throw new Error('QA object not found');
+      if (!object) {
+        // Match the real storage's missing-object contract so photo fallback is 404, not 500.
+        const error = new Error('QA object not found');
+        error.name = 'NoSuchKey';
+        error.$metadata = { httpStatusCode: 404 };
+        throw error;
+      }
       const body = req('node:stream').Readable.from(object.data);
       body.transformToByteArray = async () => object.data;
       return { Body: body, ContentType: object.contentType };

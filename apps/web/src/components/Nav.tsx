@@ -291,6 +291,10 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
         activePrefixes: ["/employees"],
         excludedPrefixes: ["/employees/activities"],
+        children: [
+          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities"] },
+          { href: "/employees/payroll", label: "Nómina", icon: IconFileDollar, roles: ["ADMIN", "OFFICE"] },
+        ],
       },
       { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
     ],

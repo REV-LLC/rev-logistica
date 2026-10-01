@@ -1429,6 +1429,8 @@ model Owner {
 }
 
 model Employee {
+  salaries EmployeeSalary[]
+  payrollReceipts PayrollReceipt[]
   activityNotes EmployeeActivityNote[]
   loanEntries EmployeeLoanEntry[]
   id         String       @id @default(uuid())
@@ -1720,4 +1722,43 @@ model EmployeeActivityNote {
   createdBy        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([employeeId, date])
+}
+
+
+model EmployeeSalary {
+  id String @id @default(uuid())
+  employeeId String
+  effectiveFrom DateTime @db.Date
+  monthlySalary Decimal @db.Decimal(14, 2)
+  transportAllowance Decimal @db.Decimal(14, 2)
+  revision Int
+  provisional Boolean @default(false)
+  regime String @default("STANDARD")
+  note String
+  createdBy String?
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  receipts PayrollReceipt[]
+
+  @@unique([employeeId, revision])
+  @@index([employeeId, effectiveFrom, revision])
+}
+
+model PayrollReceipt {
+  id String @id @default(uuid())
+  employeeId String
+  salaryId String
+  periodFrom DateTime @db.Date
+  periodTo DateTime @db.Date
+  days Int
+  idempotencyKey String @unique
+  requestHash String
+  snapshot Json
+  issuedBy String
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  salary EmployeeSalary @relation(fields: [salaryId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, periodFrom, periodTo])
+  @@index([employeeId, createdAt])
 }
