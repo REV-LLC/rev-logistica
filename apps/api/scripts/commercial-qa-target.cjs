@@ -6,6 +6,7 @@ const targets = {
   '54414/equipment_commercial_live_20260930': 'qa-config-office@example.invalid',
   '54414/equipment_commercial_no_payroll_20261001': 'qa-config-office@example.invalid',
   '54414/equipment_payroll_qa_20261001': 'qa-config-office@example.invalid',
+  '54414/equipment_cutover_qa_20261001_1000': 'qa-config-office@example.invalid',
 };
 const actorEmail = targets[`${url.port}${url.pathname}`];
 if (!['localhost', '127.0.0.1'].includes(url.hostname) || !actorEmail)

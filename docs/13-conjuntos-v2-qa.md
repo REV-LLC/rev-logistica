@@ -5,6 +5,11 @@
 Implementación integrada con el módulo de anexos en `codex/equipment-commercial-ui`.
 No se publicó ni se modificaron datos de producción. Contrato común: [12-commercial-profiles-contract.md](12-commercial-profiles-contract.md).
 
+Control de empalme posterior, **1/oct/2026 10:00 Bogotá**, con un snapshot nuevo
+que incluye DV019508 registrado hoy y fechado ayer: ver
+[15-empalme-20261001.md](15-empalme-20261001.md). Se restauró otra base aislada,
+sin reemplazar las copias citadas aquí. No se aplicaron empalmes reales.
+
 Actualización del 1 de octubre: el usuario pidió recuperar y completar nómina.
 QA activa ahora usa `equipment_payroll_qa_20261001`, restaurada del mismo dump:
 147 migraciones (141 originales + cinco de conjuntos/anexos + una nueva de nómina).

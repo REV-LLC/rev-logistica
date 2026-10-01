@@ -43,6 +43,17 @@ describe('Document composition v2', () => {
     expect(await prepareDocumentComposition({} as never, [root], new Date('2026-09-30T12:00:00Z'))).toEqual([{ assetId: 'machine' }]);
     await expect(prepareDocumentComposition({} as never, [root, attachment, consumable], new Date('2026-09-30T12:00:00Z'))).rejects.toThrow('1 de octubre');
   });
+  it('a September return recorded in October keeps legacy validation and does not query v2 origins', async () => {
+    const f = fixture();
+    await expect(validateDocumentComposition(f.tx as never, {
+      id: 'recorded-in-october', type: 'RETURN', customerWorksiteId: 'site',
+      docDate: new Date('2026-09-30T19:41:00Z'), items: [{ assetId: 'machine' }],
+    })).resolves.toBeNull();
+    expect(f.tx.documentItem.findMany).not.toHaveBeenCalled();
+    expect(await prepareDocumentComposition(f.tx as never,
+      [{ assetId: 'machine', compositionNodeId: 'node-created-in-october' }],
+      new Date('2026-09-30T19:41:00Z'))).toEqual([{ assetId: 'machine' }]);
+  });
   it('accepts a partial return and excludes the same direct document from earlier returns', async () => {
     const f = fixture(); f.previous.push({ sourceDocumentItemId: 'source', quantity: 2 });
     await expect(f.validate([returned(3)])).resolves.not.toBeNull();

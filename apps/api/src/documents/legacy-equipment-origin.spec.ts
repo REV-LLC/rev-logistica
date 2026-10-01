@@ -94,6 +94,33 @@ describe('Empalmes individuales e inmutables', () => {
     expect(legacyEffectiveDate('2026-10-01').toISOString()).toBe(
       '2026-10-01T05:00:00.000Z',
     ));
+  it('una entrega de septiembre registrada en octubre sigue siendo un origen histórico', async () => {
+    const f = fixture();
+    f.source.document.docDate = new Date('2026-09-30T19:41:00Z');
+    f.source.effectiveAt = f.source.document.docDate;
+    f.source.createdAt = new Date('2026-10-01T14:59:05Z');
+    const inspected = await f.service.inspect('ledger', '2026-10-01');
+    expect(inspected.evidence.documentDate).toBe('2026-09-30T19:41:00.000Z');
+    expect(inspected.evidence.effectiveAt).toBe('2026-09-30T19:41:00.000Z');
+    expect(inspected.evidence.createdAt).toBe('2026-10-01T14:59:05.000Z');
+    expect(f.tx.legacyEquipmentOrigin.create).not.toHaveBeenCalled();
+  });
+  it('una devolución de septiembre registrada en octubre retira el origen anterior por su fecha efectiva', async () => {
+    const f = fixture();
+    f.tx.stockLedger.findMany.mockResolvedValue([
+      f.source,
+      {
+        ...f.source,
+        id: 'return-recorded-today',
+        movementType: 'IN',
+        effectiveAt: new Date('2026-09-30T19:41:00Z'),
+        createdAt: new Date('2026-10-01T14:59:05Z'),
+      },
+    ]);
+    await expect(f.service.inspect('ledger', '2026-10-01')).rejects.toThrow(
+      /ya no pertenece/,
+    );
+  });
   it('rechaza retornos posteriores, otro alquiler y salidas duplicadas', async () => {
     const f = fixture();
     f.tx.stockLedger.findMany.mockResolvedValue([
