@@ -3,9 +3,13 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../../..');
 const req = createRequire(path.join(root, 'package.json'));
+const freshSnapshot = process.env.QA_FRESH_SNAPSHOT === '1';
+const databaseName = freshSnapshot
+  ? 'equipment_commercial_live_20260930'
+  : 'equipment_commercial_qa_20260930';
 Object.assign(process.env, {
   DATABASE_URL:
-    'postgresql://transport_qa:transport_qa_local_only@127.0.0.1:54414/equipment_commercial_qa_20260930',
+    `postgresql://transport_qa:transport_qa_local_only@127.0.0.1:54414/${databaseName}`,
   JWT_SECRET: 'isolated-equipment-commercial-qa-20260930',
   AUTH_BYPASS_LOCAL: 'false',
   AUTH_BYPASS: 'false',
@@ -122,7 +126,7 @@ const { AppModule } = req(path.join(root, 'apps/api/dist/src/app.module.js'));
   app.enableCors({ origin: ['http://127.0.0.1:3159'], credentials: true });
   await app.listen(3059, '127.0.0.1');
   console.log(
-    'QA API ready on127.0.0.1:3059; local DB only; mail, messages, storage and schedulers isolated.',
+    `QA API ready on 127.0.0.1:3059; database ${databaseName}; local DB only; mail, messages, storage and schedulers isolated.`,
   );
 })().catch((error) => {
   console.error(error.message);
