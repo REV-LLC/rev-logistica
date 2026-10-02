@@ -21,6 +21,7 @@ exports.loadTransportModule = function loadTransportModule(entry, mocks = {}) {
     }).outputText;
     const localRequire = (specifier) => {
       if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+      if (specifier.endsWith('.module.css')) return new Proxy({}, { get: (_, key) => key === '__esModule' ? false : String(key) });
       if (specifier.startsWith('.') || specifier.startsWith('@/')) {
         const base = specifier.startsWith('@/')
           ? path.resolve(__dirname, '../..', specifier.slice(2))

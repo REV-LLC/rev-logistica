@@ -160,7 +160,7 @@ export default function ExistingPartPicker({
             <Group justify="space-between">
               <div>
                 <Text>{entryName(row)}</Text>
-                {row.familyId ? <Text size="xs" c="dimmed">Elegir unidad en la remisión</Text> : null}
+                {row.familyId ? <Text size="xs" c="dimmed">Permitir equipos de esta familia</Text> : null}
               </div>
               <Button type="button" onClick={() => onSelect(row)}>
                 Vincular
