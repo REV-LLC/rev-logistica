@@ -55,13 +55,14 @@ async function fixture() {
     back: () =>
       act(() =>
         [...container.querySelectorAll("button")]
-          .find((button) => button.textContent === "Equipo X")
+          .find((button) => button.textContent === "Volver a Equipo X")
           .click(),
       ),
   };
 }
 test("generic breadcrumb navigates X → Y → Z and blocks cycles by identity", async () => {
   const f = await fixture();
+  assert.equal(f.container.querySelectorAll("button").length, 0, "no inert button on the root equipment");
   await act(() =>
     f.handlers().onConfigurePart({ accessoryId: "y", label: "Implemento Y" }),
   );

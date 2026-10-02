@@ -3,11 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import type { ConfigurationLocation } from "./types";
+import classes from "./ConfigurationEditor.module.css";
 
 export type ConfigurationNavigation = {
   onConfigurePart: (location: ConfigurationLocation) => void;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
+  onLabelChange?: (label: string) => void;
 };
 
 const locationKey = (location: ConfigurationLocation) =>
@@ -29,6 +31,7 @@ export default function ConfigurationNavigator({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const current = trail[trail.length - 1];
   const goBack = (index: number) => {
     if (busy || index === trail.length - 1) return;
@@ -59,34 +62,38 @@ export default function ConfigurationNavigator({
   };
   return (
     <Stack gap="lg">
-      <Group gap="xs" aria-label="Ruta del conjunto" style={{ minWidth: 0 }}>
-        {trail.map((location, index) => (
-          <Group
-            key={`${locationKey(location)}:${index}`}
-            gap="xs"
-            wrap="nowrap"
-            style={{ maxWidth: "100%" }}
-          >
-            {index ? (
-              <Text c="dimmed" aria-hidden="true">
-                →
-              </Text>
-            ) : null}
-            <Button
-              variant={index === trail.length - 1 ? "light" : "subtle"}
-              size="xs"
-              disabled={busy}
-              aria-current={index === trail.length - 1 ? "step" : undefined}
-              onClick={() => goBack(index)}
-              style={{ maxWidth: 260 }}
+      <a className={classes.backLink} href="/inventory" onClick={event => {
+        if (busy || (dirty && !window.confirm("Hay cambios sin guardar. ¿Descartarlos y volver al inventario?"))) event.preventDefault();
+      }}>Volver al inventario</a>
+      {trail.length > 1 ? (
+        <Group gap="xs" aria-label="Ruta del conjunto" style={{ minWidth: 0 }}>
+          {trail.slice(0, -1).map((location, index) => (
+            <Group
+              key={`${locationKey(location)}:${index}`}
+              gap="xs"
+              wrap="nowrap"
+              style={{ maxWidth: "100%" }}
             >
-              <Text inherit truncate="end">
-                {location.label}
-              </Text>
-            </Button>
-          </Group>
-        ))}
-      </Group>
+              {index ? (
+                <Text c="dimmed" aria-hidden="true">
+                  →
+                </Text>
+              ) : null}
+              <Button
+                variant="subtle"
+                size="xs"
+                disabled={busy}
+                onClick={() => goBack(index)}
+                style={{ maxWidth: 260 }}
+              >
+                <Text inherit truncate="end">
+                  Volver a {labels[locationKey(location)] ?? location.label}
+                </Text>
+              </Button>
+            </Group>
+          ))}
+        </Group>
+      ) : null}
       {error ? (
         <Alert color="red" role="alert">
           {error}
@@ -97,6 +104,11 @@ export default function ConfigurationNavigator({
           onConfigurePart: configure,
           onDirtyChange: setDirty,
           onBusyChange: setBusy,
+          onLabelChange: (label) =>
+            setLabels((previous) => ({
+              ...previous,
+              [locationKey(current)]: label,
+            })),
         })}
       </div>
     </Stack>
