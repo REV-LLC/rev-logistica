@@ -89,7 +89,7 @@ test('component configuration cannot overwrite the assignment managed by the mot
   assert.equal('motor' in payload, false);
   assert.deepEqual(payload.entries, []);
 });
-test("renders separate classifications, independent flags and configuration notes", () => {
+test("renders habitual equipment separately from compatible choices without exposing technical controls", () => {
   const markup = renderToStaticMarkup(
     React.createElement(
       MantineProvider,
@@ -101,18 +101,17 @@ test("renders separate classifications, independent flags and configuration note
     ),
   );
   for (const text of [
-    "Componentes del equipo",
-    "Accesorios de trabajo",
-    "Incluido por defecto",
-    "Requerido para operar",
+    "Sale normalmente con",
+    "Otros implementos compatibles",
     "TECHO DD-29",
-    "no elimina el elemento",
-    "Notas de configuración",
+    "Agregar componente",
+    "Notas",
   ])
     assert.ok(markup.includes(text), text);
-  assert.match(markup, /<details>/);
+  assert.match(markup, /<details(?:\s[^>]*)?>/);
   assert.doesNotMatch(markup, /<details[^>]*\bopen/);
   assert.doesNotMatch(markup, /Cada relación vincula/);
+  assert.doesNotMatch(markup, /Cantidad habitual|Cantidad máxima|Requerido para operar|Elegir unidad en la remisión/);
 });
 
 test('part titles and breadcrumbs distinguish units and owners without exposing import codes', () => {
