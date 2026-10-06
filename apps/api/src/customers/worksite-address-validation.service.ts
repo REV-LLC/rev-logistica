@@ -13,6 +13,7 @@ type GoogleAddressValidationResponse = {
     address?: {
       formattedAddress?: string;
       postalAddress?: {
+        regionCode?: string;
         administrativeArea?: string;
         locality?: string;
       };
@@ -40,7 +41,8 @@ type WorksiteAddressValidationParams = {
 @Injectable()
 export class WorksiteAddressValidationService {
   async validate(params: WorksiteAddressValidationParams) {
-    const { address, regionCode = 'CO' } = params;
+    const { address } = params;
+    const regionCode = (params.regionCode ?? 'CO').trim().toUpperCase();
     const cleanAddress = address.trim();
     if (!cleanAddress) {
       throw new BadRequestException('La dirección es obligatoria.');
@@ -53,7 +55,7 @@ export class WorksiteAddressValidationService {
       throw new ServiceUnavailableException('GOOGLE_MAPS_API_KEY no está configurada.');
     }
 
-    const response = await fetch(
+    const request = (inferColombia = false) => fetch(
       `https://addressvalidation.googleapis.com/v1:validateAddress?key=${encodeURIComponent(
         apiKey,
       )}`,
@@ -62,20 +64,37 @@ export class WorksiteAddressValidationService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: {
-            regionCode,
+            regionCode: inferColombia ? undefined : regionCode,
             administrativeArea: department || undefined,
             locality: city || undefined,
-            addressLines: [cleanAddress],
+            addressLines: inferColombia
+              ? [cleanAddress, ...[city, department].filter(Boolean), 'Colombia']
+              : [cleanAddress],
           },
         }),
       },
     );
 
-    const data = (await response.json()) as GoogleAddressValidationResponse;
+    let response = await request();
+    let data = (await response.json()) as GoogleAddressValidationResponse;
+    // Google currently rejects explicit CO for this project, while country
+    // inference succeeds. Retry only that rejection and verify the country.
+    const inferredColombia = response.status === 403 && regionCode === 'CO';
+    if (inferredColombia) {
+      response = await request(true);
+      data = (await response.json()) as GoogleAddressValidationResponse;
+    }
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ServiceUnavailableException('Google Maps rechazó el acceso para revisar esta dirección.');
+      }
       throw new BadRequestException(
         data.error?.message ?? 'Google no pudo validar la dirección.',
       );
+    }
+
+    if (inferredColombia && data.result?.address?.postalAddress?.regionCode !== 'CO') {
+      throw new BadRequestException('Google no confirmó que la dirección sugerida esté en Colombia.');
     }
 
     const formattedAddress = data.result?.address?.formattedAddress?.trim();
