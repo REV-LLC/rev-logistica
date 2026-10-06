@@ -10,8 +10,13 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChargeType } from '@prisma/client';
+import { BulkKitSettingsDto } from '../../bulk-kits/bulk-kits.dto';
 
 export class BulkAssetFamilyInput {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BulkKitSettingsDto)
+  kitSettings?: BulkKitSettingsDto;
   @IsOptional()
   @IsUUID()
   id?: string;

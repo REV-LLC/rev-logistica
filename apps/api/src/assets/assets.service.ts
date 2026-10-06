@@ -187,6 +187,9 @@ export class AssetsService {
         code: true,
         name: true,
         controlType: true,
+        bulkKitsEnabled: true,
+        bulkKitPrefix: true,
+        bulkKitSettingsVersion: true,
         subfamilies: {
           where: { active: true },
           select: {

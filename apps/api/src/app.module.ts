@@ -39,9 +39,11 @@ import { FuelModule } from './fuel/fuel.module';
 import { AccessoriesModule } from './accessories/accessories.module';
 import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
+import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
 
 @Module({
   imports: [
+    BulkKitsModule,
     CommercialProfilesModule,
     CacheModule.register({
       isGlobal: true,

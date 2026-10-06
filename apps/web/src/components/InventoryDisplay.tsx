@@ -1,6 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { api } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
+const BulkKitConfigurationModal = dynamic(() => import('./bulk-kits/BulkKitConfigurationModal'));
 import {
   Badge,
   Button,
@@ -135,6 +139,18 @@ export default function InventoryDisplay({
   serialAssetScope?: 'own' | 'allied';
   showWorksiteQuantities?: boolean;
 }) {
+  const [kitFamilyId, setKitFamilyId] = useState<string | null>(null);
+  const [enabledKitFamilies, setEnabledKitFamilies] = useState<Set<string>>(new Set());
+  const [kitRevision, setKitRevision] = useState(0);
+  const mayConfigureKits = !isWorksiteView && ['ADMIN', 'OFFICE'].includes(getCurrentUserRole() ?? '');
+  useEffect(() => {
+    if (!mayConfigureKits || !bulk.length) return;
+    let cancelled = false;
+    api<Array<{ id: string; bulkKitsEnabled: boolean }>>('/asset-families?controlType=BULK')
+      .then(families => { if (!cancelled) setEnabledKitFamilies(new Set(families.filter(family => family.bulkKitsEnabled).map(family => family.id))); })
+      .catch(() => { if (!cancelled) setEnabledKitFamilies(new Set()); });
+    return () => { cancelled = true; };
+  }, [mayConfigureKits, bulk.length, kitRevision]);
   const rowsBySku = useMemo(() => {
     const result = new Map<string, BulkItem[]>();
     for (const item of bulk) result.set(item.skuId, [...(result.get(item.skuId) ?? []), item]);
@@ -372,6 +388,7 @@ export default function InventoryDisplay({
                       </Text>
                     </div>
                     <Group gap="xs">
+                      {mayConfigureKits && enabledKitFamilies.has(group.id) ? <Button variant="light" size="xs" onClick={() => setKitFamilyId(group.id)}>Configurar conjunto</Button> : null}
                       {quantityBadge(group.totalQuantity, 'orange')}
                       {showWorksiteQuantities && group.totalWorksiteQuantity > 0 ? (
                         <Badge color="blue" variant="light">
@@ -419,6 +436,7 @@ export default function InventoryDisplay({
         </section>
       )}
 
+      {kitFamilyId ? <BulkKitConfigurationModal key={kitFamilyId} familyId={kitFamilyId} onClose={() => setKitFamilyId(null)} onSaved={() => setKitRevision(value => value + 1)} /> : null}
       {showSerialSection && (
         <section>
           <Title order={3} mb="sm">
