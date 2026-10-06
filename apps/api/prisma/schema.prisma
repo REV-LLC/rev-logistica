@@ -599,6 +599,10 @@ model AssetFamily {
   name        String
   controlType SkuControlType
   createdAt   DateTime       @default(now())
+  bulkKitsEnabled Boolean @default(false)
+  bulkKitPrefix String?
+  bulkKitSettingsVersion Int @default(0)
+  bulkKits BulkKit[]
 
   skus                   Sku[]
   subfamilies            AssetSubfamily[]
@@ -669,6 +673,7 @@ model Sku {
   createdAt            DateTime   @default(now())
 
   assets               Asset[]
+  bulkKitEntries       BulkKitEntry[]
   documentItems        DocumentItem[]
   ledger               StockLedger[]
   imageFileObject      FileObject?           @relation("SkuImage", fields: [imageFileObjectId], references: [id])
@@ -680,6 +685,32 @@ model Sku {
 
   @@unique([assetFamilyId, name])
   @@index([assetSubfamilyId])
+}
+
+// Templates have no stock: documents move the real pieces only.
+model BulkKit {
+  id String @id @default(uuid())
+  assetFamilyId String
+  reference String
+  active Boolean @default(true)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assetFamily AssetFamily @relation(fields: [assetFamilyId], references: [id], onDelete: Restrict)
+  entries BulkKitEntry[]
+  @@unique([assetFamilyId, reference])
+  @@index([assetFamilyId, active])
+}
+model BulkKitEntry {
+  id String @id @default(uuid())
+  bulkKitId String
+  skuId String
+  quantity Int
+  sortOrder Int @default(0)
+  bulkKit BulkKit @relation(fields: [bulkKitId], references: [id], onDelete: Cascade)
+  sku Sku @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  @@unique([bulkKitId, skuId])
+  @@index([skuId])
 }
 
 model ProviderSkuPrice {

@@ -68,6 +68,8 @@ export type InventoryItemPickerModalProps = {
     label: string;
     content: ReactNode;
     selectedCount: number;
+    canConfirm?: boolean;
+    exclusive?: boolean;
     onConfirm: () => number;
   };
 };
@@ -220,8 +222,9 @@ export default function InventoryItemPickerModal({
   };
 
   const confirmSelection = () => {
+    if (extraTab?.canConfirm === false) return;
     let addedCount = 0;
-    selectedRows.forEach((row) => {
+    (extraTab?.exclusive ? [] : selectedRows).forEach((row) => {
       const added = row.type === 'bulk' ? onAddBulk(row.item) : onAddSerial(row.item);
       if (added) addedCount += 1;
     });
@@ -235,7 +238,7 @@ export default function InventoryItemPickerModal({
     onClose();
   };
 
-  const selectedCount = selectedRows.length + (extraTab?.selectedCount ?? 0);
+  const selectedCount = (extraTab?.exclusive ? 0 : selectedRows.length) + (extraTab?.selectedCount ?? 0);
   const hasItems = groupedRows.some((group) => group.rows.length > 0);
   const availableCount = selectableRows.length;
   const ownerWarehouseNames = useMemo(
@@ -410,7 +413,7 @@ export default function InventoryItemPickerModal({
             </Text>
             <Button
               onClick={confirmSelection}
-              disabled={selectedCount === 0}
+              disabled={selectedCount === 0 || extraTab?.canConfirm === false}
               className="inventory-picker-mobile-confirm"
             >
               Agregar
@@ -729,7 +732,7 @@ export default function InventoryItemPickerModal({
             <Button
               size={isMobile ? 'sm' : 'md'}
               onClick={confirmSelection}
-              disabled={selectedCount === 0}
+              disabled={selectedCount === 0 || extraTab?.canConfirm === false}
             >
               <span className="inventory-picker-desktop-action-label">
                 Agregar al documento{selectedCount ? ` (${selectedCount})` : ''}

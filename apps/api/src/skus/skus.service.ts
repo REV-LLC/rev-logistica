@@ -411,11 +411,16 @@ export class SkusService {
       throw new NotFoundException('Sku not found');
     }
 
-    const [assetsCount, ledgerCount, documentItemsCount] = await Promise.all([
+    const [assetsCount, ledgerCount, documentItemsCount, kitEntriesCount] = await Promise.all([
       this.prisma.asset.count({ where: { skuId } }),
       this.prisma.stockLedger.count({ where: { skuId } }),
       this.prisma.documentItem.count({ where: { skuId } }),
+      this.prisma.bulkKitEntry.count({ where: { skuId } }),
     ]);
+
+    if (kitEntriesCount) {
+      throw new BadRequestException('Esta referencia pertenece a un conjunto. Retírala de la plantilla antes de eliminarla.');
+    }
 
     if (assetsCount || ledgerCount || documentItemsCount) {
       throw new BadRequestException(
@@ -423,7 +428,14 @@ export class SkusService {
       );
     }
 
-    return this.prisma.sku.delete({ where: { id: skuId } });
+    try {
+      return await this.prisma.sku.delete({ where: { id: skuId } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new BadRequestException('La referencia está en uso. Actualiza el catálogo antes de eliminarla.');
+      }
+      throw error;
+    }
   }
 
   private resolveCreateChargeConfig(chargeType?: ChargeType, minimumChargeHours?: number) {
