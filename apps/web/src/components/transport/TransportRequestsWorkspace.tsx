@@ -1337,6 +1337,7 @@ export default function TransportRequestsWorkspace({
       />
 
       <RequestInventoryPickerModal
+        allowBulkKits={docType === 'REMISSION' && !isTabletRole}
         returnWorksiteId={docType === 'RETURN' && !isTabletRole ? customerWorksiteId : undefined}
         selectedItems={selectedItems}
         setSelectedItems={setSelectedItems}

@@ -6,6 +6,7 @@ import {
   Alert,
   Badge,
   Button,
+  Checkbox,
   Container,
   Group,
   Modal,
@@ -56,6 +57,9 @@ type AssetSubfamily = {
 };
 
 type AssetFamily = {
+  bulkKitsEnabled: boolean;
+  bulkKitPrefix: string | null;
+  bulkKitSettingsVersion: number;
   id: string;
   code: string;
   name: string;
@@ -83,6 +87,7 @@ type GlobalBulkSku = {
 };
 
 type CreateBulkResponse = {
+  family?: Pick<AssetFamily, 'id' | 'bulkKitsEnabled' | 'bulkKitPrefix' | 'bulkKitSettingsVersion'>;
   sku: {
     id: string;
     assetFamilyId: string;
@@ -142,6 +147,7 @@ type WarehouseInventoryResponse = {
 
 type BulkPayload = {
   family: {
+    kitSettings?: { enabled: boolean; prefix: string; version: number };
     id?: string;
     code?: string;
     name?: string;
@@ -374,6 +380,8 @@ export default function AddBulkStockPage() {
   const isEmbedded = searchParams.get('embed') === '1';
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [bulkFamilies, setBulkFamilies] = useState<AssetFamily[]>([]);
+  const [kitsEnabled, setKitsEnabled] = useState(false);
+  const [kitPrefix, setKitPrefix] = useState('');
   const [globalBulkSkus, setGlobalBulkSkus] = useState<GlobalBulkSku[]>([]);
   const [weightUnits, setWeightUnits] = useState<string[]>([]);
   const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
@@ -678,6 +686,10 @@ export default function AddBulkStockPage() {
     catalogGroupOptions(groupKey, fallback).map((option) => option.value);
   const typeOptions = bulkFamilies.map((family) => ({ value: family.id, label: family.name }));
   const selectedFamily = bulkFamilies.find((family) => family.id === itemTypeSelection) ?? null;
+  useEffect(() => {
+    setKitsEnabled(Boolean(selectedFamily?.bulkKitsEnabled));
+    setKitPrefix(selectedFamily?.bulkKitPrefix ?? '');
+  }, [selectedFamily?.id, selectedFamily?.bulkKitsEnabled, selectedFamily?.bulkKitPrefix]);
   const selectedSubfamily = selectedFamily?.subfamilies.find(
     (subfamily) => subfamily.id === selectedSubfamilyId,
   );
@@ -1383,6 +1395,10 @@ export default function AddBulkStockPage() {
         setError('Confirm the product before adding stock');
         return;
       }
+      if (kitsEnabled && !kitPrefix.trim()) {
+        setError('Ingresa el texto inicial de los conjuntos.');
+        return;
+      }
     }
 
     if (quantity === '' || Number(quantity) <= 0) {
@@ -1417,6 +1433,8 @@ export default function AddBulkStockPage() {
                 id: builtItem?.familyId,
                 name: builtItem?.familyName,
                 code: builtItem?.familyCode,
+                kitSettings: selectedFamily && (kitsEnabled !== Boolean(selectedFamily.bulkKitsEnabled) || kitPrefix !== (selectedFamily.bulkKitPrefix ?? ''))
+                  ? { enabled: kitsEnabled, prefix: kitPrefix, version: selectedFamily.bulkKitSettingsVersion } : undefined,
               },
               subfamily: builtItem?.subfamilyId ? { id: builtItem.subfamilyId } : undefined,
               sku: {
@@ -1441,6 +1459,9 @@ export default function AddBulkStockPage() {
         method: 'POST',
         json: payload,
       });
+      if (response.family) {
+        setBulkFamilies(current => current.map(family => family.id === response.family!.id ? { ...family, ...response.family } : family));
+      }
       api<GlobalBulkSku[]>('/skus?controlType=BULK')
         .then((items) => setGlobalBulkSkus(items.filter((sku) => sku.active)))
         .catch(() => undefined);
@@ -1953,6 +1974,8 @@ export default function AddBulkStockPage() {
                   {selectedFamily ? (
                     <Paper withBorder radius="md" p="sm">
                       <Stack gap="sm">
+                        <Checkbox label="Habilitar conjuntos para esta familia" checked={kitsEnabled} onChange={event => setKitsEnabled(event.currentTarget.checked)} disabled={saving} />
+                        {kitsEnabled ? <TextInput label="Texto inicial de los conjuntos" placeholder="Ej. Andamio colgante de" value={kitPrefix} onChange={event => setKitPrefix(event.currentTarget.value)} maxLength={100} required disabled={saving} /> : null}
                         <Select
                           label="Subfamilia (opcional)"
                           data={subfamilyOptions}

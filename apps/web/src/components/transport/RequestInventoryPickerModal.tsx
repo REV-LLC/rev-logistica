@@ -3,6 +3,8 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import InventoryItemPickerModal, {
   type InventoryItemPickerModalProps,
 } from "../InventoryItemPickerModal";
+import dynamic from 'next/dynamic';
+const RemissionKitPicker = dynamic(() => import('./RemissionKitPicker'));
 import ReturnAccessoryPickerPanel from "./ReturnAccessoryPickerPanel";
 import {
   addReturnAccessories,
@@ -14,18 +16,22 @@ import { useReturnAccessoryOptions } from "./use-return-accessory-options";
 import type { SelectedItem } from "./request-types";
 
 type Props = InventoryItemPickerModalProps & {
+  allowBulkKits?: boolean;
   returnWorksiteId?: string;
   selectedItems: SelectedItem[];
   setSelectedItems: Dispatch<SetStateAction<SelectedItem[]>>;
 };
 
 export default function RequestInventoryPickerModal({
+  allowBulkKits,
   returnWorksiteId,
   selectedItems,
   setSelectedItems,
   ...picker
 }: Props) {
-  if (!returnWorksiteId) return <InventoryItemPickerModal {...picker} />;
+  if (!returnWorksiteId) return allowBulkKits && picker.opened
+    ? <RemissionKitPicker {...picker} selectedItems={selectedItems} setSelectedItems={setSelectedItems} />
+    : <InventoryItemPickerModal {...picker} />;
   // A cancelled/closed picker discards only its temporary selection. Changing the worksite resets it too.
   return picker.opened ? (
     <ReturnPicker

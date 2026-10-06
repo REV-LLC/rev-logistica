@@ -34,6 +34,7 @@ import { CreateInventoryOutDto } from './dto/create-inventory-out.dto';
 import { CreateSerializedAssetDto } from './dto/create-serialized-asset.dto';
 import { EquipmentConfigurationService } from '../accessories/equipment-configuration.service';
 import { CreateBulkAdjustmentDto } from './dto/create-bulk-adjustment.dto';
+import { saveBulkKitSettings } from '../bulk-kits/bulk-kits.validation';
 import { bulkSkuCanonicalKey, normalizeBulkSkuInput } from './bulk-sku-normalization';
 import { normalizeAssetFamilyIdentity } from './asset-family-normalization';
 import {
@@ -703,6 +704,7 @@ export class InventoryService {
   async addBulkAdjustment(payload: CreateBulkAdjustmentDto, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.BULK, tx);
+      if (payload.family.kitSettings) await saveBulkKitSettings(tx, assetFamily.id, payload.family.kitSettings);
       const assetSubfamily = payload.subfamily
         ? await this.resolveAssetSubfamily(payload.subfamily, assetFamily.id, tx, payload.sku.id)
         : null;
@@ -762,6 +764,10 @@ export class InventoryService {
 
       return {
         sku: { id: sku.id, assetFamilyId: assetFamily.id },
+        family: payload.family.kitSettings ? await tx.assetFamily.findUnique({
+          where: { id: assetFamily.id },
+          select: { id: true, bulkKitsEnabled: true, bulkKitPrefix: true, bulkKitSettingsVersion: true },
+        }) : undefined,
         ledger,
         providerPrice,
       };
