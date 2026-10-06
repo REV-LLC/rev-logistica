@@ -1,6 +1,17 @@
+.table {
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  padding: var(--mantine-spacing-md);
+}
+
 .table table th:first-child,
 .table table td:first-child {
-  min-width: 210px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+  box-shadow: 6px 0 10px -10px rgba(0, 0, 0, 0.3);
 }
 
 .table table th:last-child,
@@ -10,6 +21,11 @@
   z-index: 1;
   background: var(--mantine-color-body);
   box-shadow: -6px 0 10px -10px rgba(0, 0, 0, 0.3);
+}
+
+.table table tbody tr:hover td:first-child,
+.table table tbody tr:hover td:last-child {
+  background: var(--table-highlight-on-hover-color, var(--table-hover-color));
 }
 
 .table table td {
