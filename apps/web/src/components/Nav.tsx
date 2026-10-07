@@ -43,7 +43,6 @@ import {
   IconHome,
   IconRulerMeasure,
   IconMap2,
-  IconMessageCircle,
   IconSettings,
   IconTag,
   IconTools,
@@ -77,13 +76,6 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
-      {
-        href: "/inventory/ledger",
-        label: "Movimientos",
-        icon: IconArrowsShuffle,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      { href: "/office-assistant", label: "Asistente Office", icon: IconMessageCircle, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
       {
@@ -127,29 +119,9 @@ const sections: NavSection[] = [
       },
       {
         href: "/transport/vehicles",
-        label: "Flota y obras",
+        label: "Vehículos",
         icon: IconTruck,
         roles: ["ADMIN", "OFFICE"],
-        children: [
-          {
-            href: "/transport/vehicles",
-            label: "Vehículos",
-            icon: IconTruck,
-            roles: ["ADMIN", "OFFICE"],
-          },
-          {
-            href: "/transport/worksites",
-            label: "Obras",
-            icon: IconBuilding,
-            roles: ["ADMIN", "OFFICE"],
-          },
-        ],
-      },
-      {
-        href: "/transport/driver-worksites",
-        label: "Obras",
-        icon: IconMap2,
-        roles: ["DRIVER"],
       },
       {
         href: "/notifications/deliveries",
@@ -168,6 +140,12 @@ const sections: NavSection[] = [
   {
     title: "Inventario",
     links: [
+      {
+        href: "/inventory/ledger",
+        label: "Movimientos",
+        icon: IconArrowsShuffle,
+        roles: ["ADMIN", "OFFICE"],
+      },
       {
         href: "/inventory/warehouse?scope=own",
         label: "Existencias",
@@ -252,6 +230,18 @@ const sections: NavSection[] = [
   {
     title: "Gestión",
     links: [
+      {
+        href: "/transport/worksites",
+        label: "Obras",
+        icon: IconBuilding,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
+        href: "/transport/driver-worksites",
+        label: "Obras",
+        icon: IconMap2,
+        roles: ["DRIVER"],
+      },
       {
         href: "/customers",
         label: "Clientes y facturación",
@@ -892,6 +882,16 @@ export default function Nav({ onNavigate }: NavProps) {
         <Divider mb="sm" color="rgba(255,255,255,0.10)" />
         <Stack gap="xs">
           <OfficeDraftBrowserNotifications />
+          <Button
+            variant="subtle"
+            color="gray"
+            size="sm"
+            fullWidth
+            styles={{ inner: { justifyContent: "flex-start" } }}
+            onClick={() => window.dispatchEvent(new Event('rev:open-offline-manager'))}
+          >
+            Sincronización
+          </Button>
           {!authBypass ? (
             <Button
               variant="subtle"
