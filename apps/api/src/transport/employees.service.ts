@@ -48,6 +48,7 @@ export class EmployeesService {
         email: true,
         documentId: true,
         active: true,
+        payrollEnabled: true,
         createdAt: true,
         user: {
           select: {
@@ -81,6 +82,7 @@ export class EmployeesService {
   }
 
   async createEmployee(payload: {
+    payrollEnabled?: boolean;
     name: string;
     lastName: string;
     role: string;
@@ -147,6 +149,7 @@ export class EmployeesService {
 
         const created = await tx.employee.create({
           data: {
+            payrollEnabled: payload.payrollEnabled ?? true,
             name: payload.name,
             lastName: payload.lastName,
             role: payload.role as any,
@@ -158,7 +161,7 @@ export class EmployeesService {
         });
 
         const provisionalSalary = provisionalSalaryData(created.id);
-        if (provisionalSalary) await tx.employeeSalary.create({ data: provisionalSalary });
+        if (provisionalSalary && payload.payrollEnabled !== false) await tx.employeeSalary.create({ data: provisionalSalary });
 
         if (vehicleIds.length) {
           await tx.employeeVehicle.createMany({
@@ -179,6 +182,7 @@ export class EmployeesService {
   async updateEmployee(
     employeeId: string,
     payload: {
+      payrollEnabled?: boolean;
       name?: string;
       lastName?: string;
       role?: string;
@@ -295,6 +299,7 @@ export class EmployeesService {
             email: payload.email,
             documentId: payload.documentId,
             active: payload.active,
+            payrollEnabled: payload.payrollEnabled,
           },
         });
 

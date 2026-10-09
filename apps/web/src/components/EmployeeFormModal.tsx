@@ -59,6 +59,7 @@ export type EmployeeForm = {
   email: string;
   documentId: string;
   active: boolean;
+  payrollEnabled: boolean;
   vehicleIds: string[];
   loginEnabled: boolean;
   loginIdentifier: string;
@@ -82,6 +83,7 @@ export const emptyEmployeeForm: EmployeeForm = {
   email: '',
   documentId: '',
   active: true,
+  payrollEnabled: true,
   vehicleIds: [],
   loginEnabled: false,
   loginIdentifier: '',
@@ -371,6 +373,15 @@ export default function EmployeeFormModal({
             />
           </SimpleGrid>
 
+          <Switch
+              checked={form.payrollEnabled}
+              label="Incluir en nómina"
+              description="Desactiva esta opción para socios u otras personas que no reciben nómina. Conserva su estado y su acceso."
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                onChange((previous) => ({ ...previous, payrollEnabled: checked }));
+              }}
+            />
           {!editingEmployee ? (
             <Switch
               checked={form.active}

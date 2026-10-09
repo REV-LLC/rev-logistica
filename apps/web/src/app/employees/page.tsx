@@ -223,6 +223,7 @@ export default function EmployeeCardsPage() {
       email: employee.email ?? '',
       documentId: toUppercaseInput(employee.documentId),
       active: employee.active,
+      payrollEnabled: employee.payrollEnabled ?? true,
       vehicleIds: employee.vehicles.map((vehicle) => vehicle.id),
       loginEnabled: Boolean(employee.user),
       loginIdentifier: employee.user?.email ?? '',
@@ -275,6 +276,7 @@ export default function EmployeeCardsPage() {
         email: form.email.trim() || undefined,
         documentId: form.documentId.trim().toUpperCase() || undefined,
         active: form.active,
+        payrollEnabled: form.payrollEnabled,
         vehicleIds: form.vehicleIds,
         loginEnabled: form.loginEnabled,
         loginIdentifier: form.loginEnabled
@@ -301,6 +303,7 @@ export default function EmployeeCardsPage() {
             email: payload.email,
             documentId: payload.documentId,
             vehicleIds: payload.vehicleIds,
+            payrollEnabled: payload.payrollEnabled,
             loginIdentifier: payload.loginIdentifier,
             loginPassword: payload.loginPassword,
             loginRole: payload.loginRole,

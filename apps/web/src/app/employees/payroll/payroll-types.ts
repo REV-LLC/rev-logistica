@@ -13,7 +13,7 @@ export type PayrollPreview = {
 export type PayrollReceipt = PayrollPreview & { id: string; createdAt: string; observations?: string | null };
 export type PayrollEmployee = {
   id: string; name: string; lastName: string; documentId: string | null;
-  role: string; active: boolean; latestRevision: number; current: Salary | null;
+  role: string; active: boolean; payrollEnabled?: boolean; latestRevision: number; current: Salary | null;
   history: Salary[]; preview: PayrollPreview; receipts: PayrollReceipt[];
 };
 export type PayrollPeriodResponse = {
