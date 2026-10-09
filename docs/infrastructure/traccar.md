@@ -167,3 +167,32 @@ cambiar la URL de recepción de las tablets. Si existe una variable
 La prueba de pantalla apagada fue confirmada por el usuario. La integración
 no garantiza conexión GPS: comprobar siempre la hora real del último reporte
 que muestra Traccar.
+
+## Puntos conocidos desde REV
+
+El control «+ Guardar ubicación» permite a ADMIN/OFFICE seleccionar un camión
+y guardar su última posición como geocerca circular nativa. El radio inicial es
+50 metros y puede ajustarse entre 25 y 2000 metros. No se aceptan coordenadas
+del navegador: la API recupera la posición directamente de Traccar, valida
+que pertenezca al camión y exige que tenga menos de 15 minutos. Si llegó otra
+posición desde que se abrió el formulario, el usuario debe confirmar de nuevo.
+
+Los puntos se guardan en la base nativa de Traccar, con `revKnownPlace=true`,
+y se vinculan a toda la flota y a las cuentas administradoras/de seguimiento
+de REV. Al renovar la sesión se sincronizan permisos para nuevos usuarios y
+camiones. Los usuarios nativos de REV conservan sus restricciones de lectura;
+la creación pasa por la API autenticada de REV. No cambia el código de Traccar
+ni el receptor de las tablets. No hay migraciones de la base de REV.
+
+`GET /tracking/places` consulta la última posición y compara su distancia
+contra el círculo guardado. Los reportes antiguos se muestran como históricos,
+no como presencia actual. El panel consulta cada 30 segundos mientras es
+visible; esto no cambia la frecuencia de reporte de las tablets. La entrada
+a la geocerca y la salida nativas se evaluarán con los siguientes reportes del
+dispositivo. Los nombres repetidos se rechazan y los reintentos conservan un
+identificador de solicitud para recuperar un guardado parcialmente completado.
+
+El iframe no permite leer desde REV qué camión seleccionó el usuario dentro
+del mapa: el control usa un selector explícito de camión encima del mapa.
+La administración avanzada y eliminación de geocercas sigue disponible para
+la cuenta administradora nativa de Traccar.

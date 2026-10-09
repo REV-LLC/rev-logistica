@@ -28,13 +28,13 @@ describe('TrackingService', () => {
   it('provisions a separate readonly account, assigns devices and returns only a bounded native session', async () => {
     fetchMock.mockResolvedValueOnce(reply([])).mockResolvedValueOnce(reply({ id: 7, email: 'rev-rev-user@rev.invalid' }))
       .mockResolvedValueOnce(reply([{ id: 1 }, { id: 2 }])).mockResolvedValueOnce(reply([{ id: 1 }]))
-      .mockResolvedValueOnce(reply(null, 204)).mockResolvedValueOnce(reply('native-token'));
+      .mockResolvedValueOnce(reply(null, 204)).mockResolvedValueOnce(reply([])).mockResolvedValueOnce(reply('native-token'));
     const result = await service.createSession(identity);
     const calls = fetchMock.mock.calls;
     const profile = JSON.parse(calls[1][1].body);
     expect(profile).toMatchObject({ administrator: false, readonly: true, deviceReadonly: true, limitCommands: true, attributes: { revUserId: identity.sub } });
     expect(JSON.parse(calls[4][1].body)).toEqual({ userId: 7, deviceId: 2 });
-    expect(calls[5][1].headers.Authorization).not.toEqual(calls[0][1].headers.Authorization);
+    expect(calls[6][1].headers.Authorization).not.toEqual(calls[0][1].headers.Authorization);
     expect(result.panelUrl).toEqual('https://gps.revcontractorsllc.com/');
     expect(new URL(result.sessionUrl).searchParams.get('token')).toBe('native-token');
     expect(Date.parse(result.expiresAt)).toBeLessThanOrEqual(Date.now() + 300000);
