@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Group, Modal, Paper, Stack, Text } from '@mantine/core';
+import { Button, Group, Modal, Paper, Stack, Text } from '@mantine/core';
 import {
   listOfflineOperations,
   OFFLINE_QUEUE_EVENT,
@@ -42,21 +42,14 @@ export default function OfflineManager() {
   }, [refresh]);
 
   const pendingCount = operations.filter((item) => item.status !== 'completed').length;
-  const color = !online ? 'orange' : pendingCount ? 'yellow' : 'green';
-  const label = !online ? 'Sin conexión' : pendingCount ? `${pendingCount} pendiente(s)` : 'En línea';
+  useEffect(() => {
+    const open = () => setOpened(true);
+    window.addEventListener('rev:open-offline-manager', open);
+    return () => window.removeEventListener('rev:open-offline-manager', open);
+  }, []);
 
   return (
     <>
-      <Badge
-        component="button"
-        type="button"
-        color={color}
-        variant="filled"
-        onClick={() => setOpened(true)}
-        style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 3000, cursor: 'pointer' }}
-      >
-        {label}
-      </Badge>
       <Modal opened={opened} onClose={() => setOpened(false)} title="Sincronización offline">
         <Stack>
           <Text size="sm" c="dimmed">

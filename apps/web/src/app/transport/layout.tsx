@@ -11,6 +11,7 @@ export default function TransportLayout({ children }: { children: React.ReactNod
         { prefix: '/transport/generate', roles: ['ADMIN', 'OFFICE', 'DRIVER', 'WAREHOUSE_TABLET'] },
         { prefix: '/transport/driver-worksites', roles: ['DRIVER'] },
         { prefix: '/transport/cost', roles: ['ADMIN', 'OFFICE'] },
+        { prefix: '/transport/tracking', roles: ['ADMIN', 'OFFICE'] },
         { prefix: '/transport/vehicles', roles: ['ADMIN', 'OFFICE'] },
         { prefix: '/transport/worksites', roles: ['ADMIN', 'OFFICE'] },
       ]}

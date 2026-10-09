@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { AppShell, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useState } from "react";
+import OfficeAssistantLauncher from "@/components/OfficeAssistantLauncher";
 import Nav from "@/components/Nav";
 import PageLoadingBoundary from "@/components/PageLoadingBoundary";
 
@@ -49,6 +50,11 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       prefix: "/transport/cost",
       title: "Transporte",
       subtitle: "Costos y despacho",
+    },
+    {
+      prefix: "/transport/tracking",
+      title: "Seguimiento de camiones",
+      subtitle: "Mapa y recorridos",
     },
     {
       prefix: "/transport/vehicles",
@@ -260,6 +266,7 @@ export default function ResponsiveShell({
         <Nav onNavigate={close} />
       </AppShell.Navbar>
       <AppShell.Main><PageLoadingBoundary>{children}</PageLoadingBoundary></AppShell.Main>
+      <OfficeAssistantLauncher />
     </AppShell>
   );
 }
