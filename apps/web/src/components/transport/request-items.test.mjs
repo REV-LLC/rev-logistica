@@ -3,6 +3,14 @@ import test from 'node:test';
 
 import { buildRequestItems } from './request-items.ts';
 
+test('la elección de combustible pertenece al documento sin crear un motor separado', () => {
+  const items = buildRequestItems([{ type: 'serial', assetId: 'mezcladora', name: 'Mezcladora #2', deliveryFuel: 'ELECTRICO' }]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].assetId, 'mezcladora');
+  assert.equal(items[0].deliveryFuel, 'ELECTRICO');
+  assert.equal(items[0].componentParentAssetId, undefined);
+});
+
 test('el payload conserva el origen por ítem independiente del propietario y del tipo', () => {
   for (const type of ['bulk', 'serial', 'free', 'accessory']) {
     const [item] = buildRequestItems([{ type, name: 'QA', sourceWarehouseId: 'our-warehouse', ownerWarehouseId: 'provider' }]);

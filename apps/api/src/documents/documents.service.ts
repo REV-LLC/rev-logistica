@@ -1,4 +1,5 @@
 import { documentCommercialSnapshots } from '../commercial-profiles/commercial-history';
+import { validateDeliveryFuel } from './document-delivery-fuel';
 import { validateDocumentConfiguration } from '../accessories/document-configuration';
 import { compositionFields, CompositionFields, isDocumentCompositionV2 } from './document-composition';
 import {
@@ -1315,6 +1316,7 @@ export class DocumentsService {
         recipientPhone: true,
         recipientPhones: true,
         _count: { select: { items: true } },
+        items: { select: { assetId: true, deliveryFuel: true } },
         files: {
           where: { fileType: 'SIGNATURE_RECEIVED' },
           select: { id: true },
@@ -1334,6 +1336,7 @@ export class DocumentsService {
     if (!document._count.items) {
       throw new BadRequestException('Selecciona al menos un item');
     }
+    await validateDeliveryFuel(this.prisma, document);
     if (!document.files.length) {
       throw new BadRequestException('Captura la firma antes de enviar');
     }
@@ -2269,12 +2272,13 @@ export class DocumentsService {
               select: {
                 id: true,
                 name: true,
-                assetFamily: { select: { id: true, name: true } },
+                assetFamily: { select: { id: true, name: true, deliveryFuelSelectable: true } },
               },
             },
             asset: {
               select: {
                 id: true,
+                isImplement: true,
                 serialOrEngine: true,
                 description: true,
                 internalNumber: true,
@@ -2283,7 +2287,7 @@ export class DocumentsService {
                   select: {
                     id: true,
                     name: true,
-                    assetFamily: { select: { id: true, name: true } },
+                    assetFamily: { select: { id: true, name: true, deliveryFuelSelectable: true } },
                   },
                 },
               },
@@ -2297,7 +2301,7 @@ export class DocumentsService {
               select: {
                 id: true,
                 name: true,
-                assetFamily: { select: { id: true, name: true } },
+                assetFamily: { select: { id: true, name: true, deliveryFuelSelectable: true } },
               },
             },
             asset: {
@@ -2310,7 +2314,7 @@ export class DocumentsService {
                   select: {
                     id: true,
                     name: true,
-                    assetFamily: { select: { id: true, name: true } },
+                    assetFamily: { select: { id: true, name: true, deliveryFuelSelectable: true } },
                   },
                 },
               },
@@ -2406,6 +2410,7 @@ export class DocumentsService {
             accessoryCode: true,
             quantity: true,
             requestedTag: true,
+            deliveryFuel: true,
             conditionNote: true,
             sku: {
               select: {

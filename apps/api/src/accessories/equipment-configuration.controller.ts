@@ -40,8 +40,9 @@ export class EquipmentConfigurationController {
   @Get('asset-candidates') assetCandidates(
     @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(0), ParseIntPipe) page?: number,
+    @Query('implementsOnly') implementsOnly?: string,
   ) {
-    return this.configurations.assetCandidates(search, page);
+    return this.configurations.assetCandidates(search, page, implementsOnly === 'true');
   }
   @Get('assets/:id')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)

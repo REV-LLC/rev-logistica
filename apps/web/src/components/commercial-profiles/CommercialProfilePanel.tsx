@@ -21,11 +21,12 @@ import {
   type CommercialScope,
   commercialError,
   commercialPayload,
+  commercialScopeIds,
   scopeLabels,
-  todayInBogota,
 } from "./types";
 
 type AssetMetadata = {
+  isImplement?: boolean;
   skuId?: string;
   sku?: { id: string; assetFamilyId?: string; assetFamily?: { id: string } };
 };
@@ -33,21 +34,23 @@ type AssetMetadata = {
 export default function CommercialProfilePanel({
   assetId,
   accessoryId,
+  skuId,
   onSaved,
   onDirtyChange,
   onBusyChange,
 }: {
   assetId?: string;
   accessoryId?: string;
+  skuId?: string;
   onSaved?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const ownScope = accessoryId ? "ACCESSORY" : "ASSET";
+  const ownScope = skuId ? 'SKU' : accessoryId ? "ACCESSORY" : "ASSET";
   const [scopeType, setScopeType] = useState<CommercialScope>(ownScope);
   const [scopeIds, setScopeIds] = useState<
     Partial<Record<CommercialScope, string>>
-  >({ [ownScope]: accessoryId ?? assetId });
+  >({ [ownScope]: skuId ?? accessoryId ?? assetId });
   const [configuration, setConfiguration] = useState<EquipmentConfiguration>();
   const [value, setValue] = useState<CommercialProfile>();
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,7 @@ export default function CommercialProfilePanel({
   const [success, setSuccess] = useState("");
   const [reload, setReload] = useState(0);
   const inFlight = useRef(false);
-  const scopeId = scopeType === ownScope ? accessoryId ?? assetId : scopeIds[scopeType];
+  const scopeId = scopeType === ownScope ? skuId ?? accessoryId ?? assetId : scopeIds[scopeType];
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -77,7 +80,8 @@ export default function CommercialProfilePanel({
     const accessory = accessoryId
       ? api<Accessory>(`/accessories/${accessoryId}`, { signal: controller.signal })
       : null;
-    const physical = accessory
+    const physical = skuId ? api<{ name: string; assetFamilyId: string; isImplement: boolean }>(`/skus/${skuId}`, { signal: controller.signal })
+      .then(item => ({ version: 0, entries: [], parent: { name: item.name, familyId: item.assetFamilyId, warehouseId: null, isImplement: item.isImplement } })) : accessory
       ? accessory.then(item => item.kind === "INDIVIDUAL" && item.purpose !== "COMPONENT"
         ? api<EquipmentConfiguration>(`/equipment-configurations/accessories/${accessoryId}`, { signal: controller.signal })
         : { version: 0, entries: [], parent: { name: item.name, familyId: item.familyId, warehouseId: null } })
@@ -88,23 +92,22 @@ export default function CommercialProfilePanel({
         { signal: controller.signal },
       ),
       physical,
-      accessory ? Promise.resolve(null) : api<AssetMetadata>(`/assets/${assetId}`, { signal: controller.signal }),
+      accessory || skuId ? Promise.resolve(null) : api<AssetMetadata>(`/assets/${assetId}`, { signal: controller.signal }),
     ])
       .then(([profile, config, asset]) => {
         if (controller.signal.aborted) return;
-        setValue({
-          ...profile,
-          effectiveFrom: profile.effectiveFrom ?? todayInBogota(),
-        });
+        setValue(profile);
         setConfiguration(config);
-        setScopeIds(accessoryId ? { ACCESSORY: accessoryId } : {
+        const nextIds = commercialScopeIds(skuId ? { SKU: skuId, FAMILY: config.parent?.familyId } : accessoryId ? { ACCESSORY: accessoryId } : {
           ASSET: assetId,
           SKU: asset?.skuId ?? asset?.sku?.id,
           FAMILY:
             config.parent?.familyId ??
             asset?.sku?.assetFamilyId ??
             asset?.sku?.assetFamily?.id,
-        });
+        }, config.parent?.isImplement === true || asset?.isImplement === true);
+        setScopeIds(nextIds);
+        if (scopeType !== ownScope && !nextIds[scopeType]) setScopeType(ownScope);
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -118,7 +121,7 @@ export default function CommercialProfilePanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [assetId, accessoryId, scopeType, scopeId, reload]);
+  }, [assetId, accessoryId, skuId, scopeType, scopeId, reload]);
 
   const change = (next: CommercialProfile) => {
     setValue(next);
@@ -202,7 +205,9 @@ export default function CommercialProfilePanel({
           {scopeType === "FAMILY"
             ? "toda la familia"
             : "todos los equipos de esta referencia"}
-          . Afecta a todos sus equipos sin configuración propia.
+          {scopeType === "FAMILY"
+            ? ". Afecta a los equipos sin configuración propia, no a los implementos."
+            : ". Afecta a todos sus equipos sin configuración propia."}
         </Alert>
       ) : null}
       {error ? (
@@ -238,7 +243,6 @@ export default function CommercialProfilePanel({
                       ...value,
                       groups: structuredClone(value.inherited.groups),
                       modes: structuredClone(value.inherited.modes),
-                      effectiveFrom: todayInBogota(),
                     });
                   }}
                 >

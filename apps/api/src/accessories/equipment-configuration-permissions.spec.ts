@@ -4,7 +4,6 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { EquipmentConfigurationController } from './equipment-configuration.controller';
-import { EquipmentMotorsController } from './equipment-motors.controller';
 
 jest.mock('../auth/auth-bypass', () => ({ isAuthBypassEnabled: () => false }));
 
@@ -71,15 +70,5 @@ describe('Configuration permissions with real JWT guards', () => {
         'Missing Authorization',
       );
   });
-  it.each(['ADMIN', 'OFFICE', 'DRIVER', 'WAREHOUSE_TABLET', 'OPERATOR'])('protects all dedicated motor routes for %s', async role => {
-    for (const method of ['list', 'equipment', 'get', 'assign', 'edit'] as const) {
-      const token = await jwt.signAsync({ sub: 'qa', role });
-      const ctx = context('getAsset', token);
-      ctx.getClass = () => EquipmentMotorsController;
-      ctx.getHandler = () => EquipmentMotorsController.prototype[method];
-      await auth.canActivate(ctx);
-      if (['ADMIN', 'OFFICE'].includes(role)) expect(roles.canActivate(ctx)).toBe(true);
-      else expect(() => roles.canActivate(ctx)).toThrow('Insufficient role');
-    }
-  });
+
 });

@@ -14,6 +14,7 @@ import {
   UseGuards,
   ValidationPipe,
   BadRequestException,
+  GoneException,
 } from '@nestjs/common';
 import { Role, EquipmentPartRole } from '@prisma/client';
 import { Request } from 'express';
@@ -23,7 +24,6 @@ import { RolesGuard } from '../auth/roles.guard';
 import { AccessoriesService } from './accessories.service';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
 import {
-  CreateAccessoryDto,
   MoveAccessoryDto,
   UpdateAccessoryDto,
 } from './dto/accessory.dto';
@@ -76,8 +76,8 @@ export class AccessoriesController {
   }
 
   @Post()
-  create(@Body(validation) dto: CreateAccessoryDto, @Req() req: AuthRequest) {
-    return this.accessories.create(dto, req.user.sub);
+  create() {
+    throw new GoneException('Crea implementos desde inventario: equipo con identidad o material por cantidad. El registro de accesorios anterior queda solo para consulta histórica.');
   }
 
   @Get(':id')

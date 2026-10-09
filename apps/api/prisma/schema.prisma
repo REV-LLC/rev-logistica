@@ -36,9 +36,14 @@ model EquipmentConfigurationEntry {
   id                String @id @default(uuid())
   configurationId   String
   role              EquipmentPartRole
+  recommendation    Boolean @default(false)
   assetId           String?
+  skuId             String?
   accessoryId       String?
   familyId          String?
+  // A recommendation route links families, never selects physical units.
+  // Null means the equipment whose configuration owns this entry.
+  templateParentFamilyId String?
   maximumQuantity   Int?
   quantity          Int @default(1)
   defaultIncluded   Boolean @default(false)
@@ -46,13 +51,17 @@ model EquipmentConfigurationEntry {
   sortOrder         Int @default(0)
   configuration     EquipmentConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
   asset             Asset? @relation("ConfiguredAsset", fields: [assetId], references: [id], onDelete: Restrict)
+  sku               Sku? @relation("ConfiguredBulk", fields: [skuId], references: [id], onDelete: Restrict)
   accessory         Accessory? @relation("ConfiguredAccessory", fields: [accessoryId], references: [id], onDelete: Restrict)
   family            AssetFamily? @relation("ConfiguredFamily", fields: [familyId], references: [id], onDelete: Restrict)
+  templateParentFamily AssetFamily? @relation("TemplateRouteParentFamily", fields: [templateParentFamilyId], references: [id], onDelete: Restrict, map: "EquipmentConfigurationEntry_template_parent_family_fkey")
   @@index([configurationId, sortOrder])
   @@unique([configurationId, assetId])
+  @@unique([configurationId, skuId])
   @@unique([configurationId, accessoryId])
   @@unique([configurationId, familyId])
   @@index([familyId])
+  @@index([templateParentFamilyId])
   @@index([assetId])
   @@index([accessoryId])
 }
@@ -83,6 +92,43 @@ model EquipmentConfigurationArchive {
   createdAt DateTime @default(now())
 }
 
+// Reviewed one-to-one promotion. The historical Accessory inventory is retained
+// as evidence but excluded from operational stock once this bridge exists.
+model ImplementIdentityBridge {
+  commercialOriginReview ImplementCommercialOriginReview?
+  id               String   @id @default(uuid())
+  accessoryId      String   @unique
+  assetId          String?  @unique
+  skuId            String?
+  openingLedgerId  String   @unique
+  evidenceSnapshot Json
+  createdBy        String
+  effectiveAt      DateTime
+  createdAt        DateTime @default(now())
+  accessory        Accessory @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  asset            Asset? @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  sku              Sku? @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  openingLedger    StockLedger @relation(fields: [openingLedgerId], references: [id], onDelete: Restrict)
+  reviewer         User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([createdBy, effectiveAt])
+  @@index([skuId])
+}
+
+// An explicit, append-only commercial lineage review. This never assigns a
+// physical implement, changes compatibility, or rewrites the original bridge.
+model ImplementCommercialOriginReview {
+  id String @id @default(uuid())
+  bridgeId String @unique
+  parentOriginId String
+  reviewedBy String
+  reviewedAt DateTime @default(now())
+  evidenceSnapshot Json
+  bridge ImplementIdentityBridge @relation(fields: [bridgeId], references: [id], onDelete: Restrict)
+  parentOrigin LegacyEquipmentOrigin @relation(fields: [parentOriginId], references: [id], onDelete: Restrict)
+  reviewer User @relation(fields: [reviewedBy], references: [id], onDelete: Restrict)
+}
+
 enum AccessoryMovementType {
   RECEIVE
   ASSIGN
@@ -95,6 +141,7 @@ enum AccessoryMovementType {
 }
 
 model Accessory {
+  implementBridge     ImplementIdentityBridge?
   id                  String         @id @default(uuid())
   name                String
   description         String?
@@ -394,6 +441,8 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  implementCommercialOriginReviews ImplementCommercialOriginReview[]
+  implementIdentityBridges ImplementIdentityBridge[]
   reviewedLegacyEquipmentOrigins LegacyEquipmentOrigin[]
   annexDraftRevisions AnnexDraftRevision[]
   activityNotes EmployeeActivityNote[]
@@ -602,6 +651,7 @@ model AssetFamily {
   bulkKitsEnabled Boolean @default(false)
   bulkKitPrefix String?
   bulkKitSettingsVersion Int @default(0)
+  deliveryFuelSelectable Boolean @default(false)
   bulkKits BulkKit[]
 
   skus                   Sku[]
@@ -610,6 +660,7 @@ model AssetFamily {
   usedAsComponentInRules AssetFamilyComponent[] @relation("ComponentRuleComponent")
   accessories            Accessory[]
   configurationEntries   EquipmentConfigurationEntry[] @relation("ConfiguredFamily")
+  templateRouteChildren  EquipmentConfigurationEntry[] @relation("TemplateRouteParentFamily")
 }
 
 model AssetFamilyComponent {
@@ -652,6 +703,7 @@ model AssetSubfamily {
 }
 
 model Sku {
+  implementBridges     ImplementIdentityBridge[]
   id                   String     @id @default(uuid())
   name                 String
   imageUrl             String?
@@ -670,9 +722,12 @@ model Sku {
   areaM2               Decimal?
   unitWeight           Decimal?
   active               Boolean    @default(true)
+  isImplement          Boolean    @default(false)
+  isConsumable         Boolean    @default(false)
   createdAt            DateTime   @default(now())
 
   assets               Asset[]
+  configurationEntries EquipmentConfigurationEntry[] @relation("ConfiguredBulk")
   bulkKitEntries       BulkKitEntry[]
   documentItems        DocumentItem[]
   ledger               StockLedger[]
@@ -752,7 +807,16 @@ model AssetMotorCompatibility {
   @@index([equipmentAssetId])
 }
 
+// Immutable cutover evidence. Old motors remain inventory identities, not live mixer assignments.
+model RetiredMotorConfiguration {
+  assetId String @id
+  snapshot Json
+  retiredAt DateTime @default(now())
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+}
+
 model Asset {
+  implementBridge    ImplementIdentityBridge?
   activityNotes EmployeeActivityNote[]
   id                 String                  @id @default(uuid())
   skuId              String
@@ -771,6 +835,7 @@ model Asset {
   warehouseOwnerId   String
   warehouseCurrentId String?
   active             Boolean                 @default(true)
+  isImplement        Boolean                 @default(false)
   isDamaged          Boolean                 @default(false)
   damageNote         String?
   deletedAt          DateTime?
@@ -781,6 +846,7 @@ model Asset {
   assignedMotorId    String?                 @unique
   motorPowerHp       Decimal?                @db.Decimal(8, 2)
   motorVersion       Int                     @default(0)
+  retiredMotorConfiguration RetiredMotorConfiguration?
   motorCompatibility AssetMotorCompatibility[] @relation("CompatibleMotor")
   compatibleMotors   AssetMotorCompatibility[] @relation("CompatibleEquipment")
   createdAt          DateTime                @default(now())
@@ -1192,6 +1258,7 @@ model DocumentItem {
   skuId        String?
   quantity     Decimal?
   requestedTag String?
+  deliveryFuel String?
 
   // SERIAL
   assetId                  String?
@@ -1251,6 +1318,7 @@ model DocumentItem {
 }
 
 model StockLedger {
+  implementBridge ImplementIdentityBridge?
   id String @id @default(uuid())
   legacyEquipmentOrigin LegacyEquipmentOrigin?
 
@@ -1303,6 +1371,7 @@ model StockLedger {
 
 // An individually reviewed bridge. Original documents and stock movements remain unchanged.
 model LegacyEquipmentOrigin {
+  implementCommercialOriginReviews ImplementCommercialOriginReview[]
   id String @id @default(uuid())
   parentOriginId String?
   parentOrigin LegacyEquipmentOrigin? @relation("LegacyComposition", fields: [parentOriginId], references: [id], onDelete: NoAction, onUpdate: NoAction)

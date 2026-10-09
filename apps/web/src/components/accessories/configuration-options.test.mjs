@@ -43,7 +43,8 @@ const Options = loadTransportModule(
           React.createElement("input", {
             type: "number",
             value,
-            onChange: (event) => onChange(Number(event.currentTarget.value)),
+            onInput: (event) => onChange(Number(event.currentTarget.value)),
+            readOnly: false,
           }),
         ),
       TextInput: ({ label, value, onChange }) =>
@@ -116,14 +117,19 @@ async function fixture(entry = individual, extra = {}) {
       act(() => container.querySelector("input[type=checkbox]").click()),
   };
 }
-test("individual options hide quantity controls and preserve the stored identity and limits", async () => {
+test("individual options preserve their identity but never reintroduce blocking limits", async () => {
   const f = await fixture();
   assert.equal(f.container.querySelectorAll("input[type=number]").length, 0);
   await f.toggle();
   await f.click("Aplicar");
   assert.equal(f.applied[0].defaultIncluded, false);
   assert.equal(f.applied[0].accessoryId, "part");
-  assert.equal(f.applied[0].maximumQuantity, 1);
+  assert.equal(f.applied[0].id, "row");
+  assert.equal(f.applied[0].quantity, 1);
+  assert.equal(f.applied[0].maximumQuantity, null);
+  assert.equal(f.applied[0].required, false);
+  assert.ok(!f.container.textContent.includes("Límite de cantidad"));
+  assert.equal(individual.maximumQuantity, 1, "the stored parent is unchanged");
   assert.equal(
     individual.defaultIncluded,
     true,
@@ -137,7 +143,18 @@ test("cancelled options never reach the parent configuration", async () => {
   assert.equal(f.cancelled.length, 1);
   assert.deepEqual(f.applied, []);
 });
-test("a single-unit family has no default-unit checkbox or quantity controls", async () => {
+test("opening and cancelling legacy options leave stored requirements and limits untouched", async () => {
+  const entry = Object.freeze({ ...individual, required: true });
+  const f = await fixture(entry);
+  assert.deepEqual(f.applied, []);
+  assert.equal(entry.required, true);
+  assert.equal(entry.maximumQuantity, 1);
+  await f.click("Cancelar");
+  assert.deepEqual(f.applied, []);
+  assert.equal(entry.required, true);
+  assert.equal(entry.maximumQuantity, 1);
+});
+test("a previously limited family keeps its target and exposes an editable recommendation", async () => {
   const f = await fixture({
     id: "family-row",
     role: "ACCESSORY",
@@ -146,13 +163,22 @@ test("a single-unit family has no default-unit checkbox or quantity controls", a
     quantity: 1,
     maximumQuantity: 1,
     defaultIncluded: false,
-    required: false,
+    required: true,
   });
-  assert.equal(f.container.querySelectorAll("input[type=checkbox]").length, 1);
-  assert.equal(f.container.querySelectorAll("input[type=number]").length, 0);
+  assert.equal(f.container.querySelectorAll("input[type=checkbox]").length, 0);
+  assert.equal(f.container.querySelectorAll("input[type=number]").length, 1);
+  assert.ok(f.container.textContent.includes("Cantidad recomendada"));
+  const quantity = f.container.querySelector("input[type=number]");
+  await act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(quantity, "3");
+    quantity.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
   await f.click("Aplicar");
   assert.equal(f.applied[0].familyId, "family-y");
   assert.equal(f.applied[0].defaultIncluded, false);
+  assert.equal(f.applied[0].quantity, 3);
+  assert.equal(f.applied[0].required, false);
+  assert.equal(f.applied[0].maximumQuantity, null);
 });
 test("consumables and multi-unit families retain editable quantities", async () => {
   for (const entry of [
@@ -174,9 +200,25 @@ test("consumables and multi-unit families retain editable quantities", async () 
     },
   ]) {
     const f = await fixture(entry);
-    assert.equal(f.container.querySelectorAll("input[type=number]").length, 2);
+    assert.equal(f.container.querySelectorAll("input[type=number]").length, 1);
     await f.click("Aplicar");
     assert.equal(f.applied[0].quantity, 2);
+    assert.equal(f.applied[0].required, false);
+    assert.equal(f.applied[0].maximumQuantity, null);
+  }
+});
+test("native asset and bulk targets survive applying options without legacy blocking rules", async () => {
+  for (const entry of [
+    { id: "asset-link", role: "ACCESSORY", assetId: "asset-y", quantity: 1,
+      defaultIncluded: true, required: true, maximumQuantity: 1 },
+    { id: "bulk-link", role: "ACCESSORY", skuId: "sku-y", quantity: 3,
+      defaultIncluded: false, required: true, maximumQuantity: 1 },
+  ]) {
+    const f = await fixture(entry);
+    await f.click("Aplicar");
+    assert.deepEqual(f.applied, [{ ...entry, required: false, maximumQuantity: null }]);
+    assert.equal(entry.required, true);
+    assert.equal(entry.maximumQuantity, 1);
   }
 });
 test("nested navigation and unlinking cannot silently discard draft changes or history", async () => {
@@ -209,5 +251,5 @@ test("a new part is not persisted or linked until explicitly applied", async () 
   const f = await fixture(entry, { creating: true });
   assert.ok(!f.container.textContent.includes("Desvincular del equipo"));
   await f.click("Agregar al conjunto");
-  assert.deepEqual(f.applied, [entry]);
+  assert.deepEqual(f.applied, [{ ...entry, required: false, maximumQuantity: null }]);
 });

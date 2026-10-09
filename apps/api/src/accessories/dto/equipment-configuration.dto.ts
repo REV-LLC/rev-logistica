@@ -32,8 +32,13 @@ export class EquipmentConfigurationEntryDto {
   @IsUUID() id!: string;
   @IsEnum(EquipmentPartRole) role!: EquipmentPartRole;
   @IsOptional() @IsUUID() assetId?: string;
+  @IsOptional() @IsUUID() skuId?: string;
+  @IsOptional() @IsBoolean() recommendation?: boolean;
   @IsOptional() @IsUUID() accessoryId?: string;
   @IsOptional() @IsUUID() familyId?: string;
+  // Null is a direct recommendation from the principal equipment; a UUID is
+  // another family in this same recommended route. Never a concrete asset.
+  @IsOptional() @IsUUID() templateParentFamilyId?: string | null;
   @IsOptional() @IsInt() @Min(1) @Max(1000000) maximumQuantity?: number | null;
   @IsOptional()
   @ValidateNested()

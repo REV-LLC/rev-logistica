@@ -11,6 +11,7 @@ const returned = (quantity: number, node = 'return') => ({ compositionNodeId: no
 function fixture() {
   const previous: Array<{ sourceDocumentItemId: string; quantity: number }> = [];
   const tx = {
+    implementIdentityBridge: { findMany: jest.fn(async () => []) },
     documentItem: { findMany: jest.fn(async ({ where }) => where.id ? [source] : previous) },
     accessory: { findMany: jest.fn(async () => [{ id: 'attachment' }]) },
   };

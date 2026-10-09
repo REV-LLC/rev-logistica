@@ -136,6 +136,8 @@ export function useRequestSubmission({
       if (!selectedItems.length) {
         throw new Error('Selecciona al menos un item.');
       }
+      if (docType === 'REMISSION' && selectedItems.some(item => item.deliveryFuelSelectable && !item.deliveryFuel))
+        throw new Error('Elige eléctrico o gasolina para cada mezcladora de esta entrega.');
       if (
         selectedItems.some(
           (item) =>

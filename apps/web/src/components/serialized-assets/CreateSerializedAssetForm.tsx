@@ -214,6 +214,7 @@ type Props = {
 
 export default function CreateSerializedAssetForm({ initialFamilyId, initialWarehouseId, initialCurrentWarehouseId, onCreated, onSavingChange }: Props) {
   const router = useRouter();
+  const [isImplement, setIsImplement] = useState(false);
   const [families, setFamilies] = useState<AssetFamily[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [units, setUnits] = useState<string[]>([]);
@@ -236,9 +237,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
   const [subfamilyId, setSubfamilyId] = useState<string | null>(null);
   const [subfamilyName, setSubfamilyName] = useState('ESTÁNDAR');
 
-  const [interchangeableMotor, setInterchangeableMotor] = useState(false);
   const [skuSuggestionId, setSkuSuggestionId] = useState<string | null>(null);
-  useEffect(() => { setInterchangeableMotor(false); }, [skuSuggestionId, familyId, subfamilyId]);
   const [skuName, setSkuName] = useState('');
   const [skuBrand, setSkuBrand] = useState('');
   const [skuModel, setSkuModel] = useState('');
@@ -851,7 +850,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
           extendedLengthMeters: toOptionalNumber(skuExtendedLengthMeters),
         },
         asset: {
-          interchangeableMotor: !skuSuggestionId && interchangeableMotor,
+          isImplement,
           description: resolvedSkuName || undefined,
           serialOrEngine: serialOrEngine.trim() || undefined,
           registrationNumber: registrationNumber.trim() || undefined,
@@ -1582,9 +1581,14 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                     </Text>
                   </div>
 
-                  {!skuSuggestionId ? <Checkbox label="Este equipo admite motor intercambiable" checked={interchangeableMotor}
-                    onChange={event => setInterchangeableMotor(event.currentTarget.checked)}
-                    description="Después de crear el equipo, asigna su motor desde el botón de motor en su ficha." /> : null}
+                  <Checkbox label="Es un implemento" checked={isImplement}
+                    onChange={event => setIsImplement(event.currentTarget.checked)} />
+                  {isImplement ? <Group>
+                    <Text size="sm">No consumible · Unidad individual</Text>
+                    <Button variant="subtle" onClick={() => router.push('/inventory/bulk-adjustments?implement=1')}>
+                      Registrar consumible por cantidad
+                    </Button>
+                  </Group> : null}
                   <UppercaseTextInput
                     ref={serialOrEngineRef}
                     label="Serial o motor"
@@ -1651,7 +1655,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
 
               <Paper withBorder radius="lg" p="md" className={getWorkflowStepClassName(assetWorkflowStep === 'configuration')}>
                 <Stack gap="md">
-                  <Text fw={700}>6. Componentes y accesorios</Text>
+                  <Text fw={700}>6. Implementos</Text>
                   <Text size="sm" c="dimmed">Opcional. Crea los elementos que realmente ingresan o vincula los existentes sin duplicar inventario.</Text>
                   <ConfigurationEditor  value={configuration} onChange={setConfiguration} disabled={saving || assetWorkflowStep !== 'configuration'} />
                   <Group justify="space-between">
@@ -1699,7 +1703,7 @@ export default function CreateSerializedAssetForm({ initialFamilyId, initialWare
                       </Text>
                     </Paper>
                   </SimpleGrid>
-                  <Text size="sm">Componentes: {configuration.entries.filter(row => row.role === 'COMPONENT').length} · Accesorios: {configuration.entries.filter(row => row.role === 'ACCESSORY').length}.</Text>
+                  <Text size="sm">Implementos: {configuration.entries.filter(row => !row.familyId).length}.</Text>
                   <Text size="xs" c="dimmed">Crear ingresa existencias; vincular no las duplica.</Text>
                   <Button type="button" variant="subtle" onClick={() => setAssetWorkflowStep('configuration')}>Editar configuración</Button>
                 </Stack>

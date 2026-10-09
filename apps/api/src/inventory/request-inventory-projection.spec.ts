@@ -29,6 +29,15 @@ const inventory = {
 };
 
 describe('projectInventoryForRequest', () => {
+  it('preserves native implement classification for Driver and Office without inferring it from family', () => {
+    const input = { customerWorksiteId: 'site', bulk: [{ skuId: 'hose', ownerWarehouseId: 'owner', quantity: 2, isImplement: true, isConsumable: false }],
+      serial: [{ ownerWarehouseId: 'owner', isImplement: true }, { ownerWarehouseId: 'owner', isImplement: false }] };
+    for (const audience of ['DRIVER', 'STAFF'] as const) {
+      const result = projectInventoryForRequest(input, audience);
+      expect(result.bulk[0]).toMatchObject({ isImplement: true, isConsumable: false, quantity: 2 });
+      expect(result.serial.map(row => row.isImplement)).toEqual([true, false]);
+    }
+  });
   it('keeps provider rows separate for staff', () => {
     const result = projectInventoryForRequest(inventory, 'STAFF');
 

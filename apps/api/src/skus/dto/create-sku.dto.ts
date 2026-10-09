@@ -9,6 +9,8 @@ import {
 import { ChargeType } from '@prisma/client';
 
 export class CreateSkuDto {
+  @IsOptional() @IsBoolean() isImplement?: boolean;
+  @IsOptional() @IsBoolean() isConsumable?: boolean;
   @IsString()
   name: string;
 

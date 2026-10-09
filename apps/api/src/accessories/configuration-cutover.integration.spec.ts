@@ -35,6 +35,15 @@ const correction = migration('20260928121000_confirmed_mixer_half_bag');
 
   it('preserves all historical stock/documents and existing edited configurations on replay', async () => {
     const tables = ['DocumentItem', 'StockLedger', 'AccessoryBalance', 'AccessoryMovement', 'Asset', 'EquipmentConfiguration', 'EquipmentConfigurationEntry', 'EquipmentConfigurationRevision'];
+    // A fresh clone may include assets created after the original deployment.
+    // The first pass can create their missing recipes, but never change stock.
+    const protectedTables = tables.slice(0, 5);
+    const originalHistory = await fingerprints(protectedTables);
+    await db.query(handoff);
+    expect(await fingerprints(protectedTables)).toEqual(originalHistory);
+    // Deployment replays run in separate transactions, where ON COMMIT DROP
+    // clears this helper. Our rollback harness keeps a single transaction.
+    await db.query('DROP TABLE pg_temp.configuration_cutover_assets');
     const before = await fingerprints(tables);
     await db.query(handoff);
     expect(await fingerprints(tables)).toEqual(before);

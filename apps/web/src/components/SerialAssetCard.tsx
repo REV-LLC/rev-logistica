@@ -48,9 +48,6 @@ export type SerialAssetCardItem = {
   imageFileObjectId?: string | null;
   registrationNumber?: string | null;
   kind?: "STANDARD" | "MOTOR" | string | null;
-  motorConfiguration?: "NONE" | "FIXED" | "INTERCHANGEABLE" | string | null;
-  assignedMotorId?: string | null;
-  assignedMixerId?: string | null;
 };
 
 function getStatusColor(status?: string | null) {
@@ -411,17 +408,15 @@ export default function SerialAssetCard({
         {footer}
         {href && canManageAccessories ? (
           <Group gap="xs">
-          <Button component={Link} href={`/inventory/equipment-configuration/assets/${item.assetId}`} variant="default" size="xs"
-            onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>Configurar</Button>
           <Button
             component={Link}
-            href={`/inventory/accessories/equipment/${item.assetId}?create=1`}
+            href={`/inventory/serialized-assets/${item.assetId}?tab=accessories`}
             variant="light"
             size="xs"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            Agregar accesorio
+            Configurar implementos
           </Button>
           </Group>
         ) : null}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { commercialBusinessDate } from './commercial-cutoff';
 const uuid = z.string().uuid();
 const decimal = z.string().regex(/^\d{1,10}(\.\d{1,6})?$/);
 export const scopeSchema = z
@@ -82,7 +83,10 @@ export const modeSchema = z
 export const profileSchema = scopeSchema
   .extend({
     expectedVersion: z.number().int().min(0),
-    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    // The UI omits this metadata: use the server's civil save date in Bogotá.
+    // Explicit dates remain supported for reviewed imports and existing callers.
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      .default(() => commercialBusinessDate(new Date())),
     groups: z.array(groupSchema).max(100),
     modes: z.array(modeSchema).min(1).max(100),
   })
@@ -114,6 +118,8 @@ export type CommercialProfileInput = z.infer<typeof profileSchema>;
 export type CommercialScope = z.infer<typeof scopeSchema>;
 export type CompositionPart = {
   documentItemId: string;
+  /** Internal reviewed identity alias, stripped before a snapshot is exposed or persisted. */
+  legacyAccessoryId?: string;
   parentAssetId?: string;
   parentDocumentItemId?: string;
   assetId?: string;

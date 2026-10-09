@@ -1,5 +1,65 @@
 import { BadRequestException } from '@nestjs/common';
-import { EquipmentConfigurationDto } from './dto/equipment-configuration.dto';
+import { EquipmentConfigurationDto, EquipmentConfigurationEntryDto } from './dto/equipment-configuration.dto';
+
+/** Old clients may still submit requirements/caps. In the implement model they
+ * are recommendations, never a reason to block a document. Identity and stock
+ * checks remain independent and are not relaxed here. */
+export function implementRecommendationRules(row: {
+  recommendation?: boolean;
+  familyId?: string | null;
+  required?: boolean;
+  maximumQuantity?: number | null;
+  defaultIncluded?: boolean;
+}) {
+  return {
+    recommendation: Boolean(row.recommendation || row.familyId || row.required ||
+      row.maximumQuantity != null || row.defaultIncluded),
+    required: false,
+    maximumQuantity: null,
+  };
+}
+
+/** Recommendations form an explicit family-only forest rooted at the owner.
+ * sortOrder only controls presentation; it never implies a relationship. */
+export function validateTemplateRoute(entries: EquipmentConfigurationEntryDto[]) {
+  const parents = new Map<string, string | null>();
+  for (const entry of entries) {
+    if (entry.templateParentFamilyId != null && !entry.familyId)
+      throw new BadRequestException(
+        'La ruta recomendada relaciona familias, no unidades concretas.',
+      );
+    if (entry.familyId)
+      parents.set(entry.familyId, entry.templateParentFamilyId ?? null);
+  }
+  for (const [familyId, parentFamilyId] of parents) {
+    if (parentFamilyId === familyId)
+      throw new BadRequestException(
+        'Una familia no puede depender de sí misma en la ruta recomendada.',
+      );
+    if (parentFamilyId && !parents.has(parentFamilyId))
+      throw new BadRequestException(
+        'La familia anterior debe estar en esta misma ruta recomendada.',
+      );
+  }
+  // Check every node, including a cyclic component disconnected from the root.
+  for (const familyId of parents.keys()) {
+    const visited = new Set<string>();
+    let current: string | null = familyId;
+    let depth = 0;
+    while (current) {
+      if (visited.has(current))
+        throw new BadRequestException(
+          'La ruta recomendada no puede contener ciclos entre familias.',
+        );
+      visited.add(current);
+      if (++depth > 16)
+        throw new BadRequestException(
+          'La ruta recomendada admite hasta 16 niveles.',
+        );
+      current = parents.get(current) ?? null;
+    }
+  }
+}
 
 export function validateConfigurationDraft(dto: EquipmentConfigurationDto) {
   const ids = new Set<string>();
@@ -15,7 +75,7 @@ export function validateConfigurationDraft(dto: EquipmentConfigurationDto) {
       );
     ids.add(entry.id);
     if (
-      [entry.assetId, entry.accessoryId, entry.familyId, entry.newPart].filter(Boolean)
+      [entry.assetId, entry.skuId, entry.accessoryId, entry.familyId, entry.newPart].filter(Boolean)
         .length !== 1
     )
       throw new BadRequestException(
@@ -35,7 +95,7 @@ export function validateConfigurationDraft(dto: EquipmentConfigurationDto) {
       ? `asset:${entry.assetId}`
       : entry.accessoryId
         ? `accessory:${entry.accessoryId}`
-        : entry.familyId ? `family:${entry.familyId}` : null;
+        : entry.skuId ? `sku:${entry.skuId}` : entry.familyId ? `family:${entry.familyId}` : null;
     if (key && targets.has(key))
       throw new BadRequestException(
         'Un elemento no puede repetirse en la configuración.',
@@ -76,6 +136,7 @@ export function validateConfigurationDraft(dto: EquipmentConfigurationDto) {
         );
     }
   }
+  validateTemplateRoute(dto.entries);
 }
 
 export function assertAcyclicConfiguration(

@@ -6,9 +6,11 @@ export type ReturnDocumentOrigin = {
   assetId?: string | null; skuId?: string | null; accessoryId?: string | null;
   componentParentAssetId?: string | null; ownerWarehouseId?: string | null;
   quantity: number; consecutive: string | null;
+  deliveryFuel?: 'ELECTRICO' | 'GASOLINA' | null;
 };
 
 export const returnOriginFields = (origin: ReturnDocumentOrigin) => ({
+  deliveryFuel: origin.deliveryFuel ?? undefined,
   sourceDocumentItemId: origin.sourceDocumentItemId,
   parentSourceDocumentItemId: origin.parentSourceDocumentItemId ?? undefined,
   parentLegacyOriginId: origin.parentLegacyOriginId ?? undefined,

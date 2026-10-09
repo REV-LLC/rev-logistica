@@ -214,12 +214,6 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/inventory/accessories",
-        label: "Accesorios",
-        icon: IconBox,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
         href: "/inventory/maintenance",
         label: "Mantenimientos",
         icon: IconTools,

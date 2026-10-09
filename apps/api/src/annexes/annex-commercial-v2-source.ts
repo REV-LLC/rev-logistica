@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { documentDeliveryLabel } from '../documents/document-delivery-fuel';
 import type { AnnexInput } from './annex-input';
 import type { CommercialSnapshot } from '../commercial-profiles/commercial-profile.input';
 import {
@@ -11,6 +12,7 @@ import {
 } from '../commercial-profiles/commercial-history-v2';
 import { resolveComposition } from '../commercial-profiles/commercial-composition';
 import type { SourceIssue } from './annex-inventory';
+import { isReviewedImplementCutover } from '../commercial-profiles/promoted-implement-commercial-bridge';
 
 type Lot = AnnexInput['rentals'][number];
 type Movement = {
@@ -50,7 +52,8 @@ export function prepareCommercialV2(
     itemId,
     lot: {
       ...lot,
-      returns: itemId.startsWith('legacy-origin:')
+      label: documentDeliveryLabel(lot.label, origins.get(itemId)?.item.deliveryFuel),
+      returns: itemId.startsWith('legacy-origin:') || itemId.startsWith('implement-origin:')
         ? lot.returns
         : documents
             .filter((d) => d.type === 'RETURN')
@@ -92,6 +95,7 @@ export function prepareCommercialV2(
       for (const returnedItem of returnedDoc.items.filter(
         (i) => i.sourceDocumentItemId === id,
       )) {
+        if (isReviewedImplementCutover(returnedItem)) continue;
         const returnedMovement = movements.find(
           (m) =>
             m.requestId ===

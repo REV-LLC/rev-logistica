@@ -94,7 +94,8 @@ export async function inspectLegacyEquipmentOrigin(
   const sku = source.asset.sku;
   const profile = await effectiveCommercialProfile(
     tx,
-    { assetId: source.assetId!, skuId: sku.id, familyId: sku.assetFamilyId },
+    { assetId: source.assetId!, skuId: sku.id, familyId: sku.assetFamilyId,
+      isImplement: source.asset.isImplement },
     effectiveFrom,
   );
   const catalog = {

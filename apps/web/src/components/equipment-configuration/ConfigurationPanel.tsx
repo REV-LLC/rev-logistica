@@ -20,9 +20,11 @@ import classes from "./ConfigurationEditor.module.css";
 export default function ConfigurationPanel({
   assetId,
   accessoryId,
+  physicalOnly = false,
 }: {
   assetId?: string;
   accessoryId?: string;
+  physicalOnly?: boolean;
 }) {
   if (!assetId && !accessoryId)
     return (
@@ -31,20 +33,24 @@ export default function ConfigurationPanel({
   const root: ConfigurationLocation = accessoryId
     ? { accessoryId, label: "Accesorio principal" }
     : { assetId: assetId!, label: "Equipo principal" };
-  return <ConfigurationNavigator key={assetId ?? accessoryId} root={root} renderOwner={renderOwner} />;
+  return <ConfigurationNavigator key={assetId ?? accessoryId} root={root}
+    renderOwner={(location, navigation) => renderOwner(location, navigation, physicalOnly && location.assetId === assetId)} />;
 }
 
 function renderOwner(
   location: ConfigurationLocation,
   navigation: ConfigurationNavigation,
+  physicalOnly = false,
 ) {
+  if (location.skuId) return <CommercialProfilePanel skuId={location.skuId}
+    onDirtyChange={navigation.onDirtyChange} onBusyChange={navigation.onBusyChange} />;
   return location.accessoryId ? (
     <AccessoryConfigurationPanel
       accessoryId={location.accessoryId}
       {...navigation}
     />
   ) : (
-    <ConfigurationTabs assetId={location.assetId} {...navigation} />
+    <ConfigurationTabs assetId={location.assetId} physicalOnly={physicalOnly} {...navigation} />
   );
 }
 
@@ -101,8 +107,9 @@ function ConfigurationTabs({
   assetId,
   accessoryId,
   onDirtyChange,
+  physicalOnly = false,
   ...navigation
-}: { assetId?: string; accessoryId?: string } & ConfigurationNavigation) {
+}: { assetId?: string; accessoryId?: string; physicalOnly?: boolean } & ConfigurationNavigation) {
   const [tab, setTab] = useState<string | null>("physical");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -129,7 +136,7 @@ function ConfigurationTabs({
           {label}
         </Text>
       ) : null}
-      <Tabs
+      {!physicalOnly ? <Tabs
         value={tab}
         onChange={(next) => {
           if (
@@ -147,13 +154,13 @@ function ConfigurationTabs({
       >
         <Tabs.List>
           <Tabs.Tab value="physical" disabled={busy}>
-            Componentes y accesorios
+            Implementos
           </Tabs.Tab>
           <Tabs.Tab value="commercial" disabled={busy}>
             Modalidades de cobro
           </Tabs.Tab>
         </Tabs.List>
-      </Tabs>
+      </Tabs> : null}
       {tab === "commercial" ? (
         <CommercialProfilePanel
           key={assetId ?? accessoryId}
@@ -298,12 +305,6 @@ function PhysicalConfigurationPanel({
               accessoryParent={!!accessoryId}
               onConfigurePart={(rowId) => void configurePart(rowId)}
             />
-            {!value.parent?.warehouseId ? (
-              <Text size="sm">
-                Fuera de bodega: solo puedes vincular existencias ya
-                registradas.
-              </Text>
-            ) : null}
             <div className={classes.actions}>
               <Button
                 variant="default"

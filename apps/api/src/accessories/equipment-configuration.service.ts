@@ -14,10 +14,10 @@ import { AccessoriesService } from './accessories.service';
 import { EquipmentConfigurationDto } from './dto/equipment-configuration.dto';
 import {
   assertAcyclicConfiguration,
+  implementRecommendationRules,
   validateConfigurationDraft,
 } from './equipment-configuration-rules';
 import { isCompatible } from './accessory-rules';
-import { motorInclude, motorSnapshot } from './equipment-motor';
 import { documentReturnOrigins } from '../documents/document-return-origins';
 import { assetDisplayName } from './asset-display';
 
@@ -33,6 +33,7 @@ const include = {
   entries: {
     orderBy: { sortOrder: 'asc' as const },
     include: {
+      sku: { select: { id: true, name: true, imageUrl: true, isConsumable: true } },
       family: { select: { id: true, name: true, controlType: true } },
       asset: {
         select: {
@@ -42,7 +43,9 @@ const include = {
           internalNumber: true,
           warehouseOwner: { select: { name: true } },
           kind: true,
-          sku: { select: { name: true } },
+          isImplement: true,
+          imageFileObject: { select: { storageKey: true } },
+          sku: { select: { name: true, imageUrl: true } },
         },
       },
       accessory: {
@@ -89,7 +92,7 @@ export class EquipmentConfigurationService {
     });
   }
 
-  async assetCandidates(search = '', page = 0) {
+  async assetCandidates(search = '', page = 0, implementsOnly = false) {
     if (
       search.length > 160 ||
       !Number.isSafeInteger(page) ||
@@ -103,6 +106,7 @@ export class EquipmentConfigurationService {
         active: true,
         deletedAt: null,
         kind: { not: 'MOTOR' },
+        ...(implementsOnly ? { isImplement: true } : {}),
         ...(search.trim()
           ? {
               OR: [
@@ -114,13 +118,14 @@ export class EquipmentConfigurationService {
             }
           : {}),
       },
-      select: { id: true, publicCode: true, description: true, internalNumber: true,
-        warehouseOwner: { select: { name: true } }, sku: { select: { name: true } } },
+      select: { id: true, publicCode: true, description: true, internalNumber: true, isImplement: true,
+        imageFileObject: { select: { storageKey: true } },
+        warehouseOwner: { select: { name: true } }, sku: { select: { name: true, imageUrl: true } } },
       orderBy: { id: 'asc' },
       skip: page * 50,
       take: 51,
     });
-    return { items: items.slice(0, 50), hasMore: items.length > 50 };
+    return { items: items.slice(0, 50).map(item => ({ ...item, imageUrl: item.imageFileObject?.storageKey ?? item.sku.imageUrl })), hasMore: items.length > 50 };
   }
 
   private async parent(
@@ -131,9 +136,8 @@ export class EquipmentConfigurationService {
       const asset = await tx.asset.findFirst({
         where: { id: owner.assetId, active: true, deletedAt: null },
         include: {
-          sku: true,
+          sku: { include: { assetFamily: { select: { deliveryFuelSelectable: true } } } },
           warehouseOwner: { select: { name: true } },
-          ...motorInclude,
         },
       });
       if (!asset) throw new NotFoundException('Equipo activo no encontrado.');
@@ -154,6 +158,7 @@ export class EquipmentConfigurationService {
         purpose: 'ACCESSORY',
       },
       include: {
+        implementBridge: { select: { assetId: true } },
         balances: {
           where: { quantity: { gt: 0 }, warehouseId: { not: null } },
           select: { warehouseId: true },
@@ -165,6 +170,8 @@ export class EquipmentConfigurationService {
       throw new NotFoundException(
         'Solo un accesorio individualizado activo puede tener su propia configuración.',
       );
+    if (accessory.implementBridge)
+      throw new BadRequestException('Este implemento ya fue convertido a equipo. Abre su ficha de inventario para configurarlo.');
     return {
       asset: null,
       accessory,
@@ -183,11 +190,14 @@ export class EquipmentConfigurationService {
     return {
       version: config?.version ?? 0,
       notes: config?.notes ?? null,
-      entries: config?.entries ?? [],
-      ...(parent.asset ? { motor: motorSnapshot(parent.asset) } : {}),
+      entries: (config?.entries ?? []).map(entry => ({ ...entry, ...implementRecommendationRules(entry),
+        ...(entry.asset ? { asset: { ...entry.asset, imageUrl: entry.asset.imageFileObject?.storageKey ?? entry.asset.sku.imageUrl } } : {}),
+      })),
+      deliveryFuelSelectable: !parent.asset?.isImplement && (parent.asset?.sku.assetFamily?.deliveryFuelSelectable ?? false),
       parent: {
         name: parent.name,
         familyId: parent.familyId,
+        ownerWarehouseId: parent.ownerWarehouseId,
         warehouseId: parent.warehouseId,
       },
     };
@@ -232,7 +242,16 @@ export class EquipmentConfigurationService {
     dto: EquipmentConfigurationDto,
     userId: string,
   ) {
+    dto = { ...dto, entries: dto.entries.map(row => ({ ...row, ...implementRecommendationRules(row) })) };
     validateConfigurationDraft(dto);
+    // Identity promotion locks Accessory rows first as well. Do not let a
+    // concurrent configuration retain an old identity after its cutover.
+    const legacyIds = [...new Set([
+      ...(owner.accessoryId ? [owner.accessoryId] : []),
+      ...dto.entries.flatMap(row => row.accessoryId ? [row.accessoryId] : []),
+    ])].sort();
+    for (const id of legacyIds)
+      await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR SHARE`;
     // Prevent two simultaneous edits from introducing a cycle or conflicting classifications.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('equipment-configuration', 0))::text`;
     const parent = await this.parent(tx, owner);
@@ -245,7 +264,19 @@ export class EquipmentConfigurationService {
         'Otra persona cambió esta configuración. Recarga antes de guardar.',
       );
 
-    const savedAsset = parent.asset;
+    // Older clients do not know this optional field. Preserve an existing route
+    // only when both the row and its family identity are unchanged; explicit
+    // null is how a current client reconnects a family to the principal asset.
+    const previousEntries = new Map(existing?.entries.map(row => [row.id, row]) ?? []);
+    dto = { ...dto, entries: dto.entries.map(row => {
+      const previous = previousEntries.get(row.id);
+      return row.templateParentFamilyId === undefined && row.familyId &&
+        previous?.familyId === row.familyId
+        ? { ...row, templateParentFamilyId: previous.templateParentFamilyId }
+        : row;
+    }) };
+    validateConfigurationDraft(dto);
+
 
     const data: Prisma.EquipmentConfigurationEntryCreateManyInput[] = [];
     for (const [sortOrder, row] of dto.entries.entries()) {
@@ -311,7 +342,11 @@ export class EquipmentConfigurationService {
         if (!family || row.familyId === parent.familyId || owner.accessoryId)
           throw new BadRequestException('La familia compatible debe existir y ser distinta a la familia del equipo principal.');
         if (family.skus.length || ['MOTORES', 'MOTOR_PARA_MEZCLADORA'].includes(family.code))
-          throw new BadRequestException('El motor se asigna al equipo desde el botón Motor de la ficha, no como una familia elegible en documentos.');
+          throw new BadRequestException('Los motores antiguos no forman parte de las nuevas configuraciones de entrega.');
+      } else if (row.skuId) {
+        const child = await tx.sku.findFirst({ where: { id: row.skuId, active: true, isImplement: true,
+          assetFamily: { controlType: 'BULK' } }, select: { id: true } });
+        if (!child) throw new BadRequestException('Selecciona un implemento registrado por cantidad.');
       } else if (row.assetId) {
         if (row.assetId === owner.assetId)
           throw new BadRequestException(
@@ -327,18 +362,7 @@ export class EquipmentConfigurationService {
           );
         if (child.kind === 'MOTOR')
           throw new BadRequestException(
-            'Asigna el motor desde el botón Motor de la ficha; no como una pieza opcional.',
-          );
-        const conflicting = await tx.equipmentConfigurationEntry.count({
-          where: {
-            assetId: child.id,
-            role: { not: row.role },
-            ...(existing ? { configurationId: { not: existing.id } } : {}),
-          },
-        });
-        if (conflicting)
-          throw new BadRequestException(
-            'Este equipo ya tiene otra clasificación en una configuración. Revisa sus vínculos antes de reclasificarlo.',
+            'El motor antiguo conserva su historial; no se vincula como implemento. Elige eléctrica o gasolina en la entrega.',
           );
       } else if (accessoryId) {
         if (accessoryId === owner.accessoryId)
@@ -347,12 +371,15 @@ export class EquipmentConfigurationService {
           );
         const child = await tx.accessory.findFirst({
           where: { id: accessoryId, active: true },
-          include: { assets: true, subfamilies: true, compatibleParents: true },
+          include: { assets: true, subfamilies: true, compatibleParents: true,
+            implementBridge: { select: { assetId: true } } },
         });
-        if (!child || child.purpose !== row.role)
+        if (!child)
           throw new BadRequestException(
-            'La clasificación del elemento no coincide: componente y accesorio no son intercambiables.',
+            'El implemento no existe o está inactivo.',
           );
+        if (child.implementBridge)
+          throw new BadRequestException('Este implemento ya fue convertido a equipo. Agrégalo desde las unidades de inventario.');
         if (child.kind === 'INDIVIDUAL' && row.quantity !== 1)
           throw new BadRequestException(
             'Un elemento individualizado se configura como una unidad.',
@@ -379,13 +406,14 @@ export class EquipmentConfigurationService {
         id: row.id,
         configurationId: '',
         role: row.role,
+        ...implementRecommendationRules(row),
         assetId: row.assetId ?? null,
+        skuId: row.skuId ?? null,
         accessoryId: accessoryId ?? null,
         familyId: row.familyId ?? null,
-        maximumQuantity: row.maximumQuantity ?? null,
+        templateParentFamilyId: row.templateParentFamilyId ?? null,
         quantity: row.quantity,
         defaultIncluded: row.defaultIncluded,
-        required: row.required,
         sortOrder,
       });
     }
@@ -449,8 +477,11 @@ export class EquipmentConfigurationService {
           id,
           role,
           assetId,
+          skuId,
+          recommendation,
           accessoryId,
           familyId,
+          templateParentFamilyId,
           maximumQuantity,
           quantity,
           defaultIncluded,
@@ -459,8 +490,11 @@ export class EquipmentConfigurationService {
           id,
           role,
           assetId,
+          skuId,
+          recommendation,
           accessoryId,
           familyId,
+          templateParentFamilyId,
           maximumQuantity,
           quantity,
           defaultIncluded,
@@ -475,6 +509,6 @@ export class EquipmentConfigurationService {
         createdBy: userId,
       },
     });
-    return { ...saved, ...(savedAsset ? { motor: motorSnapshot(savedAsset) } : {}) };
+    return saved;
   }
 }

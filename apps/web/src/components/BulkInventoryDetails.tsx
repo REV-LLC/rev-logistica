@@ -10,6 +10,7 @@ import type { BulkItem } from '@/components/InventoryDisplay';
 import type { LedgerItem } from '@/components/LedgerTable';
 import { api } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
+import BulkImplementClassification from './inventory/BulkImplementClassification';
 
 const movementLabels: Record<string, string> = { IN: 'Entrada a bodega', OUT: 'Salida a obra', TRANSIT: 'En tránsito', ON_SITE: 'Entrega en obra', ADJUST: 'Ajuste de inventario' };
 
@@ -111,6 +112,7 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
             {error ? <Alert color="red" mt="sm">{error}</Alert> : null}
           </Paper>
           <Stack gap="md">
+            {canEdit ? <BulkImplementClassification skuId={skuId} /> : null}
             <div><Text size="sm" c="dimmed">{item.category ?? 'Inventario masivo'}</Text><Title order={2}>{name}</Title></div>
             <SimpleGrid cols={2}>
               <Paper withBorder p="md" radius="md"><Text size="sm" c="dimmed">{isWorksiteView ? 'En esta obra' : 'En esta bodega'}</Text><Text size="xl" fw={700} c={quantity < 0 ? 'red' : 'teal'}>{quantity.toLocaleString('es-CO')}</Text></Paper>

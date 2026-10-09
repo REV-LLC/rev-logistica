@@ -2,6 +2,11 @@ import type { ConfigurationEntry } from "../equipment-configuration/types";
 import { entryName } from "../equipment-configuration/types";
 
 export type CommercialScope = "ASSET" | "SKU" | "FAMILY" | "ACCESSORY";
+export function commercialScopeIds(ids: Partial<Record<CommercialScope, string>>, isImplement: boolean): Partial<Record<CommercialScope, string>> {
+  if (!isImplement) return ids;
+  const { FAMILY: _family, ...ownScopes } = ids;
+  return ownScopes;
+}
 export type CommercialUnit = "DAY" | "HOUR" | "METER";
 export type CommercialSelector = {
   kind: CommercialScope | "ACCESSORY";
@@ -45,7 +50,7 @@ export const unitLabels: Record<CommercialUnit, string> = {
 export const scopeLabels: Record<CommercialScope, string> = {
   ASSET: "Solo este equipo",
   SKU: "Equipos de esta referencia",
-  FAMILY: "Toda esta familia",
+  FAMILY: "Equipos de esta familia",
   ACCESSORY: "Solo este componente o accesorio",
 };
 export const selectorKey = (selector: CommercialSelector) =>
@@ -56,14 +61,6 @@ export function parseSelectorKey(value: string): CommercialSelector {
     throw new Error("Referencia comercial inválida.");
   return { kind: kind as CommercialSelector["kind"], id };
 }
-export const todayInBogota = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
 export function configuredSelectorOptions(
   entries: ConfigurationEntry[],
   groups: CommercialGroup[],
@@ -74,6 +71,8 @@ export function configuredSelectorOptions(
       ? { kind: "ASSET", id: entry.assetId }
       : entry.accessoryId
         ? { kind: "ACCESSORY", id: entry.accessoryId }
+        : entry.skuId
+          ? { kind: "SKU", id: entry.skuId }
         : entry.familyId
           ? { kind: "FAMILY", id: entry.familyId }
           : undefined;
@@ -111,7 +110,6 @@ export function commercialPayload(profile: CommercialProfile) {
     scopeType: profile.scopeType,
     scopeId: profile.scopeId,
     expectedVersion: profile.version,
-    effectiveFrom: profile.effectiveFrom,
     groups: profile.groups.map((group) => ({
       id: group.id,
       name: group.name.trim(),
@@ -143,17 +141,6 @@ export function commercialPayload(profile: CommercialProfile) {
 const nonNegativeDecimal = (value: string) =>
   /^\d{1,10}(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value));
 export function commercialError(profile: CommercialProfile): string | null {
-  if (
-    !profile.effectiveFrom ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(profile.effectiveFrom)
-  )
-    return "Indica desde qué fecha aplican estas condiciones.";
-  const date = new Date(`${profile.effectiveFrom}T00:00:00Z`);
-  if (
-    !Number.isFinite(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== profile.effectiveFrom
-  )
-    return "La fecha de vigencia no es válida.";
   if (!profile.modes.length) return "Agrega al menos una modalidad de cobro.";
   const groupIds = new Set(profile.groups.map((group) => group.id));
   if (

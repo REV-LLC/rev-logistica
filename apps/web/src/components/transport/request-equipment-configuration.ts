@@ -6,7 +6,8 @@ import { buildBulkKey, createSelectionId } from './request-formatting';
 import type { InventoryBulk, InventorySerial, SelectedItem } from './request-types';
 import { inventoryWithReturnOrigins, type ReturnDocumentOrigin } from './return-document-origins';
 
-export type ConfigurationContext = { docType: 'REMISSION' | 'RETURN'; customerWorksiteId: string; motorOnly?: boolean };
+export type ConfigurationContext = { docType: 'REMISSION' | 'RETURN'; customerWorksiteId: string; includeImplements?: boolean;
+  onDeliveryFuelSelectable?: (enabled: boolean) => void };
 export type DocumentPartOption = {
   key: string;
   name: string;
@@ -17,6 +18,11 @@ export type DocumentPartOption = {
   item?: SelectedItem;
   unavailable?: string;
   locked?: boolean;
+  /** Recommendation topology is separate from the physical document parent. */
+  templateFamilyId?: string;
+  templateFamilyName?: string;
+  templateParentFamilyId?: string | null;
+  itemFamilyId?: string;
 };
 type AccessoryOption = {
   accessoryId: string; sourceBalanceId: string; name: string; code: string | null;
@@ -51,6 +57,82 @@ export function availableForDocument(option: SelectedItem, items: SelectedItem[]
     (option.physicalAvailableQuantity ?? option.availableQuantity ?? 0) - physicalUsed));
 }
 
+export type DocumentTemplateRouteStatus = {
+  status: 'COMPLETE' | 'PARTIAL' | 'UNVERIFIED';
+  complete: boolean;
+  present: number;
+  total: number;
+  missingFamilyNames: string[];
+  unknownItemCount: number;
+};
+
+/** Read-only family coverage. A route never creates custody links or requires quantities. */
+export function documentTemplateRouteStatus(
+  parent: SelectedItem,
+  options: DocumentPartOption[],
+  selectedItems: SelectedItem[],
+): DocumentTemplateRouteStatus | null {
+  const families = new Map<string, string>();
+  for (const option of options) {
+    if (option.templateFamilyId) families.set(option.templateFamilyId, option.templateFamilyName ?? option.name);
+  }
+  if (!families.size) return null;
+
+  const byId = new Map(selectedItems.map(item => [item.selectionId, item]));
+  const byAsset = new Map<string, SelectedItem[]>();
+  const bySource = new Map<string, SelectedItem[]>();
+  for (const item of selectedItems) {
+    if (item.assetId) byAsset.set(item.assetId, [...(byAsset.get(item.assetId) ?? []), item]);
+    if (item.sourceDocumentItemId) bySource.set(item.sourceDocumentItemId, [...(bySource.get(item.sourceDocumentItemId) ?? []), item]);
+  }
+  const unique = (matches: SelectedItem[] | undefined) => matches?.length === 1 ? matches[0] : undefined;
+  const documentParent = (item: SelectedItem) => {
+    // Explicit line ancestry always takes priority; a missing line must not fall back to another equipment.
+    if (item.parentCompositionNodeId) return byId.get(item.parentCompositionNodeId);
+    if (item.parentSourceDocumentItemId) return unique(bySource.get(item.parentSourceDocumentItemId));
+    if (item.parentLegacyOriginId) return undefined;
+    return item.componentParentAssetId ? unique(byAsset.get(item.componentParentAssetId)) : undefined;
+  };
+  const belongsToEquipment = (item: SelectedItem) => {
+    if (item.selectionId === parent.selectionId || !byId.has(parent.selectionId)) return false;
+    const seen = new Set([item.selectionId]);
+    let ancestor = documentParent(item);
+    while (ancestor && !seen.has(ancestor.selectionId)) {
+      if (ancestor.selectionId === parent.selectionId) return true;
+      seen.add(ancestor.selectionId);
+      ancestor = documentParent(ancestor);
+    }
+    return false;
+  };
+  const present = new Set<string>();
+  const identity = (item: SelectedItem) => item.assetId ? `asset:${item.assetId}`
+    : item.type === 'bulk' && item.skuId ? `sku:${item.skuId}`
+      : item.type === 'accessory' && item.accessoryId ? `accessory:${item.accessoryId}` : undefined;
+  const knownFamilies = new Map<string, Set<string>>();
+  for (const option of options) {
+    const key = option.item && identity(option.item);
+    const familyId = option.itemFamilyId ?? option.templateFamilyId;
+    if (key && familyId) {
+      const ids = knownFamilies.get(key) ?? new Set<string>();
+      ids.add(familyId);
+      knownFamilies.set(key, ids);
+    }
+  }
+  let unknownItemCount = 0;
+  for (const item of selectedItems) {
+    const quantity = item.quantity ?? 1;
+    if (!Number.isFinite(quantity) || quantity <= 0 || !belongsToEquipment(item)) continue;
+    const key = identity(item);
+    const ids = key && knownFamilies.get(key);
+    if (!ids) unknownItemCount++;
+    else for (const familyId of ids) if (families.has(familyId)) present.add(familyId);
+  }
+  const missingFamilyNames = [...families].filter(([id]) => !present.has(id)).map(([, name]) => name);
+  const complete = missingFamilyNames.length === 0;
+  return { status: complete ? 'COMPLETE' : unknownItemCount ? 'UNVERIFIED' : 'PARTIAL',
+    complete, present: present.size, total: families.size, missingFamilyNames, unknownItemCount };
+}
+
 /** Idempotent and non-destructive: never resets edited quantities or resurrects defaults on render. */
 export function addDocumentParts(items: SelectedItem[], parent: SelectedItem, options: DocumentPartOption[]) {
   if (!items.some(item => item.selectionId === parent.selectionId)) return items;
@@ -74,10 +156,10 @@ export async function loadDocumentConfiguration(
   const ownerRoute = parent.assetId ? `assets/${parent.assetId}` : `accessories/${parent.accessoryId}`;
   const loaded = context.docType === 'REMISSION'
     ? await api<EquipmentConfiguration>(`/equipment-configurations/${ownerRoute}`, { signal })
-    : { entries: [], motor: undefined };
-  const config = context.motorOnly ? { ...loaded, entries: [] } : loaded;
-  const motor = config.motor?.configuration === 'INTERCHANGEABLE' ? config.motor : undefined;
-  if (context.docType === 'REMISSION' && !config.entries.length && !motor) return [];
+    : { entries: [], deliveryFuelSelectable: false };
+  context.onDeliveryFuelSelectable?.(loaded.deliveryFuelSelectable ?? false);
+  const config = context.includeImplements === false ? { ...loaded, entries: [] } : loaded;
+  if (context.docType === 'REMISSION' && !config.entries.length) return [];
   const params = new URLSearchParams({ type: context.docType, customerWorksiteId: context.customerWorksiteId,
     assetId: anchorAssetId, deliveryMode: 'WAREHOUSE' });
   if (parent.accessoryId) params.set('parentAccessoryId', parent.accessoryId);
@@ -99,7 +181,7 @@ export async function loadDocumentConfiguration(
     config.entries.some(entry => entry.accessoryId) || context.docType === 'RETURN' ? getAccessories() : Promise.resolve([]),
     context.docType === 'RETURN'
       ? api<{ serial: InventorySerial[]; bulk: InventoryBulk[] }>(`/inventory/on-site/${context.customerWorksiteId}/request-options`, { signal })
-      : (motor?.assignedMotorId || config.entries.some(entry => entry.assetId || entry.familyId)) && parent.sourceWarehouseId
+      : config.entries.some(entry => entry.assetId || entry.skuId || entry.familyId) && parent.sourceWarehouseId
         ? api<{ serial: InventorySerial[]; bulk: InventoryBulk[] }>(`/inventory/warehouse/${parent.sourceWarehouseId}`, { signal })
         : Promise.resolve({ serial: [], bulk: [] }),
     context.docType === 'RETURN' && parent.assetId ? api<Array<{ assetId: string | null; skuId: string | null }>>(
@@ -146,38 +228,35 @@ export async function loadDocumentConfiguration(
     (!parent.sourceDocumentItemId || ('sourceDocumentItemId' in part && part.sourceDocumentItemId === bulk.sourceDocumentItemId)))).map((bulk): DocumentPartOption => ({
     key: buildBulkKey(bulk), name: bulk.skuName ?? 'Pieza', role: 'ACCESSORY', defaultIncluded: false, required: false, quantity: 1, item: bulkItem(bulk),
   }))];
-  const motorAsset = motor?.assignedMotorId ? stock.serial.find(asset => asset.assetId === motor.assignedMotorId && asset.quantity > 0) : undefined;
-  const motorOption: DocumentPartOption[] = motor ? [{ key: 'assigned-motor',
-    name: motor.assignedMotor ? `${motor.assignedMotor.description || motor.assignedMotor.sku.name} #${motor.assignedMotor.internalNumber}` : 'Sin motor asignado',
-    role: 'COMPONENT', defaultIncluded: true, required: true, quantity: 1, locked: true,
-    item: motorAsset && !motorAsset.isDamaged ? serialItem(motorAsset) : undefined,
-    unavailable: motorAsset?.isDamaged ? 'El motor asignado está averiado. Registra su reparación o cambia el motor en inventario antes de la remisión.' : motorAsset ? undefined : motor.assignedMotorId
-      ? 'El motor asignado no está disponible en este origen. Revisa inventario antes de continuar.'
-      : 'Office debe asignar un motor al equipo en inventario; no se elige en este documento.',
-  }] : [];
-  return [...motorOption, ...config.entries.flatMap((entry): DocumentPartOption[] => {
+  return config.entries.flatMap((entry): DocumentPartOption[] => {
     if (entry.familyId) {
+      const template = { templateFamilyId: entry.familyId, templateFamilyName: entryName(entry), itemFamilyId: entry.familyId,
+        templateParentFamilyId: entry.templateParentFamilyId ?? null };
       const candidates = [
         ...stock.serial.filter(asset => asset.assetFamily?.id === entry.familyId && asset.quantity > 0 && asset.assetId !== parent.assetId).map(serialItem),
         ...(stock.bulk ?? []).filter(bulk => bulk.assetFamilyId === entry.familyId && bulk.quantity > 0).map(bulkItem),
       ];
       return candidates.length ? candidates.map(item => ({ key: `${entry.id}:${item.assetId ?? item.bulkKey}`, name: item.name,
-        role: entry.role, defaultIncluded: false, required: entry.required, quantity: item.assetId ? 1 : entry.quantity, item }))
-        : [{ key: entry.id, name: entryName(entry), role: entry.role, defaultIncluded: false, required: entry.required, quantity: entry.quantity,
-          unavailable: 'No hay unidades de esta familia disponibles en este origen.' }];
+        ...template, role: entry.role, defaultIncluded: false, required: entry.recommendation ? false : entry.required, quantity: item.assetId || entry.recommendation ? 1 : entry.quantity, item }))
+        : [{ key: entry.id, name: entryName(entry), role: entry.role, defaultIncluded: false, required: entry.recommendation ? false : entry.required, quantity: entry.recommendation ? 1 : entry.quantity,
+          ...template, unavailable: 'No hay unidades de esta familia disponibles en este origen.' }];
     }
     let item: SelectedItem | undefined;
+    let itemFamilyId: string | undefined;
     if (entry.accessoryId) {
       // Prefer a balance that can supply the default quantity; never invent stock.
       const candidates = accessories.filter(option => option.accessoryId === entry.accessoryId);
       const option = candidates.find(option => option.quantity >= entry.quantity) ?? candidates[0];
       if (option) item = accessoryItem(option);
+    } else if (entry.skuId) {
+      const bulk = stock.bulk.find(bulk => bulk.skuId === entry.skuId && bulk.quantity > 0);
+      if (bulk) { item = bulkItem(bulk); itemFamilyId = bulk.assetFamilyId ?? undefined; }
     } else {
       const asset = stock.serial.find(asset => asset.assetId === entry.assetId && asset.quantity > 0);
-      if (asset) item = serialItem(asset);
+      if (asset) { item = serialItem(asset); itemFamilyId = asset.assetFamily?.id; }
     }
     return [{ key: entry.id, name: entryName(entry), role: entry.role, defaultIncluded: entry.defaultIncluded,
-      required: entry.required, quantity: entry.quantity, item,
+      required: entry.recommendation ? false : entry.required, quantity: entry.quantity, item, itemFamilyId,
       unavailable: item ? undefined : 'No disponible en el origen de este equipo.' }];
-  })];
+  });
 }

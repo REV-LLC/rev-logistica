@@ -45,10 +45,12 @@ export async function accessoryDocumentOptions(
       ? query.parentAccessoryId ? await db.$queryRaw<Array<{ id: string }>>`
         SELECT b.id FROM "AccessoryBalance" b JOIN "Accessory" a ON a.id = b."accessoryId"
         JOIN "AccessoryParent" p ON p."accessoryId" = a.id
-        WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND p."parentAccessoryId" = ${query.parentAccessoryId}`
+        WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND p."parentAccessoryId" = ${query.parentAccessoryId}
+        AND NOT EXISTS (SELECT 1 FROM "ImplementIdentityBridge" bridge WHERE bridge."accessoryId" = a.id)`
       : await db.$queryRaw<
           Array<{ id: string }>
-        >`SELECT b.id FROM "AccessoryBalance" b JOIN "Accessory" a ON a.id = b."accessoryId" WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND a."familyId" = ${parent!.sku.assetFamilyId}`
+        >`SELECT b.id FROM "AccessoryBalance" b JOIN "Accessory" a ON a.id = b."accessoryId" WHERE b."warehouseId" = a."ownerWarehouseId" AND b.quantity > 0 AND a."familyId" = ${parent!.sku.assetFamilyId}
+          AND NOT EXISTS (SELECT 1 FROM "ImplementIdentityBridge" bridge WHERE bridge."accessoryId" = a.id)`
       : [];
   const rows = await db.accessoryBalance.findMany({
     where: {
@@ -78,6 +80,7 @@ export async function accessoryDocumentOptions(
           }),
       accessory: {
         active: true,
+        implementBridge: null,
         ...(query.configuredOnly === 'true'
           ? { configurationEntries: { some: { configuration: query.parentAccessoryId ? { accessoryId: query.parentAccessoryId } : { assetId: query.assetId ?? '00000000-0000-0000-0000-000000000000' } } } }
           : {}),

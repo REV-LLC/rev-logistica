@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { CommercialDocument } from './commercial-history-v2';
 import { commercialBusinessDate } from './commercial-cutoff';
+import { promotedImplementCommercialBridge, type ReviewedCommercialParent } from './promoted-implement-commercial-bridge';
 
 /** Read-only graph projections, never persisted as historical documents or stock movements. */
 export async function legacyCommercialBridge(
@@ -59,6 +60,7 @@ export async function legacyCommercialBridge(
     nodeId: string;
     effectiveFrom: string;
   }> = [];
+  const reviewedParents: ReviewedCommercialParent[] = [];
   for (const origin of origins) {
     const source = origin.sourceLedger;
     if (!source.asset) continue;
@@ -69,6 +71,8 @@ export async function legacyCommercialBridge(
       .slice(position + 1)
       .find((row) => !row.quantity.isZero());
     const id = `legacy-origin:${origin.id}`;
+    reviewedParents.push({ id: origin.id, assetId: source.assetId!, ownerWarehouseId: source.ownerWarehouseId,
+      customerWorksiteId: source.customerWorksiteId!, effectiveFrom: origin.effectiveFrom, closedAt: closed?.effectiveAt });
     entries.push({
       sourceLedgerId: source.id,
       nodeId: id,
@@ -109,5 +113,8 @@ export async function legacyCommercialBridge(
         ],
       } as unknown as CommercialDocument);
   }
+  const promoted = await promotedImplementCommercialBridge(tx, siteId, through, reviewedParents);
+  documents.push(...promoted.documents);
+  entries.push(...promoted.entries);
   return { documents, entries };
 }

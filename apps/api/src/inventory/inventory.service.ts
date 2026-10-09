@@ -13,7 +13,6 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
   AssetKind,
-  AssetMotorConfiguration,
   ChargeType,
   DocumentType,
   MovementType,
@@ -23,6 +22,7 @@ import {
   WarehouseType,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { validateImplementClassification } from './implement-classification';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
 import { CreateBulkStockDto } from './dto/create-bulk-stock.dto';
@@ -271,7 +271,7 @@ export class InventoryService {
 
   private async assertNoUnremittedAccessories(tx: Prisma.TransactionClient, assetIds: string[]) {
     if (!assetIds.length) return;
-    const pending = await tx.accessoryBalance.findFirst({ where: { assetId: { in: assetIds }, customerWorksiteId: null, transitDocumentId: null, quantity: { gt: 0 } }, select: { id: true } });
+    const pending = await tx.accessoryBalance.findFirst({ where: { assetId: { in: assetIds }, customerWorksiteId: null, transitDocumentId: null, quantity: { gt: 0 }, accessory: { implementBridge: null } }, select: { id: true } });
     if (pending) throw new BadRequestException('El equipo tiene accesorios asignados en bodega. Inclúyelos en la remisión o devuélvelos a la bodega antes de despachar.');
   }
 
@@ -479,8 +479,6 @@ export class InventoryService {
   }
 
   async createSerializedAsset(payload: CreateSerializedAssetDto, userId: string) {
-    if (payload.sku.id && payload.asset.interchangeableMotor)
-      throw new BadRequestException('El motor intercambiable se habilita al crear un equipo desde cero, sin plantilla.');
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const assetFamily = await this.resolveAssetFamily(payload.family, SkuControlType.SERIAL, tx);
@@ -602,7 +600,7 @@ export class InventoryService {
           ),
           internalNumber,
           serialOrEngine: serialOrEngine || null,
-          motorConfiguration: payload.asset.interchangeableMotor ? 'INTERCHANGEABLE' : 'NONE',
+          isImplement: payload.asset.isImplement ?? false,
           registrationNumber: payload.asset.registrationNumber?.trim().toUpperCase() || null,
           description: payload.asset.description ?? null,
           brand: payload.asset.brand ?? null,
@@ -619,6 +617,7 @@ export class InventoryService {
           id: true,
           internalNumber: true,
           skuId: true,
+          isImplement: true,
           warehouseOwnerId: true,
           warehouseCurrentId: true,
         },
@@ -1783,9 +1782,6 @@ export class InventoryService {
         internalNumber: true,
         active: true,
         kind: true,
-        motorConfiguration: true,
-        assignedMotorId: true,
-        assignedToMixer: { select: { id: true } },
         weight: true,
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
@@ -1923,9 +1919,6 @@ export class InventoryService {
         assetSubfamily: asset.sku.assetSubfamily,
         active: asset.active,
         kind: asset.kind,
-        motorConfiguration: asset.motorConfiguration,
-        assignedMotorId: asset.assignedMotorId,
-        assignedMixerId: asset.assignedToMixer?.id ?? null,
         weight: asset.weight,
         status,
         location,
@@ -2190,6 +2183,7 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isImplement: true,
             isDamaged: true,
             damageNote: true,
             description: true,
@@ -2202,9 +2196,6 @@ export class InventoryService {
             internalNumber: true,
             weight: true,
             kind: true,
-            motorConfiguration: true,
-            assignedMotorId: true,
-            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -2222,6 +2213,8 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
+            isImplement: true,
+            isConsumable: true,
             imageUrl: true,
             imageFileObjectId: true,
             assetFamily: { select: { id: true, code: true, name: true } },
@@ -2277,6 +2270,8 @@ export class InventoryService {
           id: sku?.id ?? row.skuId,
           skuName: sku?.name ?? null,
           name: sku?.name ?? null,
+          isImplement: sku?.isImplement ?? false,
+          isConsumable: sku?.isConsumable ?? false,
           category: sku?.assetFamily?.name ?? null,
           imageUrl: sku?.imageUrl ?? null,
           imageFileObjectId: sku?.imageFileObjectId ?? null,
@@ -2324,6 +2319,7 @@ export class InventoryService {
             ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
             : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
+          isImplement: asset?.isImplement ?? false,
           isDamaged: asset?.isDamaged ?? false,
           damageNote: asset?.damageNote ?? null,
           description: asset?.description ?? null,
@@ -2340,10 +2336,6 @@ export class InventoryService {
             ?? { type: 'UNKNOWN' as const, name: null },
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
-          motorConfiguration:
-            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
-          assignedMotorId: asset?.assignedMotorId ?? null,
-          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily ?? null,
           assetSubfamily: sku?.assetSubfamily ?? null,
           weight: asset?.weight ?? null,
@@ -2504,6 +2496,7 @@ export class InventoryService {
           select: {
             id: true,
             serialOrEngine: true,
+            isImplement: true,
             isDamaged: true,
             damageNote: true,
             description: true,
@@ -2516,9 +2509,6 @@ export class InventoryService {
             internalNumber: true,
             weight: true,
             kind: true,
-            motorConfiguration: true,
-            assignedMotorId: true,
-            assignedToMixer: { select: { id: true } },
           },
         })
       : [];
@@ -2536,6 +2526,8 @@ export class InventoryService {
           select: {
             id: true,
             name: true,
+            isImplement: true,
+            isConsumable: true,
             imageUrl: true,
             imageFileObjectId: true,
             price: true,
@@ -2585,6 +2577,8 @@ export class InventoryService {
           ownerWarehouseName: ownerWarehouseNames.get(row.ownerWarehouseId.toLowerCase()) ?? null,
           skuName: sku?.name ?? null,
           category: sku?.assetFamily?.name ?? null,
+          isImplement: sku?.isImplement ?? false,
+          isConsumable: sku?.isConsumable ?? false,
           assetFamilyId: sku?.assetFamily?.id ?? null,
           controlType: sku?.assetFamily?.controlType ?? null,
           imageUrl: sku?.imageUrl ?? null,
@@ -2621,6 +2615,7 @@ export class InventoryService {
             ? ownerWarehouseNames.get(asset.warehouseOwnerId.toLowerCase()) ?? null
             : null,
           serialOrEngine: asset?.serialOrEngine ?? null,
+          isImplement: asset?.isImplement ?? false,
           isDamaged: asset?.isDamaged ?? false,
           damageNote: asset?.damageNote ?? null,
           description: asset?.description ?? null,
@@ -2634,10 +2629,6 @@ export class InventoryService {
           status: serialStatusByAssetId.get(row.assetId) ?? 'UNKNOWN',
           internalNumber: asset?.internalNumber ?? null,
           kind: asset?.kind ?? AssetKind.STANDARD,
-          motorConfiguration:
-            asset?.motorConfiguration ?? AssetMotorConfiguration.NONE,
-          assignedMotorId: asset?.assignedMotorId ?? null,
-          assignedMixerId: asset?.assignedToMixer?.id ?? null,
           assetFamily: sku?.assetFamily
             ? { id: sku.assetFamily.id, code: sku.assetFamily.code, name: sku.assetFamily.name }
             : null,
@@ -3268,6 +3259,8 @@ export class InventoryService {
 
   private async resolveSku(
     input: {
+      isImplement?: boolean;
+      isConsumable?: boolean;
       id?: string;
       name?: string;
       unitWeight?: number;
@@ -3286,6 +3279,12 @@ export class InventoryService {
     tx: Prisma.TransactionClient,
     assetSubfamilyId?: string | null,
   ) {
+    if (input.isImplement !== undefined || input.isConsumable !== undefined) {
+      const family = await tx.assetFamily.findUniqueOrThrow({ where: { id: assetFamilyId }, select: { controlType: true } });
+      const previous = input.id ? await tx.sku.findUnique({ where: { id: input.id }, select: { isImplement: true, isConsumable: true } }) : null;
+      validateImplementClassification(family.controlType, input.isImplement ?? previous?.isImplement ?? false,
+        input.isConsumable ?? previous?.isConsumable ?? false);
+    }
     if (input.id) {
       const existing = await tx.sku.findUnique({
         where: { id: input.id },
@@ -3327,6 +3326,8 @@ export class InventoryService {
           extendedLengthMeters: input.extendedLengthMeters ?? undefined,
           areaM2: input.areaM2 ?? undefined,
           unitWeight: input.unitWeight ?? undefined,
+          isImplement: input.isImplement,
+          isConsumable: input.isConsumable,
         },
         select: { id: true },
       });
@@ -3348,6 +3349,8 @@ export class InventoryService {
       },
       create: {
         name,
+        isImplement: input.isImplement ?? false,
+        isConsumable: input.isConsumable ?? false,
         assetFamilyId,
         assetSubfamilyId: assetSubfamilyId ?? null,
         price: input.price ?? null,
@@ -3365,6 +3368,8 @@ export class InventoryService {
       },
       update: {
         assetSubfamilyId: assetSubfamilyId ?? undefined,
+        isImplement: input.isImplement,
+        isConsumable: input.isConsumable,
         price: input.price ?? undefined,
         subrentalPrice: input.subrentalPrice ?? undefined,
         replacementValue: input.replacementValue ?? undefined,
@@ -3384,6 +3389,8 @@ export class InventoryService {
 
   private async resolveBulkSku(
     input: {
+      isImplement?: boolean;
+      isConsumable?: boolean;
       id?: string;
       name?: string;
       unitWeight?: number;
