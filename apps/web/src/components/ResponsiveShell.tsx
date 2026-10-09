@@ -52,6 +52,11 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Costos y despacho",
     },
     {
+      prefix: "/transport/tracking",
+      title: "Seguimiento de camiones",
+      subtitle: "Mapa y recorridos",
+    },
+    {
       prefix: "/transport/vehicles",
       title: "Vehiculos",
       subtitle: "Flota y documentos",

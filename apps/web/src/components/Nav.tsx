@@ -118,6 +118,12 @@ const sections: NavSection[] = [
         ],
       },
       {
+        href: "/transport/tracking",
+        label: "Seguimiento de camiones",
+        icon: IconMap2,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/transport/vehicles",
         label: "Vehículos",
         icon: IconTruck,
