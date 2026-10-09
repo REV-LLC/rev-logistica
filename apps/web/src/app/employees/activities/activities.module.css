@@ -392,3 +392,8 @@
     padding-inline: 10px;
   }
 }
+
+.previewWAREHOUSE {
+  background: var(--mantine-color-blue-0);
+  color: var(--mantine-color-blue-8);
+}
