@@ -11,8 +11,8 @@ const {
   commercialError,
   configuredSelectorOptions,
   newCommercialMode,
+  commercialScopeIds,
   parseSelectorKey,
-  todayInBogota,
 } = loadTransportModule("../commercial-profiles/types.ts");
 const Editor = loadTransportModule(
   "../commercial-profiles/CommercialProfileEditor.tsx",
@@ -40,6 +40,14 @@ const profile = {
   modes: [mode],
 };
 
+test('implement pricing exposes only its asset/reference scopes, never its equipment family', () => {
+  const ids = { ASSET: 'implement-asset', SKU: 'implement-sku', FAMILY: 'shared-family' };
+  assert.deepEqual(commercialScopeIds(ids, true), { ASSET: ids.ASSET, SKU: ids.SKU });
+  assert.deepEqual(commercialScopeIds(ids, false), ids);
+  assert.deepEqual(commercialScopeIds({ SKU: 'bulk', FAMILY: 'bulk-family' }, true), { SKU: 'bulk' });
+  assert.equal(ids.FAMILY, 'shared-family');
+});
+
 test("commercial payload preserves stable IDs and concurrency version without stock or physical configuration", () => {
   const payload = commercialPayload({
     ...profile,
@@ -48,7 +56,6 @@ test("commercial payload preserves stable IDs and concurrency version without st
     configuration: { version: 7 },
   });
   assert.deepEqual(Object.keys(payload).sort(), [
-    "effectiveFrom",
     "expectedVersion",
     "groups",
     "modes",
@@ -184,10 +191,9 @@ test("selectors derive from saved part identity, not entry IDs, names or default
     configuredSelectorOptions([], [group])[0].value,
     "FAMILY:family-1",
   );
-  assert.match(todayInBogota(), /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test("editor renders Spanish generic configuration, units, inclusion and effective date", () => {
+test("editor renders Spanish generic pricing without a manual effective date or help block", () => {
   const markup = renderToStaticMarkup(
     React.createElement(
       MantineProvider,
@@ -201,18 +207,29 @@ test("editor renders Spanish generic configuration, units, inclusion and effecti
   );
   for (const label of [
     "Grupos de implementos",
-    "Tarifas y mínimos",
-    "Vigente desde",
+    "Otras combinaciones",
     "Cuándo aplica",
     "La tarifa $0",
     "Crear alternativas con / sin",
-    "Mínimo de horas",
+    "Cantidad mínima a cobrar",
+    "Precio c/u",
+    "Cálculo automático",
   ])
     assert.ok(markup.includes(label), label);
   assert.equal(markup.includes("Cortadora"), false);
-  assert.match(markup, /Ayuda de cobros/);
+  assert.doesNotMatch(markup, /Ayuda de cobros/);
+  assert.doesNotMatch(markup, /Opciones avanzadas|Unidad de cobro|Reemplaza las modalidades/);
+  assert.doesNotMatch(markup, /Vigente desde|type="date"/);
   assert.doesNotMatch(markup, /Composición y cobro son decisiones distintas/);
   assert.doesNotMatch(markup, /referencia guardada family-1/);
+});
+
+test('save omits old, missing or future effective dates; the server dates every new revision', () => {
+  for (const effectiveFrom of [null, '2026-09-30', '2099-01-01']) {
+    const value = { ...profile, effectiveFrom };
+    assert.equal(commercialError(value), null);
+    assert.equal(Object.hasOwn(commercialPayload(value), 'effectiveFrom'), false);
+  }
 });
 
 test('selectors show unit names or an explicit outside-set status while preserving stored identities', () => {

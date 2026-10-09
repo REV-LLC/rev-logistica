@@ -16,6 +16,7 @@ export async function effectiveCommercialProfile(
     skuId?: string;
     familyId?: string | null;
     accessoryId?: string;
+    isImplement?: boolean;
   },
   date: string,
 ) {
@@ -23,8 +24,11 @@ export async function effectiveCommercialProfile(
     ['ACCESSORY', target.accessoryId],
     ['ASSET', target.assetId],
     ['SKU', target.skuId],
-    ['FAMILY', target.accessoryId ? undefined : target.familyId],
+    // A family organizes inventory, not the price of an implement. Its own
+    // asset/reference profile remains eligible; only the family fallback stops.
+    ['FAMILY', target.accessoryId || target.isImplement ? undefined : target.familyId],
   ].filter(([, id]) => Boolean(id));
+  if (!scopes.length) return null;
   const profiles = await tx.commercialProfile.findMany({
     where: {
       OR: scopes.map(([scopeType, scopeId]) => ({

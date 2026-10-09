@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -45,6 +46,8 @@ export class BulkAssetSubfamilyInput {
 }
 
 export class BulkSkuInput {
+  @IsOptional() @IsBoolean() isImplement?: boolean;
+  @IsOptional() @IsBoolean() isConsumable?: boolean;
   @IsOptional()
   @IsUUID()
   id?: string;

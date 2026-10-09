@@ -375,6 +375,8 @@ const getWorkflowStepClassName = (isActive: boolean) =>
 export default function AddBulkStockPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isImplement, setIsImplement] = useState(searchParams.get('implement') === '1');
+  const [isConsumable, setIsConsumable] = useState(false);
   const formaletaFormRef = useRef<HTMLDivElement | null>(null);
   const entrySectionRef = useRef<HTMLDivElement | null>(null);
   const isEmbedded = searchParams.get('embed') === '1';
@@ -1455,6 +1457,7 @@ export default function AddBulkStockPage() {
                 isProviderWarehouse && providerPrice !== '' ? Number(providerPrice) : undefined,
             };
 
+      if (isImplement && entryMode !== 'existing') Object.assign(payload.sku, { isImplement: true, isConsumable });
       const response = await api<CreateBulkResponse>('/inventory/bulk-adjustments', {
         method: 'POST',
         json: payload,
@@ -2532,6 +2535,12 @@ export default function AddBulkStockPage() {
               <Stack gap="md">
                 <div>
                   <Text fw={700}>3. Cantidad</Text>
+                  {entryMode !== 'existing' ? <Stack gap="xs">
+                    <Switch label="Es un implemento" checked={isImplement}
+                      onChange={event => { setIsImplement(event.currentTarget.checked); setIsConsumable(false); }} />
+                    {isImplement ? <Switch label="Se consume (no se devuelve)" checked={isConsumable}
+                      onChange={event => setIsConsumable(event.currentTarget.checked)} /> : null}
+                  </Stack> : null}
                   <Text size="sm" c="dimmed">
                     {entryMode === 'existing'
                       ? 'La entrada se suma al item seleccionado en su bodega dueña.'

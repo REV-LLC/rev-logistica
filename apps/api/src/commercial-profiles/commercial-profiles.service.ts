@@ -40,16 +40,17 @@ export class CommercialProfilesService {
       });
       inherited = await effectiveCommercialProfile(
         this.prisma,
-        { skuId: asset.skuId, familyId: asset.sku.assetFamilyId },
+        { skuId: asset.skuId, familyId: asset.sku.assetFamilyId, isImplement: asset.isImplement },
         today,
       );
     } else if (scope.scopeType === 'SKU') {
       const sku = await this.prisma.sku.findUniqueOrThrow({
         where: { id: scope.scopeId },
+        include: { assets: { where: { isImplement: true }, select: { id: true }, take: 1 } },
       });
       inherited = await effectiveCommercialProfile(
         this.prisma,
-        { familyId: sku.assetFamilyId },
+        { familyId: sku.assetFamilyId, isImplement: sku.isImplement || sku.assets.length > 0 },
         today,
       );
     }
@@ -69,6 +70,7 @@ export class CommercialProfilesService {
     >,
     scope: CommercialScope,
     selectors: Array<{ kind: string; id: string }>,
+    writable = false,
   ) {
     const ids = [{ kind: scope.scopeType, id: scope.scopeId }, ...selectors];
     for (const kind of ['ASSET', 'SKU', 'FAMILY', 'ACCESSORY']) {
@@ -84,10 +86,13 @@ export class CommercialProfilesService {
             ? await tx.sku.count({ where })
             : kind === 'FAMILY'
               ? await tx.assetFamily.count({ where })
-              : await tx.accessory.count({ where });
+              : await tx.accessory.count({ where: { ...where,
+                ...(writable ? { implementBridge: null } : {}),
+              } });
       if (count !== selected.length)
         throw new NotFoundException(
-          'La configuración referencia un equipo, familia, referencia o accesorio inexistente',
+          writable ? 'La configuración referencia un elemento inexistente o un implemento ya convertido a equipo. Usa su nueva ficha de inventario.'
+            : 'La configuración referencia un equipo, familia, referencia o accesorio inexistente',
         );
     }
   }
@@ -102,11 +107,20 @@ export class CommercialProfilesService {
     const input = parsed.data;
     const scope = { scopeType: input.scopeType, scopeId: input.scopeId };
     return this.prisma.$transaction(async (tx) => {
+      // Promotion acquires the same identity locks before commercial-profile
+      // locks. A concurrent edit cannot resurrect a retired legacy selector.
+      const legacyIds = [...new Set([
+        ...(scope.scopeType === 'ACCESSORY' ? [scope.scopeId] : []),
+        ...input.groups.flatMap(group => group.selectors.filter(selector => selector.kind === 'ACCESSORY').map(selector => selector.id)),
+      ])].sort();
+      for (const id of legacyIds)
+        await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR SHARE`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`commercial-profile:${scope.scopeType}:${scope.scopeId}`},0))::text`;
       await this.validateIds(
         tx,
         scope,
         input.groups.flatMap((g) => g.selectors),
+        true,
       );
       let profile = await tx.commercialProfile.findUnique({
         where: { scopeType_scopeId: scope },

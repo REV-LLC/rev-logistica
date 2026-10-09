@@ -18,6 +18,7 @@ import {
   Container,
   Group,
   Paper,
+  Select,
   Stack,
   Tabs,
   Text,
@@ -60,7 +61,7 @@ import ProviderRemissionDialog from './ProviderRemissionDialog';
 import RequestDocumentsDialog from './RequestDocumentsDialog';
 import RequestInformationSection from './RequestInformationSection';
 import RequestItemsSection from './RequestItemsSection';
-import RequestAccessorySelector from './RequestAccessorySelector';
+import RequestImplementSelector from './RequestImplementSelector';
 import RequestEquipmentConfiguration from './RequestEquipmentConfiguration';
 import RequestSignatureDialog from './RequestSignatureDialog';
 import RequestSigningSection from './RequestSigningSection';
@@ -416,7 +417,7 @@ export default function TransportRequestsWorkspace({
   });
   const { addSerialItem, cancelPendingSelections } = useRequestAssetSelection({
     configurationWorksiteId: customerWorksiteId,
-    motorOnly: isTabletRole,
+    includeImplements: !isTabletRole,
     setSelectedItems, docType, setError, setItemsAddedNotice,
   });
 
@@ -713,6 +714,7 @@ export default function TransportRequestsWorkspace({
             type: 'serial' as const,
             sourceWarehouseId,
             assetId: item.assetId ?? undefined,
+            deliveryFuelSelectable: !item.asset?.isImplement && Boolean(item.deliveryFuel || item.asset?.sku?.assetFamily?.deliveryFuelSelectable),
             name: getSerialDisplayName({
               ...item.asset,
               assetId: item.assetId,
@@ -863,6 +865,10 @@ export default function TransportRequestsWorkspace({
       setError('Selecciona al menos un item.');
       return;
     }
+    if (docType === 'REMISSION' && selectedItems.some(item => item.deliveryFuelSelectable && !item.deliveryFuel)) {
+      setError('Elige eléctrica o gasolina para cada equipo que lo solicita.');
+      return;
+    }
     if (docType !== 'REMISSION' || !navigator.onLine) {
       setGenerateStep('sign');
       return;
@@ -917,7 +923,13 @@ export default function TransportRequestsWorkspace({
   };
 
   const renderDamageFields = (item: SelectedItem, index: number) => {
-    if (docType !== 'RETURN') return null;
+    if (docType !== 'RETURN') return item.deliveryFuelSelectable ? <Select
+      label="Esta entrega va con motor"
+      placeholder="Eléctrico o gasolina"
+      data={[{ value: 'ELECTRICO', label: 'Eléctrico' }, { value: 'GASOLINA', label: 'Gasolina' }]}
+      value={item.deliveryFuel ?? null}
+      onChange={value => { updateSelected(index, { deliveryFuel: value as SelectedItem['deliveryFuel'] }); setError(null); }}
+      required mt="xs" /> : null;
     return (
       <Stack gap={6} mt="xs">
         <Checkbox
@@ -1190,7 +1202,7 @@ export default function TransportRequestsWorkspace({
                 key={`${item.selectionId}:${docType}:${customerWorksiteId}:${item.sourceWarehouseId}`}
                 parent={item} docType={docType} customerWorksiteId={customerWorksiteId}
                 selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
-              accessorySelector={docType === 'REMISSION' && !isTabletRole ? <RequestAccessorySelector deliveryMode="WAREHOUSE" warehouseId={physicalSourceWarehouseId} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
+              accessorySelector={docType === 'REMISSION' && !isTabletRole ? <RequestImplementSelector warehouseId={physicalSourceWarehouseId} warehouses={warehouses} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
               clearLoadedInventory={clearLoadedInventory}
               physicalSourceWarehouseName={physicalSourceWarehouseName}
               sourceMode={sourceMode}

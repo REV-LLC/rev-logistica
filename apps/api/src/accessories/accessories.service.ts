@@ -9,6 +9,7 @@ import { Prisma, EquipmentPartRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { accessoryDocumentOptions } from './accessory-document-options';
 import { assetDisplayName } from './asset-display';
+import { assertLegacyImplementWritable, legacyImplementReadMetadata } from './implement-identity-rules';
 import { AccessoryDocumentOptionsDto } from './dto/accessory-document-options.dto';
 import {
   AccessoryDetailsDto,
@@ -41,6 +42,7 @@ const equipmentSelect = {
   } },
 } satisfies Prisma.AssetSelect;
 const detailInclude = {
+  implementBridge: { select: { assetId: true } },
   family: { select: { id: true, name: true } },
   ownerWarehouse: { select: { id: true, name: true } },
   subfamilies: { include: { subfamily: { select: { name: true } } } },
@@ -103,7 +105,7 @@ export class AccessoriesService {
       throw new BadRequestException(
         'La búsqueda debe ser un texto de máximo 160 caracteres.',
       );
-    const where: Prisma.AccessoryWhereInput = { familyId, purpose };
+    const where: Prisma.AccessoryWhereInput = { familyId, purpose, implementBridge: null };
     if (search?.trim())
       where.OR = [
         { name: { contains: search.trim(), mode: 'insensitive' } },
@@ -152,7 +154,7 @@ export class AccessoriesService {
       include: detailInclude,
     });
     if (!item) throw new NotFoundException('Accesorio no encontrado.');
-    return item;
+    return { ...item, ...legacyImplementReadMetadata(item) };
   }
 
   async history(id: string, page = 0) {
@@ -199,8 +201,10 @@ export class AccessoriesService {
       dto.assetIds.length !== 1 || dto.assetIds[0] !== dto.exclusiveAssetId))
       throw new BadRequestException('El componente exclusivo solo puede pertenecer a su equipo.');
     if (dto.scope === 'ACCESSORIES') {
+      for (const id of [...new Set(dto.parentAccessoryIds ?? [])].sort())
+        await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR SHARE`;
       const count = await tx.accessory.count({ where: {
-        id: { in: dto.parentAccessoryIds ?? [] }, familyId: dto.familyId, active: true, kind: 'INDIVIDUAL', purpose: 'ACCESSORY',
+        id: { in: dto.parentAccessoryIds ?? [] }, familyId: dto.familyId, active: true, kind: 'INDIVIDUAL', purpose: 'ACCESSORY', implementBridge: null,
       } });
       if (count !== dto.parentAccessoryIds?.length)
         throw new BadRequestException('Selecciona accesorios principales individualizados y activos.');
@@ -291,6 +295,8 @@ export class AccessoriesService {
         >`SELECT id FROM "Accessory" WHERE id = ${id} FOR UPDATE`;
         if (!rows.length)
           throw new NotFoundException('Accesorio no encontrado.');
+        const item = await tx.accessory.findUniqueOrThrow({ where: { id }, select: { implementBridge: { select: { assetId: true } } } });
+        assertLegacyImplementWritable(item);
         return fn(tx);
       }),
     );
@@ -341,6 +347,7 @@ export class AccessoriesService {
             include: detailInclude,
           });
           if (prior) {
+            assertLegacyImplementWritable(prior);
             if (prior.creationFingerprint !== hash)
               throw new ConflictException(
                 'La operación ya fue usada con otros datos.',
@@ -565,6 +572,11 @@ export class AccessoriesService {
     documentId?: string,
     compatibilityParentAccessoryId?: string,
   ) {
+    const item = await tx.accessory.findUniqueOrThrow({
+      where: { id },
+      include: { subfamilies: true, assets: true, compatibleParents: true, implementBridge: { select: { assetId: true } } },
+    });
+    assertLegacyImplementWritable(item);
     const hash = fingerprint({ id, ...dto, userId });
     const prior = await tx.accessoryMovement.findUnique({
       where: { requestId: dto.requestId },
@@ -576,10 +588,6 @@ export class AccessoriesService {
         );
       return prior;
     }
-    const item = await tx.accessory.findUniqueOrThrow({
-      where: { id },
-      include: { subfamilies: true, assets: true, compatibleParents: true },
-    });
     if (!item.active)
       throw new BadRequestException('El accesorio está archivado.');
     if (!dto.note.trim())

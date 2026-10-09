@@ -1,0 +1,159 @@
+{
+  "status": "LOCAL_DATA_CUTOVER_COMPLETE_NOT_DEPLOYED",
+  "branch": "codex/implements-integration",
+  "snapshot": {
+    "takenAt": "2026-10-09T15:02:43.909Z",
+    "sha256": "42d685bfb5fbafc44841502c48cecc688940d54dbf2162504d2e87dc48d263a7",
+    "database": "accessory_qa_cutover_20261009",
+    "documents": 496,
+    "legacyAccessories": 15
+  },
+  "applied": {
+    "schemaMigrations": 11,
+    "nativeIndividualIdentities": 12,
+    "nativeBulkReturnableIdentities": 2,
+    "nativeBulkQuantity": 2,
+    "positiveLegacyBalancesWithoutNativeBridge": 0,
+    "retiredLegacyIdentitiesPreservedWithoutRevivingStock": 1,
+    "legacyConfigurationTargetsRemaining": 0,
+    "commercialOriginReviews": 2,
+    "historicalDocuments": 496,
+    "historicalDocumentItems": 1303,
+    "stockLedgerRows": 2400,
+    "additiveReviewedOpeningRows": 16,
+    "productionWrites": 0,
+    "historicalDocumentsUnchanged": true,
+    "historicalAccessoryBalancesAndMovementsUnchanged": true,
+    "existingStockLedgerUnchanged": true,
+    "idempotentReplayVerified": true,
+    "serialSharedFamilyAllowed": true,
+    "onlyExistingConcreteLinksPreserved": true,
+    "unconfiguredNewPrices": "Explicit zero authorized by the user; old prices and snapshots unchanged"
+  },
+  "verified": {
+    "apiBuild": "PASS",
+    "apiTestSuites": 129,
+    "apiTests": 1210,
+    "frontendTests": 235,
+    "frontendTypes": "PASS",
+    "frontendBuild": "PASS: isolated source copy, webpack production build; preview not interrupted",
+    "skippedTests": 0,
+    "postgresIntegrationDatabase": "accessory_qa_cutover_20261009",
+    "gitDiffCheck": "PASS",
+    "browserRehearsalAgainstNewSnapshot": "PASS within local ADMIN auth-bypass scope: mixer draft selection/autosave/reopen; returnable BULK classification save/restore; native inventory and old-route redirects. Signed external PDF and real production auth not exercised.",
+    "bulkBrowserQa": {
+      "classificationSavedAndRestored": true,
+      "historyAndStockUnchanged": true,
+      "oldRoutesRedirectBeforeRender": true,
+      "viewports": ["1440x1000", "390x844"],
+      "runtimeErrors": 0,
+      "horizontalOverflow": false,
+      "existingImageOptimizationWarnings": 3
+    },
+    "realAnnexEndpoint": "HTTP 200 for Floralia Convivale and Serene: one resolved native bucket per site, zero tariff, exact reviewed parent origin. Unrelated historical REVIEW issues preserved.",
+    "nativeDocumentServiceRehearsal": "PASS with full PostgreSQL rollback for both real promoted onsite buckets: return without fabricated original line, provider transit/receipt, redispatch to exact reviewed parent origin, return against the new native line and second provider receipt. Parent machine never moved. Evidence metadata is QA-only; external uploads not exercised.",
+    "nativeReturnBrowserQa": {
+      "implementExcludedFromEquipmentTab": true,
+      "implementVisibleInDedicatedTab": true,
+      "draftContainsNativeAssetNotLegacyAccessory": true,
+      "autosaveAndReload": true,
+      "viewports": ["1440x1000", "390x844"],
+      "runtimeErrors": 0,
+      "horizontalOverflow": false,
+      "testDraftCleanup": "Protected Document, DocumentItem, AccessoryBalance, AccessoryMovement and StockLedger hashes unchanged after cleanup"
+    },
+    "mixerBrowserQa": {
+      "url": "http://127.0.0.1:3165/transport/generate",
+      "viewports": ["1440x1000", "390x844"],
+      "tool": "Installed Playwright with Chrome; Browser plugin not available",
+      "blankPageOrFrameworkOverlay": false,
+      "runtimeErrors": 0,
+      "consoleWarningsAndErrors": 0,
+      "horizontalOverflow": false,
+      "electricThenGasolinePersisted": true,
+      "singleEquipmentLine": true,
+      "choiceRestoredAfterReload": true,
+      "missingChoiceBlocksSignStep": true,
+      "testDraftsRemovedWithoutStockMovements": true,
+      "realSignatureAndExternalPdfStorage": "NOT TESTED: external QA services disabled"
+    },
+    "currentPreviewStillUsesPreviousQaDatabase": false
+  },
+  "mixerMotorRetirement": {
+    "status": "APPLIED_LOCAL_ONLY",
+    "archivedUnits": 14,
+    "preservedAssignments": 3,
+    "liveAssignments": 0,
+    "liveMotorCompatibilities": 0,
+    "immutableArchiveVerified": true,
+    "historicalFuelTagsAdded": 0,
+    "newDeliveryField": "DocumentItem.deliveryFuel: ELECTRICO | GASOLINA",
+    "familyConfiguration": "AssetFamily.deliveryFuelSelectable, excludes implement assets",
+    "deliveryReturnAndRedispatchPostgresRollback": "PASS",
+    "priceChangesByFuel": false,
+    "obsoleteOperationalMotorUiAndApiRemoved": true,
+    "oldMotorAssetsRetainedForHistoricalConsultationAndReturn": true,
+    "backup": "qa-before.dump, sha256 b018540e0fa3dc65c99b3d590c3d7e77961ed819561ed2261005bedda94e2952"
+  },
+  "caseBucket": {
+    "sourceAccessoryId": "34ae56b5-b6ec-4a7c-9bd7-fec73474702c",
+    "retiredAccessoryId": "c1b90a70-6c66-4b8b-a769-699382dd002a",
+    "parentAssetId": "4c34a24a-27c0-458b-8362-a6ec67fc97fb",
+    "nativeQaAssetId": "9cc9d6a5-5635-42e0-8f14-7263c2df9d92",
+    "internalNumber": 2,
+    "defaultIncluded": true,
+    "linkedOnlyToCase2": true,
+    "location": "Bodega Principal de Alquiler",
+    "quantity": 1,
+    "retiredQuantityNotRevived": true,
+    "note": "User confirmed the original dealership bucket belongs only to CASE #2 for now. The prior record stays retired; no old movement was changed. QA identities and URLs are not a production manifest."
+  },
+  "documentaryBridge": {
+    "implemented": true,
+    "sourceDocumentItemIdRequired": true,
+    "reviewedSingleOutstandingDeliveryOnly": true,
+    "projectionDoesNotRewriteOriginalItem": true,
+    "nativeReturnAgainstOriginalLineTested": true,
+    "commercialOldLotEndsOnDMinus1": true,
+    "nativeLotStartsOnD": true,
+    "minimumAndReportContinuity": "No saved AnnexDraftRevision exists in this snapshot; the two continuing promoted implement rentals have minimum zero. Their machine origin and frozen conditions are preserved through explicit append-only reviews. Positive implement minima on other future conversions still require REVIEW, not a silently restarted minimum."
+  },
+  "confirmedCustodyApplied": [
+    {
+      "items": ["BACHE PARA PLUMA GRUA", "TRIPODE PARA PLUMA GRUA"],
+      "location": "Bodega Principal de Alquiler",
+      "effect": "Reviewed current opening only. Original Las Pilas source remains unchanged and is not offered for another return after cutover. Old commercial projection closes before cutover."
+    },
+    {
+      "items": ["GUAYA GRUESA #7"],
+      "location": "TECNIREPARACIONES",
+      "internalNumber": 7,
+      "effect": "Reviewed provider-warehouse opening only. Original Mercedes Forestal source remains unchanged and is not offered for another return after cutover."
+    },
+    {
+      "items": ["MANGUERA DE SUCCION", "MANGUERA DE DESCARGA FLEXIBLE"],
+      "model": "BULK returnable: Sku.isImplement=true, Sku.isConsumable=false",
+      "ownerAndLocation": "VEREAL MAQUINARIA SAS",
+      "quantityPerReference": 1,
+      "effect": "Two native SKU openings; existing individual records, balances and concrete equipment compatibility preserved as historical evidence."
+    }
+  ],
+  "oldCreationRetired": {
+    "api": "POST /accessories returns 410; native inventory creation is the only new-implement entry point",
+    "frontend": "Old catalogue/equipment pages redirect before render; former creation, movement and linking workspaces removed; obsolete navigation removed; asset card opens native Implementos tab",
+    "historicalReadersRetained": true,
+    "bulkClassificationEditableInInventory": true,
+    "nativeDocumentEntry": "RequestImplementSelector replaces the old legacy-only RequestAccessorySelector; uses real selected parent lines or verified onsite documentary/reviewed origins. No automatic unit linking or synthetic parent document line. Return picker separates native Asset/SKU implements into its Implementos tab; legacy historical readers remain for older documents."
+  },
+  "remainingLocalInventoryCutover": [],
+  "productionReleaseConditions": [
+    "New production backup and fresh read-only preflight: stop on new/changed source balances, documents, custody, prices or saved annex adjustments; never reuse QA-generated asset IDs.",
+    "Publish additive schema, backend guards/readers and native frontend together; apply an explicitly reviewed production manifest with replay and history proofs. Local runners must not be redirected to production.",
+    "Verify real Office/Driver auth and the signed-PDF/external-storage boundary in the release validation; those external services are deliberately disabled in this local preview."
+  ],
+  "finalLocalBackup": {
+    "filename": "qa-before-final-cutover.dump",
+    "sha256": "92ddf9c2ec05c71fe8ecef93ce9f52c0ffff5f05437c40a9d9170ce38177d3ae"
+  },
+  "privateEvidence": "Production and QA backups plus reviewed per-unit manifests/reports in /private/tmp/rev-cutover-20261009-QMEv07; no production execution is authorized by these local runners"
+}

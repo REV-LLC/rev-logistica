@@ -96,6 +96,7 @@ export class AssetsService {
         imageFileObjectId: true,
         imageFileObject: { select: { storageKey: true } },
         active: true,
+        isImplement: true,
         deletedAt: true,
         deletionReason: true,
         isDamaged: true,
@@ -103,24 +104,6 @@ export class AssetsService {
         deletedByUserId: true,
         kind: true,
         motorPowerHp: true,
-        motorConfiguration: true,
-        assignedMotorId: true,
-        assignedMotor: {
-          select: {
-            id: true,
-            internalNumber: true,
-            publicCode: true,
-            description: true,
-            serialOrEngine: true,
-            brand: true,
-            model: true,
-            fuel: true,
-            isDamaged: true,
-            damageNote: true,
-            sku: { select: { name: true } },
-          },
-        },
-        assignedToMixer: { select: { id: true } },
         createdAt: true,
         sku: {
           select: {
@@ -307,26 +290,10 @@ export class AssetsService {
             employee: { select: { name: true, lastName: true } },
           },
         },
+        isImplement: true,
         kind: true,
         motorPowerHp: true,
-        motorConfiguration: true,
-        assignedMotorId: true,
-        assignedMotor: {
-          select: {
-            id: true,
-            internalNumber: true,
-            publicCode: true,
-            description: true,
-            serialOrEngine: true,
-            brand: true,
-            model: true,
-            fuel: true,
-            isDamaged: true,
-            damageNote: true,
-            sku: { select: { name: true } },
-          },
-        },
-        assignedToMixer: { select: { id: true } },
+        implementBridge: { select: { accessoryId: true } },
         createdAt: true,
         sku: {
           select: {
@@ -366,6 +333,8 @@ export class AssetsService {
 
     return {
       ...item,
+      legacyAccessoryId: item.implementBridge?.accessoryId ?? null,
+      legacyAccessoryHistoryUrl: item.implementBridge ? `/accessories/${item.implementBridge.accessoryId}/history` : null,
       hourMeter: Number(item.hourMeter),
       currentHourMeter: Number(item.hourMeter),
       imageUrl: item.imageFileObject?.storageKey ?? null,
@@ -398,6 +367,7 @@ export class AssetsService {
   }
 
   async createAsset(payload: {
+    isImplement?: boolean;
     skuId: string;
     warehouseOwnerId: string;
     warehouseCurrentId?: string;
@@ -506,6 +476,7 @@ export class AssetsService {
             weight: payload.weight ?? null,
             hourMeter: payload.hourMeter ?? 0,
             active: payload.active ?? true,
+            isImplement: payload.isImplement ?? false,
           },
         });
 
@@ -547,6 +518,7 @@ export class AssetsService {
   async updateAsset(
     assetId: string,
     payload: {
+      isImplement?: boolean;
       description?: string | null;
       registrationNumber?: string | null;
       brand?: string | null;
@@ -571,7 +543,7 @@ export class AssetsService {
     }
 
     if (asset.kind === 'MOTOR' && ['brand', 'model', 'fuel', 'description'].some(key => Object.prototype.hasOwnProperty.call(payload, key)))
-      throw new BadRequestException('Edita los datos del motor desde su modal para conservar descripción, compatibilidad e historial.');
+      throw new BadRequestException('Este motor pertenece al modelo histórico retirado. Su identificación se conserva sin modificaciones.');
 
     if (payload.warehouseCurrentId != null) {
       const warehouse = await this.prisma.warehouse.findUnique({
@@ -648,6 +620,7 @@ export class AssetsService {
               : undefined,
             hourMeter: payload.hourMeter,
             active: payload.active,
+            isImplement: payload.isImplement,
           },
         });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -663,7 +636,7 @@ export class AssetsService {
 
   async updateAssetCondition(
     assetId: string,
-    payload: { isDamaged: boolean; note: string; expectedParentAssetId?: string },
+    payload: { isDamaged: boolean; note: string },
     userId: string,
   ) {
     const note = payload.note?.trim();
@@ -671,16 +644,6 @@ export class AssetsService {
       throw new BadRequestException('Describe la avería o la reparación (máximo 2000 caracteres).');
     }
     const cacheKeys = await this.prisma.$transaction(async (tx) => {
-      if (payload.expectedParentAssetId) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended('equipment-configuration', 0))::text`;
-        const parent = await tx.asset.findUnique({
-          where: { id: payload.expectedParentAssetId },
-          select: { assignedMotorId: true, deletedAt: true },
-        });
-        if (!parent || parent.deletedAt || parent.assignedMotorId !== assetId) {
-          throw new BadRequestException('El motor asignado cambió. Actualiza el equipo antes de registrar la avería o reparación.');
-        }
-      }
       const asset = await tx.asset.findUnique({
         where: { id: assetId },
         select: { id: true, isDamaged: true, deletedAt: true, warehouseCurrentId: true, warehouseOwnerId: true },
@@ -713,12 +676,10 @@ export class AssetsService {
 
   private async assertNoAssignedAccessories(tx: Prisma.TransactionClient, assetId: string) {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('equipment-configuration', 0))::text`;
-    const [motorState] = await tx.$queryRaw<Array<{ assignedMotorId: string | null; isAssignedMotor: boolean }>>`SELECT a."assignedMotorId",
-      EXISTS (SELECT 1 FROM "Asset" parent WHERE parent."assignedMotorId" = a.id) AS "isAssignedMotor"
-      FROM "Asset" a WHERE a.id = ${assetId} FOR UPDATE`;
-    if (motorState?.assignedMotorId || motorState?.isAssignedMotor)
-      throw new BadRequestException('Desasigna el motor desde el botón Motor de la ficha antes de desactivar o dar de baja el equipo. Así queda registrado el historial.');
-    const assigned = await tx.accessoryBalance.count({ where: { assetId, quantity: { gt: 0 } } });
+    await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${assetId} FOR UPDATE`;
+    if (await tx.retiredMotorConfiguration.findUnique({ where: { assetId }, select: { assetId: true } }))
+      throw new BadRequestException('Este equipo tiene una configuración de motor archivada. No puede darse de baja ni desactivarse sin revisar su historial.');
+    const assigned = await tx.accessoryBalance.count({ where: { assetId, quantity: { gt: 0 }, accessory: { implementBridge: null } } });
     if (assigned) throw new BadRequestException('Devuelve o traslada los accesorios asignados antes de desactivar o eliminar el equipo.');
   }
 
@@ -730,8 +691,6 @@ export class AssetsService {
         active: true,
         deletedAt: true,
         warehouseCurrentId: true,
-        assignedMotorId: true,
-        assignedToMixer: { select: { id: true } },
       },
     });
 

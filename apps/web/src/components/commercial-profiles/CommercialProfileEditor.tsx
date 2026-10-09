@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import {
   Button,
   Card,
   Group,
   MultiSelect,
-  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -16,6 +14,7 @@ import type { ConfigurationEntry } from "../equipment-configuration/types";
 import CommercialModeCard from "./CommercialModeCard";
 import {
   type CommercialProfile,
+  type CommercialMode,
   configuredSelectorOptions,
   newCommercialMode,
   parseSelectorKey,
@@ -33,30 +32,23 @@ export default function CommercialProfileEditor({
   disabled?: boolean;
   onChange: (value: CommercialProfile) => void;
 }) {
-  const [alternateGroup, setAlternateGroup] = useState<string | null>(null);
   const options = configuredSelectorOptions(entries, value.groups);
-  const groupOptions = value.groups.map((group) => ({
-    value: group.id,
-    label: group.name || "Grupo sin nombre",
-  }));
+  const renderMode = (mode: CommercialMode) => <CommercialModeCard
+    key={mode.id} mode={mode} groups={value.groups} disabled={disabled}
+    onChange={updated => onChange({ ...value, modes: value.modes.map(row => row.id === updated.id ? updated : row) })}
+    onRemove={() => onChange({ ...value, modes: value.modes.filter(row => row.id !== mode.id) })}
+  />;
+  // A rate appears once: next to its sole group, or under multi-group combinations.
+  const groupedModes = value.modes.filter(mode => mode.conditions.length === 1
+    && value.groups.some(group => group.id === mode.conditions[0].groupId));
   return (
     <Stack gap="lg">
-      <TextInput
-        label="Vigente desde"
-        type="date"
-        required
-        value={value.effectiveFrom ?? ""}
-        disabled={disabled}
-        onChange={(event) =>
-          onChange({ ...value, effectiveFrom: event.currentTarget.value })
-        }
-      />
       {options.length || value.groups.length ? <Stack gap="sm">
         <Group justify="space-between">
           <div>
             <Text fw={700}>Grupos de implementos</Text>
             <Text size="sm" c="dimmed">
-              Elementos que se cobran de la misma forma.
+              Agrupa implementos y configura sus combinaciones de cobro.
             </Text>
           </div>
           <Button
@@ -126,6 +118,19 @@ export default function CommercialProfileEditor({
                   }
                 />
               </SimpleGrid>
+              {groupedModes.filter(mode => mode.conditions[0].groupId === group.id).map(renderMode)}
+              <Button type="button" variant="light" disabled={disabled || value.modes.length > 98
+                || groupedModes.some(mode => mode.conditions[0].groupId === group.id)}
+                onClick={() => {
+                  const without = newCommercialMode();
+                  const withPart = newCommercialMode();
+                  onChange({ ...value, modes: [...value.modes,
+                    { ...without, name: `Sin ${group.name || 'implemento'}`, conditions: [{ groupId: group.id, presence: 'ABSENT' }],
+                      parts: [{ groupId: group.id, treatment: 'INCLUDED' }] },
+                    { ...withPart, name: `Con ${group.name || 'implemento'}`, conditions: [{ groupId: group.id, presence: 'PRESENT', minimumQuantity: 1 }],
+                      parts: [{ groupId: group.id, treatment: 'INCLUDED' }] },
+                  ] });
+                }}>Crear alternativas con / sin</Button>
               <Button
                 type="button"
                 color="red"
@@ -161,11 +166,11 @@ export default function CommercialProfileEditor({
         ))}
       </Stack> : null}
       <Stack gap="sm">
-        <Text fw={700}>Tarifas y mínimos</Text>
+        <Text fw={700}>Otras combinaciones</Text>
         <Text size="sm" c="dimmed">
-          Define cuándo aplica cada cobro.
+          Precio c/u × cantidad calculada en el anexo.
         </Text>
-        <SimpleGrid cols={{ base: 1, sm: 3 }} style={{ alignItems: "end" }}>
+        <Group>
           <Button
             type="button"
             variant="light"
@@ -177,98 +182,16 @@ export default function CommercialProfileEditor({
               })
             }
           >
-            Agregar modalidad
+            Agregar combinación
           </Button>
-          {value.groups.length ? (
-            <Select
-              label="Alternativa según un grupo"
-              placeholder="Escoge el implemento"
-              data={groupOptions}
-              value={alternateGroup}
-              disabled={disabled}
-              onChange={setAlternateGroup}
-            />
-          ) : null}
-          {value.groups.length ? (
-            <Button
-              type="button"
-              variant="default"
-              disabled={
-                disabled ||
-                !alternateGroup ||
-                !value.groups.some((group) => group.id === alternateGroup) ||
-                value.modes.length > 98
-              }
-              onClick={() => {
-                if (!alternateGroup) return;
-                const without = newCommercialMode();
-                const withPart = newCommercialMode();
-                onChange({
-                  ...value,
-                  modes: [
-                    ...value.modes,
-                    {
-                      ...without,
-                      name: "Sin implemento",
-                      conditions: [
-                        { groupId: alternateGroup, presence: "ABSENT" },
-                      ],
-                    },
-                    {
-                      ...withPart,
-                      name: "Con implemento",
-                      conditions: [
-                        {
-                          groupId: alternateGroup,
-                          presence: "PRESENT",
-                          minimumQuantity: 1,
-                        },
-                      ],
-                    },
-                  ],
-                });
-              }}
-            >
-              Crear alternativas con / sin
-            </Button>
-          ) : null}
-        </SimpleGrid>
-        {value.modes.map((mode) => (
-          <CommercialModeCard
-            key={mode.id}
-            mode={mode}
-            groups={value.groups}
-            disabled={disabled}
-            onChange={(updated) =>
-              onChange({
-                ...value,
-                modes: value.modes.map((row) =>
-                  row.id === updated.id ? updated : row,
-                ),
-              })
-            }
-            onRemove={() =>
-              onChange({
-                ...value,
-                modes: value.modes.filter((row) => row.id !== mode.id),
-              })
-            }
-          />
-        ))}
+        </Group>
+        {value.modes.filter(mode => !groupedModes.includes(mode)).map(renderMode)}
         {!value.modes.length ? (
           <Text size="sm" c="dimmed">
-            Agrega una modalidad para definir tarifa y mínimo.
+            Agrega una combinación para definir precio y mínimo.
           </Text>
         ) : null}
       </Stack>
-      <details>
-        <Text component="summary" size="sm" c="dimmed" style={{ cursor: 'pointer' }}>Ayuda de cobros</Text>
-        <Stack gap="xs" mt="sm">
-          <Text size="sm">Las condiciones usan lo realmente entregado. Configurar cobros no mueve inventario ni modifica anexos históricos.</Text>
-          <Text size="sm">Una tarifa vacía queda pendiente; escribe 0 si no hay cobro. El mínimo de horas aplica por día trabajado y el de días o metros por alquiler completo.</Text>
-          <Text size="sm">Los grupos pueden incluir piezas concretas o familias cuyas unidades se eligen en la remisión.</Text>
-        </Stack>
-      </details>
     </Stack>
   );
 }

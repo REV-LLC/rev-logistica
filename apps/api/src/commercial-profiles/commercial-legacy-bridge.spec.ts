@@ -57,6 +57,7 @@ const origin = {
 };
 const mock = (rows: unknown[] = [source]) => ({
   legacyEquipmentOrigin: { findMany: jest.fn().mockResolvedValue([origin]) },
+  implementIdentityBridge: { findMany: jest.fn().mockResolvedValue([]) },
   stockLedger: { findMany: jest.fn().mockResolvedValue(rows) },
 });
 describe('read-only reviewed legacy bridge', () => {

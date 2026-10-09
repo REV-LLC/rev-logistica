@@ -30,8 +30,11 @@ export type InventoryDocumentOrigin = {
   parentLegacyOriginId?: string;
   componentParentAssetId?: string;
   returnSourceLabel?: string;
+  deliveryFuel?: 'ELECTRICO' | 'GASOLINA';
 };
 export type InventoryItemPickerBulkItem = InventoryDocumentOrigin & {
+  isImplement?: boolean;
+  isConsumable?: boolean;
   sourceWarehouseId?: string | null;
   skuId: string;
   skuName: string | null;
@@ -42,6 +45,7 @@ export type InventoryItemPickerBulkItem = InventoryDocumentOrigin & {
 };
 
 export type InventoryItemPickerSerialItem = SerialAssetCardItem & InventoryDocumentOrigin & {
+  isImplement?: boolean;
   quantity: number;
   skuId?: string | null;
   ownerWarehouseId: string | null;

@@ -1,7 +1,6 @@
 import { DocumentType, MovementType, StockLedger, WarehouseType } from '@prisma/client';
 import { AssetsService } from '../assets/assets.service';
 import { InventoryService } from './inventory.service';
-import { createEquipmentMotor } from '../accessories/equipment-motor';
 
 describe('serialized catalogue creation followed by historical delivery', () => {
   const registered = new Date('2026-09-04T16:00:00.000Z');
@@ -97,9 +96,6 @@ describe('serialized catalogue creation followed by historical delivery', () => 
       family: { id: 'family' }, subfamily: { id: 'subfamily' }, sku: { id: 'sku' },
       ownerWarehouseId, warehouseCurrentId, asset: { brand: 'ECOMAX' },
     }, 'operator')],
-    ['unified configurator motor creation', ({ tx, warehouseCurrentId }) => createEquipmentMotor(
-      tx as never, { warehouseOwnerId: ownerWarehouseId, warehouseCurrentId } as never, { fuel: 'GASOLINA', brand: 'HONDA' }, 'operator',
-    )],
     ['AssetsService.createAsset', ({ assets, warehouseCurrentId }) => assets.createAsset({
       skuId: 'sku', warehouseOwnerId: ownerWarehouseId, warehouseCurrentId, brand: 'ECOMAX',
     }, 'operator')],

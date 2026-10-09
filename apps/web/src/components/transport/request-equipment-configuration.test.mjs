@@ -132,55 +132,24 @@ test('saldo insuficiente no se inventa para cumplir un predeterminado', async ()
   assert.deepEqual(addDocumentParts([root], root, options), [root]);
 });
 
-test('motor asignado se incluye automáticamente sin ofrecer otros motores en el documento', async () => {
-  const { loadDocumentConfiguration } = moduleWithApi(async url => {
-    if (url.startsWith('/equipment-configurations/')) return { entries: [], motor: { configuration: 'INTERCHANGEABLE',
-      assignedMotorId: 'motor', assignedMotor: { id: 'motor', internalNumber: 8, sku: { name: 'HONDA' } } } };
-    assert.equal(url, '/inventory/warehouse/physical-origin');
-    return { serial: [{ assetId: 'motor', quantity: 1, skuName: 'HONDA', ownerWarehouseId: 'owner' },
-      { assetId: 'motor-alternative', quantity: 1, skuName: 'OTRO' }], bulk: [] };
-  });
-  const options = await loadDocumentConfiguration(root, context);
-  assert.equal(options.length, 1);
-  assert.equal(options[0].locked, true);
-  assert.equal(options[0].item.assetId, 'motor');
-  assert.equal(options[0].defaultIncluded, true);
-  const items = addDocumentParts([root], root, options);
-  assert.equal(items[1].componentParentAssetId, 'machine');
-});
-
-test('motor pendiente avisa que la asignación se hace en inventario, no consulta alternativas', async () => {
+test('una asignación histórica ya no agrega ni bloquea motores en una remisión', async () => {
   const { loadDocumentConfiguration } = moduleWithApi(async url => {
     assert.equal(url, '/equipment-configurations/assets/machine');
-    return { entries: [], motor: { configuration: 'INTERCHANGEABLE', assignedMotorId: null } };
+    return { entries: [], deliveryFuelSelectable: true, motor: { configuration: 'INTERCHANGEABLE', assignedMotorId: 'motor' } };
   });
-  const options = await loadDocumentConfiguration(root, context);
-  assert.equal(options.length, 1);
-  assert.equal(options[0].locked, true);
-  assert.match(options[0].unavailable, /inventario/);
+  let selectable = false;
+  const options = await loadDocumentConfiguration(root, { ...context, onDeliveryFuelSelectable: enabled => { selectable = enabled; } });
+  assert.equal(selectable, true);
+  assert.deepEqual(options, []);
   assert.deepEqual(addDocumentParts([root], root, options), [root]);
 });
-
-test('un motor averiado conserva su asignación, pero no se incluye como disponible en una remisión', async () => {
+test('tablet consulta la elección sin cargar implementos privados', async () => {
   const { loadDocumentConfiguration } = moduleWithApi(async url => {
-    if (url.startsWith('/equipment-configurations/')) return { entries: [], motor: { configuration: 'INTERCHANGEABLE',
-      assignedMotorId: 'motor', assignedMotor: { id: 'motor', internalNumber: 8, sku: { name: 'HONDA' } } } };
-    return { serial: [{ assetId: 'motor', quantity: 1, skuName: 'HONDA', isDamaged: true }], bulk: [] };
+    assert.equal(url, '/equipment-configurations/assets/machine');
+    return { entries: [{ accessoryId: 'private-catalog' }], deliveryFuelSelectable: true };
   });
-  const options = await loadDocumentConfiguration(root, context);
-  assert.match(options[0].unavailable, /averiado/);
-  assert.equal(options[0].item, undefined);
-  assert.deepEqual(addDocumentParts([root], root, options), [root]);
-});
-
-test('tablet incorpora el motor asignado sin consultar catálogos ni cambiar permisos de accesorios', async () => {
-  const { loadDocumentConfiguration } = moduleWithApi(async url => {
-    if (url.startsWith('/equipment-configurations/')) return { entries: [{ accessoryId: 'private-catalog' }], motor: {
-      configuration: 'INTERCHANGEABLE', assignedMotorId: 'motor', assignedMotor: { sku: { name: 'MOTOR' }, internalNumber: 1 } } };
-    assert.equal(url, '/inventory/warehouse/physical-origin');
-    return { serial: [{ assetId: 'motor', quantity: 1, skuName: 'MOTOR' }], bulk: [] };
-  });
-  const options = await loadDocumentConfiguration(root, { ...context, motorOnly: true });
-  assert.equal(options.length, 1);
-  assert.equal(addDocumentParts([root], root, options)[1].assetId, 'motor');
+  let selectable = false;
+  const options = await loadDocumentConfiguration(root, { ...context, includeImplements: false, onDeliveryFuelSelectable: enabled => { selectable = enabled; } });
+  assert.equal(selectable, true);
+  assert.deepEqual(options, []);
 });

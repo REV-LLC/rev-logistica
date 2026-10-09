@@ -42,6 +42,7 @@ function ItemRow(props: RequestSelectedItemsProps & { node: RequestItemGroup; de
   const panelId = `configuration-${item.selectionId}`;
   const details = <>
     <Text fw={600} style={{ overflowWrap: 'anywhere' }}>{item.name}</Text>
+    {props.docType === 'RETURN' && item.deliveryFuel ? <Text size="sm">Motor: {item.deliveryFuel === 'ELECTRICO' ? 'Eléctrico' : 'Gasolina'}</Text> : null}
     {props.docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {props.warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
     {item.serial ? <Text size="xs" c="dimmed">{item.serial}</Text> : null}
     {children.length ? <Text size="xs" c="teal">{children.length} pieza(s) incluida(s){expanded ? '' : ' · Ver configuración'}</Text> : null}

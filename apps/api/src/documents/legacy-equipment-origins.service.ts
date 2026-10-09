@@ -104,9 +104,9 @@ export class LegacyEquipmentOriginsService {
           });
           const motorParent =
             child.kind === 'MOTOR'
-              ? await tx.asset.findFirst({
-                  where: { id: parentId, assignedMotorId: child.id },
-                  select: { id: true },
+              ? await tx.retiredMotorConfiguration.findFirst({
+                  where: { assetId: parentId, snapshot: { path: ['assignedMotorId'], equals: child.id } },
+                  select: { assetId: true },
                 })
               : null;
           if (!configured && !motorParent)

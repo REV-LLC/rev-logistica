@@ -62,6 +62,7 @@ async function fixture() {
 }
 test("generic breadcrumb navigates X → Y → Z and blocks cycles by identity", async () => {
   const f = await fixture();
+  assert.equal(f.container.querySelector('a[href="/inventory"]'), null, "no inventory return button in the configurator");
   assert.equal(f.container.querySelectorAll("button").length, 0, "no inert button on the root equipment");
   await act(() =>
     f.handlers().onConfigurePart({ accessoryId: "y", label: "Implemento Y" }),

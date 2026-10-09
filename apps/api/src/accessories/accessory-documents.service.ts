@@ -4,6 +4,7 @@ import { AccessoriesService } from './accessories.service';
 import { isCompatible, Location } from './accessory-rules';
 import { resolveLatestSerializedMovements } from '../inventory/serialized-ledger-location';
 import { isDocumentCompositionV2 } from '../documents/document-composition';
+import { assertLegacyImplementWritable } from './implement-identity-rules';
 
 type AccessoryDocument = Document & { items: DocumentItem[] };
 
@@ -69,8 +70,9 @@ export class AccessoryDocumentsService {
     for (const line of lines) {
       const accessory = await tx.accessory.findUniqueOrThrow({
         where: { id: line.accessoryId! },
-        include: { subfamilies: true, assets: true, compatibleParents: true },
+        include: { subfamilies: true, assets: true, compatibleParents: true, implementBridge: { select: { assetId: true } } },
       });
+      assertLegacyImplementWritable(accessory);
       const parent = parents.find(
         (asset) => asset.id === line.componentParentAssetId,
       );

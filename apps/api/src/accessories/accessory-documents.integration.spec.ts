@@ -5,6 +5,7 @@ import { DocumentsService } from '../documents/documents.service';
 import { AccessoriesService } from './accessories.service';
 import { ProviderReturnsService } from '../provider-returns/provider-returns.service';
 import { DocumentType, InventorySourceMode, Role } from '@prisma/client';
+import { documentReturnOrigins } from '../documents/document-return-origins';
 
 const testUrl = process.env.ACCESSORY_TEST_DATABASE_URL;
 if (testUrl) {
@@ -246,6 +247,26 @@ if (testUrl) {
       siteId = siteIds[0],
       destinationId = warehouseId,
     ) {
+      // Current documentary fixtures choose the exact shipment line, just as
+      // the worksite picker does. Never bypass origin validation in services.
+      const origins = await documentReturnOrigins(prisma, siteId);
+      items = items.map(item => {
+        if (type === 'RETURN' && !item.sourceDocumentItemId) {
+          const matches = origins.filter(origin => item.assetId ? origin.assetId === item.assetId
+            : item.accessoryId ? origin.accessoryId === item.accessoryId && origin.componentParentAssetId === item.componentParentAssetId
+            : origin.skuId === item.skuId && origin.ownerWarehouseId === item.ownerWarehouseId);
+          if (matches.length > 1) throw new Error('QA return fixture must select its shipment explicitly.');
+          if (matches[0]) return { ...item, sourceDocumentItemId: matches[0].sourceDocumentItemId,
+            ...(matches[0].parentSourceDocumentItemId ? { parentSourceDocumentItemId: matches[0].parentSourceDocumentItemId } : {}) };
+        }
+        if (type === 'REMISSION' && item.accessoryId && item.componentParentAssetId &&
+            !items.some(parent => parent.assetId === item.componentParentAssetId)) {
+          const matches = origins.filter(origin => origin.assetId === item.componentParentAssetId);
+          if (matches.length !== 1) throw new Error('QA replenishment fixture needs an unambiguous shipment parent.');
+          return { ...item, parentSourceDocumentItemId: matches[0].sourceDocumentItemId };
+        }
+        return item;
+      });
       const doc = await documents.createRequestDocument({
         type,
         items,
@@ -552,7 +573,7 @@ if (testUrl) {
       ]);
       await expect(
         documents.approveRequestDocument(excessive.id, userId),
-      ).rejects.toThrow('existencias suficientes');
+      ).rejects.toThrow('supera lo pendiente');
       await expect(
         accessories.move(
           accessory.id,

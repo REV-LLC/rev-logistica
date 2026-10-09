@@ -45,10 +45,6 @@ export default function ConfigurationEntryOptions({
     !!draft.assetId ||
     draft.newPart?.kind === "INDIVIDUAL" ||
     draft.accessory?.kind === "INDIVIDUAL";
-  const singleFamily =
-    !!draft.familyId &&
-    draft.family?.controlType === "SERIAL" &&
-    draft.maximumQuantity === 1;
   const patch = (changes: Partial<ConfigurationEntry>) => {
     setDraft((previous) => ({ ...previous, ...changes }));
     setError("");
@@ -164,12 +160,11 @@ export default function ConfigurationEntryOptions({
         ) : null}
         {draft.familyId ? (
           <Text size="sm" c="dimmed">
-            Esta opción permite usar equipos de esa familia. La pieza concreta
-            se selecciona al preparar la entrega.
+            Se propondrán unidades de esta familia al preparar el documento.
           </Text>
         ) : (
           <Checkbox
-            label="Agregar automáticamente a la entrega"
+            label="Proponer al preparar el documento"
             checked={draft.defaultIncluded}
             disabled={disabled}
             onChange={(event) =>
@@ -177,44 +172,16 @@ export default function ConfigurationEntryOptions({
             }
           />
         )}
-        <Checkbox
-          label="No permitir una entrega sin este elemento"
-          checked={draft.required}
-          disabled={disabled}
-          onChange={(event) => patch({ required: event.currentTarget.checked })}
-        />
-        {!individual && !singleFamily ? (
-          <>
-            <NumberInput
-              label="Cantidad por entrega"
-              min={1}
-              max={1000000}
-              allowDecimal={false}
-              disabled={disabled}
-              value={draft.quantity}
-              onChange={(value) => patch({ quantity: Number(value) })}
-            />
-            <details>
-              <summary style={{ cursor: "pointer", fontSize: 14 }}>
-                Límite de cantidad
-              </summary>
-              <NumberInput
-                label="Máximo por entrega"
-                placeholder="Sin límite"
-                mt="sm"
-                min={draft.quantity}
-                max={1000000}
-                allowDecimal={false}
-                disabled={disabled}
-                value={draft.maximumQuantity ?? ""}
-                onChange={(value) =>
-                  patch({
-                    maximumQuantity: typeof value === "number" ? value : null,
-                  })
-                }
-              />
-            </details>
-          </>
+        {!individual ? (
+          <NumberInput
+            label="Cantidad recomendada"
+            min={1}
+            max={1000000}
+            allowDecimal={false}
+            disabled={disabled}
+            value={draft.quantity}
+            onChange={(value) => patch({ quantity: Number(value) })}
+          />
         ) : null}
         {error ? (
           <Text role="alert" c="red" size="sm">
@@ -274,16 +241,7 @@ export default function ConfigurationEntryOptions({
                 setError(issue);
                 return;
               }
-              if (
-                draft.maximumQuantity != null &&
-                draft.maximumQuantity < draft.quantity
-              ) {
-                setError(
-                  "El máximo no puede ser menor que la cantidad por entrega.",
-                );
-                return;
-              }
-              onApply(draft);
+              onApply({ ...draft, required: false, maximumQuantity: null });
             }}
           >
             {creating ? "Agregar al conjunto" : "Aplicar"}

@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Checkbox, Group, Loader, Stack, Text } from '@man
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { SelectedItem } from './request-types';
 import { removeRequestItem } from './request-item-groups';
-import { addDocumentParts, availableForDocument, loadDocumentConfiguration, sameDocumentPart,
+import { addDocumentParts, availableForDocument, documentTemplateRouteStatus, loadDocumentConfiguration, sameDocumentPart,
   type ConfigurationContext, type DocumentPartOption } from './request-equipment-configuration';
 
 type Props = ConfigurationContext & {
@@ -31,8 +31,19 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
     return () => controller.abort();
   }, [assetId, accessoryId, accessoryKind, componentParentAssetId, sourceDocumentItemId, sourceWarehouseId, selectionId, docType, customerWorksiteId, revision]);
 
+  const route = docType === 'REMISSION' && !loading && !error
+    ? documentTemplateRouteStatus(parent, options, selectedItems) : null;
+
   return <Stack gap="sm">
-    <Text fw={700}>Configuración de este documento</Text>
+    <Group justify="space-between" gap="xs">
+      <Text fw={700}>Configuración de este documento</Text>
+      {route ? <Badge variant="light" color={route.complete ? 'teal' : 'gray'}
+        title={route.complete ? 'Todas las familias de la ruta están incluidas.' : route.status === 'UNVERIFIED'
+          ? 'Hay líneas vinculadas cuya familia no está identificada. Revisa la ruta antes de confirmar.'
+          : `Falta: ${route.missingFamilyNames.join(', ')}`}>
+        {route.complete ? 'Ruta completa' : route.status === 'UNVERIFIED' ? 'Ruta por verificar' : `Ruta parcial ${route.present}/${route.total}`}
+      </Badge> : null}
+    </Group>
     <Text size="sm" c="dimmed">{docType === 'REMISSION'
       ? 'Marca lo que acompaña al equipo. Los cambios no modifican su configuración de inventario.'
       : 'Selecciona lo que regresa. Se muestran existencias pendientes en esta obra, no los valores predeterminados del inventario.'}</Text>
@@ -44,9 +55,6 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
     {options.map(option => {
       const selected = selectedItems.filter(item => option.item ? sameDocumentPart(item, option.item) : false);
       const available = option.item ? availableForDocument(option.item, selectedItems) : 0;
-      if (option.locked) return <Alert key={option.key} color={option.unavailable ? 'orange' : 'blue'} title="Motor asignado en inventario">
-        {option.name}. {option.unavailable ?? 'Se incluye el motor asignado. Para cambiarlo o desasignarlo, edita el equipo en inventario.'}
-      </Alert>;
       return <Group key={option.key} align="start" justify="space-between" wrap="wrap">
         <div style={{ flex: 1, minWidth: 180 }}>
           <Checkbox label={option.name} checked={selected.length > 0}
@@ -63,7 +71,7 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
             : `Cantidad propuesta: ${option.quantity} · Disponible: ${available}`)}</Text>
         </div>
         <Group gap={4}>
-          <Badge variant="light" color={option.role === 'COMPONENT' ? 'blue' : 'teal'}>{option.role === 'COMPONENT' ? 'Componente' : 'Accesorio'}</Badge>
+          <Badge variant="light" color="teal">Implemento</Badge>
           {option.defaultIncluded ? <Badge variant="outline" color="gray">Predeterminado</Badge> : null}
           {option.required ? <Badge color="orange" variant="light">Requerido</Badge> : null}
         </Group>
@@ -74,6 +82,5 @@ export default function RequestEquipmentConfiguration({ parent, docType, custome
         setSelectedItems(current => addDocumentParts(current, parent, options.filter(option => option.defaultIncluded)))}>
         Agregar predeterminados disponibles
       </Button> : null}
-    {options.some(option => option.required) ? <Text size="xs" c="dimmed">Antes de aprobar la remisión se comprueba que estén las piezas requeridas y sus cantidades. En una familia requerida puedes elegir la unidad disponible.</Text> : null}
   </Stack>;
 }

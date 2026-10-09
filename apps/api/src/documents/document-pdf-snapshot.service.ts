@@ -191,6 +191,7 @@ export class DocumentPdfSnapshotService {
             accessoryCode: true,
             quantity: true,
             requestedTag: true,
+            deliveryFuel: true,
             conditionNote: true,
             sku: {
               select: {

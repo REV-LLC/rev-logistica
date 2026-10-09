@@ -10,6 +10,8 @@ export type CommercialNode = {
   assetId?: string;
   skuId?: string;
   accessoryId?: string;
+  legacyAccessoryId?: string;
+  projectionReviewReason?: string;
   familyId?: string;
   label: string;
   quantity: number;
@@ -27,6 +29,11 @@ export function resolveComposition(
     const cached = resolved.get(id);
     if (cached) return cached;
     const node = byId.get(id)!;
+    if (node.projectionReviewReason) {
+      const snapshot: CommercialSnapshot = { schemaVersion: 2, status: 'REVIEW', parts: [], reason: node.projectionReviewReason };
+      resolved.set(id, snapshot);
+      return snapshot;
+    }
     if (resolving.has(id))
       return {
         status: 'REVIEW',
@@ -44,6 +51,7 @@ export function resolveComposition(
         ...(child.assetId ? { assetId: child.assetId } : {}),
         ...(child.skuId ? { skuId: child.skuId } : {}),
         ...(child.accessoryId ? { accessoryId: child.accessoryId } : {}),
+        ...(child.legacyAccessoryId ? { legacyAccessoryId: child.legacyAccessoryId } : {}),
         ...(child.familyId ? { familyId: child.familyId } : {}),
         label: child.label,
         quantity: child.quantity,
@@ -67,7 +75,7 @@ export function resolveComposition(
             status: 'REVIEW',
             reason:
               'No existe modalidad comercial congelada para este elemento',
-            parts: parts.map((p) => ({ ...p, treatment: 'REVIEW' })),
+            parts: parts.map(({ legacyAccessoryId: _alias, ...p }) => ({ ...p, treatment: 'REVIEW' })),
           };
     if (node.parentId && byId.has(node.parentId)) {
       const parent = resolve(node.parentId);

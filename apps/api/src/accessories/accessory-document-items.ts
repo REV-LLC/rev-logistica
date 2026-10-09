@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { prepareDocumentComposition } from '../documents/document-composition';
+import { assertLegacyImplementWritable } from './implement-identity-rules';
 
 /** Capture catalogue labels server-side. Drafts do not reserve or move stock. */
 export async function prepareAccessoryDocumentItems(
@@ -11,8 +12,13 @@ export async function prepareAccessoryDocumentItems(
   items = await prepareDocumentComposition(tx, items, documentDate);
   const lines = items.filter((item) => item.accessoryId);
   if (!lines.length) return items;
+  // Coordinate with identity promotion: no legacy draft may pass the guard and
+  // then persist after the accessory row has been promoted in another transaction.
+  for (const id of [...new Set(lines.map(item => item.accessoryId!))].sort())
+    await tx.$queryRaw`SELECT id FROM "Accessory" WHERE id = ${id} FOR SHARE`;
   const accessories = await tx.accessory.findMany({
     where: { id: { in: lines.map((item) => item.accessoryId!) } },
+    include: { implementBridge: { select: { assetId: true } } },
   });
   const parents = await tx.asset.findMany({
     where: {
@@ -27,6 +33,7 @@ export async function prepareAccessoryDocumentItems(
   return items.map((line) => {
     if (!line.accessoryId) return line;
     const accessory = accessories.find((item) => item.id === line.accessoryId);
+    if (accessory) assertLegacyImplementWritable(accessory);
     const parent = parents.find(
       (asset) => asset.id === line.componentParentAssetId,
     );

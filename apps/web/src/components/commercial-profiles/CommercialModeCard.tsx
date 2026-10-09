@@ -49,22 +49,22 @@ export default function CommercialModeCard({
     >
       <summary style={{ cursor: "pointer" }}>
         <Text component="span" fw={700}>
-          {mode.name || "Nueva modalidad"} · {unitLabels[mode.unit]}
+          {mode.name || "Nueva combinación"}
         </Text>
         <Text size="sm" c="dimmed" mt={4}>
           {mode.pricing.source === "CATALOG"
             ? "Tarifa de catálogo"
             : mode.pricing.amount
-              ? `$ ${Number(mode.pricing.amount).toLocaleString("es-CO")}`
+              ? `$ ${Number(mode.pricing.amount).toLocaleString("es-CO")} c/u`
               : "Tarifa pendiente"}
           {" · Mínimo "}
-          {mode.minimum.value || "0"} {unitLabels[mode.unit].toLowerCase()}
+          {mode.minimum.value || "0"}
         </Text>
       </summary>
       <Stack gap="md" mt="md">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput
-            label="Nombre de la modalidad"
+            label="Nombre de la combinación"
             placeholder="Ej. Alquiler con implemento"
             required
             maxLength={120}
@@ -74,52 +74,9 @@ export default function CommercialModeCard({
               onChange({ ...mode, name: event.currentTarget.value })
             }
           />
-          <Select
-            label="Unidad de cobro"
-            required
-            allowDeselect={false}
-            value={mode.unit}
-            disabled={disabled}
-            data={Object.entries(unitLabels).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-            onChange={(unit) => {
-              if (unit)
-                onChange({
-                  ...mode,
-                  unit: unit as CommercialUnit,
-                  minimum: {
-                    value: "0",
-                    basis: unit === "HOUR" ? "PER_REPORTED_DAY" : "PER_RENTAL",
-                  },
-                  pricing: { source: "FIXED", amount: "" },
-                });
-            }}
-            description="Cambiar unidad reinicia tarifa y mínimo."
-          />
-          <Select
-            label="Tipo de tarifa"
-            value={mode.pricing.source}
-            allowDeselect={false}
-            disabled={disabled}
-            data={[
-              { value: "FIXED", label: "Tarifa de esta modalidad" },
-              { value: "CATALOG", label: "Tarifa del catálogo (misma unidad)" },
-            ]}
-            onChange={(source) =>
-              onChange({
-                ...mode,
-                pricing:
-                  source === "CATALOG"
-                    ? { source: "CATALOG" }
-                    : { source: "FIXED", amount: "" },
-              })
-            }
-          />
           {mode.pricing.source === "FIXED" ? (
             <NumberInput
-              label={`Tarifa por ${mode.unit === "DAY" ? "día" : mode.unit === "HOUR" ? "hora" : "metro"}`}
+              label="Precio c/u"
               description="Sin cobro: escribe 0."
               required
               min={0}
@@ -142,7 +99,7 @@ export default function CommercialModeCard({
             </Text>
           )}
           <NumberInput
-            label={`Mínimo de ${unitLabels[mode.unit].toLowerCase()}`}
+            label="Cantidad mínima a cobrar"
             min={0}
             max={
               mode.unit === "HOUR" ? 24 : mode.unit === "DAY" ? 999 : 9999999999
@@ -164,6 +121,22 @@ export default function CommercialModeCard({
             }
           />
         </SimpleGrid>
+        <details>
+          <summary style={{ cursor: 'pointer' }}>Cálculo automático · {unitLabels[mode.unit]}</summary>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} mt="sm">
+            <Select label="De dónde sale la cantidad" allowDeselect={false} value={mode.unit} disabled={disabled}
+              data={[{ value: 'DAY', label: 'Días del alquiler' }, { value: 'HOUR', label: 'Horas reportadas' },
+                { value: 'METER', label: 'Metros reportados' }]}
+              description="Cambiar el cálculo reinicia precio y mínimo."
+              onChange={unit => { if (unit && unit !== mode.unit) onChange({ ...mode, unit: unit as CommercialUnit,
+                minimum: { value: '0', basis: unit === 'HOUR' ? 'PER_REPORTED_DAY' : 'PER_RENTAL' },
+                pricing: { source: 'FIXED', amount: '' } }); }} />
+            <Select label="Tipo de tarifa" value={mode.pricing.source} allowDeselect={false} disabled={disabled}
+              data={[{ value: 'FIXED', label: 'Precio de esta combinación' }, { value: 'CATALOG', label: 'Precio del catálogo (mismo cálculo)' }]}
+              onChange={source => { if (source && source !== mode.pricing.source) onChange({ ...mode,
+                pricing: source === 'CATALOG' ? { source: 'CATALOG' } : { source: 'FIXED', amount: '' } }); }} />
+          </SimpleGrid>
+        </details>
         <Stack gap="xs">
           <Text fw={600}>Cuándo aplica</Text>
           {!mode.conditions.length ? (
@@ -333,7 +306,7 @@ export default function CommercialModeCard({
           disabled={disabled}
           onClick={onRemove}
         >
-          Quitar modalidad
+          Quitar combinación
         </Button>
       </Stack>
     </Card>

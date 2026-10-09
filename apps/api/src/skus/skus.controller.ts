@@ -56,6 +56,10 @@ export class SkusController {
   ) {
     return this.skusService.listProviderPrices({ providerWarehouseId, skuId });
   }
+  @Get(':skuId')
+  getSku(@Param('skuId', new ParseUUIDPipe()) skuId: string) {
+    return this.skusService.getSku(skuId);
+  }
 
   @Put(':skuId/provider-prices/:providerWarehouseId')
   upsertProviderPrice(

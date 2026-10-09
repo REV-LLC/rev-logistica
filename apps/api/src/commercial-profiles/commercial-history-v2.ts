@@ -1,4 +1,5 @@
 import { legacyCommercialBridge } from './commercial-legacy-bridge';
+import { documentDeliveryLabel } from '../documents/document-delivery-fuel';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { commercialBusinessDate, usesCommercialV2 } from './commercial-cutoff';
@@ -8,6 +9,7 @@ import {
   type CommercialNode,
 } from './commercial-composition';
 import type { CommercialSnapshot } from './commercial-profile.input';
+import { promotedImplementProjectionEvidence, projectReviewedImplementCutovers } from './promoted-implement-commercial-bridge';
 
 export const commercialDocumentInclude = {
   items: {
@@ -32,6 +34,7 @@ export function commercialNodesAt(
   const nodes = deliveries.flatMap((doc) =>
     doc.items.map((item) => {
       const sku = item.asset?.sku ?? item.sku;
+      const promotion = promotedImplementProjectionEvidence(item, date);
       const parent = item.parentCompositionNodeId
         ? doc.items.find(
             (p) => p.compositionNodeId === item.parentCompositionNodeId,
@@ -54,9 +57,12 @@ export function commercialNodesAt(
         assetId: item.assetId ?? undefined,
         skuId: sku?.id,
         accessoryId: item.accessoryId ?? undefined,
+        ...(promotion ? { legacyAccessoryId: promotion.legacyAccessoryId, projectionReviewReason: promotion.reviewReason } : {}),
         familyId: sku?.assetFamilyId ?? undefined,
-        label:
+        label: documentDeliveryLabel(
           sku?.name ?? item.accessory?.name ?? item.accessoryName ?? 'Elemento',
+          item.assetId ? item.deliveryFuel : null,
+        ),
         quantity: (item.assetId ? 1 : Number(item.quantity ?? 1)) - returned,
         snapshot:
           (item.commercialSnapshot as unknown as CommercialSnapshot | null) ?? {
@@ -118,6 +124,7 @@ export async function documentCommercialSnapshotsV2(
         skuId: sku?.id,
         familyId: sku?.assetFamilyId,
         accessoryId: item.accessoryId ?? undefined,
+        isImplement: item.asset?.isImplement ?? sku?.isImplement,
       },
       date,
     );
@@ -148,7 +155,7 @@ export async function documentCommercialSnapshotsV2(
     ? await legacyCommercialBridge(tx, doc.customerWorksiteId, date)
     : { documents: [] };
   const snapshots = resolveComposition(
-    commercialNodesAt([...documents, ...bridge.documents, doc], date),
+    commercialNodesAt([...projectReviewedImplementCutovers(documents, bridge.documents), ...bridge.documents, doc], date),
   );
   const result = new Map<string, CommercialSnapshot>();
   for (const item of doc.items) {

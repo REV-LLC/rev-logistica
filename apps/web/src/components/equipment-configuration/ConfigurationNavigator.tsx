@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import type { ConfigurationLocation } from "./types";
-import classes from "./ConfigurationEditor.module.css";
 
 export type ConfigurationNavigation = {
   onConfigurePart: (location: ConfigurationLocation) => void;
@@ -15,7 +14,7 @@ export type ConfigurationNavigation = {
 const locationKey = (location: ConfigurationLocation) =>
   location.assetId
     ? `asset:${location.assetId}`
-    : `accessory:${location.accessoryId}`;
+    : location.skuId ? `sku:${location.skuId}` : `accessory:${location.accessoryId}`;
 
 export default function ConfigurationNavigator({
   root,
@@ -62,9 +61,6 @@ export default function ConfigurationNavigator({
   };
   return (
     <Stack gap="lg">
-      <a className={classes.backLink} href="/inventory" onClick={event => {
-        if (busy || (dirty && !window.confirm("Hay cambios sin guardar. ¿Descartarlos y volver al inventario?"))) event.preventDefault();
-      }}>Volver al inventario</a>
       {trail.length > 1 ? (
         <Group gap="xs" aria-label="Ruta del conjunto" style={{ minWidth: 0 }}>
           {trail.slice(0, -1).map((location, index) => (

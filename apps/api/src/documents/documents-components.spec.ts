@@ -35,11 +35,11 @@ describe('Document component contract after unified configuration cutover', () =
   it('never duplicates a physical identity', async () => {
     await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket')])).rejects.toThrow('dos veces');
   });
-  it('preserves quantity limits', async () => {
-    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).rejects.toThrow('máximo 1');
+  it('does not enforce quantity caps stored by the previous model', async () => {
+    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).resolves.toBeUndefined();
   });
-  it('names a missing required part and the equipment number', async () => {
-    await expect(fixture(true).validate([item('loader')])).rejects.toThrow('MINICARGADOR #3 requiere 1 de BALDES');
+  it('allows an old required implement to be omitted without editing its historical rule', async () => {
+    await expect(fixture(true).validate([item('loader')])).resolves.toBeUndefined();
   });
   it('accepts a required part with its parent reference', async () => {
     await expect(fixture(true).validate([item('loader'), item('bucket', 'loader')])).resolves.toBeUndefined();
@@ -62,9 +62,10 @@ describe('Document component contract after unified configuration cutover', () =
     f.tx.documentItem.findMany.mockResolvedValue([{ assetId: 'wrong', componentParentAssetId: 'loader' }] as never);
     await expect(f.validate([item('loader'), item('wrong', 'loader')], 'RETURN')).resolves.toBeUndefined();
   });
-  it('exposes a general correction error, not a motor-only recovery workflow', async () => {
-    await expect(fixture(true).validate([item('loader')])).rejects.toMatchObject({
-      response: { code: 'MISSING_EQUIPMENT_PART' },
-    });
+  it('does not rewrite a stored legacy requirement while validating a new document', async () => {
+    const f = fixture(true);
+    const previous = { ...f.entry };
+    await expect(f.validate([item('loader')])).resolves.toBeUndefined();
+    expect(f.entry).toEqual(previous);
   });
 });
