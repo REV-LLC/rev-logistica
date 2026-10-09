@@ -3,6 +3,9 @@ import { EmployeeRole, Role } from '@prisma/client';
 
 export class UpdateEmployeeDto {
   @IsOptional()
+  @IsBoolean()
+  payrollEnabled?: boolean;
+  @IsOptional()
   @IsString()
   name?: string;
 
