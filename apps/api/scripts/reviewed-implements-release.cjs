@@ -15,6 +15,11 @@ const { resolveComposition } = require('../dist/src/commercial-profiles/commerci
 const value = name => process.argv.find(v => v.startsWith('--' + name + '='))?.slice(name.length + 3);
 const mode = value('mode') ?? 'preview';
 const target = value('target') ?? 'rehearsal';
+// A remote operator connection has higher round-trip latency than a rehearsal
+// clone. Keep a bounded, explicit window; individual SQL statements and lock
+// acquisition retain their short limits, and every invariant still rolls back.
+const transactionTimeout = Number(value('transaction-timeout-ms') ?? 60000);
+assert(Number.isInteger(transactionTimeout) && transactionTimeout >= 60000 && transactionTimeout <= 180000);
 const rollback = new Error('REVIEWED_RELEASE_ROLLBACK');
 const json = v => JSON.parse(JSON.stringify(v));
 const tables = ['Document','DocumentItem','Accessory','AccessoryBalance','AccessoryMovement','AccessoryRevision','AccessoryAsset','AccessorySubfamily','LegacyEquipmentOrigin','AnnexDraftRevision'];
@@ -145,7 +150,7 @@ async function run(variables) {
   await tx.$executeRawUnsafe('SET CONSTRAINTS ALL IMMEDIATE');
   report={...report,status:mode==='exercise'?'EXERCISED_WITH_FULL_ROLLBACK':'APPLIED',converted,historicalRowsUnchanged:true,existingLedgerUnchanged:true,replayWithoutDuplicates:true};
   if(mode==='exercise')throw rollback;
- },{timeout:60000});
+ },{timeout:transactionTimeout});
  }catch(e){if(e!==rollback)throw e;}finally{await db.$disconnect();}
  console.log(JSON.stringify(report));
 }
