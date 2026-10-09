@@ -15,6 +15,7 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  TextInput,
   ThemeIcon,
   Title,
 } from '@mantine/core';
@@ -22,6 +23,7 @@ import {
   IconCurrencyDollar,
   IconPencil,
   IconPlus,
+  IconSearch,
   IconUsers,
 } from '@tabler/icons-react';
 import EmployeeCard, {
@@ -58,6 +60,9 @@ const roleSortWeight: Partial<Record<EmployeeCardRecord['role'], number>> = {
 };
 
 function compareEmployeeCards(a: EmployeeCardRecord, b: EmployeeCardRecord) {
+  const statusDelta = Number(b.active) - Number(a.active);
+  if (statusDelta !== 0) return statusDelta;
+
   const roleDelta = (roleSortWeight[a.role] ?? 3) - (roleSortWeight[b.role] ?? 3);
   if (roleDelta !== 0) {
     return roleDelta;
@@ -149,6 +154,7 @@ function EmployeeCardDetails({
 export default function EmployeeCardsPage() {
 
   const [employees, setEmployees] = useState<EmployeeCardRecord[]>([]);
+  const [search, setSearch] = useState('');
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -188,7 +194,16 @@ export default function EmployeeCardsPage() {
     loadData();
   }, []);
 
-  const sortedEmployees = useMemo(() => [...employees].sort(compareEmployeeCards), [employees]);
+  const sortedEmployees = useMemo(() => {
+    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
+    const terms = normalize(search).split(/\s+/).filter(Boolean);
+    return employees
+      .filter(employee => {
+        const name = normalize(getEmployeeCardFullName(employee));
+        return terms.every(term => name.includes(term));
+      })
+      .sort(compareEmployeeCards);
+  }, [employees, search]);
 
   const openCreate = () => {
     setError(null);
@@ -363,6 +378,15 @@ export default function EmployeeCardsPage() {
           </Group>
         </Group>
 
+        <TextInput
+          type="search"
+          label="Buscar empleado"
+          placeholder="Buscar por nombre o apellido"
+          leftSection={<IconSearch size={18} />}
+          value={search}
+          onChange={event => setSearch(event.currentTarget.value)}
+        />
+
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
@@ -402,6 +426,11 @@ export default function EmployeeCardsPage() {
               />
             ))}
           </SimpleGrid>
+        ) : null}
+        {!loading && employees.length > 0 && sortedEmployees.length === 0 ? (
+          <Paper withBorder radius="lg" p="xl">
+            <Text ta="center" c="dimmed">No hay empleados que coincidan con la búsqueda.</Text>
+          </Paper>
         ) : null}
       </Stack>
 

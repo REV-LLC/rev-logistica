@@ -22,11 +22,13 @@ export default function EmployeePhotoControl({
   employee,
   size = 48,
   editable = false,
+  grayscale = false,
   onPreview,
 }: {
   employee: EmployeePhotoRecord;
   size?: number;
   editable?: boolean;
+  grayscale?: boolean;
   onPreview?: (employee: EmployeePhotoRecord) => void;
 }) {
   const [uploading, setUploading] = useState(false);
@@ -77,6 +79,7 @@ export default function EmployeePhotoControl({
             cursor: onPreview ? 'zoom-in' : 'default',
             display: 'block',
             padding: 0,
+            filter: grayscale ? 'grayscale(1)' : undefined,
           }}
         >
           <EmployeeAvatar employee={employee} size={size} />
