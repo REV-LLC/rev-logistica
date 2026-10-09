@@ -1,7 +1,9 @@
-# Nuevo módulo: Bitácora de empleados
+# Implementos en inventario y documentos
 
-Ahora Office y administración pueden llevar un calendario de actividades por empleado y registrar notas para cada día.
+Ahora los implementos con identidad propia se gestionan como equipos del inventario. Los retornables y consumibles por cantidad se gestionan como BULK.
 
-Encuéntralo en Operación → Bitácora de empleados, o abre la bitácora desde la ficha de un empleado.
+Desde la ficha del equipo puedes crear o agregar implementos compatibles y configurar sus precios, sin compartir automáticamente la tarifa de la máquina.
 
-Cada nota incluye fecha, obra, activo y descripción. Puedes buscar clientes y obras, editar las notas y eliminarlas cuando sea necesario.
+En las devoluciones, selecciona los implementos desde su pestaña dentro de las existencias de la obra. Se conserva el historial de los accesorios anteriores.
+
+Al entregar una mezcladora, elige si va eléctrica o a gasolina. Ya no es necesario asignarle un motor separado.
