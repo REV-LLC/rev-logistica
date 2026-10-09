@@ -23,6 +23,7 @@ describe('Employee activity notes', () => {
     employee: { findUnique: jest.fn() },
     customerWorksite: { findUnique: jest.fn() },
     asset: { findUnique: jest.fn() },
+    warehouse: { findUnique: jest.fn() },
     employeeActivityNote: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -37,6 +38,7 @@ describe('Employee activity notes', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.employee.findUnique.mockResolvedValue({ id: 'employee' });
+    prisma.warehouse.findUnique.mockResolvedValue({ active: true });
     prisma.customerWorksite.findUnique.mockResolvedValue({
       active: true,
       worksite: { active: true },
@@ -95,6 +97,7 @@ describe('Employee activity notes', () => {
           createdByUserId: 'author',
           date: new Date('2026-09-30T00:00:00Z'),
           type: 'WORKSITE',
+          warehouseId: null,
           endDate: null,
           assetId: payload.assetId,
           customerWorksiteId: payload.customerWorksiteId,
@@ -172,6 +175,107 @@ describe('Employee activity notes', () => {
       endDate: null,
       assetId: payload.assetId,
     });
+  });
+  const warehousePayload = {
+    date: payload.date,
+    type: 'WAREHOUSE' as const,
+    warehouseId: '33333333-3333-4333-8333-333333333333',
+    description: 'Organización de bodega',
+  };
+  it('stores a warehouse activity without equipment or a date range', async () => {
+    expect(
+      await validate(plainToInstance(ActivityNoteDto, warehousePayload)),
+    ).toHaveLength(0);
+    await service.create(
+      'employee',
+      {
+        ...warehousePayload,
+        customerWorksiteId: payload.customerWorksiteId,
+        endDate: '2026-10-05',
+      },
+      'author',
+    );
+    expect(
+      prisma.employeeActivityNote.create.mock.calls[0][0].data,
+    ).toMatchObject({
+      type: 'WAREHOUSE',
+      warehouseId: warehousePayload.warehouseId,
+      customerWorksiteId: null,
+      assetId: null,
+      endDate: null,
+    });
+    expect(prisma.asset.findUnique).not.toHaveBeenCalled();
+    expect(prisma.customerWorksite.findUnique).not.toHaveBeenCalled();
+  });
+  it('requires a valid warehouse and validates optional equipment', async () => {
+    for (const fields of [
+      { warehouseId: undefined },
+      { warehouseId: 'invalid' },
+      { assetId: 'invalid' },
+    ]) {
+      expect(
+        (
+          await validate(
+            plainToInstance(ActivityNoteDto, {
+              ...warehousePayload,
+              ...fields,
+            }),
+          )
+        ).length,
+      ).toBeGreaterThan(0);
+    }
+    await service.create(
+      'employee',
+      { ...warehousePayload, assetId: payload.assetId },
+      'author',
+    );
+    expect(
+      prisma.employeeActivityNote.create.mock.calls[0][0].data.assetId,
+    ).toBe(payload.assetId);
+    prisma.asset.findUnique.mockResolvedValue(null);
+    await expect(
+      service.create(
+        'employee',
+        { ...warehousePayload, assetId: payload.assetId },
+        'author',
+      ),
+    ).rejects.toThrow('Selecciona un activo disponible.');
+  });
+  it('rejects unavailable warehouses but allows editing historical notes', async () => {
+    prisma.warehouse.findUnique.mockResolvedValue(null);
+    await expect(
+      service.create('employee', warehousePayload, 'author'),
+    ).rejects.toThrow('Selecciona una bodega disponible.');
+    prisma.warehouse.findUnique.mockResolvedValue({ active: false });
+    await expect(
+      service.create('employee', warehousePayload, 'author'),
+    ).rejects.toThrow('Selecciona una bodega disponible.');
+    prisma.employeeActivityNote.findFirst.mockResolvedValue({
+      warehouseId: warehousePayload.warehouseId,
+      customerWorksiteId: null,
+      assetId: null,
+    });
+    await service.update('employee', 'note', warehousePayload);
+    expect(prisma.employeeActivityNote.update).toHaveBeenCalled();
+  });
+  it('clears warehouse when replacing an activity with worksite or absence', async () => {
+    prisma.employeeActivityNote.findFirst.mockResolvedValue({
+      warehouseId: warehousePayload.warehouseId,
+      customerWorksiteId: null,
+      assetId: null,
+    });
+    await service.update('employee', 'note', payload);
+    expect(
+      prisma.employeeActivityNote.update.mock.calls[0][0].data.warehouseId,
+    ).toBeNull();
+    await service.update('employee', 'note', {
+      ...payload,
+      type: 'ABSENCE',
+      endDate: payload.date,
+    });
+    expect(
+      prisma.employeeActivityNote.update.mock.calls[1][0].data.warehouseId,
+    ).toBeNull();
   });
   it('rejects a missing employee', async () => {
     prisma.employee.findUnique.mockResolvedValue(null);

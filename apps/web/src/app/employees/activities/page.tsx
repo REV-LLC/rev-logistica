@@ -14,6 +14,7 @@ import {
   Modal,
   Paper,
   ScrollArea,
+  Select,
   Stack,
   Text,
   Textarea,
@@ -66,13 +67,20 @@ type Customer = {
   nitOrId: string | null;
   customerWorksites: Worksite[];
 };
-type Options = { customers: Customer[]; assets: Asset[] };
+type Warehouse = { id: string; name: string };
+type Options = {
+  customers: Customer[];
+  assets: Asset[];
+  warehouses: Warehouse[];
+};
 type Note = {
   id: string;
   date: string;
   endDate: string | null;
   type: ActivityType;
   description: string;
+  warehouseId: string | null;
+  warehouse: Warehouse | null;
   assetId: string | null;
   customerWorksiteId: string | null;
   asset: Asset | null;
@@ -119,6 +127,7 @@ export default function EmployeeActivitiesPage() {
   const requestedEmployeeId = useSearchParams().get("employeeId");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [options, setOptions] = useState<Options>({
+    warehouses: [],
     customers: [],
     assets: [],
   });
@@ -138,6 +147,7 @@ export default function EmployeeActivitiesPage() {
     type: "WORKSITE",
     endDate: "",
     date: "",
+    warehouseId: "",
     customerWorksiteId: "",
     assetId: "",
     description: "",
@@ -304,6 +314,7 @@ export default function EmployeeActivitiesPage() {
             type: note.type,
             endDate: (note.endDate ?? note.date).slice(0, 10),
             date: note.date.slice(0, 10),
+            warehouseId: note.warehouseId ?? "",
             customerWorksiteId: note.customerWorksiteId ?? "",
             assetId: note.assetId ?? "",
             description: note.description,
@@ -312,6 +323,7 @@ export default function EmployeeActivitiesPage() {
             type,
             endDate: date,
             date,
+            warehouseId: "",
             customerWorksiteId: "",
             assetId: "",
             description: "",
@@ -322,19 +334,27 @@ export default function EmployeeActivitiesPage() {
   async function save() {
     if (!employeeId || saving) return;
     const worksite = form.type === "WORKSITE";
+    const warehouse = form.type === "WAREHOUSE";
     if (
       !form.date ||
       (worksite && (!form.customerWorksiteId || !form.assetId)) ||
+      (warehouse && !form.warehouseId) ||
       (form.type !== "VACATION" && !form.description.trim())
     ) {
       setFormError(
         worksite
           ? "Completa la fecha, la obra, el equipo y la descripción."
-          : "Completa las fechas y el motivo del reporte.",
+          : warehouse
+            ? "Completa la fecha, la bodega y la descripción."
+            : "Completa las fechas y el motivo del reporte.",
       );
       return;
     }
-    if (!worksite && (!form.endDate || form.endDate < form.date)) {
+    if (
+      !worksite &&
+      !warehouse &&
+      (!form.endDate || form.endDate < form.date)
+    ) {
       setFormError("La fecha de fin debe ser igual o posterior al inicio.");
       return;
     }
@@ -353,7 +373,12 @@ export default function EmployeeActivitiesPage() {
                   customerWorksiteId: form.customerWorksiteId,
                   assetId: form.assetId,
                 }
-              : { endDate: form.endDate }),
+              : warehouse
+                ? {
+                    warehouseId: form.warehouseId,
+                    ...(form.assetId ? { assetId: form.assetId } : {}),
+                  }
+                : { endDate: form.endDate }),
             description: form.description.trim() || activityLabels[form.type],
           },
         },
@@ -587,7 +612,8 @@ export default function EmployeeActivitiesPage() {
                                 key={note.id}
                                 className={`${styles.preview} ${styles[`preview${note.type}`]}`}
                               >
-                                {note.type === "WORKSITE"
+                                {note.type === "WORKSITE" ||
+                                note.type === "WAREHOUSE"
                                   ? note.description
                                   : activityLabels[note.type]}
                               </span>
@@ -674,6 +700,10 @@ export default function EmployeeActivitiesPage() {
                                   note.customerWorksite.worksite.name}
                               </Text>
                             </>
+                          ) : note.warehouse ? (
+                            <Text fw={650} size="sm" c="blue">
+                              {note.warehouse.name}
+                            </Text>
                           ) : (
                             <Text size="xs" c="dimmed">
                               {dayLabel(note.date.slice(0, 10))}
@@ -741,13 +771,19 @@ export default function EmployeeActivitiesPage() {
         ) : null}
       </Stack>
       <Modal
-        opened={opened && form.type === "WORKSITE"}
+        opened={
+          opened && (form.type === "WORKSITE" || form.type === "WAREHOUSE")
+        }
         onClose={() => {
           if (!saving) setOpened(false);
         }}
         title={
           <Text fw={750} size="lg">
-            {editing ? "Editar nota" : "Nueva nota de actividad"}
+            {editing
+              ? "Editar nota"
+              : form.type === "WAREHOUSE"
+                ? "Nueva actividad en bodega"
+                : "Nueva nota de actividad"}
           </Text>
         }
         size="lg"
@@ -764,7 +800,11 @@ export default function EmployeeActivitiesPage() {
           }}
         >
           <Stack gap="md">
-            <Paper p="sm" radius="md" bg="orange.0">
+            <Paper
+              p="sm"
+              radius="md"
+              bg={form.type === "WAREHOUSE" ? "blue.0" : "orange.0"}
+            >
               <Text size="sm" fw={700}>
                 {employee ? fullName(employee) : ""}
               </Text>
@@ -784,95 +824,125 @@ export default function EmployeeActivitiesPage() {
                 setForm({ ...form, date: event.currentTarget.value })
               }
             />
-            <div>
-              <Text size="sm" fw={500} mb={6}>
-                Obra{" "}
-                <Text component="span" c="red">
-                  *
+            {form.type === "WAREHOUSE" ? (
+              <Select
+                label="Bodega"
+                placeholder="Selecciona una bodega"
+                searchable
+                required
+                disabled={saving}
+                nothingFoundMessage="No se encontraron bodegas"
+                data={[
+                  ...(options.warehouses ?? []),
+                  ...(editing?.warehouse &&
+                  !(options.warehouses ?? []).some(
+                    (item) => item.id === editing.warehouseId,
+                  )
+                    ? [editing.warehouse]
+                    : []),
+                ].map((item) => ({ value: item.id, label: item.name }))}
+                value={form.warehouseId || null}
+                onChange={(value) =>
+                  setForm({ ...form, warehouseId: value ?? "" })
+                }
+              />
+            ) : (
+              <div>
+                <Text size="sm" fw={500} mb={6}>
+                  Obra{" "}
+                  <Text component="span" c="red">
+                    *
+                  </Text>
                 </Text>
-              </Text>
-              {chosenSiteLabel ? (
-                <Alert color="orange" mb="xs" title="Obra seleccionada">
-                  {chosenSiteLabel}
-                </Alert>
-              ) : null}
-              <Paper withBorder radius="md" p="sm">
-                <TextInput
-                  aria-label="Buscar cliente u obra"
-                  placeholder="Buscar cliente, documento u obra…"
-                  leftSection={<IconSearch size={16} />}
-                  value={search}
-                  disabled={saving}
-                  onChange={(event) => setSearch(event.currentTarget.value)}
-                  mb="xs"
-                />
-                <ScrollArea.Autosize mah={240} type="auto">
-                  <Accordion
-                    variant="separated"
-                    radius="md"
-                    key={search ? "filtered" : "all"}
-                    defaultValue={search ? filteredCustomers[0]?.id : undefined}
-                  >
-                    {filteredCustomers.map((customer) => (
-                      <Accordion.Item key={customer.id} value={customer.id}>
-                        <Accordion.Control disabled={saving}>
-                          <Text size="sm" fw={600}>
-                            {customer.name}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {customer.nitOrId ? `${customer.nitOrId} · ` : ""}
-                            {customer.customerWorksites.length} obras
-                          </Text>
-                        </Accordion.Control>
-                        <Accordion.Panel>
-                          <Stack gap={6}>
-                            {customer.customerWorksites.length ? (
-                              customer.customerWorksites.map((site) => (
-                                <UnstyledButton
-                                  key={site.id}
-                                  disabled={saving}
-                                  className={`${styles.worksite} ${form.customerWorksiteId === site.id ? styles.chosen : ""}`}
-                                  aria-pressed={
-                                    form.customerWorksiteId === site.id
-                                  }
-                                  onClick={() =>
-                                    setForm({
-                                      ...form,
-                                      customerWorksiteId: site.id,
-                                    })
-                                  }
-                                >
-                                  <Text size="sm" fw={600}>
-                                    {site.alias || site.worksite.name}
-                                  </Text>
-                                  <Text size="xs" c="dimmed">
-                                    {site.worksite.address ||
-                                      site.worksite.name}
-                                  </Text>
-                                </UnstyledButton>
-                              ))
-                            ) : (
-                              <Text size="sm" c="dimmed">
-                                Este cliente no tiene obras disponibles.
-                              </Text>
-                            )}
-                          </Stack>
-                        </Accordion.Panel>
-                      </Accordion.Item>
-                    ))}
-                  </Accordion>
-                  {!filteredCustomers.length ? (
-                    <Text p="md" size="sm" c="dimmed">
-                      No se encontraron clientes u obras.
-                    </Text>
-                  ) : null}
-                </ScrollArea.Autosize>
-              </Paper>
-            </div>
+                {chosenSiteLabel ? (
+                  <Alert color="orange" mb="xs" title="Obra seleccionada">
+                    {chosenSiteLabel}
+                  </Alert>
+                ) : null}
+                <Paper withBorder radius="md" p="sm">
+                  <TextInput
+                    aria-label="Buscar cliente u obra"
+                    placeholder="Buscar cliente, documento u obra…"
+                    leftSection={<IconSearch size={16} />}
+                    value={search}
+                    disabled={saving}
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    mb="xs"
+                  />
+                  <ScrollArea.Autosize mah={240} type="auto">
+                    <Accordion
+                      variant="separated"
+                      radius="md"
+                      key={search ? "filtered" : "all"}
+                      defaultValue={
+                        search ? filteredCustomers[0]?.id : undefined
+                      }
+                    >
+                      {filteredCustomers.map((customer) => (
+                        <Accordion.Item key={customer.id} value={customer.id}>
+                          <Accordion.Control disabled={saving}>
+                            <Text size="sm" fw={600}>
+                              {customer.name}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {customer.nitOrId ? `${customer.nitOrId} · ` : ""}
+                              {customer.customerWorksites.length} obras
+                            </Text>
+                          </Accordion.Control>
+                          <Accordion.Panel>
+                            <Stack gap={6}>
+                              {customer.customerWorksites.length ? (
+                                customer.customerWorksites.map((site) => (
+                                  <UnstyledButton
+                                    key={site.id}
+                                    disabled={saving}
+                                    className={`${styles.worksite} ${form.customerWorksiteId === site.id ? styles.chosen : ""}`}
+                                    aria-pressed={
+                                      form.customerWorksiteId === site.id
+                                    }
+                                    onClick={() =>
+                                      setForm({
+                                        ...form,
+                                        customerWorksiteId: site.id,
+                                      })
+                                    }
+                                  >
+                                    <Text size="sm" fw={600}>
+                                      {site.alias || site.worksite.name}
+                                    </Text>
+                                    <Text size="xs" c="dimmed">
+                                      {site.worksite.address ||
+                                        site.worksite.name}
+                                    </Text>
+                                  </UnstyledButton>
+                                ))
+                              ) : (
+                                <Text size="sm" c="dimmed">
+                                  Este cliente no tiene obras disponibles.
+                                </Text>
+                              )}
+                            </Stack>
+                          </Accordion.Panel>
+                        </Accordion.Item>
+                      ))}
+                    </Accordion>
+                    {!filteredCustomers.length ? (
+                      <Text p="md" size="sm" c="dimmed">
+                        No se encontraron clientes u obras.
+                      </Text>
+                    ) : null}
+                  </ScrollArea.Autosize>
+                </Paper>
+              </div>
+            )}
             <EquipmentSelect
-              label="Activo / equipo"
+              label={
+                form.type === "WAREHOUSE"
+                  ? "Activo / equipo (opcional)"
+                  : "Activo / equipo"
+              }
               placeholder="Busca por código, equipo o serie"
-              required
+              required={form.type === "WORKSITE"}
               items={assetOptions}
               value={form.assetId || null}
               disabled={saving}
@@ -909,7 +979,7 @@ export default function EmployeeActivitiesPage() {
         </form>
       </Modal>
       <EmployeeReportModal
-        opened={opened && form.type !== "WORKSITE"}
+        opened={opened && form.type !== "WORKSITE" && form.type !== "WAREHOUSE"}
         editing={Boolean(editing)}
         employeeName={employee ? fullName(employee) : ""}
         form={form}
@@ -936,7 +1006,9 @@ export default function EmployeeActivitiesPage() {
         <Stack>
           {formError ? <Alert color="red">{formError}</Alert> : null}
           <Text>
-            {deleting && deleting.type !== "WORKSITE"
+            {deleting &&
+            deleting.type !== "WORKSITE" &&
+            deleting.type !== "WAREHOUSE"
               ? `¿Quieres eliminar el reporte de ${activityLabels[deleting.type].toLowerCase()} de todo el período?`
               : "¿Quieres eliminar esta nota de la bitácora?"}
           </Text>

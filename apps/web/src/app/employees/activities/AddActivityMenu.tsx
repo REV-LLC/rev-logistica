@@ -1,7 +1,12 @@
 "use client";
 import type { ReactNode } from "react";
 import { Menu, Text } from "@mantine/core";
-import { IconBuilding, IconFirstAidKit, IconBeach } from "@tabler/icons-react";
+import {
+  IconBuilding,
+  IconBuildingWarehouse,
+  IconFirstAidKit,
+  IconBeach,
+} from "@tabler/icons-react";
 import type { ActivityType } from "./activity-types";
 
 export default function AddActivityMenu({
@@ -33,6 +38,18 @@ export default function AddActivityMenu({
           </Text>
           <Text size="xs" c="dimmed">
             Obra, equipo y actividad del día
+          </Text>
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconBuildingWarehouse size={22} />}
+          onClick={() => onSelect("WAREHOUSE")}
+          py="sm"
+        >
+          <Text size="sm" fw={650}>
+            Agregar actividad en bodega
+          </Text>
+          <Text size="xs" c="dimmed">
+            Bodega y actividad del día
           </Text>
         </Menu.Item>
         <Menu.Item
