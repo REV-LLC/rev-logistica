@@ -8,7 +8,7 @@ import { PayrollPdfService, REV_PAYROLL_COMPANY } from './payroll-pdf.service';
 export type SalaryInput = { effectiveFrom: string; monthlySalary: string; transportAllowance: string; note: string; expectedRevision: number; regime?: 'STANDARD' | 'REVIEW_REQUIRED' };
 export type PreviewInput = { from: string; to: string; days: number; observations?: string };
 export type ReceiptInput = PreviewInput & { expectedSalaryRevision: number; idempotencyKey: string };
-const employeeSelect = { id: true, name: true, lastName: true, documentId: true, role: true, active: true, salaries: { orderBy: { revision: 'desc' as const } } };
+const employeeSelect = { id: true, name: true, lastName: true, documentId: true, role: true, active: true, payrollEnabled: true, salaries: { orderBy: { revision: 'desc' as const } } };
 type PayrollEmployee = Prisma.EmployeeGetPayload<{ select: typeof employeeSelect }>;
 
 @Injectable()
@@ -18,8 +18,13 @@ export class EmployeePayrollService {
   private serializeSalary(salary: EmployeeSalary) {
     return { ...salary, effectiveFrom: salary.effectiveFrom.toISOString().slice(0, 10), monthlySalary: salary.monthlySalary.toFixed(2), transportAllowance: salary.transportAllowance.toFixed(2), totalMonthly: salary.monthlySalary.plus(salary.transportAllowance).toFixed(2) };
   }
+  private effectiveSalaries(salaries: EmployeeSalary[]) {
+    // A backdated confirmation replaces the onboarding estimate, while retaining its audit history.
+    return salaries.filter(s => !s.provisional || !salaries.some(confirmed =>
+      !confirmed.provisional && confirmed.revision > s.revision && confirmed.effectiveFrom <= s.effectiveFrom));
+  }
   private salaryAt(salaries: EmployeeSalary[], date: Date) {
-    return salaries.filter(s => s.effectiveFrom <= date).sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime() || b.revision - a.revision)[0] ?? null;
+    return this.effectiveSalaries(salaries).filter(s => s.effectiveFrom <= date).sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime() || b.revision - a.revision)[0] ?? null;
   }
   private serializeEmployee(employee: PayrollEmployee, date: Date) {
     const { salaries, ...data } = employee;
@@ -63,6 +68,7 @@ export class EmployeePayrollService {
     if (input.days !== 15 && !observations) throw new BadRequestException('Indica el motivo de modificar los días liquidados');
     const salary = this.salaryAt(employee.salaries, start);
     const blockingReasons: string[] = [];
+    if (employee.payrollEnabled === false) blockingReasons.push('El empleado está excluido de nómina.');
     if (!employee.active) blockingReasons.push('El empleado está inactivo; revisar su liquidación de retiro por separado.');
     if (!employee.documentId?.trim()) blockingReasons.push('Registra la cédula del empleado antes de emitir.');
     if (!salary) blockingReasons.push('No hay salario vigente al inicio de la quincena.');
@@ -72,7 +78,7 @@ export class EmployeePayrollService {
     if (salary && salary.transportAllowance.gt(0) && salary.monthlySalary.gt(new Prisma.Decimal(policy.minimumMonthlySalary).mul(2))) blockingReasons.push('El auxilio legal de transporte requiere revisar elegibilidad para salarios superiores a 2 SMMLV.');
     if (salary && salary.transportAllowance.gt(policy.transportAllowanceReference)) blockingReasons.push('El auxilio supera la referencia legal; revisar su clasificación e ingreso base de cotización.');
     if (salary && salary.monthlySalary.lt(policy.minimumMonthlySalary)) blockingReasons.push('Salario inferior al mínimo de jornada completa; requiere revisión.');
-    if (employee.salaries.some(s => s.effectiveFrom > start && s.effectiveFrom <= end)) blockingReasons.push('Hay un cambio salarial dentro de la quincena. Se requiere liquidación por tramos, fuera del alcance inicial.');
+    if (this.effectiveSalaries(employee.salaries).some(s => s.effectiveFrom > start && s.effectiveFrom <= end)) blockingReasons.push('Hay un cambio salarial dentro de la quincena. Se requiere liquidación por tramos, fuera del alcance inicial.');
     const amounts = salary ? calculatePayroll(salary.monthlySalary, salary.transportAllowance, input.days) : null;
     return { employeeId: employee.id, from: input.from, to: input.to, days: input.days, observations, expectedSalaryRevision: employee.salaries[0]?.revision ?? 0, salaryRevision: salary?.revision ?? null, salaryId: salary?.id ?? null, provisional: salary?.provisional ?? false, eligible: blockingReasons.length === 0, blockingReasons, policy, ...amounts };
   }
@@ -90,7 +96,7 @@ export class EmployeePayrollService {
       this.prisma.employee.findMany({ orderBy: [{ name: 'asc' }, { lastName: 'asc' }, { id: 'asc' }], select: employeeSelect }),
       this.prisma.payrollReceipt.findMany({ where: { periodFrom: start, periodTo: end }, orderBy: { createdAt: 'desc' } }),
     ]);
-    return { policy: payrollPolicy(from), from, to, employees: employees.map(e => ({ ...this.serializeEmployee(e, start), preview: this.buildPreview(e, { from, to, days: 15 }), receipts: receipts.filter(r => r.employeeId === e.id).map(r => this.serializeReceipt(r)) })) };
+    return { policy: payrollPolicy(from), from, to, employees: employees.filter(e => e.payrollEnabled || receipts.some(r => r.employeeId === e.id)).map(e => ({ ...this.serializeEmployee(e, start), preview: this.buildPreview(e, { from, to, days: 15 }), receipts: receipts.filter(r => r.employeeId === e.id).map(r => this.serializeReceipt(r)) })) };
   }
   async receipts(employeeId: string, from?: string, to?: string) {
     if (!(await this.prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } }))) throw new NotFoundException('Empleado no encontrado');

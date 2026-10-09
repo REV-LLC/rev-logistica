@@ -44,6 +44,7 @@ export type EmployeeCardRecord = {
   email: string | null;
   documentId: string | null;
   active: boolean;
+  payrollEnabled?: boolean;
   vehicles: EmployeeCardVehicle[];
   user: {
     id: string;

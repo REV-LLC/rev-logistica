@@ -5,10 +5,10 @@ import { PayrollAccessGuard } from './employee-payroll.controller';
 
 const input = { from: '2026-10-01', to: '2026-10-15', days: 15 };
 const salary = { id: 'salary-1', employeeId: 'employee-1', effectiveFrom: new Date('2026-10-01T00:00:00Z'), monthlySalary: new Prisma.Decimal('1750905'), transportAllowance: new Prisma.Decimal('249095'), revision: 1, provisional: false, regime: 'STANDARD', note: 'Confirmed', createdBy: 'office-1', createdAt: new Date() };
-const employee = { id: 'employee-1', name: 'QA', lastName: 'SYNTHETIC', role: 'OFFICE', documentId: 'QA-ID', active: true, salaries: [salary] };
+const employee = { id: 'employee-1', name: 'QA', lastName: 'SYNTHETIC', role: 'OFFICE', documentId: 'QA-ID', active: true, payrollEnabled: true, salaries: [salary] };
 function setup(overrides = {}) {
   const actual = { ...employee, ...overrides };
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: employee.id }]), employee: { findUnique: jest.fn().mockResolvedValue(actual), findUniqueOrThrow: jest.fn().mockResolvedValue(actual) }, employeeSalary: { findFirst: jest.fn().mockResolvedValue(salary), create: jest.fn() }, payrollReceipt: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: 'receipt-1', createdAt: new Date('2026-10-16T12:00:00Z') })) } };
+  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: employee.id }]), employee: { findMany: jest.fn(), findUnique: jest.fn().mockResolvedValue(actual), findUniqueOrThrow: jest.fn().mockResolvedValue(actual) }, employeeSalary: { findFirst: jest.fn().mockResolvedValue(salary), create: jest.fn() }, payrollReceipt: { findMany: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: 'receipt-1', createdAt: new Date('2026-10-16T12:00:00Z') })) } };
   const prisma = { ...tx, $transaction: jest.fn().mockImplementation(fn => fn(tx)) };
   const pdf = { render: jest.fn() };
   return { tx, prisma, pdf, service: new EmployeePayrollService(prisma as never, pdf as never) };
@@ -22,6 +22,14 @@ describe('payroll history and issuance', () => {
     expect(preview.eligible).toBe(false);
     expect(preview.blockingReasons.join(' ')).toMatch(/tramos/);
   });
+  it('replaces an onboarding estimate with a backdated confirmation without a false mid-period change', async () => {
+    const confirmed = { ...salary, revision: 2, monthlySalary: new Prisma.Decimal('4000000'), transportAllowance: new Prisma.Decimal('0') };
+    const estimate = { ...salary, provisional: true, effectiveFrom: new Date('2026-10-09T00:00:00Z') };
+    const { service } = setup({ salaries: [confirmed, estimate] });
+    expect(await service.preview(employee.id, input)).toMatchObject({ eligible: true, monthlySalary: '4000000.00', transportAllowance: '0.00' });
+    const { service: later } = setup({ salaries: [confirmed, estimate] });
+    expect(await later.preview(employee.id, { from: '2026-10-16', to: '2026-10-31', days: 15 })).toMatchObject({ eligible: true, monthlySalary: '4000000.00' });
+  });
   it('exposes provisional preview but rejects issuance until salary is confirmed', async () => {
     const { service, tx } = setup({ salaries: [{ ...salary, provisional: true }] });
     expect((await service.preview(employee.id, input)).provisional).toBe(true);
@@ -32,9 +40,26 @@ describe('payroll history and issuance', () => {
     { salaries: [{ ...salary, regime: 'REVIEW_REQUIRED' }] },
     { salaries: [{ ...salary, monthlySalary: new Prisma.Decimal('7003620'), transportAllowance: new Prisma.Decimal('0') }] },
     { salaries: [{ ...salary, monthlySalary: new Prisma.Decimal('4000000') }] },
-    { documentId: null }, { active: false }, { salaries: [] },
+    { documentId: null }, { active: false }, { payrollEnabled: false }, { salaries: [] },
   ])('blocks unsupported or incomplete configuration %j', async overrides => {
     expect((await setup(overrides).service.preview(employee.id, input)).eligible).toBe(false);
+  });
+  it('excludes non-payroll staff but retains their issued historical receipts', async () => {
+    const { service, prisma } = setup();
+    const excluded = { ...employee, payrollEnabled: false };
+    prisma.employee.findMany = jest.fn().mockResolvedValue([excluded]) as never;
+    prisma.payrollReceipt.findMany = jest.fn().mockResolvedValue([]) as never;
+    expect((await service.period(input.from, input.to)).employees).toEqual([]);
+    prisma.payrollReceipt.findMany.mockResolvedValue([{ employeeId: employee.id, id: 'historical', snapshot: { netPay: '100' }, createdAt: new Date() }] as never);
+    const result = await service.period(input.from, input.to);
+    expect(result.employees).toHaveLength(1);
+    expect(result.employees[0].preview.eligible).toBe(false);
+    expect(result.employees[0].receipts[0].id).toBe('historical');
+  });
+  it('rejects new receipts for staff excluded from payroll', async () => {
+    const { service, tx } = setup({ payrollEnabled: false });
+    await expect(service.issue(employee.id, { ...input, expectedSalaryRevision: 1, idempotencyKey: 'key' }, 'office')).rejects.toThrow(/excluido/);
+    expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
   });
   it('requires an explanation for modified payable days', async () => {
     const { service } = setup();
