@@ -113,6 +113,7 @@ export default function EmployeeCard({
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <EmployeePhotoControl
             employee={employee}
+            grayscale={!employee.active}
             size={74}
             editable
             onPreview={() => onPhotoPreview(employee)}
