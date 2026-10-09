@@ -98,8 +98,7 @@ railway volume --service traccar-db --environment production list --json
 ```
 
 Los dos servicios generan consumo adicional en Railway. Quedan pendientes la
-política de retención del historial, los respaldos y la integración del mapa
-con REV. No eliminar el volumen al actualizar las imágenes.
+política de retención del historial y los respaldos. No eliminar el volumen al actualizar las imágenes.
 
 Referencias: [Docker](https://www.traccar.org/docker/),
 [configuración del servidor](https://www.traccar.org/configuration-file/),
@@ -108,13 +107,14 @@ Referencias: [Docker](https://www.traccar.org/docker/),
 ## Acceso desde REV
 
 `Operación → Seguimiento de camiones` abre la página `/transport/tracking`,
-visible para ADMIN y OFFICE. El botón abre el panel original en otra pestaña.
+visible para ADMIN y OFFICE. El panel original se muestra dentro de un iframe
+en REV. Un enlace secundario permite abrirlo en otra pestaña.
 Traccar conserva su propio inicio de sesión, permisos de dispositivos, mapa,
 WebSocket, recorridos, exportaciones y reportes. No se copian posiciones a la
 base de REV ni se envían contraseñas o tokens Traccar al frontend.
 
 La dirección pública se puede cambiar con `NEXT_PUBLIC_TRACCAR_WEB_URL` en
-Vercel y un nuevo build. El valor por defecto es el panel configurado arriba.
+Vercel y un nuevo build. El valor por defecto es `https://gps.revcontractorsllc.com`.
 Solo se aceptan URLs HTTPS sin credenciales, query ni fragmento. La URL de
 recepción de tablets no es la URL del panel.
 
@@ -125,10 +125,26 @@ sobre los dispositivos. Ser administrador no implica que el listado normal
 muestre todos los dispositivos; ZNN938 fue vinculado explícitamente al usuario
 `sg@revcontractorsllc.com` mediante `/api/permissions`.
 
-No se modificaron las cookies ni se incrustó el panel en un iframe. La opción
-`WEB_SAMESITECOOKIE=None` fue rechazada por la revisión automática de seguridad
-y no fue aplicada. Abrir el panel como sitio principal conserva el funcionamiento
-normal de su sesión incluso cuando el navegador bloquea cookies de terceros.
+El panel usa `gps.revcontractorsllc.com` y REV usa
+`app.revcontractorsllc.com`: ambos son HTTPS bajo el mismo dominio de sitio.
+Así la sesión nativa funciona en el iframe sin relajar la protección de cookies.
+No configurar `WEB_SAMESITECOOKIE=None`. El cambio a ese valor fue rechazado
+por la revisión automática y no fue aplicado.
+
+### DNS necesario para el panel incrustado
+
+Railway tiene creado el dominio personalizado con destino al puerto 8082.
+Registros creados en el DNS autoritativo de GoDaddy:
+
+| Tipo | Nombre | Destino |
+| --- | --- | --- |
+| CNAME | gps | 41uas181.up.railway.app |
+| TXT | _railway-verify.gps | railway-verify=f60ac8cc7b1b7077f972f5a86e3f0b95cb48292828ff0f90fff4e749cc71a7ce |
+
+Después verificar resolución, certificado HTTPS y sesión dentro de REV. No
+cambiar la URL de recepción de las tablets. Si existe una variable
+`NEXT_PUBLIC_TRACCAR_WEB_URL` anterior en Vercel, actualizarla a
+`https://gps.revcontractorsllc.com` y reconstruir el frontend.
 
 La prueba de pantalla apagada fue confirmada por el usuario. La integración
 no garantiza conexión GPS: comprobar siempre la hora real del último reporte
