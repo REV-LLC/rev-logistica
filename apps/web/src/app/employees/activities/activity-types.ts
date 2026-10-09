@@ -1,5 +1,6 @@
 export type ActivityType =
   | "WORKSITE"
+  | "WAREHOUSE"
   | "ABSENCE"
   | "MEDICAL_LEAVE"
   | "VACATION";
@@ -8,17 +9,20 @@ export type ActivityForm = {
   date: string;
   endDate: string;
   customerWorksiteId: string;
+  warehouseId: string;
   assetId: string;
   description: string;
 };
 export const activityLabels: Record<ActivityType, string> = {
   WORKSITE: "Actividad de obra",
+  WAREHOUSE: "Actividad en bodega",
   ABSENCE: "Falta",
   MEDICAL_LEAVE: "Incapacidad",
   VACATION: "Vacaciones",
 };
 export const activityColors: Record<ActivityType, string> = {
   WORKSITE: "orange",
+  WAREHOUSE: "blue",
   ABSENCE: "red",
   MEDICAL_LEAVE: "violet",
   VACATION: "teal",
