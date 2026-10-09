@@ -57,6 +57,8 @@ describe('DocumentsService autosave lifecycle', () => {
           customerWorksiteId: 'worksite-1',
           recipientPhone: '3001234567',
           recipientPhones: ['3001234567'],
+          type: DocumentType.REMISSION,
+          items: [],
           _count: { items: 1 },
           files: [{ id: 'signature-1' }],
         }),

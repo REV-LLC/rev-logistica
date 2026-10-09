@@ -7,6 +7,7 @@ import type {
 export function matchesGroup(group: CommercialGroup, part: CompositionPart) {
   return group.selectors.some(
     (s) =>
+      (s.kind === 'ACCESSORY' && part.legacyAccessoryId === s.id) ||
       ({
         ASSET: part.assetId,
         SKU: part.skuId,
@@ -48,7 +49,7 @@ export function resolveCommercialMode(
     ...base,
     status: 'REVIEW',
     reason,
-    parts: parts.map((p) => ({ ...p, treatment: 'REVIEW' })),
+    parts: parts.map(({ legacyAccessoryId: _alias, ...p }) => ({ ...p, treatment: 'REVIEW' })),
   });
   if (matching.length !== 1)
     return review(
@@ -64,6 +65,7 @@ export function resolveCommercialMode(
   if (mode.pricing.source === 'CATALOG' && catalog.price == null)
     return review('No hay tarifa configurada; registra un precio, incluido cero si corresponde');
   const resolved = parts.map((part) => {
+    const { legacyAccessoryId: _alias, ...publicPart } = part;
     const treatments = new Set(
       mode.parts
         .filter((rule) => {
@@ -73,7 +75,7 @@ export function resolveCommercialMode(
         .map((r) => r.treatment),
     );
     return {
-      ...part,
+      ...publicPart,
       treatment:
         treatments.size === 1 ? [...treatments][0] : ('REVIEW' as const),
     };

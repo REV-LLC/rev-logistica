@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import PDFDocument from 'pdfkit';
 import sharp from 'sharp';
+import { documentDeliveryLabel } from './document-delivery-fuel';
 
 type SharedDocumentFile = {
   fileType: string;
@@ -30,6 +31,7 @@ export type SharedDocument = {
     accessoryCode?: string | null;
     quantity: { toString(): string } | string | number | null;
     requestedTag: string | null;
+    deliveryFuel?: string | null;
     conditionNote: string | null;
     sku: { name: string; assetFamily?: { name: string } | null } | null;
     asset: {
@@ -69,6 +71,10 @@ export function formatDocumentDateTime(docDate: Date) {
 }
 
 export function buildPdfItemDescription(item: PdfItem) {
+  if (item.deliveryFuel && item.asset) {
+    const reference = item.asset.sku?.name || item.asset.description || 'Equipo';
+    return documentDeliveryLabel(reference, item.deliveryFuel);
+  }
   if (item.accessoryId) return item.accessoryName || item.requestedTag || 'Accesorio';
   const reference =
     item.asset?.sku?.name ||

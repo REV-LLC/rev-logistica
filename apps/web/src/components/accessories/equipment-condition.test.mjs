@@ -26,7 +26,7 @@ async function fixture(overrides = {}, reject = false) {
       Button: ({ children, onClick, disabled }) => React.createElement('button', { onClick, disabled }, children) },
     '@/lib/api': { api: async (path, options) => {
       calls.push({ path, ...options });
-      if (reject) throw new Error('El motor asignado cambió.');
+      if (reject) throw new Error('No se pudo registrar.');
       return { isDamaged: options.json.isDamaged, damageNote: options.json.isDamaged ? options.json.note : null, conditionEvents: [] };
     } },
   }).default;
@@ -43,37 +43,24 @@ async function fixture(overrides = {}, reject = false) {
   };
 }
 
-test('requires explicitly choosing machine or motor before reporting damage', async () => {
-  const f = await fixture();
-  assert.equal(f.button('Confirmar avería').disabled, true);
-  assert.deepEqual(f.calls, []);
+test('una avería se registra solo sobre la mezcladora, sin seleccionar motor', async () => {
+ const f = await fixture(); await f.note(' No enciende ');
+ await act(async () => f.button('Confirmar avería').click());
+ assert.deepEqual(f.calls, [{ path: '/assets/machine/condition', method: 'PATCH', json: { isDamaged: true, note: 'No enciende' } }]);
+ assert.equal(f.updates.length, 1); assert.equal(f.closed, 1);
 });
-test('motor damage targets the motor ID and checks its assignment, never the machine ID', async () => {
-  const f = await fixture(); await f.select('motor'); await f.note(' No enciende ');
-  await act(async () => f.button('Confirmar avería').click());
-  assert.deepEqual(f.calls, [{ path: '/assets/motor/condition', method: 'PATCH', json: { isDamaged: true, note: 'No enciende', expectedParentAssetId: 'machine' } }]);
-  assert.equal(f.updates[0][1], 'motor'); assert.equal(f.closed, 1);
+test('sin descripción no cambia ninguna condición', async () => {
+ const f = await fixture(); await act(async () => f.button('Confirmar avería').click());
+ assert.deepEqual(f.calls, []); assert.equal(f.closed, 0);
 });
-test('machine damage changes only the machine and clears the note on target change', async () => {
-  const f = await fixture(); await f.select('motor'); await f.note('Nota del motor'); await f.select('equipment');
-  await act(async () => f.button('Confirmar avería').click()); assert.deepEqual(f.calls, []);
-  await f.note('Falla del chasis'); await act(async () => f.button('Confirmar avería').click());
-  assert.deepEqual(f.calls[0], { path: '/assets/machine/condition', method: 'PATCH', json: { isDamaged: true, note: 'Falla del chasis' } });
-  assert.equal(f.updates[0][1], 'equipment');
+test('un error conserva el formulario y no modifica el cliente', async () => {
+ const f = await fixture({}, true); await f.note('Falla');
+ await act(async () => f.button('Confirmar avería').click());
+ assert.equal(f.closed, 0); assert.deepEqual(f.updates, []);
+ assert.ok(f.container.textContent.includes('No se pudo registrar.'));
 });
-test('a damaged motor offers repair independently of an operational machine', async () => {
-  const f = await fixture({ assignedMotor: { id: 'motor', name: 'Honda', isDamaged: true } });
-  await f.select('motor'); await f.note('Reparado'); await act(async () => f.button('Confirmar reparación').click());
-  assert.equal(f.calls[0].json.isDamaged, false); assert.equal(f.updates[0][1], 'motor');
-});
-test('stale assignment errors leave the form open and do not change client condition', async () => {
-  const f = await fixture({}, true); await f.select('motor'); await f.note('Falla');
-  await act(async () => f.button('Confirmar avería').click());
-  assert.equal(f.closed, 0); assert.deepEqual(f.updates, []);
-  assert.ok(f.container.textContent.includes('El motor asignado cambió.'));
-});
-test('equipment without an interchangeable motor keeps its direct condition action', async () => {
-  const f = await fixture({ assignedMotor: null, isDamaged: true }); await f.note('Reparado');
-  await act(async () => f.button('Confirmar reparación').click());
-  assert.equal(f.calls[0].path, '/assets/machine/condition'); assert.equal(f.calls[0].json.isDamaged, false);
+test('reparar registra el historial del mismo equipo', async () => {
+ const f = await fixture({ isDamaged: true }); await f.note('Reparado');
+ await act(async () => f.button('Confirmar reparación').click());
+ assert.equal(f.calls[0].path, '/assets/machine/condition'); assert.equal(f.calls[0].json.isDamaged, false);
 });

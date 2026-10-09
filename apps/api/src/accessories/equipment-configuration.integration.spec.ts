@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { AccessoriesService } from './accessories.service';
-import { EquipmentMotorsService } from './equipment-motors.service';
 import { EquipmentConfigurationService } from './equipment-configuration.service';
 import { AssetsService } from '../assets/assets.service';
 import { DocumentsService } from '../documents/documents.service';
+import { documentReturnOrigins } from '../documents/document-return-origins';
 import {
   EquipmentConfigurationDto,
   EquipmentConfigurationEntryDto,
@@ -36,7 +36,6 @@ if (testUrl) {
     });
     const parts = new AccessoriesService(prisma);
     const configs = new EquipmentConfigurationService(prisma, parts);
-    const motors = new EquipmentMotorsService(prisma);
     const conditions = new AssetsService(prisma, { del: async () => undefined } as any);
     const inventory = new InventoryService(
       prisma,
@@ -143,165 +142,6 @@ if (testUrl) {
       ).id;
       otherAssetId = (await inventory.createSerializedAsset(payload(), userId))
         .asset.id;
-    });
-
-    const createInterchangeable = async () => (await inventory.createSerializedAsset({ ...payload(), asset: { interchangeableMotor: true } }, userId)).asset.id;
-    const version = async (id: string) => (await configs.get({ assetId: id })).version;
-    const details = (ids: string[]) => ({ brand: 'HONDA QA', model: 'GX ' + run, powerHp: 6.5, fuel: 'GASOLINA' as const, compatibleEquipmentIds: ids });
-
-    it('creates a real motor asset, transfers it atomically and records both equipment histories without stock movements', async () => {
-      const source = await createInterchangeable(), target = await createInterchangeable();
-      const initialVersion = await version(source);
-      const created = await motors.assign(source, { version: initialVersion, newMotor: details([source, target]) }, userId);
-      const motorId = created.assignedMotorId!;
-      const motor = await motors.get(motorId);
-      expect(motor.description).toBe('HONDA QA 6.5 HP GX ' + run);
-      expect(Number(motor.motorPowerHp)).toBe(6.5);
-      expect((await motors.candidates(run)).items.some(m => m.id === motorId && m.assignedToMixer?.id === source)).toBe(true);
-      const stock = await prisma.stockLedger.findMany({ where: { assetId: motorId } });
-      expect(stock).toHaveLength(1);
-      const targetBefore = await version(target);
-      await motors.assign(target, { version: targetBefore, motorId, expectedSourceId: source }, userId);
-      expect((await prisma.asset.findUniqueOrThrow({ where: { id: source } })).assignedMotorId).toBeNull();
-      expect((await prisma.asset.findUniqueOrThrow({ where: { id: target } })).assignedMotorId).toBe(motorId);
-      expect(await prisma.stockLedger.findMany({ where: { assetId: motorId } })).toEqual(stock);
-      const sourceHistory = await configs.motorHistory(source), targetHistory = await configs.motorHistory(target);
-      expect(sourceHistory).toHaveLength(2);
-      expect(sourceHistory[0].after).toMatchObject({ motor: { assignedMotorId: null } });
-      expect(targetHistory[0].after).toMatchObject({ motor: { assignedMotorId: motorId } });
-      expect((sourceHistory[0].after as any).operationId).toBe((targetHistory[0].after as any).operationId);
-      await expect(motors.assign(target, { version: targetBefore, motorId: null }, userId)).rejects.toThrow('equipo cambió');
-      const current = await configs.get({ assetId: target });
-      await expect(configs.save({ assetId: target }, { ...draft(current), entries: [{ id: randomUUID(), assetId: motorId,
-        role: 'COMPONENT', quantity: 1, defaultIncluded: true, required: false }] }, userId)).rejects.toThrow('botón Motor');
-      await motors.assign(target, { version: await version(target), motorId: null }, userId);
-      expect((await motors.get(motorId)).assignedToMixer).toBeNull();
-      expect(await prisma.stockLedger.findMany({ where: { assetId: motorId } })).toEqual(stock);
-    });
-
-    it('rejects invalid compatibility, unenabled equipment and stale source without detaching anything', async () => {
-      const source = await createInterchangeable(), target = await createInterchangeable();
-      const created = await motors.assign(source, { version: await version(source), newMotor: details([source]) }, userId);
-      const motorId = created.assignedMotorId!;
-      await expect(motors.assign(target, { version: await version(target), motorId, expectedSourceId: source }, userId)).rejects.toThrow('no es compatible');
-      await expect(motors.assign(target, { version: await version(target), motorId, expectedSourceId: null }, userId)).rejects.toThrow('asignación del motor cambió');
-      await expect(motors.assign(otherAssetId, { version: await version(otherAssetId), motorId, expectedSourceId: source }, userId)).rejects.toThrow('no tiene habilitado');
-      expect((await motors.get(motorId)).assignedToMixer?.id).toBe(source);
-      const count = await prisma.asset.count({ where: { warehouseOwnerId: warehouseId } });
-      await expect(motors.assign(target, { version: await version(target), newMotor: details([otherAssetId, target]) }, userId)).rejects.toThrow('equipos activos');
-      expect(await prisma.asset.count({ where: { warehouseOwnerId: warehouseId } })).toBe(count);
-    });
-
-    it('edits motor details and compatibility while preserving identity and auditing changes', async () => {
-      const source = await createInterchangeable(), target = await createInterchangeable();
-      const { assignedMotorId } = await motors.assign(source, { version: await version(source), newMotor: details([source]) }, userId);
-      const motor = await motors.get(assignedMotorId!);
-      await expect(motors.edit(motor.id, { ...details([target]), version: motor.motorVersion }, userId)).rejects.toThrow('incluir el equipo');
-      const updated = await motors.edit(motor.id, { ...details([source, target]), brand: 'EDITADO', powerHp: 9, version: motor.motorVersion }, userId);
-      expect(updated.publicCode).toBe(motor.publicCode);
-      expect(updated.internalNumber).toBe(motor.internalNumber);
-      expect(updated.description).toBe('EDITADO 9 HP GX ' + run);
-      expect(updated.motorCompatibility).toHaveLength(2);
-      await expect(motors.edit(motor.id, { ...details([source]), version: motor.motorVersion }, userId)).rejects.toThrow('motor cambió');
-      expect(await prisma.equipmentConfigurationRevision.count({ where: { configuration: { assetId: motor.id } } })).toBe(1);
-    });
-
-    it('serializes concurrent transfers so a stale selection cannot steal a just-assigned motor', async () => {
-      const source = await createInterchangeable();
-      const targets = await Promise.all([createInterchangeable(), createInterchangeable()]);
-      const { assignedMotorId: motorId } = await motors.assign(source, { version: await version(source), newMotor: details([source, ...targets]) }, userId);
-      const results = await Promise.allSettled(targets.map(async target => motors.assign(target,
-        { version: await version(target), motorId, expectedSourceId: source }, userId)));
-      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-      expect(await prisma.asset.count({ where: { assignedMotorId: motorId } })).toBe(1);
-    });
-
-    it('rejects changing the creation flag through a template', async () => {
-      const base = await prisma.asset.findUniqueOrThrow({ where: { id: otherAssetId } });
-      await expect(inventory.createSerializedAsset({ ...payload(), sku: { id: base.skuId }, asset: { interchangeableMotor: true } }, userId)).rejects.toThrow('sin plantilla');
-    });
-
-    it('rolls back both assignments and their audit trail if the transaction fails after the transfer', async () => {
-      const source = await createInterchangeable(), target = await createInterchangeable();
-      const { assignedMotorId: motorId } = await motors.assign(source, { version: await version(source), newMotor: details([source, target]) }, userId);
-      const sourceBefore = await configs.get({ assetId: source }), targetBefore = await configs.get({ assetId: target });
-      const historyBefore = await configs.motorHistory(source);
-      const transact = prisma.$transaction.bind(prisma);
-      const spy = jest.spyOn(prisma, '$transaction').mockImplementationOnce(((callback: any) => transact(async tx => {
-        await callback(tx);
-        throw new Error('QA simulated commit failure');
-      })) as any);
-      try {
-        await expect(motors.assign(target, { version: targetBefore.version, motorId, expectedSourceId: source }, userId)).rejects.toThrow('simulated commit failure');
-      } finally { spy.mockRestore(); }
-      expect(await configs.get({ assetId: source })).toEqual(sourceBefore);
-      expect(await configs.get({ assetId: target })).toEqual(targetBefore);
-      expect(await configs.motorHistory(source)).toEqual(historyBefore);
-      expect(await configs.motorHistory(target)).toHaveLength(0);
-    });
-
-    it('completes motor creation, transfer, remission, damaged return and independent repairs without stock or identity drift', async () => {
-      const documents = new DocumentsService(prisma, inventory, {} as any, {} as any, { refresh: jest.fn() } as any);
-      jest.spyOn(documents as any, 'sendFinalEmailInBackground').mockImplementation(() => undefined);
-      customerId = (await prisma.customer.create({ data: { name: `QA MOTOR ${run}` } })).id;
-      worksiteId = (await prisma.worksite.create({ data: { name: `QA MOTOR ${run}` } })).id;
-      customerWorksiteId = (await prisma.customerWorksite.create({ data: { customerId, worksiteId } })).id;
-      const source = await createInterchangeable(), target = await createInterchangeable();
-      const motorId = (await motors.assign(source, { version: await version(source), newMotor: details([source, target]) }, userId)).assignedMotorId!;
-      const motorBefore = await motors.get(motorId);
-      const stockBefore = await prisma.stockLedger.findMany({ where: { assetId: motorId } });
-      await motors.assign(target, { version: await version(target), motorId, expectedSourceId: source }, userId);
-      expect((await conditions.getAssetById(source)).assignedMotorId).toBeNull();
-      expect(await prisma.stockLedger.findMany({ where: { assetId: motorId } })).toEqual(stockBefore);
-      await expect(conditions.updateAssetCondition(motorId, { isDamaged: true, note: 'Stale card', expectedParentAssetId: source }, userId)).rejects.toThrow('motor asignado cambió');
-      const items = [
-        { assetId: target, ownerWarehouseId: warehouseId, sourceWarehouseId: warehouseId },
-        { assetId: motorId, componentParentAssetId: target, ownerWarehouseId: warehouseId, sourceWarehouseId: warehouseId },
-      ];
-      const draft = async (type: 'REMISSION' | 'RETURN', lines = items) => {
-        const doc = await documents.createRequestDocument({ type, items: lines, warehouseId, customerWorksiteId, createdBy: userId, sendWhatsapp: false });
-        documentIds.push(doc.id); return doc;
-      };
-      const omitted = await draft('REMISSION', items.slice(0, 1));
-      await expect(documents.approveRequestDocument(omitted.id, userId)).rejects.toThrow('incluir el motor asignado');
-      expect(await prisma.stockLedger.count({ where: { refDocumentId: omitted.id } })).toBe(0);
-      const sent = await draft('REMISSION');
-      await documents.approveRequestDocument(sent.id, userId);
-      expect(await prisma.stockLedger.count({ where: { refDocumentId: sent.id, movementType: 'OUT' } })).toBe(2);
-      for (const id of [target, motorId]) expect((await conditions.getAssetById(id)).warehouseCurrentId).toBeNull();
-      await expect(motors.assign(source, { version: await version(source), motorId, expectedSourceId: target }, userId)).rejects.toThrow('bodega');
-      await expect(documents.approveRequestDocument(sent.id, userId)).rejects.toThrow('DRAFT');
-      expect(await prisma.stockLedger.count({ where: { refDocumentId: sent.id } })).toBe(2);
-      const returned = await draft('RETURN', items.map(item => ({ ...item, ...(item.assetId === motorId ? { conditionNote: 'QA motor no enciende al regresar' } : {}) })));
-      await documents.approveRequestDocument(returned.id, userId);
-      expect(await prisma.stockLedger.count({ where: { refDocumentId: returned.id, movementType: 'IN' } })).toBe(2);
-      const machine = await conditions.getAssetById(target), damagedMotor = await conditions.getAssetById(motorId);
-      expect(machine).toMatchObject({ isDamaged: false, warehouseCurrentId: warehouseId, assignedMotorId: motorId, conditionEvents: [] });
-      expect(machine.assignedMotor).toMatchObject({ id: motorId, isDamaged: true });
-      expect(damagedMotor).toMatchObject({ isDamaged: true, warehouseCurrentId: warehouseId, conditionEvents: [expect.objectContaining({ note: 'QA motor no enciende al regresar' })] });
-      const blocked = await draft('REMISSION');
-      await expect(documents.approveRequestDocument(blocked.id, userId)).rejects.toThrow('averiado');
-      expect(await prisma.stockLedger.count({ where: { refDocumentId: blocked.id } })).toBe(0);
-      await conditions.updateAssetCondition(motorId, { isDamaged: false, note: 'QA motor reparado', expectedParentAssetId: target }, userId);
-      await conditions.updateAssetCondition(target, { isDamaged: true, note: 'QA falla del chasis' }, userId);
-      expect((await conditions.getAssetById(motorId)).isDamaged).toBe(false);
-      await expect(documents.approveRequestDocument(blocked.id, userId)).rejects.toThrow('averiado');
-      await conditions.updateAssetCondition(target, { isDamaged: false, note: 'QA chasis reparado' }, userId);
-      await documents.approveRequestDocument(blocked.id, userId);
-      const finalReturn = await draft('RETURN');
-      await documents.approveRequestDocument(finalReturn.id, userId);
-      for (const id of [target, motorId]) {
-        const asset = await conditions.getAssetById(id);
-        expect(asset.isDamaged).toBe(false);
-        expect(asset.conditionEvents).toHaveLength(2);
-        expect(asset.warehouseCurrentId).toBe(warehouseId);
-        const balance = await prisma.stockLedger.aggregate({ where: { assetId: id, warehouseId }, _sum: { quantity: true } });
-        expect(Number(balance._sum.quantity)).toBe(1);
-      }
-      const motorAfter = await motors.get(motorId);
-      expect(motorAfter.publicCode).toBe(motorBefore.publicCode);
-      expect(motorAfter.internalNumber).toBe(motorBefore.internalNumber);
-      expect(motorAfter.assignedToMixer?.id).toBe(target);
     });
 
     afterAll(async () => {
@@ -433,11 +273,10 @@ if (testUrl) {
       });
       const byCode = await configs.assetCandidates(asset.publicCode);
       expect(byCode.items.map((item) => item.id)).toContain(assetId);
-      expect(Object.keys(byCode.items[0]).sort()).toEqual([
-        'id',
-        'publicCode',
-        'sku',
-      ]);
+      expect(byCode.items.find(item => item.id === assetId)).toMatchObject({
+        id: assetId, publicCode: asset.publicCode, isImplement: false,
+      });
+      expect(byCode.items.every(item => !('ledger' in item) && !('passwordHash' in item))).toBe(true);
       const byName = await configs.assetCandidates(`QA EQUIPO ${run}`);
       expect(byName.items.length).toBeGreaterThan(0);
       await expect(configs.assetCandidates('', -1)).rejects.toThrow('inválida');
@@ -451,7 +290,9 @@ if (testUrl) {
       const after = await parts.get(roofId);
       expect(after.balances).toEqual(before.balances);
       expect(after.version).toBe(before.version);
-      expect((await configs.get({ assetId })).entries[0].required).toBe(true);
+      expect((await configs.get({ assetId })).entries[0]).toMatchObject({
+        recommendation: true, required: false, maximumQuantity: null,
+      });
     });
     it('prevents reuse of an exclusive roof by another equipment and preserving the failed version', async () => {
       const current = draft(await configs.get({ assetId: otherAssetId }));

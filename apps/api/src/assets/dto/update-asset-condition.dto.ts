@@ -11,8 +11,4 @@ export class UpdateAssetConditionDto {
   @MaxLength(2000)
   note!: string;
 
-  // Supplied when reporting a motor from its equipment card.
-  @IsOptional()
-  @IsUUID()
-  expectedParentAssetId?: string;
 }

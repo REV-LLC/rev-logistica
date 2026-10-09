@@ -23,31 +23,33 @@ function fixture() {
 }
 
 describe('Unified document composition', () => {
-  it('requires the persistently assigned motor', async () => {
-    await expect(fixture().validate([item('mixer')])).rejects.toThrow('motor asignado');
+  it('a mixer no longer requires an assigned motor or a separate motor line', async () => {
+    await expect(fixture().validate([item('mixer')])).resolves.toBeUndefined();
   });
-  it('accepts only the assigned motor, never a replacement chosen in the document', async () => {
-    await expect(fixture().validate([item('mixer'), item('motor', 'mixer')])).resolves.toBeUndefined();
-    await expect(fixture().validate([item('mixer'), item('motor2', 'mixer')])).rejects.toThrow('motor asignado');
+  it('an old assignment does not authorize new motor composition', async () => {
+    await expect(fixture().validate([item('mixer'), item('motor', 'mixer')])).rejects.toThrow('consulta y devolución histórica');
   });
-  it('does not count a disconnected motor as satisfying the requirement', async () => {
-    await expect(fixture().validate([item('mixer'), item('motor')])).rejects.toThrow('motor asignado');
+  it('does not apply old quantity caps even before a stored configuration is converted', async () => {
+    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).resolves.toBeUndefined();
   });
-  it('keeps maximum quantities', async () => {
-    await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).rejects.toThrow('máximo 1');
+  it('recommendations do not impose legacy minimums or quantity caps', async () => {
+    const f = fixture();
+    Object.assign(f.configs[1].entries[0], { recommendation: true, required: true, quantity: 5, maximumQuantity: 1 });
+    await expect(f.validate([item('loader')])).resolves.toBeUndefined();
+    await expect(f.validate([item('loader'), item('bucket', 'loader'), item('bucket2', 'loader')])).resolves.toBeUndefined();
   });
   it('allows simultaneous transport of different compatible implements', async () => {
     await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('forks', 'loader')])).resolves.toBeUndefined();
   });
-  it('missing part errors identify the equipment by its readable name, not its generated code', async () => {
+  it('an untouched legacy required unit is only a recommendation, not a document blocker', async () => {
     const f = fixture();
     f.configs[1].entries.push({ assetId: 'bucket', asset: { publicCode: 'BUCKET-IMPORT-LONG-CODE',
       internalNumber: 3, sku: { name: 'Balde New Holland' } }, required: true, quantity: 1 } as never);
-    await expect(f.validate([item('loader')])).rejects.toThrow('Balde New Holland #3');
+    await expect(f.validate([item('loader')])).resolves.toBeUndefined();
   });
   it('rejects incompatible equipment and absent parents', async () => {
     await expect(fixture().validate([item('loader'), item('wrong', 'loader')])).rejects.toThrow('no está permitida');
-    await expect(fixture().validate([item('motor', 'mixer')])).rejects.toThrow('equipo principal');
+    await expect(fixture().validate([item('bucket', 'loader')])).rejects.toThrow('equipo principal');
   });
   it('rejects duplicate equipment', async () => {
     await expect(fixture().validate([item('loader'), item('bucket', 'loader'), item('bucket')])).rejects.toThrow('dos veces');
@@ -58,10 +60,10 @@ describe('Unified document composition', () => {
   it('does not require an optional roof', async () => {
     await expect(fixture().validate([item('roller')])).resolves.toBeUndefined();
   });
-  it('validates required accessories before accessory lines are separated', async () => {
+  it('old required accessories do not block documents with or without the implement', async () => {
     const f = fixture();
     f.configs[2].entries[0].required = true;
-    await expect(f.validate([item('roller')])).rejects.toThrow('requiere');
+    await expect(f.validate([item('roller')])).resolves.toBeUndefined();
     await expect(f.validate([item('roller'), { accessoryId: 'roof', componentParentAssetId: 'roller', quantity: 1 }])).resolves.toBeUndefined();
   });
   it('allows a partial return without requiring the current default motor', async () => {

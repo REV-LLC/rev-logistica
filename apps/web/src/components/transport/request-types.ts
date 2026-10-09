@@ -68,6 +68,8 @@ export type SelectedItem = {
   assetId?: string;
   name: string;
   requestedTag?: string;
+  deliveryFuel?: 'ELECTRICO' | 'GASOLINA';
+  deliveryFuelSelectable?: boolean;
   serial?: string | null;
   quantity?: number;
   availableQuantity?: number;
@@ -175,27 +177,21 @@ export type RequestDocumentDetail = {
     condition?: string | null;
     conditionNote?: string | null;
     requestedTag?: string | null;
+    deliveryFuel?: 'ELECTRICO' | 'GASOLINA' | null;
     billingCutoffDate?: string | null;
     sku?: { id: string; name: string } | null;
     asset?: {
       id: string;
+      isImplement?: boolean;
       internalNumber?: number | null;
       serialOrEngine?: string | null;
       description?: string | null;
       kind?: 'STANDARD' | 'MOTOR' | string | null;
-      assignedMotorId?: string | null;
-      assignedToMixer?: { id: string } | null;
-      sku?: { id: string; name: string } | null;
+      sku?: { id: string; name: string; assetFamily?: { deliveryFuelSelectable?: boolean } } | null;
     } | null;
   }>;
 };
 
-export type MixerMotorRecovery = {
-  document: RequestDocumentDetail;
-  mixer: InventorySerial;
-  motors: InventorySerial[];
-  ownerWarehouseId: string;
-};
 
 export type RecoverableApprovalError = {
   code?: string;

@@ -3,6 +3,7 @@ import { ChargeType, Prisma, SkuControlType, WarehouseType } from '@prisma/clien
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { SKU_WEIGHT_UNITS } from './skus.constants';
+import { validateImplementClassification } from '../inventory/implement-classification';
 
 @Injectable()
 export class SkusService {
@@ -65,6 +66,8 @@ export class SkusService {
         areaM2: true,
         unitWeight: true,
         active: true,
+        isImplement: true,
+        isConsumable: true,
         createdAt: true,
         assetFamily: {
           select: {
@@ -95,6 +98,11 @@ export class SkusService {
 
   listUnits() {
     return SKU_WEIGHT_UNITS;
+  }
+  async getSku(id: string) {
+    const sku = await this.prisma.sku.findUnique({ where: { id }, include: { assetFamily: true, assetSubfamily: true } });
+    if (!sku) throw new NotFoundException('Referencia no encontrada.');
+    return { ...sku, controlType: sku.assetFamily.controlType, category: sku.assetFamily.name };
   }
 
   async listProviderPrices(params: { providerWarehouseId?: string; skuId?: string }) {
@@ -165,6 +173,8 @@ export class SkusService {
   }
 
   async createSku(payload: {
+    isImplement?: boolean;
+    isConsumable?: boolean;
     name: string;
     imageUrl?: string;
     assetFamilyId: string;
@@ -193,6 +203,7 @@ export class SkusService {
       assetFamily,
       payload.assetSubfamilyId,
     );
+    validateImplementClassification(assetFamily.controlType, payload.isImplement ?? false, payload.isConsumable ?? false);
 
     const chargeConfig = this.resolveCreateChargeConfig(payload.chargeType, payload.minimumChargeHours);
 
@@ -215,6 +226,8 @@ export class SkusService {
           areaM2: payload.areaM2 ?? null,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
+          isImplement: payload.isImplement ?? false,
+          isConsumable: payload.isConsumable ?? false,
         },
         select: {
           id: true,
@@ -267,6 +280,8 @@ export class SkusService {
   async updateSku(
     skuId: string,
     payload: {
+      isImplement?: boolean;
+      isConsumable?: boolean;
       name?: string;
       imageUrl?: string;
       assetFamilyId?: string;
@@ -293,6 +308,8 @@ export class SkusService {
         assetSubfamilyId: true,
         chargeType: true,
         minimumChargeHours: true,
+        isImplement: true,
+        isConsumable: true,
       },
     });
 
@@ -307,6 +324,8 @@ export class SkusService {
     if (!targetAssetFamily) {
       throw new BadRequestException('Asset family not found');
     }
+    validateImplementClassification(targetAssetFamily.controlType,
+      payload.isImplement ?? sku.isImplement, payload.isConsumable ?? sku.isConsumable);
     const assetSubfamilyId =
       payload.assetFamilyId || payload.assetSubfamilyId
         ? await this.resolveAssetSubfamilyId(targetAssetFamily, payload.assetSubfamilyId)
@@ -339,6 +358,8 @@ export class SkusService {
           areaM2: payload.areaM2 ?? undefined,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
+          isImplement: payload.isImplement,
+          isConsumable: payload.isConsumable,
         },
         select: {
           id: true,

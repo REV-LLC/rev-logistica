@@ -13,6 +13,7 @@ export type RequestItemInput = {
   assetId?: string;
   name: string;
   requestedTag?: string;
+  deliveryFuel?: 'ELECTRICO' | 'GASOLINA';
   quantity?: number;
   ownerWarehouseId?: string | null;
   isDamaged?: boolean;
@@ -24,9 +25,11 @@ export function documentCompositionPayload(item: {
   selectionId?: string; compositionNodeId?: string | null; parentCompositionNodeId?: string | null;
   sourceDocumentItemId?: string | null; parentSourceDocumentItemId?: string | null;
   parentLegacyOriginId?: string | null;
+  deliveryFuel?: 'ELECTRICO' | 'GASOLINA' | null;
 }) {
   const node = item.compositionNodeId ?? item.selectionId;
   return {
+    ...(item.deliveryFuel ? { deliveryFuel: item.deliveryFuel } : {}),
     ...(node ? { compositionNodeId: node } : {}),
     ...(item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
     ...(item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),
@@ -37,6 +40,7 @@ export function documentCompositionPayload(item: {
 
 export function restoreDocumentComposition(item: Parameters<typeof documentCompositionPayload>[0] & { id: string }) {
   return {
+    ...(item.deliveryFuel ? { deliveryFuel: item.deliveryFuel, deliveryFuelSelectable: true } : {}),
     selectionId: item.compositionNodeId ?? item.id,
     ...(item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
     ...(item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),

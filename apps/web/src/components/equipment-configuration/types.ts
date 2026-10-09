@@ -2,14 +2,19 @@ import { getSerialDisplayName } from '@/lib/serial-assets';
 
 export type PartRole = "COMPONENT" | "ACCESSORY";
 export type ConfigurationLocation =
-  | { assetId: string; accessoryId?: never; label: string }
-  | { accessoryId: string; assetId?: never; label: string };
+  | { assetId: string; accessoryId?: never; skuId?: never; label: string }
+  | { accessoryId: string; assetId?: never; skuId?: never; label: string }
+  | { skuId: string; assetId?: never; accessoryId?: never; label: string };
 export type ConfigurationEntry = {
   id: string;
   role: PartRole;
   assetId?: string | null;
+  skuId?: string | null;
+  recommendation?: boolean;
+  sku?: { id: string; name: string; imageUrl?: string | null; isConsumable?: boolean } | null;
   accessoryId?: string | null;
   familyId?: string | null;
+  templateParentFamilyId?: string | null;
   family?: { id: string; name: string; controlType: 'SERIAL' | 'BULK' } | null;
   maximumQuantity?: number | null;
   quantity: number;
@@ -24,7 +29,7 @@ export type ConfigurationEntry = {
   };
   asset?: { id: string; publicCode: string; description?: string | null;
     internalNumber?: number | null; warehouseOwner?: { name: string } | null;
-    sku: { name: string } } | null;
+    imageUrl?: string | null; isImplement?: boolean; sku: { name: string; imageUrl?: string | null } } | null;
   accessory?: {
     id: string;
     name: string;
@@ -35,33 +40,27 @@ export type ConfigurationEntry = {
   } | null;
 };
 export type EquipmentConfiguration = {
-  motor?: EquipmentMotor;
+  deliveryFuelSelectable?: boolean;
   notes?: string | null;
   version: number;
   entries: ConfigurationEntry[];
-  parent?: { name: string; familyId: string; warehouseId: string | null };
+  parent?: { name: string; familyId: string; ownerWarehouseId?: string | null; warehouseId: string | null; isImplement?: boolean };
 };
-export type MotorAsset = { description?: string | null; id: string; publicCode: string; internalNumber: number; serialOrEngine: string | null; fuel: string | null; sku: { name: string } };
-export type EquipmentMotor = {
-  configuration: 'NONE' | 'FIXED' | 'INTERCHANGEABLE';
-  assignedMotorId?: string | null;
-  assignedMotor?: MotorAsset | null;
-  canConfigure?: boolean;
-};
-export const motorLabel = (motor: MotorAsset) => `${motor.description || motor.sku.name} #${motor.internalNumber}${motor.serialOrEngine ? ` · ${motor.serialOrEngine}` : ''}`;
 export const partRoleLabels: Record<PartRole, string> = {
-  COMPONENT: "Componente",
-  ACCESSORY: "Accesorio",
+  COMPONENT: "Implemento",
+  ACCESSORY: "Implemento",
 };
 export const entryName = (entry: ConfigurationEntry) =>
   entry.newPart?.name ||
   entry.accessory?.name ||
+  entry.sku?.name ||
   (entry.asset ? `${getSerialDisplayName({ ...entry.asset, skuName: entry.asset.sku.name })}${entry.asset.warehouseOwner?.name ? ` · ${entry.asset.warehouseOwner.name}` : ''}` : '') ||
   entry.family?.name ||
   "Sin nombre";
 
 export function configurationPartLocation(entry: ConfigurationEntry): ConfigurationLocation | null {
   if (entry.assetId) return { assetId: entry.assetId, label: entryName(entry) };
+  if (entry.skuId) return { skuId: entry.skuId, label: entryName(entry) };
   if (entry.accessoryId) return { accessoryId: entry.accessoryId, label: entryName(entry) };
   return null; // New elements must be saved to obtain their persistent identity.
 }
@@ -81,9 +80,12 @@ export function configurationPayload(config: EquipmentConfiguration) {
     entries: config.entries.map((row) => ({
       id: row.id,
       role: row.role,
+      recommendation: row.recommendation ?? !!row.familyId,
       ...(row.assetId ? { assetId: row.assetId } : {}),
+      ...(row.skuId ? { skuId: row.skuId } : {}),
       ...(row.accessoryId ? { accessoryId: row.accessoryId } : {}),
       ...(row.familyId ? { familyId: row.familyId } : {}),
+      ...(row.familyId && row.templateParentFamilyId !== undefined ? { templateParentFamilyId: row.templateParentFamilyId } : {}),
       ...(row.maximumQuantity !== undefined ? { maximumQuantity: row.maximumQuantity } : {}),
       ...(row.newPart ? { newPart: row.newPart } : {}),
       quantity: row.quantity,
@@ -94,7 +96,7 @@ export function configurationPayload(config: EquipmentConfiguration) {
 }
 export function configurationError(config: EquipmentConfiguration) {
   for (const row of config.entries) {
-    if (![row.assetId, row.accessoryId, row.familyId, row.newPart].filter(Boolean).length)
+    if (![row.assetId, row.skuId, row.accessoryId, row.familyId, row.newPart].filter(Boolean).length)
       return "Vincula un elemento o completa sus datos.";
     if (row.newPart && !row.newPart.name.trim())
       return "Escribe el nombre de cada elemento nuevo.";
@@ -106,6 +108,21 @@ export function configurationError(config: EquipmentConfiguration) {
         row.newPart.initialQuantity < 1)
     )
       return "Indica una existencia inicial positiva.";
+  }
+  const families = new Map(config.entries.filter(row => row.familyId).map(row => [row.familyId!, row]));
+  for (const row of config.entries) {
+    if (row.templateParentFamilyId && !row.familyId)
+      return "Solo una familia de la ruta puede tener un paso anterior.";
+    if (row.templateParentFamilyId && !families.has(row.templateParentFamilyId))
+      return "El paso anterior debe pertenecer a esta ruta.";
+    const visited = new Set<string>();
+    let current: ConfigurationEntry | undefined = row.familyId ? row : undefined;
+    while (current?.familyId) {
+      if (visited.has(current.familyId)) return "La ruta no puede tener ciclos.";
+      visited.add(current.familyId);
+      if (visited.size > 16) return "La ruta admite hasta 16 niveles.";
+      current = current.templateParentFamilyId ? families.get(current.templateParentFamilyId) : undefined;
+    }
   }
   return null;
 }

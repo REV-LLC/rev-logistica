@@ -7,6 +7,7 @@ import type { AnnexInput } from './annex-input';
 import type { CommercialSnapshot } from '../commercial-profiles/commercial-profile.input';
 import { documentCommercialSnapshots } from '../commercial-profiles/commercial-history';
 import { inventoryBusinessDay } from '../inventory/business-date-ledger-order';
+import { projectReviewedImplementCutovers } from '../commercial-profiles/promoted-implement-commercial-bridge';
 import type { SourceIssue } from './annex-inventory';
 
 type Ledger = {
@@ -59,7 +60,7 @@ export async function applyCommercialComposition(
   siteId: string,
   history: AnnexInput[],
 ) {
-  const documents = await tx.document.findMany({
+  let documents = await tx.document.findMany({
     where: {
       customerWorksiteId: siteId,
       status: 'CONFIRMED',
@@ -100,6 +101,7 @@ export async function applyCommercialComposition(
       'El historial de accesorios requiere procesamiento por lotes',
     );
   const bridge = await legacyCommercialBridge(tx, siteId, period.through);
+  documents = projectReviewedImplementCutovers(documents, bridge.documents);
   documents.push(...bridge.documents);
   const bridgeBySource = new Map(
     bridge.entries.map((entry) => [entry.sourceLedgerId, entry]),
@@ -139,7 +141,7 @@ export async function applyCommercialComposition(
     const reviewed = bridgeBySource.get(lot.source.reference);
     if (
       handledV2.has(lot.id) &&
-      (!reviewed || reviewed.effectiveFrom <= period.from)
+      (!reviewed || reviewed.effectiveFrom <= period.from || lot.deliveredOn >= reviewed.effectiveFrom)
     )
       continue;
     if (reviewed)

@@ -5,8 +5,20 @@
   color: var(--ui-color-title, #0f172a);
   line-height: 1.35;
 }
-.backLink { width: fit-content; color: var(--mantine-color-blue-6); font-size: 14px; text-decoration: none; }
-.backLink:hover { text-decoration: underline; }
+.implementCard {
+  padding: 18px;
+  border: 1px solid #e1e5ed;
+  border-radius: 12px;
+  background: #fff;
+}
+.cardImage {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  margin-bottom: 12px;
+}
 .row {
   display: flex;
   align-items: center;
@@ -47,14 +59,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.notes {
-  color: #64748b;
-  font-size: 14px;
-}
-.notes summary {
-  cursor: pointer;
-  width: fit-content;
 }
 .actions {
   display: flex;

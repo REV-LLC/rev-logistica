@@ -1,0 +1,36 @@
+{
+  "status": "applied-local-only-production-preflight-required",
+  "reviewedOn": "2026-10-06",
+  "change": "Assign the existing quantity-controlled reference to its existing subfamily. Do not create or convert an identity.",
+  "reference": {
+    "name": "YOYO ANDAMIO COLGANTE",
+    "qaSkuId": "d006a75a-be1a-461d-bd27-a8daac757c9b",
+    "familyCode": "ANDAMIO_COLGANTE",
+    "controlType": "BULK",
+    "previousSubfamily": null,
+    "targetSubfamilyCode": "YOYO",
+    "targetSubfamilyName": "YOYOS"
+  },
+  "localVerification": {
+    "database": "configuration_ui_qa_20261002",
+    "protectedTablesUnchanged": 74,
+    "otherSkuRowsUnchanged": 220,
+    "retryChanges": 0,
+    "backup": "/private/tmp/rev-scaffold-yoyo-20261006-dFnBHC/qa-before.dump",
+    "backupSha256": "e7eef71cb74f98b70924d4d2ea6c4811d4db7dc91e78369b7713ef43b4afed95",
+    "evidence": "/private/tmp/rev-scaffold-yoyo-20261006-dFnBHC/applied.json"
+  },
+  "productionPreflight": [
+    "Inspect current production and confirm a single intended YOYO ANDAMIO COLGANTE reference in the BULK ANDAMIO_COLGANTE family; the QA UUID is evidence, not an instruction to choose a production row.",
+    "Confirm the active YOYO subfamily belongs to that same family; do not create a separate AssetFamily or move the reference out of its family.",
+    "Require a fresh verified backup and explicit production authorization.",
+    "If already assigned to YOYO, do nothing. If assigned elsewhere, stop for review rather than overwriting.",
+    "Change only Sku.assetSubfamilyId and verify all other fields, identities, documents, configurations and ledger rows remain unchanged."
+  ],
+  "bulkAssemblies": {
+    "status": "not-implemented",
+    "compositionQuantities": "awaiting-user-confirmation",
+    "trackingModel": "awaiting-confirmation-template-versus-individually-tracked-assembly",
+    "automaticUnitLinks": false
+  }
+}

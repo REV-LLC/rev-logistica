@@ -118,6 +118,12 @@ const sections: NavSection[] = [
         ],
       },
       {
+        href: "/transport/tracking",
+        label: "Seguimiento de camiones",
+        icon: IconMap2,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/transport/vehicles",
         label: "Vehículos",
         icon: IconTruck,
@@ -206,12 +212,6 @@ const sections: NavSection[] = [
             activeHrefs: ["/inventory/serialized-assets"],
           },
         ],
-      },
-      {
-        href: "/inventory/accessories",
-        label: "Accesorios",
-        icon: IconBox,
-        roles: ["ADMIN", "OFFICE"],
       },
       {
         href: "/inventory/maintenance",

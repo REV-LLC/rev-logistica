@@ -96,7 +96,7 @@ export class SerializedAssetSubfamilyInput {
 }
 
 export class SerializedAssetInput {
-  @IsOptional() @IsBoolean() interchangeableMotor?: boolean;
+  @IsOptional() @IsBoolean() isImplement?: boolean;
   @IsOptional()
   @IsString()
   serialOrEngine?: string;

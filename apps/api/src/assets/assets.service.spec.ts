@@ -64,6 +64,7 @@ describe('AssetsService asset deletion', () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'asset-1' }]),
       accessoryBalance: { count: jest.fn().mockResolvedValue(0) },
+      retiredMotorConfiguration: { findUnique: jest.fn().mockResolvedValue(null) },
       asset: {
         update: jest.fn().mockResolvedValue({
           id: 'asset-1',

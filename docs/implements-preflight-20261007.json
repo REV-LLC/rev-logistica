@@ -1,0 +1,121 @@
+{
+  "status": "INTEGRATED_LOCALLY_NOT_READY_FOR_PRODUCTION",
+  "branch": "codex/implements-integration",
+  "productionBase": "6f398b3bea7ecd477f018dd36661a97320893083",
+  "snapshot": {
+    "takenAt": "2026-10-07T12:41:29.361Z",
+    "sha256": "c37ec329a10163cc92a11a7ded2509b1b94515d350a6d3401706ea878d8a46f0",
+    "qaDatabase": "accessory_qa_implements_20261007",
+    "protectedBackupLocation": "outputs/release-backups/implements-20261007, en el checkout 6414, ignorado por Git"
+  },
+  "verified": {
+    "apiBuild": "PASS",
+    "webBuild": "PASS",
+    "apiTestsWithPostgres": 1211,
+    "apiSkippedTests": 0,
+    "webTests": 239,
+    "localConversionSafetyTests": 5,
+    "schemaMigrationsOnFreshClone": 7,
+    "bulkKitReleasePreserved": true,
+    "productionWrites": 0,
+    "physicalIdentityConversionsApplied": 0,
+    "uiBrowserVerificationOfIntegratedVersion": "PENDING_FULL_ROLLOUT_REHEARSAL",
+    "sharedSerialFamily": {
+      "status": "PASS",
+      "browserViewports": ["1440x1000", "390x844"],
+      "browserWrites": 0,
+      "databaseTests": "PostgreSQL real con rollback: creación en familia compartida y subfamilia separada, filtro por isImplement, rechazo de unidad no vinculada, precios ASSET/SKU independientes, documento y anexo congelados",
+      "classificationChangesApplied": 0,
+      "existingBulkFamilyControlPreserved": true
+    },
+    "implementCreationDefaults": {
+      "status": "PASS",
+      "inheritedFields": ["familyId", "ownerWarehouseId", "warehouseId"],
+      "independentlyEditableWarehouses": true,
+      "worksiteLocationIsNotInvented": true,
+      "browserCreationWrites": 0
+    },
+    "pricingUi": {
+      "status": "PASS",
+      "environment": "localhost:3165 web / localhost:3063 API / copia local PostgreSQL",
+      "browser": "Playwright incluido y Chrome instalado; plugin Browser no disponible",
+      "viewports": ["1440x1000", "390x844"],
+      "realSaveStatus": 200,
+      "manualEffectiveDateRemoved": true,
+      "effectiveDateSource": "Servidor, fecha civil America/Bogota al guardar; la UI no envía effectiveFrom",
+      "fixtureOnly": true,
+      "checks": ["guardar y recargar precio c/u conservando IDs, cantidades automáticas y mínimos", "editor único con tarifas junto al grupo y combinaciones multigrupo", "agregar grupos no reemplaza reglas existentes", "proteger cambios sin guardar", "sin errores de aplicación ni desbordamiento horizontal"],
+      "knownWarnings": ["Aviso Next Image LCP del logo fiesta.svg, ajeno al flujo de precios. Las lecturas obsoletas se cancelan al cambiar pestaña o recargar."]
+    }
+  },
+  "currentCatalogue": {
+    "legacyAccessories": 13,
+    "activeLegacyAccessories": 13,
+    "individualLegacyAccessories": 13,
+    "legacyAccessoriesWithDocuments": 3,
+    "configurationEntries": 69,
+    "legacyRequiredEntries": 8,
+    "legacyCappedEntries": 32
+  },
+  "additionalCorrections": [
+    "La validación documental nueva ya no impone requisitos ni máximos del modelo antiguo, aunque las filas guardadas no se hayan convertido. Mantiene compatibilidad, identidad, origen, existencias y asignación persistente del motor.",
+    "La lectura de configuración presenta requisitos y máximos antiguos como recomendaciones, sin reescribir sus filas ni modificar la versión guardada.",
+    "Las pruebas documentales y de motores identifican la remisión de origen al devolver y al agregar piezas a un equipo ya entregado. No se debilitó el validador para hacerlas pasar.",
+    "El control BULK por cantidad es independiente del consumo: admite implementos retornables y consumibles. La creación y selección de implementos ofrecen ambos casos sin reglas por nombre de familia.",
+    "Prueba PostgreSQL de implemento BULK retornable: crear diez unidades, remitir tres, devolver dos y después una, rechazar devolución duplicada sin efectos parciales y conservar isConsumable=false. Los datos de ensayo se revierten.",
+    "Pestaña Precios directa y un único editor genérico por identidades: tarifas con/sin junto a su grupo, combinaciones multigrupo separadas, precio c/u y cantidad mínima. El origen DAY/HOUR/METER sigue configurado en Cálculo automático; cambiar solo precio no lo altera. Se retiró el editor rápido anterior y su reemplazo global de modalidades. Las alternativas nuevas empiezan en DAY visible con precio vacío; no se adivina METER por familia.",
+    "Prueba PostgreSQL con equipo X e implemento Y nativo BULK: guardar perfiles por SKU, remitir dos equipos con/sin implemento, verificar DAY mínimo3 y METER mínimo40 en documentos y anexos, incluido contextual0 y conservación del precio congelado tras editar el perfil. Todos los datos de esa prueba se revierten.",
+    "La vigencia ya no es editable en la UI: cada guardado omite effectiveFrom y el servidor lo calcula en Bogotá. Se probó el cambio a medianoche, la persistencia real por HTTP y que no se reutilice una fecha antigua del perfil. Los llamadores existentes con fechas explícitas mantienen compatibilidad.",
+    "Máquina e implemento individual pueden compartir familia SERIAL y distinguirse por subfamilia e isImplement. Crear implemento propone la familia del principal y permite una nueva subfamilia; no infiere compatibilidad ni guarda vínculos automáticamente.",
+    "Los implementos no heredan modalidades del ámbito FAMILY en nuevas entregas ni nuevos empalmes. Se conservan perfiles propios ASSET/SKU, precios explícitos dentro del conjunto y snapshots anteriores. La UI no ofrece editar la tarifa de toda la familia desde un implemento.",
+    "El formulario de implementos no envía providerPrice=0: ese campo es costo de proveedor, no tarifa comercial, y el backend lo rechaza para bodegas propias. Pruebas React verifican ambos payloads individuales/BULK sin escribir datos.",
+    "Crear implemento hereda bodega propietaria y bodega actual del principal como campos independientes editables. Si el equipo está en obra, no se crea ni se inventa ubicación: Office debe elegir bodega inicial. Se probaron bodegas diferentes, cambio manual, referencia inexistente y ubicación null."
+  ],
+  "confirmedDecisions": [
+    {
+      "case": "Familia compartida para equipo e implementos individuales",
+      "detail": "El usuario prefiere Minicargadores como familia común, con subfamilias para máquinas, baldes, martillos, etc. Compartir familia no significa compatibilidad ni tarifa común. La creación y el aislamiento comercial están probados; falta el manifiesto revisado de reclasificación de registros existentes. El control SERIAL/BULK de familias no se ha alterado."
+    },
+    {
+      "case": "Cantidades de cobro automáticas y editor único",
+      "detail": "Editor único implementado localmente con grupos, combinaciones y precio c/u. Conserva DAY/HOUR/METER y sus automatismos; no existe conversión genérica de cantidad física a cantidad facturable. Coordinado con Rediseñar anexos y prefacturas: días se ajustan con dayAdjustments, horas con machineDays y metros con metering; select-mode elige modalidades del snapshot congelado."
+    },
+    {
+      "case": "Cortadora con o sin disco",
+      "withImplement": "METER con mínimo por alquiler configurable",
+      "withoutImplement": "DAY con mínimo de días por alquiler configurable",
+      "detail": "El usuario confirmó metros, no centímetros. No se han recibido ni cargado tarifas reales en esta implementación. Los mínimos de alquileres que cambian DAY/METER siguen sujetos a revisión; editar el catálogo no actualiza snapshots anteriores."
+    },
+    {
+      "items": ["MANGUERA DE SUCCIÓN", "MANGUERA DE DESCARGA FLEXIBLE"],
+      "controlType": "BULK",
+      "isImplement": true,
+      "isConsumable": false,
+      "detail": "Confirmado por el usuario: por cantidad y retornables. El código nativo admite este modelo; los registros existentes todavía no se han convertido."
+    }
+  ],
+  "releaseBlockers": [
+    {
+      "code": "DOCUMENTED_LEGACY_IDENTITY_BRIDGE",
+      "items": ["BACHE PARA PLUMA GRUA", "TRIPODE PARA PLUMA GRUA", "GUAYA GRUESA #7"],
+      "detail": "El servicio de promoción actual rechaza identidades con DocumentItem o movimientos documentales. Implementar y ensayar el empalme de devolución y anexo contra las líneas originales; no borrar, reescribir ni ignorar documentos históricos."
+    },
+    {
+      "code": "REVIEWED_RETURNABLE_HOSE_CONVERSION",
+      "items": ["MANGUERA DE SUCCIÓN", "MANGUERA DE DESCARGA FLEXIBLE"],
+      "detail": "Hoy figuran como INDIVIDUAL. La clasificación BULK retornable ya está confirmada e implementada para registros nativos. Falta preparar y ensayar la conversión de estas identidades existentes conservando propietario, ubicación, cantidades, relaciones y evidencia histórica; no se ha aplicado ninguna conversión física."
+    },
+    {
+      "code": "REVIEWED_CUTOVER_MANIFEST",
+      "detail": "Preparar un manifiesto revisado de referencias, subfamilias, numeración, ubicación, perfiles comerciales e imagen para las unidades autorizadas. La referencia de balde del ensayo existe en el snapshot nuevo, pero no se reutilizan el Asset ni las huellas de QA. Conservar #2 para el balde CASE SR240B confirmado."
+    },
+    {
+      "code": "LEGACY_CREATION_AND_EXISTING_BULK_UI",
+      "detail": "El catálogo anterior todavía permite crear registros Accessory y el editor de inventario BULK existente no expone aún la clasificación de implemento. Completar la UI y retirar la creación anterior solo junto con el empalme; conservar lectores históricos."
+    },
+    {
+      "code": "FINAL_UI_AND_ROLLOUT_REHEARSAL",
+      "detail": "Levantar un preview con API y web integrados contra esta base QA, revisar Office y Driver en escritorio/móvil y ejecutar el manifiesto revisado. Después repetir preflight contra producción actual antes de publicar."
+    }
+  ]
+}

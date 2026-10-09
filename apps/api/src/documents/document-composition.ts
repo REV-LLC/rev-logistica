@@ -4,9 +4,11 @@ import { Prisma } from '@prisma/client';
 import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
 import { documentReturnOrigins } from './document-return-origins';
 import { assertLegacyEquipmentOrigin } from './legacy-equipment-origin';
+import { reviewedDocumentaryIdentities } from '../accessories/implement-documentary-identity';
 import { getWorksiteQuantityDelta, WORKSITE_BALANCE_MOVEMENT_TYPES } from '../inventory/worksite-ledger-balance';
 
 export type CompositionFields = {
+  deliveryFuel?: string | null;
   compositionNodeId?: string | null;
   parentCompositionNodeId?: string | null;
   sourceDocumentItemId?: string | null;
@@ -23,6 +25,7 @@ export const isDocumentCompositionV2 = (date?: Date) =>
 
 export function compositionFields(item: CompositionFields): CompositionFields {
   return {
+    ...(item.deliveryFuel ? { deliveryFuel: item.deliveryFuel } : {}),
     compositionNodeId: item.compositionNodeId ?? null,
     parentCompositionNodeId: item.parentCompositionNodeId ?? null,
     sourceDocumentItemId: item.sourceDocumentItemId ?? null,
@@ -95,12 +98,17 @@ export async function prepareDocumentComposition<T extends CompositionLine>(
     if (line.sourceDocumentItemId) return bySource.get(line.sourceDocumentItemId)!.componentParentAssetId;
     return line.componentParentAssetId ?? null;
   };
-  return rows.map(item => ({ ...item, componentParentAssetId: anchor(item),
+  return rows.map(item => {
+    const source = item.sourceDocumentItemId ? bySource.get(item.sourceDocumentItemId) : undefined;
+    if (source && item.deliveryFuel && item.deliveryFuel !== source.deliveryFuel)
+      throw new BadRequestException('El combustible de la devolución debe coincidir con la entrega de origen.');
+    return ({ ...item, ...(source ? { deliveryFuel: source.deliveryFuel } : {}), componentParentAssetId: anchor(item),
     ...(!item.parentCompositionNodeId && !item.parentSourceDocumentItemId && !item.parentLegacyOriginId && item.sourceDocumentItemId ? {
       parentSourceDocumentItemId: bySource.get(item.sourceDocumentItemId)!.compositionParent?.id ?? bySource.get(item.sourceDocumentItemId)!.parentSourceDocumentItemId,
       parentLegacyOriginId: bySource.get(item.sourceDocumentItemId)!.parentLegacyOriginId,
     } : {}),
-  }));
+    });
+  });
 }
 
 /** Resolve immediate parents while verifying immutable documentary references. Runs inside stock transaction. */
@@ -111,7 +119,7 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
   const rows = normalizeComposition(document.items);
   const ids = [...new Set(rows.flatMap(item => [item.sourceDocumentItemId, item.parentSourceDocumentItemId].filter((id): id is string => !!id)))];
   const sources = ids.length ? await tx.documentItem.findMany({ where: { id: { in: ids } }, include: { document: true, compositionParent: { select: { id: true } } } }) : [];
-  const bySource = new Map(sources.map(item => [item.id, item]));
+  const bySource = new Map((await reviewedDocumentaryIdentities(tx, sources, document.docDate)).map(item => [item.id, item]));
   const byNode = new Map(rows.map(item => [item.compositionNodeId, item]));
   if (document.type === 'RETURN' && document.customerWorksiteId && rows.some(item => !item.sourceDocumentItemId)) {
     const origins = await documentReturnOrigins(tx, document.customerWorksiteId, document.id);
@@ -130,7 +138,7 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
       if (item.accessoryId) {
         const balance = await tx.accessoryBalance.aggregate({ where: { accessoryId: item.accessoryId,
           assetId: item.componentParentAssetId, customerWorksiteId: document.customerWorksiteId,
-          transitDocumentId: null }, _sum: { quantity: true } });
+          transitDocumentId: null, accessory: { implementBridge: null } }, _sum: { quantity: true } });
         physical = balance._sum.quantity ?? 0;
       } else if (item.skuId) {
         const movements = await tx.stockLedger.groupBy({ by: ['movementType'], where: {
@@ -166,6 +174,8 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
     if (item.sourceDocumentItemId) {
       if (document.type !== 'RETURN') throw new BadRequestException('La línea de origen para devolución solo se usa al devolver.');
       const source = bySource.get(item.sourceDocumentItemId)!;
+      if ((item.deliveryFuel ?? null) !== (source.deliveryFuel ?? null))
+        throw new BadRequestException('El combustible de la devolución debe coincidir con la entrega de origen.');
       if ((item.assetId ?? null) !== source.assetId || (item.accessoryId ?? null) !== source.accessoryId || (item.skuId ?? null) !== source.skuId)
         throw new BadRequestException('El elemento devuelto no corresponde a su remisión de origen.');
       const originalParent = source.compositionParent?.id ?? source.parentSourceDocumentItemId ?? (source.parentLegacyOriginId ? `legacy-origin:${source.parentLegacyOriginId}` : undefined);
@@ -186,6 +196,7 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
         const present = await tx.accessoryBalance.findFirst({ where: {
           accessoryId: parent.accessoryId, assetId: parent.componentParentAssetId,
           customerWorksiteId: document.customerWorksiteId, transitDocumentId: null, quantity: { gt: 0 },
+          accessory: { implementBridge: null },
         }, select: { id: true } });
         if (!present) throw new BadRequestException('El accesorio principal ya no está físicamente en esta obra.');
       }
@@ -195,7 +206,7 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
   }
   const accessoryParents = [...new Set([...parents.values()].flatMap(parent => parent.accessoryId ? [parent.accessoryId] : []))];
   if (accessoryParents.length) {
-    const eligible = await tx.accessory.findMany({ where: { id: { in: accessoryParents }, active: true, kind: 'INDIVIDUAL', purpose: 'ACCESSORY' }, select: { id: true } });
+    const eligible = await tx.accessory.findMany({ where: { id: { in: accessoryParents }, active: true, kind: 'INDIVIDUAL', purpose: 'ACCESSORY', implementBridge: null }, select: { id: true } });
     if (eligible.length !== accessoryParents.length) throw new BadRequestException('Solo un accesorio individualizado activo puede ser padre de otro elemento.');
   }
   return { items: rows, parents };

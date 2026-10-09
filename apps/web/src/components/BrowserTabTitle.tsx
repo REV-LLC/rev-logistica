@@ -23,6 +23,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/transport/generate', 'Generar documento'],
   ['/transport/driver-worksites', 'Obras'],
   ['/transport/cost', 'Costo de transporte'],
+  ['/transport/tracking', 'Seguimiento de camiones'],
   ['/transport/vehicles', 'Vehículos'],
   ['/transport/worksites', 'Obras'],
   ['/mobility-guides', 'Guías de movilidad'],

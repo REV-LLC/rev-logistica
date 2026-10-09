@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "status": "REVIEWED_IN_QA_PENDING_PRODUCTION_PREFLIGHT",
+  "purpose": "Correspondencia revisada de una única unidad, no conversión de una familia ni copia de la base QA a producción.",
+  "sourceAccessoryId": "c1b90a70-6c66-4b8b-a769-699382dd002a",
+  "sourceName": "BALDE ESTÁNDAR · CASE SR240B #2",
+  "targetSkuId": "7289f79d-aa98-45b7-bbe6-14d33adaecca",
+  "targetAssetDescription": "BALDE ESTÁNDAR",
+  "targetInternalNumber": 2,
+  "numberingReview": "El #2 corresponde al balde del CASE SR240B #2. El #1 corresponde al balde del BOBCAT S650 #1 y no fue convertido ni renumerado en este ajuste.",
+  "targetIsImplement": true,
+  "reviewedParentAssetId": "4c34a24a-27c0-458b-8362-a6ec67fc97fb",
+  "reviewedParentLegacyOriginId": "622f38c6-63ab-4042-9806-bf444d65917a",
+  "existingConfigurationEntryId": "18574cc3-fa4d-4f01-bf6b-a7e80e9539b1",
+  "defaultIncluded": true,
+  "image": {
+    "file": "bucket-case-sr240b-2.png",
+    "sha256": "9fb61fd7c07551f63f29398905f637341984c0f2ae56ea0ebf68e7c4763f86a4"
+  },
+  "productionRequirements": [
+    "Respaldo nuevo de producción y auditoría de sus datos actuales, no del snapshot QA del 2 de octubre.",
+    "Revisar nuevamente ubicación, propietario, cantidad única, documentos y configuraciones de este UUID antes de promover.",
+    "Si hay documentos, tránsito o relaciones no soportadas, preparar su empalme específico; no forzar esta primera versión.",
+    "Copiar el perfil comercial vigente revisado; no asumir cero ni reutilizar tarifas por nombre.",
+    "Generar una vista previa y huella nuevas contra producción con fecha real de empalme; no reutilizar la huella ni el Asset creado en QA.",
+    "Conservar el número revisado #2 para esta unidad y verificar que esté libre dentro del propietario y subfamilia; no asignar números por el orden de conversión ni renumerar otros equipos automáticamente.",
+    "Publicar esquema, código de identidad, selectores documentales, lectores de anexos e interfaz juntos.",
+    "Subir la imagen original al almacenamiento de producción y enlazar su FileObject al Asset, sin copiar URLs localhost.",
+    "Comprobar reintento idempotente, una sola existencia y documentos/movimientos históricos intactos."
+  ]
+}

@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 
 export class UpdateAssetDto {
+  @IsOptional() @IsBoolean() isImplement?: boolean;
   @IsOptional()
   @IsString()
   @MaxLength(80)

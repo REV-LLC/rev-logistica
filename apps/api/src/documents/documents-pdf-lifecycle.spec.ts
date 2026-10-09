@@ -130,7 +130,7 @@ describe('DocumentsService PDF lifecycle', () => {
     expect(emails.sendFinalIfNeeded).toHaveBeenCalledWith(document.id);
   });
 
-  it('does not ask a motor asset to select another motor during approval', async () => {
+  it('refuses a new dispatch of a retired motor without changing stock or confirming the draft', async () => {
     const document = {
       id: 'document-corrupted-motor-1',
       type: DocumentType.REMISSION,
@@ -192,8 +192,10 @@ describe('DocumentsService PDF lifecycle', () => {
 
     await expect(
       service.approveRequestDocument(document.id, 'office-1'),
-    ).resolves.toMatchObject({ status: DocumentStatus.CONFIRMED });
-    expect(inventory.moveOut).toHaveBeenCalled();
+    ).rejects.toThrow('consulta y devolución histórica');
+    expect(inventory.moveOut).not.toHaveBeenCalled();
+    expect(prisma.document.update).not.toHaveBeenCalled();
+    expect(emails.sendFinalIfNeeded).not.toHaveBeenCalled();
   });
 
   it('requires a remission linked to every provider before approval', async () => {

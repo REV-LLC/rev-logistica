@@ -3,6 +3,7 @@ import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessoriesService } from './accessories.service';
 import { Location, locationKey } from './accessory-rules';
+import { assertLegacyImplementWritable } from './implement-identity-rules';
 
 export type AccessoryReceiptSelection = {
   sourceMovementId: string;
@@ -20,7 +21,7 @@ export class AccessoryProviderReturnsService {
     const rows = await this.prisma.accessoryMovement.findMany({
       where: {
         type: { in: ['RETURN', 'TRANSIT'] },
-        accessory: { ownerWarehouse: { type: 'ALLY' } },
+        accessory: { ownerWarehouse: { type: 'ALLY' }, implementBridge: null },
         document: {
           type: 'RETURN',
           status: 'CONFIRMED',
@@ -102,13 +103,14 @@ export class AccessoryProviderReturnsService {
       const movement = await tx.accessoryMovement.findUnique({
         where: { id: selection.sourceMovementId },
         include: {
-          accessory: true,
+          accessory: { include: { implementBridge: { select: { assetId: true } } } },
           document: { include: { items: true } },
           providerReceiptItems: {
             where: { receiptDocument: { status: 'CONFIRMED' } },
           },
         },
       });
+      if (movement) assertLegacyImplementWritable(movement.accessory);
       if (
         !movement ||
         !['RETURN', 'TRANSIT'].includes(movement.type) ||

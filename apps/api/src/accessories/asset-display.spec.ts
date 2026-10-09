@@ -18,7 +18,7 @@ describe('Readable equipment presentation', () => {
       equipmentConfiguration: { findUnique: jest.fn().mockResolvedValue(null) } };
     const service = new EquipmentConfigurationService(prisma as never, {} as never);
     const result = await service.get({ assetId: asset.id });
-    expect(result.parent).toEqual({ name: 'New Holland #3 · Motavita', familyId: 'family-id', warehouseId: 'warehouse-id' });
+    expect(result.parent).toEqual({ name: 'New Holland #3 · Motavita', familyId: 'family-id', ownerWarehouseId: 'owner-id', warehouseId: 'warehouse-id' });
     expect(prisma.asset.findFirst.mock.calls[0][0].where.id).toBe(asset.id);
     expect(prisma.equipmentConfiguration.findUnique.mock.calls[0][0].include.entries.include.asset.select)
       .toMatchObject({ internalNumber: true, description: true, warehouseOwner: { select: { name: true } } });
@@ -29,6 +29,15 @@ describe('Readable equipment presentation', () => {
     const service = new EquipmentConfigurationService({ asset: { findMany } } as never, {} as never);
     const result = await service.assetCandidates('New Holland');
     expect(findMany.mock.calls[0][0].select).toMatchObject({ id: true, publicCode: true, internalNumber: true, description: true, warehouseOwner: { select: { name: true } } });
-    expect(result.items[0]).toBe(asset);
+    expect(result.items[0]).toMatchObject(asset);
+    expect(result.items[0].id).toBe(asset.id);
+    expect(result.items[0].publicCode).toBe(asset.publicCode);
+  });
+
+  it('preserves the owner without fabricating a warehouse location for equipment on a worksite', async () => {
+    const prisma = { asset: { findFirst: jest.fn().mockResolvedValue({ ...asset, warehouseCurrentId: null }) },
+      equipmentConfiguration: { findUnique: jest.fn().mockResolvedValue(null) } };
+    const service = new EquipmentConfigurationService(prisma as never, {} as never);
+    expect((await service.get({ assetId: asset.id })).parent).toMatchObject({ ownerWarehouseId: 'owner-id', warehouseId: null });
   });
 });

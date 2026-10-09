@@ -52,6 +52,7 @@ test("configuration payload strips display and server fields without creating st
       {
         id: "row",
         role: "COMPONENT",
+        recommendation: false,
         accessoryId: "roof",
         quantity: 1,
         required: false,
@@ -77,7 +78,7 @@ test("a new part retains opening stock independently of the habitual quantity", 
   };
   const config = { version: 0, entries: [entry] };
   assert.equal(configurationError(config), null);
-  assert.deepEqual(configurationPayload(config).entries, [entry]);
+  assert.deepEqual(configurationPayload(config).entries, [{ ...entry, recommendation: false }]);
   assert.match(
     configurationError({ ...config, entries: [{ ...entry, quantity: 0 }] }),
     /enteros positivos/,
@@ -89,7 +90,7 @@ test('component configuration cannot overwrite the assignment managed by the mot
   assert.equal('motor' in payload, false);
   assert.deepEqual(payload.entries, []);
 });
-test("renders habitual equipment separately from compatible choices without exposing technical controls", () => {
+test("renders compatible implements without the archived route or technical controls", () => {
   const markup = renderToStaticMarkup(
     React.createElement(
       MantineProvider,
@@ -101,17 +102,18 @@ test("renders habitual equipment separately from compatible choices without expo
     ),
   );
   for (const text of [
-    "Sale normalmente con",
-    "Otros implementos compatibles",
+    "Implementos compatibles",
     "TECHO DD-29",
-    "Agregar componente",
-    "Notas",
+    "Agregar",
   ])
     assert.ok(markup.includes(text), text);
-  assert.match(markup, /<details(?:\s[^>]*)?>/);
-  assert.doesNotMatch(markup, /<details[^>]*\bopen/);
+  assert.doesNotMatch(markup, /Notas de configuración|<summary[^>]*>Notas/);
+  assert.doesNotMatch(markup, /Agregar implemento|Agregar componente|AGREGAR IMPLEMENTO EXISTENTE/);
+  assert.equal((markup.match(/>Agregar<\/span>/g) ?? []).length, 1);
+  assert.equal(configurationPayload({ version: 1, entries: [row], notes: "Nota guardada" }).notes, "Nota guardada");
   assert.doesNotMatch(markup, /Cada relación vincula/);
   assert.doesNotMatch(markup, /Cantidad habitual|Cantidad máxima|Requerido para operar|Elegir unidad en la remisión/);
+  assert.doesNotMatch(markup, /Plantilla recomendada|Ruta recomendada|Agregar a la ruta|Agregar familia a la ruta/);
 });
 
 test('part titles and breadcrumbs distinguish units and owners without exposing import codes', () => {

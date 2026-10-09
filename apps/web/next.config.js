@@ -37,6 +37,16 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: '/inventory/accessories',
+        destination: '/inventory/warehouse',
+        permanent: false,
+      },
+      {
+        source: '/inventory/accessories/equipment/:assetId',
+        destination: '/inventory/serialized-assets/:assetId?tab=accessories',
+        permanent: false,
+      },
+      {
         source: '/inventory/remision-devolucion',
         destination: '/inventory/dispatch-return',
         permanent: true,

@@ -1,5 +1,6 @@
 import {
   Badge,
+  Checkbox,
   Button,
   FileButton,
   Group,
@@ -18,6 +19,8 @@ type Option = { value: string; label: string };
 
 type SerializedAssetEditFormProps = {
   active: boolean;
+  isImplement?: boolean;
+  onImplementChange?: (value: boolean) => void;
   brand: string;
   fuel: string;
   fuelOptions: Option[];
@@ -43,6 +46,8 @@ type SerializedAssetEditFormProps = {
 
 export default function SerializedAssetEditForm({
   active,
+  isImplement = false,
+  onImplementChange,
   brand,
   fuel,
   fuelOptions,
@@ -80,6 +85,8 @@ export default function SerializedAssetEditForm({
       </Group>
 
       <Stack gap="md">
+        {onImplementChange ? <Checkbox label="Es un implemento" checked={isImplement}
+          onChange={event => onImplementChange(event.currentTarget.checked)} /> : null}
         <FormGrid>
           <UppercaseTextInput
             label="Número de registro"

@@ -1,6 +1,8 @@
 export type RequestInventoryAudience = 'DRIVER' | 'STAFF';
 
 export type BulkInventoryRow = {
+  isImplement?: boolean;
+  isConsumable?: boolean;
   skuId: string;
   ownerWarehouseId: string | null;
   ownerWarehouseName?: string | null;
@@ -8,6 +10,7 @@ export type BulkInventoryRow = {
 };
 
 export type SerialInventoryRow = {
+  isImplement?: boolean;
   ownerWarehouseId: string | null;
   ownerWarehouseName?: string | null;
 };

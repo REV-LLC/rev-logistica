@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 
 export class CreateAssetDto {
+  @IsOptional() @IsBoolean() isImplement?: boolean;
   @IsUUID()
   skuId: string;
 
