@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { Alert, Badge, Button, Loader, Stack, Text } from '@mantine/core';
 import { IconExternalLink, IconMap2 } from '@tabler/icons-react';
+import KnownPlaces from '@/components/tracking/KnownPlaces';
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 
 const DEFAULT_TRACCAR_WEB_URL = 'https://gps.revcontractorsllc.com';
@@ -93,6 +94,7 @@ export default function VehicleTrackingPage() {
             <iframe key={session.sessionUrl} src={session.sessionUrl} title="Conexión segura al seguimiento"
               referrerPolicy="no-referrer" hidden onLoad={() => setReady(true)} />
           )}
+          {ready && !error && <KnownPlaces onSaved={() => setMapVersion((version) => version + 1)} />}
           {ready && !error && <iframe
             key={mapVersion}
             src={panelUrl}
