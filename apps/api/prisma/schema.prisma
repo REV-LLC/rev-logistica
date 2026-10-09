@@ -1529,6 +1529,7 @@ model Owner {
 }
 
 model Employee {
+  payrollEnabled Boolean @default(true)
   salaries EmployeeSalary[]
   payrollReceipts PayrollReceipt[]
   activityNotes EmployeeActivityNote[]

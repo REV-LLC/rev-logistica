@@ -2,6 +2,10 @@ import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID } fro
 import { EmployeeRole, Role } from '@prisma/client';
 
 export class CreateEmployeeDto {
+  @IsOptional()
+  @IsBoolean()
+  payrollEnabled?: boolean;
+
   @IsString()
   name: string;
 
