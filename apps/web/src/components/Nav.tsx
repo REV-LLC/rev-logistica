@@ -118,12 +118,6 @@ const sections: NavSection[] = [
         ],
       },
       {
-        href: "/transport/tracking",
-        label: "Seguimiento de camiones",
-        icon: IconMap2,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
         href: "/transport/vehicles",
         label: "Vehículos",
         icon: IconTruck,
@@ -341,6 +335,18 @@ const homeLink: NavLinkItem = {
   roles: ["ADMIN", "OFFICE", "DRIVER", "OPERATOR"],
   exact: true,
 };
+const quickLinks: NavLinkItem[] = [
+  { href: "/transport/vehicles", label: "Vehículos", icon: IconTruck, roles: ["ADMIN", "OFFICE"] },
+  { href: "/employees", label: "Empleados", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/activities"] },
+  {
+    href: "/inventory/warehouse?scope=own",
+    label: "Inventario propio",
+    icon: IconBox,
+    roles: ["ADMIN", "OFFICE"],
+    activeRoutes: [{ pathnamePrefix: "/inventory/serialized-assets/", searchParam: { key: "scope", value: "own" } }],
+  },
+  { href: "/transport/tracking", label: "Mapa", icon: IconMap2, roles: ["ADMIN", "OFFICE"] },
+];
 const defaultExpandedSections = new Set(["Operación"]);
 
 type NavProps = {
@@ -874,6 +880,12 @@ export default function Nav({ onNavigate }: NavProps) {
         <Stack gap="md" pr={4}>
           {canShowLink(homeLink) ? (
             <Stack gap={0}>{renderNavItem(homeLink)}</Stack>
+          ) : null}
+          {quickLinks.some(canShowLink) ? (
+            <Stack gap={2}>
+              <Text size="xs" fw={600} c="#aebdcd" px="sm">Accesos rápidos</Text>
+              {quickLinks.filter(canShowLink).map((link) => renderNavItem(link))}
+            </Stack>
           ) : null}
           {orderedSections.map(renderSection)}
         </Stack>
