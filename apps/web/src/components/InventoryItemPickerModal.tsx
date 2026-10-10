@@ -54,6 +54,7 @@ export type InventoryItemPickerSerialItem = SerialAssetCardItem & InventoryDocum
 
 export type InventoryItemPickerModalProps = {
   opened: boolean;
+  catalogOnly?: boolean;
   allowDamaged?: boolean;
   onClose: () => void;
   title?: string;
@@ -104,6 +105,7 @@ type PickerRow =
 
 export default function InventoryItemPickerModal({
   opened,
+  catalogOnly = false,
   allowDamaged = false,
   onClose,
   title = 'Seleccionar items',
@@ -362,7 +364,7 @@ export default function InventoryItemPickerModal({
                           disabled={row.disabled}
                           role="checkbox"
                           aria-checked={isSelected}
-                          aria-label={`${row.name}, ${row.type === 'bulk' ? 'Masivo' : 'Equipo'}, ${quantity} ${
+                          aria-label={catalogOnly ? row.name : `${row.name}, ${row.type === 'bulk' ? 'Masivo' : 'Equipo'}, ${quantity} ${
                             quantity === 1 ? 'disponible' : 'disponibles'
                           }`}
                         >
@@ -374,7 +376,7 @@ export default function InventoryItemPickerModal({
                               {row.name}
                             </Text>
                             <Text component="span" className="inventory-picker-mobile-row-meta">
-                              {row.type === 'serial' && row.item.isDamaged ? 'Equipo averiado' : `${row.type === 'bulk' ? 'Masivo' : 'Equipo'} · ${quantity} ${quantity === 1 ? 'disponible' : 'disponibles'}`}
+                              {catalogOnly ? 'Referencia' : row.type === 'serial' && row.item.isDamaged ? 'Equipo averiado' : `${row.type === 'bulk' ? 'Masivo' : 'Equipo'} · ${quantity} ${quantity === 1 ? 'disponible' : 'disponibles'}`}
                             </Text>
                             {row.type === 'serial' && row.item.isDamaged && row.item.damageNote ? (
                               <Text component="span" size="xs" c="orange.8">
@@ -498,7 +500,7 @@ export default function InventoryItemPickerModal({
                     >
                       <Group gap="xs" className="inventory-picker-desktop-summary">
                         <Badge variant="light" color="teal" size={isMobile ? 'sm' : 'lg'}>
-                          {availableCount} disponible{availableCount === 1 ? '' : 's'}
+                          {availableCount} {catalogOnly ? `referencia${availableCount === 1 ? '' : 's'}` : `disponible${availableCount === 1 ? '' : 's'}`}
                         </Badge>
                         <Badge
                           variant={selectedCount ? 'filled' : 'light'}
@@ -509,7 +511,7 @@ export default function InventoryItemPickerModal({
                         </Badge>
                       </Group>
                       <Text size="sm" c="dimmed" className="inventory-picker-mobile-summary">
-                        <strong>{availableCount}</strong> disponible{availableCount === 1 ? '' : 's'}
+                        <strong>{availableCount}</strong> {catalogOnly ? `referencia${availableCount === 1 ? '' : 's'}` : `disponible${availableCount === 1 ? '' : 's'}`}
                         {' · '}
                         <strong>{selectedCount}</strong> seleccionado{selectedCount === 1 ? '' : 's'}
                       </Text>
@@ -585,10 +587,10 @@ export default function InventoryItemPickerModal({
                                   <Table.Th>Item</Table.Th>
                                   {showTableColumns ? (
                                     <>
-                                      <Table.Th style={{ width: 116 }}>Tipo</Table.Th>
-                                      <Table.Th style={{ width: 100, textAlign: 'center' }}>
+                                      {!catalogOnly ? <Table.Th style={{ width: 116 }}>Tipo</Table.Th> : null}
+                                      {!catalogOnly ? <Table.Th style={{ width: 100, textAlign: 'center' }}>
                                         Disponible
-                                      </Table.Th>
+                                      </Table.Th> : null}
                                       {showOwnerWarehouse ? (
                                         <Table.Th style={{ width: 220 }}>Bodega dueña</Table.Th>
                                       ) : null}
@@ -630,10 +632,7 @@ export default function InventoryItemPickerModal({
                                           c="dimmed"
                                           className="inventory-picker-mobile-meta"
                                         >
-                                          {row.type === 'bulk' ? 'Masivo' : 'Equipo'}
-                                          {' · '}
-                                          {row.item.quantity} disponible
-                                          {row.item.quantity === 1 ? '' : 's'}
+                                          {catalogOnly ? 'Referencia' : `${row.type === 'bulk' ? 'Masivo' : 'Equipo'} · ${row.item.quantity} disponible${row.item.quantity === 1 ? '' : 's'}`}
                                         </Text>
                                         {showOwnerWarehouse && !singleOwnerWarehouseName ? (
                                           <Text
@@ -661,7 +660,7 @@ export default function InventoryItemPickerModal({
                                       </Table.Td>
                                       {showTableColumns ? (
                                         <>
-                                          <Table.Td>
+                                          {!catalogOnly ? <Table.Td>
                                             <Badge
                                               variant="light"
                                               color={row.type === 'bulk' ? 'blue' : 'violet'}
@@ -669,12 +668,12 @@ export default function InventoryItemPickerModal({
                                             >
                                               {row.type === 'bulk' ? 'Masivo' : 'Equipo'}
                                             </Badge>
-                                          </Table.Td>
-                                          <Table.Td style={{ textAlign: 'center' }}>
+                                          </Table.Td> : null}
+                                          {!catalogOnly ? <Table.Td style={{ textAlign: 'center' }}>
                                             <Text size="sm" fw={700}>
                                               {row.item.quantity}
                                             </Text>
-                                          </Table.Td>
+                                          </Table.Td> : null}
                                           {showOwnerWarehouse ? (
                                             <Table.Td>
                                               <Text size="sm" c="dimmed">

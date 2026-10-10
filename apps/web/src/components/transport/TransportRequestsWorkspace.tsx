@@ -3,6 +3,8 @@ import { restoreDocumentComposition } from './request-items';
 import { getRequestInventorySourceMode, getRequestSourceWarehouseId, type RequestInventorySourceMode } from './request-inventory-source';
 
 import RequestInventoryPickerModal from './RequestInventoryPickerModal';
+import RequestItemOwnerModal from './RequestItemOwnerModal';
+import { addProviderCatalogItem, getItemOwnerLabel } from './request-item-owners';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
@@ -370,8 +372,7 @@ export default function TransportRequestsWorkspace({
     warehouses.find((warehouse) => warehouse.id === sourceOwnerWarehouseId)
       ?.name ?? '-';
   // This is only the next batch's origin. Previously added lines retain theirs.
-  const physicalSourceWarehouseId = sourceOwnerWarehouseId ?? principalWarehouse?.id ?? null;
-  const physicalSourceWarehouseName = warehouses.find(w => w.id === physicalSourceWarehouseId)?.name ?? 'Sin seleccionar';
+  const physicalSourceWarehouseId = tabletEmployee?.warehouseId ?? sourceOwnerWarehouseId ?? principalWarehouse?.id ?? null;
   const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null, sourceId?: string | null) =>
     warehouses.find(w => w.id === getRequestSourceWarehouseId(doc, ownerId, sourceId))?.name
       ?? (getRequestSourceWarehouseId(doc, ownerId, sourceId) === doc.warehouse?.id ? doc.warehouse?.name : null)
@@ -388,26 +389,27 @@ export default function TransportRequestsWorkspace({
     loadingInventory,
     showInventoryOwnerWarehouse,
     itemsModalOpen,
+    ownerModalOpen,
+    setOwnerModalOpen,
+    startItemSelection,
+    confirmItemOwner,
     setItemsModalOpen,
     selectedBulkKeys,
     selectedSerialIds,
     availableBulkItems,
     pickerSerialItems,
-    loadInventory,
-    clearLoadedInventory: clearInventoryCache,
   } = useRequestInventory({
     selectedItems,
     docType,
     physicalSourceWarehouseId,
+    fixedSourceWarehouseId: tabletEmployee?.warehouseId,
     sourceMode,
-    principalWarehouse,
     sourceOwnerWarehouseId,
     setSourceOwnerWarehouseId,
     setError,
     warehouses,
-    canDecide,
+    skuOptions,
     effectiveSourceWorksiteId,
-    useManualWarehouseCapture,
     activeTab,
     generateStep,
     setFreeTagInput,
@@ -487,7 +489,6 @@ export default function TransportRequestsWorkspace({
   }, [itemsAddedNotice]);
   const {
     addBulkItem,
-    addFreeItem,
     resolveFreeItemToSku,
     updateSelected,
     updateSelectedOwner,
@@ -548,10 +549,6 @@ export default function TransportRequestsWorkspace({
     setReceivedSignature(null);
     clearEvidencePhotos();
     clearProviderRemissionDocuments();
-  };
-  const clearLoadedInventory = () => {
-    clearInventoryCache();
-    cancelPendingSelections();
   };
 
   const { handleSubmit } = useRequestSubmission({
@@ -1198,13 +1195,12 @@ export default function TransportRequestsWorkspace({
 
           {activeTab === 'generate' && generateStep === 'items' ? (
             <RequestItemsSection
+              onAddItems={() => { cancelPendingSelections(); startItemSelection(); }}
               renderConfiguration={!isTabletRole ? item => <RequestEquipmentConfiguration
                 key={`${item.selectionId}:${docType}:${customerWorksiteId}:${item.sourceWarehouseId}`}
                 parent={item} docType={docType} customerWorksiteId={customerWorksiteId}
                 selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
               accessorySelector={docType === 'REMISSION' && !isTabletRole ? <RequestImplementSelector warehouseId={physicalSourceWarehouseId} warehouses={warehouses} customerWorksiteId={customerWorksiteId} selectedItems={selectedItems} setSelectedItems={setSelectedItems} /> : undefined}
-              clearLoadedInventory={clearLoadedInventory}
-              physicalSourceWarehouseName={physicalSourceWarehouseName}
               sourceMode={sourceMode}
               setGenerateStep={setGenerateStep}
               renderGenerateError={renderGenerateError}
@@ -1216,22 +1212,8 @@ export default function TransportRequestsWorkspace({
               deliveryMode={deliveryMode}
               selectedDriver={selectedDriver}
               selectedDispatcher={selectedDispatcher}
-              sourceOwnerWarehouseId={sourceOwnerWarehouseId}
-              setSourceOwnerWarehouseId={setSourceOwnerWarehouseId}
-              originWarehouses={tabletEmployee ? warehouses.filter(w => w.id === tabletEmployee.warehouseId) : warehouses}
               warehouses={warehouses}
-              setCreationProviderRequirements={setCreationProviderRequirements}
-              isMobile={isMobile}
-              useManualWarehouseCapture={useManualWarehouseCapture}
-              canDecide={canDecide}
-              loadInventory={loadInventory}
               loadingInventory={loadingInventory}
-              freeTagInput={freeTagInput}
-              setFreeTagInput={setFreeTagInput}
-              setError={setError}
-              freeInternalNumber={freeInternalNumber}
-              setFreeInternalNumber={setFreeInternalNumber}
-              addFreeItem={addFreeItem}
               selectedItems={selectedItems}
               isTabletOrMobile={isTabletOrMobile}
               renderDamageFields={renderDamageFields}
@@ -1348,8 +1330,17 @@ export default function TransportRequestsWorkspace({
         resolveAndApprove={resolveAndApprove}
       />
 
+      {ownerModalOpen ? <RequestItemOwnerModal
+        opened={activeTab === 'generate' && generateStep === 'items'}
+        warehouses={tabletEmployee ? warehouses.filter(warehouse => warehouse.type === 'ALLY' || warehouse.id === tabletEmployee.warehouseId) : warehouses}
+        onClose={() => setOwnerModalOpen(false)}
+        onConfirm={confirmItemOwner}
+      /> : null}
+
       <RequestInventoryPickerModal
-        allowBulkKits={docType === 'REMISSION' && !isTabletRole}
+        key={sourceMode === 'warehouse' ? sourceOwnerWarehouseId : effectiveSourceWorksiteId}
+        catalogOnly={useManualWarehouseCapture}
+        allowBulkKits={docType === 'REMISSION' && !isTabletRole && !useManualWarehouseCapture}
         returnWorksiteId={docType === 'RETURN' && !isTabletRole ? customerWorksiteId : undefined}
         selectedItems={selectedItems}
         setSelectedItems={setSelectedItems}
@@ -1357,26 +1348,23 @@ export default function TransportRequestsWorkspace({
         opened={
           activeTab === 'generate' &&
           generateStep === 'items' &&
-          itemsModalOpen &&
-          (!useManualWarehouseCapture || canDecide)
+          itemsModalOpen
         }
         onClose={() => setItemsModalOpen(false)}
-        title="Seleccionar items"
+        title={sourceMode === 'warehouse' ? `Ítems de ${getItemOwnerLabel(sourceOwnerWarehouse)}` : 'Seleccionar ítems'}
         bulkItems={availableBulkItems}
         serialItems={pickerSerialItems}
         selectedBulkKeys={selectedBulkKeys}
         selectedSerialIds={selectedSerialIds}
-        onAddBulk={addBulkItem}
+        onAddBulk={useManualWarehouseCapture ? item => {
+          setSelectedItems(current => addProviderCatalogItem(current, item));
+          return true;
+        } : addBulkItem}
         onAddSerial={addSerialItem}
         skuOptions={skuOptions}
         itemsAddedNotice={itemsAddedNotice}
         showOwnerWarehouse={
           sourceMode === 'on-site' ? showInventoryOwnerWarehouse : !isDriverRole
-        }
-        emptyStateText={
-          useManualWarehouseCapture
-            ? 'Use description capture in the main section.'
-            : null
         }
         onItemAddedNotice={setItemsAddedNotice}
       />
