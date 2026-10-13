@@ -199,11 +199,14 @@ la cuenta administradora nativa de Traccar.
 
 ## Marcadores visibles de las sedes
 
-El estilo nativo `custom` usa `https://app.revcontractorsllc.com/maps/rev-sites-v1.json`.
+El estilo nativo `custom` usa `https://app.revcontractorsllc.com/maps/rev-sites-v1.json?v=2`.
 Parte del estilo Liberty de OpenFreeMap e incorpora dos puntos GeoJSON: Sede
 principal REV (Cra. 22 #5A-07) y Sede secundaria REV (Calle 8A #22-29), Cali.
 Los marcadores tienen radio fijo de 14 píxeles, borde blanco y números 1/2;
-los nombres permanecen visibles al cambiar el zoom y no desaparecen por
+los indicadores se desplazan 32 píxeles hacia arriba para no quedar tapados
+por un camión estacionado (18 píxeles a izquierda/derecha para distinguir
+las dos sedes al alejar el mapa); sus coordenadas no cambian.
+Los nombres permanecen visibles al cambiar el zoom y no desaparecen por
 colisiones con camiones. Las geocercas de 50 metros siguen siendo la fuente
 de reconocimiento de llegadas; el estilo es solo una referencia visual.
 
