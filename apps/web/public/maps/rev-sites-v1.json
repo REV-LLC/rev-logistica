@@ -6071,9 +6071,17 @@
       }
     },
     {
-      "id": "rev-sites-marker",
+      "id": "rev-sites-marker-primary",
       "type": "circle",
       "source": "rev-sites",
+      "filter": [
+        "==",
+        [
+          "get",
+          "site"
+        ],
+        "primary"
+      ],
       "paint": {
         "circle-radius": 14,
         "circle-color": [
@@ -6081,13 +6089,26 @@
           "color"
         ],
         "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 3
+        "circle-stroke-width": 3,
+        "circle-translate": [
+          -18,
+          -32
+        ],
+        "circle-translate-anchor": "viewport"
       }
     },
     {
-      "id": "rev-sites-number",
+      "id": "rev-sites-number-primary",
       "type": "symbol",
       "source": "rev-sites",
+      "filter": [
+        "==",
+        [
+          "get",
+          "site"
+        ],
+        "primary"
+      ],
       "layout": {
         "text-field": [
           "get",
@@ -6097,6 +6118,69 @@
           "Noto Sans Bold"
         ],
         "text-size": 16,
+        "text-offset": [
+          -1.125,
+          -2
+        ],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      "paint": {
+        "text-color": "#ffffff"
+      }
+    },
+    {
+      "id": "rev-sites-marker-secondary",
+      "type": "circle",
+      "source": "rev-sites",
+      "filter": [
+        "==",
+        [
+          "get",
+          "site"
+        ],
+        "secondary"
+      ],
+      "paint": {
+        "circle-radius": 14,
+        "circle-color": [
+          "get",
+          "color"
+        ],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 3,
+        "circle-translate": [
+          18,
+          -32
+        ],
+        "circle-translate-anchor": "viewport"
+      }
+    },
+    {
+      "id": "rev-sites-number-secondary",
+      "type": "symbol",
+      "source": "rev-sites",
+      "filter": [
+        "==",
+        [
+          "get",
+          "site"
+        ],
+        "secondary"
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "number"
+        ],
+        "text-font": [
+          "Noto Sans Bold"
+        ],
+        "text-size": 16,
+        "text-offset": [
+          1.125,
+          -2
+        ],
         "text-allow-overlap": true,
         "text-ignore-placement": true
       },
@@ -6127,8 +6211,8 @@
         "text-size": 14,
         "text-anchor": "right",
         "text-offset": [
-          -1.65,
-          0
+          -2.95,
+          -2.2
         ],
         "text-max-width": 9,
         "text-allow-overlap": true,
@@ -6166,8 +6250,8 @@
         "text-size": 14,
         "text-anchor": "left",
         "text-offset": [
-          1.65,
-          0
+          2.95,
+          -2.2
         ],
         "text-max-width": 9,
         "text-allow-overlap": true,
