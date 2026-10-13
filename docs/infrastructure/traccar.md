@@ -196,3 +196,25 @@ El iframe no permite leer desde REV qué camión seleccionó el usuario dentro
 del mapa: el control usa un selector explícito de camión encima del mapa.
 La administración avanzada y eliminación de geocercas sigue disponible para
 la cuenta administradora nativa de Traccar.
+
+## Marcadores visibles de las sedes
+
+El estilo nativo `custom` usa `https://app.revcontractorsllc.com/maps/rev-sites-v1.json`.
+Parte del estilo Liberty de OpenFreeMap e incorpora dos puntos GeoJSON: Sede
+principal REV (Cra. 22 #5A-07) y Sede secundaria REV (Calle 8A #22-29), Cali.
+Los marcadores tienen radio fijo de 14 píxeles, borde blanco y números 1/2;
+los nombres permanecen visibles al cambiar el zoom y no desaparecen por
+colisiones con camiones. Las geocercas de 50 metros siguen siendo la fuente
+de reconocimiento de llegadas; el estilo es solo una referencia visual.
+
+Traccar conserva el frontend oficial 6.16.0. Configuración del servidor:
+`map=custom`, `mapUrl` con la URL anterior y `attributes.activeMapStyles=custom`.
+Las cuentas con preferencias de mapas propias deben usar el mismo estilo.
+El navegador obtiene el estilo desde REV; CORS permite únicamente el origen
+del panel GPS. El archivo no contiene credenciales ni posiciones de camiones.
+Las sedes son referencias fijas: si cambia su dirección, actualizar tanto su
+geocerca como el GeoJSON del estilo y publicar una nueva versión de URL.
+No alojar el estilo en el filesystem efímero del contenedor Traccar.
+
+Base del mapa: https://tiles.openfreemap.org/styles/liberty
+Documentación del estilo nativo: https://www.traccar.org/map-layers/
