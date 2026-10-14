@@ -29,7 +29,7 @@ export class SkusController {
   constructor(private readonly skusService: SkusService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.OFFICE, Role.WAREHOUSE_TABLET)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.WAREHOUSE_TABLET, Role.DRIVER)
   listSkus(
     @Query('search') search?: string,
     @Query('controlType') controlType?: SkuControlType,
