@@ -1,28 +1,78 @@
-.boundary { position: relative; min-height: calc(100dvh - 100px); }
+.boundary { min-height: 100dvh; }
+
+/* A route fallback can briefly remove its page background. Never expose white beneath the glass. */
+:global(html):has(.overlay),
+:global(body):has(.overlay) { background-color: #101820; }
+
 .overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 50;
-  background: var(--mantine-color-body);
-  min-height: calc(100dvh - 100px);
-  padding: 24px;
+  z-index: 11000;
+  display: grid;
+  place-items: center;
+  background: rgb(3 12 21 / 42%);
+  -webkit-backdrop-filter: blur(18px) saturate(85%);
+  backdrop-filter: blur(18px) saturate(85%);
+  animation-name: glass-enter;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  color: #f1f5f9;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  touch-action: none;
+  overscroll-behavior: contain;
 }
+.overlay[data-phase='revealing'] { animation-name: glass-reveal; }
 .message {
-  position: sticky;
-  top: 35dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
   text-align: center;
+  transition: opacity 180ms ease, transform 320ms ease;
 }
-
+.overlay[data-phase='revealing'] .message { opacity: 0; transform: scale(.97); }
 .logo {
-  width: 80px;
-  height: 80px;
-  animation: logo-spin 2s linear infinite;
+  display: block;
+  width: 156px;
+  height: 78px;
+  object-fit: contain;
+  animation: logo-pulse 1.6s ease-in-out infinite;
 }
-
-@keyframes logo-spin {
-  to { transform: rotate(360deg); }
+.label { color: #c0ccd8; font-size: 14px; }
+.track {
+  width: 116px;
+  height: 3px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
 }
-
+.track span {
+  display: block;
+  height: 100%;
+  width: 45%;
+  border-radius: inherit;
+  background: #ffb71b;
+  animation: progress 1.2s ease-in-out infinite;
+}
+@keyframes logo-pulse { 50% { opacity: 0.65; } }
+@keyframes progress { from { transform: translateX(-110%); } to { transform: translateX(325%); } }
+@keyframes glass-enter {
+  from { background: rgb(3 12 21 / 0%); -webkit-backdrop-filter: blur(0px) saturate(100%); backdrop-filter: blur(0px) saturate(100%); }
+  to { background: rgb(3 12 21 / 42%); -webkit-backdrop-filter: blur(18px) saturate(85%); backdrop-filter: blur(18px) saturate(85%); }
+}
+@keyframes glass-reveal {
+  from { background: rgb(3 12 21 / 42%); -webkit-backdrop-filter: blur(18px) saturate(85%); backdrop-filter: blur(18px) saturate(85%); }
+  to { background: rgb(3 12 21 / 0%); -webkit-backdrop-filter: blur(0px) saturate(100%); backdrop-filter: blur(0px) saturate(100%); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .logo { animation: none; }
+  .overlay, .logo, .track span { animation: none; }
+  .message { transition: none; }
+  .track span { width: 100%; }
+}
+
+@media print {
+  .boundary { min-height: 0; }
+  .overlay { display: none; }
+  :global(html):has(.overlay),
+  :global(body):has(.overlay) { background-color: revert; }
 }

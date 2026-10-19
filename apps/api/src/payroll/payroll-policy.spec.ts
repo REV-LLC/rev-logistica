@@ -2,6 +2,12 @@ import { Prisma } from '@prisma/client';
 import { bogotaDate, calculatePayroll, payrollPeriod, payrollPolicy, provisionalSalaryData, salaryAmount } from './payroll-policy';
 const d = (value: string) => new Prisma.Decimal(value);
 describe('basic fortnight payroll arithmetic', () => {
+  it('uses the company allowance for policy and new provisional salaries, without normalizing historical amounts', () => {
+    expect(payrollPolicy('2026-10-19')).toMatchObject({ transportAllowanceReference: '250000.00', transportAllowanceReferenceType: 'COMPANY', version: 'CO-2026-BASIC-v2' });
+    expect(provisionalSalaryData('new-employee', new Date('2026-10-19T12:00:00Z'))).toMatchObject({ transportAllowance: '250000.00', provisional: true });
+    expect(calculatePayroll(d('1750905'), d('250000'), 15)).toMatchObject({ totalMonthly: '2000905.00', transportEarned: '125000', totalEarned: '1000453', netPay: '930417' });
+    expect(calculatePayroll(d('1750905'), d('249095'), 15).transportAllowance).toBe('249095.00');
+  });
   it('keeps displayed concepts, total and net consistent under HALF_UP rounding', () => {
     const result = calculatePayroll(d('1750905'), d('249095'), 15);
     expect(result).toMatchObject({ totalMonthly: '2000000.00', salaryEarned: '875453', transportEarned: '124548', totalEarned: '1000001', healthDeduction: '35018', pensionDeduction: '35018', totalDeductions: '70036', netPay: '929965' });

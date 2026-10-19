@@ -40,6 +40,11 @@ export class EmployeesController {
     return this.employeesService.listEmployees();
   }
 
+  @Get(':employeeId')
+  getEmployeeProfile(@Param('employeeId', new ParseUUIDPipe()) employeeId: string) {
+    return this.employeesService.getEmployeeProfile(employeeId);
+  }
+
   @Get(':employeeId/photo')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
   async getEmployeePhoto(

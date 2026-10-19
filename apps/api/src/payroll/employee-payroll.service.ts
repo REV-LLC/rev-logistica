@@ -68,6 +68,7 @@ export class EmployeePayrollService {
     if (input.days !== 15 && !observations) throw new BadRequestException('Indica el motivo de modificar los días liquidados');
     const salary = this.salaryAt(employee.salaries, start);
     const blockingReasons: string[] = [];
+    const warnings: string[] = [];
     if (employee.payrollEnabled === false) blockingReasons.push('El empleado está excluido de nómina.');
     if (!employee.active) blockingReasons.push('El empleado está inactivo; revisar su liquidación de retiro por separado.');
     if (!employee.documentId?.trim()) blockingReasons.push('Registra la cédula del empleado antes de emitir.');
@@ -76,11 +77,11 @@ export class EmployeePayrollService {
     if (salary && salary.regime !== 'STANDARD') blockingReasons.push('El régimen requiere revisión; esta versión solo calcula el régimen general de jornada completa.');
     if (salary && salary.monthlySalary.gte(new Prisma.Decimal(policy.minimumMonthlySalary).mul(4))) blockingReasons.push('Requiere revisión de aportes adicionales y retenciones; el cálculo básico no cubre salarios desde 4 SMMLV.');
     if (salary && salary.transportAllowance.gt(0) && salary.monthlySalary.gt(new Prisma.Decimal(policy.minimumMonthlySalary).mul(2))) blockingReasons.push('El auxilio legal de transporte requiere revisar elegibilidad para salarios superiores a 2 SMMLV.');
-    if (salary && salary.transportAllowance.gt(policy.transportAllowanceReference)) blockingReasons.push('El auxilio supera la referencia legal; revisar su clasificación e ingreso base de cotización.');
+    if (salary && salary.transportAllowance.gt(policy.transportAllowanceReference)) warnings.push('El auxilio supera la referencia configurada. Se conserva el valor registrado; revisa su clasificación para aportes. Esta advertencia no impide emitir el comprobante.');
     if (salary && salary.monthlySalary.lt(policy.minimumMonthlySalary)) blockingReasons.push('Salario inferior al mínimo de jornada completa; requiere revisión.');
     if (this.effectiveSalaries(employee.salaries).some(s => s.effectiveFrom > start && s.effectiveFrom <= end)) blockingReasons.push('Hay un cambio salarial dentro de la quincena. Se requiere liquidación por tramos, fuera del alcance inicial.');
     const amounts = salary ? calculatePayroll(salary.monthlySalary, salary.transportAllowance, input.days) : null;
-    return { employeeId: employee.id, from: input.from, to: input.to, days: input.days, observations, expectedSalaryRevision: employee.salaries[0]?.revision ?? 0, salaryRevision: salary?.revision ?? null, salaryId: salary?.id ?? null, provisional: salary?.provisional ?? false, eligible: blockingReasons.length === 0, blockingReasons, policy, ...amounts };
+    return { employeeId: employee.id, from: input.from, to: input.to, days: input.days, observations, expectedSalaryRevision: employee.salaries[0]?.revision ?? 0, salaryRevision: salary?.revision ?? null, salaryId: salary?.id ?? null, provisional: salary?.provisional ?? false, eligible: blockingReasons.length === 0, blockingReasons, warnings, policy, ...amounts };
   }
   async preview(employeeId: string, input: PreviewInput) {
     const employee = await this.prisma.employee.findUnique({ where: { id: employeeId }, select: employeeSelect });
@@ -90,13 +91,14 @@ export class EmployeePayrollService {
   private serializeReceipt(receipt: PayrollReceipt) {
     return { ...(receipt.snapshot as Prisma.JsonObject), id: receipt.id, createdAt: receipt.createdAt.toISOString(), status: 'ISSUED', paymentStatus: 'NOT_RECORDED' };
   }
-  async period(from: string, to: string) {
+  async period(from: string, to: string, employeeId?: string) {
     const { start, end } = payrollPeriod(from, to);
     const [employees, receipts] = await Promise.all([
-      this.prisma.employee.findMany({ orderBy: [{ name: 'asc' }, { lastName: 'asc' }, { id: 'asc' }], select: employeeSelect }),
-      this.prisma.payrollReceipt.findMany({ where: { periodFrom: start, periodTo: end }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.employee.findMany({ ...(employeeId ? { where: { id: employeeId } } : {}), orderBy: [{ name: 'asc' }, { lastName: 'asc' }, { id: 'asc' }], select: employeeSelect }),
+      this.prisma.payrollReceipt.findMany({ where: { periodFrom: start, periodTo: end, ...(employeeId ? { employeeId } : {}) }, orderBy: { createdAt: 'desc' } }),
     ]);
-    return { policy: payrollPolicy(from), from, to, employees: employees.filter(e => e.payrollEnabled || receipts.some(r => r.employeeId === e.id)).map(e => ({ ...this.serializeEmployee(e, start), preview: this.buildPreview(e, { from, to, days: 15 }), receipts: receipts.filter(r => r.employeeId === e.id).map(r => this.serializeReceipt(r)) })) };
+    if (employeeId && !employees.length) throw new NotFoundException('Empleado no encontrado');
+    return { policy: payrollPolicy(from), from, to, employees: employees.filter(e => employeeId ? e.id === employeeId : e.payrollEnabled || receipts.some(r => r.employeeId === e.id)).map(e => ({ ...this.serializeEmployee(e, start), preview: this.buildPreview(e, { from, to, days: 15 }), receipts: receipts.filter(r => r.employeeId === e.id).map(r => this.serializeReceipt(r)) })) };
   }
   async receipts(employeeId: string, from?: string, to?: string) {
     if (!(await this.prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } }))) throw new NotFoundException('Empleado no encontrado');

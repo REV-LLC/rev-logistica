@@ -36,6 +36,18 @@ const PROFILE_PHOTO_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 export class EmployeesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getEmployeeProfile(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true, name: true, lastName: true, role: true, documentId: true, phone: true, active: true,
+        vehicles: { select: { vehicle: { select: { id: true, plate: true, brand: true, model: true } } } },
+      },
+    });
+    if (!employee) throw new NotFoundException('Empleado no encontrado');
+    return { ...employee, vehicles: employee.vehicles.map(entry => entry.vehicle) };
+  }
+
   async listEmployees() {
     const employees = await this.prisma.employee.findMany({
       orderBy: { name: 'asc' },

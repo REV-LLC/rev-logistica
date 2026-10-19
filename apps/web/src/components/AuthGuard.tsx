@@ -81,7 +81,7 @@ export default function AuthGuard({ children, allowedRoles, routeRoleRules = [] 
 
   if (!ready) {
     return (
-      <main>
+      <main data-page-loading="true">
         <Center h="60vh">
           <Stack align="center">
             <Loader />

@@ -13,6 +13,12 @@ import {
   IconPhone,
 } from '@tabler/icons-react';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
+import { employeeProfileHref } from '@/lib/employee-profile';
+import { employeeRoleLabels as employeeCardRoleLabelByValue, type EmployeeRole as EmployeeCardRole } from '@/lib/employee-roles';
+import styles from './EmployeeCard.module.css';
+
+export { employeeCardRoleLabelByValue };
+export type { EmployeeCardRole };
 
 export type EmployeeCardVehicle = {
   id: string;
@@ -23,17 +29,6 @@ export type EmployeeCardVehicle = {
 };
 
 export type EmployeeCardAppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
-
-export type EmployeeCardRole =
-  | 'DRIVER'
-  | 'HEAVY_MACHINERY_OPERATOR'
-  | 'MACHINIST'
-  | 'OFFICE'
-  | 'MANAGER'
-  | 'OPERATIONS_MANAGER'
-  | 'MECHANIC'
-  | 'WAREHOUSE_KEEPER'
-  | 'OTHER';
 
 export type EmployeeCardRecord = {
   id: string;
@@ -52,18 +47,6 @@ export type EmployeeCardRecord = {
     role: EmployeeCardAppRole;
     active: boolean;
   } | null;
-};
-
-export const employeeCardRoleLabelByValue: Record<EmployeeCardRole, string> = {
-  DRIVER: 'Conductor',
-  HEAVY_MACHINERY_OPERATOR: 'Operario maquinaria amarilla',
-  MACHINIST: 'Machinero',
-  OFFICE: 'Oficina',
-  MANAGER: 'Gerente',
-  OPERATIONS_MANAGER: 'Jefe operaciones',
-  MECHANIC: 'Mecánico',
-  WAREHOUSE_KEEPER: 'Bodeguero',
-  OTHER: 'Otro',
 };
 
 const iconSize14Style = { width: 14, height: 14, minWidth: 14, flexShrink: 0 } as const;
@@ -93,21 +76,21 @@ export default function EmployeeCard({
   employee,
   onDocuments,
   onIdentityCard,
-  onDetails,
   onEdit,
   identityCardLoading = false,
+  appearance = 'default',
 }: {
   employee: EmployeeCardRecord;
   onDocuments: (employee: EmployeeCardRecord) => void;
   onIdentityCard: (employee: EmployeeCardRecord) => void;
-  onDetails: (employee: EmployeeCardRecord) => void;
   onEdit: (employee: EmployeeCardRecord) => void;
   identityCardLoading?: boolean;
+  appearance?: 'default' | 'glass';
 }) {
   const showVehicle = employee.role !== 'OFFICE';
 
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper withBorder radius="lg" p="lg" className={appearance === 'glass' ? styles.glass : undefined}>
       <Stack gap="md">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <EmployeePhotoControl
@@ -120,7 +103,7 @@ export default function EmployeeCard({
         </Group>
 
         <Stack gap={2}>
-          <Text fw={800} size="lg" lh={1.15}>
+          <Text fw={appearance === 'glass' ? 600 : 800} size="lg" lh={1.15}>
             {getEmployeeCardFullName(employee)}
           </Text>
           <Text size="sm" c="dimmed">
@@ -195,12 +178,13 @@ export default function EmployeeCard({
               <IconCurrencyDollar style={iconSize14Style} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Ver información completa">
+          <Tooltip label="Ver perfil">
             <ActionIcon
+              component={Link}
+              href={employeeProfileHref(employee.id)}
               color="blue"
               variant="filled"
-              aria-label={`Ver información de ${getEmployeeCardFullName(employee)}`}
-              onClick={() => onDetails(employee)}
+              aria-label={`Ver perfil de ${getEmployeeCardFullName(employee)}`}
             >
               <IconEye style={iconSize14Style} />
             </ActionIcon>

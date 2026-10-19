@@ -10,6 +10,7 @@ export default function AppAvatar({ src, alt, children, imageStyle, imageSizes =
   return (
     <Avatar {...props} alt={alt}>
       {src && src !== failedSrc ? (
+        <span style={{ position: 'absolute', inset: 0, display: 'block', borderRadius: 'inherit' }}>
         <AppImage
           src={src}
           alt={alt ?? props.name ?? ''}
@@ -18,6 +19,7 @@ export default function AppAvatar({ src, alt, children, imageStyle, imageSizes =
           style={{ height: '100%', objectFit: 'cover', borderRadius: 'inherit', ...imageStyle }}
           onError={() => setFailedSrc(src)}
         />
+        </span>
       ) : children}
     </Avatar>
   );

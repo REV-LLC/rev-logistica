@@ -1,0 +1,66 @@
+.backdrop {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 100vh;
+  height: 100lvh;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: #101820;
+}
+
+.backgroundImage {
+  object-fit: cover;
+  object-position: center 45%;
+  filter: blur(4px);
+  transform: scale(1.03);
+}
+
+.backdrop .backgroundImage[data-image-state='loading'],
+.backdrop .backgroundImage[data-image-state='error'] {
+  background: transparent;
+  animation: none;
+}
+
+.picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.backdrop[data-variant='transport'] .backgroundImage {
+  object-position: 70% 45%;
+}
+
+.backdrop::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: rgb(3 12 21 / 72%);
+}
+
+.backdrop[data-variant='brand']::after {
+  background: rgb(3 12 21 / 40%);
+}
+
+.backdrop[data-variant='brand'] {
+  top: var(--app-shell-header-offset, 0px);
+  height: calc(100vh - var(--app-shell-header-offset, 0px));
+  height: calc(100lvh - var(--app-shell-header-offset, 0px));
+}
+
+.backdrop[data-variant='brand'] .backgroundImage {
+  object-position: center;
+}
+
+/* Fill the sidebar too, while keeping the brand centered in the content area. */
+.backdrop[data-variant='brand'] .picture {
+  inset-inline-end: calc(-1 * var(--app-shell-navbar-offset, 0px));
+}
+
+@media (max-width: 48em) {
+  .backdrop[data-variant='transport'] .backgroundImage {
+    object-position: center 45%;
+  }
+
+}
