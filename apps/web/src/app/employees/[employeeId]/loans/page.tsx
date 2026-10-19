@@ -80,7 +80,7 @@ function EmployeeLoanCard({ employeeId }: { employeeId: string }) {
     {account ? <Paper radius="md" className={styles.card}>
       <Group justify="space-between" wrap="nowrap" p="md" className={styles.employeeHeader}>
         <Text fw={700} c="inherit" style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{account.employee.name} {account.employee.lastName}</Text>
-        <EmployeePhotoControl employee={account.employee} size={48} grayscale />
+        <EmployeePhotoControl employee={account.employee} size={64} />
       </Group>
       <div className={styles.ledgerBody}>
       <div role="region" aria-label="Movimientos del préstamo" tabIndex={0}

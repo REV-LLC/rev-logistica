@@ -1,9 +1,9 @@
-# Implementos en inventario y documentos
+# Buscador y mejoras en préstamos
 
-Ahora los implementos con identidad propia se gestionan como equipos del inventario. Los retornables y consumibles por cantidad se gestionan como BULK.
+Ahora puedes encontrar las páginas de la app desde el buscador de la parte superior del menú lateral, sin recorrer cada sección.
 
-Desde la ficha del equipo puedes crear o agregar implementos compatibles y configurar sus precios, sin compartir automáticamente la tarifa de la máquina.
+En Préstamos y deudas puedes consultar el historial y editar la descripción de cada movimiento sin cambiar su valor ni su fecha. Los pagos y los préstamos adicionales se distinguen por signo y color.
 
-En las devoluciones, selecciona los implementos desde su pestaña dentro de las existencias de la obra. Se conserva el historial de los accesorios anteriores.
+Administración puede invertir los signos visuales desde Configuración → Préstamos. Un pago siempre reduce la deuda y un préstamo la aumenta.
 
-Al entregar una mezcladora, elige si va eléctrica o a gasolina. Ya no es necesario asignarle un motor separado.
+La foto de la cabecera de préstamos se ve a color y más grande. Tócala para ampliarla y toca el nombre bajo la foto ampliada para abrir el perfil del empleado.
