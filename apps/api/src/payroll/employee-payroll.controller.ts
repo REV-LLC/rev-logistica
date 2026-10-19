@@ -48,6 +48,8 @@ export class EmployeePayrollController {
   @Header('Cache-Control', 'private, no-store')
   @Get('period') period(@Query('from') from: string, @Query('to') to: string) { return this.payroll.period(from, to); }
   @Header('Cache-Control', 'private, no-store')
+  @Get(':employeeId/period') employeePeriod(@Param('employeeId', new ParseUUIDPipe()) id: string, @Query('from') from: string, @Query('to') to: string) { return this.payroll.period(from, to, id); }
+  @Header('Cache-Control', 'private, no-store')
   @Get('receipts/:receiptId/pdf') async pdf(@Param('receiptId', new ParseUUIDPipe()) id: string, @Res() response: Response) {
     const buffer = await this.payroll.receiptPdf(id);
     response.setHeader('Content-Type', 'application/pdf');

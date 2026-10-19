@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Badge,
   Button,
   Container,
   Group,
@@ -22,26 +21,25 @@ import {
 } from '@mantine/core';
 import {
   IconCurrencyDollar,
-  IconPencil,
   IconPlus,
   IconSearch,
   IconUsers,
 } from '@tabler/icons-react';
 import EmployeeCard, {
-  employeeCardRoleLabelByValue,
   getEmployeeCardFullName,
   type EmployeeCardRecord,
 } from '@/components/EmployeeCard';
 import EmployeeFormModal, {
-  appRoleLabelByValue,
   emptyEmployeeForm,
   toUppercaseInput,
   type EmployeeForm,
   type VehicleOption,
 } from '@/components/EmployeeFormModal';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
-import EmployeePhotoControl from '@/components/EmployeePhotoControl';
+import { employeeProfileHref } from '@/lib/employee-profile';
 import { api, apiBlob, ApiError } from '@/lib/api';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
+import styles from './directory.module.css';
 
 const EMPLOYEE_IDENTITY_CATEGORY = 'CEDULA';
 
@@ -77,77 +75,6 @@ function fileLabel(file: EmployeeAttachedFile) {
   return file.displayName?.trim() || file.originalName?.trim() || file.fileType;
 }
 
-function EmployeeCardDetails({
-  employee,
-  onEdit,
-}: {
-  employee: EmployeeCardRecord;
-  onEdit: (employee: EmployeeCardRecord) => void;
-}) {
-  return (
-    <Stack gap="lg">
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Group gap="md" align="flex-start" wrap="nowrap">
-          <EmployeePhotoControl
-            employee={employee}
-            size={76}
-            editable
-          />
-          <div>
-            <Text fw={800} size="lg">{getEmployeeCardFullName(employee)}</Text>
-            <Text size="sm" c="dimmed">
-              {employeeCardRoleLabelByValue[employee.role] ?? employee.role}
-            </Text>
-            <Text size="xs" c="dimmed">{employee.documentId ?? 'Sin documento'}</Text>
-          </div>
-        </Group>
-        <Badge color={employee.active ? 'green' : 'gray'} variant="light">
-          {employee.active ? 'Activo' : 'Inactivo'}
-        </Badge>
-      </Group>
-
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Teléfono</Text>
-          <Text size="sm" mt={6}>{employee.phone ?? '-'}</Text>
-        </Paper>
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Correo</Text>
-          <Text size="sm" mt={6}>{employee.email ?? '-'}</Text>
-        </Paper>
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Acceso a la app</Text>
-          <Text size="sm" mt={6}>{employee.user?.email ?? 'Sin acceso creado'}</Text>
-          {employee.user ? (
-            <Text size="xs" c="dimmed">
-              {appRoleLabelByValue[employee.user.role]} · {employee.user.active ? 'Activo' : 'Inactivo'}
-            </Text>
-          ) : null}
-        </Paper>
-        <Paper withBorder radius="md" p="sm">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Vehículos</Text>
-          <Text size="sm" mt={6}>
-            {employee.vehicles.length
-              ? employee.vehicles.map((vehicle) => vehicle.plate).join(', ')
-              : 'Sin vehículos asignados'}
-          </Text>
-        </Paper>
-      </SimpleGrid>
-
-      <Group justify="flex-end">
-        <Button component={Link} href={`/employees/activities?employeeId=${employee.id}`} variant="light">Abrir bitácora</Button>
-        <Button
-          variant="light"
-          leftSection={<IconPencil size={16} />}
-          onClick={() => onEdit(employee)}
-        >
-          Editar empleado
-        </Button>
-      </Group>
-    </Stack>
-  );
-}
-
 export default function EmployeeCardsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -162,19 +89,7 @@ export default function EmployeeCardsPage() {
   const [editingEmployee, setEditingEmployee] = useState<EmployeeCardRecord | null>(null);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
-  const [detailsEmployee, setDetailsEmployee] = useState<EmployeeCardRecord | null>(null);
   const [downloadingIdentityEmployeeId, setDownloadingIdentityEmployeeId] = useState<string | null>(null);
-  const linkedEmployee = employees.find(employee => employee.id === requestedEmployeeId);
-  const profileEmployee = requestedEmployeeId ? linkedEmployee : detailsEmployee;
-  function closeDetails() {
-    setDetailsEmployee(null);
-    if (requestedEmployeeId) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete('employeeId');
-      const query = params.toString();
-      router.replace(query ? `/employees?${query}` : '/employees', { scroll: false });
-    }
-  }
 
   const loadData = async () => {
     setLoading(true);
@@ -200,8 +115,12 @@ export default function EmployeeCardsPage() {
   };
 
   useEffect(() => {
+    if (requestedEmployeeId) {
+      router.replace(employeeProfileHref(requestedEmployeeId));
+      return;
+    }
     loadData();
-  }, []);
+  }, [requestedEmployeeId, router]);
 
   const sortedEmployees = useMemo(() => {
     const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
@@ -374,12 +293,15 @@ export default function EmployeeCardsPage() {
     setDocumentsEmployee(null);
   };
 
+  if (requestedEmployeeId) return <Container size="xl" py="xl"><CollectionLoading label="Abriendo perfil del empleado" variant="employees" /></Container>;
+
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={styles.page}>
+      <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
         <Group justify="space-between" align="center" wrap="wrap">
-          <Title order={1}>Empleados</Title>
-          <Group gap="xs" wrap="wrap">
+          <Title order={1} className={styles.title}>Empleados</Title>
+          <Group gap="xs" wrap="wrap" className={styles.headerActions}>
             <Button component={Link} href="/employees/payroll" variant="light">Nómina</Button>
             <Button component={Link} href="/employees/loans" variant="light" leftSection={<IconCurrencyDollar size={16} />}>
               Préstamos
@@ -390,6 +312,7 @@ export default function EmployeeCardsPage() {
           </Group>
         </Group>
 
+        <section className={styles.surface} aria-label="Directorio de empleados"><Stack gap="lg">
         <TextInput
           type="search"
           label="Buscar empleado"
@@ -405,16 +328,12 @@ export default function EmployeeCardsPage() {
           </Alert>
         ) : null}
 
-        {requestedEmployeeId && !loading && !error && !linkedEmployee ? <Alert color="red" title="Empleado no disponible" role="alert">
-          No se encontró el empleado de este enlace. <Button variant="subtle" onClick={closeDetails}>Volver al directorio</Button>
-        </Alert> : null}
-
         {loading ? (
           <CollectionLoading label="Cargando empleados" variant="employees" />
         ) : null}
 
         {!loading && employees.length === 0 ? (
-          <Paper withBorder radius="lg" p="xl">
+          <Paper withBorder radius="lg" p="xl" className={styles.emptyState}>
             <Stack align="center" gap="xs">
               <ThemeIcon color="gray" variant="light" size={40} radius="xl">
                 <IconUsers size={20} />
@@ -435,37 +354,20 @@ export default function EmployeeCardsPage() {
                 employee={employee}
                 onDocuments={openDocuments}
                 onIdentityCard={downloadIdentityCard}
-                onDetails={setDetailsEmployee}
                 onEdit={openEdit}
                 identityCardLoading={downloadingIdentityEmployeeId === employee.id}
+                appearance="glass"
               />
             ))}
           </SimpleGrid>
         ) : null}
         {!loading && employees.length > 0 && sortedEmployees.length === 0 ? (
-          <Paper withBorder radius="lg" p="xl">
+          <Paper withBorder radius="lg" p="xl" className={styles.emptyState}>
             <Text ta="center" c="dimmed">No hay empleados que coincidan con la búsqueda.</Text>
           </Paper>
         ) : null}
+        </Stack></section>
       </Stack>
-
-      <Modal
-        opened={Boolean(profileEmployee)}
-        onClose={closeDetails}
-        title="Información del empleado"
-        centered
-        size="lg"
-      >
-        {profileEmployee ? (
-          <EmployeeCardDetails
-            employee={profileEmployee}
-            onEdit={(employee) => {
-              closeDetails();
-              openEdit(employee);
-            }}
-          />
-        ) : null}
-      </Modal>
 
       <Modal
         opened={!!documentsEmployee}

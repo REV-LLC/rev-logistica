@@ -2,6 +2,8 @@
 
 Primera versión autorizada para REV, independiente de la futura transformación de Finge. Solo ADMIN y OFFICE activos acceden. El salario pertenece al empleado; una cuenta User vinculada no crea un segundo salario. Las APIs generales de empleados y usuarios no incluyen valores salariales.
 
+La presentación del perfil y sus pestañas sigue la referencia de [estilo de los perfiles de empleados](16-estilo-perfiles-empleados.md), separada de las reglas de liquidación descritas aquí.
+
 ## Alcance
 
 Salario mensual de jornada completa, auxilio legal de transporte configurable, quincenas 1-15 y 16-fin de mes, días nominales editables entre 1 y 15, salud 4%, pensión 4%, previsualización y comprobante PDF. Ambas quincenas usan 15 días nominales y divisor mensual 30, incluso febrero o meses de 31 días. Modificar días requiere observación. No se infieren novedades laborales de remisiones, tiempos comerciales o anexos.
@@ -10,11 +12,13 @@ No incluye prestaciones, aportes patronales, PILA, dispersión de dinero, pago r
 
 ## Configuración provisional e historial
 
-La migración nueva crea salario base 1.750.905 y auxilio 249.095, total mensual 2.000.000, PROVISIONALES para cada empleado existente, desde 2026-10-01. Es configuración inicial autorizada, no evidencia de salario efectivamente pactado ni nómina histórica. Office debe confirmar monto, auxilio y régimen mediante una nueva revisión salarial antes de emitir. Un empleado nuevo recibe el mismo estado provisional durante las fechas 2026 verificadas; otros años quedan pendientes de configuración, sin extrapolar importes.
+La migración original creó salario base 1.750.905 y auxilio 249.095, total mensual 2.000.000, PROVISIONALES para cada empleado existente, desde 2026-10-01. Estos registros históricos no se reescriben. Desde la configuración autorizada del 2026-10-19, la referencia interna de auxilio de la empresa y el valor inicial para empleados nuevos son 250.000; con base 1.750.905, el total mensual provisional es 2.000.905. Esta referencia empresarial no modifica el valor oficial del decreto. La política actual queda identificada como `CO-2026-BASIC-v2` y su referencia como `COMPANY` en las nuevas instantáneas.
+
+La configuración provisional no es evidencia de salario efectivamente pactado ni nómina histórica. Office debe confirmar monto, auxilio y régimen mediante una nueva revisión salarial antes de emitir. Otros años quedan pendientes de configuración, sin extrapolar importes. Cambiar la referencia no modifica salarios existentes, auxilios cero o acuerdos individuales, ni recalcula comprobantes emitidos.
 
 Cada cambio conserva vigencia, revisión, motivo, autor y fecha. La revisión esperada y bloqueo de fila impiden sobrescribir modificaciones simultáneas. No se permite una nueva vigencia que atraviese períodos ya emitidos. La migración aplica sobre el historial existente de REV: no utiliza la migración inicial de Finge ni reintegra la migración salarial antigua retirada.
 
-Un salario confirmado se aplica al inicio de la quincena. Si hay una vigencia dentro de ella, la emisión se bloquea: falta cálculo por tramos. Se bloquean salarios provisionales, empleado inactivo, cédula faltante, régimen REVIEW_REQUIRED, salario inferior al mínimo, salarios desde 4 SMMLV y auxilio positivo por encima de 2 SMMLV o superior a la referencia legal. Confirmar STANDARD significa que Office ha revisado que corresponde al régimen general contemplado; los importes no prueban elegibilidad por sí solos.
+Un salario confirmado se aplica al inicio de la quincena. Si hay una vigencia dentro de ella, la emisión se bloquea: falta cálculo por tramos. Se bloquean salarios provisionales, empleado inactivo, cédula faltante, régimen REVIEW_REQUIRED, salario inferior al mínimo, salarios desde 4 SMMLV y auxilio positivo por encima de 2 SMMLV. Un auxilio que supere la referencia empresarial de 250.000 genera una advertencia no bloqueante; se mantiene el valor del empleado y se permite emitir cuando no hay otros bloqueos. Confirmar STANDARD significa que Office ha revisado que corresponde al régimen general contemplado; los importes no prueban elegibilidad por sí solos.
 
 ## Cálculo y redondeo
 
@@ -25,15 +29,15 @@ Ejemplo autorizado de 15 días:
 | Concepto | COP |
 | --- | ---: |
 | Salario mensual | 1.750.905 |
-| Auxilio mensual | 249.095 |
+| Auxilio mensual de la empresa | 250.000 |
 | Salario devengado | 875.453 |
-| Auxilio devengado | 124.548 |
-| Total devengado | 1.000.001 |
+| Auxilio devengado | 125.000 |
+| Total devengado | 1.000.453 |
 | Salud | 35.018 |
 | Pensión | 35.018 |
-| Neto | 929.965 |
+| Neto | 930.417 |
 
-El peso de diferencia frente a redondear el total bruto antes de sus componentes es resultado explícito de redondear cada concepto. No se copian deducciones 35.050 ni totales inconsistentes de la imagen de referencia. No se implementa todavía conciliación de redondeos entre quincenas.
+Los conceptos se redondean individualmente, también al leer importes históricos distintos al valor inicial actual. No se copian deducciones 35.050 ni totales inconsistentes de la imagen de referencia. No se implementa todavía conciliación de redondeos entre quincenas.
 
 ## Comprobantes
 

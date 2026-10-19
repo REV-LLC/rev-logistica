@@ -31,3 +31,22 @@
 .table table td {
   font-variant-numeric: tabular-nums;
 }
+
+.summaryFigure {
+  min-width: 0;
+}
+
+.summaryValue {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 36em) {
+  .summaryFigure.summaryFigure {
+    padding: 10px !important;
+  }
+
+  .summaryValue {
+    font-size: clamp(14px, 3.8vw, 18px);
+  }
+}

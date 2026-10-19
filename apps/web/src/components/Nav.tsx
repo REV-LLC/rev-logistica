@@ -788,7 +788,7 @@ export default function Nav({ onNavigate }: NavProps) {
       gap="md"
       p="md"
       style={{
-        background: "var(--ui-sidebar-background)",
+        background: "transparent",
       }}
     >
       <Group
@@ -871,7 +871,7 @@ export default function Nav({ onNavigate }: NavProps) {
       <SidebarSearch
         key={routeKey}
         entries={buildNavigationSearchEntries([
-          { title: 'Accesos rápidos', links: [homeLink, ...quickLinks].filter(canShowLink) },
+          { title: 'General', links: [homeLink, ...quickLinks].filter(canShowLink) },
           ...orderedSections,
         ])}
         onNavigate={onNavigate}
@@ -889,12 +889,6 @@ export default function Nav({ onNavigate }: NavProps) {
         }}
       >
         <Stack gap="md" pr={4}>
-          {quickLinks.some(canShowLink) ? (
-            <Stack gap={2}>
-              <Text size="xs" fw={600} c="#aebdcd" px="sm">Accesos rápidos</Text>
-              {quickLinks.filter(canShowLink).map((link) => renderNavItem(link))}
-            </Stack>
-          ) : null}
           {orderedSections.map(renderSection)}
         </Stack>
       </ScrollArea>

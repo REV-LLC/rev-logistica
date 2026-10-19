@@ -4,7 +4,7 @@ import { EmployeePayrollService } from './employee-payroll.service';
 import { PayrollAccessGuard } from './employee-payroll.controller';
 
 const input = { from: '2026-10-01', to: '2026-10-15', days: 15 };
-const salary = { id: 'salary-1', employeeId: 'employee-1', effectiveFrom: new Date('2026-10-01T00:00:00Z'), monthlySalary: new Prisma.Decimal('1750905'), transportAllowance: new Prisma.Decimal('249095'), revision: 1, provisional: false, regime: 'STANDARD', note: 'Confirmed', createdBy: 'office-1', createdAt: new Date() };
+const salary = { id: 'salary-1', employeeId: 'employee-1', effectiveFrom: new Date('2026-10-01T00:00:00Z'), monthlySalary: new Prisma.Decimal('1750905'), transportAllowance: new Prisma.Decimal('250000'), revision: 1, provisional: false, regime: 'STANDARD', note: 'Confirmed', createdBy: 'office-1', createdAt: new Date() };
 const employee = { id: 'employee-1', name: 'QA', lastName: 'SYNTHETIC', role: 'OFFICE', documentId: 'QA-ID', active: true, payrollEnabled: true, salaries: [salary] };
 function setup(overrides = {}) {
   const actual = { ...employee, ...overrides };
@@ -36,6 +36,37 @@ describe('payroll history and issuance', () => {
     await expect(service.issue(employee.id, { ...input, expectedSalaryRevision: 1, idempotencyKey: 'key' }, 'office')).rejects.toThrow(BadRequestException);
     expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
   });
+  it('keeps the configured allowance and treats an excess as a non-blocking warning', async () => {
+    const { service, tx } = setup({ salaries: [{ ...salary, monthlySalary: new Prisma.Decimal('1910000'), transportAllowance: new Prisma.Decimal('300000') }] });
+    const preview = await service.preview(employee.id, input);
+    expect(preview).toMatchObject({ eligible: true, blockingReasons: [], transportAllowance: '300000.00', transportEarned: '150000', totalEarned: '1105000', netPay: '1028600' });
+    expect(preview.warnings).toHaveLength(1);
+    expect(preview.warnings[0]).toMatch(/no impide emitir/);
+    const receipt = await service.issue(employee.id, { ...input, expectedSalaryRevision: 1, idempotencyKey: 'allowance-warning' }, 'office');
+    expect(receipt).toMatchObject({ eligible: true, warnings: preview.warnings, transportAllowance: '300000.00', netPay: '1028600', status: 'ISSUED' });
+    expect(tx.payrollReceipt.create).toHaveBeenCalledTimes(1);
+    expect(tx.employeeSalary.create).not.toHaveBeenCalled();
+  });
+  it('does not warn when the allowance equals the configured reference', async () => {
+    expect(await setup().service.preview(employee.id, input)).toMatchObject({ eligible: true, warnings: [] });
+  });
+  it.each([{ active: false }, { payrollEnabled: false }, { documentId: null }, { salaries: [{ ...salary, provisional: true, transportAllowance: new Prisma.Decimal('300000') }] }])('an allowance warning never bypasses other issuance blockers %j', async overrides => {
+    const { service, tx } = setup({ salaries: [{ ...salary, transportAllowance: new Prisma.Decimal('300000') }], ...overrides });
+    const preview = await service.preview(employee.id, input);
+    expect(preview.eligible).toBe(false);
+    expect(preview.warnings).toHaveLength(1);
+    expect(preview.blockingReasons.length).toBeGreaterThan(0);
+    await expect(service.issue(employee.id, { ...input, expectedSalaryRevision: 1, idempotencyKey: 'still-blocked' }, 'office')).rejects.toThrow(BadRequestException);
+    expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
+  });
+  it('returns historical snapshots unchanged, without adding warnings retrospectively', async () => {
+    const { service, prisma } = setup();
+    const snapshot = { eligible: false, blockingReasons: ['Historical validation'], transportAllowance: '250000.00', netPay: '1003600' };
+    prisma.payrollReceipt.findMany.mockResolvedValue([{ id: 'historical', snapshot, createdAt: new Date('2026-10-10T12:00:00Z') }] as never);
+    const [receipt] = await service.receipts(employee.id);
+    expect(receipt).toMatchObject(snapshot);
+    expect(receipt).not.toHaveProperty('warnings');
+  });
   it.each([
     { salaries: [{ ...salary, regime: 'REVIEW_REQUIRED' }] },
     { salaries: [{ ...salary, monthlySalary: new Prisma.Decimal('7003620'), transportAllowance: new Prisma.Decimal('0') }] },
@@ -61,6 +92,25 @@ describe('payroll history and issuance', () => {
     await expect(service.issue(employee.id, { ...input, expectedSalaryRevision: 1, idempotencyKey: 'key' }, 'office')).rejects.toThrow(/excluido/);
     expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
   });
+  it('scopes the profile period and receipts to one employee without enrolling excluded staff', async () => {
+    const { service, prisma, tx } = setup();
+    prisma.employee.findMany.mockResolvedValue([{ ...employee, payrollEnabled: false }]);
+    prisma.payrollReceipt.findMany.mockResolvedValue([]);
+    const result = await service.period(input.from, input.to, employee.id);
+    expect(prisma.employee.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: employee.id } }));
+    expect(prisma.payrollReceipt.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ employeeId: employee.id }) }));
+    expect(result.employees).toHaveLength(1);
+    expect(result.employees[0].payrollEnabled).toBe(false);
+    expect(result.employees[0].preview.blockingReasons).toContain('El empleado está excluido de nómina.');
+    expect(tx.employeeSalary.create).not.toHaveBeenCalled();
+    expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
+  });
+  it('does not fall back to a different employee if the scoped profile is missing', async () => {
+    const { service, prisma } = setup();
+    prisma.employee.findMany.mockResolvedValue([]);
+    prisma.payrollReceipt.findMany.mockResolvedValue([]);
+    await expect(service.period(input.from, input.to, 'missing')).rejects.toThrow('Empleado no encontrado');
+  });
   it('requires an explanation for modified payable days', async () => {
     const { service } = setup();
     await expect(service.preview(employee.id, { ...input, days: 10 })).rejects.toThrow(/motivo/);
@@ -68,14 +118,14 @@ describe('payroll history and issuance', () => {
   });
   it('detects stale salary edits and stale issuance before writes', async () => {
     const { service, tx } = setup();
-    await expect(service.save(employee.id, { effectiveFrom: '2026-10-01', monthlySalary: '1750905', transportAllowance: '249095', note: 'Confirmación', expectedRevision: 0 }, 'office')).rejects.toThrow(ConflictException);
+    await expect(service.save(employee.id, { effectiveFrom: '2026-10-01', monthlySalary: '1750905', transportAllowance: '250000', note: 'Confirmación', expectedRevision: 0 }, 'office')).rejects.toThrow(ConflictException);
     await expect(service.issue(employee.id, { ...input, expectedSalaryRevision: 2, idempotencyKey: 'key' }, 'office')).rejects.toThrow(ConflictException);
     expect(tx.employeeSalary.create).not.toHaveBeenCalled();
     expect(tx.payrollReceipt.create).not.toHaveBeenCalled();
   });
   it('does not allow retroactive salary edits across a closed receipt', async () => {
     const { service, tx } = setup(); tx.payrollReceipt.findFirst.mockResolvedValue({ id: 'closed' } as never);
-    await expect(service.save(employee.id, { effectiveFrom: '2026-10-01', monthlySalary: '1750905', transportAllowance: '249095', note: 'Cambio', expectedRevision: 1 }, 'office')).rejects.toThrow(/emitidos/);
+    await expect(service.save(employee.id, { effectiveFrom: '2026-10-01', monthlySalary: '1750905', transportAllowance: '250000', note: 'Cambio', expectedRevision: 1 }, 'office')).rejects.toThrow(/emitidos/);
   });
   it('returns the original snapshot for idempotent retry even after employee or salary changes', async () => {
     const { service, tx } = setup();
@@ -87,7 +137,7 @@ describe('payroll history and issuance', () => {
     const retry = await service.issue(employee.id, command, 'office');
     expect(retry).toEqual(first);
     expect(tx.payrollReceipt.create).toHaveBeenCalledTimes(1);
-    expect(first).toMatchObject({ status: 'ISSUED', paymentStatus: 'NOT_RECORDED', netPay: '929965', employee: { name: 'QA' } });
+    expect(first).toMatchObject({ status: 'ISSUED', paymentStatus: 'NOT_RECORDED', netPay: '930417', employee: { name: 'QA' } });
     await expect(service.issue(employee.id, { ...command, days: 10, observations: 'Changed' }, 'office')).rejects.toThrow(ConflictException);
   });
   it('rejects a second receipt for the same period instead of replacing the historical one', async () => {

@@ -192,18 +192,20 @@ export default function EmployeeAvatar({
   employee,
   size = 40,
   version = 0,
+  fullSize = false,
 }: {
   employee: EmployeeAvatarRecord;
   size?: number;
   version?: number;
+  fullSize?: boolean;
 }) {
-  const photo = useEmployeePhotoState(employee.id, version);
+  const photo = useEmployeePhotoState(employee.id, version, fullSize);
 
   return (
     <Skeleton data-page-image-loading={photo.loading ? "true" : "false"} visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
     <AppAvatar
       src={photo.url}
-      radius="xl"
+      radius={fullSize ? '50%' : 'xl'}
       size={size}
       imageSizes={`${size}px`}
       color="blue"
