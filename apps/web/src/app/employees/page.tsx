@@ -1,7 +1,5 @@
 'use client';
 
-import CollectionLoading from '@/components/CollectionLoading';
-
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -40,6 +38,7 @@ import { employeeProfileHref } from '@/lib/employee-profile';
 import { api, apiBlob, ApiError } from '@/lib/api';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import styles from './directory.module.css';
+import EmployeeDirectoryLoading from './EmployeeDirectoryLoading';
 
 const EMPLOYEE_IDENTITY_CATEGORY = 'CEDULA';
 
@@ -293,7 +292,7 @@ export default function EmployeeCardsPage() {
     setDocumentsEmployee(null);
   };
 
-  if (requestedEmployeeId) return <Container size="xl" py="xl"><CollectionLoading label="Abriendo perfil del empleado" variant="employees" /></Container>;
+  if (requestedEmployeeId || loading) return <EmployeeDirectoryLoading label={requestedEmployeeId ? 'Abriendo perfil del empleado' : 'Cargando empleados'} />;
 
   return (
     <Container size="xl" py="xl" className={styles.page}>
@@ -326,10 +325,6 @@ export default function EmployeeCardsPage() {
           <Alert color="red" variant="light" title="No se pudo completar la accion">
             {error}
           </Alert>
-        ) : null}
-
-        {loading ? (
-          <CollectionLoading label="Cargando empleados" variant="employees" />
         ) : null}
 
         {!loading && employees.length === 0 ? (

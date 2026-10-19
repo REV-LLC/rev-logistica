@@ -30,6 +30,11 @@
   font-weight: 500;
 }
 
+/* Keep the pending marker measurable without drawing a second loading surface. */
+.loadingSpace {
+  min-height: 52dvh;
+}
+
 .surface {
   min-width: 0;
   padding: 24px;
