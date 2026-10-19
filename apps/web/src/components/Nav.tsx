@@ -1,6 +1,8 @@
 "use client";
 
 import AppImage from '@/components/AppImage';
+import SidebarSearch from '@/components/SidebarSearch';
+import { buildNavigationSearchEntries } from '@/lib/navigation-search';
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -865,6 +867,14 @@ export default function Nav({ onNavigate }: NavProps) {
         </Stack>
       </Group>
       <Divider color="rgba(255,255,255,0.10)" />
+      <SidebarSearch
+        key={routeKey}
+        entries={buildNavigationSearchEntries([
+          { title: 'Accesos rápidos', links: [homeLink, ...quickLinks].filter(canShowLink) },
+          ...orderedSections,
+        ])}
+        onNavigate={onNavigate}
+      />
       <ScrollArea
         viewportRef={scrollViewportRef}
         type="auto"
@@ -878,9 +888,6 @@ export default function Nav({ onNavigate }: NavProps) {
         }}
       >
         <Stack gap="md" pr={4}>
-          {canShowLink(homeLink) ? (
-            <Stack gap={0}>{renderNavItem(homeLink)}</Stack>
-          ) : null}
           {quickLinks.some(canShowLink) ? (
             <Stack gap={2}>
               <Text size="xs" fw={600} c="#aebdcd" px="sm">Accesos rápidos</Text>
