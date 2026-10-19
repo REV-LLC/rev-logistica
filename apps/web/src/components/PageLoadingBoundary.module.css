@@ -1,18 +1,15 @@
 .boundary { min-height: 100dvh; }
 
-/* A route fallback can briefly remove its page background. Never expose white beneath the glass. */
-:global(html):has(.overlay),
-:global(body):has(.overlay) { background-color: #101820; }
-
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 11000;
   display: grid;
   place-items: center;
-  background: rgb(3 12 21 / 42%);
-  -webkit-backdrop-filter: blur(18px) saturate(85%);
-  backdrop-filter: blur(18px) saturate(85%);
+  /* Neutral glass: the current page supplies every background color. */
+  background: transparent;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   animation-name: glass-enter;
   animation-timing-function: ease-out;
   animation-fill-mode: both;
@@ -38,7 +35,7 @@
   object-fit: contain;
   animation: logo-pulse 1.6s ease-in-out infinite;
 }
-.label { color: #c0ccd8; font-size: 14px; }
+.label { color: #f1f5f9; font-size: 14px; text-shadow: 0 1px 3px rgb(0 0 0 / 80%); }
 .track {
   width: 116px;
   height: 3px;
@@ -57,12 +54,12 @@
 @keyframes logo-pulse { 50% { opacity: 0.65; } }
 @keyframes progress { from { transform: translateX(-110%); } to { transform: translateX(325%); } }
 @keyframes glass-enter {
-  from { background: rgb(3 12 21 / 0%); -webkit-backdrop-filter: blur(0px) saturate(100%); backdrop-filter: blur(0px) saturate(100%); }
-  to { background: rgb(3 12 21 / 42%); -webkit-backdrop-filter: blur(18px) saturate(85%); backdrop-filter: blur(18px) saturate(85%); }
+  from { -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px); }
+  to { -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
 }
 @keyframes glass-reveal {
-  from { background: rgb(3 12 21 / 42%); -webkit-backdrop-filter: blur(18px) saturate(85%); backdrop-filter: blur(18px) saturate(85%); }
-  to { background: rgb(3 12 21 / 0%); -webkit-backdrop-filter: blur(0px) saturate(100%); backdrop-filter: blur(0px) saturate(100%); }
+  from { -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+  to { -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .overlay, .logo, .track span { animation: none; }
@@ -73,6 +70,4 @@
 @media print {
   .boundary { min-height: 0; }
   .overlay { display: none; }
-  :global(html):has(.overlay),
-  :global(body):has(.overlay) { background-color: revert; }
 }
