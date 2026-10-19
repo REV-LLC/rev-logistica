@@ -441,6 +441,7 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  loanDescriptionRevisions EmployeeLoanDescriptionRevision[]
   implementCommercialOriginReviews ImplementCommercialOriginReview[]
   implementIdentityBridges ImplementIdentityBridge[]
   reviewedLegacyEquipmentOrigins LegacyEquipmentOrigin[]
@@ -598,6 +599,7 @@ model Warehouse {
   type           WarehouseType
   ownerCompanyId String
   active         Boolean       @default(true)
+  activityNotes  EmployeeActivityNote[]
   tabletUsers    User[]
   createdAt      DateTime      @default(now())
 
@@ -1717,6 +1719,7 @@ model FileObject {
 }
 
 model EmployeeLoanEntry {
+  descriptionRevisions EmployeeLoanDescriptionRevision[]
   id String @id @default(uuid())
   employeeId String
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
@@ -1733,6 +1736,19 @@ model EmployeeLoanEntry {
   @@unique([employeeId, requestId])
   @@unique([sourceReference, sourceRow])
   @@index([employeeId, date, createdAt])
+}
+
+model EmployeeLoanDescriptionRevision {
+  id String @id @default(uuid())
+  entryId String
+  beforeDetail String
+  afterDetail String
+  createdById String
+  createdAt DateTime @default(now())
+  entry EmployeeLoanEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([entryId, createdAt])
 }
 
 model ReleaseAcknowledgement {
@@ -1799,6 +1815,7 @@ model CommercialProfileRevision {
 // Dates represent calendar days, stored at midnight UTC without local time conversion.
 enum EmployeeActivityType {
   WORKSITE
+  WAREHOUSE
   ABSENCE
   MEDICAL_LEAVE
   VACATION
@@ -1811,6 +1828,7 @@ model EmployeeActivityNote {
   endDate            DateTime? @db.Date
   type               EmployeeActivityType @default(WORKSITE)
   customerWorksiteId String?
+  warehouseId        String?
   assetId            String?
   description        String   @db.VarChar(5000)
   createdByUserId     String
@@ -1818,6 +1836,7 @@ model EmployeeActivityNote {
   updatedAt          DateTime @updatedAt
 
   employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
   asset            Asset?            @relation(fields: [assetId], references: [id], onDelete: Restrict)
   createdBy        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)

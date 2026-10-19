@@ -13,6 +13,12 @@ import { SettingsService } from './settings.service';
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
+  @Get('loan-display')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  async loanDisplay() {
+    return { paymentsPositive: await this.settings.get<boolean>('loans.payments_positive') };
+  }
+
   @Get('branding')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   async branding() {

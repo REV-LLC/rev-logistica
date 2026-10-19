@@ -1,0 +1,62 @@
+.content.content {
+  --profile-photo-size: min(24rem, calc(100vw - 3rem), 58dvh);
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 0 !important;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.body.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 !important;
+}
+
+.photo {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--profile-photo-size);
+  height: var(--profile-photo-size);
+  border-radius: 50%;
+  clip-path: circle(50%);
+  overflow: hidden;
+  background: var(--mantine-color-gray-2);
+}
+
+.name {
+  max-width: 100%;
+  color: white;
+  font-size: clamp(1.125rem, 3.5vw, 1.5rem);
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 45%);
+}
+
+.nameLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nameLink span {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.nameLink svg {
+  flex-shrink: 0;
+}
+
+.nameLink:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 6px;
+  border-radius: 3px;
+}

@@ -3,6 +3,7 @@
 import { MantineProvider, createTheme } from '@mantine/core';
 import OfflineManager from './OfflineManager';
 import LoginTransition from './LoginTransition';
+import EmployeePhotoPreviewProvider from './EmployeePhotoPreviewProvider';
 
 const theme = createTheme({
   fontFamily: 'Space Grotesk, sans-serif',
@@ -12,7 +13,7 @@ const theme = createTheme({
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme}>
-      <LoginTransition>{children}</LoginTransition>
+      <EmployeePhotoPreviewProvider><LoginTransition>{children}</LoginTransition></EmployeePhotoPreviewProvider>
       <OfflineManager />
     </MantineProvider>
   );

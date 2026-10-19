@@ -111,7 +111,7 @@ const warehouseOptions = {
   setSourceWorksiteId: noop,
 };
 
-test('carga todos los propietarios presentes en la ubicación; Driver captura manualmente solo al salir de proveedor', async () => {
+test('carga stock en custodia y usa el catálogo para proveedores sin consultar sus existencias', async () => {
   const calls = [],
     errors = [];
   const { useRequestInventory } = loadTransportModule(
@@ -134,6 +134,7 @@ test('carga todos los propietarios presentes en la ubicación; Driver captura ma
   );
   const options = {
     ...warehouseOptions,
+    sourceOwnerWarehouseId: null,
     setError: (value) => errors.push(value),
   };
   const hook = await mountHook(useRequestInventory, options);
@@ -148,10 +149,88 @@ test('carga todos los propietarios presentes en la ubicación; Driver captura ma
   await hook.update({ ...options, canDecide: false });
   await act(() => hook.current.loadInventory());
   assert.equal(calls.length, 2); // Provider-owned stock in our custody is selectable by Driver.
-  await hook.update({ ...options, physicalSourceWarehouseId: 'ally', canDecide: false });
+  await hook.update({ ...options, physicalSourceWarehouseId: 'ally', sourceOwnerWarehouseId: 'ally', canDecide: false,
+    skuOptions: [{ id: 'mixer', name: 'MEZCLADORA', assetFamilyId: 'family', controlType: 'SERIAL' }],
+  });
   await act(() => hook.current.loadInventory());
   assert.equal(calls.length, 2);
-  assert.match(errors.at(-1), /captura libre/);
+  assert.equal(hook.current.bulkItems[0].skuName, 'MEZCLADORA');
+  assert.equal(hook.current.bulkItems[0].ownerWarehouseId, 'ally');
+  assert.equal(hook.current.itemsModalOpen, true);
+  assert.deepEqual(hook.current.serialItems, []);
+  assert.deepEqual(errors.filter(Boolean), []);
+});
+
+test('al entrar a ítems pide el dueño antes de cargar la lista y no modifica selecciones anteriores', async () => {
+  const calls = [], owners = [];
+  const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
+    '@/lib/api': { ApiError, api: async url => { calls.push(url); return { bulk: [], serial: [] }; } },
+  });
+  const selected = [{ selectionId: 'existing', type: 'free', name: 'BOMBA', ownerWarehouseId: 'other' }];
+  const options = { ...warehouseOptions, physicalSourceWarehouseId: 'own', sourceOwnerWarehouseId: null,
+    warehouses: [{ id: 'own', name: 'Bodega principal de alquiler', type: 'OWN' }, { id: 'ally', name: 'Proveedor', type: 'ALLY' }],
+    skuOptions: [{ id: 'mixer', name: 'MEZCLADORA', assetFamilyId: 'family', controlType: 'SERIAL' }],
+    setSourceOwnerWarehouseId: owner => owners.push(owner),
+  };
+  const hook = await mountHook(useRequestInventory, options);
+  assert.equal(hook.current.ownerModalOpen, true);
+  assert.equal(hook.current.itemsModalOpen, false);
+  assert.deepEqual(calls, []);
+  await act(() => hook.current.confirmItemOwner('ally'));
+  assert.equal(hook.current.ownerModalOpen, false);
+  assert.equal(hook.current.itemsModalOpen, true);
+  assert.deepEqual(owners, ['ally']);
+  assert.deepEqual(calls, []);
+  await hook.update({ ...options, selectedItems: selected, sourceOwnerWarehouseId: 'ally', physicalSourceWarehouseId: 'ally' });
+  await act(() => hook.current.startItemSelection());
+  assert.equal(hook.current.ownerModalOpen, true);
+  assert.equal(hook.current.itemsModalOpen, false);
+  await act(() => hook.current.confirmItemOwner('own'));
+  assert.deepEqual(calls, ['/inventory/warehouse/own']);
+  assert.equal(selected[0].ownerWarehouseId, 'other');
+});
+
+test('cancelar la elección del dueño y volver a ítems conserva el resumen sin reabrir la lista', async () => {
+  const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
+    '@/lib/api': { ApiError, api: async () => { throw Error('No debería cargar inventario'); } },
+  });
+  const hook = await mountHook(useRequestInventory, warehouseOptions);
+  await act(() => hook.current.setOwnerModalOpen(false));
+  assert.equal(hook.current.itemsModalOpen, false);
+  await hook.update({ ...warehouseOptions, generateStep: 'sign' });
+  await hook.update({ ...warehouseOptions, selectedItems: [{ selectionId: 'added', type: 'free', name: 'BOMBA' }] });
+  assert.equal(hook.current.ownerModalOpen, false);
+  assert.equal(hook.current.itemsModalOpen, false);
+});
+
+test('la tablet elige proveedor sin cambiar su bodega física autorizada', async () => {
+  const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
+    '@/lib/api': { ApiError, api: async () => { throw Error('No debe consultar stock del proveedor'); } },
+  });
+  const hook = await mountHook(useRequestInventory, { ...warehouseOptions,
+    fixedSourceWarehouseId: 'assigned', physicalSourceWarehouseId: 'assigned',
+    skuOptions: [{ id: 'mixer', name: 'MEZCLADORA', assetFamilyId: 'family', controlType: 'SERIAL' }],
+  });
+  await act(() => hook.current.confirmItemOwner('ally'));
+  assert.equal(hook.current.bulkItems[0].ownerWarehouseId, 'ally');
+  assert.equal(hook.current.bulkItems[0].sourceWarehouseId, 'assigned');
+  assert.equal(hook.current.itemsModalOpen, true);
+});
+
+test('elegir inventario propio no mezcla equipos de proveedores bajo el nombre de Renta Equipos del Valle', async () => {
+  const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
+    '@/lib/api': { ApiError, api: async () => ({
+      bulk: [{ skuId: 'tube', ownerWarehouseId: 'own', quantity: 10 }, { skuId: 'tube', ownerWarehouseId: 'ally', quantity: 4 }],
+      serial: [{ assetId: 'own-asset', ownerWarehouseId: 'own' }, { assetId: 'provider-asset', ownerWarehouseId: 'ally' }],
+    }) },
+  });
+  const hook = await mountHook(useRequestInventory, { ...warehouseOptions,
+    warehouses: [{ id: 'own', name: 'Bodega principal de alquiler', type: 'OWN' }, ...warehouseOptions.warehouses],
+  });
+  await act(() => hook.current.confirmItemOwner('own'));
+  assert.equal(hook.current.bulkItems.length, 1);
+  assert.deepEqual(hook.current.serialItems.map(item => item.assetId), ['own-asset']);
+  assert.equal(hook.current.bulkItems[0].ownerWarehouseName, 'Renta Equipos del Valle');
 });
 
 test('devolución consulta saldo de obra y conserva la presentación de dueños del backend', async () => {
@@ -353,11 +432,12 @@ test('cambiar la salida física descarta una respuesta de inventario anterior', 
   const { useRequestInventory } = loadTransportModule('use-request-inventory.ts', {
     '@/lib/api': { ApiError, api: () => new Promise(resolve => { finish = resolve; }) },
   });
-  const hook = await mountHook(useRequestInventory, warehouseOptions);
+  const options = { ...warehouseOptions, sourceOwnerWarehouseId: null };
+  const hook = await mountHook(useRequestInventory, options);
   let pending;
   await act(async () => { pending = hook.current.loadInventory(); });
   await act(async () => hook.current.clearLoadedInventory());
-  await hook.update({ ...warehouseOptions, physicalSourceWarehouseId: 'ally' });
+  await hook.update({ ...options, physicalSourceWarehouseId: 'ally' });
   await act(async () => {
     finish({ bulk: [], serial: [{ assetId: 'stale', ownerWarehouseId: 'ally' }] });
     await pending;

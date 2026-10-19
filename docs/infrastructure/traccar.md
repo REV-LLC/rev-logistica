@@ -109,21 +109,39 @@ Referencias: [Docker](https://www.traccar.org/docker/),
 `Operación → Seguimiento de camiones` abre la página `/transport/tracking`,
 visible para ADMIN y OFFICE. El panel original se muestra dentro de un iframe
 en REV. Un enlace secundario permite abrirlo en otra pestaña.
-Traccar conserva su propio inicio de sesión, permisos de dispositivos, mapa,
-WebSocket, recorridos, exportaciones y reportes. No se copian posiciones a la
-base de REV ni se envían contraseñas o tokens Traccar al frontend.
+Traccar conserva su sesión nativa, permisos de dispositivos, mapa, WebSocket,
+recorridos, exportaciones y reportes. REV establece la sesión automáticamente
+mediante el endpoint nativo `/api/session?token=…`. No se copian posiciones a
+la base de REV ni se envían contraseñas o credenciales administradoras al frontend.
 
 La dirección pública se puede cambiar con `NEXT_PUBLIC_TRACCAR_WEB_URL` en
 Vercel y un nuevo build. El valor por defecto es `https://gps.revcontractorsllc.com`.
 Solo se aceptan URLs HTTPS sin credenciales, query ni fragmento. La URL de
 recepción de tablets no es la URL del panel.
 
-La sesión REV controla el acceso al menú, y la sesión Traccar controla el
-acceso efectivo a las posiciones. Cerrar una sesión no cierra la otra.
-Cada usuario de oficina necesita una cuenta Traccar y permisos explícitos
-sobre los dispositivos. Ser administrador no implica que el listado normal
-muestre todos los dispositivos; ZNN938 fue vinculado explícitamente al usuario
-`sg@revcontractorsllc.com` mediante `/api/permissions`.
+`POST /tracking/session` requiere JWT REV válido y rol ADMIN/OFFICE. Además
+consulta el usuario actual en la base de REV para rechazar cuentas inactivas
+o cambios de rol, aunque el JWT anterior siga firmado. El backend crea una
+cuenta nativa de lectura por ID de usuario REV (`rev-<id>@rev.invalid`), con
+`administrator=false`, `readonly=true`, `deviceReadonly=true` y comandos
+limitados. Vincula los dispositivos de la flota mediante la API de permisos.
+No reutiliza ni modifica la cuenta administradora humana de Traccar.
+
+Configurar **solo en el servicio API de Railway**:
+
+- `TRACCAR_WEB_URL=https://gps.revcontractorsllc.com` (mismo valor que la web).
+- `TRACCAR_INTEGRATION_EMAIL` y `TRACCAR_INTEGRATION_PASSWORD`: credenciales
+  privadas del servicio de integración, nunca variables `NEXT_PUBLIC_*`.
+
+El token temporal nunca supera cinco minutos ni la expiración del JWT REV.
+Una navegación invisible al endpoint nativo establece su cookie desde el
+mismo origen de Traccar, sin cambiar CORS ni SameSite. Después se abre el
+panel original. Mientras el mapa está abierto, REV revalida permisos y
+renueva el acceso cada dos minutos y al volver a la pestaña. Al salir de REV
+o de la página, cesa la renovación; la sesión nativa emitida puede permanecer
+válida hasta cinco minutos. No guardar tokens en localStorage, enlaces
+compartidos, logs o capturas. El acceso directo externo sigue ofreciendo
+el login nativo cuando no hay una sesión vigente.
 
 El panel usa `gps.revcontractorsllc.com` y REV usa
 `app.revcontractorsllc.com`: ambos son HTTPS bajo el mismo dominio de sitio.
@@ -149,3 +167,57 @@ cambiar la URL de recepción de las tablets. Si existe una variable
 La prueba de pantalla apagada fue confirmada por el usuario. La integración
 no garantiza conexión GPS: comprobar siempre la hora real del último reporte
 que muestra Traccar.
+
+## Puntos conocidos desde REV
+
+El control «+ Guardar ubicación» permite a ADMIN/OFFICE seleccionar un camión
+y guardar su última posición como geocerca circular nativa. El radio inicial es
+50 metros y puede ajustarse entre 25 y 2000 metros. No se aceptan coordenadas
+del navegador: la API recupera la posición directamente de Traccar, valida
+que pertenezca al camión y exige que tenga menos de 15 minutos. Si llegó otra
+posición desde que se abrió el formulario, el usuario debe confirmar de nuevo.
+
+Los puntos se guardan en la base nativa de Traccar, con `revKnownPlace=true`,
+y se vinculan a toda la flota y a las cuentas administradoras/de seguimiento
+de REV. Al renovar la sesión se sincronizan permisos para nuevos usuarios y
+camiones. Los usuarios nativos de REV conservan sus restricciones de lectura;
+la creación pasa por la API autenticada de REV. No cambia el código de Traccar
+ni el receptor de las tablets. No hay migraciones de la base de REV.
+
+`GET /tracking/places` consulta la última posición y compara su distancia
+contra el círculo guardado. Los reportes antiguos se muestran como históricos,
+no como presencia actual. El panel consulta cada 30 segundos mientras es
+visible; esto no cambia la frecuencia de reporte de las tablets. La entrada
+a la geocerca y la salida nativas se evaluarán con los siguientes reportes del
+dispositivo. Los nombres repetidos se rechazan y los reintentos conservan un
+identificador de solicitud para recuperar un guardado parcialmente completado.
+
+El iframe no permite leer desde REV qué camión seleccionó el usuario dentro
+del mapa: el control usa un selector explícito de camión encima del mapa.
+La administración avanzada y eliminación de geocercas sigue disponible para
+la cuenta administradora nativa de Traccar.
+
+## Marcadores visibles de las sedes
+
+El estilo nativo `custom` usa `https://app.revcontractorsllc.com/maps/rev-sites-v1.json?v=2`.
+Parte del estilo Liberty de OpenFreeMap e incorpora dos puntos GeoJSON: Sede
+principal REV (Cra. 22 #5A-07) y Sede secundaria REV (Calle 8A #22-29), Cali.
+Los marcadores tienen radio fijo de 14 píxeles, borde blanco y números 1/2;
+los indicadores se desplazan 32 píxeles hacia arriba para no quedar tapados
+por un camión estacionado (18 píxeles a izquierda/derecha para distinguir
+las dos sedes al alejar el mapa); sus coordenadas no cambian.
+Los nombres permanecen visibles al cambiar el zoom y no desaparecen por
+colisiones con camiones. Las geocercas de 50 metros siguen siendo la fuente
+de reconocimiento de llegadas; el estilo es solo una referencia visual.
+
+Traccar conserva el frontend oficial 6.16.0. Configuración del servidor:
+`map=custom`, `mapUrl` con la URL anterior y `attributes.activeMapStyles=custom`.
+Las cuentas con preferencias de mapas propias deben usar el mismo estilo.
+El navegador obtiene el estilo desde REV; CORS permite únicamente el origen
+del panel GPS. El archivo no contiene credenciales ni posiciones de camiones.
+Las sedes son referencias fijas: si cambia su dirección, actualizar tanto su
+geocerca como el GeoJSON del estilo y publicar una nueva versión de URL.
+No alojar el estilo en el filesystem efímero del contenedor Traccar.
+
+Base del mapa: https://tiles.openfreemap.org/styles/liberty
+Documentación del estilo nativo: https://www.traccar.org/map-layers/

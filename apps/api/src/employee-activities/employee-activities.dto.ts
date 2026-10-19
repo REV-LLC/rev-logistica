@@ -16,7 +16,9 @@ export class ActivityNoteDto {
   @IsEnum(EmployeeActivityType)
   type?: EmployeeActivityType;
 
-  @ValidateIf((value) => value.type && value.type !== 'WORKSITE')
+  @ValidateIf((value) =>
+    ['ABSENCE', 'MEDICAL_LEAVE', 'VACATION'].includes(value.type),
+  )
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Selecciona la fecha de fin.' })
   endDate?: string;
 
@@ -29,7 +31,16 @@ export class ActivityNoteDto {
   @IsUUID()
   customerWorksiteId?: string;
 
-  @ValidateIf((value) => !value.type || value.type === 'WORKSITE')
+  @ValidateIf((value) => value.type === 'WAREHOUSE')
+  @IsUUID()
+  warehouseId?: string;
+
+  @ValidateIf(
+    (value) =>
+      !value.type ||
+      value.type === 'WORKSITE' ||
+      (value.type === 'WAREHOUSE' && value.assetId != null),
+  )
   @IsUUID()
   assetId?: string;
 

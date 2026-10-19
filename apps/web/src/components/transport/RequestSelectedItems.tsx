@@ -5,6 +5,7 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { groupRequestItems, type RequestItemGroup } from './request-item-groups';
 import { normalizeQuantityInput } from './request-formatting';
 import type { SelectedItem, SkuOption, Warehouse } from './request-types';
+import { getItemOwnerLabel } from './request-item-owners';
 
 export type RequestSelectedItemsProps = {
   selectedItems: SelectedItem[];
@@ -43,7 +44,7 @@ function ItemRow(props: RequestSelectedItemsProps & { node: RequestItemGroup; de
   const details = <>
     <Text fw={600} style={{ overflowWrap: 'anywhere' }}>{item.name}</Text>
     {props.docType === 'RETURN' && item.deliveryFuel ? <Text size="sm">Motor: {item.deliveryFuel === 'ELECTRICO' ? 'Eléctrico' : 'Gasolina'}</Text> : null}
-    {props.docType === 'REMISSION' ? <Text size="xs" c="dimmed">Origen: {props.warehouses.find(w => w.id === item.sourceWarehouseId)?.name ?? 'Pendiente de identificar'}</Text> : null}
+    {props.docType === 'REMISSION' ? <Text size="xs" c="gray.7">Dueño: {getItemOwnerLabel(props.warehouses.find(w => w.id === item.ownerWarehouseId))}</Text> : null}
     {item.serial ? <Text size="xs" c="dimmed">{item.serial}</Text> : null}
     {children.length ? <Text size="xs" c="teal">{children.length} pieza(s) incluida(s){expanded ? '' : ' · Ver configuración'}</Text> : null}
     {props.renderDamageFields(item, index)}

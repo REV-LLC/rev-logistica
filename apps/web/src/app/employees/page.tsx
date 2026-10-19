@@ -3,6 +3,7 @@
 import CollectionLoading from '@/components/CollectionLoading';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -40,7 +41,6 @@ import EmployeeFormModal, {
 } from '@/components/EmployeeFormModal';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
-import EmployeePhotoModal from '@/components/EmployeePhotoModal';
 import { api, apiBlob, ApiError } from '@/lib/api';
 
 const EMPLOYEE_IDENTITY_CATEGORY = 'CEDULA';
@@ -80,11 +80,9 @@ function fileLabel(file: EmployeeAttachedFile) {
 function EmployeeCardDetails({
   employee,
   onEdit,
-  onPhotoPreview,
 }: {
   employee: EmployeeCardRecord;
   onEdit: (employee: EmployeeCardRecord) => void;
-  onPhotoPreview: (employee: EmployeeCardRecord) => void;
 }) {
   return (
     <Stack gap="lg">
@@ -94,7 +92,6 @@ function EmployeeCardDetails({
             employee={employee}
             size={76}
             editable
-            onPreview={() => onPhotoPreview(employee)}
           />
           <div>
             <Text fw={800} size="lg">{getEmployeeCardFullName(employee)}</Text>
@@ -152,7 +149,9 @@ function EmployeeCardDetails({
 }
 
 export default function EmployeeCardsPage() {
-
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedEmployeeId = searchParams.get('employeeId');
   const [employees, setEmployees] = useState<EmployeeCardRecord[]>([]);
   const [search, setSearch] = useState('');
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
@@ -164,8 +163,18 @@ export default function EmployeeCardsPage() {
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [documentsEmployee, setDocumentsEmployee] = useState<EmployeeCardRecord | null>(null);
   const [detailsEmployee, setDetailsEmployee] = useState<EmployeeCardRecord | null>(null);
-  const [photoEmployee, setPhotoEmployee] = useState<EmployeeCardRecord | null>(null);
   const [downloadingIdentityEmployeeId, setDownloadingIdentityEmployeeId] = useState<string | null>(null);
+  const linkedEmployee = employees.find(employee => employee.id === requestedEmployeeId);
+  const profileEmployee = requestedEmployeeId ? linkedEmployee : detailsEmployee;
+  function closeDetails() {
+    setDetailsEmployee(null);
+    if (requestedEmployeeId) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('employeeId');
+      const query = params.toString();
+      router.replace(query ? `/employees?${query}` : '/employees', { scroll: false });
+    }
+  }
 
   const loadData = async () => {
     setLoading(true);
@@ -396,6 +405,10 @@ export default function EmployeeCardsPage() {
           </Alert>
         ) : null}
 
+        {requestedEmployeeId && !loading && !error && !linkedEmployee ? <Alert color="red" title="Empleado no disponible" role="alert">
+          No se encontró el empleado de este enlace. <Button variant="subtle" onClick={closeDetails}>Volver al directorio</Button>
+        </Alert> : null}
+
         {loading ? (
           <CollectionLoading label="Cargando empleados" variant="employees" />
         ) : null}
@@ -424,7 +437,6 @@ export default function EmployeeCardsPage() {
                 onIdentityCard={downloadIdentityCard}
                 onDetails={setDetailsEmployee}
                 onEdit={openEdit}
-                onPhotoPreview={setPhotoEmployee}
                 identityCardLoading={downloadingIdentityEmployeeId === employee.id}
               />
             ))}
@@ -438,25 +450,22 @@ export default function EmployeeCardsPage() {
       </Stack>
 
       <Modal
-        opened={Boolean(detailsEmployee)}
-        onClose={() => setDetailsEmployee(null)}
+        opened={Boolean(profileEmployee)}
+        onClose={closeDetails}
         title="Información del empleado"
         centered
         size="lg"
       >
-        {detailsEmployee ? (
+        {profileEmployee ? (
           <EmployeeCardDetails
-            employee={detailsEmployee}
+            employee={profileEmployee}
             onEdit={(employee) => {
-              setDetailsEmployee(null);
+              closeDetails();
               openEdit(employee);
             }}
-            onPhotoPreview={setPhotoEmployee}
           />
         ) : null}
       </Modal>
-
-      <EmployeePhotoModal employee={photoEmployee} onClose={() => setPhotoEmployee(null)} />
 
       <Modal
         opened={!!documentsEmployee}

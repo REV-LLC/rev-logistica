@@ -1,3 +1,4 @@
+import { TrackingModule } from './tracking/tracking.module';
 import { CommercialProfilesModule } from './commercial-profiles/commercial-profiles.module';
 import { AnnexesModule } from './annexes/annexes.module';
 import {
@@ -59,6 +60,7 @@ import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
     PrismaModule,
     SettingsModule,
     AuthModule,
+    TrackingModule,
     AnnexesModule,
     CatalogModule,
     PartnersModule,

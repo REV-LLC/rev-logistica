@@ -3,6 +3,7 @@ import { api, ApiError } from '@/lib/api';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildBulkKey } from './request-formatting';
+import { buildProviderCatalog, getItemOwnerLabel } from './request-item-owners';
 import { inventoryWithReturnOrigins, type ReturnDocumentOrigin } from './return-document-origins';
 import type { Warehouse } from './request-types';
 import {
@@ -11,6 +12,7 @@ import {
   InventorySerial,
   RequestInventoryResponse,
   SelectedItem,
+  SkuOption,
   SolicitudesTab,
 } from './request-types';
 
@@ -19,14 +21,13 @@ type Options = {
   docType: 'REMISSION' | 'RETURN';
   sourceMode: 'warehouse' | 'on-site';
   physicalSourceWarehouseId: string | null;
-  principalWarehouse: Warehouse | null;
+  fixedSourceWarehouseId?: string;
   sourceOwnerWarehouseId: string | null;
   setSourceOwnerWarehouseId: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
   warehouses: Warehouse[];
-  canDecide: boolean;
+  skuOptions?: SkuOption[];
   effectiveSourceWorksiteId: string | null;
-  useManualWarehouseCapture: boolean;
   activeTab: SolicitudesTab;
   generateStep: GenerateStep;
   setFreeTagInput: Dispatch<SetStateAction<string>>;
@@ -40,14 +41,13 @@ export function useRequestInventory({
   docType,
   sourceMode,
   physicalSourceWarehouseId,
-  principalWarehouse,
+  fixedSourceWarehouseId,
   sourceOwnerWarehouseId,
   setSourceOwnerWarehouseId,
   setError,
   warehouses,
-  canDecide,
+  skuOptions = [],
   effectiveSourceWorksiteId,
-  useManualWarehouseCapture,
   activeTab,
   generateStep,
   setFreeTagInput,
@@ -65,8 +65,8 @@ export function useRequestInventory({
     useState(true);
 
   const [itemsModalOpen, setItemsModalOpen] = useState(false);
-
-  const lastAutoOpenedWarehouseRef = useRef<string | null>(null);
+  const [ownerModalOpen, setOwnerModalOpen] = useState(false);
+  const itemStepStartedRef = useRef(false);
 
   const inventoryLoadVersionRef = useRef(0);
   const clearLoadedInventory = () => {
@@ -75,19 +75,22 @@ export function useRequestInventory({
     setBulkItems([]);
     setSerialItems([]);
     setItemsModalOpen(false);
-    lastAutoOpenedWarehouseRef.current = null;
   };
   useEffect(() => () => { inventoryLoadVersionRef.current += 1; },
-    [docType, physicalSourceWarehouseId, sourceOwnerWarehouseId, effectiveSourceWorksiteId]);
+    [docType, effectiveSourceWorksiteId]);
 
   const selectedBulkKeys = useMemo(
     () =>
       new Set(
         selectedItems
-          .filter((item) => item.type === 'bulk' && item.bulkKey)
-          .map((item) => item.bulkKey as string),
+          .filter((item) => item.type === 'bulk' || item.type === 'free')
+          .flatMap((item) => {
+            if (item.bulkKey) return [item.bulkKey];
+            const reference = item.type === 'free' ? skuOptions.find(sku => sku.name === item.requestedTag) : null;
+            return reference ? [buildBulkKey({ skuId: reference.id, ownerWarehouseId: item.ownerWarehouseId ?? null, sourceWarehouseId: item.sourceWarehouseId })] : [];
+          }),
       ),
-    [selectedItems],
+    [selectedItems, skuOptions],
   );
 
   const selectedSerialIds = useMemo(
@@ -118,37 +121,37 @@ export function useRequestInventory({
     [availableSerialItems, docType],
   );
 
-  useEffect(() => {
-    if (
-      sourceMode !== 'warehouse' ||
-      !principalWarehouse?.id ||
-      sourceOwnerWarehouseId
-    )
-      return;
-    lastAutoOpenedWarehouseRef.current = principalWarehouse.id;
-    setSourceOwnerWarehouseId(principalWarehouse.id);
-  }, [principalWarehouse?.id, sourceMode, sourceOwnerWarehouseId]);
-
-  const loadInventory = async (openSelector = true) => {
+  const loadInventory = async (openSelector = true, ownerId = sourceOwnerWarehouseId ?? physicalSourceWarehouseId) => {
     const version = ++inventoryLoadVersionRef.current;
     setLoadingInventory(true);
     setError(null);
     try {
       if (sourceMode === 'warehouse') {
-        if (!physicalSourceWarehouseId) throw new Error('Selecciona de dónde recogiste los equipos.');
+        if (!ownerId) throw new Error('Selecciona el dueño del equipo.');
+        const sourceWarehouseId = fixedSourceWarehouseId ?? ownerId;
         const selectedOwner = warehouses.find(
-          (warehouse) => warehouse.id === physicalSourceWarehouseId,
+          (warehouse) => warehouse.id === ownerId,
         );
-        if (selectedOwner?.type === 'ALLY' && !canDecide) {
-          throw new Error('Para bodega alterna, usa captura libre de tags.');
+        if (selectedOwner?.type === 'ALLY') {
+          if (!skuOptions.length) throw new Error('No se pudo cargar el catálogo de equipos. Intenta nuevamente.');
+          setBulkItems(buildProviderCatalog(skuOptions, selectedOwner, sourceWarehouseId));
+          setSerialItems([]);
+        } else {
+          const data = await api<{
+            bulk: InventoryBulk[];
+            serial: InventorySerial[];
+          }>(`/inventory/warehouse/${sourceWarehouseId}`, { method: 'GET' });
+          if (version !== inventoryLoadVersionRef.current) return;
+          const ownerNames = new Map(warehouses.map(warehouse => [warehouse.id, getItemOwnerLabel(warehouse)]));
+          const bulk = selectedOwner?.type === 'OWN' ? data.bulk.filter(item => item.ownerWarehouseId === ownerId) : data.bulk;
+          const serial = selectedOwner?.type === 'OWN' ? data.serial.filter(item => item.ownerWarehouseId === ownerId) : data.serial;
+          setBulkItems(bulk.map(item => ({ ...item, sourceWarehouseId,
+            ownerWarehouseName: ownerNames.get(item.ownerWarehouseId ?? '') ?? item.ownerWarehouseName,
+          })));
+          setSerialItems(serial.map(item => ({ ...item, sourceWarehouseId,
+            ownerWarehouseName: ownerNames.get(item.ownerWarehouseId ?? '') ?? item.ownerWarehouseName,
+          })));
         }
-        const data = await api<{
-          bulk: InventoryBulk[];
-          serial: InventorySerial[];
-        }>(`/inventory/warehouse/${physicalSourceWarehouseId}`, { method: 'GET' });
-        if (version !== inventoryLoadVersionRef.current) return;
-        setBulkItems(data.bulk.map(item => ({ ...item, sourceWarehouseId: physicalSourceWarehouseId })));
-        setSerialItems(data.serial.map(item => ({ ...item, sourceWarehouseId: physicalSourceWarehouseId })));
       } else if (sourceMode === 'on-site') {
         if (!effectiveSourceWorksiteId) throw new Error('Selecciona una obra');
         const [stock, origins] = await Promise.all([api<RequestInventoryResponse>(
@@ -161,7 +164,7 @@ export function useRequestInventory({
         setSerialItems(data.serial);
         setShowInventoryOwnerWarehouse(data.presentation.showOwnerWarehouse);
       }
-      if (openSelector && (!useManualWarehouseCapture || canDecide)) {
+      if (openSelector) {
         setItemsModalOpen(true);
       }
     } catch (err) {
@@ -171,35 +174,40 @@ export function useRequestInventory({
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error loading inventory');
+        setError('No se pudo cargar la lista de equipos.');
       }
     } finally {
       if (version === inventoryLoadVersionRef.current) setLoadingInventory(false);
     }
   };
 
+  const startItemSelection = () => {
+    clearLoadedInventory();
+    if (sourceMode === 'warehouse') setOwnerModalOpen(true);
+    else void loadInventory();
+  };
+
+  const confirmItemOwner = (ownerId: string) => {
+    clearLoadedInventory();
+    setSourceOwnerWarehouseId(ownerId);
+    setOwnerModalOpen(false);
+    return loadInventory(true, ownerId);
+  };
+
   useEffect(() => {
     if (activeTab !== 'generate' || generateStep !== 'items') {
+      inventoryLoadVersionRef.current += 1;
+      setLoadingInventory(false);
       setItemsModalOpen(false);
+      setOwnerModalOpen(false);
+      itemStepStartedRef.current = false;
       return;
     }
     if (sourceMode !== 'warehouse') return;
-    if (!sourceOwnerWarehouseId) {
-      lastAutoOpenedWarehouseRef.current = null;
-      return;
-    }
-    const selectedOwner = warehouses.find(
-      (warehouse) => warehouse.id === sourceOwnerWarehouseId,
-    );
-    if (selectedOwner?.type === 'ALLY') {
-      lastAutoOpenedWarehouseRef.current = null;
-      return;
-    }
-    const inventoryKey = `${physicalSourceWarehouseId}:${sourceOwnerWarehouseId}`;
-    if (lastAutoOpenedWarehouseRef.current === inventoryKey) return;
-    lastAutoOpenedWarehouseRef.current = inventoryKey;
-    void loadInventory(true);
-  }, [activeTab, generateStep, sourceMode, sourceOwnerWarehouseId, physicalSourceWarehouseId, warehouses]);
+    if (itemStepStartedRef.current) return;
+    itemStepStartedRef.current = true;
+    if (!selectedItems.length) setOwnerModalOpen(true);
+  }, [activeTab, generateStep, sourceMode, selectedItems.length]);
 
   useEffect(() => {
     if (sourceMode !== 'on-site') return;
@@ -234,6 +242,10 @@ export function useRequestInventory({
     loadingInventory,
     showInventoryOwnerWarehouse,
     itemsModalOpen,
+    ownerModalOpen,
+    setOwnerModalOpen,
+    startItemSelection,
+    confirmItemOwner,
     setItemsModalOpen,
     selectedBulkKeys,
     selectedSerialIds,

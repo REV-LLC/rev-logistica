@@ -1,16 +1,12 @@
 'use client';
-import WarehouseSelect from '@/components/WarehouseSelect';
 import {
   Badge,
   Button,
   Divider,
   Group,
-  NumberInput,
   Paper,
   SimpleGrid,
-  Stack,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core';
 import type { Dispatch, JSX, ReactNode, SetStateAction } from 'react';
@@ -19,19 +15,16 @@ import {
   Customer,
   Employee,
   GenerateStep,
-  ProviderRemissionRequirements,
   SelectedItem,
   SkuOption,
   Warehouse,
 } from './request-types';
-import { helpLabel } from './RequestHelpLabel';
+import { IconPlus } from '@tabler/icons-react';
 
 type Props = {
+  onAddItems: () => void;
   renderConfiguration?: (item: SelectedItem) => ReactNode;
   accessorySelector?: ReactNode;
-  clearLoadedInventory: () => void;
-  originWarehouses: Warehouse[];
-  physicalSourceWarehouseName: string;
   sourceMode: 'warehouse' | 'on-site';
   setGenerateStep: Dispatch<SetStateAction<GenerateStep>>;
   renderGenerateError: () => JSX.Element | null;
@@ -43,23 +36,8 @@ type Props = {
   deliveryMode: 'WAREHOUSE' | 'ON_SITE';
   selectedDriver: Employee | null;
   selectedDispatcher: Employee | null;
-  sourceOwnerWarehouseId: string | null;
-  setSourceOwnerWarehouseId: Dispatch<SetStateAction<string | null>>;
   warehouses: Warehouse[];
-  setCreationProviderRequirements: Dispatch<
-    SetStateAction<ProviderRemissionRequirements | null>
-  >;
-  isMobile: boolean;
-  useManualWarehouseCapture: boolean;
-  canDecide: boolean;
-  loadInventory: (openSelector?: boolean) => Promise<void>;
   loadingInventory: boolean;
-  freeTagInput: string;
-  setFreeTagInput: Dispatch<SetStateAction<string>>;
-  setError: Dispatch<SetStateAction<string | null>>;
-  freeInternalNumber: number | '';
-  setFreeInternalNumber: Dispatch<SetStateAction<number | ''>>;
-  addFreeItem: () => void;
   selectedItems: SelectedItem[];
   isTabletOrMobile: boolean;
   renderDamageFields: (item: SelectedItem, index: number) => JSX.Element | null;
@@ -77,11 +55,9 @@ type Props = {
 };
 
 export default function RequestItemsSection({
+  onAddItems,
   renderConfiguration,
   accessorySelector,
-  clearLoadedInventory,
-  originWarehouses,
-  physicalSourceWarehouseName,
   sourceMode,
   setGenerateStep,
   renderGenerateError,
@@ -93,21 +69,8 @@ export default function RequestItemsSection({
   deliveryMode,
   selectedDriver,
   selectedDispatcher,
-  sourceOwnerWarehouseId,
-  setSourceOwnerWarehouseId,
   warehouses,
-  setCreationProviderRequirements,
-  isMobile,
-  useManualWarehouseCapture,
-  canDecide,
-  loadInventory,
   loadingInventory,
-  freeTagInput,
-  setFreeTagInput,
-  setError,
-  freeInternalNumber,
-  setFreeInternalNumber,
-  addFreeItem,
   selectedItems,
   isTabletOrMobile,
   renderDamageFields,
@@ -141,7 +104,7 @@ export default function RequestItemsSection({
               {sourceMode === 'warehouse' ? 'Desde bodega' : 'Desde obra'}
             </Badge>
           </Group>
-          <Title order={4}>Items del documento</Title>
+          <Title order={4}>Ítems del documento</Title>
           <Text size="sm" c="dimmed">
             Agrega equipos, cantidades y condiciones para construir el
             documento.
@@ -198,86 +161,13 @@ export default function RequestItemsSection({
           </div>
         </SimpleGrid>
       </Paper>
-      <Text c="dimmed">Agrega los equipos que lleva este documento.</Text>
-      {sourceMode === 'warehouse' ? <Text size="sm" c="dimmed">
-        Selecciona dónde los recogiste y agrégalos. Puedes cambiar de bodega para agregar más; los anteriores conservan su origen.
-      </Text> : null}
-
-      <Group mt="md" align="flex-end" wrap="wrap">
-        {sourceMode === 'warehouse' && (
-          <WarehouseSelect
-            label={helpLabel(
-              '¿De dónde salen estos equipos?',
-              'Bodega donde se recogieron. El propietario de los equipos del inventario se conserva por separado.',
-            )}
-            value={sourceOwnerWarehouseId}
-            onChange={(value) => {
-              clearLoadedInventory();
-              setSourceOwnerWarehouseId(value);
-              const nextWarehouse = warehouses.find(
-                (warehouse) => warehouse.id === value,
-              );
-              if (nextWarehouse?.type !== 'ALLY')
-                setCreationProviderRequirements(null);
-            }}
-            warehouses={originWarehouses}
-            formatLabels={false}
-            clearable={false}
-            placeholder="Seleccionar bodega o proveedor"
-            width={isMobile ? '100%' : 320}
-          />
-        )}
-        {useManualWarehouseCapture && !canDecide ? null : (
-          <Button
-            onClick={() => void loadInventory()}
-            loading={loadingInventory}
-          >
-            {docType === 'RETURN' ? 'Seleccionar existencias' : 'Seleccionar equipos'}
-          </Button>
-        )}
+      <Divider my="md" />
+      <Group justify="space-between" align="center" wrap="wrap">
+        <Title order={4}>Ítems agregados</Title>
+        <Button leftSection={<IconPlus size={18} aria-hidden />} onClick={onAddItems} loading={loadingInventory}>
+          {selectedItems.length ? 'Agregar más ítems' : 'Agregar ítems'}
+        </Button>
       </Group>
-
-      {useManualWarehouseCapture ? (
-        <Stack mt="md" gap="sm">
-          <Text size="sm">Registra lo que recogiste en {physicalSourceWarehouseName}. Office lo identificará antes de aprobar.</Text>
-          <Group align="flex-end" wrap="wrap">
-            <TextInput
-              label="Referencia"
-              placeholder="Escribe la referencia entregada"
-              value={freeTagInput}
-              onChange={(value) => {
-                setFreeTagInput(value.currentTarget.value);
-                setError(null);
-              }}
-              w={isMobile ? '100%' : 320}
-            />
-            <NumberInput
-              label="N° interno (opcional)"
-              min={1}
-              allowDecimal={false}
-              value={freeInternalNumber}
-              onChange={(value) =>
-                setFreeInternalNumber(typeof value === 'number' ? value : '')
-              }
-              w={isMobile ? '100%' : 190}
-            />
-            <Button onClick={addFreeItem}>Agregar item</Button>
-          </Group>
-        </Stack>
-      ) : null}
-
-      <Divider my="md" />
-
-      {useManualWarehouseCapture ? null : (
-        <Text size="sm" c="dimmed">
-          {docType === 'RETURN'
-            ? 'Pulsa "Seleccionar existencias" para consultar los equipos, materiales y accesorios de esta obra.'
-            : 'Pulsa "Seleccionar equipos" para consultar el inventario de esta bodega.'}
-        </Text>
-      )}
-      <Divider my="md" />
-
-      <Title order={4}>Seleccionados</Title>
       {accessorySelector}
       <RequestSelectedItems selectedItems={selectedItems} isTabletOrMobile={isTabletOrMobile}
         docType={docType} warehouses={warehouses} renderDamageFields={renderDamageFields}

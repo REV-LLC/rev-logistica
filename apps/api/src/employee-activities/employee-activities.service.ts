@@ -36,6 +36,7 @@ const activityAssetSelect = {
 } as const;
 
 const noteInclude = {
+  warehouse: { select: { id: true, name: true } },
   customerWorksite: { include: { customer: true, worksite: true } },
   asset: { select: activityAssetSelect },
   createdBy: {
@@ -48,7 +49,7 @@ export class EmployeeActivitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async options() {
-    const [customers, assets] = await Promise.all([
+    const [customers, assets, warehouses] = await Promise.all([
       this.prisma.customer.findMany({
         orderBy: { name: 'asc' },
         select: {
@@ -71,8 +72,13 @@ export class EmployeeActivitiesService {
         orderBy: { publicCode: 'asc' },
         select: activityAssetSelect,
       }),
+      this.prisma.warehouse.findMany({
+        where: { active: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      }),
     ]);
-    return { customers, assets };
+    return { customers, assets, warehouses };
   }
 
   private async employee(employeeId: string) {
@@ -106,7 +112,11 @@ export class EmployeeActivitiesService {
 
   private async data(
     payload: ActivityNoteDto,
-    previous?: { customerWorksiteId: string | null; assetId: string | null },
+    previous?: {
+      customerWorksiteId: string | null;
+      assetId: string | null;
+      warehouseId?: string | null;
+    },
   ) {
     const date = parseCalendarDate(payload.date);
     const type = payload.type ?? EmployeeActivityType.WORKSITE;
@@ -114,6 +124,43 @@ export class EmployeeActivitiesService {
       throw new BadRequestException('El tipo de registro no es válido.');
     const description = payload.description.trim();
     if (!description) throw new BadRequestException('Escribe una descripción.');
+    if (type === EmployeeActivityType.WAREHOUSE) {
+      if (!payload.warehouseId)
+        throw new BadRequestException('Selecciona una bodega.');
+      const [warehouse, asset] = await Promise.all([
+        this.prisma.warehouse.findUnique({
+          where: { id: payload.warehouseId },
+          select: { active: true },
+        }),
+        payload.assetId
+          ? this.prisma.asset.findUnique({
+              where: { id: payload.assetId },
+              select: { active: true, deletedAt: true },
+            })
+          : null,
+      ]);
+      if (
+        !warehouse ||
+        (previous?.warehouseId !== payload.warehouseId && !warehouse.active)
+      )
+        throw new BadRequestException('Selecciona una bodega disponible.');
+      if (
+        payload.assetId &&
+        (!asset ||
+          (previous?.assetId !== payload.assetId &&
+            (!asset.active || asset.deletedAt)))
+      )
+        throw new BadRequestException('Selecciona un activo disponible.');
+      return {
+        date,
+        endDate: null,
+        type,
+        description,
+        warehouseId: payload.warehouseId,
+        customerWorksiteId: null,
+        assetId: payload.assetId ?? null,
+      };
+    }
     if (type !== EmployeeActivityType.WORKSITE) {
       const endDate = parseCalendarDate(payload.endDate ?? '');
       if (endDate < date)
@@ -126,6 +173,7 @@ export class EmployeeActivitiesService {
         type,
         description,
         customerWorksiteId: null,
+        warehouseId: null,
         assetId: null,
       };
     }
@@ -159,6 +207,7 @@ export class EmployeeActivitiesService {
       date,
       endDate: null,
       type,
+      warehouseId: null,
       customerWorksiteId: payload.customerWorksiteId,
       assetId: payload.assetId,
       description,
