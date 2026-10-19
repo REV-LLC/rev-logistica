@@ -44,6 +44,8 @@ La navegación utiliza una única `PageLoadingBoundary` montada en `Providers`, 
 
 El fallback raíz de Next y la validación de sesión participan en esta misma carga. Al pasar del directorio al perfil se conserva hasta resolver la identidad y las imágenes visibles, incluido el fondo. Errores de datos e imágenes deben liberar la capa y mostrar el error de la página; las imágenes tienen un límite de espera de 12 segundos. Se mantienen los límites de seguridad para una navegación cancelada, sin bloquear indefinidamente la pantalla.
 
+El directorio de empleados comparte `EmployeeDirectoryLoading` entre su fallback de ruta, la consulta inicial y la apertura de enlaces antiguos de perfil. Este estado muestra únicamente el fondo de marca y un marcador de carga accesible: no dibuja tarjetas blancas, esqueletos ni un segundo indicador detrás del cristal global. Las cards reales se montan al resolver la consulta.
+
 Para integrar otro flujo, marcar su contenedor de carga inicial con `data-page-loading="true"` y retirarlo o cambiarlo a `"false"` tanto al completar como al fallar la solicitud. Las imágenes `AppImage` y `EmployeeAvatar` ya comunican su carga. Una navegación imperativa puede usar `useTransition` con el mismo marcador, como `SidebarSearch`. Las operaciones locales (editar un formulario, cambiar pestañas, guardar o filtrar datos) conservan su indicador local: no deben activar la pantalla completa por defecto.
 
 ## Identidad del empleado

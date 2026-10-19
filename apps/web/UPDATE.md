@@ -1,5 +1,5 @@
-# Transiciones entre páginas más naturales
+# Mejoras en la carga y fotos de empleados
 
-Al cambiar de página, el efecto de cristal conserva ahora el fondo y los colores de cada pantalla, sin añadir un tinte azul ni oscurecerla.
+Al entrar a Empleados, la transición muestra el fondo de la página sin las tarjetas blancas de carga. Las tarjetas reales aparecen cuando la información está lista.
 
-El logo de REV y la animación de desenfoque se mantienen durante la carga, tanto en computador como en celular.
+Las fotos de empleados conservan ahora un contorno completamente circular, tanto en las miniaturas como en el perfil y la vista ampliada, en computador y celular.
