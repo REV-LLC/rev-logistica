@@ -78,8 +78,11 @@ export default function EmployeePhotoControl({
             appearance: 'none',
             background: 'transparent',
             border: 0,
+            borderRadius: '50%',
             cursor: 'zoom-in',
             display: 'block',
+            width: size,
+            height: size,
             padding: 0,
             filter: grayscale ? 'grayscale(1)' : undefined,
           }}

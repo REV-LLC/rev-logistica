@@ -205,7 +205,7 @@ export default function EmployeeAvatar({
     <Skeleton data-page-image-loading={photo.loading ? "true" : "false"} visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
     <AppAvatar
       src={photo.url}
-      radius={fullSize ? '50%' : 'xl'}
+      radius="50%"
       size={size}
       imageSizes={`${size}px`}
       color="blue"
