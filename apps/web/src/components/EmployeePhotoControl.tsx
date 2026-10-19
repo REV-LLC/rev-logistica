@@ -24,12 +24,14 @@ export default function EmployeePhotoControl({
   size = 48,
   editable = false,
   grayscale = false,
+  fullSize = false,
   onBeforePreview,
 }: {
   employee: EmployeePhotoRecord;
   size?: number;
   editable?: boolean;
   grayscale?: boolean;
+  fullSize?: boolean;
   onBeforePreview?: () => void;
 }) {
   const openPhoto = useEmployeePhotoPreview();
@@ -82,7 +84,7 @@ export default function EmployeePhotoControl({
             filter: grayscale ? 'grayscale(1)' : undefined,
           }}
         >
-          <EmployeeAvatar employee={employee} size={size} />
+          <EmployeeAvatar employee={employee} size={size} fullSize={fullSize} />
         </Box>
 
         {editable ? (
@@ -97,11 +99,11 @@ export default function EmployeePhotoControl({
                 color="blue"
                 loading={uploading}
                 radius="xl"
-                size="sm"
+                size={size >= 128 ? 44 : 'sm'}
                 variant="filled"
                 style={{ position: 'absolute', bottom: -2, right: -2 }}
               >
-                <IconCamera size={14} />
+                <IconCamera size={size >= 128 ? 20 : 14} />
               </ActionIcon>
             )}
           </FileButton>

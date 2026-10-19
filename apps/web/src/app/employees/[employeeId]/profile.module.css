@@ -1,0 +1,103 @@
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100dvh - var(--app-shell-header-offset, 0px));
+}
+
+/* Keep the mobile scroll/overscroll canvas dark only while this profile is mounted. */
+:global(html):has(.page),
+:global(body):has(.page),
+:global(.mantine-AppShell-main):has(.page) {
+  background-color: #101820;
+}
+
+.backLink {
+  color: #f5f7fa;
+}
+
+.backLink:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  min-height: 216px;
+  padding: 20px 24px;
+}
+
+.portrait {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-end;
+  justify-content: center;
+  width: 176px;
+  height: 176px;
+}
+
+.details {
+  min-width: 0;
+}
+
+.name {
+  min-width: 0;
+  color: #f5f7fa;
+  font-size: clamp(28px, 2.2vw, 36px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 10px;
+  color: #d6dfe8;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.contact {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: #d6dfe8;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.contactLine,
+.vehicle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.contactLine svg,
+.vehicle svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 48em) {
+  .identity {
+    flex-direction: column;
+    gap: 28px;
+    min-height: 0;
+    padding: 16px 8px;
+    text-align: center;
+  }
+
+  .name {
+    font-size: 28px;
+  }
+
+  .contactLine,
+  .subtitle {
+    justify-content: center;
+  }
+}

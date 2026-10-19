@@ -3,6 +3,7 @@
 import AppAvatar from '@/components/AppAvatar';
 import { useEmployeePhotoUrl } from '@/components/EmployeeAvatar';
 import ProfilePhotoLightbox from '@/components/ProfilePhotoLightbox';
+import { employeeProfileHref } from '@/lib/employee-profile';
 
 type EmployeePhotoRecord = {
   id: string;
@@ -38,7 +39,7 @@ export default function EmployeePhotoModal({
       opened={Boolean(employee)}
       onClose={onClose}
       name={employee ? employeeName(employee) : ''}
-      profileHref={employee ? `/employees?employeeId=${encodeURIComponent(employee.id)}` : undefined}
+      profileHref={employee ? employeeProfileHref(employee.id) : undefined}
     >
       {employee ? <EmployeePhotoPreview employee={employee} /> : null}
     </ProfilePhotoLightbox>

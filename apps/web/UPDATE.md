@@ -1,9 +1,9 @@
-# Buscador y mejoras en préstamos
+# Perfiles de empleados y nueva navegación
 
-Ahora puedes encontrar las páginas de la app desde el buscador de la parte superior del menú lateral, sin recorrer cada sección.
+Cada empleado tiene ahora su propia página con foto, datos de contacto, cargo y vehículo asignado cuando corresponda. Desde su perfil puedes gestionar Nómina, Préstamos y Bitácora sin salir de la página.
 
-En Préstamos y deudas puedes consultar el historial y editar la descripción de cada movimiento sin cambiar su valor ni su fecha. Los pagos y los préstamos adicionales se distinguen por signo y color.
+En el celular mejoramos la lectura de los valores y las descripciones de los préstamos. Toca una descripción para ver su información completa y editarla; el botón para agregar movimientos queda al final del historial, más cerca del pulgar.
 
-Administración puede invertir los signos visuales desde Configuración → Préstamos. Un pago siempre reduce la deuda y un préstamo la aumenta.
+El directorio y los perfiles estrenan fondos y superficies de cristal. El menú lateral ahora es flotante y conserva el buscador para encontrar rápidamente las páginas de la app.
 
-La foto de la cabecera de préstamos se ve a color y más grande. Tócala para ampliarla y toca el nombre bajo la foto ampliada para abrir el perfil del empleado.
+Al cambiar de página verás una transición difuminada con el logo de REV mientras carga la información.

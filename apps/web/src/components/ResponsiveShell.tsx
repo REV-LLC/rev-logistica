@@ -8,7 +8,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useState } from "react";
 import OfficeAssistantLauncher from "@/components/OfficeAssistantLauncher";
 import Nav from "@/components/Nav";
-import PageLoadingBoundary from "@/components/PageLoadingBoundary";
+import styles from './ResponsiveShell.module.css';
 
 const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
   [
@@ -191,6 +191,7 @@ export default function ResponsiveShell({
 
   return (
     <AppShell
+      className={styles.shell}
       header={{ height: { base: 56, sm: 0 } }}
       navbar={{ width: 284, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding={{ base: "xs", sm: "md" }}
@@ -257,15 +258,14 @@ export default function ResponsiveShell({
       </AppShell.Header>
 
       <AppShell.Navbar
+        className={styles.navbar}
+        aria-label="Menú principal"
+        data-mobile-opened={opened ? 'true' : 'false'}
         withBorder={false}
-        style={{
-          background: '#031426',
-          boxShadow: '10px 0 30px rgba(7, 29, 51, 0.08)',
-        }}
       >
         <Nav onNavigate={close} />
       </AppShell.Navbar>
-      <AppShell.Main><PageLoadingBoundary>{children}</PageLoadingBoundary></AppShell.Main>
+      <AppShell.Main>{children}</AppShell.Main>
       <OfficeAssistantLauncher />
     </AppShell>
   );

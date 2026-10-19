@@ -12,7 +12,8 @@ export function bogotaDate(now = new Date()) {
 export function payrollPolicy(date: string) {
   civilDate(date);
   if (date < '2026-01-01' || date > '2026-12-31') throw new BadRequestException('Falta configurar la política salarial para ese año');
-  return { country: 'CO', currency: 'COP', date, minimumMonthlySalary: '1750905.00', transportAllowanceReference: '249095.00', healthRate: '0.04', pensionRate: '0.04', monthlyDayDivisor: 30, nominalFortnightDays: 15, rounding: 'HALF_UP_PER_CONCEPT', version: 'CO-2026-BASIC-v1' };
+  // Company allowance reference; this is not a replacement for the statutory decree value.
+  return { country: 'CO', currency: 'COP', date, minimumMonthlySalary: '1750905.00', transportAllowanceReference: '250000.00', transportAllowanceReferenceType: 'COMPANY', healthRate: '0.04', pensionRate: '0.04', monthlyDayDivisor: 30, nominalFortnightDays: 15, rounding: 'HALF_UP_PER_CONCEPT', version: 'CO-2026-BASIC-v2' };
 }
 export function payrollPeriod(from: string, to: string) {
   const start = civilDate(from), end = civilDate(to);

@@ -40,7 +40,7 @@ export default function SalaryModal({ employee, date, policy, onClose, onSaved }
         <TextInput label="Auxilio de transporte mensual" description="0 si no corresponde" inputMode="decimal" value={allowance} onChange={e => setAllowance(e.currentTarget.value)} required disabled={saving} />
       </SimpleGrid>
       <Group justify="space-between"><Text size="sm" c="dimmed">Base + auxilio mensual</Text><Text fw={800}>{total ? payrollMoney(total) : 'Revisa los valores'}</Text></Group>
-      <Text size="xs" c="dimmed">Referencia 2026: mínimo {payrollMoney(policy.minimumMonthlySalary)} · auxilio {payrollMoney(policy.transportAllowanceReference)}. No supone que el auxilio corresponda a todas las personas.</Text>
+      <Text size="xs" c="dimmed">Referencia 2026: mínimo {payrollMoney(policy.minimumMonthlySalary)} · auxilio de la empresa {payrollMoney(policy.transportAllowanceReference)}. No supone que el auxilio corresponda a todas las personas.</Text>
       <Select label="Tratamiento de nómina" value={regime} onChange={value => setRegime(value ?? 'REVIEW_REQUIRED')} allowDeselect={false} disabled={saving} data={[
         { value: 'STANDARD', label: 'Régimen general: salud 4% y pensión 4%' },
         { value: 'REVIEW_REQUIRED', label: 'Requiere revisión: régimen o condiciones especiales' },

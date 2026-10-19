@@ -1,0 +1,30 @@
+{
+  "purpose": "Fondo del directorio de empleados REV",
+  "createdOn": "2026-10-19",
+  "generator": "built-in image_gen",
+  "brandReference": "apps/web/public/fiesta.svg",
+  "assets": [
+    {
+      "path": "apps/web/public/employees/rev-directory-v1.webp",
+      "width": 1672,
+      "height": 941,
+      "bytes": 197082,
+      "prompt": "Use case: stylized-concept. Asset type: production background image for REV employees directory web app, not a UI mockup. Reference Image 1 is the exact existing REV navigation brand mark: preserve its distinctive connected R/E geometry, three horizontal silver E bars, yellow-gold R and V, relative proportions, and letter shapes. Create a restrained premium industrial photographic brand background: a charcoal graphite architectural wall with subtle fine mineral texture, soft ambient cool shadows, very restrained warm rim lighting. Place a single REV emblem precisely in the horizontal and vertical center of the entire image, as a shallow dimensional brushed-metal wall emblem. R and V retain the yellow-gold brand color, E brushed silver. Keep the logo small enough for mobile crops: the entire emblem including R, E and V occupies only about 22 percent of the full image width and 18 percent of its height, surrounded by generous empty dark space. Wide landscape 16:9 canvas, complete wall background edge to edge. Soft cinematic depth, exceptionally restrained lighting, dark navy-charcoal overall tones compatible with #101820. The logo should be distinct but not dazzling; this background will sit behind translucent frosted glass employee cards. Text verbatim only 'REV', rendered as the supplied geometric mark, no other words. Do not redesign the logo. No people, trucks, construction machines, desks, plants, extra symbols, neon, lens flare, decorative blobs, UI, buttons, panels, watermarks or border. This is a finished background asset, not a screenshot or a poster."
+    },
+    {
+      "path": "apps/web/public/employees/rev-directory-mobile-v1.webp",
+      "width": 750,
+      "height": 1333,
+      "bytes": 142968,
+      "prompt": "Use case: compositing. Image 1 is the finished REV employees directory background; create a responsive portrait 9:16 variant of this SAME background, not a new design. Preserve the exact existing yellow-gold R and V, silver E, letter geometry, shallow brushed-metal emblem, charcoal architectural wall texture, seams, light direction and restrained industrial mood. Change only framing and wall extension to portrait. The full REV emblem must be exactly centered horizontally and vertically in the entire canvas and fully visible with generous side padding: logo total width about 62 percent of portrait canvas width, its original wide aspect ratio unchanged. Extend the same dark charcoal wall around it to fill the portrait image edge to edge. Keep all three letters intact and connected as in original, no distortion, no new text. No UI, extra marks, people, equipment, additional logos, border or watermark. Production mobile background asset, exact coherent identity with the landscape source."
+    }
+  ],
+  "implementation": {
+    "component": "apps/web/src/components/EmployeePageBackground.tsx",
+    "alignment": "Centrado en el área de contenido disponible, excluyendo sidebar y encabezado móvil.",
+    "background": "#101820",
+    "blur": "4px",
+    "glassBlur": "18px",
+    "scope": "Directorio /employees; activo de la entrega de perfiles y navegación de cristal."
+  }
+}

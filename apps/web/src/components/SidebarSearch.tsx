@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ActionIcon, Combobox, Group, ScrollArea, Stack, Text, TextInput, useCombobox } from '@mantine/core';
 import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
@@ -13,6 +13,7 @@ export default function SidebarSearch({ entries, onNavigate }: {
   const [query, setQuery] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
   const results = searchNavigation(entries, query);
 
@@ -26,7 +27,7 @@ export default function SidebarSearch({ entries, onNavigate }: {
         combobox.closeDropdown();
         setQuery('');
         input.current?.blur();
-        router.push(href);
+        startNavigation(() => router.push(href));
         onNavigate?.();
       }}
     >
@@ -34,6 +35,7 @@ export default function SidebarSearch({ entries, onNavigate }: {
         <TextInput
           ref={input}
           aria-label="Buscar en la aplicación"
+          data-page-loading={navigating ? 'true' : 'false'}
           placeholder="Buscar en la aplicación"
           leftSection={<IconSearch size={17} aria-hidden="true" />}
           value={query}

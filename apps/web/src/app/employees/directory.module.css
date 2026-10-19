@@ -1,0 +1,76 @@
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100dvh - var(--app-shell-header-offset, 0px));
+  --mantine-color-text: #f1f5f9;
+  --mantine-color-dimmed: #c0ccd8;
+  --mantine-color-default-color: #f1f5f9;
+  --mantine-color-default: rgb(255 255 255 / 6%);
+  --mantine-color-default-hover: rgb(255 255 255 / 11%);
+  --mantine-color-default-border: rgb(255 255 255 / 16%);
+  --mantine-color-blue-light-color: #a6d5ff;
+  --mantine-color-blue-light: rgb(90 165 230 / 12%);
+  --mantine-color-blue-light-hover: rgb(90 165 230 / 22%);
+  --mantine-color-gray-light-color: #d0dbe6;
+  --mantine-color-gray-light: rgb(255 255 255 / 8%);
+  --mantine-color-teal-light-color: #8ee1cc;
+  --mantine-color-green-light-color: #a3e6b3;
+  --mantine-color-green-light: rgb(101 194 136 / 17%);
+  color: #f1f5f9;
+}
+
+:global(html):has(.page),
+:global(body):has(.page),
+:global(.mantine-AppShell-main):has(.page) {
+  background-color: #101820;
+}
+
+.title {
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.surface {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 6%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  backdrop-filter: blur(18px) saturate(115%);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 12%);
+}
+
+.surface :global(.mantine-Input-label) {
+  color: #e3ebf3;
+}
+
+.surface :global(.mantine-Input-input) {
+  --input-bg: rgb(255 255 255 / 5%);
+  --input-color: #f1f5f9;
+  --input-bd: rgb(255 255 255 / 18%);
+  --input-placeholder-color: #b4c2d0;
+  color-scheme: dark;
+}
+
+.emptyState {
+  background: transparent;
+  border: 0;
+  color: #f1f5f9;
+}
+
+@media (max-width: 48em) {
+  .surface {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .headerActions {
+    width: 100%;
+  }
+
+  .headerActions > a,
+  .headerActions > button {
+    min-height: 44px;
+  }
+}

@@ -4,7 +4,7 @@ export type Salary = {
   regime: 'STANDARD' | 'REVIEW_REQUIRED'; note: string;
 };
 export type PayrollPreview = {
-  eligible: boolean; blockingReasons: string[]; provisional: boolean;
+  eligible: boolean; blockingReasons: string[]; warnings?: string[]; provisional: boolean;
   expectedSalaryRevision: number; from: string; to: string; days: number;
   monthlySalary: string; transportAllowance: string; totalMonthly: string;
   salaryEarned: string; transportEarned: string; totalEarned: string;

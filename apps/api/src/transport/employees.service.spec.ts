@@ -12,7 +12,7 @@ describe('employee management with provisional salary history', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-10-01T12:00:00Z'));
     const { employee, tx, service } = setup();
     await expect(service.createEmployee({ name: 'QA', lastName: 'EMPLOYEE', role: 'OFFICE' })).resolves.toEqual(employee);
-    expect(tx.employeeSalary.create).toHaveBeenCalledWith({ data: expect.objectContaining({ employeeId: employee.id, revision: 1, provisional: true, monthlySalary: '1750905.00', transportAllowance: '249095.00' }) });
+    expect(tx.employeeSalary.create).toHaveBeenCalledWith({ data: expect.objectContaining({ employeeId: employee.id, revision: 1, provisional: true, monthlySalary: '1750905.00', transportAllowance: '250000.00' }) });
   });
   it('does not invent an automatic wage for an unconfigured year', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2027-01-02T12:00:00Z'));
