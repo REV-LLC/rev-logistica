@@ -441,6 +441,7 @@ enum InventorySnapshotDestinationType {
 }
 
 model User {
+  loanDescriptionRevisions EmployeeLoanDescriptionRevision[]
   implementCommercialOriginReviews ImplementCommercialOriginReview[]
   implementIdentityBridges ImplementIdentityBridge[]
   reviewedLegacyEquipmentOrigins LegacyEquipmentOrigin[]
@@ -1718,6 +1719,7 @@ model FileObject {
 }
 
 model EmployeeLoanEntry {
+  descriptionRevisions EmployeeLoanDescriptionRevision[]
   id String @id @default(uuid())
   employeeId String
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
@@ -1734,6 +1736,19 @@ model EmployeeLoanEntry {
   @@unique([employeeId, requestId])
   @@unique([sourceReference, sourceRow])
   @@index([employeeId, date, createdAt])
+}
+
+model EmployeeLoanDescriptionRevision {
+  id String @id @default(uuid())
+  entryId String
+  beforeDetail String
+  afterDetail String
+  createdById String
+  createdAt DateTime @default(now())
+  entry EmployeeLoanEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([entryId, createdAt])
 }
 
 model ReleaseAcknowledgement {

@@ -95,7 +95,6 @@ export default function EmployeeCard({
   onIdentityCard,
   onDetails,
   onEdit,
-  onPhotoPreview,
   identityCardLoading = false,
 }: {
   employee: EmployeeCardRecord;
@@ -103,7 +102,6 @@ export default function EmployeeCard({
   onIdentityCard: (employee: EmployeeCardRecord) => void;
   onDetails: (employee: EmployeeCardRecord) => void;
   onEdit: (employee: EmployeeCardRecord) => void;
-  onPhotoPreview: (employee: EmployeeCardRecord) => void;
   identityCardLoading?: boolean;
 }) {
   const showVehicle = employee.role !== 'OFFICE';
@@ -117,7 +115,6 @@ export default function EmployeeCard({
             grayscale={!employee.active}
             size={74}
             editable
-            onPreview={() => onPhotoPreview(employee)}
           />
           <EmployeeStatusBadge active={employee.active} />
         </Group>

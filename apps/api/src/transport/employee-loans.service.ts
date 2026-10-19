@@ -19,14 +19,16 @@ export class EmployeeLoansService {
     const rows = await this.prisma.$queryRaw<Array<{
       id: string; name: string; lastName: string; documentId: string | null;
       opening: Prisma.Decimal | null; balance: Prisma.Decimal;
+      openingDetail: string | null;
       lastPaymentAmount: Prisma.Decimal | null; lastPaymentDate: Date | null;
     }>>(Prisma.sql`
       SELECT e.id, e.name, e."lastName", e."documentId",
-        totals.opening, COALESCE(totals.balance, 0) AS balance,
+        totals.opening, totals."openingDetail", COALESCE(totals.balance, 0) AS balance,
         payment.amount AS "lastPaymentAmount", payment.date AS "lastPaymentDate"
       FROM "Employee" e
       LEFT JOIN LATERAL (
         SELECT sum(amount) FILTER (WHERE type = 'OPENING') AS opening,
+          max(detail) FILTER (WHERE type = 'OPENING') AS "openingDetail",
           sum(CASE WHEN type = 'PAYMENT' THEN -amount ELSE amount END) AS balance
         FROM "EmployeeLoanEntry" WHERE "employeeId" = e.id
       ) totals ON true
@@ -73,6 +75,34 @@ export class EmployeeLoansService {
       if (opening?.date && date < opening.date) throw new BadRequestException('La fecha no puede ser anterior al saldo inicial');
       await tx.employeeLoanEntry.create({ data: { employeeId, type: input.type, date, detail: input.detail.trim(), amount, requestId: input.requestId, createdById: userId } });
     });
+    return this.get(employeeId);
+  }
+
+  async updateDescription(employeeId: string, entryId: string, detail: string, userId: string) {
+    const normalized = typeof detail === 'string' ? detail.trim() : '';
+    if (!normalized || normalized.length > 500) {
+      throw new BadRequestException('Escribe una descripción de hasta 500 caracteres.');
+    }
+
+    await this.prisma.$transaction(async tx => {
+      // Use the same employee lock as add(): no loan movement is recreated and
+      // retries with the already-saved description do not duplicate revisions.
+      const employee = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "Employee" WHERE "id" = ${employeeId} FOR UPDATE
+      `);
+      if (!employee.length) throw new NotFoundException('Empleado no encontrado');
+      const entry = await tx.employeeLoanEntry.findFirst({ where: { id: entryId, employeeId } });
+      if (!entry) throw new NotFoundException('Movimiento no encontrado para este empleado');
+      if (entry.detail === normalized) return;
+
+      await tx.employeeLoanDescriptionRevision.create({
+        data: { entryId, beforeDetail: entry.detail, afterDetail: normalized, createdById: userId },
+      });
+      // Intentionally never spread input: amount, date, type, requestId and
+      // source provenance cannot be modified by this operation.
+      await tx.employeeLoanEntry.update({ where: { id: entryId }, data: { detail: normalized } });
+    });
+
     return this.get(employeeId);
   }
 }

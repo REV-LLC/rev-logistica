@@ -12,6 +12,7 @@ type LoanSummary = {
   lastName: string;
   documentId: string | null;
   opening: string | null;
+  openingDetail: string | null;
   balance: string;
   lastPayment: { amount: string; date: string | null } | null;
 };
@@ -50,7 +51,9 @@ export default function EmployeeLoansPage() {
             <Table.Th ta="right">Deuda actual</Table.Th><Table.Th>Último pago</Table.Th><Table.Th>Acciones</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>{rows.map(row => <Table.Tr key={row.id}>
-            <Table.Td><Text fw={600} size="sm">{row.name} {row.lastName}</Text></Table.Td>
+            <Table.Td><Text fw={600} size="sm">{row.name} {row.lastName}</Text>
+              {row.openingDetail ? <Text size="sm" c="dimmed" mt={4} maw={320} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{row.openingDetail}</Text> : null}
+            </Table.Td>
             <Table.Td><Text size="sm">{row.documentId || 'Sin registrar'}</Text></Table.Td>
             <Table.Td ta="right" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{row.opening === null ? <Text size="sm" c="dimmed">Sin registrar</Text> : money(row.opening)}</Table.Td>
             <Table.Td ta="right" fw={700} style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{money(row.balance)}</Table.Td>

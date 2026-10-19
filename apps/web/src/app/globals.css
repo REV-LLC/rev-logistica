@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
+  --ui-sidebar-background: linear-gradient(180deg, #031426 0%, #041c31 100%);
   --ui-font-sans: 'Space Grotesk', sans-serif;
   --ui-color-title: #0f172a;
   --ui-color-body: #475569;
@@ -1329,20 +1330,4 @@ a {
   background: var(--mantine-color-gray-0);
   color: var(--mantine-color-gray-5);
   border: 1px dashed var(--mantine-color-gray-3);
-}
-
-.employee-photo-preview {
-  display: block;
-  width: min(100%, 32rem);
-  max-height: min(66dvh, 34rem);
-  min-height: 18rem;
-  object-fit: contain;
-  overflow: hidden;
-  border-radius: var(--mantine-radius-lg);
-  background: var(--mantine-color-gray-0);
-  border: 1px solid var(--mantine-color-gray-2);
-}
-
-.employee-photo-preview--empty {
-  border-style: dashed;
 }

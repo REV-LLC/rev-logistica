@@ -286,6 +286,7 @@ const sections: NavSection[] = [
   {
     title: "Configuración",
     links: [
+      { href: "/settings/loans", label: "Préstamos", icon: IconFileDollar, roles: ["ADMIN"] },
       { href: "/settings/warehouse-tablets", label: "Tablets de bodega", icon: IconBuildingWarehouse, roles: ["ADMIN"] },
       {
         href: "/settings/task-notifications",
@@ -785,7 +786,7 @@ export default function Nav({ onNavigate }: NavProps) {
       gap="md"
       p="md"
       style={{
-        background: "linear-gradient(180deg, #031426 0%, #041c31 100%)",
+        background: "var(--ui-sidebar-background)",
       }}
     >
       <Group
