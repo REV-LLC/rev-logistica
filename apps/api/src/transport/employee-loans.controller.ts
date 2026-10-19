@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards, ValidationPipe } from '@nestjs/common';
 import { IsIn, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { EmployeeLoansService, type LoanInput } from './employee-loans.service';
+import { UpdateLoanDescriptionDto } from './dto/update-loan-description.dto';
 class LoanEntryDto implements LoanInput {
   @IsIn(['OPENING','CHARGE','PAYMENT']) type!: LoanInput['type'];
   @Matches(/^\d{4}-\d{2}-\d{2}$/) date!: string;
@@ -22,4 +23,15 @@ export class EmployeeLoansController {
   @Post(':employeeId/loans') add(@Param('employeeId', new ParseUUIDPipe()) id: string,
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) body: LoanEntryDto,
     @Req() req: { user: { sub: string } }) { return this.loans.add(id, body, req.user.sub); }
+
+  @Patch(':employeeId/loans/:entryId/description')
+  updateDescription(
+    @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
+    @Param('entryId', new ParseUUIDPipe()) entryId: string,
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+    body: UpdateLoanDescriptionDto,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.loans.updateDescription(employeeId, entryId, body.detail, req.user.sub);
+  }
 }

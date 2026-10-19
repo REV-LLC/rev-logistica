@@ -1,4 +1,7 @@
 export const APP_SETTING_DEFINITIONS = {
+  'loans.payments_positive': {
+    category: 'LOANS', description: 'Mostrar pagos con signo positivo y préstamos con signo negativo; no cambia los saldos', defaultValue: false,
+  },
   'branding.service_name': {
     category: 'BRANDING', description: 'Nombre del servicio mostrado en la navegación', defaultValue: 'finge',
     minLength: 1, maxLength: 80,

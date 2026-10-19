@@ -7,6 +7,7 @@ import EmployeeAvatar, {
   invalidateEmployeePhoto,
 } from '@/components/EmployeeAvatar';
 import { api, ApiError } from '@/lib/api';
+import { useEmployeePhotoPreview } from './EmployeePhotoPreviewProvider';
 
 type EmployeePhotoRecord = {
   id: string;
@@ -23,14 +24,15 @@ export default function EmployeePhotoControl({
   size = 48,
   editable = false,
   grayscale = false,
-  onPreview,
+  onBeforePreview,
 }: {
   employee: EmployeePhotoRecord;
   size?: number;
   editable?: boolean;
   grayscale?: boolean;
-  onPreview?: (employee: EmployeePhotoRecord) => void;
+  onBeforePreview?: () => void;
 }) {
+  const openPhoto = useEmployeePhotoPreview();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,22 +63,20 @@ export default function EmployeePhotoControl({
 
   return (
     <Tooltip
-      label={error ?? (onPreview ? 'Ampliar foto' : 'Foto del empleado')}
+      label={error ?? 'Ampliar foto'}
       color={error ? 'red' : undefined}
     >
       <Box pos="relative" w={size} h={size} style={{ flexShrink: 0 }}>
         <Box
-          component={onPreview ? 'button' : 'div'}
-          type={onPreview ? 'button' : undefined}
-          aria-label={
-            onPreview ? `Ampliar foto de ${employeeName(employee)}` : undefined
-          }
-          onClick={onPreview ? () => onPreview(employee) : undefined}
+          component="button"
+          type="button"
+          aria-label={`Ampliar foto de ${employeeName(employee)}`}
+          onClick={() => { onBeforePreview?.(); openPhoto(employee); }}
           style={{
             appearance: 'none',
             background: 'transparent',
             border: 0,
-            cursor: onPreview ? 'zoom-in' : 'default',
+            cursor: 'zoom-in',
             display: 'block',
             padding: 0,
             filter: grayscale ? 'grayscale(1)' : undefined,
@@ -105,7 +105,7 @@ export default function EmployeePhotoControl({
               </ActionIcon>
             )}
           </FileButton>
-        ) : onPreview ? (
+        ) : (
           <ActionIcon
             aria-hidden="true"
             color="dark"
@@ -121,7 +121,7 @@ export default function EmployeePhotoControl({
           >
             <IconZoomIn size={12} />
           </ActionIcon>
-        ) : null}
+        )}
       </Box>
     </Tooltip>
   );

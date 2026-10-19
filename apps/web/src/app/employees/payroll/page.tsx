@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Alert, Badge, Button, Checkbox, Container, Group, Loader, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconArrowLeft, IconPencil, IconPrinter, IconSearch } from '@tabler/icons-react';
-import EmployeeAvatar from '@/components/EmployeeAvatar';
+import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import { useClientTableData } from '@/components/tables/useClientTableData';
@@ -44,7 +44,7 @@ export default function PayrollPage() {
     return () => controller.abort();
   }, [from, to, attempt]);
   const columns = useMemo<DataTableColumn<PayrollEmployee>[]>(() => [
-    { id: 'employee', width: 240, header: 'Empleado', sortValue: employeeName, mobile: { priority: 'primary' }, cell: row => <Group gap="sm" wrap="nowrap"><EmployeeAvatar employee={row} size={32} /><div><Text size="sm" fw={600}>{employeeName(row)}</Text><Text size="xs" c="dimmed">{row.documentId ?? 'Cédula sin registrar'}</Text></div></Group> },
+    { id: 'employee', width: 240, header: 'Empleado', sortValue: employeeName, mobile: { priority: 'primary' }, cell: row => <Group gap="sm" wrap="nowrap"><EmployeePhotoControl employee={row} size={32} /><div><Text size="sm" fw={600}>{employeeName(row)}</Text><Text size="xs" c="dimmed">{row.documentId ?? 'Cédula sin registrar'}</Text></div></Group> },
     { id: 'salary', width: 130, header: 'Base mensual', align: 'right', sortValue: row => numericSort(row.current?.monthlySalary), cell: row => payrollMoney(row.current?.monthlySalary) },
     { id: 'allowance', width: 130, header: 'Auxilio mensual', align: 'right', sortValue: row => numericSort(row.current?.transportAllowance), cell: row => payrollMoney(row.current?.transportAllowance) },
     { id: 'monthly', width: 130, header: 'Base + auxilio', align: 'right', sortValue: row => numericSort(row.current?.totalMonthly), cell: row => <Text size="sm" fw={600}>{payrollMoney(row.current?.totalMonthly)}</Text> },

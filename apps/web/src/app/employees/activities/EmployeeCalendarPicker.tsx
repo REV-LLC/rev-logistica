@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Badge,
   Group,
@@ -13,10 +13,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { IconCheck, IconChevronDown, IconSearch } from "@tabler/icons-react";
-import EmployeeAvatar, {
-  useEmployeePhotoUrl,
-} from "@/components/EmployeeAvatar";
-import AppAvatar from "@/components/AppAvatar";
+import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 import { useMediaQuery } from "@mantine/hooks";
 import styles from "./activities.module.css";
 
@@ -34,27 +31,6 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-function CalendarPortrait({
-  employee,
-  large,
-}: {
-  employee: CalendarEmployee;
-  large: boolean;
-}) {
-  const photoUrl = useEmployeePhotoUrl(employee.id, 0, large);
-  const size = large ? 96 : 48;
-  return (
-    <AppAvatar
-      src={photoUrl}
-      size={size}
-      imageSizes={`${size}px`}
-      radius={large ? 20 : "xl"}
-      color="blue"
-      alt={nameOf(employee)}
-    >{`${employee.name[0] ?? ""}${employee.lastName[0] ?? ""}`}</AppAvatar>
-  );
-}
-
 export default function EmployeeCalendarPicker({
   employees,
   employee,
@@ -69,6 +45,8 @@ export default function EmployeeCalendarPicker({
   const largeScreen = useMediaQuery("(min-width: 1600px)");
   const [opened, setOpened] = useState(false);
   const [search, setSearch] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const beforePreview = () => { setOpened(false); triggerRef.current?.focus(); };
   const filtered = useMemo(
     () =>
       employees.filter((person) =>
@@ -78,6 +56,8 @@ export default function EmployeeCalendarPicker({
   );
 
   return (
+    <div className={styles.employeePicker}>
+    {employee ? <EmployeePhotoControl employee={employee} size={largeScreen ? 96 : 48} onBeforePreview={beforePreview} /> : null}
     <Popover
       opened={opened}
       onChange={setOpened}
@@ -92,6 +72,7 @@ export default function EmployeeCalendarPicker({
     >
       <Popover.Target>
         <UnstyledButton
+          ref={triggerRef}
           className={styles.employeeTrigger}
           disabled={disabled || !employees.length}
           aria-label={`Cambiar empleado${employee ? `: ${nameOf(employee)}` : ""}`}
@@ -103,12 +84,6 @@ export default function EmployeeCalendarPicker({
           }}
         >
           <Group wrap="nowrap" gap="sm">
-            {employee ? (
-              <CalendarPortrait
-                employee={employee}
-                large={Boolean(largeScreen)}
-              />
-            ) : null}
             <div className={styles.employeeName}>
               <Text
                 fw={700}
@@ -156,9 +131,14 @@ export default function EmployeeCalendarPicker({
           >
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
               {filtered.map((person) => (
-                <UnstyledButton
+                <Group
                   key={person.id}
                   className={`${styles.employeeOption} ${employee?.id === person.id ? styles.employeeOptionSelected : ""}`}
+                  gap="sm" wrap="nowrap"
+                >
+                  <EmployeePhotoControl employee={person} size={44} onBeforePreview={beforePreview} />
+                  <UnstyledButton
+                  className={styles.employeeOptionSelect}
                   aria-label={`Ver calendario de ${nameOf(person)}`}
                   aria-pressed={employee?.id === person.id}
                   onClick={() => {
@@ -167,7 +147,6 @@ export default function EmployeeCalendarPicker({
                   }}
                 >
                   <Group gap="sm" wrap="nowrap">
-                    <EmployeeAvatar employee={person} size={44} />
                     <div className={styles.employeeName}>
                       <Text size="sm" fw={650}>
                         {nameOf(person)}
@@ -180,7 +159,8 @@ export default function EmployeeCalendarPicker({
                       <IconCheck size={18} color="#ed751a" aria-hidden="true" />
                     ) : null}
                   </Group>
-                </UnstyledButton>
+                  </UnstyledButton>
+                </Group>
               ))}
             </SimpleGrid>
             {!filtered.length ? (
@@ -192,5 +172,6 @@ export default function EmployeeCalendarPicker({
         </Stack>
       </Popover.Dropdown>
     </Popover>
+    </div>
   );
 }

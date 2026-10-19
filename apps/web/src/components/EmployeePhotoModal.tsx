@@ -1,10 +1,8 @@
 "use client";
 
-import AppImage from '@/components/AppImage';
-import { Center, Modal, Stack, Text } from "@mantine/core";
-import EmployeeAvatar, {
-  useEmployeePhotoUrl,
-} from "@/components/EmployeeAvatar";
+import AppAvatar from '@/components/AppAvatar';
+import { useEmployeePhotoUrl } from '@/components/EmployeeAvatar';
+import ProfilePhotoLightbox from '@/components/ProfilePhotoLightbox';
 
 type EmployeePhotoRecord = {
   id: string;
@@ -18,27 +16,13 @@ function employeeName(employee: EmployeePhotoRecord) {
 
 function EmployeePhotoPreview({ employee }: { employee: EmployeePhotoRecord }) {
   const photoUrl = useEmployeePhotoUrl(employee.id, 0, true);
+  const name = employeeName(employee);
+  const parts = name.split(/\s+/).filter(Boolean);
+  const initials = `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
 
   return (
-    <Stack align="center" gap="md">
-      {photoUrl ? (
-        <AppImage
-          width={512}
-          height={544}
-          sizes="(max-width: 576px) 90vw, 512px"
-          src={photoUrl}
-          alt={`Foto ampliada de ${employeeName(employee)}`}
-          className="employee-photo-preview"
-        />
-      ) : (
-        <Center className="employee-photo-preview employee-photo-preview--empty">
-          <EmployeeAvatar employee={employee} size={180} />
-        </Center>
-      )}
-      <Text fw={800} size="lg" ta="center">
-        {employeeName(employee)}
-      </Text>
-    </Stack>
+    <AppAvatar src={photoUrl} alt={`Foto ampliada de ${name}`} size="var(--profile-photo-size)" radius="50%" color="gray"
+      imageSizes="(max-width: 432px) calc(100vw - 48px), 384px">{initials}</AppAvatar>
   );
 }
 
@@ -50,14 +34,13 @@ export default function EmployeePhotoModal({
   onClose: () => void;
 }) {
   return (
-    <Modal
+    <ProfilePhotoLightbox
       opened={Boolean(employee)}
       onClose={onClose}
-      title="Foto del empleado"
-      centered
-      size="lg"
+      name={employee ? employeeName(employee) : ''}
+      profileHref={employee ? `/employees?employeeId=${encodeURIComponent(employee.id)}` : undefined}
     >
       {employee ? <EmployeePhotoPreview employee={employee} /> : null}
-    </Modal>
+    </ProfilePhotoLightbox>
   );
 }
