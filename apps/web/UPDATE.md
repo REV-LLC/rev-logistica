@@ -1,9 +1,5 @@
-# Perfiles de empleados y nueva navegación
+# Transiciones entre páginas más naturales
 
-Cada empleado tiene ahora su propia página con foto, datos de contacto, cargo y vehículo asignado cuando corresponda. Desde su perfil puedes gestionar Nómina, Préstamos y Bitácora sin salir de la página.
+Al cambiar de página, el efecto de cristal conserva ahora el fondo y los colores de cada pantalla, sin añadir un tinte azul ni oscurecerla.
 
-En el celular mejoramos la lectura de los valores y las descripciones de los préstamos. Toca una descripción para ver su información completa y editarla; el botón para agregar movimientos queda al final del historial, más cerca del pulgar.
-
-El directorio y los perfiles estrenan fondos y superficies de cristal. El menú lateral ahora es flotante y conserva el buscador para encontrar rápidamente las páginas de la app.
-
-Al cambiar de página verás una transición difuminada con el logo de REV mientras carga la información.
+El logo de REV y la animación de desenfoque se mantienen durante la carga, tanto en computador como en celular.
