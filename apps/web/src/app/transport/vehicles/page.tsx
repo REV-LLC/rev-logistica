@@ -15,6 +15,7 @@ import {
   Stack,
   Text,
   TextInput,
+  Title,
 } from '@mantine/core';
 import {
   IconCalendarDue,
@@ -30,7 +31,7 @@ import {
   IconTruck,
   IconUserCheck,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
@@ -39,6 +40,9 @@ import MaintenancePanel from '@/components/maintenance/MaintenancePanel';
 import EntityNotificationManager from '@/components/notifications/EntityNotificationManager';
 import NotificationRecipientsEditor from '@/components/notifications/NotificationRecipientsEditor';
 import StatCard from '@/components/dashboard/StatCard';
+import glass from '../../employees/directory.module.css';
+import styles from './vehicles.module.css';
+import tableGlass from '@/components/tables/GlassDataTable.module.css';
 import { api } from '@/lib/api';
 import {
   recipientsFromTopic,
@@ -458,7 +462,7 @@ export default function VehiclesPage() {
       cell: (vehicle) => {
         const soatStatus = getDocumentStatus(daysUntil(vehicle.soatVigencia));
         return (
-          <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Group justify="space-between" align="flex-start" wrap="nowrap" className={styles.vehicleIdentity}>
             <Stack gap={2}>
               <Text fw={700}>{vehicle.plate}</Text>
               <Text size="sm" c="dimmed">
@@ -528,29 +532,34 @@ export default function VehiclesPage() {
   });
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && vehicles.length === 0 ? 'true' : undefined}>
+      <EmployeePageBackground src="/employees/transport-v1.webp" variant="transport" />
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Vehiculos"
-          description="Administra flota, documentacion y disponibilidad operativa desde una sola vista."
-          icon={<IconTruck size={20} />}
-          iconColor="orange"
-          accentColor="rgba(249,115,22,0.12)"
-          aside={
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <div>
+            <Title order={1} className={glass.title}>Vehículos</Title>
+            <Text size="sm" c="dimmed">Administra flota, documentación y disponibilidad operativa desde una sola vista.</Text>
+          </div>
+          <Group className={glass.headerActions}>
             <Button onClick={startCreate} leftSection={<IconPlus size={16} />}>
-              Nuevo vehiculo
+              Nuevo vehículo
             </Button>
-          }
-        >
-          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+          </Group>
+        </Group>
+
+        <section className={glass.surface} aria-label="Flota de vehículos">
+          <Stack gap="lg">
+          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md" visibleFrom="md" className={styles.metrics}>
             <StatCard
+              variant="glass"
               label="Total"
               value={String(metrics.total)}
-              hint="Vehiculos registrados"
+              hint="Vehículos registrados"
               color="orange"
               icon={<IconTruck size={20} />}
             />
             <StatCard
+              variant="glass"
               label="Con conductor"
               value={String(metrics.withDrivers)}
               hint="Asignaciones activas"
@@ -558,21 +567,22 @@ export default function VehiclesPage() {
               icon={<IconUserCheck size={20} />}
             />
             <StatCard
-              label="SOAT proximo"
+              variant="glass"
+              label="SOAT próximo"
               value={String(metrics.soatSoon)}
-              hint="Vence en 30 dias o menos"
+              hint="Vence en 30 días o menos"
               color="red"
               icon={<IconFileDescription size={20} />}
             />
             <StatCard
-              label="Tecnomecanica proxima"
+              variant="glass"
+              label="Tecnomecánica próxima"
               value={String(metrics.technoSoon)}
-              hint="Vence en 30 dias o menos"
+              hint="Vence en 30 días o menos"
               color="grape"
               icon={<IconCalendarDue size={20} />}
             />
           </SimpleGrid>
-        </PageHeaderCard>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la carga">
@@ -588,7 +598,8 @@ export default function VehiclesPage() {
           </Alert>
         ) : null}
 
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+        <div className={tableGlass.table}>
+          {loading && vehicles.length === 0 ? <div className={glass.loadingSpace} role="status" aria-label="Cargando vehículos" /> :
           <EntityDataTable
             rows={vehicleTable.rows}
             columns={vehicleColumns}
@@ -599,8 +610,8 @@ export default function VehiclesPage() {
             pagination={vehicleTable.pagination}
             onPageSizeChange={vehicleTable.onPageSizeChange}
             emptyState={{
-              title: 'No hay vehiculos registrados',
-              description: 'Crea un vehiculo para empezar.',
+              title: 'No hay vehículos registrados',
+              description: 'Crea un vehículo para empezar.',
               icon: <IconCar size={20} />,
             }}
             actions={(vehicle) => [
@@ -635,7 +646,10 @@ export default function VehiclesPage() {
               },
             ]}
           />
-        </Paper>
+          }
+        </div>
+          </Stack>
+        </section>
       </Stack>
 
       <Modal opened={!!detailsVehicle} onClose={() => setDetailsVehicle(null)} title="Detalle de vehiculo" size="lg">

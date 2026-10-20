@@ -18,6 +18,7 @@ import {
   Switch,
   Text,
   TextInput,
+  Title,
 } from '@mantine/core';
 import {
   IconBuildingWarehouse,
@@ -29,12 +30,15 @@ import {
   IconSearch,
   IconUpload,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
 import StatCard from '@/components/dashboard/StatCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { api, ApiError } from '@/lib/api';
+import glass from '../employees/directory.module.css';
+import tableGlass from '@/components/tables/GlassDataTable.module.css';
+import styles from './providers.module.css';
 
 type Provider = {
   id: string;
@@ -264,7 +268,7 @@ export default function ProvidersPage() {
             styles={providerLogoStyles}
           />
           <div style={{ minWidth: 0 }}>
-            <Text fw={700} lineClamp={1}>{provider.name}</Text>
+            <Text fw={600} className={styles.providerName}>{provider.name}</Text>
             <Text size="xs" c="dimmed">
               {provider.nitOrId ? `NIT: ${provider.nitOrId}` : 'Sin NIT'}
             </Text>
@@ -314,31 +318,33 @@ export default function ProvidersPage() {
     : [];
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && providers.length === 0 ? 'true' : undefined}>
+      <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Proveedores"
-          description="Administra los datos de los dueños externos y consulta sus bodegas asociadas."
-          icon={<IconBuildingWarehouse size={20} />}
-          iconColor="yellow"
-          accentColor="rgba(245,158,11,0.12)"
-          aside={(
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <div>
+            <Title order={1} className={glass.title}>Proveedores</Title>
+            <Text size="sm" c="dimmed">Administra los datos de los dueños externos y consulta sus bodegas asociadas.</Text>
+          </div>
+          <Group className={glass.headerActions}>
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
               Nuevo proveedor
             </Button>
-          )}
-        >
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-            <StatCard label="Proveedores" value={String(providerDirectory.length)} hint={`${activeProviders} activos`} color="yellow" icon={<IconBuildingWarehouse size={20} />} />
-            <StatCard label="Bodegas" value={String(alliedWarehouses.length)} hint="Bodegas proveedoras" color="blue" icon={<IconBuildingWarehouse size={20} />} />
-            <StatCard label="Sin bodega" value={String(providersWithoutWarehouse)} hint="Pendientes por relacionar" color="gray" icon={<IconBuildingWarehouse size={20} />} />
-          </SimpleGrid>
-        </PageHeaderCard>
+          </Group>
+        </Group>
+
+        <section className={glass.surface} aria-label="Directorio de proveedores">
+          <Stack gap="lg">
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" visibleFrom="md" className={styles.metrics}>
+              <StatCard variant="glass" label="Proveedores" value={String(providerDirectory.length)} hint={`${activeProviders} activos`} color="yellow" icon={<IconBuildingWarehouse size={20} />} />
+              <StatCard variant="glass" label="Bodegas" value={String(alliedWarehouses.length)} hint="Bodegas proveedoras" color="blue" icon={<IconBuildingWarehouse size={20} />} />
+              <StatCard variant="glass" label="Sin bodega" value={String(providersWithoutWarehouse)} hint="Pendientes por relacionar" color="gray" icon={<IconBuildingWarehouse size={20} />} />
+            </SimpleGrid>
 
         {error ? <Alert color="red">{error}</Alert> : null}
         {success ? <Alert color="green">{success}</Alert> : null}
 
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+        <div className={tableGlass.table}>
           <Stack gap="md">
             <DataTableToolbar
               title="Directorio de proveedores"
@@ -365,7 +371,7 @@ export default function ProvidersPage() {
                 allowDeselect={false}
               />
             </SimpleGrid>
-            <EntityDataTable
+            {loading && providers.length === 0 ? <div className={glass.loadingSpace} role="status" aria-label="Cargando proveedores" /> : <EntityDataTable
               rows={filteredProviders}
               columns={columns}
               getRowId={(provider) => provider.id}
@@ -392,9 +398,11 @@ export default function ProvidersPage() {
                   onClick: () => openEdit(provider),
                 },
               ]}
-            />
+            />}
           </Stack>
-        </Paper>
+        </div>
+          </Stack>
+        </section>
       </Stack>
 
       <Modal

@@ -1,0 +1,53 @@
+.table {
+  min-width: 0;
+}
+
+.table :global(.mantine-Table-table) {
+  --table-border-color: rgb(255 255 255 / 12%);
+  --table-hover-color: rgb(255 255 255 / 3%);
+}
+
+.table :global(.mantine-Table-th),
+.table :global(.mantine-Table-td) {
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+
+.table :global(.mantine-Paper-root) {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.table :global(.mantine-ScrollArea-scrollbar),
+.table :global(.mantine-ScrollArea-scrollbar):hover,
+.table :global(.mantine-ScrollArea-scrollbar):active,
+.table :global(.mantine-ScrollArea-corner) {
+  background-color: transparent;
+}
+
+.table :global(.mantine-ScrollArea-thumb),
+.table :global(.mantine-ScrollArea-scrollbar):hover > :global(.mantine-ScrollArea-thumb),
+.table :global(.mantine-ScrollArea-scrollbar):active > :global(.mantine-ScrollArea-thumb) {
+  background-color: rgb(0 0 0 / 40%);
+}
+
+.table :global(.mantine-ActionIcon-root):not([aria-hidden='true']) {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.table :global(.mantine-Pagination-control):disabled {
+  background: rgb(255 255 255 / 3%);
+  border-color: rgb(255 255 255 / 12%);
+  color: rgb(255 255 255 / 25%);
+}
+
+@media (max-width: 61.99em) {
+  .table :global(.mantine-ActionIcon-root):not([aria-hidden='true']) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
