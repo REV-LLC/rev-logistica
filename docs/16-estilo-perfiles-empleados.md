@@ -64,6 +64,12 @@ La barra de desplazamiento mantiene una pista transparente y un control oscuro a
 
 `/providers` utiliza el fondo responsive REV del directorio, el título compartido y una sola superficie para indicadores, búsqueda, filtro por estado y lista. Reutiliza la variante `glass` de `StatCard` y `GlassDataTable.module.css`, también usado en Vehículos. Esta clase de tabla se aplica de forma explícita; no vuelve transparentes las tablas de otros módulos ni los modales. Los logos de empresas conservan su presentación de marca y no adoptan el recorte circular de las fotos de empleados. Se mantienen la exclusión de dueños internos, los datos de contacto, las relaciones de bodegas y las acciones existentes.
 
+## Clientes y Lista de precios
+
+El grupo «Clientes y facturación» utiliza el patrón compartido en Clientes, Proveedores y Lista de precios. Anexos queda expresamente fuera: no se cambia el layout de facturación, el editor de anexos ni sus estilos. Las clases de cristal se aplican únicamente en cada página seleccionada, no al módulo completo por herencia.
+
+Clientes conserva su contador de activos, filtros, ordenación, paginación y acciones. Detalle, documentos, RUT, creación con obra inicial y edición siguen usando sus modales legibles. Lista de precios mantiene el alcance de equipos propios, sus filtros Bulk/Serial y la exportación CSV; su selector usa un indicador translúcido sobre el cristal. Solo la carga inicial participa en la transición global: cambiar de tipo o actualizar el catálogo utiliza el indicador local, incluso cuando una categoría está vacía. Los importes y cálculos no cambian.
+
 ## Identidad del empleado
 
 - Foto circular, a color, de `200px`, sin un recuadro azul alrededor del encabezado. Su soporte visual permite que crezca hacia arriba sin empujar innecesariamente los datos inferiores.

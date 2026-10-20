@@ -7,28 +7,30 @@ import {
   Button,
   Container,
   Group,
-  Paper,
   SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
+  Title,
 } from '@mantine/core';
 import {
   IconBox,
   IconDownload,
-  IconFileDollar,
   IconListSearch,
   IconRefresh,
   IconTag,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
 import StatCard from '@/components/dashboard/StatCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
+import glass from '../../employees/directory.module.css';
+import tableGlass from '@/components/tables/GlassDataTable.module.css';
+import styles from './price-list.module.css';
 
 type ControlType = 'BULK' | 'SERIAL';
 
@@ -92,7 +94,8 @@ export default function PriceListPage() {
   const [controlType, setControlType] = useState<ControlType>('BULK');
   const [items, setItems] = useState<PriceListSku[]>([]);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadItems = async (targetControlType = controlType) => {
@@ -113,6 +116,7 @@ export default function PriceListPage() {
       }
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -152,7 +156,7 @@ export default function PriceListPage() {
       mobile: { priority: 'primary' },
       cell: (item) => (
         <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <div>
+          <div className={styles.referenceName}>
             <Text fw={600}>{item.name}</Text>
             <Badge mt={4} variant="light" color="gray" radius="sm">
               {item.assetFamily.code}
@@ -248,16 +252,15 @@ export default function PriceListPage() {
   };
 
   return (
-    <Container size="xl" py="md">
+    <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={initialLoading ? 'true' : undefined}>
+      <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Lista de precios"
-          description="Tarifas de alquiler de equipos propios. No incluye referencias exclusivas de subalquiler."
-          icon={<IconFileDollar size={20} />}
-          iconColor="yellow"
-          accentColor="rgba(217, 154, 24, 0.16)"
-          aside={
-            <Group gap="xs">
+        <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+          <div>
+            <Title order={1} className={glass.title}>Lista de precios</Title>
+            <Text size="sm" c="dimmed">Tarifas de alquiler de equipos propios. No incluye referencias exclusivas de subalquiler.</Text>
+          </div>
+            <Group gap="xs" className={glass.headerActions}>
               <Button
                 variant="light"
                 color="gray"
@@ -277,25 +280,29 @@ export default function PriceListPage() {
                 CSV
               </Button>
             </Group>
-          }
-        >
+        </Group>
+
+        <section className={glass.surface} aria-label="Lista de precios de equipos propios">
+          <Stack gap="lg">
           <Group gap="md" align="flex-end" wrap="wrap">
             <SegmentedControl
+              aria-label="Tipo de inventario"
+              className={styles.controlType}
               data={controlTypeOptions}
               value={controlType}
               onChange={(value) => setControlType(value as ControlType)}
               size="md"
             />
             <TextInput
+              aria-label="Buscar referencias"
               leftSection={<IconListSearch size={16} />}
               placeholder="Buscar por referencia, codigo o familia"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
-              style={{ flex: '1 1 320px' }}
+              style={{ flex: '1 1 320px', minWidth: 0 }}
             />
 
           </Group>
-        </PageHeaderCard>
 
         {error ? (
           <Alert color="red" variant="light">
@@ -303,8 +310,9 @@ export default function PriceListPage() {
           </Alert>
         ) : null}
 
-        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" visibleFrom="md" className={styles.metrics}>
           <StatCard
+            variant="glass"
             label="Referencias"
             value={filteredItems.length}
             hint={`${controlType === 'BULK' ? 'Bulk' : 'Serial'} visibles`}
@@ -312,6 +320,7 @@ export default function PriceListPage() {
             color="yellow"
           />
           <StatCard
+            variant="glass"
             label="Con precio cliente"
             value={pricedCount}
             hint="Precio principal registrado"
@@ -321,7 +330,7 @@ export default function PriceListPage() {
 
         </SimpleGrid>
 
-        <Paper withBorder radius="md" p="md">
+        <div className={tableGlass.table}>
           <Stack gap="md">
             <DataTableToolbar
               title={controlType === 'BULK' ? 'Items Bulk' : 'Items Serial'}
@@ -333,7 +342,7 @@ export default function PriceListPage() {
               </Badge>
             </DataTableToolbar>
 
-            <EntityDataTable
+            {initialLoading ? <div className={glass.loadingSpace} role="status" aria-label="Cargando lista de precios" /> : <EntityDataTable
               rows={priceTable.rows}
               columns={priceColumns}
               getRowId={(item) => item.id}
@@ -347,9 +356,11 @@ export default function PriceListPage() {
                 title: 'No hay referencias para mostrar',
                 description: 'Prueba cambiando el tipo o búsqueda.',
               }}
-            />
+            />}
           </Stack>
-        </Paper>
+        </div>
+          </Stack>
+        </section>
       </Stack>
     </Container>
   );
