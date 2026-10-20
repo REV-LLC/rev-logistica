@@ -6,9 +6,11 @@ import { Alert, Badge, Center, Container, Loader, Text } from '@mantine/core';
 import { IconArrowRight } from '@tabler/icons-react';
 import AuthGuard from '@/components/AuthGuard';
 import ResponsiveShell from '@/components/ResponsiveShell';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
 import { api } from '@/lib/api';
 import { getCurrentUserRole, getCurrentUserSession, type AppRole } from '@/lib/auth';
 import styles from './home.module.css';
+import glass from './employees/directory.module.css';
 
 type Vehicle = { id: string; plate: string; soatVigencia?: string | null; tecnomecanicaVigencia?: string | null; active?: boolean };
 type Task = { id: string; title: string; description?: string | null; dueDate?: string | null; status?: 'OPEN' | 'DOING' | 'DONE' | 'DELETED' | null; priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null; assignedToUserId?: string | null };
@@ -186,5 +188,29 @@ export default function HomePage() {
     <Section title="Alertas" count={notifications.length}>{notifications.length ? notifications.slice(0, 5).map((item) => <ActionRow key={item.topicId} href={fieldModuleHref} title={item.title} detail={item.message} meta={reminderMeta(item)} tone={item.status === 'OVERDUE' ? 'danger' : 'warning'} />) : <EmptyRow>No tienes alertas asignadas.</EmptyRow>}</Section>
   </div>;
 
-  return <AuthGuard allowedRoles={['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR']}><ResponsiveShell><main className={styles.canvas}><Container size="xl" py={{ base: 'lg', md: 40 }}><header className={styles.pageHeader}><div><Text component="h1">{greeting()}, {userName()}</Text><Text>{role ? roleDescription[role] : 'Tu operación de hoy.'}</Text></div><div className={styles.headerMeta}><Badge variant="light" color="gray">{role || 'SIN ROL'}</Badge><Text>{todayLabel()}</Text></div></header>{error ? <Alert color="red" variant="light" mb="lg">{error}</Alert> : null}{loading ? <Center py={80}><Loader /></Center> : role === 'ADMIN' ? adminView : role === 'OFFICE' ? officeView : fieldView}</Container></main></ResponsiveShell></AuthGuard>;
+  return (
+    <AuthGuard allowedRoles={['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR']}>
+      <ResponsiveShell>
+        <main className={`${styles.canvas} ${glass.page}`}>
+          <EmployeePageBackground src="/login/excavator.webp" />
+          <Container size="xl" py={{ base: 'lg', md: 40 }}>
+            <header className={styles.pageHeader}>
+              <div>
+                <Text component="h1">{greeting()}, {userName()}</Text>
+                <Text>{role ? roleDescription[role] : 'Tu operación de hoy.'}</Text>
+              </div>
+              <div className={styles.headerMeta}>
+                <Badge variant="light" color="gray">{role || 'SIN ROL'}</Badge>
+                <Text>{todayLabel()}</Text>
+              </div>
+            </header>
+            {error ? <Alert color="red" variant="light" mb="lg">{error}</Alert> : null}
+            <div className={glass.surface}>
+              {loading ? <Center py={80}><Loader /></Center> : role === 'ADMIN' ? adminView : role === 'OFFICE' ? officeView : fieldView}
+            </div>
+          </Container>
+        </main>
+      </ResponsiveShell>
+    </AuthGuard>
+  );
 }
