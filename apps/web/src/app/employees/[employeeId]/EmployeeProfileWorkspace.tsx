@@ -22,7 +22,7 @@ export default function EmployeeProfileWorkspace({ employeeId, selfService = fal
   const requestedTab = searchParams.get('tab');
   const [selection, setSelection] = useState<{ requestedTab: string | null; tab: string } | null>(null);
   const defaultTab = employeeWorkspaceTab(requestedTab, selfService);
-  const tab = selection?.requestedTab === requestedTab ? selection.tab : defaultTab;
+  const tab = !selfService && selection?.requestedTab === requestedTab ? selection.tab : defaultTab;
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const [payrollElement, setPayrollElement] = useState<HTMLButtonElement | null>(null);
   const [loansElement, setLoansElement] = useState<HTMLButtonElement | null>(null);
@@ -31,8 +31,8 @@ export default function EmployeeProfileWorkspace({ employeeId, selfService = fal
   return <section className={styles.workspace} aria-label="Gestión del empleado">
     <Tabs value={tab} onChange={value => {
       if (!value || (selfService && value === 'payroll')) return;
-      setSelection({ requestedTab, tab: value });
       if (selfService) router.replace(`/profile?tab=${value}`, { scroll: false });
+      else setSelection({ requestedTab, tab: value });
     }} variant="unstyled" keepMounted={false} classNames={{ list: styles.list, tab: styles.tab, tabSection: styles.tabSection, tabLabel: styles.tabLabel, panel: styles.panel }}>
       <Tabs.List ref={setListElement} aria-label="Secciones del empleado">
         <FloatingIndicator target={activeElement} parent={listElement} transitionDuration={260} className={styles.indicator} aria-hidden="true" />
