@@ -204,11 +204,11 @@ export default function SerialAssetCard({
           minWidth: 0,
           height: showcase ? "auto" : isContentSized ? "auto" : "62%",
           aspectRatio: showcase || isContentSized ? "16 / 9" : undefined,
-          background: "#ffffff",
+          background: "var(--inventory-image-bg, #ffffff)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          borderBottom: "1px solid var(--mantine-color-gray-3)",
+          borderBottom: "1px solid var(--inventory-line, var(--mantine-color-gray-3))",
           borderRadius: isMobile ? "calc(var(--mantine-radius-md) - 2px)" : 0,
           overflow: "hidden",
           position: "relative",
@@ -235,7 +235,7 @@ export default function SerialAssetCard({
               width: "100%",
               height: "100%",
               objectFit: showcase ? "cover" : "contain",
-              background: "#ffffff",
+              background: "var(--inventory-image-bg, #ffffff)",
             }}
           />
         ) : (
@@ -351,7 +351,7 @@ export default function SerialAssetCard({
               ) : null}
             </Group>
           </Group>
-          <Text size="xs" fw={600} c={item.isDamaged ? 'orange.8' : 'teal.8'}>
+          <Text size="xs" fw={600} c={item.isDamaged ? 'var(--inventory-warning, var(--mantine-color-orange-8))' : 'var(--inventory-positive, var(--mantine-color-teal-8))'}>
             Condición: {item.isDamaged ? 'Averiado' : 'Operativo'}
           </Text>
           {item.isDamaged && item.damageNote ? (
@@ -382,7 +382,7 @@ export default function SerialAssetCard({
           {additionalDetails.map((detail) => (
             <Group key={detail.label} gap={7} wrap="nowrap" align="center">
               {detail.icon ? (
-                <Box c="var(--mantine-color-gray-7)" style={{ display: "flex", flexShrink: 0 }}>
+                <Box c="var(--inventory-muted, var(--mantine-color-gray-7))" style={{ display: "flex", flexShrink: 0 }}>
                   {detail.icon}
                 </Box>
               ) : null}

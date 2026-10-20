@@ -1,0 +1,10 @@
+.page {
+  --mantine-color-red-light-color: #ffb4b4;
+  --mantine-color-red-light: rgb(255 110 110 / 14%);
+  --mantine-color-violet-light-color: #cdb9ff;
+  --mantine-color-violet-light: rgb(178 141 255 / 14%);
+}
+
+.customerIdentity :global(.mantine-Badge-root) {
+  flex-shrink: 0;
+}

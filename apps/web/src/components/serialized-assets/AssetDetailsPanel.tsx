@@ -1,4 +1,5 @@
 import { Paper, SimpleGrid, Stack, Text, Box } from '@mantine/core';
+import type { CSSProperties } from 'react';
 
 export type AssetDetailSection = {
   title: string;
@@ -13,7 +14,7 @@ export default function AssetDetailsPanel({ sections }: AssetDetailsPanelProps) 
   return (
     <Paper withBorder radius="xl" p={{ base: 'md', md: 'xl' }}>
       <div>
-        <Text className="ui-text-title" style={{ fontSize: '1rem' }}>
+        <Text className="ui-text-title" style={{ fontSize: 'var(--asset-panel-title-size, 1rem)' }}>
           Datos del equipo
         </Text>
         <Text className="ui-text-body " style={{ marginTop:6 }}>
@@ -26,15 +27,14 @@ export default function AssetDetailsPanel({ sections }: AssetDetailsPanelProps) 
           <Box
             key={section.title}
             style={{
-              background: 'rgba(15, 23, 42, 0.02)',
+              background: 'var(--asset-detail-section-background, rgba(15, 23, 42, 0.02))',
               borderRadius: 12,
               padding: '16px 18px',
             }}
           >
             <Text
               fw={700}
-              tt="uppercase"
-              style={{ fontSize: '0.75rem', letterSpacing: 0.4, color: 'var(--mantine-color-dimmed)' }}
+              style={{ fontFamily: 'inherit', textTransform: 'var(--asset-detail-heading-transform, uppercase)' as CSSProperties['textTransform'], fontSize: 'var(--asset-detail-heading-size, 0.75rem)', letterSpacing: 0, color: 'var(--asset-detail-section-title, var(--mantine-color-dimmed))' }}
               mb="sm"
             >
               {section.title}
@@ -48,7 +48,7 @@ export default function AssetDetailsPanel({ sections }: AssetDetailsPanelProps) 
                   py={8}
                   style={{ minHeight: 40, alignItems: 'center' }}
                 >
-                  <Text className="ui-text-label" style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+                  <Text className="ui-text-label" style={{ fontSize: '0.875rem', opacity: 'var(--asset-detail-label-opacity, 0.7)' }}>
                     {field.label}
                   </Text>
                   <Text

@@ -26,6 +26,7 @@ import {
 } from '@/components/LedgerDocumentTable';
 import { api, ApiError } from '@/lib/api';
 import styles from './ledger.module.css';
+import glass from '../../employees/directory.module.css';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
 const DEFAULT_TAKE = 30;
@@ -234,13 +235,14 @@ export default function LedgerPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={`${glass.page} ${styles.page}`}>
       <Container size="xl" py={{ base: 'lg', md: 40 }}>
         <header className={styles.header}>
           <Text component="h1">Historial de movimientos</Text>
           <Text>Revisa entradas, salidas, movimientos en tránsito y ajustes de inventario.</Text>
         </header>
 
+        <section className={glass.surface} aria-label="Consulta de movimientos">
         <div className={styles.filterRail}>
           <DataTableToolbar mb={0} controlsStyle={{ flex: '1 1 100%' }}>
           <TextInput
@@ -324,6 +326,8 @@ export default function LedgerPage() {
         <Button variant="subtle" className={styles.loadMore} disabled={!nextCursor || search !== debouncedSearch} loading={loading} onClick={() => fetchLedger(nextCursor)}>
           {nextCursor ? 'Cargar más movimientos' : loading ? 'Cargando movimientos' : 'No hay más resultados'}
         </Button>
+
+        </section>
 
         <Modal opened={filtersOpen} onClose={() => setFiltersOpen(false)} title="Más filtros" size="lg" centered>
           <Stack gap="md">

@@ -1,0 +1,26 @@
+.page {
+  --mantine-color-red-light-color: #ffb4b4;
+  --mantine-color-red-light: rgb(255 110 110 / 14%);
+  --mantine-color-orange-light-color: #ffd18a;
+  --mantine-color-orange-light: rgb(255 174 82 / 14%);
+  --mantine-color-violet-light-color: #cdb9ff;
+  --mantine-color-violet-light: rgb(178 141 255 / 14%);
+  --mantine-color-grape-light-color: #e4b4fa;
+}
+
+.metrics {
+  padding-block-end: 24px;
+  border-block-end: 1px solid rgb(255 255 255 / 12%);
+}
+
+@media (max-width: 22em) {
+  .vehicleIdentity {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .vehicleIdentity > :first-child {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+}

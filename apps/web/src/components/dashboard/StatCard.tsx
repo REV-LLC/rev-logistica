@@ -10,9 +10,10 @@ type StatCardProps = {
   hint?: ReactNode;
   color: string;
   icon: ReactNode;
+  variant?: 'default' | 'glass';
 };
 
-export default function StatCard({ label, value, hint, color, icon }: StatCardProps) {
+export default function StatCard({ label, value, hint, color, icon, variant = 'default' }: StatCardProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   if (isMobile) {
@@ -21,13 +22,13 @@ export default function StatCard({ label, value, hint, color, icon }: StatCardPr
 
   return (
     <Paper
-      withBorder
+      withBorder={variant !== 'glass'}
       radius="lg"
-      p="lg"
+      p={variant === 'glass' ? 0 : 'lg'}
       style={{
-        background:
+        background: variant === 'glass' ? 'transparent' :
           'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,248,251,0.92) 100%)',
-        borderColor: 'rgba(15, 23, 42, 0.08)',
+        borderColor: variant === 'glass' ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
       }}
     >
       <Group justify="space-between" align="flex-start" wrap="nowrap">

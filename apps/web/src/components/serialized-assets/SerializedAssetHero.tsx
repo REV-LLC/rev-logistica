@@ -47,7 +47,7 @@ export default function SerializedAssetHero({
             alignItems: 'center',
             justifyContent: 'center',
             background: imageUrl.trim()
-              ? 'radial-gradient(circle at 50% 40%, rgba(255,255,255,1) 0%, rgba(236,253,245,0.5) 100%)'
+              ? 'var(--asset-image-background, radial-gradient(circle at 50% 40%, rgba(255,255,255,1) 0%, rgba(236,253,245,0.5) 100%))'
               : 'transparent',
           }}
         >

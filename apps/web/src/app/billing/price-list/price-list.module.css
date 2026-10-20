@@ -1,0 +1,43 @@
+.page {
+  --mantine-color-yellow-light-color: #ffe08b;
+  --mantine-color-yellow-light: rgb(255 200 70 / 14%);
+  --mantine-color-red-light-color: #ffb4b4;
+  --mantine-color-red-light: rgb(255 110 110 / 14%);
+}
+
+.metrics {
+  padding-block-end: 24px;
+  border-block-end: 1px solid rgb(255 255 255 / 12%);
+}
+
+.referenceName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.controlType {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 14%);
+}
+
+.controlType :global(.mantine-SegmentedControl-indicator) {
+  background: rgb(255 255 255 / 14%);
+  box-shadow: none;
+}
+
+.controlType :global(.mantine-SegmentedControl-label) {
+  color: #c0ccd8;
+}
+
+.controlType :global(.mantine-SegmentedControl-label)[data-active] {
+  color: #f1f5f9;
+}
+
+.controlType :global(.mantine-SegmentedControl-label):hover {
+  color: #f1f5f9;
+  background: transparent;
+}
+
+.controlType :global(.mantine-SegmentedControl-inner)::before {
+  border-color: rgb(255 255 255 / 14%);
+}
