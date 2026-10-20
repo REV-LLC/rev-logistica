@@ -40,6 +40,7 @@ import AssetMovementSummary from '@/components/serialized-assets/AssetMovementSu
 import SerializedAssetEditForm from '@/components/serialized-assets/SerializedAssetEditForm';
 import SerializedAssetHero from '@/components/serialized-assets/SerializedAssetHero';
 import dynamic from 'next/dynamic';
+import styles from '@/components/InventoryGlass.module.css';
 
 const ConfigurationPanel = dynamic(() => import('@/components/equipment-configuration/ConfigurationPanel'));
 const CommercialProfilePanel = dynamic(() => import('@/components/commercial-profiles/CommercialProfilePanel'));
@@ -582,7 +583,7 @@ function EditSerializedAssetPage() {
   };
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={styles.page}>
       <Group mb="md" justify="space-between" align="center">
         <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.back()}>
           Volver

@@ -1,9 +1,12 @@
 .page {
-  --assets-orange: #f4510b;
-  --assets-ink: #111827;
-  --assets-muted: #667085;
-  --assets-line: #e3e7ed;
-  background: #ffffff;
+  --assets-orange: var(--inventory-accent, #f4510b);
+  --assets-ink: var(--inventory-ink, #111827);
+  --assets-muted: var(--inventory-muted, #667085);
+  --assets-line: var(--inventory-line, #e3e7ed);
+  background: var(--inventory-surface, #ffffff);
+  border: 1px solid var(--assets-line);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  backdrop-filter: blur(18px) saturate(115%);
   border-radius: 1.25rem;
   min-height: calc(100dvh - 2rem);
   overflow: hidden;
@@ -32,9 +35,9 @@
 
 .title {
   color: var(--assets-ink);
-  font-size: clamp(1.8rem, 2.7vw, 2.45rem);
+  font-size: 2rem;
   font-weight: 700;
-  letter-spacing: -0.045em;
+  letter-spacing: 0;
   line-height: 1.05;
   margin: 0;
 }
@@ -59,10 +62,10 @@
 
 .typeChip {
   align-items: center;
-  background: #fffaf7;
-  border: 1px solid #ffad7d;
+  background: var(--inventory-accent-bg, #fffaf7);
+  border: 1px solid var(--inventory-accent, #ffad7d);
   border-radius: 0.9rem;
-  color: #d83b05;
+  color: var(--inventory-accent, #d83b05);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0.82rem;
@@ -86,7 +89,7 @@
 }
 
 .search input {
-  border-color: #d8dee7;
+  border-color: var(--inventory-line, #d8dee7);
   border-radius: 0.68rem;
   color: var(--assets-ink);
   font-size: 0.98rem;
@@ -95,7 +98,7 @@
 }
 
 .control {
-  border-color: #d8dee7;
+  border-color: var(--inventory-line, #d8dee7);
   border-radius: 0.68rem;
   color: var(--assets-ink);
   font-size: 0.92rem;
@@ -119,8 +122,8 @@
 
 .filter {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #d8dee7;
+  background: var(--inventory-surface, #ffffff);
+  border: 1px solid var(--inventory-line, #d8dee7);
   border-radius: 0.68rem;
   color: var(--assets-ink);
   cursor: pointer;
@@ -134,13 +137,13 @@
 }
 
 .filter:hover {
-  border-color: #aeb8c6;
+  border-color: var(--inventory-muted, #aeb8c6);
 }
 
 .filterActive {
-  background: #fffaf7;
+  background: var(--inventory-accent-bg, #fffaf7);
   border-color: var(--assets-orange);
-  color: #d83b05;
+  color: var(--inventory-accent, #d83b05);
 }
 
 .dot {
@@ -150,7 +153,7 @@
 }
 
 .content {
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--assets-line);
   padding: 1.35rem 2.75rem 3rem;
 }
 
@@ -186,8 +189,8 @@
 
 .familyIcon {
   align-items: center;
-  background: #f7f8fa;
-  border: 1px solid #e4e7ec;
+  background: var(--inventory-surface, #f7f8fa);
+  border: 1px solid var(--assets-line);
   border-radius: 0.75rem;
   color: var(--assets-orange);
   display: flex;

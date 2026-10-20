@@ -1,5 +1,12 @@
+.sectionTitle {
+  color: var(--ui-color-title);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .providerDirectory {
-  background: #ffffff;
+  background: var(--inventory-surface, #ffffff);
   border-radius: 0.75rem;
   padding: clamp(1rem, 1.4vw, 1.5rem);
 }
@@ -13,8 +20,8 @@
 }
 
 .providerViews {
-  background: #f1f4f8;
-  border: 1px solid #dfe4eb;
+  background: var(--inventory-surface, #f1f4f8);
+  border: 1px solid var(--inventory-line, #dfe4eb);
   border-radius: 0.875rem;
   display: flex;
   flex-wrap: wrap;
@@ -27,7 +34,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 0.625rem;
-  color: #475569;
+  color: var(--inventory-ink, #475569);
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -40,7 +47,7 @@
 }
 
 .providerView:hover {
-  color: #c2410c;
+  color: var(--inventory-accent, #c2410c);
 }
 
 .providerView:focus-visible {
@@ -49,16 +56,16 @@
 }
 
 .providerViewActive {
-  background: white;
-  border-color: #e2e8f0;
+  background: var(--inventory-hover, white);
+  border-color: var(--inventory-line, #e2e8f0);
   box-shadow: 0 1px 3px rgb(15 23 42 / 7%);
-  color: #c2410c;
+  color: var(--inventory-accent, #c2410c);
 }
 
 .providerViewCount {
-  background: #ffedd5;
+  background: var(--inventory-accent-bg, #ffedd5);
   border-radius: 1rem;
-  color: #9a3412;
+  color: var(--inventory-accent, #9a3412);
   font-size: 0.75rem;
   padding: 0.1rem 0.4rem;
 }
@@ -85,24 +92,24 @@
 }
 
 .tableSurface {
-  border-color: #dfe4eb;
+  border-color: var(--inventory-line, #dfe4eb);
   box-shadow: none;
   overflow: hidden;
 }
 
 .tableSurface thead {
-  background: #f8fafc;
+  background: var(--inventory-surface, #f8fafc);
 }
 
 .tableSurface th {
-  color: #334155;
+  color: var(--inventory-ink, #334155);
   font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .tableSurface td {
-  border-color: #e7ebf0;
+  border-color: var(--inventory-line, #e7ebf0);
 }
 
 .tableRow {
@@ -110,16 +117,16 @@
 }
 
 .tableRow:hover {
-  background: #f8fbff;
+  background: var(--inventory-hover, #f8fbff);
 }
 
 .mobileList {
-  background: #ffffff;
+  background: var(--inventory-surface, #ffffff);
 }
 
 .mobileRow {
   align-items: center;
-  border-bottom: 1px solid #e7ebf0;
+  border-bottom: 1px solid var(--inventory-line, #e7ebf0);
   display: flex;
   gap: 0.75rem;
   justify-content: space-between;
@@ -133,7 +140,7 @@
 }
 
 .mobileRow:active {
-  background: #f5f8fc;
+  background: var(--inventory-hover, #f5f8fc);
 }
 
 .mobileIdentity,
