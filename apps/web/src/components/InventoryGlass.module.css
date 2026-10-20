@@ -1,0 +1,141 @@
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100dvh - var(--app-shell-header-offset, 0px));
+  color: #f1f5f9;
+  --ui-color-title: #fff;
+  --ui-color-label: #f1f5f9;
+  --ui-color-body: #cbd3d9;
+  --mantine-color-text: #f1f5f9;
+  --mantine-color-dimmed: #c0cbd3;
+  --mantine-color-body: #343b40;
+  --mantine-color-default: rgb(255 255 255 / 6%);
+  --mantine-color-default-hover: rgb(255 255 255 / 11%);
+  --mantine-color-default-color: #f1f5f9;
+  --mantine-color-default-border: rgb(255 255 255 / 18%);
+  --mantine-color-blue-light-color: #a6d5ff;
+  --mantine-color-blue-light: rgb(90 165 230 / 16%);
+  --mantine-color-teal-light-color: #9ee7d4;
+  --mantine-color-teal-light: rgb(84 200 171 / 16%);
+  --mantine-color-green-light-color: #afe9ba;
+  --mantine-color-green-light: rgb(101 194 136 / 16%);
+  --mantine-color-gray-light-color: #e0e7ed;
+  --mantine-color-gray-light: rgb(255 255 255 / 9%);
+  --mantine-color-red-light-color: #ffb4b4;
+  --mantine-color-red-light: rgb(255 100 100 / 13%);
+  --mantine-color-orange-light-color: #ffd09b;
+  --mantine-color-orange-light: rgb(255 163 97 / 14%);
+  --mantine-color-yellow-light-color: #fce5a0;
+  --mantine-color-cyan-light-color: #9de4ed;
+  --mantine-color-violet-light-color: #d7c6ff;
+  --mantine-color-indigo-light-color: #c1caff;
+  --mantine-color-pink-light-color: #ffc2df;
+  --mantine-color-grape-light-color: #ecc4ff;
+  --mantine-color-lime-light-color: #d6efae;
+  --inventory-positive: #9ee7d4;
+  --inventory-warning: #ffd09b;
+  --asset-image-background: rgb(255 255 255 / 4%);
+  --asset-detail-label-opacity: 1;
+  --asset-detail-section-background: transparent;
+  --asset-detail-section-title: #fff;
+  --asset-detail-heading-size: 1rem;
+  --asset-detail-heading-transform: none;
+  --asset-panel-title-size: 1.125rem;
+  --inventory-ink: #f1f5f9;
+  --inventory-muted: #c0cbd3;
+  --inventory-line: rgb(255 255 255 / 16%);
+  --inventory-surface: rgb(255 255 255 / 6%);
+  --inventory-hover: rgb(255 255 255 / 10%);
+  --inventory-accent: #ffc296;
+  --inventory-accent-bg: rgb(255 163 97 / 12%);
+  --inventory-image-bg: rgb(255 255 255 / 4%);
+  --inventory-status-bg: #343b40;
+}
+
+:global(html):has(.page),
+:global(body):has(.page),
+:global(.mantine-AppShell-main):has(.page) {
+  background: #343b40;
+}
+
+/* Scope the glass treatment to this page, including shared panels with inline surfaces. */
+.page :global(.mantine-Paper-root) {
+  background: rgb(255 255 255 / 6%) !important;
+  border-color: rgb(255 255 255 / 16%);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 10%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.page :global(.mantine-Paper-root) :global(.mantine-Paper-root) {
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.page :global(.mantine-Divider-root),
+.page :global(.mantine-Tabs-list) {
+  --divider-color: rgb(255 255 255 / 16%);
+  --tabs-list-border-color: rgb(255 255 255 / 16%);
+}
+
+.page :global(.mantine-Tabs-tab) {
+  color: #cbd3d9;
+  min-height: 44px;
+}
+
+.page :global(.mantine-Tabs-list)::before {
+  border-color: rgb(255 255 255 / 16%);
+}
+
+.page :global(.mantine-Tabs-tab):hover {
+  background: rgb(255 255 255 / 7%);
+}
+
+.page :global(.mantine-Tabs-tab)[data-active] {
+  color: #fff;
+  font-weight: 700;
+  border-color: #a6d5ff;
+}
+
+.page :global(.mantine-Input-input) {
+  --input-bg: rgb(255 255 255 / 5%);
+  --input-color: #f1f5f9;
+  --input-bd: rgb(255 255 255 / 22%);
+  --input-placeholder-color: #b4c2cc;
+  color-scheme: dark;
+}
+
+.page :global(.mantine-Input-label) {
+  color: #f1f5f9;
+}
+
+.page :global(.mantine-Button-root)[data-variant='outline'] {
+  color: #a6d5ff;
+  border-color: rgb(166 213 255 / 65%);
+}
+
+.page :global(.mantine-Table-thead) {
+  background: rgb(255 255 255 / 5%);
+}
+
+.page :global(.mantine-Table-tr),
+.page :global(.mantine-Table-td),
+.page :global(.mantine-Table-th) {
+  border-color: var(--inventory-line);
+}
+
+.page :global(.mantine-Title-root) {
+  color: #fff;
+  letter-spacing: 0;
+}
+
+.page :global(h3.mantine-Title-root) {
+  font-size: 1.125rem;
+}
+
+.page :global(a):focus-visible,
+.page :global(button):focus-visible {
+  outline: 2px solid #a6d5ff;
+  outline-offset: 3px;
+}

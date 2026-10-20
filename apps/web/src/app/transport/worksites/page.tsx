@@ -16,6 +16,7 @@ import {
   Switch,
   Text,
   TextInput,
+  Title,
 } from '@mantine/core';
 import {
   IconBuilding,
@@ -28,7 +29,6 @@ import {
   IconUsersGroup,
   IconX,
 } from '@tabler/icons-react';
-import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import EntityDataTable from '@/components/tables/EntityDataTable';
@@ -36,6 +36,8 @@ import type { DataTableColumn } from '@/components/tables/table.types';
 import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
 import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
+import glass from '@/components/InventoryGlass.module.css';
+import styles from './worksites.module.css';
 
 type Customer = {
   id: string;
@@ -443,21 +445,18 @@ export default function WorksitesPage() {
   });
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`}>
       <Stack gap="lg">
-        <PageHeaderCard
-          title="Obras"
-          description="Gestiona frentes de trabajo, clientes asociados y estado operativo desde una sola vista."
-          icon={<IconBuildingEstate size={20} />}
-          iconColor="blue"
-          accentColor="rgba(59,130,246,0.12)"
-          aside={
+        <Group justify="space-between" align="flex-start" className={styles.header}>
+          <div>
+            <Title order={1} className={styles.title}>Obras</Title>
+            <Text c="dimmed" mt="sm">Gestiona frentes de trabajo, clientes asociados y estado operativo desde una sola vista.</Text>
+          </div>
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
               Nueva obra
             </Button>
-          }
-        >
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+        </Group>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" visibleFrom="md" className={styles.metrics}>
             <StatCard
               label="Total"
               value={String(metrics.total)}
@@ -480,7 +479,6 @@ export default function WorksitesPage() {
               icon={<IconUsersGroup size={20} />}
             />
           </SimpleGrid>
-        </PageHeaderCard>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">
@@ -526,7 +524,7 @@ export default function WorksitesPage() {
                 { value: 'inactive', label: 'Inactivas' },
               ]}
               w="100%"
-              flex={{ base: '1 1 100%', sm: '0 0 150px' }}
+              flex={{ base: '1 1 100%', sm: '0 0 210px' }}
             />
             {hasActiveFilters ? (
               <Button
@@ -539,6 +537,7 @@ export default function WorksitesPage() {
               </Button>
             ) : null}
           </DataTableToolbar>
+          <div className={styles.table}>
           <EntityDataTable
             rows={worksiteTable.rows}
             columns={worksiteColumns}
@@ -571,6 +570,7 @@ export default function WorksitesPage() {
               },
             ]}
           />
+          </div>
         </Paper>
       </Stack>
 
@@ -642,7 +642,7 @@ export default function WorksitesPage() {
                 />
                 <TextInput
                   label="Alias"
-                  placeholder="Short reference or internal name"
+                  placeholder="Referencia corta o nombre interno"
                   value={form.alias}
                   onChange={(event) => {
                     const value = event.currentTarget.value;

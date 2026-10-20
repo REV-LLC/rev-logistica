@@ -1,0 +1,50 @@
+.title {
+  color: #fff;
+  font-size: 2.5rem;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.header { gap: 1.25rem; margin-bottom: 12px; }
+.metrics { padding-bottom: 24px; border-bottom: 1px solid var(--inventory-line); }
+.page .metrics :global(.mantine-Paper-root) {
+  background: transparent !important;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.table { min-width: 0; }
+.table :global(.mantine-Table-table) {
+  --table-border-color: var(--inventory-line);
+  --table-hover-color: rgb(255 255 255 / 5%);
+}
+.table :global(.mantine-Table-th) { color: #fff; font-weight: 700; }
+.table :global(.mantine-Table-td) { color: #cbd3d9; }
+.table :global(.mantine-Table-th), .table :global(.mantine-Table-td) {
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+.page .table :global(.mantine-Paper-root) {
+  background: transparent !important;
+  border: 0;
+  border-bottom: 1px solid var(--inventory-line);
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.table :global(.mantine-ScrollArea-scrollbar), .table :global(.mantine-ScrollArea-corner) {
+  background: transparent;
+}
+.table :global(.mantine-Pagination-control):disabled {
+  background: rgb(255 255 255 / 3%);
+  border-color: var(--inventory-line);
+  color: #aebbc6;
+}
+@media (max-width: 48em) {
+  .title { font-size: 1.875rem; }
+  .header > button { width: 100%; min-height: 44px; }
+}

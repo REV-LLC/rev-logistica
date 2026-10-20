@@ -53,6 +53,7 @@ import OwnerCreateModal, {
 } from '@/components/OwnerCreateModal';
 import TableRowActions from '@/components/TableRowActions';
 import classes from '@/components/WarehouseInventoryPageClient.module.css';
+import glass from '@/components/InventoryGlass.module.css';
 import WarehouseAssetsView, { type OwnerAssetsResponse } from '@/components/WarehouseAssetsView';
 
 interface InventoryResponse {
@@ -1134,7 +1135,7 @@ export default function WarehouseInventoryPageClient({
   }
 
   return (
-    <main>
+    <main className={glass.page}>
       {inventoryView === 'SERIAL' && isOwnInventory ? (
         <>
         {(ownerAssetsLoading || warehousesLoading) && !currentOwnerAssets ? <Container size="xl" py="xl"><CollectionLoading label="Cargando equipos propios" /></Container> : null}
@@ -1578,7 +1579,7 @@ export default function WarehouseInventoryPageClient({
             <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
               <Stack gap="md">
                 <div>
-                  <Text fw={700}>{isProviderDetail ? 'Disponibles en bodega' : 'Resultado de inventario'}</Text>
+                  <Text className={classes.sectionTitle}>{isProviderDetail ? 'Disponibles en bodega' : 'Resultado de inventario'}</Text>
                   <Text size="sm" c="dimmed">
                     {isOwnInventory
                       ? inventoryView === 'BULK'
