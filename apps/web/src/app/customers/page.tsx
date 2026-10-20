@@ -41,6 +41,10 @@ import { useClientTableData } from '@/components/tables/useClientTableData';
 import TableRowActions from '@/components/TableRowActions';
 import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 import { api, ApiError } from '@/lib/api';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
+import glass from '../employees/directory.module.css';
+import tableGlass from '@/components/tables/GlassDataTable.module.css';
+import styles from './customers.module.css';
 
 type Customer = {
   id: string;
@@ -497,7 +501,7 @@ export default function CustomersPage() {
       sortValue: (customer) => customer.name,
       mobile: { priority: 'primary' },
       cell: (customer) => (
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Group justify="space-between" align="flex-start" wrap="nowrap" className={styles.customerIdentity}>
           <div style={{ minWidth: 0 }}>
             <Text fw={700} style={breakableTextStyle}>{customer.name}</Text>
             <Text visibleFrom="md" size="sm" c="dimmed">
@@ -565,34 +569,35 @@ export default function CustomersPage() {
   });
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && customers.length === 0 ? 'true' : undefined}>
+      <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
+          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+            <div>
+              <Group gap="sm" mb={6}>
+                <Title order={1} className={glass.title}>Clientes</Title>
+                <Badge color="green" variant="light">
+                  {metrics.active} activos
+                </Badge>
+              </Group>
+              <Text c="dimmed" size="sm" maw={680}>
+                Centraliza información comercial, contactos y documentos del cliente para operar sin buscar en varias fuentes.
+              </Text>
+            </div>
+            <Group className={glass.headerActions}>
+              <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+                Nuevo cliente
+              </Button>
+            </Group>
+          </Group>
+
+        <section className={glass.surface} aria-label="Directorio de clientes">
+          <Stack gap="lg">
         {updateLinkMessage ? (
           <Alert color="green" withCloseButton onClose={() => setUpdateLinkMessage(null)}>
             {updateLinkMessage}
           </Alert>
         ) : null}
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
-          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
-            <div>
-              <Group gap="xs" mb={6}>
-                <ThemeIcon color="green" variant="light" size={34} radius="xl">
-                  <IconUsersGroup size={18} />
-                </ThemeIcon>
-                <Badge color="green" variant="light">
-                  {metrics.active} activos
-                </Badge>
-              </Group>
-              <Title order={2}>Clientes</Title>
-              <Text c="dimmed" size="sm" maw={680}>
-                Centraliza informacion comercial, contactos y documentos del cliente para operar sin buscar en varias fuentes.
-              </Text>
-            </div>
-            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-              Nuevo cliente
-            </Button>
-          </Group>
-        </Paper>
 
         {error ? (
           <Alert color="red" variant="light" title="No se pudo completar la accion">
@@ -600,17 +605,19 @@ export default function CustomersPage() {
           </Alert>
         ) : null}
 
-        <Paper withBorder radius="xl" p={{ base: 'md', md: 'lg' }}>
+        <div className={tableGlass.table}>
           <DataTableToolbar
             title="Directorio de clientes"
             description={`${filteredCustomers.length} de ${metrics.total} clientes visibles`}
+            controlsStyle={{ flex: '1 1 520px', minWidth: 0 }}
           >
             <TextInput
+              aria-label="Buscar clientes"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
               placeholder="Buscar cliente, NIT, telefono o correo"
               leftSection={<IconSearch size={16} />}
-              style={{ flex: '1 1 300px' }}
+              style={{ flex: '1 1 300px', minWidth: 0 }}
             />
             <Select
               aria-label="Filtrar clientes por estado"
@@ -622,10 +629,11 @@ export default function CustomersPage() {
                 { value: 'active', label: 'Activos' },
                 { value: 'inactive', label: 'Inactivos' },
               ]}
-              w={170}
+              w={{ base: '100%', sm: 170 }}
+              style={{ flexShrink: 0 }}
             />
           </DataTableToolbar>
-          <EntityDataTable
+          {loading && customers.length === 0 ? <div className={glass.loadingSpace} role="status" aria-label="Cargando clientes" /> : <EntityDataTable
             rows={customerTable.rows}
             columns={customerColumns}
             getRowId={(customer) => customer.id}
@@ -663,8 +671,10 @@ export default function CustomersPage() {
                 onClick: () => openEdit(customer),
               },
             ]}
-          />
-        </Paper>
+          />}
+        </div>
+          </Stack>
+        </section>
       </Stack>
 
       <Modal
