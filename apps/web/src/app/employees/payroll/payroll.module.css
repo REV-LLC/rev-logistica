@@ -32,6 +32,102 @@
   font-variant-numeric: tabular-nums;
 }
 
+.period.period,
+.surface .explanation {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.surface .explanation {
+  padding: 0;
+}
+
+.surface :global(.mantine-Alert-message) {
+  color: #d5dfe9;
+}
+
+.surface .table {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.surface .table :global(.mantine-ScrollArea-scrollbar),
+.surface .table :global(.mantine-ScrollArea-scrollbar):hover,
+.surface .table :global(.mantine-ScrollArea-scrollbar):active,
+.surface .table :global(.mantine-ScrollArea-corner) {
+  background-color: transparent;
+}
+
+.surface .table :global(.mantine-ScrollArea-thumb),
+.surface .table :global(.mantine-ScrollArea-scrollbar):hover > :global(.mantine-ScrollArea-thumb),
+.surface .table :global(.mantine-ScrollArea-scrollbar):active > :global(.mantine-ScrollArea-thumb) {
+  background-color: rgb(0 0 0 / 40%);
+}
+
+.surface :global(.mantine-Table-table) {
+  --table-border-color: rgb(255 255 255 / 12%);
+  --table-hover-color: rgb(255 255 255 / 3%);
+}
+
+.surface .table table thead th {
+  background: transparent;
+  color: #eef4fa;
+}
+
+.surface .table table th:first-child,
+.surface .table table td:first-child,
+.surface .table table th:last-child,
+.surface .table table td:last-child,
+.surface .table table tbody tr:hover td:first-child,
+.surface .table table tbody tr:hover td:last-child {
+  /* Without cell backgrounds, scroll the entire table together to prevent text overlap. */
+  position: static;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  background: transparent;
+  box-shadow: none;
+}
+
+.surface .table :global(.mantine-Paper-root) {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.surface :global(.mantine-Checkbox-input):not(:checked) {
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(255 255 255 / 25%);
+}
+
+.surface .table :global(.mantine-ActionIcon-root):not([aria-hidden='true']) {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.surface .table :global(.mantine-Pagination-control):disabled {
+  background: rgb(255 255 255 / 3%);
+  border-color: rgb(255 255 255 / 12%);
+  color: rgb(255 255 255 / 25%);
+}
+
+@media (max-width: 61.99em) {
+  .surface .table :global(.mantine-SimpleGrid-root) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .surface .table :global(.mantine-ActionIcon-root):not([aria-hidden='true']) {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
 .summaryFigure {
   min-width: 0;
 }
