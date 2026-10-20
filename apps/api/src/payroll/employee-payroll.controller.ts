@@ -1,4 +1,4 @@
-import { Body, CanActivate, Controller, ExecutionContext, ForbiddenException, Get, Header, Injectable, Param, ParseUUIDPipe, Post, Query, Req, Res, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, CanActivate, Controller, ExecutionContext, ForbiddenException, Get, Header, Injectable, Param, ParseUUIDPipe, Post, Query, Req, Res, SetMetadata, UseGuards, ValidationPipe } from '@nestjs/common';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
@@ -34,6 +34,8 @@ export class PayrollAccessGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{ user: { sub: string } }>();
     const user = await this.prisma.user.findUnique({ where: { id: request.user.sub }, select: { active: true, role: true } });
     if (!user?.active || !([Role.ADMIN, Role.OFFICE] as Role[]).includes(user.role)) throw new ForbiddenException('No tienes permiso vigente para consultar nómina');
+    const handler = context.getHandler?.();
+    if (handler && Reflect.getMetadata('payroll:write', handler) && user.role !== Role.ADMIN) throw new ForbiddenException('Solo Admin puede modificar o emitir nómina.');
     return true;
   }
 }
@@ -58,10 +60,14 @@ export class EmployeePayrollController {
     response.send(buffer);
   }
   @Header('Cache-Control', 'private, no-store')
+  @Roles(Role.ADMIN)
+  @SetMetadata('payroll:write', true)
   @Post(':employeeId/salaries') save(@Param('employeeId', new ParseUUIDPipe()) id: string, @Body(validation) input: SalaryDto, @Req() req: { user: { sub: string } }) { return this.payroll.save(id, input, req.user.sub); }
   @Header('Cache-Control', 'private, no-store')
   @Post(':employeeId/preview') preview(@Param('employeeId', new ParseUUIDPipe()) id: string, @Body(validation) input: PreviewDto) { return this.payroll.preview(id, input); }
   @Header('Cache-Control', 'private, no-store')
+  @Roles(Role.ADMIN)
+  @SetMetadata('payroll:write', true)
   @Post(':employeeId/receipts') issue(@Param('employeeId', new ParseUUIDPipe()) id: string, @Body(validation) input: ReceiptDto, @Req() req: { user: { sub: string } }) { return this.payroll.issue(id, input, req.user.sub); }
   @Header('Cache-Control', 'private, no-store')
   @Get(':employeeId/receipts') receipts(@Param('employeeId', new ParseUUIDPipe()) id: string, @Query('from') from?: string, @Query('to') to?: string) { return this.payroll.receipts(id, from, to); }

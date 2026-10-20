@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -35,6 +36,33 @@ const PROFILE_PHOTO_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 @Injectable()
 export class EmployeesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async ownEmployeeId(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { active: true, role: true, employee: { select: { id: true, active: true } } },
+    });
+    if (!user?.active || user.role === Role.WAREHOUSE_TABLET) throw new ForbiddenException('Esta cuenta no tiene acceso a un perfil personal.');
+    if (!user.employee?.active) throw new NotFoundException('No tienes un empleado activo vinculado a tu cuenta. Contacta a administración.');
+    return user.employee.id;
+  }
+
+  async assertEmployeeManagement(userId: string, payload: { payrollEnabled?: boolean; loginRole?: Role; loginEnabled?: boolean; loginIdentifier?: string; loginEmail?: string; loginPassword?: string; loginActive?: boolean }, employeeId?: string) {
+    const actor = await this.prisma.user.findUnique({ where: { id: userId }, select: { active: true, role: true } });
+    if (!actor?.active || !([Role.ADMIN, Role.OFFICE] as Role[]).includes(actor.role)) throw new ForbiddenException('No tienes permiso vigente para gestionar empleados.');
+    if (actor.role === Role.ADMIN) return actor.role;
+    if (payload.loginRole === Role.ADMIN) throw new ForbiddenException('Solo Admin puede otorgar acceso de administrador.');
+    if (!employeeId) {
+      if (payload.payrollEnabled === true) throw new ForbiddenException('Solo Admin puede incluir empleados en nómina.');
+      return actor.role;
+    }
+    const target = await this.prisma.employee.findUnique({ where: { id: employeeId }, select: { payrollEnabled: true, user: { select: { role: true } } } });
+    if (!target) throw new NotFoundException('Empleado no encontrado');
+    if (payload.payrollEnabled !== undefined && payload.payrollEnabled !== target.payrollEnabled) throw new ForbiddenException('Solo Admin puede cambiar la inclusión en nómina.');
+    const changesLogin = ['loginEnabled', 'loginIdentifier', 'loginEmail', 'loginPassword', 'loginRole', 'loginActive'].some(key => payload[key as keyof typeof payload] !== undefined);
+    if (target.user?.role === Role.ADMIN && changesLogin) throw new ForbiddenException('Solo Admin puede modificar el acceso de otro administrador.');
+    return actor.role;
+  }
 
   async getEmployeeProfile(employeeId: string) {
     const employee = await this.prisma.employee.findUnique({

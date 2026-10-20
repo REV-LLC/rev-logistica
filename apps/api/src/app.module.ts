@@ -41,6 +41,7 @@ import { AccessoriesModule } from './accessories/accessories.module';
 import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
 import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
+import { EmployeePortalModule } from './employee-portal/employee-portal.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
     AccessoriesModule,
     OfficeAssistantModule,
     EmployeeActivitiesModule,
+    EmployeePortalModule,
   ],
   controllers: [AppController],
   providers: [

@@ -20,5 +20,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
   imports: [PrismaModule, AuthModule, NotificationsModule],
   controllers: [EmployeePayrollController, EmployeeLoansController, EmployeesController, VehiclesController, TransportCostController, LocationsController],
   providers: [EmployeePayrollService, PayrollPdfService, PayrollAccessGuard, EmployeeLoansService, EmployeesService, VehiclesService, TransportCostService, LocationsService],
+  exports: [EmployeesService, EmployeeLoansService],
 })
 export class TransportModule {}
