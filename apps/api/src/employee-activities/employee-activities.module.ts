@@ -8,5 +8,6 @@ import { EmployeeActivitiesService } from './employee-activities.service';
   imports: [PrismaModule, AuthModule],
   controllers: [EmployeeActivitiesController],
   providers: [EmployeeActivitiesService],
+  exports: [EmployeeActivitiesService],
 })
 export class EmployeeActivitiesModule {}
