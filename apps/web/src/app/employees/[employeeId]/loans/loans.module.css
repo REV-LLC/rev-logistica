@@ -35,7 +35,7 @@
   margin: 0;
   padding-top: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--mantine-radius-md) var(--mantine-radius-md) 0 0;
 }
 
 .embeddedLedger .balance {
@@ -168,6 +168,15 @@
   line-height: 1.25;
   padding-block: 7px;
   border-bottom: 1px solid #cbd9e7;
+}
+
+.embeddedLedger .movementsTable thead,
+.embeddedLedger .movementsTable thead th {
+  background: #15293d;
+}
+
+.embeddedLedger .movementsTable thead th {
+  color: #eef4fa;
 }
 
 .entryDescription.entryDescription {

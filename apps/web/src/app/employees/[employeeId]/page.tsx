@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/PageTransitionLink';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import { useParams } from 'next/navigation';
 import { Alert, Button, Container, Skeleton, Stack, Title } from '@mantine/core';

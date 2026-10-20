@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import PageLoadingOverlay from './PageLoadingOverlay';
 import { isPageNavigation } from '@/lib/page-navigation';
-import { loadingRevealDelay, PAGE_LOADING_REVEAL_MS } from '@/lib/page-loading-transition';
+import { loadingRevealDelay, PAGE_LOADING_ENTER_MS, PAGE_LOADING_REVEAL_MS } from '@/lib/page-loading-transition';
+import { PageNavigationContext } from './PageNavigationContext';
 import styles from './PageLoadingBoundary.module.css';
 
 export default function PageLoadingBoundary({ children }: { children: ReactNode }) {
@@ -16,10 +18,40 @@ export default function PageLoadingBoundary({ children }: { children: ReactNode 
   const [navigating, setNavigating] = useState(false);
   const [phase, setPhase] = useState<'loading' | 'revealing' | 'idle'>('loading');
   const enteredAt = useRef(0);
+  const navigationDeadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const entryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const entryFrame = useRef<number | undefined>(undefined);
+
+  const beginNavigation = useCallback(() => {
+    setNavigating(true);
+    clearTimeout(navigationDeadline.current);
+    // A canceled or failed navigation must never lock the current page.
+    navigationDeadline.current = setTimeout(() => setNavigating(false), 15000);
+  }, []);
+
+  const navigateAfterEntrance = useCallback((navigate: () => void) => {
+    clearTimeout(entryTimer.current);
+    if (entryFrame.current !== undefined) cancelAnimationFrame(entryFrame.current);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { navigate(); return; }
+    // Commit the overlay on the old page before Next can commit a cached destination.
+    flushSync(beginNavigation);
+    entryFrame.current = requestAnimationFrame(() => {
+      entryTimer.current = setTimeout(navigate, PAGE_LOADING_ENTER_MS);
+    });
+  }, [beginNavigation]);
+
+  useEffect(() => () => {
+    clearTimeout(navigationDeadline.current);
+    clearTimeout(entryTimer.current);
+    if (entryFrame.current !== undefined) cancelAnimationFrame(entryFrame.current);
+  }, []);
 
   // Inspect the newly committed page before paint, including its client data markers.
   useLayoutEffect(() => {
     setNavigating(false);
+    clearTimeout(navigationDeadline.current);
+    clearTimeout(entryTimer.current);
+    if (entryFrame.current !== undefined) cancelAnimationFrame(entryFrame.current);
     const root = content.current;
     if (!root) return;
     let waitForImages = true;
@@ -58,27 +90,24 @@ export default function PageLoadingBoundary({ children }: { children: ReactNode 
   }, [routeKey]);
 
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const begin = () => {
-      setNavigating(true);
-      clearTimeout(timeout);
-      // A canceled or failed navigation must never lock the current page.
-      timeout = setTimeout(() => setNavigating(false), 15000);
-    };
     const onClick = (event: MouseEvent) => {
       const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
       if (!(anchor instanceof HTMLAnchorElement)) return;
+      // Coordinated links begin only after Next confirms an uncanceled same-tab navigation.
+      if (anchor.dataset.pageTransitionLink === 'true') return;
       if (isPageNavigation({ defaultPrevented: event.defaultPrevented, button: event.button,
         metaKey: event.metaKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, altKey: event.altKey,
-        href: anchor.href, target: anchor.target, download: anchor.hasAttribute('download') }, location.href)) begin();
+        href: anchor.href, target: anchor.target, download: anchor.hasAttribute('download') }, location.href)) beginNavigation();
     };
     const onPopState = () => {
-      if (`${location.pathname}?${new URLSearchParams(location.search).toString()}` !== routeKey) begin();
+      clearTimeout(entryTimer.current);
+      if (entryFrame.current !== undefined) cancelAnimationFrame(entryFrame.current);
+      if (`${location.pathname}?${new URLSearchParams(location.search).toString()}` !== routeKey) beginNavigation();
     };
     document.addEventListener('click', onClick, true);
     window.addEventListener('popstate', onPopState);
-    return () => { document.removeEventListener('click', onClick, true); window.removeEventListener('popstate', onPopState); clearTimeout(timeout); };
-  }, [routeKey]);
+    return () => { document.removeEventListener('click', onClick, true); window.removeEventListener('popstate', onPopState); };
+  }, [routeKey, beginNavigation]);
 
   const busy = loading || navigating;
 
@@ -102,8 +131,8 @@ export default function PageLoadingBoundary({ children }: { children: ReactNode 
   }, [phase]);
 
   const covered = busy || phase !== 'idle';
-  return <div className={styles.boundary}>
+  return <PageNavigationContext.Provider value={navigateAfterEntrance}><div className={styles.boundary}>
     <div ref={content} aria-busy={covered} inert={covered}>{children}</div>
     {covered ? <PageLoadingOverlay phase={!busy && phase === 'revealing' ? 'revealing' : 'loading'} /> : null}
-  </div>;
+  </div></PageNavigationContext.Provider>;
 }
