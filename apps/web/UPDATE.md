@@ -1,9 +1,9 @@
-# Home y nómina renovados, con transiciones más suaves
+# Más módulos con el nuevo estilo de cristal
 
-El inicio estrena el estilo de cristal y el fondo del login, con títulos más claros y una mejor lectura en celular.
+Vehículos, Proveedores, Clientes y Lista de precios estrenan el estilo de cristal, con fondos compartidos, filtros más claros y una mejor lectura en celular.
 
-Nómina comparte el fondo y el estilo de Empleados. La tabla se desplaza completa horizontalmente, sin bloques opacos en las columnas ni cambios de color en la barra al usarla. En celular, la información se organiza en dos columnas.
+Inventario, las fichas de equipos, el historial de movimientos y Obras también adoptan el nuevo estilo visual.
 
-Las transiciones muestran primero el desenfoque sobre la página actual y después revelan el destino, con el logo REV centrado en toda la pantalla y una animación de carga de al menos un segundo.
+Se mantienen las acciones, filtros y formularios habituales. La Lista de precios conserva las tarifas de equipos propios y su exportación CSV.
 
-Las fotos de empleados conservan su forma circular en miniaturas, perfiles y ampliaciones. Los encabezados de préstamos en el perfil mantienen un fondo legible al desplazar la lista y bordes superiores redondeados.
+Esta actualización es visual: no modifica existencias, movimientos, tarifas ni documentos. Anexos conserva su funcionamiento y presentación actuales.
