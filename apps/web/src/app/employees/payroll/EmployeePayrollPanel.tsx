@@ -11,6 +11,7 @@ import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import { useClientTableData } from '@/components/tables/useClientTableData';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { api } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import { bogotaPayrollMonth, payrollMoney, payrollPeriod } from '@/lib/payroll-period';
 import SalaryModal from './SalaryModal';
 import ReceiptModal from './ReceiptModal';
@@ -23,6 +24,7 @@ const searchValue = (row: PayrollEmployee) => `${employeeName(row)} ${row.docume
 const payrollFigures = (row: PayrollEmployee) => row.receipts[0] ?? row.preview;
 
 export default function EmployeePayrollPanel({ employeeId, embedded = false }: { employeeId?: string; embedded?: boolean }) {
+  const canEditPayroll = getCurrentUserRole() === 'ADMIN';
   const [month, setMonth] = useState(bogotaPayrollMonth);
   const [half, setHalf] = useState<'FIRST' | 'SECOND'>(() => Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', day: '2-digit' }).format(new Date())) <= 15 ? 'FIRST' : 'SECOND');
   const [data, setData] = useState<PayrollPeriodResponse | null>(null);
@@ -65,7 +67,7 @@ export default function EmployeePayrollPanel({ employeeId, embedded = false }: {
     <Stack gap="lg">
     {!embedded ? <Group justify="space-between" wrap="wrap"><div><Title order={1} className={directoryStyles.title}>Nómina</Title><Text c="dimmed" size="sm">Salarios, auxilio y comprobantes quincenales del equipo.</Text></div><Button component={Link} href="/employees" variant="subtle" leftSection={<IconArrowLeft size={16} />}>Empleados</Button></Group> : null}
     <section className={!embedded ? `${directoryStyles.surface} ${styles.surface}` : undefined} aria-label={!embedded ? 'Nómina de empleados' : undefined}><Stack gap="lg">
-    <Paper withBorder={embedded} radius="md" p={embedded ? 'md' : 0} className={!embedded ? styles.period : undefined}><DataTableToolbar title="Período de liquidación" description="15 días de nómina por quincena completa; puedes ajustar los días al emitir.">
+    <Paper withBorder={embedded} radius="md" p={embedded ? 'md' : 0} className={!embedded ? styles.period : undefined}><DataTableToolbar title="Período de liquidación" description={canEditPayroll ? '15 días de nómina por quincena completa; puedes ajustar los días al emitir.' : 'Consulta de nómina. Solo Admin puede modificar salarios o emitir comprobantes.'}>
       <TextInput type="month" label="Mes" value={month} onChange={e => { setMonth(e.currentTarget.value); closeForPeriod(); }} style={{ flex: '1 1 150px' }} />
       <Select label="Quincena" value={half} onChange={value => { setHalf(value === 'SECOND' ? 'SECOND' : 'FIRST'); closeForPeriod(); }} allowDeselect={false} data={[{ value: 'FIRST', label: 'Del 1 al 15' }, { value: 'SECOND', label: 'Del 16 a fin de mes' }]} style={{ flex: '1 1 190px' }} />
     </DataTableToolbar>{period ? <Text size="xs" c="dimmed">{period.from} al {period.to}</Text> : <Text c="red" size="sm">Selecciona un mes válido.</Text>}</Paper>
@@ -75,7 +77,7 @@ export default function EmployeePayrollPanel({ employeeId, embedded = false }: {
     {loading ? <Loader aria-label="Cargando nómina" /> : period && data && embedded ? rows.map(row => <Stack key={row.id} gap="md">
       <Group justify="space-between" align="center" wrap="wrap">
         <Badge color={row.payrollEnabled === false ? 'gray' : !row.current || row.current.provisional ? 'yellow' : row.preview.eligible && !row.preview.warnings?.length ? 'teal' : 'orange'} variant="light">{row.payrollEnabled === false ? 'No incluido en nómina' : !row.current ? 'Salario sin configurar' : row.current.provisional ? 'Provisional' : row.preview.eligible ? row.preview.warnings?.length ? 'Con advertencias' : 'Confirmado' : 'Revisión'}</Badge>
-        <Group gap="xs" wrap="wrap"><Button variant="default" leftSection={<IconPencil size={16} />} onClick={() => setSalaryEmployee(row)}>Modificar salario</Button><Button leftSection={<IconPrinter size={16} />} onClick={() => setReceiptEmployee(row)}>Imprimir nómina</Button></Group>
+        <Group gap="xs" wrap="wrap">{canEditPayroll ? <Button variant="default" leftSection={<IconPencil size={16} />} onClick={() => setSalaryEmployee(row)}>Modificar salario</Button> : null}<Button leftSection={<IconPrinter size={16} />} disabled={!canEditPayroll && !row.receipts.length} title={!canEditPayroll && !row.receipts.length ? 'Admin debe emitir el comprobante primero.' : undefined} onClick={() => setReceiptEmployee(row)}>Imprimir nómina</Button></Group>
       </Group>
       <SimpleGrid cols={{ base: 2, lg: 4 }} spacing="sm">{[
         ['Base mensual', payrollMoney(row.current?.monthlySalary)], ['Auxilio mensual', payrollMoney(row.current?.transportAllowance)],
@@ -86,11 +88,11 @@ export default function EmployeePayrollPanel({ employeeId, embedded = false }: {
       {row.preview.blockingReasons.length ? <Alert color="orange" title="Pendiente antes de emitir">{row.preview.blockingReasons.map(reason => <Text size="sm" key={reason}>{reason}</Text>)}</Alert> : null}
       {row.preview.warnings?.length ? <Alert color="orange" title="Advertencia">{row.preview.warnings.map(warning => <Text size="sm" key={warning}>{warning}</Text>)}</Alert> : null}
     </Stack>) : period && data ? <div className={styles.table}><EntityDataTable rows={table.rows} columns={columns} getRowId={row => row.id} tableMinWidth={1520} sort={table.sort} onSortChange={table.onSortChange} pagination={table.pagination} onPageSizeChange={table.onPageSizeChange} emptyState={{ title: 'No hay empleados para mostrar', description: 'Revisa la búsqueda o crea un empleado en el directorio.' }} actions={row => [
-      { key: 'print', label: `Imprimir nómina de ${employeeName(row)}`, icon: <IconPrinter size={16} />, onClick: () => setReceiptEmployee(row), color: 'blue' },
-      { key: 'edit', label: `Modificar salario de ${employeeName(row)}`, icon: <IconPencil size={16} />, onClick: () => setSalaryEmployee(row) },
+      { key: 'print', label: `Imprimir nómina de ${employeeName(row)}`, icon: <IconPrinter size={16} />, onClick: () => setReceiptEmployee(row), color: 'blue', disabled: !canEditPayroll && !row.receipts.length },
+      ...(canEditPayroll ? [{ key: 'edit', label: `Modificar salario de ${employeeName(row)}`, icon: <IconPencil size={16} />, onClick: () => setSalaryEmployee(row) }] : []),
     ]} /></div> : null}
     </Stack></section>
-    {salaryEmployee && data && period ? <SalaryModal key={`${salaryEmployee.id}:${period.from}`} employee={salaryEmployee} date={period.from} policy={data.policy} onClose={() => setSalaryEmployee(null)} onSaved={() => { setSalaryEmployee(null); setAttempt(value => value + 1); }} /> : null}
+    {canEditPayroll && salaryEmployee && data && period ? <SalaryModal key={`${salaryEmployee.id}:${period.from}`} employee={salaryEmployee} date={period.from} policy={data.policy} onClose={() => setSalaryEmployee(null)} onSaved={() => { setSalaryEmployee(null); setAttempt(value => value + 1); }} /> : null}
     {receiptEmployee && period ? <ReceiptModal key={`${receiptEmployee.id}:${period.from}`} employee={receiptEmployee} period={period} onClose={() => setReceiptEmployee(null)} onIssued={() => setAttempt(value => value + 1)} /> : null}
   </Stack></Container>;
 }

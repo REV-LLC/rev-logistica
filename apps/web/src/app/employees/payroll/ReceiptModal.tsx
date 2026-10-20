@@ -5,12 +5,14 @@ import { Alert, Badge, Button, Divider, Group, Modal, NumberInput, SimpleGrid, S
 import { useDebouncedValue } from '@mantine/hooks';
 import { IconDownload, IconFileTypePdf } from '@tabler/icons-react';
 import { api, apiBlob } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import { payrollMoney, type PayrollPeriod } from '@/lib/payroll-period';
 import { employeeName, type PayrollEmployee, type PayrollPreview, type PayrollReceipt } from './payroll-types';
 
 export default function ReceiptModal({ employee, period, onClose, onIssued }: {
   employee: PayrollEmployee; period: PayrollPeriod; onClose: () => void; onIssued: () => void;
 }) {
+  const canIssue = getCurrentUserRole() === 'ADMIN';
   const [days, setDays] = useState<number | string>(employee.receipts[0]?.days ?? period.defaultDays);
   const [observations, setObservations] = useState(employee.receipts[0]?.observations ?? '');
   const [preview, setPreview] = useState<{ key: string; data: PayrollPreview } | null>(null);
@@ -26,7 +28,7 @@ export default function ReceiptModal({ employee, period, onClose, onIssued }: {
   const ready = issued ?? (preview?.key === requestKey ? preview.data : null);
 
   useEffect(() => {
-    if (issued || debouncedKey !== requestKey || !validDays) return;
+    if (!canIssue || issued || debouncedKey !== requestKey || !validDays) return;
     const controller = new AbortController();
     setLoading(true); setError(null);
     api<PayrollPreview>(`/employee-payroll/${employee.id}/preview`, { method: 'POST', json: JSON.parse(debouncedKey), signal: controller.signal })
@@ -34,7 +36,7 @@ export default function ReceiptModal({ employee, period, onClose, onIssued }: {
       .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo calcular la nómina.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [debouncedKey, employee.id, requestKey, validDays, issued]);
+  }, [debouncedKey, employee.id, requestKey, validDays, issued, canIssue]);
 
   async function download(receipt: PayrollReceipt) {
     const blob = await apiBlob(`/employee-payroll/receipts/${receipt.id}/pdf`);
@@ -51,7 +53,7 @@ export default function ReceiptModal({ employee, period, onClose, onIssued }: {
     finally { setBusy(null); }
   }
   async function issue() {
-    if (!ready?.eligible || !validDays || (days !== 15 && !observations.trim())) return;
+    if (!canIssue || !ready?.eligible || !validDays || (days !== 15 && !observations.trim())) return;
     const key = `${requestKey}:${ready.expectedSalaryRevision}`;
     if (idempotency.current?.key !== key) idempotency.current = { key, id: crypto.randomUUID() };
     setBusy('new'); setError(null);
@@ -75,15 +77,15 @@ export default function ReceiptModal({ employee, period, onClose, onIssued }: {
       <Text size="sm" c="dimmed">{period.from} al {period.to} · nómina quincenal</Text>
       {error ? <Alert color="red" title="No se pudo completar la operación">{error}</Alert> : null}
       {issued ? <Alert color="teal" title="Comprobante emitido">Estos valores están congelados. Descarga el PDF original; no se recalcula con cambios de salario. Las rectificaciones de comprobantes emitidos requieren un flujo separado.</Alert> : null}
-      <NumberInput label="Días liquidados" description="Quincena completa: 15 días de nómina, incluso cuando el mes tiene 28 o 31 días." value={days} onChange={setDays} min={1} max={15} allowDecimal={false} disabled={!!busy || !!issued} />
-      <Textarea label="Observaciones" description={days !== 15 ? 'Indica el motivo de liquidar menos de 15 días.' : 'Opcional; se imprime en el comprobante.'} value={observations} onChange={e => setObservations(e.currentTarget.value)} minRows={2} maxLength={1000} disabled={!!busy || !!issued} required={days !== 15} />
+      <NumberInput label="Días liquidados" description="Quincena completa: 15 días de nómina, incluso cuando el mes tiene 28 o 31 días." value={days} onChange={setDays} min={1} max={15} allowDecimal={false} disabled={!canIssue || !!busy || !!issued} />
+      <Textarea label="Observaciones" description={days !== 15 ? 'Indica el motivo de liquidar menos de 15 días.' : 'Opcional; se imprime en el comprobante.'} value={observations} onChange={e => setObservations(e.currentTarget.value)} minRows={2} maxLength={1000} disabled={!canIssue || !!busy || !!issued} required={days !== 15} />
       {ready && !ready.eligible ? <Alert color="yellow" title="Requiere revisión"><Stack gap={4}>{ready.blockingReasons.map(reason => <Text key={reason} size="sm">{reason}</Text>)}</Stack></Alert> : null}
       {ready?.warnings?.length ? <Alert color="orange" title="Advertencia"><Stack gap={4}>{ready.warnings.map(warning => <Text key={warning} size="sm">{warning}</Text>)}</Stack></Alert> : null}
       <SimpleGrid cols={{ base: 1, xs: 2 }}>{figures.map(([label, value]) => <div key={label}><Text size="xs" c="dimmed">{label}</Text><Text fw={label === 'Neto a pagar' ? 800 : 600}>{value == null ? (loading ? 'Calculando…' : 'Pendiente') : payrollMoney(value)}</Text></div>)}</SimpleGrid>
       <Text size="xs" c="dimmed">Deducciones sobre el salario, sin auxilio. Cada concepto se redondea al peso y el total suma esos valores. El PDF conserva la liquidación; emitir no registra un pago ni una firma.</Text>
       <SimpleGrid cols={{ base: 1, sm: 2 }}>
         <Button variant="default" onClick={onClose} disabled={!!busy}>Cerrar</Button>
-        {issued ? <Button leftSection={<IconDownload size={16} />} loading={busy === issued.id} onClick={() => existingPdf(issued)} disabled={!!busy}>Descargar PDF emitido</Button> : <Button leftSection={<IconFileTypePdf size={16} />} loading={busy === 'new'} onClick={issue} disabled={!!busy || !ready?.eligible || !validDays || (days !== 15 && !observations.trim())}>Emitir y descargar PDF</Button>}
+        {issued ? <Button leftSection={<IconDownload size={16} />} loading={busy === issued.id} onClick={() => existingPdf(issued)} disabled={!!busy}>Descargar PDF emitido</Button> : canIssue ? <Button leftSection={<IconFileTypePdf size={16} />} loading={busy === 'new'} onClick={issue} disabled={!!busy || !ready?.eligible || !validDays || (days !== 15 && !observations.trim())}>Emitir y descargar PDF</Button> : null}
       </SimpleGrid>
       {receipts.length > 1 ? <><Divider /><Text size="sm" fw={700}>Comprobantes emitidos de esta quincena</Text>{receipts.map(receipt => <Group key={receipt.id} justify="space-between" wrap="wrap">
         <Stack gap={2}><Group gap="xs"><Badge variant="light">Emitido</Badge><Text size="sm">{receipt.days} días · neto {payrollMoney(receipt.netPay)}</Text></Group><Text size="xs" c="dimmed">{receipt.createdAt.slice(0, 10)} · los cambios de salario no alteran este PDF</Text></Stack>

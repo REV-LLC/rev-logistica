@@ -103,6 +103,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
   WAREHOUSE_TABLET: ['/transport/generate', '/transport/requests', '/inventory/ledger/document'],
   DRIVER: [
     '/',
+    '/profile',
     '/transport/generate',
     '/transport/requests',
     '/transport/driver-worksites',
@@ -110,7 +111,7 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/inventory/provider-returns',
     '/inventory/ledger/document',
   ],
-  OPERATOR: ['/', '/inventory/hour-meter', '/fuel'],
+  OPERATOR: ['/', '/inventory/hour-meter', '/fuel', '/profile'],
 };
 
 function isPathWithinPrefix(pathname: string, prefix: string) {

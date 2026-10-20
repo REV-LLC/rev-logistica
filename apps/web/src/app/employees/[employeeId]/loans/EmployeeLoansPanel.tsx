@@ -17,7 +17,7 @@ const dateLabel = (value: string | null) => value ? value.slice(0,10).split('-')
 const entryLabel = (type: Entry['type']) => type === 'OPENING' ? 'Saldo inicial' : type === 'PAYMENT' ? 'Abono / descuento' : 'Cargo';
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
-export default function EmployeeLoansPanel({ employeeId, embedded = false }: { employeeId: string; embedded?: boolean }) {
+export default function EmployeeLoansPanel({ employeeId, embedded = false, selfService = false }: { employeeId: string; embedded?: boolean; selfService?: boolean }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [paymentsPositive, setPaymentsPositive] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
     setLoading(true); setError(null);
     try {
       const [result, display] = await Promise.all([
-        api<Account>(`/employees/${employeeId}/loans`, { signal }),
+        api<Account>(selfService ? '/employee-portal/loans' : `/employees/${employeeId}/loans`, { signal }),
         api<LoanDisplaySettings>('/settings/loan-display', { signal }),
       ]);
       if (!signal?.aborted) { setAccount(result); setPaymentsPositive(display.paymentsPositive); }
@@ -45,16 +45,17 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
     catch (cause) { if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo cargar la tarjeta.'); }
     finally { if (!signal?.aborted) setLoading(false); }
   }
-  useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [employeeId]);
+  useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [employeeId, selfService]);
   const opening = account?.entries.find(entry => entry.type === 'OPENING');
   const entries = account?.entries ?? [];
   const selectedPresentation = loanMovementPresentation(type, paymentsPositive);
   const fillerRowCount = Math.max(0, 5 - Math.max(entries.length, 1));
   function openForm() {
+    if (selfService) return;
     setType(opening ? 'CHARGE' : 'OPENING'); setDate(today()); setDetail(opening ? '' : 'Saldo inicial'); setAmount(''); setSaveError(null); request.current = null; setOpen(true);
   }
   async function save() {
-    if (submitting.current) return;
+    if (selfService || submitting.current) return;
     if (!date || !detail.trim() || amount === '' || !Number.isFinite(Number(amount)) || Number(amount) < 0 || (type !== 'OPENING' && Number(amount) === 0)) {
       setSaveError('Completa la fecha, la descripción y un valor válido.'); return;
     }
@@ -97,9 +98,9 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
                 <Text component="span" size="sm" fw={500} className={styles.description}>{entry.detail}</Text>
                 <Text component="span" size="xs" c="dimmed" className={styles.entryType}>{entryLabel(entry.type)}</Text>
               </UnstyledButton>
-              <Tooltip label="Editar descripción" withArrow><ActionIcon variant="subtle" color="gray" size="md" className={styles.editAction}
+              {!selfService ? <Tooltip label="Editar descripción" withArrow><ActionIcon variant="subtle" color="gray" size="md" className={styles.editAction}
                 aria-label={`Editar descripción del ${entry.type === 'OPENING' ? 'saldo inicial' : entry.type === 'PAYMENT' ? 'abono' : 'cargo'} del ${dateLabel(entry.date)} por ${money(entry.amount)}`}
-                onClick={() => setEditingEntry(entry)}><IconPencil size={17} /></ActionIcon></Tooltip>
+                onClick={() => setEditingEntry(entry)}><IconPencil size={17} /></ActionIcon></Tooltip> : null}
             </Group>
           </Table.Td>
           <Table.Td ta="right" className={styles.amountCell} c={presentation.color}>{presentation.sign} {money(entry.amount)}</Table.Td>
@@ -111,11 +112,11 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
               <Text size="sm" fw={600} c={presentation.color} className={styles.detailAmount}>{presentation.sign} {money(entry.amount)}</Text>
             </Group>
             <Text size="sm" className={styles.fullDescription}>{entry.detail}</Text>
-            <Button variant="subtle" size="compact-sm" w="fit-content" onClick={() => setEditingEntry(entry)}>Editar descripción</Button>
+            {!selfService ? <Button variant="subtle" size="compact-sm" w="fit-content" onClick={() => setEditingEntry(entry)}>Editar descripción</Button> : null}
           </section>
         </Table.Td></Table.Tr> : null}
         </Fragment>; })}
-        {!entries.length ? <Table.Tr><Table.Td colSpan={3}><Text size="sm" c="dimmed" ta="center">Registra el valor y la fecha inicial para comenzar.</Text></Table.Td></Table.Tr> : null}
+        {!entries.length ? <Table.Tr><Table.Td colSpan={3}><Text size="sm" c="dimmed" ta="center">{selfService ? 'No tienes movimientos de préstamos registrados.' : 'Registra el valor y la fecha inicial para comenzar.'}</Text></Table.Td></Table.Tr> : null}
         {Array.from({ length: fillerRowCount }, (_, index) => <Table.Tr key={`empty-${index}`} className={styles.emptyRow} aria-hidden="true">
           <Table.Td colSpan={3} />
         </Table.Tr>)}
@@ -126,10 +127,10 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
       </div>
     </Paper> : null}
     {account && opening ? <Text size="sm" c="dimmed">Cargos: {money(account.charges)} · Abonos: {money(account.payments)}. Los cargos suman y los abonos restan al saldo.</Text> : null}
-    <div className={styles.addMovementFooter}>
+    {!selfService ? <div className={styles.addMovementFooter}>
       <Button className={styles.addMovementButton} onClick={openForm} disabled={!account || loading} leftSection={<IconPlus size={18} />}>{opening ? 'Agregar movimiento' : 'Registrar saldo inicial'}</Button>
-    </div>
-    <Modal opened={open} onClose={() => !saving && setOpen(false)} title={type === 'OPENING' ? 'Registrar saldo inicial' : 'Agregar movimiento'}
+    </div> : null}
+    <Modal opened={!selfService && open} onClose={() => !saving && setOpen(false)} title={type === 'OPENING' ? 'Registrar saldo inicial' : 'Agregar movimiento'}
       centered radius="md" closeOnClickOutside={!saving} closeOnEscape={!saving} withCloseButton={!saving}>
       <form onSubmit={event => { event.preventDefault(); void save(); }}>
         <Stack gap="lg">
@@ -157,7 +158,7 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false }: { e
         </Stack>
       </form>
     </Modal>
-    {editingEntry ? <LoanDescriptionModal key={editingEntry.id} employeeId={employeeId} entry={editingEntry}
+    {!selfService && editingEntry ? <LoanDescriptionModal key={editingEntry.id} employeeId={employeeId} entry={editingEntry}
       onClose={() => setEditingEntry(null)} onSaved={updated => { setAccount(updated); setEditingEntry(null); }} /> : null}
   </Stack></Container>;
 }

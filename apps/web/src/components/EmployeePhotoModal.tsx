@@ -5,6 +5,7 @@ import { useEmployeePhotoUrl } from '@/components/EmployeeAvatar';
 import ProfilePhotoLightbox from '@/components/ProfilePhotoLightbox';
 import { employeeProfileHref } from '@/lib/employee-profile';
 import photoShape from './EmployeePhotoShape.module.css';
+import { usePathname } from 'next/navigation';
 
 type EmployeePhotoRecord = {
   id: string;
@@ -35,12 +36,13 @@ export default function EmployeePhotoModal({
   employee: EmployeePhotoRecord | null;
   onClose: () => void;
 }) {
+  const pathname = usePathname();
   return (
     <ProfilePhotoLightbox
       opened={Boolean(employee)}
       onClose={onClose}
       name={employee ? employeeName(employee) : ''}
-      profileHref={employee ? employeeProfileHref(employee.id) : undefined}
+      profileHref={employee ? pathname === '/profile' ? '/profile' : employeeProfileHref(employee.id) : undefined}
     >
       {employee ? <EmployeePhotoPreview employee={employee} /> : null}
     </ProfilePhotoLightbox>
