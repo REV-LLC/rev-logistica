@@ -1,9 +1,9 @@
-# Más módulos con el nuevo estilo de cristal
+# Tu perfil y préstamos, a un toque
 
-Vehículos, Proveedores, Clientes y Lista de precios estrenan el estilo de cristal, con fondos compartidos, filtros más claros y una mejor lectura en celular.
+Ahora puedes abrir «Ver perfil» debajo de tu nombre en el menú y consultar tus préstamos y tu bitácora, también desde el celular.
 
-Inventario, las fichas de equipos, el historial de movimientos y Obras también adoptan el nuevo estilo visual.
+En «Mi perfil» encontrarás accesos directos a Préstamos y Mi bitácora. Esta consulta es personal y de solo lectura: no muestra nómina ni permite cambiar movimientos o registros.
 
-Se mantienen las acciones, filtros y formularios habituales. La Lista de precios conserva las tarifas de equipos propios y su exportación CSV.
+Solo Admin puede modificar salarios, incluir empleados en nómina o emitir comprobantes. Office conserva la consulta y la descarga de comprobantes ya emitidos.
 
-Esta actualización es visual: no modifica existencias, movimientos, tarifas ni documentos. Anexos conserva su funcionamiento y presentación actuales.
+Los saldos, pagos, salarios e históricos existentes se conservan sin cambios.

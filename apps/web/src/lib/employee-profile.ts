@@ -16,6 +16,11 @@ export function employeeProfileHref(employeeId: string) {
   return `/employees/${encodeURIComponent(employeeId)}`;
 }
 
+export function employeeWorkspaceTab(requested: string | null, selfService: boolean) {
+  if (requested === 'loans' || requested === 'activities') return requested;
+  return selfService ? 'loans' : 'payroll';
+}
+
 export function employeeProfileName(employee: Pick<EmployeeProfileIdentity, 'name' | 'lastName'>) {
   return `${employee.name} ${employee.lastName ?? ''}`.trim();
 }

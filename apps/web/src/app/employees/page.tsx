@@ -36,6 +36,7 @@ import EmployeeFormModal, {
 import FileAttachmentsPanel from '@/components/FileAttachmentsPanel';
 import { employeeProfileHref } from '@/lib/employee-profile';
 import { api, apiBlob, ApiError } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import styles from './directory.module.css';
 import EmployeeDirectoryLoading from './EmployeeDirectoryLoading';
@@ -195,6 +196,7 @@ export default function EmployeeCardsPage() {
 
     setSaving(true);
     try {
+      const canManageLogin = getCurrentUserRole() === 'ADMIN' || editingEmployee?.user?.role !== 'ADMIN';
       const payload = {
         name: form.name.trim().toUpperCase(),
         lastName: form.lastName.trim().toUpperCase(),
@@ -203,15 +205,15 @@ export default function EmployeeCardsPage() {
         email: form.email.trim() || undefined,
         documentId: form.documentId.trim().toUpperCase() || undefined,
         active: form.active,
-        payrollEnabled: form.payrollEnabled,
+        payrollEnabled: !editingEmployee && getCurrentUserRole() !== 'ADMIN' ? false : form.payrollEnabled,
         vehicleIds: form.vehicleIds,
-        loginEnabled: form.loginEnabled,
-        loginIdentifier: form.loginEnabled
+        loginEnabled: canManageLogin ? form.loginEnabled : undefined,
+        loginIdentifier: canManageLogin && form.loginEnabled
           ? form.loginIdentifier.trim().toLowerCase() || undefined
           : undefined,
-        loginPassword: form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
-        loginRole: form.loginEnabled ? form.loginRole : undefined,
-        loginActive: form.loginEnabled ? form.loginActive : undefined,
+        loginPassword: canManageLogin && form.loginEnabled ? form.loginPassword.trim() || undefined : undefined,
+        loginRole: canManageLogin && form.loginEnabled ? form.loginRole : undefined,
+        loginActive: canManageLogin && form.loginEnabled ? form.loginActive : undefined,
       };
 
       if (editingEmployee) {

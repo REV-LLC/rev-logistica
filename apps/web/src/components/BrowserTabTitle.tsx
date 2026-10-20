@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 
 // The most specific routes come first so detail pages keep their own label.
 const routeTitles: Array<[prefix: string, title: string]> = [
+  ['/profile', 'Mi perfil'],
   ['/inventory/ledger/document', 'Documento de movimiento'],
   ['/inventory/ledger/asset', 'Movimientos de equipo'],
   ['/inventory/ledger/sku', 'Movimientos de ítem'],

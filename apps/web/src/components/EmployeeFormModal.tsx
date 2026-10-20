@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { getCurrentUserRole } from '@/lib/auth';
 import {
   Alert,
   Box,
@@ -73,6 +74,7 @@ export type EmployeeFormSummary = {
   lastName: string;
   role: RoleValue;
   active: boolean;
+  user?: { role: AppRoleValue } | null;
 };
 
 export const emptyEmployeeForm: EmployeeForm = {
@@ -203,6 +205,8 @@ export default function EmployeeFormModal({
   onChange,
 }: EmployeeFormModalProps) {
   const isEditing = mode === 'edit';
+  const isAdmin = getCurrentUserRole() === 'ADMIN';
+  const canManageLogin = isAdmin || editingEmployee?.user?.role !== 'ADMIN';
   const title = isEditing ? 'Editar empleado' : 'Nuevo empleado';
   const subtitle = isEditing
     ? 'Actualiza el perfil, las asignaciones y el acceso del colaborador.'
@@ -374,9 +378,10 @@ export default function EmployeeFormModal({
           </SimpleGrid>
 
           <Switch
-              checked={form.payrollEnabled}
+              checked={!isAdmin && !isEditing ? false : form.payrollEnabled}
+              disabled={!isAdmin}
               label="Incluir en nómina"
-              description="Desactiva esta opción para socios u otras personas que no reciben nómina. Conserva su estado y su acceso."
+              description={!isAdmin && !isEditing ? 'Admin podrá incluirlo en nómina después de crear el perfil.' : 'Solo Admin puede cambiar esta opción. No elimina el historial.'}
               onChange={(event) => {
                 const checked = event.currentTarget.checked;
                 onChange((previous) => ({ ...previous, payrollEnabled: checked }));
@@ -420,6 +425,7 @@ export default function EmployeeFormModal({
           title="Acceso a la app"
           description="Controla si el empleado puede ingresar al sistema y con qué rol operativo."
         >
+          <fieldset disabled={!canManageLogin} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Switch
             checked={form.loginEnabled}
             label="Crear o mantener acceso para este empleado"
@@ -453,7 +459,7 @@ export default function EmployeeFormModal({
                       loginRole: (value as AppRoleValue) ?? 'DRIVER',
                     }))
                   }
-                  data={appRoleOptions}
+                  data={appRoleOptions.map(option => ({ ...option, disabled: option.value === 'ADMIN' && !isAdmin }))}
                   allowDeselect={false}
                 />
               </SimpleGrid>
@@ -489,6 +495,7 @@ export default function EmployeeFormModal({
               </Text>
             </Paper>
           )}
+          </fieldset>
         </FormSection>
 
         <Group justify="flex-end" className="mobile-actions" pt="xs">

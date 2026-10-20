@@ -124,7 +124,7 @@ const errorMessage = (error: unknown) =>
 const calendarMonths = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
   .map((label, index) => ({ value: String(index + 1).padStart(2, "0"), label }));
 
-export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, embedded = false }: { requestedEmployeeId?: string | null; embedded?: boolean }) {
+export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, embedded = false, selfService = false }: { requestedEmployeeId?: string | null; embedded?: boolean; selfService?: boolean }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [options, setOptions] = useState<Options>({
     warehouses: [],
@@ -170,9 +170,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     setError(null);
     Promise.all([
       embedded && requestedEmployeeId
-        ? api<Employee>(`/employees/${encodeURIComponent(requestedEmployeeId)}`).then(employee => [employee])
+        ? api<Employee>(selfService ? '/employee-portal/profile' : `/employees/${encodeURIComponent(requestedEmployeeId)}`).then(employee => [employee])
         : api<Employee[]>("/employees"),
-      api<Options>("/employee-activities/options"),
+      selfService ? Promise.resolve({ customers: [], assets: [], warehouses: [] } as Options) : api<Options>("/employee-activities/options"),
     ])
       .then(([people, choices]) => {
         if (!active) return;
@@ -198,7 +198,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     return () => {
       active = false;
     };
-  }, [retry, requestedEmployeeId, embedded]);
+  }, [retry, requestedEmployeeId, embedded, selfService]);
 
   useEffect(() => {
     if (!employeeId) return;
@@ -206,7 +206,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     setNotesLoading(true);
     setNotes([]);
     setListError(null);
-    api<Note[]>(`/employee-activities/${employeeId}?month=${month}`)
+    api<Note[]>(selfService ? `/employee-portal/activities?month=${month}` : `/employee-activities/${employeeId}?month=${month}`)
       .then((result) => {
         if (active) setNotes(result);
       })
@@ -219,7 +219,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     return () => {
       active = false;
     };
-  }, [employeeId, month, revision]);
+  }, [employeeId, month, revision, selfService]);
 
   const employee = employees.find((person) => person.id === employeeId);
   const notesByDay = useMemo(() => {
@@ -341,6 +341,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     setOpened(true);
   }
   async function save() {
+    if (selfService) return;
     if (!employeeId || saving) return;
     const worksite = form.type === "WORKSITE";
     const warehouse = form.type === "WAREHOUSE";
@@ -403,6 +404,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     }
   }
   async function remove() {
+    if (selfService) return;
     if (!employeeId || !deleting || saving) return;
     setSaving(true);
     setFormError(null);
@@ -539,11 +541,11 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               >
                 Hoy
               </Button>
-              <AddActivityMenu onSelect={(type) => openNote(undefined, selectedDate, type)}>
+              {!selfService ? <AddActivityMenu onSelect={(type) => openNote(undefined, selectedDate, type)}>
                 <ActionIcon size={40} variant="filled" aria-label="Agregar actividad" title="Agregar actividad" disabled={!employeeId || loading || Boolean(error)}>
                   <IconPlus size={20} aria-hidden />
                 </ActionIcon>
-              </AddActivityMenu>
+              </AddActivityMenu> : null}
               </Group>
               </div>
             </div>
@@ -644,7 +646,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                             </span>
                           ) : null}
                         </button>
-                        <AddActivityMenu
+                        {!selfService ? <AddActivityMenu
                           onSelect={(type) => {
                             setSelectedDate(date);
                             if (date.slice(0, 7) !== month)
@@ -661,7 +663,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                           >
                             <IconPlus size={16} aria-hidden="true" />
                           </button>
-                        </AddActivityMenu>
+                        </AddActivityMenu> : null}
                       </div>
                     );
                   })}
@@ -758,7 +760,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                               timeStyle: "short",
                             })}
                           </Text>
-                          <Group justify="end" gap="xs">
+                          {!selfService ? <Group justify="end" gap="xs">
                             <ActionIcon
                               variant="subtle"
                               aria-label="Editar nota"
@@ -777,7 +779,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                             >
                               <IconTrash size={17} />
                             </ActionIcon>
-                          </Group>
+                          </Group> : null}
                         </Stack>
                       </Paper>
                     ))
@@ -790,7 +792,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
       </Stack>
       <Modal
         opened={
-          opened && (form.type === "WORKSITE" || form.type === "WAREHOUSE")
+          !selfService && opened && (form.type === "WORKSITE" || form.type === "WAREHOUSE")
         }
         onClose={() => {
           if (!saving) setOpened(false);
@@ -997,7 +999,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         </form>
       </Modal>
       <EmployeeReportModal
-        opened={opened && form.type !== "WORKSITE" && form.type !== "WAREHOUSE"}
+        opened={!selfService && opened && form.type !== "WORKSITE" && form.type !== "WAREHOUSE"}
         editing={Boolean(editing)}
         employeeName={employee ? fullName(employee) : ""}
         form={form}
@@ -1010,7 +1012,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         error={formError}
       />
       <Modal
-        opened={Boolean(deleting)}
+        opened={!selfService && Boolean(deleting)}
         onClose={() => {
           if (!saving) setDeleting(null);
         }}
