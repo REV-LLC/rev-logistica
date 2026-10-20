@@ -14,7 +14,7 @@ export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get('loan-display')
-  @Roles(Role.ADMIN, Role.OFFICE)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
   async loanDisplay() {
     return { paymentsPositive: await this.settings.get<boolean>('loans.payments_positive') };
   }
