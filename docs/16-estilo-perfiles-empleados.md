@@ -72,6 +72,16 @@ Clientes conserva su contador de activos, filtros, ordenación, paginación y ac
 
 ## Identidad del empleado
 
+### Consulta personal y permisos
+
+«Ver perfil», debajo del nombre en el sidebar, abre `/profile`; «Mi perfil» ofrece Préstamos y Mi bitácora. Reutiliza la identidad, foto circular, fondo según cargo y paneles de cristal existentes, en modo de solo lectura y sin Nómina. Las cuentas compartidas de bodega no tienen perfil personal.
+
+El portal consulta exclusivamente `/employee-portal/profile`, `/employee-portal/loans` y `/employee-portal/activities?month=…`. La API resuelve en cada petición el vínculo `User.employee` de la sesión activa: no acepta un ID de empleado, no busca por nombre/correo y no elige una persona alternativa si falta el vínculo. No tiene endpoints de escritura ni salarios. Los GET privados llevan `Cache-Control: private, no-store`; las notas no descargan opciones del directorio, clientes o inventario.
+
+La gestión de empleados continúa reservada a Admin y Office. Nómina es de consulta para Office, con descarga de PDFs ya emitidos; cambiar salarios, inclusión en nómina o emitir una liquidación persistida exige Admin vigente en la base de datos, también para JWT emitidos antes de un cambio de rol. El formulario de empleados no permite que Office se otorgue Admin o cambie credenciales de una cuenta Admin para eludir esta restricción. Los perfiles nuevos creados por Office quedan fuera de nómina, sin crear salarios provisionales; Admin puede incluirlos y configurar su salario. Los registros existentes no se reclasifican.
+
+La publicación requiere API y web compatibles; no se publica solo la web si todavía no existen los endpoints personales y la protección de escrituras en el servidor. No requiere migraciones ni conversiones de empleados, préstamos, notas o comprobantes históricos.
+
 - Foto circular, a color, de `200px`, sin un recuadro azul alrededor del encabezado. Su soporte visual permite que crezca hacia arriba sin empujar innecesariamente los datos inferiores.
 - La forma circular es obligatoria en miniaturas, perfiles y ampliaciones, no una variante configurable. `EmployeePhotoShape` comparte el recorte circular; los contenedores y tarjetas no deben modificar esa forma.
 - Nombre legible con peso `500`, no un título excesivamente grueso. Fuente compartida de la aplicación: Space Grotesk.

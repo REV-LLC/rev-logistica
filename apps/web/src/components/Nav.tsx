@@ -76,6 +76,13 @@ type NavSection = {
 
 const sections: NavSection[] = [
   {
+    title: 'Mi perfil',
+    links: [
+      { href: '/profile?tab=loans', label: 'Préstamos', icon: IconFileDollar, roles: ['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR'], exact: true },
+      { href: '/profile?tab=activities', label: 'Mi bitácora', icon: IconCalendar, roles: ['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR'], exact: true },
+    ],
+  },
+  {
     title: "Operación",
     links: [
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
@@ -490,6 +497,7 @@ export default function Nav({ onNavigate }: NavProps) {
     return children.length ? { ...link, children } : null;
   };
   const isLinkActive = (link: NavLinkItem) => {
+    if (pathname === '/profile' && link.href.startsWith('/profile?tab=')) return (searchParams.get('tab') === 'activities' ? 'activities' : 'loans') === link.href.split('tab=')[1];
     if (link.excludedPrefixes?.some((prefix) => pathname === prefix || pathname?.startsWith(`${prefix}/`))) return false;
     if (link.children?.some(isLinkActive)) {
       return true;
@@ -865,6 +873,11 @@ export default function Nav({ onNavigate }: NavProps) {
               {userDisplayName}
             </Text>
           ) : null}
+          {currentRole && currentRole !== 'WAREHOUSE_TABLET' ? <Button
+            component={Link} href="/profile" variant="subtle" size="compact-xs" color="gray"
+            onClick={onNavigate} styles={{ root: { color: '#c8d2df' } }}>
+            Ver perfil
+          </Button> : null}
         </Stack>
       </Group>
       <Divider color="rgba(255,255,255,0.10)" />

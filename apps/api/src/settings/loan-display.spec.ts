@@ -42,7 +42,7 @@ describe('Loan display settings HTTP contract', () => {
   beforeEach(() => { stored = null; jest.clearAllMocks(); });
   afterAll(async () => app.close());
 
-  it.each([Role.ADMIN, Role.OFFICE])('lets %s read the default without writing anything', async role => {
+  it.each([Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR])('lets %s read only the visual sign preference without writing anything', async role => {
     const result = await request(app.getHttpServer()).get('/settings/loan-display').set('x-test-role', role).expect(200);
     expect(result.body).toEqual({ paymentsPositive: false });
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -63,7 +63,7 @@ describe('Loan display settings HTTP contract', () => {
     await request(app.getHttpServer()).patch('/settings').set('x-test-role', role).send({ values: { 'loans.payments_positive': true } }).expect(403);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
-  it.each([Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET])('does not expose loan settings to %s', async role => {
+  it.each([Role.WAREHOUSE_TABLET])('does not expose personal loan display to shared %s', async role => {
     await request(app.getHttpServer()).get('/settings/loan-display').set('x-test-role', role).expect(403);
   });
 });

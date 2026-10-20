@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -46,12 +48,16 @@ export class EmployeesController {
   }
 
   @Get(':employeeId/photo')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.WAREHOUSE_TABLET)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
   async getEmployeePhoto(
     @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
     @Query('variant') variant: string | undefined,
     @Res() response: Response,
+    @Req() request: { user: { sub: string; role: Role } },
   ) {
+    if (request.user.role === Role.OPERATOR && await this.employeesService.ownEmployeeId(request.user.sub) !== employeeId) {
+      throw new ForbiddenException('Solo puedes consultar tu propia foto.');
+    }
     const photo = await this.employeesService.getEmployeePhoto(
       employeeId,
       variant === 'thumbnail',
@@ -82,7 +88,7 @@ export class EmployeesController {
   }
 
   @Post()
-  createEmployee(
+  async createEmployee(
     @Body(
       new ValidationPipe({
         whitelist: true,
@@ -91,12 +97,14 @@ export class EmployeesController {
       }),
     )
     payload: CreateEmployeeDto,
+    @Req() request: { user: { sub: string } },
   ) {
-    return this.employeesService.createEmployee(payload);
+    const actorRole = await this.employeesService.assertEmployeeManagement(request.user.sub, payload);
+    return this.employeesService.createEmployee({ ...payload, payrollEnabled: actorRole === Role.ADMIN ? payload.payrollEnabled : false });
   }
 
   @Patch(':employeeId')
-  updateEmployee(
+  async updateEmployee(
     @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
     @Body(
       new ValidationPipe({
@@ -106,7 +114,9 @@ export class EmployeesController {
       }),
     )
     payload: UpdateEmployeeDto,
+    @Req() request: { user: { sub: string } },
   ) {
+    await this.employeesService.assertEmployeeManagement(request.user.sub, payload, employeeId);
     return this.employeesService.updateEmployee(employeeId, payload);
   }
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Group, Modal, Select, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { api } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import { monthlySalaryTotal, payrollMoney } from '@/lib/payroll-period';
 import { employeeName, type PayrollEmployee, type PayrollPeriodResponse } from './payroll-types';
 
@@ -20,6 +21,7 @@ export default function SalaryModal({ employee, date, policy, onClose, onSaved }
   const total = monthlySalaryTotal(salary, allowance);
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    if (getCurrentUserRole() !== 'ADMIN') return;
     if (!total || !note.trim()) return;
     setSaving(true); setError(null);
     try {
