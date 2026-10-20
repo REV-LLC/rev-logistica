@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ActionIcon, Combobox, Group, ScrollArea, Stack, Text, TextInput, useCombobox } from '@mantine/core';
 import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
 import { searchNavigation, type NavigationSearchEntry } from '@/lib/navigation-search';
+import { usePageNavigation } from './PageNavigationContext';
 
 export default function SidebarSearch({ entries, onNavigate }: {
   entries: NavigationSearchEntry[];
@@ -13,6 +14,7 @@ export default function SidebarSearch({ entries, onNavigate }: {
   const [query, setQuery] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const navigateAfterEntrance = usePageNavigation();
   const [navigating, startNavigation] = useTransition();
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
   const results = searchNavigation(entries, query);
@@ -27,7 +29,10 @@ export default function SidebarSearch({ entries, onNavigate }: {
         combobox.closeDropdown();
         setQuery('');
         input.current?.blur();
-        startNavigation(() => router.push(href));
+        const destination = new URL(href, location.href);
+        if (destination.pathname !== location.pathname || destination.search !== location.search) {
+          navigateAfterEntrance(() => startNavigation(() => router.push(href)));
+        }
         onNavigate?.();
       }}
     >

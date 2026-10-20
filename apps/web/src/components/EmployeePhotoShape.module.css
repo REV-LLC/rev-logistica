@@ -1,0 +1,8 @@
+/* Employee portraits are circles at every size, independent of card styling. */
+.circle {
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  clip-path: circle(50%);
+}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@mantine/core";
 import AppAvatar from "./AppAvatar";
 import { apiBlob, ApiError } from "@/lib/api";
+import photoShape from "./EmployeePhotoShape.module.css";
 
 type EmployeeAvatarRecord = {
   id: string;
@@ -205,6 +206,7 @@ export default function EmployeeAvatar({
     <Skeleton data-page-image-loading={photo.loading ? "true" : "false"} visible={photo.loading} circle height={size} width={size} aria-busy={photo.loading} aria-label={photo.loading ? `Cargando foto de ${getEmployeeFullName(employee)}` : undefined}>
     <AppAvatar
       src={photo.url}
+      className={photoShape.circle}
       radius="50%"
       size={size}
       imageSizes={`${size}px`}

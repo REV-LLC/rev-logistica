@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/PageTransitionLink';
 import { Alert, Badge, Button, Checkbox, Container, Group, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconArrowLeft, IconPencil, IconPrinter, IconSearch } from '@tabler/icons-react';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
+import EmployeePageBackground from '@/components/EmployeePageBackground';
 import EntityDataTable from '@/components/tables/EntityDataTable';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import { useClientTableData } from '@/components/tables/useClientTableData';
@@ -15,6 +16,7 @@ import SalaryModal from './SalaryModal';
 import ReceiptModal from './ReceiptModal';
 import { employeeName, type PayrollEmployee, type PayrollPeriodResponse } from './payroll-types';
 import styles from './payroll.module.css';
+import directoryStyles from '../directory.module.css';
 
 const numericSort = (value: string | undefined | null) => value == null ? null : Number(value);
 const searchValue = (row: PayrollEmployee) => `${employeeName(row)} ${row.documentId ?? ''}`;
@@ -58,13 +60,16 @@ export default function EmployeePayrollPanel({ employeeId, embedded = false }: {
   const table = useClientTableData({ rows, columns, search, searchValue });
   const closeForPeriod = () => { setSalaryEmployee(null); setReceiptEmployee(null); };
 
-  return <Container size="xl" fluid={embedded} p={embedded ? 0 : undefined} py={embedded ? 0 : 'xl'}><Stack gap="lg">
-    {!embedded ? <Group justify="space-between" wrap="wrap"><div><Title order={1}>Nómina</Title><Text c="dimmed" size="sm">Salarios, auxilio y comprobantes quincenales del equipo.</Text></div><Button component={Link} href="/employees" variant="subtle" leftSection={<IconArrowLeft size={16} />}>Empleados</Button></Group> : null}
-    <Paper withBorder radius="md" p="md"><DataTableToolbar title="Período de liquidación" description="15 días de nómina por quincena completa; puedes ajustar los días al emitir.">
+  return <Container size="xl" fluid={embedded} p={embedded ? 0 : undefined} py={embedded ? 0 : 'xl'} className={!embedded ? directoryStyles.page : undefined} data-page-loading={!embedded && loading && !data ? 'true' : undefined}>
+    {!embedded ? <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" /> : null}
+    <Stack gap="lg">
+    {!embedded ? <Group justify="space-between" wrap="wrap"><div><Title order={1} className={directoryStyles.title}>Nómina</Title><Text c="dimmed" size="sm">Salarios, auxilio y comprobantes quincenales del equipo.</Text></div><Button component={Link} href="/employees" variant="subtle" leftSection={<IconArrowLeft size={16} />}>Empleados</Button></Group> : null}
+    <section className={!embedded ? `${directoryStyles.surface} ${styles.surface}` : undefined} aria-label={!embedded ? 'Nómina de empleados' : undefined}><Stack gap="lg">
+    <Paper withBorder={embedded} radius="md" p={embedded ? 'md' : 0} className={!embedded ? styles.period : undefined}><DataTableToolbar title="Período de liquidación" description="15 días de nómina por quincena completa; puedes ajustar los días al emitir.">
       <TextInput type="month" label="Mes" value={month} onChange={e => { setMonth(e.currentTarget.value); closeForPeriod(); }} style={{ flex: '1 1 150px' }} />
       <Select label="Quincena" value={half} onChange={value => { setHalf(value === 'SECOND' ? 'SECOND' : 'FIRST'); closeForPeriod(); }} allowDeselect={false} data={[{ value: 'FIRST', label: 'Del 1 al 15' }, { value: 'SECOND', label: 'Del 16 a fin de mes' }]} style={{ flex: '1 1 190px' }} />
     </DataTableToolbar>{period ? <Text size="xs" c="dimmed">{period.from} al {period.to}</Text> : <Text c="red" size="sm">Selecciona un mes válido.</Text>}</Paper>
-    {!embedded ? <Alert color="blue" title="Salario y comprobante son distintos">El total mensual es base + auxilio. Sin comprobante, la tabla estima 15 días; imprimir permite ajustar días y observaciones. Una vez emitido, muestra la liquidación congelada. Los salarios provisionales deben confirmarse. Emitir no registra un pago.</Alert> : null}
+    {!embedded ? <Alert color="blue" className={styles.explanation} title="Salario y comprobante son distintos">El total mensual es base + auxilio. Sin comprobante, la tabla estima 15 días; imprimir permite ajustar días y observaciones. Una vez emitido, muestra la liquidación congelada. Los salarios provisionales deben confirmarse. Emitir no registra un pago.</Alert> : null}
     {error ? <Alert color="red" title="No se pudo cargar la nómina"><Stack gap="sm"><Text size="sm">{error}</Text><Button variant="light" onClick={() => setAttempt(value => value + 1)}>Reintentar</Button></Stack></Alert> : null}
     {!embedded ? <DataTableToolbar><TextInput aria-label="Buscar empleado en nómina" placeholder="Buscar nombre o cédula" leftSection={<IconSearch size={16} />} value={search} onChange={e => setSearch(e.currentTarget.value)} style={{ flex: '1 1 220px' }} /><Checkbox label="Incluir inactivos" checked={includeInactive} onChange={e => setIncludeInactive(e.currentTarget.checked)} /></DataTableToolbar> : null}
     {loading ? <Loader aria-label="Cargando nómina" /> : period && data && embedded ? rows.map(row => <Stack key={row.id} gap="md">
@@ -84,6 +89,7 @@ export default function EmployeePayrollPanel({ employeeId, embedded = false }: {
       { key: 'print', label: `Imprimir nómina de ${employeeName(row)}`, icon: <IconPrinter size={16} />, onClick: () => setReceiptEmployee(row), color: 'blue' },
       { key: 'edit', label: `Modificar salario de ${employeeName(row)}`, icon: <IconPencil size={16} />, onClick: () => setSalaryEmployee(row) },
     ]} /></div> : null}
+    </Stack></section>
     {salaryEmployee && data && period ? <SalaryModal key={`${salaryEmployee.id}:${period.from}`} employee={salaryEmployee} date={period.from} policy={data.policy} onClose={() => setSalaryEmployee(null)} onSaved={() => { setSalaryEmployee(null); setAttempt(value => value + 1); }} /> : null}
     {receiptEmployee && period ? <ReceiptModal key={`${receiptEmployee.id}:${period.from}`} employee={receiptEmployee} period={period} onClose={() => setReceiptEmployee(null)} onIssued={() => setAttempt(value => value + 1)} /> : null}
   </Stack></Container>;

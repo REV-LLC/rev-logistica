@@ -16,3 +16,16 @@ test('employee photo button remains square with a circular outline at every avat
   assert.match(button, /width:\s*size/);
   assert.match(button, /height:\s*size/);
 });
+
+test('employee photos share a circular clipping rule in thumbnails, profile and expanded preview', () => {
+  for (const component of ['EmployeeAvatar', 'EmployeePhotoModal']) {
+    const source = readFileSync(new URL(`../components/${component}.tsx`, import.meta.url), 'utf8');
+    assert.match(source, /import photoShape from ['"]\.\/EmployeePhotoShape\.module\.css['"]/);
+    assert.match(source, /className=\{photoShape\.circle\}/);
+  }
+  const css = readFileSync(new URL('../components/EmployeePhotoShape.module.css', import.meta.url), 'utf8');
+  assert.match(css, /aspect-ratio:\s*1;/);
+  assert.match(css, /border-radius:\s*50%;/);
+  assert.match(css, /overflow:\s*hidden;/);
+  assert.match(css, /clip-path:\s*circle\(50%\);/);
+});

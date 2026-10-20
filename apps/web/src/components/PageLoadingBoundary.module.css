@@ -20,14 +20,19 @@
 }
 .overlay[data-phase='revealing'] { animation-name: glass-reveal; }
 .message {
+  position: fixed;
+  /* Reserve the logo frame and anchor it to the viewport, never to shell offsets. */
+  left: calc(50vw - 78px);
+  top: calc(50dvh - 39px);
+  width: 156px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
   text-align: center;
-  transition: opacity 180ms ease, transform 320ms ease;
+  transition: opacity 180ms ease;
 }
-.overlay[data-phase='revealing'] .message { opacity: 0; transform: scale(.97); }
+.overlay[data-phase='revealing'] .message { opacity: 0; }
 .logo {
   display: block;
   width: 156px;

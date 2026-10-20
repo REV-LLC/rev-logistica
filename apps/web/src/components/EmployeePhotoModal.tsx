@@ -4,6 +4,7 @@ import AppAvatar from '@/components/AppAvatar';
 import { useEmployeePhotoUrl } from '@/components/EmployeeAvatar';
 import ProfilePhotoLightbox from '@/components/ProfilePhotoLightbox';
 import { employeeProfileHref } from '@/lib/employee-profile';
+import photoShape from './EmployeePhotoShape.module.css';
 
 type EmployeePhotoRecord = {
   id: string;
@@ -22,7 +23,7 @@ function EmployeePhotoPreview({ employee }: { employee: EmployeePhotoRecord }) {
   const initials = `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}` || 'E';
 
   return (
-    <AppAvatar src={photoUrl} alt={`Foto ampliada de ${name}`} size="var(--profile-photo-size)" radius="50%" color="gray"
+    <AppAvatar src={photoUrl} alt={`Foto ampliada de ${name}`} size="var(--profile-photo-size)" radius="50%" className={photoShape.circle} color="gray"
       imageSizes="(max-width: 432px) calc(100vw - 48px), 384px">{initials}</AppAvatar>
   );
 }
