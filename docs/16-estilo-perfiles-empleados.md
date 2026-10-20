@@ -56,6 +56,14 @@ La página independiente de Nómina reutiliza el fondo responsive de marca, la t
 
 La barra de desplazamiento mantiene una pista transparente y un control oscuro al pasar el cursor o arrastrarlo; no debe heredar el fondo blanco de interacción del tema claro.
 
+## Adopción en Vehículos
+
+`/transport/vehicles` reutiliza la misma superficie y título con el fondo de camiones `transport-v1.webp`, incluida la variante de encuadre `transport`. Indicadores y tabla comparten un único cristal; los indicadores usan la variante opcional `glass` de `StatCard`, sin cambiar su apariencia predeterminada en otros módulos. La tabla y los registros móviles son transparentes y conservan las acciones, ordenación y paginación existentes. El estado inicial de carga comunica su marcador al loader global sin dibujar tarjetas blancas detrás. Formularios, detalles, documentos, mantenimiento y alertas conservan sus modales legibles y su funcionamiento.
+
+## Adopción en Proveedores
+
+`/providers` utiliza el fondo responsive REV del directorio, el título compartido y una sola superficie para indicadores, búsqueda, filtro por estado y lista. Reutiliza la variante `glass` de `StatCard` y `GlassDataTable.module.css`, también usado en Vehículos. Esta clase de tabla se aplica de forma explícita; no vuelve transparentes las tablas de otros módulos ni los modales. Los logos de empresas conservan su presentación de marca y no adoptan el recorte circular de las fotos de empleados. Se mantienen la exclusión de dueños internos, los datos de contacto, las relaciones de bodegas y las acciones existentes.
+
 ## Identidad del empleado
 
 - Foto circular, a color, de `200px`, sin un recuadro azul alrededor del encabezado. Su soporte visual permite que crezca hacia arriba sin empujar innecesariamente los datos inferiores.
