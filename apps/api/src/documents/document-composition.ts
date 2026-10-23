@@ -161,9 +161,9 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
     where: { documentId: { not: document.id }, sourceDocumentItemId: { in: ids }, document: { status: 'CONFIRMED', type: 'RETURN' } },
     select: { sourceDocumentItemId: true, quantity: true, assetId: true },
   }) : [];
-  const remaining = (id: string) => Number(bySource.get(id)!.quantity ?? 1) - returns
-    .filter(item => item.sourceDocumentItemId === id).reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
-  const consumed = new Map<string, number>();
+  const remaining = (id: string) => new Prisma.Decimal(bySource.get(id)!.quantity ?? 1).minus(returns
+    .filter(item => item.sourceDocumentItemId === id).reduce((sum, item) => sum.plus(item.quantity ?? 1), new Prisma.Decimal(0)));
+  const consumed = new Map<string, Prisma.Decimal>();
   const parents = new Map<string, CompositionLine>();
   const bridgeParents = new Map<string, CompositionLine>();
   for (const id of [...new Set(rows.flatMap(item => item.parentLegacyOriginId ? [item.parentLegacyOriginId] : []))]) {
@@ -182,15 +182,15 @@ export async function validateDocumentComposition(tx: Prisma.TransactionClient, 
       const selectedParent = item.parentCompositionNodeId ? byNode.get(item.parentCompositionNodeId)?.sourceDocumentItemId : item.parentSourceDocumentItemId ?? (item.parentLegacyOriginId ? `legacy-origin:${item.parentLegacyOriginId}` : undefined);
       if (selectedParent && selectedParent !== originalParent)
         throw new BadRequestException('La devolución no puede cambiar el padre registrado en la remisión.');
-      const quantity = (consumed.get(source.id) ?? 0) + Number(item.quantity ?? 1);
+      const quantity = (consumed.get(source.id) ?? new Prisma.Decimal(0)).plus(String(item.quantity ?? 1));
       consumed.set(source.id, quantity);
-      if (quantity > remaining(source.id)) throw new BadRequestException('La devolución supera lo pendiente de esa línea de la remisión.');
+      if (quantity.gt(remaining(source.id))) throw new BadRequestException('La devolución supera lo pendiente de esa línea de la remisión.');
     }
     const parent = item.parentCompositionNodeId ? byNode.get(item.parentCompositionNodeId) :
       item.parentSourceDocumentItemId ? bySource.get(item.parentSourceDocumentItemId) :
       item.parentLegacyOriginId ? bridgeParents.get(item.parentLegacyOriginId) : undefined;
     if (parent) {
-      if (item.parentSourceDocumentItemId && document.type === 'REMISSION' && remaining(item.parentSourceDocumentItemId) <= 0)
+      if (item.parentSourceDocumentItemId && document.type === 'REMISSION' && remaining(item.parentSourceDocumentItemId).lte(0))
         throw new BadRequestException('El padre ya fue devuelto; no puedes agregarle una pieza en esta obra.');
       if (item.parentSourceDocumentItemId && parent.accessoryId && document.type === 'REMISSION') {
         const present = await tx.accessoryBalance.findFirst({ where: {

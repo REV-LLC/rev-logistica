@@ -1,7 +1,7 @@
-# Nuevo editor de texto en PDF
+# Devoluciones más ágiles y editor PDF
 
-Admin y Office ya pueden abrir el Editor PDF desde Herramientas, cargar un documento, buscar un texto y modificarlo conservando su fuente, tamaño, color y espaciado originales.
+Al devolver formaletas, andamios y otros materiales por cantidad, ahora verás el saldo total de cada referencia y propietario en la obra. Ya no necesitas escoger una remisión ni repartir manualmente las cantidades entre entregas.
 
-Puedes comparar con el original, deshacer cambios y descargar el PDF editado. El filtro de búsqueda se mantiene al aplicar una edición para agilizar los cambios consecutivos.
+El sistema hace el reparto entre las entregas pendientes más antiguas y conserva los vínculos y las fechas que utilizan los anexos para los cobros. Los documentos históricos, anexos emitidos y tarifas registradas no se modifican.
 
-El editor comprueba que la fuente incluya los caracteres nuevos y que el texto quepa en su espacio. Si una estructura o una fuente todavía no permite una edición fiel, conserva el original y explica el motivo.
+También está disponible el nuevo Editor PDF para Admin y Office en Herramientas: permite buscar y modificar texto conservando su fuente, tamaño, color y espaciado, comparar con el original, deshacer y descargar el archivo editado. El filtro de búsqueda se mantiene después de aplicar cada cambio.

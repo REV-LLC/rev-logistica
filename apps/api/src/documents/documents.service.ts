@@ -1,5 +1,6 @@
 import { documentCommercialSnapshots } from '../commercial-profiles/commercial-history';
 import { validateDeliveryFuel } from './document-delivery-fuel';
+import { allocateBulkReturnItems } from './bulk-return-allocation';
 import { validateDocumentConfiguration } from '../accessories/document-configuration';
 import { compositionFields, CompositionFields, isDocumentCompositionV2 } from './document-composition';
 import {
@@ -436,6 +437,7 @@ export class DocumentsService {
             throw new BadRequestException('Solo se pueden aprobar remisiones o devoluciones');
           }
           await this.assertProviderRemissionEvidence(document, tx);
+          document.items = await allocateBulkReturnItems(tx, document);
           await validateDocumentConfiguration(tx, document);
           if (document.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx,document.id,true);
           if (hasAccessories) {
@@ -909,6 +911,7 @@ export class DocumentsService {
             })), documentDate);
             await tx.documentItem.createMany({ data: items });
             const composed = await tx.document.findUniqueOrThrow({ where: { id: created.id }, include: { items: true } });
+            composed.items = await allocateBulkReturnItems(tx, composed);
             await validateDocumentConfiguration(tx, composed);
             if (payload.type === DocumentType.REMISSION) await documentCommercialSnapshots(tx, created.id, true);
             if (payload.type === DocumentType.RETURN) {
