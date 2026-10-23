@@ -38,14 +38,14 @@ export function documentCompositionPayload(item: {
   };
 }
 
-export function restoreDocumentComposition(item: Parameters<typeof documentCompositionPayload>[0] & { id: string }) {
+export function restoreDocumentComposition(item: Parameters<typeof documentCompositionPayload>[0] & { id: string }, bulkReturn = false) {
   return {
     ...(item.deliveryFuel ? { deliveryFuel: item.deliveryFuel, deliveryFuelSelectable: true } : {}),
     selectionId: item.compositionNodeId ?? item.id,
-    ...(item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
-    ...(item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),
-    ...(item.parentSourceDocumentItemId ? { parentSourceDocumentItemId: item.parentSourceDocumentItemId } : {}),
-    ...(item.parentLegacyOriginId ? { parentLegacyOriginId: item.parentLegacyOriginId } : {}),
+    ...(!bulkReturn && item.parentCompositionNodeId ? { parentCompositionNodeId: item.parentCompositionNodeId } : {}),
+    ...(!bulkReturn && item.sourceDocumentItemId ? { sourceDocumentItemId: item.sourceDocumentItemId } : {}),
+    ...(!bulkReturn && item.parentSourceDocumentItemId ? { parentSourceDocumentItemId: item.parentSourceDocumentItemId } : {}),
+    ...(!bulkReturn && item.parentLegacyOriginId ? { parentLegacyOriginId: item.parentLegacyOriginId } : {}),
   };
 }
 

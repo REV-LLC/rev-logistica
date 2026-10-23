@@ -16,6 +16,25 @@ El objetivo es garantizar **control, trazabilidad y prevención de errores o fra
 - Se controlan por **SKU + cantidad**.
 - Requieren doble confirmación (PICKUP vs RECEIPT).
 
+### Devolución BULK: saldo global y reparto documental interno
+
+Desde el flujo documental nuevo, el usuario selecciona **referencia + propietario + obra**
+y cantidad total. No debe escoger una remisión ni dividir manualmente una devolución.
+El selector muestra el saldo físico agregado, incluso si procede de varias entregas.
+
+Al aprobar un borrador o registrar una devolución directa, la API bloquea las referencias
+y reconstruye sus movimientos en la misma transacción serializable. Distribuye la cantidad
+entre las entregas pendientes más antiguas (FIFO), respetando las devoluciones ya confirmadas.
+Una fecha retroactiva no puede utilizar entregas futuras ni invalidar devoluciones posteriores.
+No se combinan propietarios, referencias ni obras; si falta saldo, se revierte toda la operación.
+
+El reparto se guarda como líneas internas con `sourceDocumentItemId`, manteniendo las
+fechas de corte, condiciones y relaciones del conjunto. Los anexos siguen leyendo esos
+vínculos y las condiciones comerciales congeladas en cada entrega: **no se reescriben
+tarifas, documentos históricos ni anexos emitidos**. Las entregas antiguas sin línea
+documental conservan su representación de ledger; no se inventa una remisión de origen.
+No requiere migración de esquema ni un empalme masivo de documentos existentes.
+
 ---
 
 ## Estados de Inventario
