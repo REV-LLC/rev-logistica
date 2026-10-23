@@ -53,14 +53,38 @@ test('los ciclos explícitos y los padres externos no seleccionados no ocultan f
   assert.equal(groupRequestItems([{ ...tip, parentCompositionNodeId: undefined, parentSourceDocumentItemId: 'elsewhere' }]).length, 1);
 });
 
-test('devolución masiva distingue lotes documentales del saldo histórico', () => {
+test('devolución BULK selecciona el total por referencia y propietario, no lotes de remisión', () => {
   const stock = { serial: [], bulk: [{ skuId: 'sku', quantity: 9, ownerWarehouseId: 'owner' }] };
   const lots = [{ sourceDocumentItemId: 'first', skuId: 'sku', quantity: 3, ownerWarehouseId: 'owner', consecutive: 'RM1' },
     { sourceDocumentItemId: 'second', skuId: 'sku', quantity: 4, ownerWarehouseId: 'owner', consecutive: 'RM2' }];
   const result = inventoryWithReturnOrigins(stock, lots);
-  assert.deepEqual(result.bulk.map(item => [item.sourceDocumentItemId, item.quantity]), [['first', 3], ['second', 4], [undefined, 2]]);
+  assert.deepEqual(result.bulk.map(item => [item.sourceDocumentItemId, item.quantity]), [[undefined, 9]]);
   assert.deepEqual(stock.bulk[0].quantity, 9);
-  assert.throws(() => inventoryWithReturnOrigins({ ...stock, bulk: [{ ...stock.bulk[0], quantity: 6 }] }, lots), /conciliar/);
+  assert.equal(inventoryWithReturnOrigins({ ...stock, bulk: [{ ...stock.bulk[0], quantity: 6 }] }, lots).bulk[0].quantity, 6);
+});
+
+test('BULK no conserva vínculos arbitrarios ni mezcla propietarios o referencias', () => {
+  const stock = { serial: [], bulk: [
+    { skuId: 'sku', ownerWarehouseId: 'one', quantity: 8, sourceDocumentItemId: 'stale', parentSourceDocumentItemId: 'parent', returnSourceLabel: 'RM1' },
+    { skuId: 'sku', ownerWarehouseId: 'two', quantity: 4 },
+    { skuId: 'other', ownerWarehouseId: 'one', quantity: 2 },
+  ] };
+  assert.deepEqual(inventoryWithReturnOrigins(stock, []).bulk, [
+    { skuId: 'sku', ownerWarehouseId: 'one', quantity: 8 },
+    { skuId: 'sku', ownerWarehouseId: 'two', quantity: 4 },
+    { skuId: 'other', ownerWarehouseId: 'one', quantity: 2 },
+  ]);
+  assert.equal(stock.bulk[0].sourceDocumentItemId, 'stale');
+});
+
+test('reabrir un borrador BULK antiguo libera el origen sin perder cantidad, propietario ni identidad de fila', () => {
+  const old = { id: 'return-row', compositionNodeId: 'node', sourceDocumentItemId: 'old-remission',
+    parentSourceDocumentItemId: 'old-parent', skuId: 'sku', quantity: 10, ownerWarehouseId: 'owner' };
+  const restored = restoreDocumentComposition(old, true);
+  assert.equal(restored.selectionId, 'node');
+  assert.equal(restored.sourceDocumentItemId, undefined);
+  assert.equal(restored.parentSourceDocumentItemId, undefined);
+  assert.equal(restoreDocumentComposition(old).sourceDocumentItemId, 'old-remission');
 });
 
 test('devolución serial no elige arbitrariamente entre dos orígenes pendientes', () => {
