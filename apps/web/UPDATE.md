@@ -1,9 +1,7 @@
-# Tu perfil y préstamos, a un toque
+# Nuevo editor de texto en PDF
 
-Ahora puedes abrir «Ver perfil» debajo de tu nombre en el menú y consultar tus préstamos y tu bitácora, también desde el celular.
+Admin y Office ya pueden abrir el Editor PDF desde Herramientas, cargar un documento, buscar un texto y modificarlo conservando su fuente, tamaño, color y espaciado originales.
 
-En «Mi perfil» encontrarás accesos directos a Préstamos y Mi bitácora. Esta consulta es personal y de solo lectura: no muestra nómina ni permite cambiar movimientos o registros.
+Puedes comparar con el original, deshacer cambios y descargar el PDF editado. El filtro de búsqueda se mantiene al aplicar una edición para agilizar los cambios consecutivos.
 
-Solo Admin puede modificar salarios, incluir empleados en nómina o emitir comprobantes. Office conserva la consulta y la descarga de comprobantes ya emitidos.
-
-Los saldos, pagos, salarios e históricos existentes se conservan sin cambios.
+El editor comprueba que la fuente incluya los caracteres nuevos y que el texto quepa en su espacio. Si una estructura o una fuente todavía no permite una edición fiel, conserva el original y explica el motivo.

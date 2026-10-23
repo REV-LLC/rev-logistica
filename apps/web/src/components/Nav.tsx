@@ -315,6 +315,12 @@ const sections: NavSection[] = [
 
 const toolLinks: NavLinkItem[] = [
   {
+    href: "/tools/pdf-editor",
+    label: "Editor de PDF",
+    icon: IconFileCertificate,
+    roles: ["ADMIN", "OFFICE"],
+  },
+  {
     href: "/tools/quotation",
     label: "Cotización",
     icon: IconFileDollar,

@@ -36,6 +36,9 @@ jobs:
       - name: Build API
         run: npm --workspace apps/api run build
 
+      - name: Test PDF editor text fidelity
+        run: node --test apps/api/test/pdf-editor.test.mjs
+
       - name: Test API inventory and document regressions
         run: npm --workspace apps/api test -- --runInBand
 

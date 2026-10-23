@@ -40,6 +40,7 @@ import { FuelModule } from './fuel/fuel.module';
 import { AccessoriesModule } from './accessories/accessories.module';
 import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
+import { PdfEditorModule } from './pdf-editor/pdf-editor.controller';
 import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
 import { EmployeePortalModule } from './employee-portal/employee-portal.module';
 
@@ -85,6 +86,7 @@ import { EmployeePortalModule } from './employee-portal/employee-portal.module';
     FuelModule,
     AccessoriesModule,
     OfficeAssistantModule,
+    PdfEditorModule,
     EmployeeActivitiesModule,
     EmployeePortalModule,
   ],
