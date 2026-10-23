@@ -8,7 +8,10 @@ const require = createRequire(import.meta.url);
 const PDFKit = require('pdfkit');
 const sharp = require('sharp');
 const { PDFDocument, PDFName, StandardFonts } = require('pdf-lib');
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, Path2D, DOMMatrix, ImageData } = require('@napi-rs/canvas');
+// Both PDF.js versions can install canvas globals. Keep paths and matrices
+// from the same native implementation used by the independent renderer.
+Object.assign(globalThis, { Path2D, DOMMatrix, ImageData });
 const { PdfEditorService } = require('../dist/src/pdf-editor/pdf-editor.service.js');
 const service = new PdfEditorService();
 
