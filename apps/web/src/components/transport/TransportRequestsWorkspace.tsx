@@ -688,17 +688,17 @@ export default function TransportRequestsWorkspace({
           }
           if (item.skuId) {
             return {
-              ...restoreDocumentComposition(item),
+              ...restoreDocumentComposition(item, doc.type === 'RETURN'),
               type: 'bulk' as const,
               sourceWarehouseId,
               bulkKey: buildBulkKey({
                 skuId: item.skuId,
                 sourceWarehouseId,
-                sourceDocumentItemId: item.sourceDocumentItemId,
+                sourceDocumentItemId: doc.type === 'RETURN' ? undefined : item.sourceDocumentItemId,
                 ownerWarehouseId,
               }),
               skuId: item.skuId,
-              componentParentAssetId: item.componentParentAssetId ?? undefined,
+              componentParentAssetId: doc.type === 'RETURN' ? undefined : item.componentParentAssetId ?? undefined,
               name: item.sku?.name ?? item.skuId,
               quantity: Number(item.quantity ?? 1) || 1,
               ownerWarehouseId,
