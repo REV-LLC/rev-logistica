@@ -63,6 +63,12 @@ describe('Document composition v2', () => {
   it('sums sibling return rows before comparing with the source quantity', async () => {
     await expect(fixture().validate([returned(3, 'a'), returned(3, 'b')])).rejects.toThrow('supera lo pendiente');
   });
+  it('compares fractional portions exactly without a floating-point over-return', async () => {
+    const f = fixture();
+    f.tx.documentItem.findMany.mockImplementation(async ({ where }) => where.id ? [{ ...source, quantity: 0.3 }] : []);
+    await expect(f.validate([returned(0.1, 'a'), returned(0.2, 'b')])).resolves.not.toBeNull();
+    await expect(f.validate([returned(0.1, 'a'), returned(0.21, 'b')])).rejects.toThrow('supera lo pendiente');
+  });
   it('rejects a forged source identity or another worksite', async () => {
     await expect(fixture().validate([{ ...returned(1), accessoryId: 'wrong' }])).rejects.toThrow('no corresponde');
     const f = fixture(); f.tx.documentItem.findMany.mockResolvedValue([{ ...source, document: { ...source.document, customerWorksiteId: 'other' } }] as never);
