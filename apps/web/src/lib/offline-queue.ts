@@ -64,6 +64,7 @@ function notifyQueueChanged() {
 }
 
 export async function enqueueOfflineOperation(input: {
+  id?: string;
   label: string;
   path: string;
   method?: string;
@@ -74,7 +75,7 @@ export async function enqueueOfflineOperation(input: {
   if (!userId) throw new Error('No hay una sesión válida para guardar la operación.');
   const now = new Date().toISOString();
   const operation: OfflineOperation = {
-    id: crypto.randomUUID(),
+    id: input.id ?? crypto.randomUUID(),
     userId,
     label: input.label,
     path: input.path,
