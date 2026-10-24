@@ -1,7 +1,13 @@
 const CACHE_PREFIX = 'rev-logistica-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v5`;
+const CACHE_NAME = `${CACHE_PREFIX}v6`;
 const OFFLINE_URL = '/offline.html';
-const PRECACHE = [OFFLINE_URL, '/fiesta.svg', '/rev-logo-clean.svg', '/pwa-192.png', '/pwa-512.png'];
+const PRECACHE = [
+  OFFLINE_URL,
+  '/fiesta.svg',
+  '/rev-logo-clean.svg',
+  '/pwa-icon-v2-192.png',
+  '/pwa-icon-v2-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)));

@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   icons: {
     icon: '/fiesta.svg',
     shortcut: '/fiesta.svg',
-    apple: '/pwa-192.png',
+    apple: '/pwa-icon-v2-192.png',
   },
 };
 

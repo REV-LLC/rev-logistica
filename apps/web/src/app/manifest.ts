@@ -15,9 +15,9 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: 'es-CO',
     categories: ['business', 'productivity'],
     icons: [
-      { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/pwa-icon-v2-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/pwa-icon-v2-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/pwa-icon-v2-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
 }
