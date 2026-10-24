@@ -93,6 +93,50 @@ describe('DocumentsService autosave lifecycle', () => {
     expect(snapshots.refresh).toHaveBeenCalledWith('draft-1');
   });
 
+  it('retries PDF generation when the form was submitted before the response failed', async () => {
+    const prisma = {
+      document: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'draft-1',
+          consecutive: 'RM000001',
+          createdBy: 'driver-1',
+          status: DocumentStatus.DRAFT,
+          customerWorksiteId: 'worksite-1',
+          recipientPhone: '3001234567',
+          recipientPhones: ['3001234567'],
+          type: DocumentType.REMISSION,
+          items: [],
+          _count: { items: 1 },
+          files: [{ id: 'signature-1' }],
+        }),
+        update: jest.fn(),
+      },
+    };
+    const snapshots = { refresh: jest.fn().mockResolvedValue({ id: 'pdf-1' }) };
+    const service = new DocumentsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      snapshots as never,
+    );
+
+    await expect(
+      service.submitAutosavedRequestDocument(
+        'draft-1',
+        { sendWhatsapp: true },
+        { sub: 'driver-1', role: Role.DRIVER },
+      ),
+    ).resolves.toEqual({
+      id: 'draft-1',
+      consecutive: 'RM000001',
+      status: DocumentStatus.DRAFT,
+    });
+
+    expect(prisma.document.update).not.toHaveBeenCalled();
+    expect(snapshots.refresh).toHaveBeenCalledWith('draft-1');
+  });
+
   it('prevents a driver from updating another user’s saved form', async () => {
     const prisma = {
       document: {

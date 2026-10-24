@@ -246,7 +246,11 @@ export function useRequestSubmission({
       } as const;
 
       const movementItems = buildRequestItems(selectedItems);
-      if (!navigator.onLine) {
+      const queueAutosavedSubmission = async (input?: {
+        includeAutosave?: boolean;
+        autosaveOperationId?: string;
+        submitOperationId?: string;
+      }) => {
         if (!autosaveDraftId) {
           throw new Error(
             'Este formulario todavía no tiene un borrador en el servidor. Recupera la conexión para iniciar el borrador y vuelve a intentarlo.',
@@ -261,22 +265,31 @@ export function useRequestSubmission({
           );
         }
 
-        const autosaveOperation = await enqueueOfflineOperation({
-          label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
-          path: `/documents/${autosaveDraftId}/request/autosave`,
-          method: 'PATCH',
-          body: {
-            ...autosavePayload,
-            ...documentPayload,
-            sendWhatsapp: undefined,
-            items: movementItems,
-          },
-        });
+        const autosaveOperation =
+          input?.includeAutosave === false
+            ? null
+            : await enqueueOfflineOperation({
+                ...(input?.autosaveOperationId
+                  ? { id: input.autosaveOperationId }
+                  : {}),
+                label: `Guardar borrador ${autosaveDraftId.slice(0, 8)}`,
+                path: `/documents/${autosaveDraftId}/request/autosave`,
+                method: 'PATCH',
+                body: {
+                  ...autosavePayload,
+                  ...documentPayload,
+                  sendWhatsapp: undefined,
+                  items: movementItems,
+                },
+              });
         const submitOperation = await enqueueOfflineOperation({
+          ...(input?.submitOperationId
+            ? { id: input.submitOperationId }
+            : {}),
           label: `Enviar solicitud ${autosaveDraftId.slice(0, 8)}`,
           path: `/documents/${autosaveDraftId}/request/submit`,
           body: { sendWhatsapp: shouldSendWhatsapp },
-          dependsOn: [autosaveOperation.id],
+          dependsOn: autosaveOperation ? [autosaveOperation.id] : [],
         });
         await enqueueOfflineOperation({
           label: `Enviar correo ${autosaveDraftId.slice(0, 8)}`,
@@ -297,29 +310,63 @@ export function useRequestSubmission({
         );
         setItemsModalOpen(false);
         setWorksites([]);
+      };
+
+      if (!navigator.onLine) {
+        await queueAutosavedSubmission();
         return;
       }
 
       let created: { id: string; consecutive?: string | null };
       if (autosaveDraftId) {
-        const saved = await api<{ id: string; consecutive: string | null }>(`/documents/${autosaveDraftId}/request/autosave`, {
-          method: 'PATCH',
-          json: {
-            ...autosavePayload,
-            ...documentPayload,
-            sendWhatsapp: undefined,
-            items: movementItems,
-          },
-        });
+        const autosaveOperationId = crypto.randomUUID();
+        const submitOperationId = crypto.randomUUID();
+        let saved: { id: string; consecutive: string | null };
+        try {
+          saved = await api<{ id: string; consecutive: string | null }>(
+            `/documents/${autosaveDraftId}/request/autosave`,
+            {
+              method: 'PATCH',
+              headers: { 'Idempotency-Key': autosaveOperationId },
+              json: {
+                ...autosavePayload,
+                ...documentPayload,
+                sendWhatsapp: undefined,
+                items: movementItems,
+              },
+            },
+          );
+        } catch (error) {
+          if (error instanceof TypeError && !tabletEmployeeToken) {
+            await queueAutosavedSubmission({
+              autosaveOperationId,
+              submitOperationId,
+            });
+            return;
+          }
+          throw error;
+        }
         setConsecutive(saved.consecutive ?? '');
         setSavedConsecutive(saved.consecutive);
-        created = await api<{ id: string }>(
-          `/documents/${autosaveDraftId}/request/submit`,
-          {
-            method: 'POST',
-            json: { sendWhatsapp: shouldSendWhatsapp, ...(tabletEmployeeToken ? { tabletEmployeeToken } : {}) },
-          },
-        );
+        try {
+          created = await api<{ id: string }>(
+            `/documents/${autosaveDraftId}/request/submit`,
+            {
+              method: 'POST',
+              headers: { 'Idempotency-Key': submitOperationId },
+              json: { sendWhatsapp: shouldSendWhatsapp, ...(tabletEmployeeToken ? { tabletEmployeeToken } : {}) },
+            },
+          );
+        } catch (error) {
+          if (error instanceof TypeError && !tabletEmployeeToken) {
+            await queueAutosavedSubmission({
+              includeAutosave: false,
+              submitOperationId,
+            });
+            return;
+          }
+          throw error;
+        }
       } else {
         created = await api<{ id: string; consecutive?: string | null }>(
           editingRequestId
