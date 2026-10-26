@@ -1061,6 +1061,24 @@ export class InventoryService {
           }),
         );
 
+        // Direct worksite allocations have no physical OUT row. Match the
+        // warehouse inventory projection by subtracting these allocations.
+        // Only this warehouse's owned stock contributes ON_SITE deductions.
+        const onSiteRows = await tx.stockLedger.groupBy({
+          by: ['skuId', 'ownerWarehouseId'],
+          where: {
+            ownerWarehouseId: payload.warehouseId,
+            movementType: MovementType.ON_SITE,
+            skuId: { in: bulkSkuIds },
+          },
+          _sum: { quantity: true },
+        });
+        for (const row of onSiteRows) {
+          const key = `${row.skuId}::${row.ownerWarehouseId}`;
+          availableByGroup.set(key,
+            (availableByGroup.get(key) ?? 0) - Number(row._sum.quantity ?? 0));
+        }
+
         const shortages = bulkGroups.flatMap((group) => {
           const key = `${group.skuId}::${group.ownerWarehouseId ?? 'null'}`;
           const available = availableByGroup.get(key) ?? 0;
