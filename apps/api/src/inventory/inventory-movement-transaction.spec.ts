@@ -25,6 +25,12 @@ function fixture(method: typeof methods[number]) {
       create: jest.fn().mockImplementation(async ({ data }) => ({ id: 'ledger', ...data })),
     },
   };
+  if (method === 'moveOut') {
+    tx.stockLedger.groupBy.mockResolvedValueOnce([{
+      skuId: 'sku', assetId: null, ownerWarehouseId: 'owner', warehouseId: 'warehouse',
+      movementType: MovementType.ADJUST, _sum: { quantity: 5 },
+    }]).mockResolvedValue([]);
+  }
   if (method === 'moveOnSite') {
     tx.stockLedger.groupBy.mockResolvedValueOnce([{
       skuId: 'sku', assetId: null, ownerWarehouseId: 'owner', warehouseId: 'owner',

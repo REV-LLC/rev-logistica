@@ -64,7 +64,7 @@ describe('InventoryService warehouse availability', () => {
         callback(tx),
       ),
       warehouse: {
-        findMany: jest.fn().mockResolvedValue([{ id: ownerWarehouseId }]),
+        findMany: jest.fn().mockResolvedValue([{ id: ownerWarehouseId }, { id: warehouseId }]),
       },
     };
     const cache = { del: jest.fn().mockResolvedValue(undefined) };
@@ -78,7 +78,8 @@ describe('InventoryService warehouse availability', () => {
   it('counts a completed return in the warehouse even when it retains worksite traceability', async () => {
     const groupBy = jest
       .fn()
-      .mockResolvedValue([{ skuId, ownerWarehouseId, _sum: { quantity: 8 } }]);
+      .mockResolvedValueOnce([{ skuId, ownerWarehouseId, _sum: { quantity: 8 } }])
+      .mockResolvedValueOnce([]);
     const { service, create } = createService(groupBy);
 
     await expect(
@@ -111,6 +112,34 @@ describe('InventoryService warehouse availability', () => {
         effectiveAt: expect.any(Date),
         createdBy: 'user-1',
       }),
+    });
+  });
+
+  it.each([24, 22])('checks dispatch of %s against 22 available after direct worksite allocations (RM019569)', async (quantity) => {
+    const groupBy = jest.fn()
+      .mockResolvedValueOnce([{ skuId, ownerWarehouseId: warehouseId, _sum: { quantity: 393 } }])
+      .mockResolvedValueOnce([{ skuId, ownerWarehouseId: warehouseId, _sum: { quantity: 371 } }]);
+    const { service, create } = createService(groupBy);
+    const movement = service.moveOut({
+      warehouseId,
+      customerWorksiteId: worksiteId,
+      items: [{ skuId, ownerWarehouseId: warehouseId, quantity }],
+    }, 'user-1');
+
+    if (quantity === 24) {
+      await expect(movement).rejects.toMatchObject({ response: {
+        code: 'INSUFFICIENT_STOCK',
+        shortages: [expect.objectContaining({ availableQuantity: 22, requestedQuantity: 24, missingQuantity: 2 })],
+      } });
+      expect(create).not.toHaveBeenCalled();
+    } else {
+      await expect(movement).resolves.toMatchObject({ count: 1 });
+      expect(create).toHaveBeenCalledTimes(1);
+    }
+    expect(groupBy).toHaveBeenNthCalledWith(2, {
+      by: ['skuId', 'ownerWarehouseId'],
+      where: { ownerWarehouseId: warehouseId, movementType: MovementType.ON_SITE, skuId: { in: [skuId] } },
+      _sum: { quantity: true },
     });
   });
 
