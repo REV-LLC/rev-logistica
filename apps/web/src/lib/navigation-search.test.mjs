@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { loadTransportModule } from '../components/transport/test-support.cjs';
 
 const { buildNavigationSearchEntries, searchNavigation } = loadTransportModule('../../lib/navigation-search.ts');
@@ -41,4 +42,11 @@ test('empty and unknown queries have predictable results', () => {
   assert.equal(searchNavigation(entries, '').length, entries.length);
   assert.deepEqual(searchNavigation(entries, 'zzzz'), []);
   assert.equal(searchNavigation(entries, 'empleados')[0].label, 'Empleados');
+});
+
+test('Mapa is a visible Operations link for Admin and Office, not only an unrendered quick link', () => {
+  const nav = readFileSync(new URL('../components/Nav.tsx', import.meta.url), 'utf8');
+  const operations = nav.slice(nav.indexOf('title: "Operación"'), nav.indexOf('title: "Inventario"'));
+  assert.match(operations, /href: "\/transport\/tracking",\s+label: "Mapa",\s+icon: IconMap2,\s+roles: \["ADMIN", "OFFICE"\]/);
+  assert.equal((nav.match(/label: "Mapa"/g) ?? []).length, 1);
 });

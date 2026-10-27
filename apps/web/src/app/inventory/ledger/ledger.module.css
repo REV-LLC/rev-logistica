@@ -26,6 +26,8 @@ button.tableRow { width: 100%; border: 0; border-bottom: 1px solid var(--line); 
 .tableRow:focus-visible { outline: 2px solid var(--mantine-primary-color-filled); outline-offset: -2px; }
 .tableRow > span { min-width: 0; color: #cbd3d9; overflow-wrap: anywhere; }
 .tableRow > strong { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.worksite { display: flex; flex-direction: column; gap: .2rem; }
+.worksite small { color: var(--muted); font-size: .78rem; }
 .movement { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .empty { min-height: 14rem; display: grid; place-content: center; text-align: center; gap: .4rem; color: var(--muted); }
 .empty strong { color: var(--ink); }
@@ -47,7 +49,7 @@ button.tableRow { width: 100%; border: 0; border-bottom: 1px solid var(--line); 
   .tableRow { min-width: 0; grid-template-columns: 1fr auto; gap: .35rem 1rem; padding: 1rem .15rem; }
   .tableRow > strong { font-size: 1rem; }
   .tableRow > span { grid-column: 1; }
-  .tableRow > span:nth-of-type(3), .tableRow > span:nth-of-type(4), .tableRow > span:nth-of-type(5) { display: none; }
+  .tableRow > span:nth-of-type(4) { display: none; }
   .tableRow > svg { grid-column: 2; grid-row: 1 / 4; }
 }
 
