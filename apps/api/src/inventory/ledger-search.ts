@@ -9,13 +9,37 @@ const MOVEMENT_LABELS: Record<MovementType, string> = {
 };
 
 function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
-export function ledgerSearchWhere(search?: string): Prisma.StockLedgerWhereInput {
+// Warehouse-side entries often carry the customer/worksite only on their document.
+// A direct worksite takes precedence; never attribute a transfer to two worksites.
+export function ledgerWorksiteWhere(
+  worksite: Prisma.CustomerWorksiteWhereInput,
+): Prisma.StockLedgerWhereInput {
+  return {
+    OR: [
+      { customerWorksite: worksite },
+      { customerWorksiteId: null, document: { customerWorksite: worksite } },
+    ],
+  };
+}
+
+export function ledgerSearchWhere(
+  search?: string,
+  filters: { customerId?: string; customerWorksiteId?: string } = {},
+): Prisma.StockLedgerWhereInput {
   const terms = search?.trim().split(/\s+/).filter(Boolean);
-  if (!terms?.length) return {};
-  return { AND: terms.map(ledgerSearchTermWhere) };
+  const conditions: Prisma.StockLedgerWhereInput[] =
+    terms?.map(ledgerSearchTermWhere) ?? [];
+  if (filters.customerId)
+    conditions.push(ledgerWorksiteWhere({ customerId: filters.customerId }));
+  if (filters.customerWorksiteId)
+    conditions.push(ledgerWorksiteWhere({ id: filters.customerWorksiteId }));
+  return conditions.length ? { AND: conditions } : {};
 }
 
 function ledgerSearchTermWhere(term: string): Prisma.StockLedgerWhereInput {
@@ -28,8 +52,8 @@ function ledgerSearchTermWhere(term: string): Prisma.StockLedgerWhereInput {
     ],
   };
   const normalized = normalize(term);
-  const movementTypes = Object.values(MovementType).filter(
-    (type) => normalize(`${type} ${MOVEMENT_LABELS[type]}`).includes(normalized),
+  const movementTypes = Object.values(MovementType).filter((type) =>
+    normalize(`${type} ${MOVEMENT_LABELS[type]}`).includes(normalized),
   );
   const documentTypes = Object.values(DocumentType).filter((type) =>
     normalize(type).includes(normalized),
@@ -46,11 +70,14 @@ function ledgerSearchTermWhere(term: string): Prisma.StockLedgerWhereInput {
       { asset: { serialOrEngine: contains } },
       { asset: { sku: { name: contains } } },
       { warehouse: { name: contains } },
-      { customerWorksite: { customer: { name: contains } } },
-      { customerWorksite: { worksite: { name: contains } } },
+      ledgerWorksiteWhere({ customer: { name: contains } }),
+      ledgerWorksiteWhere({ worksite: { name: contains } }),
+      ledgerWorksiteWhere({ alias: contains }),
       { creator },
       { document: { creator } },
-      ...(movementTypes.length ? [{ movementType: { in: movementTypes } }] : []),
+      ...(movementTypes.length
+        ? [{ movementType: { in: movementTypes } }]
+        : []),
       ...(documentTypes.length
         ? [
             { refDocumentType: { in: documentTypes } },

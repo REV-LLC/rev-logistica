@@ -2691,7 +2691,7 @@ export class InventoryService {
 
   async getLedger(query: GetInventoryLedgerDto) {
     const take = Math.min(query.take ?? LEDGER_DEFAULT_TAKE, LEDGER_MAX_TAKE);
-    const where: Prisma.StockLedgerWhereInput = ledgerSearchWhere(query.search);
+    const where: Prisma.StockLedgerWhereInput = ledgerSearchWhere(query.search, query);
     const cursor = query.cursor ? this.parseLedgerCursor(query.cursor) : null;
     // An existing pagination session must keep its original ordering. Looking
     // up one old cursor row cannot reveal which newly reordered rows it already
@@ -2700,7 +2700,6 @@ export class InventoryService {
     const legacyOrder = cursor !== null && !cursor.hasAppendOrder;
 
     if (query.warehouseId) where.warehouseId = query.warehouseId;
-    if (query.customerWorksiteId) where.customerWorksiteId = query.customerWorksiteId;
     if (query.movementType) where.movementType = query.movementType;
     if (query.skuId) where.skuId = query.skuId;
     if (query.assetId) where.assetId = query.assetId;
@@ -2786,6 +2785,13 @@ export class InventoryService {
             id: true,
             consecutive: true,
             type: true,
+            customerWorksite: {
+              select: {
+                id: true,
+                customer: { select: { id: true, name: true } },
+                worksite: { select: { id: true, name: true } },
+              },
+            },
             creator: {
               select: {
                 id: true,
