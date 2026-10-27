@@ -1,7 +1,7 @@
-# Devoluciones más ágiles y editor PDF
+# Mapa y búsqueda de movimientos
 
-Al devolver formaletas, andamios y otros materiales por cantidad, ahora verás el saldo total de cada referencia y propietario en la obra. Ya no necesitas escoger una remisión ni repartir manualmente las cantidades entre entregas.
+Mapa vuelve al menú Operación para Admin y Office, sin necesidad de buscarlo entre los accesos rápidos.
 
-El sistema hace el reparto entre las entregas pendientes más antiguas y conserva los vínculos y las fechas que utilizan los anexos para los cobros. Los documentos históricos, anexos emitidos y tarifas registradas no se modifican.
+En Movimientos puedes filtrar por Cliente, Obra y Bodega, o buscar por nombre de cliente, obra, documento o equipo en todo el historial. Al elegir un cliente, el selector de obras muestra únicamente las suyas; los filtros se conservan al cargar más resultados.
 
-También está disponible el nuevo Editor PDF para Admin y Office en Herramientas: permite buscar y modificar texto conservando su fuente, tamaño, color y espaciado, comparar con el original, deshacer y descargar el archivo editado. El filtro de búsqueda se mantiene después de aplicar cada cambio.
+Las filas muestran el cliente y la obra también en el celular. La consulta incluye los movimientos registrados contra una bodega cuando su documento identifica al cliente y la obra. Esta actualización no cambia existencias, documentos, anexos ni cobros.

@@ -14,6 +14,10 @@ export class GetInventoryLedgerDto {
 
   @IsOptional()
   @IsUUID()
+  customerId?: string;
+
+  @IsOptional()
+  @IsUUID()
   customerWorksiteId?: string;
 
   @IsOptional()

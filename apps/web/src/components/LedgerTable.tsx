@@ -20,6 +20,7 @@ export type LedgerItem = {
     id: string;
     consecutive: string | null;
     type: string;
+    customerWorksite?: LedgerItem['customerWorksite'];
     creator?: {
       id: string;
       email: string;

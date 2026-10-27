@@ -1,5 +1,9 @@
 import { MovementType, Prisma } from '@prisma/client';
 import { InventoryService } from './inventory.service';
+import { ledgerWorksiteWhere } from './ledger-search';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { GetInventoryLedgerDto } from './dto/get-inventory-ledger.dto';
 
 describe('InventoryService ledger search', () => {
   function createService(rows: unknown[] = []) {
@@ -20,7 +24,10 @@ describe('InventoryService ledger search', () => {
     };
     const { service, findMany } = createService([historicalMovement]);
 
-    const result = await service.getLedger({ search: '  rm-19001  ', take: 30 });
+    const result = await service.getLedger({
+      search: '  rm-19001  ',
+      take: 30,
+    });
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -72,7 +79,10 @@ describe('InventoryService ledger search', () => {
         {
           OR: [
             { effectiveAt: { lt: row.effectiveAt } },
-            { effectiveAt: row.effectiveAt, OR: [{ appendOrder: null, id: { lt: row.id } }] },
+            {
+              effectiveAt: row.effectiveAt,
+              OR: [{ appendOrder: null, id: { lt: row.id } }],
+            },
           ],
         },
       ],
@@ -106,7 +116,11 @@ describe('InventoryService ledger search', () => {
           document: {
             creator: {
               OR: expect.arrayContaining([
-                { employee: { lastName: { contains: 'Pérez', mode: 'insensitive' } } },
+                {
+                  employee: {
+                    lastName: { contains: 'Pérez', mode: 'insensitive' },
+                  },
+                },
               ]),
             },
           },
@@ -129,5 +143,84 @@ describe('InventoryService ledger search', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: {} }),
     );
+  });
+
+  it('finds customer, worksite and alias on warehouse-side documents as well as on-site rows', async () => {
+    const { service, findMany } = createService();
+    await service.getLedger({ search: 'SIGO Mercedes' });
+    const terms = findMany.mock.calls[0][0].where.AND;
+    for (const [index, term] of ['SIGO', 'Mercedes'].entries()) {
+      const contains = { contains: term, mode: 'insensitive' };
+      expect(terms[index].OR).toEqual(
+        expect.arrayContaining([
+          ledgerWorksiteWhere({ customer: { name: contains } }),
+          ledgerWorksiteWhere({ worksite: { name: contains } }),
+          ledgerWorksiteWhere({ alias: contains }),
+        ]),
+      );
+    }
+  });
+
+  it('combines exact customer/worksite filters with warehouse, dates, search and cursor', async () => {
+    const { service, findMany } = createService([
+      {
+        id: 'row',
+        quantity: new Prisma.Decimal(1),
+        effectiveAt: new Date('2024-01-01'),
+      },
+    ]);
+    const query = {
+      customerId: 'customer',
+      customerWorksiteId: 'site',
+      warehouseId: 'warehouse',
+      search: 'RM',
+      take: 1,
+    };
+    const first = await service.getLedger(query);
+    await service.getLedger({ ...query, cursor: first.nextCursor! });
+    const firstWhere = findMany.mock.calls[0][0].where;
+    const nextWhere = findMany.mock.calls[1][0].where;
+    expect(firstWhere.AND).toEqual(
+      expect.arrayContaining([
+        ledgerWorksiteWhere({ customerId: 'customer' }),
+        ledgerWorksiteWhere({ id: 'site' }),
+      ]),
+    );
+    expect(firstWhere.warehouseId).toBe('warehouse');
+    expect(firstWhere.customerWorksiteId).toBeUndefined();
+    expect(nextWhere.AND.slice(0, -1)).toEqual(firstWhere.AND);
+    expect(nextWhere.warehouseId).toBe('warehouse');
+    expect(
+      findMany.mock.calls[0][0].include.document.select.customerWorksite,
+    ).toBeDefined();
+  });
+
+  it('only falls back to the document when the entry has no direct worksite', () => {
+    expect(ledgerWorksiteWhere({ id: 'site' })).toEqual({
+      OR: [
+        { customerWorksite: { id: 'site' } },
+        {
+          customerWorksiteId: null,
+          document: { customerWorksite: { id: 'site' } },
+        },
+      ],
+    });
+  });
+
+  it('validates customer IDs instead of accepting arbitrary values', async () => {
+    expect(
+      await validate(
+        plainToInstance(GetInventoryLedgerDto, {
+          customerId: '00000000-0000-4000-8000-000000000001',
+        }),
+      ),
+    ).toHaveLength(0);
+    expect(
+      (
+        await validate(
+          plainToInstance(GetInventoryLedgerDto, { customerId: 'not-a-uuid' }),
+        )
+      ).some((e) => e.property === 'customerId'),
+    ).toBe(true);
   });
 });
