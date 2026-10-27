@@ -22,7 +22,16 @@ export default function OfflineManager() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      if (process.env.NODE_ENV === 'production') {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => undefined);
+      } else {
+        // A worker left active by a production preview can otherwise keep
+        // serving stale chunks while developing locally.
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .catch(() => undefined);
+      }
     }
     const handleOnline = () => {
       refresh();

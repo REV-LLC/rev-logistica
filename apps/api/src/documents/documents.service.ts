@@ -1310,6 +1310,7 @@ export class DocumentsService {
       where: { id: documentId },
       select: {
         id: true,
+        consecutive: true,
         createdBy: true,
         status: true,
         type: true,
@@ -1329,6 +1330,14 @@ export class DocumentsService {
     });
     if (!document) throw new NotFoundException('Document not found');
     this.assertCanManageAutosavedRequest(document, requester);
+    if (document.status === DocumentStatus.DRAFT) {
+      await this.documentPdfSnapshots.refresh(documentId);
+      return {
+        id: document.id,
+        consecutive: document.consecutive,
+        status: document.status,
+      };
+    }
     if (document.status !== DocumentStatus.IN_PROGRESS) {
       throw new BadRequestException('Este formulario ya fue enviado');
     }

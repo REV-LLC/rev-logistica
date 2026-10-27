@@ -715,8 +715,8 @@ test('autoguardado espera una hora válida y sincroniza el consecutivo APP asign
   }
 });
 
-test('envío conserva el número APP actualizado si falla el envío del borrador y permite reintentar', async () => {
-  const calls = [], assigned = [], savedNumbers = [], errors = [];
+test('envío conserva el número APP y encola el submit si fetch pierde la conexión', async () => {
+  const calls = [], queued = [], assigned = [], savedNumbers = [], errors = [];
   Object.defineProperty(globalThis.navigator, 'onLine', {
     configurable: true,
     value: true,
@@ -724,10 +724,16 @@ test('envío conserva el número APP actualizado si falla el envío del borrador
   const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
     '@/lib/api': { ApiError, api: async (url, options) => {
       calls.push({ url, options });
-      if (url.endsWith('/submit')) throw new Error('Conexión interrumpida');
+      if (url.endsWith('/submit')) throw new TypeError('Failed to fetch');
       return { id: 'draft', consecutive: 'DV-APP-000003' };
     } },
-    '@/lib/offline-queue': { enqueueOfflineOperation: noop, syncOfflineOperations: noop },
+    '@/lib/offline-queue': {
+      enqueueOfflineOperation: async operation => {
+        queued.push(operation);
+        return { id: operation.id ?? `queued-${queued.length}` };
+      },
+      syncOfflineOperations: noop,
+    },
   });
   const hook = await mountHook(useRequestSubmission, {
     ...submissionOptions,
@@ -744,7 +750,51 @@ test('envío conserva el número APP actualizado si falla el envío del borrador
   assert.equal(calls[0].options.json.number, undefined);
   assert.deepEqual(assigned, ['DV-APP-000003']);
   assert.deepEqual(savedNumbers, assigned);
-  assert.match(errors.at(-1), /Conexión interrumpida/);
+  assert.deepEqual(errors.filter(Boolean), []);
+  assert.deepEqual(queued.map(operation => operation.path), [
+    '/documents/draft/request/submit',
+    '/documents/draft/customer-email/draft',
+  ]);
+  assert.equal(calls[1].options.headers['Idempotency-Key'], queued[0].id);
+  assert.deepEqual(queued[0].dependsOn, []);
+  assert.deepEqual(queued[1].dependsOn, [queued[0].id]);
+});
+
+test('envío se encola si fetch falla aunque navigator.onLine siga activo', async () => {
+  const calls = [], queued = [], errors = [];
+  Object.defineProperty(globalThis.navigator, 'onLine', {
+    configurable: true,
+    value: true,
+  });
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': { ApiError, api: async (url, options) => {
+      calls.push({ url, options });
+      throw new TypeError('Failed to fetch');
+    } },
+    '@/lib/offline-queue': {
+      enqueueOfflineOperation: async operation => {
+        queued.push(operation);
+        return { id: operation.id ?? `queued-${queued.length}` };
+      },
+      syncOfflineOperations: noop,
+    },
+  });
+  const hook = await mountHook(useRequestSubmission, {
+    ...submissionOptions,
+    autosaveDraftId: 'draft',
+    setError: error => errors.push(error),
+  });
+  await act(() => hook.current.handleSubmit());
+  assert.deepEqual(errors.filter(Boolean), []);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(queued.map(operation => operation.path), [
+    '/documents/draft/request/autosave',
+    '/documents/draft/request/submit',
+    '/documents/draft/customer-email/draft',
+  ]);
+  assert.equal(calls[0].options.headers['Idempotency-Key'], queued[0].id);
+  assert.deepEqual(queued[1].dependsOn, [queued[0].id]);
+  assert.deepEqual(queued[2].dependsOn, [queued[1].id]);
 });
 
 test('envío rechaza fecha u hora inválida antes de guardar o encolar el documento', async () => {
