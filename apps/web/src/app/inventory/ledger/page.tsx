@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Alert,
   Badge,
@@ -25,7 +25,7 @@ import {
   type LedgerDocumentGroup,
 } from '@/components/LedgerDocumentTable';
 import { api, ApiError } from '@/lib/api';
-import { buildLedgerQuery, createInitialLedgerFilters, ledgerCustomerOptions, ledgerWorksiteOptions, type LedgerFilters as Filters, type LedgerWorksiteOption as WorksiteOption } from '@/lib/ledger-filters';
+import { buildLedgerQuery, buildLedgerLocation, readLedgerLocation, createInitialLedgerFilters, ledgerCustomerOptions, ledgerWorksiteOptions, type LedgerDateRange, type LedgerFilters as Filters, type LedgerWorksiteOption as WorksiteOption } from '@/lib/ledger-filters';
 import styles from './ledger.module.css';
 import glass from '../../employees/directory.module.css';
 
@@ -109,11 +109,15 @@ function formattedDate(value: string) {
 
 export default function LedgerPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<Filters>(createInitialLedgerFilters);
-  const [appliedFilters, setAppliedFilters] = useState<Filters>(createInitialLedgerFilters);
-  const [search, setSearch] = useState('');
+  const searchParams = useSearchParams();
+  const locationQuery = searchParams.toString();
+  const locationState = useMemo(() => readLedgerLocation(new URLSearchParams(locationQuery)), [locationQuery]);
+  // Text changes must not recreate filters and bypass the search debounce.
+  const filterQuery = buildLedgerQuery(locationState.filters, '');
+  const filters = useMemo(() => readLedgerLocation(new URLSearchParams(filterQuery)).filters, [filterQuery]);
+  const { search, dateRange } = locationState;
+  const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [debouncedSearch] = useDebouncedValue(search, 300);
-  const [dateRange, setDateRange] = useState('all');
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -134,7 +138,7 @@ export default function LedgerPage() {
     setError(null);
     setUnauthorized(false);
     try {
-      const response = await api<LedgerResponse>(`/inventory/ledger?${buildLedgerQuery(appliedFilters, debouncedSearch, cursor)}`, { method: 'GET' });
+      const response = await api<LedgerResponse>(`/inventory/ledger?${buildLedgerQuery(filters, debouncedSearch, cursor)}`, { method: 'GET' });
       if (requestId !== latestRequest.current) return;
       setItems((current) => (cursor ? [...current, ...response.items] : response.items));
       setNextCursor(response.nextCursor);
@@ -148,7 +152,7 @@ export default function LedgerPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
     }
-  }, [appliedFilters, debouncedSearch]);
+  }, [filters, debouncedSearch]);
 
   useEffect(() => {
     setItems([]);
@@ -182,23 +186,22 @@ export default function LedgerPage() {
   const customerOptions = useMemo(() => ledgerCustomerOptions(worksites), [worksites]);
   const worksiteOptions = useMemo(() => ledgerWorksiteOptions(worksites, filters.customerId), [worksites, filters.customerId]);
 
-  const updateAndFetch = (next: Filters) => {
-    setFilters(next);
-    setAppliedFilters(next);
+  const updateAndFetch = (next: Filters, nextSearch = search, nextRange: LedgerDateRange = dateRange) => {
+    // Next's native history integration updates useSearchParams without a page
+    // transition or an extra Back entry for every filter change/keystroke.
+    window.history.replaceState(null, '', buildLedgerLocation(next, nextSearch, nextRange));
   };
 
   const handleDateRange = (value: string | null) => {
     const nextValue = value ?? 'all';
-    setDateRange(nextValue);
+    if (nextValue === 'custom') return;
     const next = { ...filters, from: nextValue === 'all' ? '' : dateInputDaysAgo(Number(nextValue)), to: '' };
-    updateAndFetch(next);
+    updateAndFetch(next, search, nextValue as LedgerDateRange);
   };
 
   const clearFilters = () => {
     const next = createInitialLedgerFilters();
-    setDateRange('all');
-    setSearch('');
-    updateAndFetch(next);
+    updateAndFetch(next, '', 'all');
   };
 
   if (unauthorized) {
@@ -222,7 +225,7 @@ export default function LedgerPage() {
             placeholder="Buscar cliente, obra, documento o equipo"
             maxLength={200}
             value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
+            onChange={(event) => updateAndFetch(filters, event.currentTarget.value)}
             leftSection={<IconSearch size={17} />}
             className={styles.search}
             style={{ flex: '1 1 240px' }}
@@ -241,11 +244,11 @@ export default function LedgerPage() {
             aria-label="Rango de fechas"
             value={dateRange}
             onChange={handleDateRange}
-            data={[{ value: '7', label: 'Últimos 7 días' }, { value: '30', label: 'Últimos 30 días' }, { value: '90', label: 'Últimos 90 días' }, { value: 'all', label: 'Todo el historial' }]}
+            data={[{ value: '7', label: 'Últimos 7 días' }, { value: '30', label: 'Últimos 30 días' }, { value: '90', label: 'Últimos 90 días' }, { value: 'all', label: 'Todo el historial' }, ...(dateRange === 'custom' ? [{ value: 'custom', label: 'Fechas personalizadas', disabled: true }] : [])]}
             allowDeselect={false}
             style={{ flex: '1 1 145px' }}
           />
-          <Button variant="subtle" color="gray" leftSection={<IconFilter size={16} />} onClick={() => setFiltersOpen(true)}>Más filtros</Button>
+          <Button variant="subtle" color="gray" leftSection={<IconFilter size={16} />} onClick={() => { setDraftFilters(filters); setFiltersOpen(true); }}>Más filtros</Button>
           <Button variant="subtle" color="gray" onClick={clearFilters}>Limpiar</Button>
           </DataTableToolbar>
           <SimpleGrid cols={{ base: 1, sm: 3 }} mt="md">
@@ -308,14 +311,14 @@ export default function LedgerPage() {
         <Modal opened={filtersOpen} onClose={() => setFiltersOpen(false)} title="Más filtros" size="lg" centered>
           <Stack gap="md">
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              <Select label="SKU" value={filters.skuId} onChange={(value) => setFilters((current) => ({ ...current, skuId: value ?? '' }))} data={skus.map((row) => ({ value: row.id, label: row.name }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
-              <Select label="Equipo" value={filters.assetId} onChange={(value) => setFilters((current) => ({ ...current, assetId: value ?? '' }))} data={assets.map((row) => ({ value: row.id, label: row.description || row.serialOrEngine || row.id }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
-              <TextInput label="Desde" type="datetime-local" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.currentTarget.value }))} />
-              <TextInput label="Hasta" type="datetime-local" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.currentTarget.value }))} />
+              <Select label="SKU" value={draftFilters.skuId} onChange={(value) => setDraftFilters((current) => ({ ...current, skuId: value ?? '' }))} data={skus.map((row) => ({ value: row.id, label: row.name }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
+              <Select label="Equipo" value={draftFilters.assetId} onChange={(value) => setDraftFilters((current) => ({ ...current, assetId: value ?? '' }))} data={assets.map((row) => ({ value: row.id, label: row.description || row.serialOrEngine || row.id }))} searchable clearable placeholder={filtersLoading ? 'Cargando...' : 'Todos'} />
+              <TextInput label="Desde" type="datetime-local" value={draftFilters.from} onChange={(event) => { const value = event.currentTarget.value; setDraftFilters((current) => ({ ...current, from: value })); }} />
+              <TextInput label="Hasta" type="datetime-local" value={draftFilters.to} onChange={(event) => { const value = event.currentTarget.value; setDraftFilters((current) => ({ ...current, to: value })); }} />
             </SimpleGrid>
             <Group justify="space-between">
-              <Button variant="subtle" color="gray" onClick={clearFilters}>Limpiar filtros</Button>
-              <Button onClick={() => { updateAndFetch(filters); setFiltersOpen(false); }} loading={loading}>Aplicar filtros</Button>
+              <Button variant="subtle" color="gray" onClick={() => { setDraftFilters(createInitialLedgerFilters()); clearFilters(); }}>Limpiar filtros</Button>
+              <Button onClick={() => { updateAndFetch(draftFilters, search, draftFilters.from !== filters.from || draftFilters.to !== filters.to ? 'custom' : dateRange); setFiltersOpen(false); }} loading={loading}>Aplicar filtros</Button>
             </Group>
           </Stack>
         </Modal>

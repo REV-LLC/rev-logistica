@@ -20,6 +20,38 @@ export function createInitialLedgerFilters(): LedgerFilters {
   return { warehouseId: '', customerId: '', customerWorksiteId: '', movementType: '', skuId: '', assetId: '', from: '', to: '' };
 }
 
+export type LedgerDateRange = 'all' | '7' | '30' | '90' | 'custom';
+const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+
+export function readLedgerLocation(params: URLSearchParams) {
+  const filters = createInitialLedgerFilters();
+  for (const key of ['warehouseId', 'customerId', 'customerWorksiteId', 'skuId', 'assetId'] as const) {
+    const value = params.get(key) ?? '';
+    if (uuid.test(value)) filters[key] = value;
+  }
+  const movement = params.get('movementType') ?? '';
+  if (['OUT', 'IN', 'TRANSIT', 'ON_SITE', 'ADJUST'].includes(movement)) filters.movementType = movement;
+  for (const key of ['from', 'to'] as const) {
+    const value = params.get(key) ?? '';
+    if (value.length <= 40 && /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(new Date(value).getTime())) filters[key] = value;
+  }
+  const range = params.get('range');
+  const dateRange: LedgerDateRange = filters.from || filters.to
+    ? range === '7' || range === '30' || range === '90' ? range : 'custom'
+    : 'all';
+  return { filters, search: (params.get('search') ?? '').slice(0, 200), dateRange };
+}
+
+// Only the view state belongs in the URL. Cursors and page size are request-local.
+export function buildLedgerLocation(filters: LedgerFilters, search: string, dateRange: LedgerDateRange) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+  if (search) params.set('search', search.slice(0, 200));
+  if ((filters.from || filters.to) && dateRange !== 'all') params.set('range', dateRange);
+  const query = params.toString();
+  return `/inventory/ledger${query ? `?${query}` : ''}`;
+}
+
 export function buildLedgerQuery(filters: LedgerFilters, search: string, cursor?: string | null) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
