@@ -1,7 +1,7 @@
-# Mapa y búsqueda de movimientos
+# Movimientos conserva tus filtros
 
-Mapa vuelve al menú Operación para Admin y Office, sin necesidad de buscarlo entre los accesos rápidos.
+Al filtrar Movimientos por cliente, obra, bodega o búsqueda y abrir un documento, la selección se conserva al regresar con Atrás o con el botón Volver del detalle.
 
-En Movimientos puedes filtrar por Cliente, Obra y Bodega, o buscar por nombre de cliente, obra, documento o equipo en todo el historial. Al elegir un cliente, el selector de obras muestra únicamente las suyas; los filtros se conservan al cargar más resultados.
+Los filtros y las fechas también se mantienen al recargar la página o abrir su enlace guardado. Limpiar elimina la selección y vuelve a mostrar todo el historial.
 
-Las filas muestran el cliente y la obra también en el celular. La consulta incluye los movimientos registrados contra una bodega cuando su documento identifica al cliente y la obra. Esta actualización no cambia existencias, documentos, anexos ni cobros.
+En Más filtros, los cambios se aplican únicamente al confirmar. También corregimos un error al editar las fechas. Esta actualización no modifica movimientos, existencias, documentos, anexos ni cobros.
