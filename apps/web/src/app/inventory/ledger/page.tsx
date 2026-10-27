@@ -25,31 +25,15 @@ import {
   type LedgerDocumentGroup,
 } from '@/components/LedgerDocumentTable';
 import { api, ApiError } from '@/lib/api';
+import { buildLedgerQuery, createInitialLedgerFilters, ledgerCustomerOptions, ledgerWorksiteOptions, type LedgerFilters as Filters, type LedgerWorksiteOption as WorksiteOption } from '@/lib/ledger-filters';
 import styles from './ledger.module.css';
 import glass from '../../employees/directory.module.css';
 
 const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
-const DEFAULT_TAKE = 30;
 const FILTER_OPTIONS_TAKE = 200;
-
-type Filters = {
-  warehouseId: string;
-  customerWorksiteId: string;
-  movementType: string;
-  skuId: string;
-  assetId: string;
-  from: string;
-  to: string;
-};
 
 type LedgerResponse = { items: LedgerItem[]; nextCursor: string | null };
 type WarehouseOption = { id: string; name: string };
-type WorksiteOption = {
-  id: string;
-  alias: string | null;
-  customer: { id: string; name: string };
-  worksite: { id: string; name: string };
-};
 type SkuOption = { id: string; name: string };
 type AssetOption = { id: string; serialOrEngine: string | null; description: string | null };
 
@@ -57,29 +41,6 @@ function dateInputDaysAgo(days: number) {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().slice(0, 16);
-}
-
-function createInitialFilters(): Filters {
-  return {
-    warehouseId: '',
-    customerWorksiteId: '',
-    movementType: '',
-    skuId: '',
-    assetId: '',
-    from: '',
-    to: '',
-  };
-}
-
-function buildQuery(filters: Filters, search: string, cursor?: string | null) {
-  const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  params.set('take', String(DEFAULT_TAKE));
-  if (search.trim()) params.set('search', search.trim());
-  if (cursor) params.set('cursor', cursor);
-  return params.toString();
 }
 
 function movementLabel(item: LedgerItem) {
@@ -127,6 +88,13 @@ function locationSummary(group: LedgerDocumentGroup) {
   return locations.length > 1 ? locations.join(' → ') : locations[0];
 }
 
+function worksiteSummary(group: LedgerDocumentGroup) {
+  return Array.from(new Set(group.items.flatMap(item => {
+    const location = item.customerWorksite ?? item.document?.customerWorksite;
+    return location ? [[location.customer?.name, location.worksite?.name].filter(Boolean).join(' / ')] : [];
+  }))).join(' · ');
+}
+
 function requester(group: LedgerDocumentGroup) {
   const creator = group.items[0]?.document?.creator;
   if (creator?.employee) return `${creator.employee.name} ${creator.employee.lastName ?? ''}`.trim();
@@ -141,8 +109,8 @@ function formattedDate(value: string) {
 
 export default function LedgerPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<Filters>(createInitialFilters);
-  const [appliedFilters, setAppliedFilters] = useState<Filters>(createInitialFilters);
+  const [filters, setFilters] = useState<Filters>(createInitialLedgerFilters);
+  const [appliedFilters, setAppliedFilters] = useState<Filters>(createInitialLedgerFilters);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(search, 300);
   const [dateRange, setDateRange] = useState('all');
@@ -152,6 +120,7 @@ export default function LedgerPage() {
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
   const [filtersLoading, setFiltersLoading] = useState(true);
+  const [filterOptionsError, setFilterOptionsError] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [worksites, setWorksites] = useState<WorksiteOption[]>([]);
@@ -165,7 +134,7 @@ export default function LedgerPage() {
     setError(null);
     setUnauthorized(false);
     try {
-      const response = await api<LedgerResponse>(`/inventory/ledger?${buildQuery(appliedFilters, debouncedSearch, cursor)}`, { method: 'GET' });
+      const response = await api<LedgerResponse>(`/inventory/ledger?${buildLedgerQuery(appliedFilters, debouncedSearch, cursor)}`, { method: 'GET' });
       if (requestId !== latestRequest.current) return;
       setItems((current) => (cursor ? [...current, ...response.items] : response.items));
       setNextCursor(response.nextCursor);
@@ -189,27 +158,29 @@ export default function LedgerPage() {
   }, [fetchLedger]);
 
   useEffect(() => {
+    let active = true;
+    const load = async <T,>(path: string, setRows: (rows: T[]) => void) => {
+      try {
+        const rows = await api<T[]>(path);
+        if (active) setRows(rows);
+      } catch {
+        if (active) setFilterOptionsError(true);
+      }
+    };
     void Promise.all([
-      api<WarehouseOption[]>('/warehouses'),
-      api<WorksiteOption[]>('/worksites'),
-      api<SkuOption[]>('/skus'),
-      api<AssetOption[]>(`/assets?take=${FILTER_OPTIONS_TAKE}`),
-    ]).then(([warehouseRows, worksiteRows, skuRows, assetRows]) => {
-      setWarehouses(warehouseRows);
-      setWorksites(worksiteRows);
-      setSkus(skuRows);
-      setAssets(assetRows);
-    }).catch(() => undefined).finally(() => setFiltersLoading(false));
+      load('/warehouses', setWarehouses),
+      load('/worksites', setWorksites),
+      load('/skus', setSkus),
+      load(`/assets?take=${FILTER_OPTIONS_TAKE}`, setAssets),
+    ]).finally(() => { if (active) setFiltersLoading(false); });
+    return () => { active = false; };
   }, []);
 
   const visibleGroups = useMemo(() => groupLedgerItemsByDocument(items), [items]);
   const visibleMovements = visibleGroups.reduce((total, group) => total + group.items.length, 0);
 
-  const locationValue = filters.warehouseId
-    ? `warehouse:${filters.warehouseId}`
-    : filters.customerWorksiteId
-      ? `worksite:${filters.customerWorksiteId}`
-      : '';
+  const customerOptions = useMemo(() => ledgerCustomerOptions(worksites), [worksites]);
+  const worksiteOptions = useMemo(() => ledgerWorksiteOptions(worksites, filters.customerId), [worksites, filters.customerId]);
 
   const updateAndFetch = (next: Filters) => {
     setFilters(next);
@@ -224,7 +195,7 @@ export default function LedgerPage() {
   };
 
   const clearFilters = () => {
-    const next: Filters = { warehouseId: '', customerWorksiteId: '', movementType: '', skuId: '', assetId: '', from: '', to: '' };
+    const next = createInitialLedgerFilters();
     setDateRange('all');
     setSearch('');
     updateAndFetch(next);
@@ -244,10 +215,11 @@ export default function LedgerPage() {
 
         <section className={glass.surface} aria-label="Consulta de movimientos">
         <div className={styles.filterRail}>
-          <DataTableToolbar mb={0} controlsStyle={{ flex: '1 1 100%' }}>
+          <DataTableToolbar mb={0} controlsStyle={{ flex: '1 1 100%', alignItems: 'flex-end' }}>
           <TextInput
-            aria-label="Buscar documento, ítem o serial"
-            placeholder="Buscar documento, ítem o serial"
+            label="Buscar"
+            aria-label="Buscar cliente, obra, documento o equipo"
+            placeholder="Buscar cliente, obra, documento o equipo"
             maxLength={200}
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
@@ -256,6 +228,7 @@ export default function LedgerPage() {
             style={{ flex: '1 1 240px' }}
           />
           <Select
+            label="Movimiento"
             aria-label="Filtrar por movimiento"
             value={filters.movementType || 'ALL'}
             onChange={(value) => updateAndFetch({ ...filters, movementType: value === 'ALL' ? '' : value ?? '' })}
@@ -264,22 +237,7 @@ export default function LedgerPage() {
             style={{ flex: '1 1 150px' }}
           />
           <Select
-            aria-label="Filtrar por ubicación"
-            value={locationValue || 'ALL'}
-            onChange={(value) => {
-              const [kind, id] = (value === 'ALL' ? '' : value ?? '').split(':');
-              updateAndFetch({ ...filters, warehouseId: kind === 'warehouse' ? id : '', customerWorksiteId: kind === 'worksite' ? id : '' });
-            }}
-            data={[
-              { value: 'ALL', label: 'Todas las ubicaciones' },
-              ...warehouses.map((row) => ({ value: `warehouse:${row.id}`, label: row.name })),
-              ...worksites.map((row) => ({ value: `worksite:${row.id}`, label: row.alias || `${row.customer.name} / ${row.worksite.name}` })),
-            ]}
-            searchable
-            allowDeselect={false}
-            style={{ flex: '1 1 170px' }}
-          />
-          <Select
+            label="Fecha"
             aria-label="Rango de fechas"
             value={dateRange}
             onChange={handleDateRange}
@@ -288,9 +246,25 @@ export default function LedgerPage() {
             style={{ flex: '1 1 145px' }}
           />
           <Button variant="subtle" color="gray" leftSection={<IconFilter size={16} />} onClick={() => setFiltersOpen(true)}>Más filtros</Button>
+          <Button variant="subtle" color="gray" onClick={clearFilters}>Limpiar</Button>
           </DataTableToolbar>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} mt="md">
+            <Select label="Cliente" placeholder={filtersLoading ? 'Cargando...' : 'Todos los clientes'}
+              value={filters.customerId || null} data={customerOptions} searchable clearable disabled={filtersLoading}
+              nothingFoundMessage="No se encontraron clientes"
+              onChange={(value) => updateAndFetch({ ...filters, customerId: value ?? '', customerWorksiteId: '' })} />
+            <Select label="Obra" placeholder={filtersLoading ? 'Cargando...' : 'Todas las obras'}
+              value={filters.customerWorksiteId || null} data={worksiteOptions} searchable clearable disabled={filtersLoading}
+              nothingFoundMessage="No se encontraron obras"
+              onChange={(value) => updateAndFetch({ ...filters, customerWorksiteId: value ?? '', customerId: value ? worksites.find(row => row.id === value)?.customer.id ?? '' : filters.customerId })} />
+            <Select label="Bodega" placeholder={filtersLoading ? 'Cargando...' : 'Todas las bodegas'}
+              value={filters.warehouseId || null} data={warehouses.map(row => ({ value: row.id, label: row.name }))} searchable clearable disabled={filtersLoading}
+              nothingFoundMessage="No se encontraron bodegas"
+              onChange={(value) => updateAndFetch({ ...filters, warehouseId: value ?? '' })} />
+          </SimpleGrid>
         </div>
 
+        {filterOptionsError ? <Alert color="yellow" mt="md">No se pudieron cargar los filtros. Puedes buscar por nombre o recargar la página.</Alert> : null}
         {error ? <Alert color="red" variant="light" title="No se pudo consultar el historial" mb="lg">{error}</Alert> : null}
 
         <Group justify="space-between" className={styles.resultsBar}>
@@ -300,10 +274,12 @@ export default function LedgerPage() {
 
         <div className={styles.tableWrap} aria-busy={loading}>
           <div className={styles.tableHeader}>
-            <span>Documento</span><span>Movimiento</span><span>Ítems</span><span>Ubicación</span><span>Solicitado por</span><span>Fecha</span><span />
+            <span>Documento</span><span>Movimiento</span><span>Ítems</span><span>Cliente / obra · Ubicación</span><span>Solicitado por</span><span>Fecha</span><span />
           </div>
           {visibleGroups.map((group) => {
             const href = group.documentId ? `/inventory/ledger/document/${group.documentId}` : '#';
+            const worksite = worksiteSummary(group);
+            const location = locationSummary(group);
             return (
               <Link key={group.key} href={href} className={styles.tableRow} aria-label={`Abrir documento ${group.reference}`}>
                 <strong>{group.reference}</strong>
@@ -313,7 +289,7 @@ export default function LedgerPage() {
                   ))}
                 </span>
                 <span>{itemsSummary(group)}</span>
-                <span>{locationSummary(group)}</span>
+                <span className={styles.worksite}>{worksite || location}{worksite && location !== worksite ? <small>{location}</small> : null}</span>
                 <span>{requester(group)}</span>
                 <span>{formattedDate(group.items[0].effectiveAt)}</span>
                 <IconArrowRight size={17} />

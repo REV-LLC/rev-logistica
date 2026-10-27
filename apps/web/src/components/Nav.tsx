@@ -133,6 +133,12 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
       },
       {
+        href: "/transport/tracking",
+        label: "Mapa",
+        icon: IconMap2,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/notifications/deliveries",
         label: "Notificaciones",
         icon: IconBell,
@@ -361,7 +367,6 @@ const quickLinks: NavLinkItem[] = [
     roles: ["ADMIN", "OFFICE"],
     activeRoutes: [{ pathnamePrefix: "/inventory/serialized-assets/", searchParam: { key: "scope", value: "own" } }],
   },
-  { href: "/transport/tracking", label: "Mapa", icon: IconMap2, roles: ["ADMIN", "OFFICE"] },
 ];
 const defaultExpandedSections = new Set(["Operación"]);
 
