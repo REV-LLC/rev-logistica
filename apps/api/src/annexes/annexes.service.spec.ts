@@ -42,3 +42,10 @@ describe('annex draft persistence', () => {
     expect(tx.annexDraftRevision.create).toHaveBeenCalledTimes(1);
   });
 });
+
+it('rejects non-daily writes before acquiring locks or storing a revision', async () => {
+  const { service, tx } = setup();
+  await expect(service.save({ ...payload, input: { ...input, machineDays: [{ assetId: 'machine', label: 'machine', date: '2026-09-16', status: 'PENDING', reports: [], pricing: { basePrice: '0' } }] } }, 'author')).rejects.toThrow('solo admite');
+  expect(tx.$queryRaw).not.toHaveBeenCalled();
+  expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
+});

@@ -1,3 +1,4 @@
+import { assertDailyAnnex } from './annex-daily-scope';
 import { selectAnnexMode } from './annex-mode-selection';
 import { AnnexSourceService } from './annex-source.service';
 import {
@@ -34,10 +35,10 @@ export class AnnexesController {
     return this.source.prepare(id, from, to, through);
   }
   @Post('select-mode') selectMode(@Body() body: unknown) {
-    return selectAnnexMode(body);
+    return assertDailyAnnex(selectAnnexMode(body));
   }
   @Post('preview') preview(@Body() body: unknown) {
-    return calculateAnnex(body);
+    return calculateAnnex(assertDailyAnnex(body));
   }
   @Get('drafts') list(@Query('customerWorksiteId') id: string) {
     return this.annexes.list(id);

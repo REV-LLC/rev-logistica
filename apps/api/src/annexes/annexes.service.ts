@@ -1,3 +1,4 @@
+import { assertDailyAnnex } from './annex-daily-scope';
 import {
   BadRequestException,
   ConflictException,
@@ -80,6 +81,7 @@ export class AnnexesService {
       reason,
       sourceIssues,
     } = parsed.data;
+    assertDailyAnnex(input);
     const result = calculateAnnex(input);
     const periodFrom = new Date(`${input.period.from}T00:00:00Z`);
     const periodTo = new Date(`${input.period.to}T00:00:00Z`);

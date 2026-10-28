@@ -1,3 +1,4 @@
+import { isDailyAnnex } from "./annex-daily-scope";
 import type {
   AnnexInput,
   Result,
@@ -19,9 +20,13 @@ const money = (value: string) =>
     maximumFractionDigits: 2,
   });
 export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
+  if (!isDailyAnnex(data.input))
+    throw new Error(
+      "Esta versión solo permite compartir anexos de alquiler por día.",
+    );
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const widths = [68, 12, 22, 22, 15, 15, 20, 27, 17, 27, 28],
+  const widths = [88, 12, 22, 22, 15, 15, 27, 17, 27, 28],
     headings = [
       "Equipo",
       "Cobro",
@@ -29,7 +34,6 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       "Hasta",
       "Cant.",
       "Días",
-      "H./m cob.",
       "Precio base",
       "Dto. %",
       "Precio final",
@@ -71,9 +75,7 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       ? `Versión guardada ${data.revision}`
       : "Consulta sin guardar",
   );
-  write(
-    "Alquiler sin IVA ni extras del operario. Documento en revisión; no es una factura.",
-  );
+  write("Alquiler por día sin IVA. Documento en revisión; no es una factura.");
   y += 3;
   tableHeader();
   for (const row of groupMachineRows(
@@ -103,7 +105,7 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
     const displayLabel = row.supplement
       ? `${row.label} · Ajuste al mínimo`
       : row.label;
-    const label = pdf.splitTextToSize(displayLabel, 66) as string[];
+    const label = pdf.splitTextToSize(displayLabel, 86) as string[];
     const height = Math.max(8, label.length * 4 + 3);
     if (y + height > 190) {
       pdf.addPage();
@@ -118,7 +120,6 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       row.to,
       row.quantity,
       row.days,
-      row.units,
       row.included ? "Incluido" : money(row.basePrice),
       Number(row.discountPercent).toLocaleString("es-CO", {
         maximumFractionDigits: 6,
