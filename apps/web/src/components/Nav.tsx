@@ -344,7 +344,7 @@ const toolLinks: NavLinkItem[] = [
     icon: IconRulerMeasure,
     roles: ["ADMIN", "OFFICE"],
   },
-  { href: "/data", label: "Datos", icon: IconDatabaseExport, roles: ["ADMIN"] },
+  { href: "/data", label: "Exportar datos", icon: IconDatabaseExport, roles: ["ADMIN", "OFFICE"] },
 ];
 
 const prodDisabledRoutes = ["/transport/cost"];
