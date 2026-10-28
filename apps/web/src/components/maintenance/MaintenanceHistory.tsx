@@ -34,18 +34,30 @@ export default function MaintenanceHistory({ completions, plans, onConfigure, on
           <Paper key={key} withBorder p="md" radius="md">
             <Stack gap="xs">
               <Group justify="space-between"><Text fw={700}>{completion.item.name}</Text>{completion.completedAtHours != null ? <Badge variant="light">{Number(completion.completedAtHours)} h</Badge> : null}</Group>
-              <Text size="sm">{new Date(completion.completedAt).toLocaleString('es-CO')} · Registrado por {author}</Text>
+              <Text size="sm">{new Date(completion.completedAt).toLocaleString('es-CO')}</Text>
               <Text size="sm" fw={600}>Realizado por: {performerName}</Text>
-              {completion.reference ? <Text size="sm" fw={600}>Referencia: {completion.reference}</Text> : null}
-              {completion.notes ? <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{completion.notes}</Text> : null}
-              {item && (item.active || !item.notificationTopic) && onComplete ? <Button size="xs" variant="light" onClick={() => onComplete(item)}>Registrar siguiente mantenimiento</Button> : null}
-              {previous.length ? <Accordion variant="contained"><Accordion.Item value="history"><Accordion.Control>Ver historial ({previous.length} anteriores)</Accordion.Control><Accordion.Panel><Stack gap="sm">{previous.map((entry) => <Paper key={entry.id} withBorder p="sm">
-                <Text size="sm" fw={600}>{new Date(entry.completedAt).toLocaleString('es-CO')}{entry.completedAtHours != null ? ` · ${Number(entry.completedAtHours)} h` : ''}</Text>
-                {entry.reference ? <Text size="sm">Referencia: {entry.reference}</Text> : null}
-                <Text size="sm">Realizado por: {entry.performedBy ? [entry.performedBy.employee?.name, entry.performedBy.employee?.lastName].filter(Boolean).join(' ') || entry.performedBy.email : 'No registrado'}</Text>
-                {entry.notes ? <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{entry.notes}</Text> : null}
-              </Paper>)}</Stack></Accordion.Panel></Accordion.Item></Accordion> : null}
-              {item && !item.notificationTopic ? <Button size="xs" variant="light" onClick={() => onConfigure({ ...item, active: true, baselineDate: completion.completedAt, baselineHours: completion.completedAtHours })}>Configurar próximos cambios</Button> : null}
+              <Accordion variant="contained">
+                <Accordion.Item value="details">
+                  <Accordion.Control>Ver detalle</Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap="xs">
+                      <Text size="sm" c="dimmed">Registrado por: {author}</Text>
+                      {completion.reference ? <Text size="sm" fw={600}>Referencia: {completion.reference}</Text> : null}
+                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{completion.notes || 'Sin observaciones'}</Text>
+                      {item && (item.active || !item.notificationTopic) && onComplete ? <Button size="xs" variant="light" onClick={() => onComplete(item)}>Registrar siguiente mantenimiento</Button> : null}
+                      {item && !item.notificationTopic ? <Button size="xs" variant="light" onClick={() => onConfigure({ ...item, active: true, baselineDate: completion.completedAt, baselineHours: completion.completedAtHours })}>Configurar próximos cambios</Button> : null}
+                    </Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+                {previous.length ? <Accordion.Item value="history"><Accordion.Control>Ver historial ({previous.length} anteriores)</Accordion.Control><Accordion.Panel><Stack gap="sm">{previous.map((entry) => <Paper key={entry.id} withBorder p="sm">
+                  <Text size="sm" fw={600}>{new Date(entry.completedAt).toLocaleString('es-CO')}{entry.completedAtHours != null ? ` · ${Number(entry.completedAtHours)} h` : ''}</Text>
+                  <Text size="sm">Realizado por: {entry.performedBy ? [entry.performedBy.employee?.name, entry.performedBy.employee?.lastName].filter(Boolean).join(' ') || entry.performedBy.email : 'No registrado'}</Text>
+                  <Accordion variant="contained" mt="xs"><Accordion.Item value="details"><Accordion.Control>Ver detalle</Accordion.Control><Accordion.Panel>
+                    {entry.reference ? <Text size="sm">Referencia: {entry.reference}</Text> : null}
+                    <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{entry.notes || 'Sin observaciones'}</Text>
+                  </Accordion.Panel></Accordion.Item></Accordion>
+                </Paper>)}</Stack></Accordion.Panel></Accordion.Item> : null}
+              </Accordion>
             </Stack>
           </Paper>
         );

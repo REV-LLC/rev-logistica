@@ -119,8 +119,8 @@ export default function MaintenancePlanList({
                           {reminder?.remainingHours !== undefined ? (
                             <Badge color="blue" variant="outline">
                               {reminder.remainingHours >= 0
-                                ? `${reminder.remainingHours} h restantes`
-                                : `${Math.abs(reminder.remainingHours)} h vencidas`}
+                                ? `${Number(reminder.remainingHours.toFixed(1))} h restantes`
+                                : `${Number(Math.abs(reminder.remainingHours).toFixed(1))} h vencidas`}
                             </Badge>
                           ) : null}
                           {reminder?.remainingDays !== undefined ? (
