@@ -31,6 +31,7 @@ import { api, ApiError } from '@/lib/api';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import WorksiteBalancePdfButton from '@/components/worksites/WorksiteBalancePdfButton';
+import WorksiteBalanceExcelButton from '@/components/worksites/WorksiteBalanceExcelButton';
 
 type WorksiteOption = {
   id: string;
@@ -174,6 +175,7 @@ export default function ObraDetailPage() {
               <IconArrowLeft size={18} />
             </ActionIcon>
             <Group gap="xs" wrap="wrap">
+              {worksite ? <WorksiteBalanceExcelButton customerWorksiteId={worksite.id} /> : null}
               {worksite ? (
                 <Button variant="default" component={Link} href={`/customers?customerId=${worksite.customer.id}`}>
                   Ver cliente
