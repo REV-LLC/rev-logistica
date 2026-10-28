@@ -1,5 +1,6 @@
 import '@mantine/core/styles.css';
 import './globals.css';
+import './dark-glass.css';
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import Providers from '@/components/Providers';
