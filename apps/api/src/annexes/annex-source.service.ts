@@ -1,3 +1,4 @@
+import { dailyRentals } from './annex-daily-scope';
 import {
   BadRequestException,
   Injectable,
@@ -175,8 +176,16 @@ export class AnnexSourceService {
           customerWorksiteId,
           history.map((h) => h.input),
         );
-        source.rentals = commercial.rentals;
-        source.machineDays = commercial.machineDays;
+        const daily = dailyRentals(commercial.rentals, commercial.machineDays);
+        source.rentals = daily.rentals;
+        source.machineDays = [];
+        if (daily.excluded)
+          source.issues.push({
+            code: 'DAILY_SCOPE_EXCLUDED',
+            reference: site.id,
+            message:
+              'Se excluyeron equipos por hora, mediciones por metro y sus piezas incluidas. Este anexo contiene únicamente alquileres por día.',
+          });
         source.issues.push(...commercial.issues);
         policy.minimumDaysByRental = {};
         const reconstructedRentals: string[] = [];

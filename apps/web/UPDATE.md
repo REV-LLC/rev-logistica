@@ -1,7 +1,7 @@
-# Tema oscuro en toda la aplicación
+# Anexos por día y tema oscuro
 
-Unificamos las páginas internas con el estilo de cristal oscuro: superficies en gris ballena, títulos claros y textos con mayor contraste.
+En esta etapa, los nuevos anexos incluyen únicamente ítems bulk y equipos cobrados por día. Los equipos por hora y los cobros por metros quedan fuera de la generación.
 
-Los formularios, modales, selectores, menús y tablas ahora siguen el mismo estilo, incluidos los selectores de equipos y la bitácora de empleados.
+La tabla conserva los ajustes de días, descuentos, mínimos y precios en cero. Los anexos históricos que incluyen otras modalidades siguen disponibles para consulta, sin alterar sus datos guardados.
 
-El inicio de sesión, los enlaces públicos y los documentos para imprimir conservan su presentación. Esta actualización es visual: no modifica tus datos ni tus permisos de acceso.
+Las páginas internas, formularios, modales, selectores y tablas ahora comparten el estilo de cristal oscuro, con superficies en gris ballena y textos con mayor contraste. El inicio de sesión, los enlaces públicos y los documentos para imprimir conservan su presentación.
