@@ -1,4 +1,5 @@
 "use client";
+import glassStyles from "./annex-glass.module.css";
 import { useEffect, useRef, useState } from "react";
 import {
   ActionIcon,
@@ -16,13 +17,20 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   Textarea,
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconDeviceFloppy, IconChevronDown } from "@tabler/icons-react";
+import {
+  IconDeviceFloppy,
+  IconChevronDown,
+  IconAlertTriangle,
+} from "@tabler/icons-react";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
+import { annexReviewNotices } from "@/lib/annex-review";
+import { annexTaxTotals } from "@/lib/annex-totals";
 import AnnexSheet from "./annex-sheet";
 import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
@@ -142,6 +150,7 @@ export default function AnnexesPage() {
     baseline.current = null;
   }
   const [calendarOpened, setCalendarOpened] = useState(false);
+  const [reviewOpened, setReviewOpened] = useState(false);
   const [reportIndex, setReportIndex] = useState<number | null>(null),
     [report, setReport] = useState<MachineDay | null>(null);
   const [urlReady, setUrlReady] = useState(false);
@@ -498,8 +507,16 @@ export default function AnnexesPage() {
     setReason("");
     setMessage(null);
   }
+  const vatPercent = input?.policy.vatPercent ?? 0;
+  const taxTotals = result
+    ? annexTaxTotals(result.totals.rentalNet, vatPercent)
+    : null;
   return (
-    <Container fluid py="xs">
+    <Container
+      fluid
+      py="xs"
+      className={`${glassStyles.theme} ${glassStyles.page}`}
+    >
       <Stack gap="xs">
         <Group justify="space-between">
           <div>
@@ -842,6 +859,7 @@ export default function AnnexesPage() {
               </Alert>
             ) : null}
             <Modal
+              classNames={{ content: glassStyles.theme }}
               opened={calendarOpened}
               onClose={() => setCalendarOpened(false)}
               title="Conf. domingos y festivos"
@@ -964,26 +982,58 @@ export default function AnnexesPage() {
               </fieldset>
             </Modal>
             {issues.length ? (
-              <Alert color="yellow" title="Fuentes que requieren revisión">
-                <Stack gap={4}>
-                  {issues.map((i, n) => (
-                    <Text size="sm" key={`${i.code}-${n}`}>
-                      {i.message} · {i.reference}
-                    </Text>
-                  ))}
-                </Stack>
-              </Alert>
+              <Stack gap="xs">
+                <Tooltip
+                  label={
+                    reviewOpened
+                      ? "Ocultar avisos"
+                      : "Ver avisos antes de facturar"
+                  }
+                >
+                  <ActionIcon
+                    color="yellow"
+                    variant="light"
+                    aria-label={
+                      reviewOpened
+                        ? "Ocultar avisos"
+                        : "Ver avisos antes de facturar"
+                    }
+                    aria-expanded={reviewOpened}
+                    aria-controls="annex-review-notices"
+                    onClick={() => setReviewOpened((opened) => !opened)}
+                  >
+                    <IconAlertTriangle size={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Collapse in={reviewOpened}>
+                  <div id="annex-review-notices">
+                    <Alert color="yellow" title="Antes de facturar">
+                      <Stack gap="sm">
+                        {annexReviewNotices(issues, input).map((notice) => (
+                          <div key={notice.message}>
+                            <Text size="sm">{notice.message}</Text>
+                            {notice.equipment.length ? (
+                              <details style={{ marginTop: 4, fontSize: 13 }}>
+                                <summary style={{ cursor: "pointer" }}>
+                                  Ver equipos afectados (
+                                  {notice.equipment.length})
+                                </summary>
+                                <Text size="sm" mt={4}>
+                                  {notice.equipment.join(" · ")}
+                                </Text>
+                              </details>
+                            ) : null}
+                          </div>
+                        ))}
+                      </Stack>
+                    </Alert>
+                  </div>
+                </Collapse>
+              </Stack>
             ) : null}
             {result ? (
-              <Paper withBorder p="md">
-                <Stack>
-                  <Title order={3}>
-                    Alquiler calculado: {money(result.totals.rentalNet)}
-                  </Title>
-                  <Text>
-                    Base: {money(result.totals.rentalGross)} · descuentos y
-                    exenciones: {money(result.totals.rentalDiscount)}
-                  </Text>
+              <div className={glassStyles.summaryLayout}>
+                <div>
                   {result.issues.length ? (
                     <Alert color="yellow">
                       {result.issues.length} pendientes de cálculo o reportes.{" "}
@@ -992,13 +1042,60 @@ export default function AnnexesPage() {
                       ).join(" · ")}
                     </Alert>
                   ) : null}
-                </Stack>
-              </Paper>
+                </div>
+                <Paper withBorder p="md" className={glassStyles.summary}>
+                  <Title order={3} ta="right">
+                    Alquiler calculado
+                  </Title>
+                  <dl className={glassStyles.amounts}>
+                    <div>
+                      <dt>Valor base</dt>
+                      <dd>{money(result.totals.rentalGross)}</dd>
+                    </div>
+                    <div>
+                      <dt>Descuentos y exenciones</dt>
+                      <dd>− {money(result.totals.rentalDiscount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Subtotal</dt>
+                      <dd>{money(result.totals.rentalNet)}</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <Switch
+                          label={`IVA (${vatPercent} %)`}
+                          aria-label="Aplicar IVA del 19 %"
+                          checked={vatPercent === 19}
+                          disabled={!editing || busy || historicalOnly}
+                          onChange={(event) =>
+                            edit({
+                              ...input,
+                              policy: {
+                                ...input.policy,
+                                vatPercent: event.currentTarget.checked
+                                  ? 19
+                                  : 0,
+                              },
+                            })
+                          }
+                          size="sm"
+                        />
+                      </dt>
+                      <dd>{money(taxTotals!.vat)}</dd>
+                    </div>
+                    <div className={glassStyles.grandTotal}>
+                      <dt>Total a pagar</dt>
+                      <dd>{money(taxTotals!.total)}</dd>
+                    </div>
+                  </dl>
+                </Paper>
+              </div>
             ) : null}
           </>
         ) : null}
         <AnnexSend data={sendData} onClose={() => setSendData(null)} />
         <Modal
+          classNames={{ content: glassStyles.theme }}
           opened={report !== null}
           onClose={() => setReport(null)}
           title={report ? `${report.label} · ${report.date}` : ""}

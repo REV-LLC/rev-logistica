@@ -245,3 +245,15 @@ describe('minimums across rental cuts', () => {
     expect(calculateAnnex(input).lines[0].kind).toBe('METER');
   });
 });
+
+it('calculates VAT after discounts and rounds the tax once to cents', () => {
+  const input = fixture();
+  input.period = { from: '2026-09-02', to: '2026-09-02', through: '2026-09-02' };
+  input.policy.vatPercent = 19;
+  input.rentals = [{ ...rental(), quantity: '1', pricing: { basePrice: '1', discountPercent: '50', adjustmentReason: 'Acuerdo' } }];
+  expect(calculateAnnex(input).tax).toEqual({ vatPercent: 19, vat: '0.10', total: '0.60' });
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax).toEqual({ vatPercent: 0, vat: '0.00', total: '0.50' });
+  delete input.policy.vatPercent;
+  expect(calculateAnnex(input).tax.vatPercent).toBe(0);
+});

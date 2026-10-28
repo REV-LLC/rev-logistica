@@ -127,6 +127,7 @@ export type AnnexInput = {
   period: { from: string; to: string; through: string };
   policy: {
     version: string;
+    vatPercent?: 0 | 19;
     includeReturnDay: boolean;
     excludedWeekdays: number[];
     excludeHolidays: boolean;

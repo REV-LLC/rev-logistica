@@ -1,7 +1,9 @@
-# Anexos por día y tema oscuro
+# Anexos: IVA guardado y desglose del total
 
-En esta etapa, los nuevos anexos incluyen únicamente ítems bulk y equipos cobrados por día. Los equipos por hora y los cobros por metros quedan fuera de la generación.
+El IVA se elige entre 0 % y 19 % desde Editar y se conserva al guardar y reabrir el anexo. El resumen muestra base, descuentos, subtotal, IVA y total a pagar; el PDF usa la misma selección y el mismo cálculo después de descuentos.
 
-La tabla conserva los ajustes de días, descuentos, mínimos y precios en cero. Los anexos históricos que incluyen otras modalidades siguen disponibles para consulta, sin alterar sus datos guardados.
+Los nuevos anexos empiezan con IVA del 19 %. Los anexos anteriores sin una selección guardada mantienen IVA del 0 % hasta que se editen, sin alterar sus revisiones históricas.
 
-Las páginas internas, formularios, modales, selectores y tablas ahora comparten el estilo de cristal oscuro, con superficies en gris ballena y textos con mayor contraste. El inicio de sesión, los enlaces públicos y los documentos para imprimir conservan su presentación.
+La tabla de alquiler diario muestra filas simples, ajusta su altura al contenido y permite configurar mínimos desde cada equipo. Los avisos se consultan desde un icono de alerta y muestran nombres en lugar de identificadores técnicos. La vista y el PDF adoptan el estilo cristal oscuro.
+
+Se mantiene el alcance actual: ítems bulk y assets cobrados por día, conservando tarifas en cero. Equipos por hora y cobros por metros siguen fuera de esta etapa.

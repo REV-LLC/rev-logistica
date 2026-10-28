@@ -3,19 +3,24 @@
   overflow: hidden;
 }
 .grid {
-  height: clamp(380px, calc(100dvh - 300px), 900px);
+  max-height: clamp(180px, calc(100dvh - 300px), 900px);
   max-width: 100%;
   font-size: 12px;
-  --rdg-header-background-color: #edf2f7;
-  --rdg-border-color: #dce3eb;
+  --rdg-color-scheme: dark;
+  --rdg-color: #f1f5f9;
+  --rdg-background-color: #293136;
+  --rdg-row-hover-background-color: #354149;
+  --rdg-row-selected-background-color: #314f66;
+  --rdg-header-background-color: #323e46;
+  --rdg-border-color: rgba(255, 255, 255, .14);
   --rdg-selection-color: #1971c2;
 }
 .editable {
-  background-color: #f0f8ff;
+  background-color: #293e50;
 }
 @media (max-width: 600px) {
   .grid {
-    height: 420px;
+    max-height: 420px;
   }
 }
 
@@ -30,14 +35,15 @@
   position: fixed;
   inset: 8px;
   z-index: 150;
-  background: var(--mantine-color-body);
-  box-shadow: 0 0 0 16px var(--mantine-color-body);
+  background: var(--rev-glass-overlay, #293136);
+  box-shadow: 0 0 0 16px var(--rev-glass-background, #20272c);
 }
 .expanded .gridContainer {
   flex: 1;
 }
 .expanded .grid {
   height: 100%;
+  max-height: none;
 }
 .toolbar {
   flex-shrink: 0;
@@ -50,12 +56,12 @@
 }
 
 .machineGroup {
-  --rdg-background-color: #e7f0fa;
-  --rdg-row-hover-background-color: #e7f0fa;
+  --rdg-background-color: #314352;
+  --rdg-row-hover-background-color: #314352;
   font-weight: 700;
 }
 .machineGroup > [role="gridcell"] {
-  background: #e7f0fa;
+  background: #314352;
 }
 .groupTitle {
   height: 100%;
@@ -104,26 +110,4 @@
 .daysArrows button:disabled {
   opacity: 0.35;
   cursor: default;
-}
-@media screen {
-  :global(html[data-mantine-color-scheme='dark']) .grid {
-    --rdg-color-scheme: dark;
-    --rdg-color: #cbd3d9;
-    --rdg-background-color: #343b40;
-    --rdg-header-background-color: #414b53;
-    --rdg-header-draggable-background-color: #4a545c;
-    --rdg-border-color: rgba(255, 255, 255, 0.16);
-    --rdg-row-hover-background-color: #3e484f;
-    --rdg-row-selected-background-color: #3e535f;
-    --rdg-row-selected-hover-background-color: #486270;
-    --rdg-selection-color: #a6d5ff;
-  }
-  :global(html[data-mantine-color-scheme='dark']) .editable { background: rgb(90 165 230 / 12%); }
-  :global(html[data-mantine-color-scheme='dark']) .machineGroup {
-    --rdg-background-color: #3e535f;
-    --rdg-row-hover-background-color: #486270;
-  }
-  :global(html[data-mantine-color-scheme='dark']) .machineGroup > [role='gridcell'] { background: #3e535f; color: #fff; }
-  :global(html[data-mantine-color-scheme='dark']) .daysArrows button { color: #a6d5ff; }
-  :global(html[data-mantine-color-scheme='dark']) .daysArrows button:hover:not(:disabled) { background: var(--rev-glass-hover); }
 }

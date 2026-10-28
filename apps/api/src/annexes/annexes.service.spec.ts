@@ -49,3 +49,14 @@ it('rejects non-daily writes before acquiring locks or storing a revision', asyn
   expect(tx.$queryRaw).not.toHaveBeenCalled();
   expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
 });
+
+it.each([0, 19])('persists the selected VAT rate %s in the revision', async (vatPercent) => {
+  const { service } = setup();
+  const saved = await service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent } } }, 'author');
+  expect(saved.revisions[0].input.policy.vatPercent).toBe(vatPercent);
+  expect(saved.revisions[0].result.tax.vatPercent).toBe(vatPercent);
+});
+it('rejects VAT rates outside the supported choices', async () => {
+  const { service } = setup();
+  await expect(service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent: 5 } } }, 'author')).rejects.toThrow();
+});

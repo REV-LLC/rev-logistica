@@ -591,7 +591,10 @@ export function calculateAnnex(value: unknown) {
   );
   const sum = (field: 'gross' | 'discount' | 'net') =>
     lines.reduce((total, line) => total.plus(line[field]), new D(0)).toFixed(2);
+  const vatPercent = input.policy.vatPercent ?? 0;
+  const vat = new D(sum('net')).mul(vatPercent).div(100).toDecimalPlaces(2, D.ROUND_HALF_UP);
   return {
+    tax: { vatPercent, vat: vat.toFixed(2), total: new D(sum('net')).plus(vat).toFixed(2) },
     engineVersion: '2',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,

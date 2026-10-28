@@ -1,4 +1,5 @@
 "use client";
+import glassStyles from "./annex-glass.module.css";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -208,6 +209,7 @@ export default function AnnexSheet({
         sheetRows(input, result ?? lastResult).filter(
           (row) => mode === "all" || row.kind === mode,
         ),
+        !isDailyAnnex(input),
       ),
     [input, result, lastResult, mode],
   );
@@ -235,13 +237,70 @@ export default function AnnexSheet({
   const employeeNames = new Map(
     employees.map((e) => [e.id, `${e.name} ${e.lastName}`]),
   );
+  const minimumControl = (row: SheetRow) => (
+    <Tooltip label="Configurar mínimo de cobro" withinPortal>
+      <ActionIcon
+        size={22}
+        p={1}
+        variant="light"
+        disabled={
+          busy || !editing || row.included || row.status === "Revisar modalidad"
+        }
+        aria-label={`Configurar mínimo de cobro: ${row.label}`}
+        onClick={() => {
+          setMachine({
+            assetId: row.assetId ?? row.skuId!,
+            label: row.label,
+            kind: row.kind,
+            index: row.index,
+          });
+          setMinimum(
+            row.kind === "rentals"
+              ? String(
+                  input.policy.minimumDaysByRental?.[row.rentalId!] ??
+                    input.policy.minimumDaysBySku?.[row.skuId!] ??
+                    0,
+                )
+              : (input.policy.minimumHoursByAsset?.[row.assetId!] ??
+                  input.policy.minimumHoursPerMachineDay),
+          );
+          const cutting =
+            row.kind === "rentals"
+              ? (input.rentals[row.index].metering ??
+                input.rentals[row.index].cutting)
+              : undefined;
+          setByMeters(Boolean(cutting));
+          setMeterPrice(cutting?.pricing.basePrice ?? "0");
+          setMeterMinimum(cutting?.minimumMeters ?? "0");
+          setCutReports(structuredClone(cutting?.reports ?? []));
+          setRememberMinimum(false);
+          setMinimumError(null);
+        }}
+      >
+        <IconSettings size={18} stroke={1.8} />
+      </ActionIcon>
+    </Tooltip>
+  );
   const columns: Column<SheetRow>[] = [
     {
       key: "label",
       name: "Equipo",
-      width: 170,
+      width: isDailyAnnex(input) ? "minmax(220px, 1fr)" : 170,
       frozen: true,
-      renderCell: ({ row }: { row: SheetRow }) => <CellText text={row.label} />,
+      renderCell: ({ row }: { row: SheetRow }) => (
+        <Group gap={4} wrap="nowrap" className={styles.groupTitle}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <CellText
+              text={
+                row.supplement ? `${row.label} · Ajuste al mínimo` : row.label
+              }
+            />
+          </span>
+          {isDailyAnnex(input) && editing && !row.included && !row.supplement
+            ? minimumControl(row)
+            : null}
+        </Group>
+      ),
     },
     {
       key: "mode",
@@ -488,7 +547,8 @@ export default function AnnexSheet({
         if (!row.group) {
           if (
             column.key === "label" &&
-            (row.kind === "machineDays" || input.policy.minimumDaysBySku)
+            (row.kind === "machineDays" ||
+              (!isDailyAnnex(input) && input.policy.minimumDaysBySku))
           )
             return (
               <CellText
@@ -516,51 +576,7 @@ export default function AnnexSheet({
                   <CellText text={row.label} />
                 </span>
               </Tooltip>
-              <Tooltip label="Configurar mínimo de cobro" withinPortal>
-                <ActionIcon
-                  size={22}
-                  p={1}
-                  variant="light"
-                  disabled={
-                    busy ||
-                    !editing ||
-                    row.included ||
-                    row.status === "Revisar modalidad"
-                  }
-                  aria-label={`Configurar mínimo de cobro: ${row.label}`}
-                  onClick={() => {
-                    setMachine({
-                      assetId: row.assetId ?? row.skuId!,
-                      label: row.label,
-                      kind: row.kind,
-                      index: row.index,
-                    });
-                    setMinimum(
-                      row.kind === "rentals"
-                        ? String(
-                            input.policy.minimumDaysByRental?.[row.rentalId!] ??
-                              input.policy.minimumDaysBySku?.[row.skuId!] ??
-                              0,
-                          )
-                        : (input.policy.minimumHoursByAsset?.[row.assetId!] ??
-                            input.policy.minimumHoursPerMachineDay),
-                    );
-                    const cutting =
-                      row.kind === "rentals"
-                        ? (input.rentals[row.index].metering ??
-                          input.rentals[row.index].cutting)
-                        : undefined;
-                    setByMeters(Boolean(cutting));
-                    setMeterPrice(cutting?.pricing.basePrice ?? "0");
-                    setMeterMinimum(cutting?.minimumMeters ?? "0");
-                    setCutReports(structuredClone(cutting?.reports ?? []));
-                    setRememberMinimum(false);
-                    setMinimumError(null);
-                  }}
-                >
-                  <IconSettings size={18} stroke={1.8} />
-                </ActionIcon>
-              </Tooltip>
+              {minimumControl(row)}
             </Group>
           );
         if (column.key === "mode")
@@ -588,7 +604,7 @@ export default function AnnexSheet({
     <Paper
       withBorder
       p="xs"
-      className={`${styles.sheet} ${expanded ? styles.expanded : ""}`}
+      className={`${glassStyles.theme} ${styles.sheet} ${expanded ? styles.expanded : ""}`}
     >
       <Stack gap={6} className={styles.content}>
         <Group justify="space-between">
@@ -624,22 +640,24 @@ export default function AnnexSheet({
             Conf. domingos y festivos
           </Button>
 
-          <Select
-            aria-label="Tipo de cobro"
-            size="xs"
-            w={95}
-            value={mode}
-            onChange={(v) => {
-              setMode(v);
-              selected.current = null;
-            }}
-            allowDeselect={false}
-            data={[
-              { value: "all", label: "Todos" },
-              { value: "rentals", label: "Por día" },
-              { value: "machineDays", label: "Por hora" },
-            ]}
-          />
+          {!isDailyAnnex(input) ? (
+            <Select
+              aria-label="Tipo de cobro"
+              size="xs"
+              w={95}
+              value={mode}
+              onChange={(v) => {
+                setMode(v);
+                selected.current = null;
+              }}
+              allowDeselect={false}
+              data={[
+                { value: "all", label: "Todos" },
+                { value: "rentals", label: "Por día" },
+                { value: "machineDays", label: "Por hora" },
+              ]}
+            />
+          ) : null}
           <Tooltip
             label={
               expanded ? "Salir de pantalla completa" : "Pantalla completa"
@@ -746,7 +764,15 @@ export default function AnnexSheet({
           }}
         >
           <DataGrid
-            className={`rdg-light ${styles.grid}`}
+            className={`rdg-dark ${styles.grid}`}
+            style={{
+              height: expanded
+                ? undefined
+                : Math.max(
+                    92,
+                    34 + rows.reduce((height, row) => height + (row.group ? 36 : 30), 0),
+                  ),
+            }}
             aria-label="Hoja editable del anexo"
             columns={columns}
             rows={rows}
@@ -792,6 +818,7 @@ export default function AnnexSheet({
     <>
       {expanded ? createPortal(sheet, document.body) : sheet}
       <Modal
+        classNames={{ content: glassStyles.theme }}
         opened={machine !== null}
         onClose={() => setMachine(null)}
         title={`Configuración de cobro · ${machine?.label ?? ""}`}
