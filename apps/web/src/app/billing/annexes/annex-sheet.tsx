@@ -1,4 +1,5 @@
 "use client";
+import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -247,7 +248,9 @@ export default function AnnexSheet({
       name: "Cobro",
       width: 64,
       renderCell: ({ row }: { row: SheetRow }) => {
-        const options = sheetModeOptions(input, row);
+        const options = sheetModeOptions(input, row).filter(
+          (mode) => mode.label === "D",
+        );
         if (!editing || !row.rentalId || options.length < 2 || row.supplement)
           return row.mode;
         return (
@@ -452,6 +455,12 @@ export default function AnnexSheet({
       ),
     },
   ]
+    .filter(
+      (column) =>
+        input.machineDays.length ||
+        input.rentals.some((r) => r.metering ?? r.cutting) ||
+        !["hours", "units", "actions"].includes(column.key),
+    )
     .map((column) =>
       column.key !== "days" &&
       (editableKeys as readonly string[]).includes(column.key)
@@ -600,7 +609,9 @@ export default function AnnexSheet({
           </div>
           <div>
             <Text size="xs" c="dimmed">
-              ALQUILER · SIN IVA NI EXTRAS DEL OPERARIO
+              {isDailyAnnex(input)
+                ? "ALQUILER POR DÍA · SIN IVA"
+                : "ALQUILER · SIN IVA NI EXTRAS DEL OPERARIO"}
             </Text>
             <Text fw={700} size="xl">
               {result ? money(result.totals.rentalNet) : "Por calcular…"}
@@ -656,7 +667,9 @@ export default function AnnexSheet({
         <Text size="xs" c="dimmed">
           {editing
             ? "Editando · Celdas azules: doble clic para editar · Guarda los cambios o cancela para descartarlos."
-            : "Consulta · Pulsa Editar para modificar valores, reportes o configuración."}
+            : isDailyAnnex(input)
+              ? "Consulta · Pulsa Editar para modificar valores o configuración."
+              : "Consulta de anexo histórico."}
         </Text>
         {error ? (
           <Alert
@@ -786,7 +799,7 @@ export default function AnnexSheet({
         <Stack gap="sm">
           <Text size="sm">
             {machine?.kind === "rentals"
-              ? "El mínimo de días se completa al devolver la cantidad alquilada y no se repite por quincena. Los metros se completan al devolver el equipo."
+              ? "El mínimo de días se completa al devolver la cantidad alquilada y no se repite por quincena."
               : "Aplica a cada día reportado. Si las horas reportadas superan el mínimo, se cobran las reportadas."}
           </Text>
           {machine && (

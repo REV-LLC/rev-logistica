@@ -22,6 +22,7 @@ import {
   Title,
 } from "@mantine/core";
 import { IconDeviceFloppy, IconChevronDown } from "@tabler/icons-react";
+import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import AnnexSheet from "./annex-sheet";
 import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
@@ -89,6 +90,7 @@ export default function AnnexesPage() {
     [result, setResult] = useState<Result | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(true);
   const hasInput = input !== null;
+  const historicalOnly = input !== null && !isDailyAnnex(input);
   useEffect(() => {
     setSelectorOpen(!hasInput);
   }, [hasInput]);
@@ -111,7 +113,7 @@ export default function AnnexesPage() {
     dirty: boolean;
   } | null>(null);
   function beginEditing() {
-    if (!input || busy) return;
+    if (!input || busy || historicalOnly) return;
     baseline.current = structuredClone({
       input,
       result,
@@ -290,7 +292,7 @@ export default function AnnexesPage() {
   }, [dirty]);
   const [previewError, setPreviewError] = useState<string | null>(null);
   useEffect(() => {
-    if (!input || result || busy) return;
+    if (!input || result || busy || historicalOnly) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setPreviewError(null);
@@ -310,7 +312,7 @@ export default function AnnexesPage() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [input, result, busy]);
+  }, [input, result, busy, historicalOnly]);
   function edit(next: AnnexInput) {
     if (!editing || busy) return;
     setInput(next);
@@ -335,7 +337,7 @@ export default function AnnexesPage() {
     }
   }
   async function prepare(refresh = false) {
-    if (!site) return;
+    if (!site || (refresh && historicalOnly)) return;
     setBusy(true);
     setError(null);
     try {
@@ -617,6 +619,7 @@ export default function AnnexesPage() {
                       disabled={
                         busy ||
                         !editing ||
+                        historicalOnly ||
                         dirty ||
                         revision === 0 ||
                         period.through === input.period.through
@@ -686,6 +689,13 @@ export default function AnnexesPage() {
         </Paper>
         {input ? (
           <>
+            {historicalOnly ? (
+              <Alert color="yellow">
+                Anexo histórico de otra modalidad: disponible solo para
+                consulta. Los nuevos anexos admiten únicamente alquileres por
+                día.
+              </Alert>
+            ) : null}
             <AnnexSheet
               key={site}
               customerName={
@@ -728,7 +738,11 @@ export default function AnnexesPage() {
                     </>
                   ) : (
                     <>
-                      <Button size="xs" disabled={busy} onClick={beginEditing}>
+                      <Button
+                        size="xs"
+                        disabled={busy || historicalOnly}
+                        onClick={beginEditing}
+                      >
                         Editar
                       </Button>
                       {!revision ? (
@@ -739,6 +753,7 @@ export default function AnnexesPage() {
                             aria-label="Guardar anexo"
                             variant="light"
                             loading={busy}
+                            disabled={historicalOnly}
                             onClick={() => calculate(true)}
                           >
                             <IconDeviceFloppy size={20} />
@@ -753,7 +768,9 @@ export default function AnnexesPage() {
                       p={2}
                       aria-label="Compartir anexo"
                       variant="light"
-                      disabled={editing || busy || !result || dirty}
+                      disabled={
+                        historicalOnly || editing || busy || !result || dirty
+                      }
                       onClick={() => {
                         if (!result) return;
                         setSendData(
