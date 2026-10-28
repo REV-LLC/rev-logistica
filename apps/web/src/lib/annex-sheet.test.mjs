@@ -138,3 +138,12 @@ test('configured modes are offered by ID and physical compositions distinguish t
  const rows=sheetRows(data,null);assert.equal(rows[0].label,'Plataforma · sin accesorios');assert.equal(rows[1].label,'Plataforma · con 1 × Implemento libre');
  assert.equal(rows[1].mode,'M');assert.deepEqual(sheetModeOptions(data,rows[1]).map(o=>[o.value,o.label]),[['day','D'],['meter','M']]);
 });
+
+test('daily-only presentation keeps rental rows and minimum supplements without group headers',()=>{
+ const daily=structuredClone(input);daily.machineDays=[];daily.policy={minimumDaysBySku:{sku:10}};daily.rentals[0].skuId='sku';
+ const calculated={lines:[line('2026-09-16','3','300.00'),{...line('2026-09-16','1','900.00'),key:'lot:minimum:2026-09-16',billableUnits:'9',reason:'Completa el mínimo'}]};
+ const rows=sheetRows(daily,calculated), flat=groupMachineRows(daily,rows,false);
+ assert.deepEqual(flat,rows);assert.equal(flat.some(row=>row.group),false);
+ assert.equal(flat[1].supplement,true);assert.equal(flat[0].label,'Plataforma');
+ assert.equal(flat.reduce((total,row)=>total+Number(row.net),0),1200);
+});

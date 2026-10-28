@@ -34,6 +34,7 @@ export class AnnexSourceService {
     const period = { from, to, through };
     const policy: AnnexInput['policy'] = {
       version: 'REV-INITIAL-1',
+      vatPercent: 19,
       includeReturnDay: true,
       excludedWeekdays: [],
       excludeHolidays: false,

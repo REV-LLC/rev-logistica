@@ -320,6 +320,7 @@ export function applySheetChanges(
 export function groupMachineRows(
   input: AnnexInput,
   rows: SheetRow[],
+  groupDaily = true,
 ): SheetRow[] {
   const groups = new Map<string, SheetRow[]>();
   const daily = rows.filter((row) => row.kind === "rentals");
@@ -333,7 +334,7 @@ export function groupMachineRows(
     groups.set(key, days);
   }
   return [
-    ...(input.policy?.minimumDaysBySku
+    ...(groupDaily && input.policy?.minimumDaysBySku
       ? [
           ...daily
             .reduce((map, row) => {

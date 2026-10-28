@@ -1,3 +1,5 @@
+import { annexTaxTotals } from "./annex-totals";
+import { annexReviewNotices } from "./annex-review";
 import { isDailyAnnex } from "./annex-daily-scope";
 import type {
   AnnexInput,
@@ -39,22 +41,36 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       "Precio final",
       "Total",
     ];
-  let y = 14;
+  const paintPage = () => {
+    pdf.setFillColor(25, 33, 39);
+    pdf.rect(0, 0, 297, 210, "F");
+    pdf.setFillColor(38, 49, 58);
+    pdf.roundedRect(8, 8, 281, 188, 4, 4, "F");
+    pdf.setDrawColor(72, 88, 100);
+    pdf.roundedRect(8, 8, 281, 188, 4, 4, "S");
+    pdf.setTextColor(237, 243, 248);
+  };
+  const addPage = () => {
+    pdf.addPage();
+    paintPage();
+  };
+  paintPage();
+  let y = 18;
   const write = (text: string, size = 9, bold = false) => {
     pdf.setFont("helvetica", bold ? "bold" : "normal");
     pdf.setFontSize(size);
     const lines = pdf.splitTextToSize(text, 269) as string[];
     for (const line of lines) {
       if (y > 191) {
-        pdf.addPage();
-        y = 14;
+        addPage();
+        y = 18;
       }
       pdf.text(line, 14, y);
       y += size * 0.45 + 1;
     }
   };
   const tableHeader = () => {
-    pdf.setFillColor(231, 240, 250);
+    pdf.setFillColor(52, 69, 82);
     pdf.rect(14, y, 273, 8, "F");
     pdf.setFontSize(8);
     pdf.setFont("helvetica", "bold");
@@ -75,20 +91,21 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       ? `Versión guardada ${data.revision}`
       : "Consulta sin guardar",
   );
-  write("Alquiler por día sin IVA. Documento en revisión; no es una factura.");
+  write("Alquiler por día. Documento para revisión; no es una factura.");
   y += 3;
   tableHeader();
   for (const row of groupMachineRows(
     data.input,
     sheetRows(data.input, data.result),
+    false,
   )) {
     if (row.group) {
       if (y + 16 > 190) {
-        pdf.addPage();
-        y = 14;
+        addPage();
+        y = 18;
         tableHeader();
       }
-      pdf.setFillColor(231, 240, 250);
+      pdf.setFillColor(52, 69, 82);
       pdf.rect(14, y, 273, 8, "F");
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8);
@@ -108,8 +125,8 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
     const label = pdf.splitTextToSize(displayLabel, 86) as string[];
     const height = Math.max(8, label.length * 4 + 3);
     if (y + height > 190) {
-      pdf.addPage();
-      y = 14;
+      addPage();
+      y = 18;
       tableHeader();
       pdf.setFont("helvetica", "normal");
     }
@@ -140,18 +157,50 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
       pdf.text(i === 0 ? label : value, x + 1, y + 5);
       x += widths[i];
     });
-    pdf.setDrawColor(220, 226, 233);
+    pdf.setDrawColor(72, 88, 100);
     pdf.line(14, y + height, 287, y + height);
     y += height;
   }
   y += 8;
-  write(`TOTAL ALQUILER: ${money(data.result.totals.rentalNet)}`, 12, true);
-  write(
-    `Base: ${money(data.result.totals.rentalGross)} | Descuentos y exenciones: ${money(data.result.totals.rentalDiscount)}`,
+  if (y + 58 > 190) {
+    addPage();
+    y = 18;
+  }
+  const tax = annexTaxTotals(
+    data.result.totals.rentalNet,
+    data.input.policy.vatPercent ?? 0,
   );
+  pdf.setFillColor(45, 59, 70);
+  pdf.roundedRect(165, y, 122, 56, 3, 3, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  pdf.text("Alquiler calculado", 281, y + 8, { align: "right" });
+  const breakdown = [
+    ["Valor base", money(data.result.totals.rentalGross)],
+    [
+      "Descuentos y exenciones",
+      "- " + money(data.result.totals.rentalDiscount),
+    ],
+    ["Subtotal", money(data.result.totals.rentalNet)],
+    [`IVA (${data.input.policy.vatPercent ?? 0} %)`, money(tax.vat)],
+    ["Total a pagar", money(tax.total)],
+  ];
+  breakdown.forEach(([label, value], index) => {
+    const total = index === breakdown.length - 1;
+    pdf.setFont("helvetica", total ? "bold" : "normal");
+    pdf.setFontSize(total ? 11 : 9);
+    const lineY = y + 18 + index * 8;
+    if (total) {
+      pdf.setDrawColor(114, 145, 166);
+      pdf.line(171, lineY - 5, 281, lineY - 5);
+    }
+    pdf.text(label, 171, lineY);
+    pdf.text(value, 281, lineY, { align: "right" });
+  });
+  y += 62;
   const pending = [
     ...new Set([
-      ...data.issues.map((i) => i.message),
+      ...annexReviewNotices(data.issues, data.input).map((i) => i.message),
       ...data.result.issues.map((i) => i.message),
     ]),
   ];

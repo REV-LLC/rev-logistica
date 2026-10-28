@@ -186,6 +186,7 @@ export const annexInputSchema = z
     policy: z
       .object({
         version: id,
+        vatPercent: z.union([z.literal(0), z.literal(19)]).optional(),
         includeReturnDay: z.boolean(),
         excludedWeekdays: z.array(z.number().int().min(0).max(6)).max(7),
         excludeHolidays: z.boolean(),
