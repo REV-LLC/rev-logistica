@@ -73,6 +73,16 @@
   border: 1px solid #e1e5ed;
   border-radius: 8px;
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) :is(.implementCard, .row, .surface) {
+    background: var(--rev-glass-surface);
+    border-color: var(--rev-glass-line);
+  }
+  :global(html[data-mantine-color-scheme='dark']) :is(.cardImage, .icon) { color: var(--mantine-color-dimmed); }
+  :global(html[data-mantine-color-scheme='dark']) .included { background: rgb(90 165 230 / 18%); color: #a6d5ff; }
+  :global(html[data-mantine-color-scheme='dark']) .actions { border-color: var(--rev-glass-line); }
+  :global(html[data-mantine-color-scheme='dark']) .family { border-color: transparent; border-bottom-color: var(--rev-glass-line); }
+}
 @media (max-width: 480px) {
   .row {
     padding: 14px 10px;

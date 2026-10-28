@@ -46,6 +46,12 @@
 .invalid { margin-top: 12px; }
 .warning { margin: 0 0 8px; color: #9a6700; font-size: 13px; }
 .unlinked { display: flex; flex-wrap: wrap; gap: 8px; }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .card { background: var(--rev-glass-surface); border-color: var(--rev-glass-line); }
+  :global(html[data-mantine-color-scheme='dark']) .principal { background: rgb(90 165 230 / 18%); border-color: #87b9e4; }
+  :global(html[data-mantine-color-scheme='dark']) :is(.icon, .arrow, .empty) { color: var(--mantine-color-dimmed); }
+  :global(html[data-mantine-color-scheme='dark']) .warning { color: #fce5a0; }
+}
 @media (max-width: 480px) {
   .card { max-width: 205px; padding: 8px; gap: 6px; }
   .name { font-size: 13px; }

@@ -178,7 +178,7 @@ export default function MaintenancePanel({ subject }: { subject: MaintenanceSubj
 
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="lg">
           <Paper radius="lg" p="md" bg="blue.0">
-            <Text size="xs" c="blue.8" fw={700} tt="uppercase">
+            <Text size="xs" c="var(--mantine-color-blue-light-color)" fw={700} tt="uppercase">
               {isHourly ? 'Horómetro actual' : 'Programación'}
             </Text>
             <Text fw={900} size="xl">

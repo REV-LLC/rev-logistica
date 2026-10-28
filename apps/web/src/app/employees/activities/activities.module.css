@@ -479,3 +479,16 @@
   min-width: 0;
   align-self: stretch;
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) :is(.day, .outside, .weekday, .employeeTrigger, .employeeOption, .worksite) { background: var(--rev-glass-surface); border-color: var(--rev-glass-line); color: var(--mantine-color-text); }
+  :global(html[data-mantine-color-scheme='dark']) :is(.weekday, .employeeChevron) { color: var(--mantine-color-dimmed); }
+  :global(html[data-mantine-color-scheme='dark']) :is(.selected, .chosen, .employeeOptionSelected, .employeeTrigger:hover, .employeeOption:hover, .worksite:hover),
+  :global(html[data-mantine-color-scheme='dark']) .dayContainer:hover .day { background: rgb(255 163 97 / 14%); }
+  :global(html[data-mantine-color-scheme='dark']) :is(.chosen, .employeeOptionSelected) { border-color: #ed751a; }
+  :global(html[data-mantine-color-scheme='dark']) :is(.count, .preview, .addNote) { color: #ffd09b; }
+  :global(html[data-mantine-color-scheme='dark']) :is(.preview, .addNote) { background: rgb(255 163 97 / 14%); }
+  :global(html[data-mantine-color-scheme='dark']) .previewABSENCE { background: rgb(224 49 49 / 16%); color: #ffb4b4; }
+  :global(html[data-mantine-color-scheme='dark']) .previewMEDICAL_LEAVE { background: rgb(121 80 242 / 16%); color: #d7c6ff; }
+  :global(html[data-mantine-color-scheme='dark']) .previewVACATION { background: rgb(12 166 120 / 16%); color: #9ee7d4; }
+  :global(html[data-mantine-color-scheme='dark']) .previewWAREHOUSE { background: rgb(90 165 230 / 18%); color: #a6d5ff; }
+}

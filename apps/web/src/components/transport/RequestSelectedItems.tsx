@@ -44,7 +44,7 @@ function ItemRow(props: RequestSelectedItemsProps & { node: RequestItemGroup; de
   const details = <>
     <Text fw={600} style={{ overflowWrap: 'anywhere' }}>{item.name}</Text>
     {props.docType === 'RETURN' && item.deliveryFuel ? <Text size="sm">Motor: {item.deliveryFuel === 'ELECTRICO' ? 'Eléctrico' : 'Gasolina'}</Text> : null}
-    {props.docType === 'REMISSION' ? <Text size="xs" c="gray.7">Dueño: {getItemOwnerLabel(props.warehouses.find(w => w.id === item.ownerWarehouseId))}</Text> : null}
+    {props.docType === 'REMISSION' ? <Text size="xs" c="dimmed">Dueño: {getItemOwnerLabel(props.warehouses.find(w => w.id === item.ownerWarehouseId))}</Text> : null}
     {item.serial ? <Text size="xs" c="dimmed">{item.serial}</Text> : null}
     {children.length ? <Text size="xs" c="teal">{children.length} pieza(s) incluida(s){expanded ? '' : ' · Ver configuración'}</Text> : null}
     {props.renderDamageFields(item, index)}

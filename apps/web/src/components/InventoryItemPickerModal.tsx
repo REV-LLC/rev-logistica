@@ -379,7 +379,7 @@ export default function InventoryItemPickerModal({
                               {catalogOnly ? 'Referencia' : row.type === 'serial' && row.item.isDamaged ? 'Equipo averiado' : `${row.type === 'bulk' ? 'Masivo' : 'Equipo'} · ${quantity} ${quantity === 1 ? 'disponible' : 'disponibles'}`}
                             </Text>
                             {row.type === 'serial' && row.item.isDamaged && row.item.damageNote ? (
-                              <Text component="span" size="xs" c="orange.8">
+                              <Text component="span" size="xs" c="var(--mantine-color-orange-light-color)">
                                 Último daño: {row.item.damageNote}
                               </Text>
                             ) : null}
@@ -624,7 +624,7 @@ export default function InventoryItemPickerModal({
                                         />
                                       </Table.Td>
                                       <Table.Td>
-                                        <Text size="sm" fw={650} c="dark.8">
+                                        <Text size="sm" fw={650} c="var(--ui-color-title)">
                                           {row.name}
                                         </Text>
                                         <Text
@@ -644,7 +644,7 @@ export default function InventoryItemPickerModal({
                                           </Text>
                                         ) : null}
                                         {row.type === 'serial' ? (
-                                          <Text size="xs" c={row.item.isDamaged ? 'orange.8' : 'teal.8'}>
+                                          <Text size="xs" c={row.item.isDamaged ? 'var(--mantine-color-orange-light-color)' : 'var(--mantine-color-teal-light-color)'}>
                                             {row.item.isDamaged ? `Averiado${row.item.damageNote ? `: ${row.item.damageNote}` : ''}` : 'Operativo'}
                                           </Text>
                                         ) : null}
