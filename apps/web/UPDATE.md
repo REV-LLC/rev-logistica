@@ -1,7 +1,7 @@
-# Exporta tus saldos en Excel
+# Tema oscuro en toda la aplicación
 
-En Exportar datos puedes descargar el saldo general de inventario, los saldos por cliente y obra, el inventario de proveedores y las existencias de cada bodega. Filtra lo que necesitas o consulta una vista previa antes de exportar.
+Unificamos las páginas internas con el estilo de cristal oscuro: superficies en gris ballena, títulos claros y textos con mayor contraste.
 
-También puedes exportar Excel desde las acciones de cada obra y desde su detalle. El archivo incluye un consolidado y el detalle por ubicación, con referencias legibles, propietarios separados y cantidades numéricas.
+Los formularios, modales, selectores, menús y tablas ahora siguen el mismo estilo, incluidos los selectores de equipos y la bitácora de empleados.
 
-Disponible para Admin y Office, con vista previa adaptada al celular. Son saldos actuales de inventario, no valores de dinero. Los respaldos técnicos siguen siendo exclusivos de Admin. La exportación es de solo lectura y no modifica documentos, movimientos, existencias, anexos ni cobros.
+El inicio de sesión, los enlaces públicos y los documentos para imprimir conservan su presentación. Esta actualización es visual: no modifica tus datos ni tus permisos de acceso.

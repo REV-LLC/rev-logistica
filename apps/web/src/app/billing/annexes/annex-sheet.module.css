@@ -105,3 +105,25 @@
   opacity: 0.35;
   cursor: default;
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .grid {
+    --rdg-color-scheme: dark;
+    --rdg-color: #cbd3d9;
+    --rdg-background-color: #343b40;
+    --rdg-header-background-color: #414b53;
+    --rdg-header-draggable-background-color: #4a545c;
+    --rdg-border-color: rgba(255, 255, 255, 0.16);
+    --rdg-row-hover-background-color: #3e484f;
+    --rdg-row-selected-background-color: #3e535f;
+    --rdg-row-selected-hover-background-color: #486270;
+    --rdg-selection-color: #a6d5ff;
+  }
+  :global(html[data-mantine-color-scheme='dark']) .editable { background: rgb(90 165 230 / 12%); }
+  :global(html[data-mantine-color-scheme='dark']) .machineGroup {
+    --rdg-background-color: #3e535f;
+    --rdg-row-hover-background-color: #486270;
+  }
+  :global(html[data-mantine-color-scheme='dark']) .machineGroup > [role='gridcell'] { background: #3e535f; color: #fff; }
+  :global(html[data-mantine-color-scheme='dark']) .daysArrows button { color: #a6d5ff; }
+  :global(html[data-mantine-color-scheme='dark']) .daysArrows button:hover:not(:disabled) { background: var(--rev-glass-hover); }
+}

@@ -22,6 +22,10 @@
 .typography dt { color: var(--mantine-color-dimmed); }
 .typography dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-variant-numeric: tabular-nums; }
 .readOnly { display: block; margin-top: 4px; color: var(--mantine-color-dimmed); font-size: 11px; }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .preview { background: #293136; }
+  :global(html[data-mantine-color-scheme='dark']) :is(.toolbar, .inspector, .textRun, .previewToolbar) { border-color: var(--rev-glass-line); }
+}
 .textTarget { position: absolute; cursor: text; background: transparent; border: 1px solid transparent; padding: 0; border-radius: 2px; }
 .textTarget:hover { border-color: var(--mantine-color-blue-4); background: rgba(34, 139, 230, .05); }
 .textTarget[aria-pressed='true'] { border-color: var(--mantine-color-blue-6); box-shadow: 0 0 0 1px var(--mantine-color-blue-6); }
