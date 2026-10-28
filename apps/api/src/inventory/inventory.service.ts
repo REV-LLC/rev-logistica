@@ -51,6 +51,7 @@ import {
   LEDGER_MAX_TAKE,
 } from './dto/get-inventory-ledger.dto';
 import { GetInventorySummaryDto } from './dto/get-inventory-summary.dto';
+import type { BalanceReportSource } from './balance-report.types';
 import { ledgerSearchWhere } from './ledger-search';
 import {
   getWorksiteQuantityDelta,
@@ -73,8 +74,6 @@ import {
 } from './serialized-warehouse-availability';
 import {
   projectInventoryForRequest,
-  type BulkInventoryRow,
-  type SerialInventoryRow,
 } from './request-inventory-projection';
 const WAREHOUSE_CACHE_TTL_SECONDS = 30;
 const ON_SITE_CACHE_TTL_SECONDS = 30;
@@ -1950,18 +1949,19 @@ export class InventoryService {
     return { warehouseId, serial };
   }
 
-  async getWarehouseInventory(warehouseId: string, includeZero = false) {
+  async getWarehouseInventory(warehouseId: string, includeZero = false, readClient?: Prisma.TransactionClient) {
+    const prisma = readClient ?? this.prisma;
     const cacheKey = `${this.getWarehouseCacheKey(warehouseId)}:${includeZero ? 'include-zero' : 'default'}`;
-    const cached = await this.cacheManager.get<{
+    const cached = readClient ? undefined : await this.cacheManager.get<{
       warehouseId: string;
-      bulk: unknown[];
-      serial: unknown[];
+      bulk: BalanceReportSource['bulk'];
+      serial: BalanceReportSource['serial'];
     }>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const warehouse = await this.prisma.warehouse.findUnique({
+    const warehouse = await prisma.warehouse.findUnique({
       where: { id: warehouseId },
       select: { id: true, name: true, type: true },
     });
@@ -1970,7 +1970,7 @@ export class InventoryService {
       throw new NotFoundException('Warehouse not found');
     }
 
-    const bulkRows = await this.prisma.stockLedger.groupBy({
+    const bulkRows = await prisma.stockLedger.groupBy({
       by: ['skuId', 'ownerWarehouseId'],
       where: {
         ...physicalWarehouseLedgerWhere(warehouseId),
@@ -1978,7 +1978,7 @@ export class InventoryService {
       },
       _sum: { quantity: true },
     });
-    const bulkOnSiteRows = await this.prisma.stockLedger.groupBy({
+    const bulkOnSiteRows = await prisma.stockLedger.groupBy({
       by: ['skuId', 'ownerWarehouseId'],
       where: {
         ownerWarehouseId: warehouseId,
@@ -1987,7 +1987,7 @@ export class InventoryService {
       },
       _sum: { quantity: true },
     });
-    const bulkWorksiteRows = await this.prisma.stockLedger.groupBy({
+    const bulkWorksiteRows = await prisma.stockLedger.groupBy({
       by: ['skuId', 'ownerWarehouseId', 'customerWorksiteId', 'movementType'],
       where: {
         ownerWarehouseId: warehouseId,
@@ -1998,7 +1998,7 @@ export class InventoryService {
       _sum: { quantity: true },
     });
 
-    const serialRows = await this.prisma.stockLedger.groupBy({
+    const serialRows = await prisma.stockLedger.groupBy({
       by: ['assetId'],
       where: {
         ...physicalWarehouseLedgerWhere(warehouseId),
@@ -2006,7 +2006,7 @@ export class InventoryService {
       },
       _sum: { quantity: true },
     });
-    const serialOnSiteRows = await this.prisma.stockLedger.groupBy({
+    const serialOnSiteRows = await prisma.stockLedger.groupBy({
       by: ['assetId'],
       where: {
         ownerWarehouseId: warehouseId,
@@ -2071,7 +2071,7 @@ export class InventoryService {
       ),
     ];
     const customerWorksites = customerWorksiteIds.length
-      ? await this.prisma.customerWorksite.findMany({
+      ? await prisma.customerWorksite.findMany({
           where: { id: { in: customerWorksiteIds } },
           select: {
             id: true,
@@ -2141,7 +2141,7 @@ export class InventoryService {
       { type: 'WAREHOUSE' | 'WORKSITE' | 'TRANSIT' | 'UNKNOWN'; name: string | null }
     >();
     if (assetIds.length > 0) {
-      const serialLedgerRows = await this.prisma.stockLedger.findMany({
+      const serialLedgerRows = await prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
         orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
@@ -2196,7 +2196,7 @@ export class InventoryService {
     }
 
     const assets = assetIds.length
-      ? await this.prisma.asset.findMany({
+      ? await prisma.asset.findMany({
           where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
@@ -2226,7 +2226,7 @@ export class InventoryService {
       ]),
     ];
     const skus = skuIds.length
-      ? await this.prisma.sku.findMany({
+      ? await prisma.sku.findMany({
           where: { id: { in: skuIds } },
           select: {
             id: true,
@@ -2258,7 +2258,7 @@ export class InventoryService {
       ]),
     ];
     const ownerWarehouses = ownerWarehouseIds.length
-      ? await this.prisma.warehouse.findMany({
+      ? await prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
           select: {
             id: true,
@@ -2372,23 +2372,24 @@ export class InventoryService {
       serial,
     };
 
-    await this.cacheManager.set(cacheKey, result, WAREHOUSE_CACHE_TTL_SECONDS);
+    if (!readClient) await this.cacheManager.set(cacheKey, result, WAREHOUSE_CACHE_TTL_SECONDS);
 
     return result;
   }
 
-  async getOnSiteInventory(customerWorksiteId: string) {
+  async getOnSiteInventory(customerWorksiteId: string, readClient?: Prisma.TransactionClient) {
+    const prisma = readClient ?? this.prisma;
     const cacheKey = this.getOnSiteCacheKey(customerWorksiteId);
-    const cached = await this.cacheManager.get<{
+    const cached = readClient ? undefined : await this.cacheManager.get<{
       customerWorksiteId: string;
-      bulk: BulkInventoryRow[];
-      serial: SerialInventoryRow[];
+      bulk: BalanceReportSource['bulk'];
+      serial: BalanceReportSource['serial'];
     }>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const customerWorksite = await this.prisma.customerWorksite.findUnique({
+    const customerWorksite = await prisma.customerWorksite.findUnique({
       where: { id: customerWorksiteId },
       select: { id: true },
     });
@@ -2397,7 +2398,7 @@ export class InventoryService {
       throw new NotFoundException('Customer worksite not found');
     }
 
-    const bulkMovementRows = await this.prisma.stockLedger.groupBy({
+    const bulkMovementRows = await prisma.stockLedger.groupBy({
       by: ['skuId', 'ownerWarehouseId', 'movementType'],
       where: {
         customerWorksiteId,
@@ -2407,7 +2408,7 @@ export class InventoryService {
       _sum: { quantity: true },
     });
 
-    const serialMovementRows = await this.prisma.stockLedger.groupBy({
+    const serialMovementRows = await prisma.stockLedger.groupBy({
       by: ['assetId', 'movementType'],
       where: {
         customerWorksiteId,
@@ -2470,7 +2471,7 @@ export class InventoryService {
     const assetIds = [...new Set(serialBase.map((row) => row.assetId))];
     const serialStatusByAssetId = new Map<string, 'IN' | 'OUT' | 'TRANSIT' | 'UNKNOWN'>();
     if (assetIds.length > 0) {
-      const serialLedgerRows = await this.prisma.stockLedger.findMany({
+      const serialLedgerRows = await prisma.stockLedger.findMany({
         where: { assetId: { in: assetIds } },
         orderBy: [{ isOpeningBalance: 'asc' }, { effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
@@ -2509,7 +2510,7 @@ export class InventoryService {
     }
 
     const assets = assetIds.length
-      ? await this.prisma.asset.findMany({
+      ? await prisma.asset.findMany({
           where: { id: { in: assetIds }, active: true, deletedAt: null },
           select: {
             id: true,
@@ -2539,7 +2540,7 @@ export class InventoryService {
       ]),
     ];
     const skus = skuIds.length
-      ? await this.prisma.sku.findMany({
+      ? await prisma.sku.findMany({
           where: { id: { in: skuIds } },
           select: {
             id: true,
@@ -2569,7 +2570,7 @@ export class InventoryService {
       ]),
     ];
     const ownerWarehouses = ownerWarehouseIds.length
-      ? await this.prisma.warehouse.findMany({
+      ? await prisma.warehouse.findMany({
           where: { id: { in: ownerWarehouseIds } },
           select: {
             id: true,
@@ -2676,7 +2677,7 @@ export class InventoryService {
       serial,
     };
 
-    await this.cacheManager.set(cacheKey, result, ON_SITE_CACHE_TTL_SECONDS);
+    if (!readClient) await this.cacheManager.set(cacheKey, result, ON_SITE_CACHE_TTL_SECONDS);
 
     return result;
   }
