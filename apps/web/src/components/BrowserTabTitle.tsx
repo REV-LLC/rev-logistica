@@ -43,7 +43,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/settings/asset-components', 'Componentes de equipos'],
   ['/tools/quotation', 'Cotización'],
   ['/tools/pdf-editor', 'Editor de PDF'],
-  ['/data', 'Datos'],
+  ['/data', 'Exportar datos'],
   ['/documents/shared', 'Documento compartido'],
   ['/actualizar-datos', 'Actualizar datos'],
   ['/privacy', 'Política de privacidad'],

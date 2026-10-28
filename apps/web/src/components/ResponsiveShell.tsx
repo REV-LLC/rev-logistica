@@ -130,7 +130,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
     { prefix: "/billing/annexes", title: "Anexos", subtitle: "Cobro por obra" },
     { prefix: "/customers", title: "Clientes", subtitle: "Relacion comercial" },
     { prefix: "/employees", title: "Empleados", subtitle: "Equipo interno" },
-    { prefix: "/data", title: "Datos", subtitle: "Backups y exportaciones" },
+    { prefix: "/data", title: "Exportar datos", subtitle: "Saldos de inventario en Excel" },
   ];
 
 function getHeaderCopy(

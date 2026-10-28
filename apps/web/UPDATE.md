@@ -1,7 +1,7 @@
-# Movimientos conserva tus filtros
+# Exporta tus saldos en Excel
 
-Al filtrar Movimientos por cliente, obra, bodega o búsqueda y abrir un documento, la selección se conserva al regresar con Atrás o con el botón Volver del detalle.
+En Exportar datos puedes descargar el saldo general de inventario, los saldos por cliente y obra, el inventario de proveedores y las existencias de cada bodega. Filtra lo que necesitas o consulta una vista previa antes de exportar.
 
-Los filtros y las fechas también se mantienen al recargar la página o abrir su enlace guardado. Limpiar elimina la selección y vuelve a mostrar todo el historial.
+También puedes exportar Excel desde las acciones de cada obra y desde su detalle. El archivo incluye un consolidado y el detalle por ubicación, con referencias legibles, propietarios separados y cantidades numéricas.
 
-En Más filtros, los cambios se aplican únicamente al confirmar. También corregimos un error al editar las fechas. Esta actualización no modifica movimientos, existencias, documentos, anexos ni cobros.
+Disponible para Admin y Office, con vista previa adaptada al celular. Son saldos actuales de inventario, no valores de dinero. Los respaldos técnicos siguen siendo exclusivos de Admin. La exportación es de solo lectura y no modifica documentos, movimientos, existencias, anexos ni cobros.

@@ -22,6 +22,7 @@ import {
   IconBuilding,
   IconBuildingEstate,
   IconExternalLink,
+  IconFileSpreadsheet,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -35,6 +36,7 @@ import EntityDataTable from '@/components/tables/EntityDataTable';
 import type { DataTableColumn } from '@/components/tables/table.types';
 import { useClientTableData } from '@/components/tables/useClientTableData';
 import { api, ApiError } from '@/lib/api';
+import { exportBalanceReport } from '@/lib/balance-export';
 import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 import glass from '@/components/InventoryGlass.module.css';
 import styles from './worksites.module.css';
@@ -111,6 +113,15 @@ export default function WorksitesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportingWorksite, setExportingWorksite] = useState<string | null>(null);
+
+  const exportWorksite = async (id: string) => {
+    if (exportingWorksite) return;
+    setExportingWorksite(id); setError(null);
+    try { await exportBalanceReport({ report: 'worksites', customerWorksiteId: id }); }
+    catch (err) { setError(err instanceof Error ? err.message : 'No se pudo exportar el saldo de la obra.'); }
+    finally { setExportingWorksite(null); }
+  };
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorksiteRow | null>(null);
@@ -561,6 +572,15 @@ export default function WorksitesPage() {
                 icon: <IconExternalLink size={16} />,
                 color: 'blue',
                 href: `/transport/worksites/${row.id}`,
+              },
+              {
+                key: 'excel',
+                label: `Exportar Excel de ${row.worksite.name} · ${row.customer.name}`,
+                icon: <IconFileSpreadsheet size={16} />,
+                color: 'green',
+                disabled: Boolean(exportingWorksite),
+                loading: exportingWorksite === row.id,
+                onClick: () => void exportWorksite(row.id),
               },
               {
                 key: 'edit',
