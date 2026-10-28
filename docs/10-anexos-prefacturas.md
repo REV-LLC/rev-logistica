@@ -410,3 +410,17 @@ rechazándose precios negativos. Los resultados del ensayo anterior documentan
 el comportamiento previo a este cambio. Los anexos guardados no se reescriben
 automáticamente: se pueden actualizar desde inventario y guardar otra revisión.
 Validado con IKARO: ocho referencias incluidas y total de alquiler cero.
+
+## Alcance operativo desde octubre de 2026
+
+La generación, selección de modalidad, cálculo por API y guardado de nuevos
+anexos se limitan a alquileres por día (bulk y assets). Las modalidades por hora
+y metro, los reportes de operario y las piezas incluidas de conjuntos excluidos
+quedan fuera de esta etapa. La selección se hace por unidad comercial, no por
+nombre o familia. REV confirma que no existen equipos diarios con operario.
+
+Se conservan las tarifas cero, descuentos, mínimos, exclusiones de calendario y
+ajustes manuales de días. El motor mantiene compatibilidad con los históricos:
+las revisiones ya guardadas no se migran ni recortan; si contienen otra modalidad,
+la pantalla las muestra en consulta y bloquea edición y envío. El PDF actual sigue
+siendo un anexo de alquiler sin IVA, no una factura.

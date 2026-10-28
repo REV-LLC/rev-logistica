@@ -47,7 +47,7 @@ export default function AnnexSend({
     ? `Anexo de alquiler · ${data.worksite} · ${data.input.period.from} al ${data.input.period.to}`
     : "";
   const message = data
-    ? `${subject}\nCliente: ${data.customer}\nRegistros hasta: ${data.input.period.through}\nDocumento para revisión. Alquiler sin IVA ni extras del operario.`
+    ? `${subject}\nCliente: ${data.customer}\nRegistros hasta: ${data.input.period.through}\nDocumento para revisión. Alquiler por día sin IVA.`
     : "";
   return (
     <Modal opened={!!data} onClose={onClose} title="Enviar anexo" size="md">
