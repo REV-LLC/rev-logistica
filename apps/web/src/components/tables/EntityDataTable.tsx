@@ -188,7 +188,7 @@ export default function EntityDataTable<T>({
                 </Table.Tr>
                 {renderExpandedRow && isRowExpanded?.(row) ? (
                   <Table.Tr>
-                    <Table.Td colSpan={columnCount} bg="gray.0" p="md">
+                    <Table.Td colSpan={columnCount} bg="var(--rev-glass-surface, var(--mantine-color-gray-0))" p="md">
                       {renderExpandedRow(row)}
                     </Table.Td>
                   </Table.Tr>

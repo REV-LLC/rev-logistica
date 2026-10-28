@@ -93,3 +93,10 @@
   min-height: 38px;
   font-size: 13px;
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .name { color: var(--ui-color-title); }
+  :global(html[data-mantine-color-scheme='dark']) .owner { color: var(--mantine-color-dimmed); }
+  :global(html[data-mantine-color-scheme='dark']) :is(.pill, .option[data-combobox-active]) { background: rgb(90 165 230 / 18%); border-color: var(--rev-glass-line); }
+  :global(html[data-mantine-color-scheme='dark']) .thumbnail { background: var(--rev-glass-surface); border-color: var(--rev-glass-line); color: var(--mantine-color-dimmed); }
+  :global(html[data-mantine-color-scheme='dark']) .check { color: #a6d5ff; }
+}

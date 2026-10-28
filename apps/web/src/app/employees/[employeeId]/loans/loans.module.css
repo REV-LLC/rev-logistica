@@ -30,6 +30,10 @@
 .employeeHeader :global(.mantine-Avatar-root) {
   background: var(--mantine-color-gray-1);
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .employeeHeader :global(.mantine-Avatar-root) { background: var(--rev-glass-hover); }
+  :global(html[data-mantine-color-scheme='dark']) .balance { background: var(--rev-glass-surface); }
+}
 
 .embeddedLedger {
   margin: 0;

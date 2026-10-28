@@ -1,0 +1,157 @@
+/* The root scheme also reaches components rendered in portals (dialogs and menus). */
+@media screen {
+  html[data-mantine-color-scheme='dark'] body,
+  html[data-mantine-color-scheme='dark'] .mantine-AppShell-main {
+    background-color: var(--rev-glass-background);
+    color: var(--mantine-color-text);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Paper-root, .mantine-Card-root) {
+    background: var(--rev-glass-surface) !important;
+    border-color: var(--rev-glass-line);
+    box-shadow: 0 16px 48px rgb(0 0 0 / 10%);
+    -webkit-backdrop-filter: blur(18px) saturate(115%);
+    backdrop-filter: blur(18px) saturate(115%);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Modal-content, .mantine-Drawer-content) {
+    background: var(--rev-glass-overlay) !important;
+    border: 1px solid var(--rev-glass-line);
+    box-shadow: 0 24px 80px rgb(0 0 0 / 30%);
+    color: var(--mantine-color-text);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Modal-header, .mantine-Drawer-header) {
+    background: #293136;
+    color: #fff;
+    border-bottom: 1px solid var(--rev-glass-line);
+    margin-bottom: 12px;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Modal-title, .mantine-Drawer-title) {
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Modal-body, .mantine-Drawer-body) .mantine-Paper-root,
+  html[data-mantine-color-scheme='dark'] .mantine-Paper-root .mantine-Paper-root {
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Combobox-dropdown, .mantine-Popover-dropdown, .mantine-Menu-dropdown) {
+    background: #293136 !important;
+    border-color: var(--rev-glass-line);
+    color: #f1f5f9;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 25%);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Combobox-option[data-combobox-selected], .mantine-Menu-item[data-hovered]) {
+    background: var(--rev-glass-hover);
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Input-wrapper {
+    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-color: #f1f5f9;
+    --input-bd: rgba(255, 255, 255, 0.22);
+    --input-placeholder-color: #b4c2cc;
+    color-scheme: dark;
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Input-wrapper[data-error] {
+    --input-bd: #ffb4b4;
+    --input-color: #ffb4b4;
+    --input-placeholder-color: #ffb4b4;
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Input-input:disabled {
+    background: rgb(255 255 255 / 3%);
+    color: #aebbc6;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Input-label, .mantine-Title-root) {
+    color: #f1f5f9;
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Table-table {
+    --table-border-color: rgba(255, 255, 255, 0.14);
+    --table-hover-color: rgba(255, 255, 255, 0.05);
+    --table-striped-color: rgba(255, 255, 255, 0.03);
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Table-th {
+    background: rgb(255 255 255 / 4%);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Table-td { color: #cbd3d9; }
+  html[data-mantine-color-scheme='dark'] .mantine-Divider-root { --divider-color: rgba(255, 255, 255, 0.14); }
+
+  html[data-mantine-color-scheme='dark'] .mantine-Tabs-tab[data-active] {
+    color: #fff;
+    font-weight: 700;
+    border-color: #a6d5ff;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-SegmentedControl-root, .mantine-Accordion-control:hover) {
+    background: rgb(255 255 255 / 5%);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.mantine-Pagination-control, .mantine-Button-root)[data-variant='default'] {
+    background: var(--rev-glass-surface);
+    border-color: var(--rev-glass-line);
+    color: #f1f5f9;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(button, a, input, textarea, select):focus-visible {
+    outline-color: #a6d5ff;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-mobile-modal, .inventory-picker-mobile-modal-body,
+    .inventory-picker-mobile-shell, .inventory-picker-mobile-header, .inventory-picker-mobile-footer,
+    .inventory-picker-toolbar, .inventory-picker-actions, .inventory-picker-table-scroll thead,
+    .bulk-flow-card, .bulk-flow-card-image, .workflow-step-card.is-active, .component-lab-placeholder) {
+    background: #3e474e;
+    color: #f1f5f9;
+    border-color: var(--rev-glass-line);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-mobile-family-heading, .inventory-picker-family-header,
+    .inventory-picker-mobile-row, .inventory-picker-mobile-check, .asset-card-image-placeholder) {
+    background: rgb(255 255 255 / 4%);
+    color: #f1f5f9;
+    border-color: var(--rev-glass-line);
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-row.is-selected, .inventory-picker-mobile-row.is-selected) {
+    background: rgb(90 165 230 / 18%);
+    border-color: #a6d5ff;
+  }
+
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-mobile-row-name, .inventory-picker-mobile-title,
+    .inventory-picker-mobile-family-heading h3, .inventory-picker-mobile-selection-count) { color: #f1f5f9; }
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-mobile-row-meta, .inventory-picker-mobile-family-heading span,
+    .inventory-picker-mobile-subtitle, .inventory-picker-empty) { color: #c0cbd3; }
+
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-row:hover, .inventory-picker-row.is-selected:hover) { background: var(--rev-glass-hover); }
+  html[data-mantine-color-scheme='dark'] :is(.rate-locked input, .rate-locked .mantine-NumberInput-input) { background: rgb(255 255 255 / 3%); color: #aebbc6; }
+  html[data-mantine-color-scheme='dark'] .bulk-flow-card-yellow .bulk-flow-card-action { color: #fce5a0 !important; }
+  html[data-mantine-color-scheme='dark'] .inventory-picker-mobile-header .mantine-ActionIcon-root { color: #f1f5f9; }
+  html[data-mantine-color-scheme='dark'] .inventory-picker-mobile-search-input input { background: var(--rev-glass-surface); }
+  html[data-mantine-color-scheme='dark'] :is(.inventory-picker-mobile-search, .inventory-picker-mobile-family, .inventory-picker-family-header) { border-color: var(--rev-glass-line); }
+}
+
+/* Documents keep their paper palette when printed, even from a dark workspace. */
+@media print {
+  :root {
+    --ui-color-title: #0f172a !important;
+    --ui-color-label: #334155 !important;
+    --ui-color-body: #475569 !important;
+    --mantine-color-text: #000 !important;
+    --mantine-color-body: #fff !important;
+    --mantine-color-dimmed: #475569 !important;
+  }
+}

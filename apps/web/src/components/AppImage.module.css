@@ -21,3 +21,9 @@
 @media (prefers-reduced-motion: reduce) {
   .image[data-image-state='loading'] { animation: none; }
 }
+@media screen {
+  :global(html[data-mantine-color-scheme='dark']) .image[data-image-state='loading'] {
+    background-image: linear-gradient(100deg, #3e484f 20%, #4a545c 45%, #3e484f 70%);
+  }
+  :global(html[data-mantine-color-scheme='dark']) .image[data-image-state='error'] { background-color: #3e484f; }
+}
