@@ -225,7 +225,7 @@ export default function AnnexesPage() {
         setReason("");
         if (latest && latest.input.period.through !== target.period.through)
           setMessage(
-            `Se abrió la última versión guardada, con registros hasta ${latest.input.period.through}.`,
+            `Se abrió la última versión guardada, con fecha final ${latest.input.period.through}.`,
           );
       } catch (e) {
         if (!controller.signal.aborted)
@@ -566,14 +566,8 @@ export default function AnnexesPage() {
                   sites.find((s) => s.id === site)?.worksite.name ||
                   "Obra por seleccionar"}{" "}
                 · {period.from.split("-").reverse().join("/")} –{" "}
-                {period.to.split("-").reverse().join("/")}
+                {(input?.period.through ?? period.through).split("-").reverse().join("/")}
               </Text>
-              {input ? (
-                <Text size="xs" c="dimmed">
-                  Registros hasta{" "}
-                  {input.period.through.split("-").reverse().join("/")}
-                </Text>
-              ) : null}
             </div>
             <IconChevronDown
               size={20}
@@ -617,26 +611,33 @@ export default function AnnexesPage() {
                     }}
                   />
                 </SimpleGrid>
-                <SimpleGrid cols={{ base: 1, sm: 3 }}>
-                  {(["from", "to", "through"] as const).map((key) => (
+                <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                  {(["from", "through"] as const).map((key) => (
                     <TextInput
                       key={key}
                       type="date"
                       label={
                         {
                           from: "Inicio del corte",
-                          to: "Fin del corte",
-                          through: "Registros hasta",
+                          through: "Fin del corte",
                         }[key]
                       }
                       value={period[key]}
+                      min={key === "through" ? period.from : undefined}
+                      max={key === "through" && input ? input.period.to : undefined}
                       disabled={
                         busy ||
                         (input !== null &&
                           (!editing || key !== "through" || dirty))
                       }
                       onChange={(e) =>
-                        setPeriod({ ...period, [key]: e.currentTarget.value })
+                        setPeriod({
+                          ...period,
+                          [key]: e.currentTarget.value,
+                          // Keep the saved cut identity while its billed end advances.
+                          ...(!input && key === "through" && e.currentTarget.value > period.to
+                            ? { to: e.currentTarget.value } : {}),
+                        })
                       }
                     />
                   ))}
@@ -706,7 +707,7 @@ export default function AnnexesPage() {
                           setError(null);
                         }}
                       >
-                        {d.periodFrom.slice(0, 10)} — {d.periodTo.slice(0, 10)}{" "}
+                        {d.periodFrom.slice(0, 10)} — {(d.revisions[0]?.input.period.through ?? d.periodTo).slice(0, 10)}{" "}
                         · revisión {d.revision}
                       </Button>
                     ))}
@@ -958,7 +959,7 @@ export default function AnnexesPage() {
                     <Text size="sm">
                       Las reglas y excepciones se conservan al guardar. Para
                       incorporar movimientos nuevos, guarda esta revisión,
-                      cambia «Registros hasta» y actualiza los movimientos. Se
+                      cambia «Fin del corte» y actualiza los movimientos. Se
                       conservan reportes y descuentos.
                     </Text>
                     <Group>

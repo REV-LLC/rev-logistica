@@ -34,6 +34,9 @@ async function inspect(blob) {
 test('download contains company logo, FINGE, opening balance and exact VAT breakdown', async()=>{
   const pdf=await inspect(await createAnnexPdf(fixture()));
   assert.equal(pdf.pages,1);assert.match(pdf.raw,/\/Subtype \/Image/);
+  assert.ok(pdf.text.includes('16/10/2026 al 16/10/2026'));
+  assert.ok(!pdf.text.includes('Registros hasta'));
+  assert.ok(!pdf.text.includes('31/10/2026'));
   for(const text of ['Empresa de prueba','FINGE','Saldo inicial','$ 100,00','$ 19,00','$ 119,00']) assert.ok(pdf.text.includes(text),text);
   assert.doesNotMatch(pdf.raw,/\/N \/Print/);
 });
