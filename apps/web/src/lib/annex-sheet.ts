@@ -2,6 +2,7 @@ import type { AnnexInput, Result } from "../app/billing/annexes/types";
 
 export type SheetRow = {
   id: string;
+  members?: SheetRow[];
   group?: boolean;
   assetId?: string;
   accessoryId?: string;
@@ -221,7 +222,9 @@ export function applySheetChanges(
 ): AnnexInput {
   const next = structuredClone(input);
   const seen = new Map<string, string>();
-  for (const { row, key, value } of changes) {
+  for (const { row, key, value } of changes.flatMap((change) =>
+    (change.row.members ?? [change.row]).map((row) => ({ ...change, row })),
+  )) {
     if (row.included || row.status === "Revisar modalidad")
       throw new Error("Esta fila no tiene un cobro independiente editable.");
     if (row.group)
@@ -317,6 +320,48 @@ export function applySheetChanges(
 }
 
 // Asset identity keeps distinct machines separate even when they share a label.
+// Consolidate presentation only: keep every source row for atomic edits.
+function consolidateDailyRows(input: AnnexInput, rows: SheetRow[]): SheetRow[] {
+  const output: SheetRow[] = [];
+  const groups = new Map<string, SheetRow>();
+  for (const row of rows) {
+    const lot = input.rentals[row.index];
+    if (!row.skuId || row.assetId || row.accessoryId || row.supplement ||
+      row.included || row.mode !== "D" || row.status !== "Calculado" ||
+      lot.commercial || lot.metering || lot.cutting) {
+      output.push(row);
+      continue;
+    }
+    const key = JSON.stringify([
+      row.skuId, row.label, row.from, row.to, row.days, row.basePrice,
+      row.effectivePrice, row.discountPercent, row.adjustmentReason,
+      input.policy?.minimumDaysByRental?.[lot.id] ?? input.policy?.minimumDaysBySku?.[row.skuId] ?? 0,
+    ]);
+    const previous = groups.get(key);
+    if (!previous) {
+      const copy = { ...row };
+      output.push(copy);
+      groups.set(key, copy);
+      continue;
+    }
+    const members = [...(previous.members ?? [{ ...previous }]), row];
+    previous.members = members;
+    previous.id = `combined:${members.map((member) => member.id).join("|")}`;
+    const precision = Math.max(...members.map((member) => member.quantity.split(".")[1]?.length ?? 0));
+    const scale = 10n ** BigInt(precision);
+    const quantity = members.reduce((total, member) => {
+      const [whole, fraction = ""] = member.quantity.split(".");
+      return total + BigInt(whole) * scale + BigInt(fraction.padEnd(precision, "0") || "0");
+    }, 0n);
+    previous.quantity = precision
+      ? `${quantity / scale}.${String(quantity % scale).padStart(precision, "0")}`.replace(/\.?0+$/, "")
+      : String(quantity);
+    previous.net = amount(members.reduce((total, member) => total + cents(member.net), 0n));
+    previous.reference = [...new Set(members.map((member) => member.reference))].join(", ");
+  }
+  return output;
+}
+
 export function groupMachineRows(
   input: AnnexInput,
   rows: SheetRow[],
@@ -324,8 +369,8 @@ export function groupMachineRows(
 ): SheetRow[] {
   const groups = new Map<string, SheetRow[]>();
   const byName = new Intl.Collator("es", { sensitivity: "base", numeric: true });
-  const daily = rows
-    .filter((row) => row.kind === "rentals")
+  const rentalRows = rows.filter((row) => row.kind === "rentals");
+  const daily = (groupDaily ? rentalRows : consolidateDailyRows(input, rentalRows))
     .sort((a, b) => byName.compare(a.label, b.label));
   for (const row of rows) {
     if (row.kind !== "machineDays") continue;

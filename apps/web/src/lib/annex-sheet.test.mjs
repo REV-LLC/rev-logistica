@@ -147,3 +147,22 @@ test('daily-only presentation keeps rental rows and minimum supplements without 
  assert.equal(flat[1].supplement,true);assert.equal(flat[0].label,'Plataforma');
  assert.equal(flat.reduce((total,row)=>total+Number(row.net),0),1200);
 });
+
+test('daily bulk rows consolidate matching charges, retain sources and edit all original lots',()=>{
+ const source=structuredClone(input);source.machineDays=[];
+ source.rentals=[{...source.rentals[0],id:'b',skuId:'baranda',label:'Baranda',quantity:'1'},
+ {...source.rentals[0],id:'a',skuId:'baranda',label:'Baranda',quantity:'2',source:{reference:'REM-2'}}];
+ const result={lines:source.rentals.map(r=>({...line('2026-09-16',r.quantity,String(Number(r.quantity)*100)+'.00'),key:`${r.id}:2026-09-16`,label:r.label}))};
+ const before=JSON.stringify(source);
+ const rows=groupMachineRows(source,sheetRows(source,result),false);
+ assert.equal(rows.length,1);assert.equal(rows[0].quantity,'3');assert.equal(rows[0].days,'1');assert.equal(rows[0].net,'300.00');
+ assert.equal(rows[0].members.length,2);assert.match(rows[0].reference,/REM-1/);assert.match(rows[0].reference,/REM-2/);
+ const edited=applySheetChanges(source,[{row:rows[0],key:'discountPercent',value:'15'},{row:rows[0],key:'days',value:'2'}]);
+ assert.deepEqual(edited.rentals.map(r=>r.pricing.discountPercent),['15','15']);
+ assert.deepEqual(edited.rentals.map(r=>r.dayAdjustments[0].quantity),['1','2']);
+ assert.equal(JSON.stringify(source),before);
+ const different=sheetRows(source,result);different[1].effectivePrice='90';
+ assert.equal(groupMachineRows(source,different,false).length,2);
+ different[1].effectivePrice='100';different[1].to='2026-09-17';
+ assert.equal(groupMachineRows(source,different,false).length,2);
+});
