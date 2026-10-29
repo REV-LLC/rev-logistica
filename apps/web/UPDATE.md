@@ -1,5 +1,7 @@
-# Documentos con fondo blanco
+# Lista de precios editable con historial
 
-Corregimos la vista de remisiones, devoluciones, cotizaciones y visores PDF para conservar las hojas blancas con texto oscuro, tanto en pantalla como al imprimir.
+Admin y Office pueden editar el precio de alquiler y el valor de reposición de cada referencia desde Lista de precios.
 
-Los botones, menús y modales que rodean los documentos mantienen el estilo cristal oscuro. Esta corrección es visual y no modifica documentos, datos ni permisos.
+Cada cambio realizado desde esta lista conserva los valores anteriores y nuevos, el motivo, la fecha y el usuario responsable. El historial se consulta desde las acciones de cada referencia.
+
+Si otra persona cambió los precios mientras tenías abierto el editor, se solicita actualizar la lista antes de guardar. El historial empieza con esta actualización; no reconstruye cambios anteriores ni modifica documentos ya guardados o modalidades particulares de cada equipo.
