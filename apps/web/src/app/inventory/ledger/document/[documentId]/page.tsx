@@ -1652,6 +1652,7 @@ export default function DocumentDetailPage() {
           linePages.map((lines, pageIndex) => (
           <Paper
             key={`${document.id}-page-${pageIndex + 1}`}
+            data-document-paper
             shadow="sm"
             p={{ base: 'md', sm: 'xl' }}
             radius="md"

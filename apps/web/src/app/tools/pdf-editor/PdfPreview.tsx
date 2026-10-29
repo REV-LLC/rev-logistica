@@ -66,7 +66,7 @@ export default function PdfPreview({ file, page, zoom, fragments, selection, dis
   return <div ref={container} className={styles.canvasViewport}>
     <Text size="xs" c="dimmed" ta="center" py="sm">{original ? 'Original' : 'Documento actual'} · Página {page + 1}{loading ? ' · Preparando vista previa…' : ''}</Text>
     {error ? <Alert color="red" m="md" role="alert">{error}</Alert> : null}
-    <div className={styles.pageCanvas} style={{ width: viewport?.width, height: viewport?.height, visibility: loading || error ? 'hidden' : 'visible' }}>
+    <div data-document-paper className={styles.pageCanvas} style={{ width: viewport?.width, height: viewport?.height, visibility: loading || error ? 'hidden' : 'visible' }}>
       <canvas ref={canvas} role="img" aria-label={`Página ${page + 1} del documento PDF`} aria-busy={loading} className={styles.canvas} />
       {viewport && !loading && !error ? fragments.filter((item) => item.editable && item.quad).map((fragment) => {
         const points = fragment.quad!.map(([x, y]) => viewport.convertToViewportPoint(x, y));
