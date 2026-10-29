@@ -29,6 +29,17 @@ export type SheetRow = {
   net: string;
   status: string;
 };
+/** An opening balance is physical stock delivered before this cut, not proof of payment. */
+export function isOpeningBalance(input: AnnexInput, row: SheetRow): boolean {
+  return (row.members ?? [row]).every((member) => {
+    if (member.kind !== "rentals") return false;
+    const rental = input.rentals[member.index];
+    return Boolean(rental && rental.deliveredOn < input.period.from &&
+      (!rental.billingStartsOn || rental.billingStartsOn <= input.period.from) &&
+      (!rental.commercialInterval || rental.commercialInterval.from <= input.period.from));
+  });
+}
+
 /** Keep every source document when identical rental lots share a display row. */
 export function sheetDocuments(input: AnnexInput, row: SheetRow) {
   const documents = new Map<string, { id: string; label: string }>();
@@ -352,6 +363,7 @@ function consolidateDailyRows(input: AnnexInput, rows: SheetRow[]): SheetRow[] {
       continue;
     }
     const key = JSON.stringify([
+      isOpeningBalance(input, row) ? "OPENING_BALANCE" : ["DELIVERY", lot.source.documentId ?? lot.source.reference],
       row.skuId, row.label, row.from, row.to, row.days, row.basePrice,
       row.effectivePrice, row.discountPercent, row.adjustmentReason,
       input.policy?.minimumDaysByRental?.[lot.id] ?? input.policy?.minimumDaysBySku?.[row.skuId] ?? 0,
