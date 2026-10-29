@@ -180,6 +180,16 @@ export class AnnexSourceService {
         );
         const daily = dailyRentals(commercial.rentals, commercial.machineDays);
         source.rentals = daily.rentals;
+        const documentsByMovement = new Map(rows.map((row) => [row.id, row]));
+        for (const rental of source.rentals) {
+          for (const sourceRef of [rental.source, ...rental.returns.map((item) => item.source)]) {
+            const movement = documentsByMovement.get(sourceRef.reference);
+            if (movement?.refDocumentId && movement.document) {
+              sourceRef.documentId = movement.refDocumentId;
+              sourceRef.documentNumber = movement.document.consecutive ?? undefined;
+            }
+          }
+        }
         const billingSetting = await tx.appSetting.findUnique({ where: { key: billingStartSettingKey } });
         const billingRule = billingSetting ? billingStartRuleSchema.parse(billingSetting.value) : null;
         applyDailyBillingStart(source.rentals, rows, billingRule);

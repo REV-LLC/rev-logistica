@@ -29,6 +29,25 @@ export type SheetRow = {
   net: string;
   status: string;
 };
+/** Keep every source document when identical rental lots share a display row. */
+export function sheetDocuments(input: AnnexInput, row: SheetRow) {
+  const documents = new Map<string, { id: string; label: string }>();
+  for (const member of row.members ?? [row]) {
+    const item = input[member.kind][member.index];
+    if (!item) continue;
+    const sources = member.kind === "rentals"
+      ? [input.rentals[member.index].source, ...input.rentals[member.index].returns.map((entry) => entry.source)]
+      : input.machineDays[member.index].reports.map((report) => report.source);
+    for (const source of sources) {
+      if (source.documentId) documents.set(source.documentId, {
+        id: source.documentId,
+        label: source.documentNumber || "Ver documento",
+      });
+    }
+  }
+  return [...documents.values()];
+}
+
 export const editableKeys = [
   "discountPercent",
   "effectivePrice",

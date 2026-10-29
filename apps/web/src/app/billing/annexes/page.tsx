@@ -25,6 +25,7 @@ import {
 } from "@mantine/core";
 import {
   IconDeviceFloppy,
+  IconPrinter,
   IconChevronDown,
   IconAlertTriangle,
 } from "@tabler/icons-react";
@@ -111,6 +112,7 @@ export default function AnnexesPage() {
     [error, setError] = useState<string | null>(null),
     [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [sendData, setSendData] = useState<AnnexExport | null>(null);
   const baseline = useRef<{
     input: AnnexInput;
@@ -779,6 +781,39 @@ export default function AnnexesPage() {
                       ) : null}
                     </>
                   )}
+                  <Tooltip label="Imprimir anexo" withinPortal>
+                    <ActionIcon size={28} p={2} aria-label="Imprimir anexo"
+                      variant="light" loading={printing}
+                      disabled={historicalOnly || editing || busy || !result || dirty}
+                      onClick={async () => {
+                        if (!result) return;
+                        const preview = window.open("about:blank", "_blank");
+                        if (!preview) {
+                          setError("Permite las ventanas emergentes para imprimir el anexo.");
+                          return;
+                        }
+                        preview.opener = null;
+                        setPrinting(true);
+                        try {
+                          const { createAnnexPdf } = await import("@/lib/annex-pdf");
+                          const blob = await createAnnexPdf({
+                            input, result, revision, issues,
+                            customer: customers.find((c) => c.id === customer)?.name ?? "Cliente",
+                            worksite: sites.find((s) => s.id === site)?.alias || sites.find((s) => s.id === site)?.worksite.name || "Obra",
+                          }, { print: true });
+                          const url = URL.createObjectURL(blob);
+                          if (!preview.closed) preview.location.replace(url);
+                          setTimeout(() => URL.revokeObjectURL(url), 60000);
+                        } catch (error) {
+                          preview.close();
+                          setError(error instanceof Error ? error.message : "No se pudo imprimir el anexo");
+                        } finally {
+                          setPrinting(false);
+                        }
+                      }}>
+                      <IconPrinter size={20} />
+                    </ActionIcon>
+                  </Tooltip>
                   <Tooltip label="Compartir anexo" withinPortal>
                     <ActionIcon
                       size={28}

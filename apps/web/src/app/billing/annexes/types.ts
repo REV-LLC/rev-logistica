@@ -69,6 +69,8 @@ export type Pricing = {
   adjustmentReason?: string;
 };
 export type Source = {
+  documentId?: string;
+  documentNumber?: string;
   reference: string;
   origin: "INVENTORY" | "PHYSICAL" | "DIGITAL";
 };

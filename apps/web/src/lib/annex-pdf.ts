@@ -21,7 +21,7 @@ const money = (value: string) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
+export async function createAnnexPdf(data: AnnexExport, options: { print?: boolean } = {}): Promise<Blob> {
   if (!isDailyAnnex(data.input))
     throw new Error(
       "Esta versión solo permite compartir anexos de alquiler por día.",
@@ -215,5 +215,6 @@ export async function createAnnexPdf(data: AnnexExport): Promise<Blob> {
     pdf.setFontSize(8);
     pdf.text(`Página ${page} de ${count}`, 283, 202, { align: "right" });
   }
+  if (options.print) pdf.autoPrint();
   return pdf.output("blob");
 }
