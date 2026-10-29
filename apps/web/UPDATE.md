@@ -1,7 +1,5 @@
-# Anexos por día y tema oscuro
+# Documentos con fondo blanco
 
-En esta etapa, los nuevos anexos incluyen únicamente ítems bulk y equipos cobrados por día. Los equipos por hora y los cobros por metros quedan fuera de la generación.
+Corregimos la vista de remisiones, devoluciones, cotizaciones y visores PDF para conservar las hojas blancas con texto oscuro, tanto en pantalla como al imprimir.
 
-La tabla conserva los ajustes de días, descuentos, mínimos y precios en cero. Los anexos históricos que incluyen otras modalidades siguen disponibles para consulta, sin alterar sus datos guardados.
-
-Las páginas internas, formularios, modales, selectores y tablas ahora comparten el estilo de cristal oscuro, con superficies en gris ballena y textos con mayor contraste. El inicio de sesión, los enlaces públicos y los documentos para imprimir conservan su presentación.
+Los botones, menús y modales que rodean los documentos mantienen el estilo cristal oscuro. Esta corrección es visual y no modifica documentos, datos ni permisos.
