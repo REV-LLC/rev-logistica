@@ -1,5 +1,4 @@
-import { annexTaxTotals } from "./annex-totals";
-import { annexReviewNotices } from "./annex-review";
+import { annexAmounts } from "./annex-totals";
 import { isDailyAnnex } from "./annex-daily-scope";
 import { documentBranding, type DocumentBranding } from "./document-branding";
 import type { AnnexInput, Result, SourceIssue } from "../app/billing/annexes/types";
@@ -140,15 +139,67 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     }
     rowIndex++;
   }
-  y += 3;
+  const amounts = annexAmounts(data.result.totals, data.input.transport, data.input.policy.vatPercent ?? 0);
+  // Transport follows the final equipment row and stays together on one sheet.
+  y += 4;
+  if (y + 31 > bottom) nextPage();
+  pdf.setTextColor(...dark); pdf.setFont("helvetica", "bold"); pdf.setFontSize(9);
+  pdf.text("Transporte", left, y + 4); y += 7;
+  pdf.setFillColor(233, 238, 241); pdf.rect(left, y, 273, 7, "F");
+  pdf.setFontSize(7);
+  pdf.text("Trayecto", left + 2, y + 4.5);
+  pdf.text("Cantidad", 175, y + 4.5, { align: "right" });
+  pdf.text("Precio unitario", 230, y + 4.5, { align: "right" });
+  pdf.text("Total", right - 2, y + 4.5, { align: "right" });
+  y += 7;
+  for (const [key, label] of [["outbound", "Ida"], ["return", "Regreso"]] as const) {
+    const charge = data.input.transport?.[key] ?? { quantity: "0", unitPrice: "0" };
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
+    pdf.text(label, left + 2, y + 3.5);
+    pdf.text(charge.quantity, 175, y + 3.5, { align: "right" });
+    pdf.text(money(charge.unitPrice), 230, y + 3.5, { align: "right" });
+    pdf.text(money(amounts.transport[key]), right - 2, y + 3.5, { align: "right" });
+    y += 5; pdf.setDrawColor(218, 226, 231); pdf.line(left, y, right, y);
+  }
+  pdf.setFont("helvetica", "bold");
+  pdf.text("Total transporte", left + 2, y + 4);
+  pdf.text(money(amounts.transport.total), right - 2, y + 4, { align: "right" });
+  y += 10;
+
+  // Customer-entered observations replace internal review alerts in the printed document.
+  const observations = data.input.observations?.trim() || "";
+  pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
+  const beside = observations ? pdf.splitTextToSize(observations, 151) as string[] : [];
+  const fitsBeside = beside.length * 3.5 + 9 <= 42;
+  const observationHeading = () => {
+    pdf.setTextColor(...muted); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
+    pdf.text("Observaciones", left, y + 4); y += 9;
+  };
+  if (!fitsBeside) {
+    const lines = pdf.splitTextToSize(observations, 267) as string[];
+    if (y + 13 > bottom) nextPage();
+    observationHeading();
+    for (const line of lines) {
+      if (y + 4 > bottom) { nextPage(); observationHeading(); }
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(7); pdf.setTextColor(...muted);
+      pdf.text(line, left + 2, y); y += 3.5;
+    }
+    y += 5;
+  }
   if (y + 42 > bottom) nextPage();
-  const tax = annexTaxTotals(data.result.totals.rentalNet, data.input.policy.vatPercent ?? 0);
+  const summaryY = y;
+  if (fitsBeside && beside.length) {
+    observationHeading();
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(7); pdf.setTextColor(...muted);
+    for (const line of beside) { pdf.text(line, left + 2, y); y += 3.5; }
+  }
+  y = summaryY;
   const breakdown = [
-    ["Valor base", money(data.result.totals.rentalGross)],
-    ["Descuentos y exenciones", "- " + money(data.result.totals.rentalDiscount)],
-    ["Subtotal", money(data.result.totals.rentalNet)],
-    [`IVA (${data.input.policy.vatPercent ?? 0} %)`, money(tax.vat)],
-    ["TOTAL A PAGAR", money(tax.total)],
+    ["Valor base", money(amounts.base)],
+    ["Descuentos y exenciones", "- " + money(amounts.discount)],
+    ["Subtotal", money(amounts.subtotal)],
+    [`IVA (${data.input.policy.vatPercent ?? 0} %)`, money(amounts.vat)],
+    ["TOTAL A PAGAR", money(amounts.total)],
   ];
   pdf.setFillColor(240, 244, 246); pdf.roundedRect(173, y, 112, 42, 2, 2, "F");
   breakdown.forEach(([label, value], i) => {
@@ -161,27 +212,6 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     pdf.text(label, 177, y + 6 + i * 7.5);
     pdf.text(value, 281, y + 6 + i * 7.5, { align: "right" });
   });
-  const summaryY = y;
-  y += 48;
-  const pending = [...new Set([
-    ...annexReviewNotices(data.issues, data.input).map((i) => i.message),
-    ...data.result.issues.map((i) => i.message),
-  ])];
-  if (pending.length) {
-    pdf.setFontSize(7); pdf.setFont("helvetica", "normal");
-    const beside = pending.flatMap((item) => pdf.splitTextToSize(`- ${item}`, 151) as string[]);
-    const fitsBeside = beside.length * 3.5 + 9 <= 42;
-    const lines = fitsBeside ? beside : pending.flatMap((item) => pdf.splitTextToSize(`- ${item}`, 267) as string[]);
-    if (fitsBeside) y = summaryY;
-    else if (y + 12 > bottom) nextPage();
-    pdf.setTextColor(...muted); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
-    pdf.text("Observaciones para revisión", left, y + 4); y += 9;
-    for (const line of lines) {
-      if (y + 4 > bottom) nextPage();
-      pdf.setFont("helvetica", "normal"); pdf.setFontSize(7); pdf.setTextColor(...muted);
-      pdf.text(line, left + 2, y); y += 3.5;
-    }
-  }
   const count = pdf.getNumberOfPages();
   for (let page = 1; page <= count; page++) {
     pdf.setPage(page); pdf.setDrawColor(218, 226, 231); pdf.line(left, 199, right, 199);

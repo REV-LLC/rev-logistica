@@ -54,3 +54,25 @@ test('current-period deliveries show document number instead of opening balance'
   const data=fixture();data.input.rentals[0].deliveredOn='2026-10-16';
   const pdf=await inspect(await createAnnexPdf(data));assert.ok(pdf.text.includes('RM-0'));assert.ok(!pdf.text.includes('Saldo inicial'));
 });
+test('PDF prints manual observations, both transport charges and combined taxable total',async()=>{
+  const data=fixture();
+  data.input.observations='Coordinar el regreso con el residente.';
+  data.input.transport={outbound:{quantity:'2',unitPrice:'60000'},return:{quantity:'1',unitPrice:'45000'}};
+  data.issues=[{code:'INTERNAL',reference:'private-id',message:'INTERNAL REVIEW DO NOT PRINT'}];
+  const pdf=await inspect(await createAnnexPdf(data));
+  for(const text of ['Coordinar el regreso con el residente.','Ida','Regreso','$ 120.000,00','$ 45.000,00','$ 165.100,00','$ 31.369,00','$ 196.469,00']) assert.ok(pdf.text.includes(text),text);
+  assert.ok(!pdf.text.includes('INTERNAL REVIEW DO NOT PRINT'));
+});
+test('totals appear only on the final page, after transport and long manual observations',async()=>{
+  const data=fixture(80);
+  data.input.observations=Array.from({length:100},(_,i)=>`Nota manual ${i} para el cliente.`).join('\n');
+  data.input.transport={outbound:{quantity:'1',unitPrice:'100'},return:{quantity:'2',unitPrice:'50'}};
+  const pdf=await inspect(await createAnnexPdf(data));
+  const pages=pdf.contents.filter(content=>content.includes('FINGE'));
+  assert.ok(pages.length>2);
+  assert.ok(pages.at(-1).includes('TOTAL A PAGAR'));
+  assert.ok(pages.slice(0,-1).every(page=>!page.includes('TOTAL A PAGAR')));
+  assert.ok(pdf.text.indexOf('Transporte')>pdf.text.indexOf('Equipo 79'));
+  assert.ok(pdf.text.includes('Nota manual 99 para el cliente.'));
+  assert.equal((pdf.text.match(/Total transporte/g)||[]).length,1);
+});

@@ -257,3 +257,21 @@ it('calculates VAT after discounts and rounds the tax once to cents', () => {
   delete input.policy.vatPercent;
   expect(calculateAnnex(input).tax.vatPercent).toBe(0);
 });
+
+it('adds manual transport before VAT without discounting it with equipment', () => {
+  const input = fixture(); input.period.through = '2026-09-01'; input.policy.vatPercent = 19;
+  input.rentals = [{ ...rental(), deliveredOn: '2026-09-01', quantity: '1', pricing: { basePrice: '100', discountPercent: '10' } }];
+  input.transport = { outbound: { quantity: '3', unitPrice: '12.34' }, return: { quantity: '1', unitPrice: '0.01' } };
+  const result = calculateAnnex(input);
+  expect(result.totals).toEqual({ rentalGross: '100.00', rentalDiscount: '10.00', rentalNet: '90.00' });
+  expect(result.transport).toEqual({ outbound: '37.02', return: '0.01', total: '37.03' });
+  expect(result.summary).toEqual({ base: '137.03', discount: '10.00', subtotal: '127.03' });
+  expect(result.tax).toEqual({ vatPercent: 19, vat: '24.14', total: '151.17' });
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax.total).toBe('127.03');
+});
+it('rejects negative or fractional transport quantities and prices with excess precision', () => {
+  for (const outbound of [{quantity:'-1',unitPrice:'10'}, {quantity:'1.5',unitPrice:'10'}, {quantity:'1',unitPrice:'-10'}, {quantity:'1',unitPrice:'1.001'}]) {
+    expect(() => calculateAnnex({...fixture(),transport:{outbound,return:{quantity:'0',unitPrice:'0'}}})).toThrow();
+  }
+});

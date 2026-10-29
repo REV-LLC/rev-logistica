@@ -60,3 +60,12 @@ it('rejects VAT rates outside the supported choices', async () => {
   const { service } = setup();
   await expect(service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent: 5 } } }, 'author')).rejects.toThrow();
 });
+it('stores observations, both transport rows and their server-calculated VAT in the saved revision', async () => {
+  const { service } = setup();
+  const observations = 'Entregar copia al residente.\nCoordinar regreso.';
+  const transport = {outbound:{quantity:'2',unitPrice:'60000'},return:{quantity:'1',unitPrice:'45000'}};
+  const saved = await service.save({...payload,input:{...input,observations,transport,policy:{...input.policy,vatPercent:19}}},'author');
+  expect(saved.revisions[0].input).toMatchObject({observations,transport});
+  expect(saved.revisions[0].result.summary.subtotal).toBe('165000.00');
+  expect(saved.revisions[0].result.tax).toEqual({vatPercent:19,vat:'31350.00',total:'196350.00'});
+});

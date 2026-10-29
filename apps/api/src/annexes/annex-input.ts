@@ -183,8 +183,14 @@ const rentalSchema = baseRentalSchema
       .optional(),
   })
   .strict();
+const transportCharge = z.object({
+  quantity: z.string().regex(/^\d{1,4}$/),
+  unitPrice: money,
+}).strict();
 export const annexInputSchema = z
   .object({
+    observations: z.string().max(5000).optional(),
+    transport: z.object({ outbound: transportCharge, return: transportCharge }).strict().optional(),
     period: z.object({ from: date, to: date, through: date }).strict(),
     policy: z
       .object({
