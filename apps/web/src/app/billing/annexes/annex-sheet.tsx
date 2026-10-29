@@ -169,6 +169,7 @@ export default function AnnexSheet({
     label: string;
     kind: SheetRow["kind"];
     index: number;
+    indices?: number[];
   } | null>(null);
   const [rememberMinimum, setRememberMinimum] = useState(false);
   const [byMeters, setByMeters] = useState(false);
@@ -253,6 +254,7 @@ export default function AnnexSheet({
             label: row.label,
             kind: row.kind,
             index: row.index,
+            indices: row.members?.map((member) => member.index),
           });
           setMinimum(
             row.kind === "rentals"
@@ -1023,11 +1025,11 @@ export default function AnnexSheet({
                   return;
                 }
                 if (daily) {
-                  delete next.rentals[machine.index].metering;
-                  next.policy.minimumDaysByRental = {
-                    ...next.policy.minimumDaysByRental,
-                    [next.rentals[machine.index].id]: Number(value),
-                  };
+                  next.policy.minimumDaysByRental = { ...next.policy.minimumDaysByRental };
+                  for (const index of machine.indices ?? [machine.index]) {
+                    delete next.rentals[index].metering;
+                    next.policy.minimumDaysByRental[next.rentals[index].id] = Number(value);
+                  }
                 } else
                   next.policy.minimumHoursByAsset = {
                     ...next.policy.minimumHoursByAsset,
