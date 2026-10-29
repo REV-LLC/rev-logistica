@@ -276,6 +276,7 @@ export default function ProviderMobilityGuidesPanel({
       >
         {preview ? (
           <iframe
+            data-document-paper
             src={preview.url}
             title={preview.name}
             style={{ width: "100%", height: "75vh", border: 0 }}

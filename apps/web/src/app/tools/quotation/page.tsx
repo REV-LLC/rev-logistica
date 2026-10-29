@@ -797,7 +797,7 @@ export default function QuotationPage() {
               Hoja carta
             </Badge>
           </Group>
-          <div className="quote-sheet">
+          <div className="quote-sheet" data-document-paper>
             <div className="quote-top">
               <AppImage width={175} height={175} sizes="175px" loading="eager" src="/rev-logo-clean.svg" alt="REV" className="quote-logo" />
               <div className="quote-meta">

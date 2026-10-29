@@ -173,7 +173,7 @@ export default function MobilityGuideListModal({
         size="90%"
         centered
       >
-        {previewUrl ? <iframe src={previewUrl} title={previewName} style={{ width: '100%', height: '75vh', border: 0 }} /> : null}
+        {previewUrl ? <iframe data-document-paper src={previewUrl} title={previewName} style={{ width: '100%', height: '75vh', border: 0 }} /> : null}
       </Modal>
     </>
   );

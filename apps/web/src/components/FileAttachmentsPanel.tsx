@@ -385,6 +385,7 @@ export default function FileAttachmentsPanel({
           />
         ) : preview ? (
           <iframe
+            data-document-paper
             src={preview.url}
             title={`Vista previa de ${fileLabel(preview.file)}`}
             style={{ display: 'block', width: '100%', height: '75vh', border: 0 }}
