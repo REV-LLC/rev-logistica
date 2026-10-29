@@ -28,7 +28,7 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
   pdf.setProperties({
     title: `Anexo de alquiler - ${data.customer} - ${data.worksite}`,
-    subject: `${date(data.input.period.from)} al ${date(data.input.period.to)}`,
+    subject: `${date(data.input.period.from)} al ${date(data.input.period.through)}`,
     author: brand.companyName,
     creator: "FINGE",
   });
@@ -53,7 +53,7 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     pdf.setFontSize(8);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(...muted);
-    pdf.text(`${date(data.input.period.from)} al ${date(data.input.period.to)}  |  Registros hasta ${date(data.input.period.through)}`, 45, headingY + 9);
+    pdf.text(`${date(data.input.period.from)} al ${date(data.input.period.through)}`, 45, headingY + 9);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(16);
     pdf.setTextColor(...dark);
