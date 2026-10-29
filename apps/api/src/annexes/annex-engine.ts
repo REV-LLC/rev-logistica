@@ -200,6 +200,10 @@ export function calculateAnnex(value: unknown) {
       ? { basePrice: '0.00' }
       : rental.pricing;
     timestamp(rental.deliveredOn);
+    if (rental.billingStartsOn) {
+      timestamp(rental.billingStartsOn);
+      if (rental.billingStartsOn < rental.deliveredOn) fail('El cobro no puede comenzar antes de la entrega');
+    }
     const initial = positive(rental.quantity, 'Cantidad');
     if (rental.assetId && !initial.eq(1))
       fail('Un activo serializado debe tener cantidad uno');
@@ -318,6 +322,12 @@ export function calculateAnnex(value: unknown) {
     for (const date of activeDates) {
       if (date < rental.deliveredOn) continue;
       let balance = initial;
+      if (date < (rental.billingStartsOn ?? rental.deliveredOn)) {
+        if (date !== rental.deliveredOn) continue;
+        // A same-day rental still bills once, even when the remaining units start tomorrow.
+        balance = rental.returns.filter(event => event.date === date)
+          .reduce((sum, event) => sum.plus(event.quantity), new D(0));
+      }
       for (const event of rental.returns) {
         // Even an exclusive return-day policy bills a same-day rental once.
         const remove =

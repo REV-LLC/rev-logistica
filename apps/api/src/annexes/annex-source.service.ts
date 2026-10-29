@@ -1,4 +1,5 @@
 import { dailyRentals } from './annex-daily-scope';
+import { applyDailyBillingStart, billingStartRuleSchema, billingStartSettingKey } from './annex-billing-start';
 import {
   BadRequestException,
   Injectable,
@@ -98,7 +99,7 @@ export class AnnexSourceService {
                 },
               },
             },
-            document: { select: { status: true, consecutive: true } },
+            document: { select: { status: true, consecutive: true, type: true, docDate: true, notes: true } },
           },
         });
         if (rows.length > 50000)
@@ -179,6 +180,9 @@ export class AnnexSourceService {
         );
         const daily = dailyRentals(commercial.rentals, commercial.machineDays);
         source.rentals = daily.rentals;
+        const billingSetting = await tx.appSetting.findUnique({ where: { key: billingStartSettingKey } });
+        const billingRule = billingSetting ? billingStartRuleSchema.parse(billingSetting.value) : null;
+        applyDailyBillingStart(source.rentals, rows, billingRule);
         source.machineDays = [];
         if (daily.excluded)
           source.issues.push({
@@ -219,7 +223,7 @@ export class AnnexSourceService {
             reconstructed = false;
           for (
             let time = Date.parse(
-              (rental.commercialInterval?.from ?? rental.deliveredOn) +
+              [rental.commercialInterval?.from ?? rental.deliveredOn, rental.billingStartsOn ?? rental.deliveredOn].sort().at(-1) +
                 'T00:00:00Z',
             );
             time < Date.parse(from + 'T00:00:00Z');
