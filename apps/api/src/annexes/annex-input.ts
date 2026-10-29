@@ -130,6 +130,7 @@ const baseRentalSchema = z
       .max(1000)
       .optional(),
     deliveredOn: date,
+    billingStartsOn: date.optional(),
     quantity: decimal,
     source,
     returns: z
