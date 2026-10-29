@@ -1,6 +1,7 @@
 import type { AnnexInput, Result } from "../app/billing/annexes/types";
 
 export type SheetRow = {
+  manualType?: "REPAIR" | "REPLACEMENT";
   id: string;
   members?: SheetRow[];
   group?: boolean;
@@ -255,6 +256,7 @@ export function applySheetChanges(
   for (const { row, key, value } of changes.flatMap((change) =>
     (change.row.members ?? [change.row]).map((row) => ({ ...change, row })),
   )) {
+    if (row.manualType) throw new Error("Usa Editar en la fila de reparación o reposición.");
     if (row.included || row.status === "Revisar modalidad")
       throw new Error("Esta fila no tiene un cobro independiente editable.");
     if (row.group)
@@ -443,4 +445,17 @@ export function groupMachineRows(
       ];
     }),
   ];
+}
+
+/** One-off charges share the item table but never affect inventory or rental days. */
+export function manualSheetRows(input: AnnexInput): SheetRow[] {
+  return (input.additionalCharges ?? []).map((charge, index) => {
+    const [whole, fraction = ''] = charge.unitPrice.split('.');
+    const price = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+    return {id: `manual:${charge.id}`, manualType: charge.type, kind: 'rentals', index,
+      label: charge.description, reference: charge.type === 'REPAIR' ? 'Reparación' : 'Reposición',
+      mode: 'UND', from: '', to: '', quantity: charge.quantity, days: '—', hours: '', units: '',
+      basePrice: amount(price), effectivePrice: amount(price), discountPercent: '0',
+      adjustmentReason: '', net: amount(price * BigInt(charge.quantity)), status: 'Manual'};
+  });
 }

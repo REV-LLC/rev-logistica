@@ -20,3 +20,9 @@ test('transport totals and VAT match the server, preserving equipment discounts'
   assert.deepEqual(annexTransportTotals(),{outbound:'0.00',return:'0.00',total:'0.00'});
   assert.throws(()=>annexTransportTotals({outbound:{quantity:'1.5',unitPrice:'10'},return:{quantity:'0',unitPrice:'0'}}));
 });
+
+test('one-off charges are added before tax with exact cents', async()=>{
+  const {annexAmounts}=await import('./annex-totals.ts');
+  const result=annexAmounts({rentalGross:'100.00',rentalDiscount:'10.00',rentalNet:'90.00'},undefined,19,[{quantity:'2',unitPrice:'12.34'},{quantity:'1',unitPrice:'0.01'}]);
+  assert.equal(result.base,'124.69');assert.equal(result.subtotal,'114.69');assert.equal(result.vat,'21.79');assert.equal(result.total,'136.48');
+});

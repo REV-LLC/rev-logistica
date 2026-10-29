@@ -205,3 +205,12 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
    assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['11','9','6']);
    assert.ok(firstRows.every(r=>!isOpeningBalance(firstCut,r)));
  });
+
+test('manual rows never allow a paste to mutate an inventory rental', async()=>{
+ const {manualSheetRows}=await import('./annex-sheet.ts');
+ const source={rentals:[],machineDays:[],additionalCharges:[{id:'r',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'}]};
+ const [row]=manualSheetRows(source);
+ assert.equal(row.reference,'Reparación');assert.equal(row.net,'24.68');
+ assert.throws(()=>applySheetChanges(source,[{row,key:'effectivePrice',value:'9'}]),/Usa Editar/);
+ assert.equal(source.additionalCharges[0].unitPrice,'12.34');
+});

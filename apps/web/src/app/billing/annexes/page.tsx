@@ -136,7 +136,7 @@ export default function AnnexesPage() {
     });
     setEditing(true);
     // Older saved revisions need a fresh preview before exposing the new charges.
-    if (!result?.summary) setResult(null);
+    if (result?.additionalChargesTotal === undefined) setResult(null);
     setMessage(null);
   }
   function cancelEditing() {
@@ -395,6 +395,7 @@ export default function AnnexesPage() {
             "Los movimientos nuevos eliminan líneas existentes. Se conservó el borrador sin cambios; revisa la conciliación antes de regenerarlo.",
           );
         }
+        data.input.additionalCharges = input.additionalCharges;
         data.input.observations = input.observations;
         data.input.transport = input.transport;
         data.input.policy = {
@@ -521,7 +522,7 @@ export default function AnnexesPage() {
   }, [result]);
   const vatPercent = input?.policy.vatPercent ?? 0;
   const taxTotals = result
-    ? annexAmounts(result.totals, input?.transport, vatPercent)
+    ? annexAmounts(result.totals, input?.transport, vatPercent, input?.additionalCharges)
     : null;
   return (
     <Container

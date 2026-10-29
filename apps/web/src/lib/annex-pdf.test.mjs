@@ -79,3 +79,11 @@ test('totals appear only on the final page, after transport and long manual obse
   assert.ok(pdf.text.includes('Nota manual 99 para el cliente.'));
   assert.equal((pdf.text.match(/Total transporte/g)||[]).length,1);
 });
+
+test('manual repairs and replacements print in the item table and contribute to VAT', async()=>{
+  const data=fixture();
+  data.input.additionalCharges=[{id:'r',type:'REPAIR',description:'Soldadura marco',quantity:'2',unitPrice:'12.34'},{id:'p',type:'REPLACEMENT',description:'Pieza perdida',quantity:'1',unitPrice:'0.01'}];
+  const pdf=await inspect(await createAnnexPdf(data));
+  for(const text of ['Soldadura marco','Pieza perdida','$ 24,68','$ 124,69','$ 23,69','$ 148,38']) assert.ok(pdf.text.includes(text),text);
+  assert.ok(pdf.text.indexOf('Pieza perdida')<pdf.text.indexOf('Transporte'));
+});
