@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
@@ -21,12 +22,23 @@ import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
 import { UpsertProviderSkuPriceDto } from './dto/upsert-provider-sku-price.dto';
 import { SkusService } from './skus.service';
+import { SkuPricingService } from './sku-pricing.service';
 
 @Controller('skus')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE)
 export class SkusController {
-  constructor(private readonly skusService: SkusService) {}
+  constructor(private readonly skusService: SkusService, private readonly pricing: SkuPricingService) {}
+
+  @Patch(':skuId/pricing')
+  updatePricing(@Param('skuId', new ParseUUIDPipe()) skuId: string, @Body() body: unknown, @Req() req: { user: { sub: string } }) {
+    return this.pricing.update(skuId, body, req.user.sub);
+  }
+
+  @Get(':skuId/price-history')
+  priceHistory(@Param('skuId', new ParseUUIDPipe()) skuId: string, @Query('cursor', new ParseUUIDPipe({ optional: true })) cursor?: string) {
+    return this.pricing.history(skuId, cursor);
+  }
 
   @Get()
   @Roles(Role.ADMIN, Role.OFFICE, Role.WAREHOUSE_TABLET, Role.DRIVER)
