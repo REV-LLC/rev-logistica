@@ -31,6 +31,7 @@ import {
   applySheetChanges,
   editableKeys,
   sheetRows,
+  sheetDocuments,
   sheetModeOptions,
   groupMachineRows,
   type SheetChange,
@@ -305,6 +306,28 @@ export default function AnnexSheet({
       ),
     },
     {
+      key: "documents",
+      name: "Documento",
+      width: 145,
+      renderCell: ({ row }: { row: SheetRow }) => {
+        const documents = sheetDocuments(input, row);
+        return documents.length ? (
+          <div style={{ overflowX: "auto", display: "flex", gap: 8 }}>
+            {documents.map((document) => (
+              <a key={document.id}
+                href={`/inventory/ledger/document/${encodeURIComponent(document.id)}`}
+                target="_blank" rel="noopener noreferrer"
+                title={`Abrir ${document.label} en otra pestaña`}
+                onClick={(event) => event.stopPropagation()}
+                style={{ color: "var(--mantine-color-blue-4)", whiteSpace: "nowrap" }}>
+                {document.label}
+              </a>
+            ))}
+          </div>
+        ) : <span title="Sin documento vinculado">—</span>;
+      },
+    },
+    {
       key: "mode",
       name: "Cobro",
       width: 64,
@@ -542,7 +565,7 @@ export default function AnnexSheet({
       ...column,
       colSpan: (args) =>
         args.type === "ROW" && args.row.group && column.key === "mode"
-          ? columns.length - 1
+          ? columns.length - columns.findIndex((item) => item.key === "mode")
           : undefined,
       renderCell: (props) => {
         const { row } = props;

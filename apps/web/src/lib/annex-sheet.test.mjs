@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sheetRows, applySheetChanges, groupMachineRows } from './annex-sheet.ts';
+import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments } from './annex-sheet.ts';
 const input = {
  period:{from:'2026-09-16',to:'2026-09-30',through:'2026-09-20'},
  rentals:[{id:'lot',label:'Plataforma',quantity:'3',deliveredOn:'2026-09-16',source:{reference:'REM-1'},pricing:{basePrice:'100'},returns:[],waivedDays:[]}],
@@ -166,3 +166,15 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
  different[1].effectivePrice='100';different[1].to='2026-09-17';
  assert.equal(groupMachineRows(source,different,false).length,2);
 });
+
+ test('document links retain every consolidated origin and deduplicate returns', () => {
+   const source = {documentId:'doc-a', documentNumber:'RM001',reference:'ledger-a'};
+   const linked = {...input, rentals:[
+     {...input.rentals[0],source,returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+     {...input.rentals[0],source:{documentId:'doc-b',documentNumber:'RM002'},returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+   ]};
+   assert.deepEqual(sheetDocuments(linked,{members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]}),[
+     {id:'doc-a',label:'RM001'},{id:'doc-r',label:'DV001'},{id:'doc-b',label:'RM002'}
+   ]);
+   assert.deepEqual(sheetDocuments(input,{kind:'rentals',index:0}),[]);
+ });

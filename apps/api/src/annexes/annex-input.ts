@@ -25,6 +25,8 @@ const pricing = z
 const source = z
   .object({
     reference: id,
+    documentId: z.string().uuid().optional(),
+    documentNumber: z.string().max(120).optional(),
     origin: z.enum(['PHYSICAL', 'DIGITAL', 'INVENTORY']),
   })
   .strict();
