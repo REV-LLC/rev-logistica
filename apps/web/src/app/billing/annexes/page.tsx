@@ -135,6 +135,8 @@ export default function AnnexesPage() {
       dirty,
     });
     setEditing(true);
+    // Older saved revisions need a fresh preview before exposing the new charges.
+    if (!result?.summary) setResult(null);
     setMessage(null);
   }
   function cancelEditing() {
