@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments } from './annex-sheet.ts';
+import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments, isOpeningBalance } from './annex-sheet.ts';
 const input = {
  period:{from:'2026-09-16',to:'2026-09-30',through:'2026-09-20'},
  rentals:[{id:'lot',label:'Plataforma',quantity:'3',deliveredOn:'2026-09-16',source:{reference:'REM-1'},pricing:{basePrice:'100'},returns:[],waivedDays:[]}],
@@ -150,8 +150,8 @@ test('daily-only presentation keeps rental rows and minimum supplements without 
 
 test('daily bulk rows consolidate matching charges, retain sources and edit all original lots',()=>{
  const source=structuredClone(input);source.machineDays=[];
- source.rentals=[{...source.rentals[0],id:'b',skuId:'baranda',label:'Baranda',quantity:'1'},
- {...source.rentals[0],id:'a',skuId:'baranda',label:'Baranda',quantity:'2',source:{reference:'REM-2'}}];
+ source.rentals=[{...source.rentals[0],id:'b',deliveredOn:'2026-09-05',skuId:'baranda',label:'Baranda',quantity:'1'},
+ {...source.rentals[0],id:'a',deliveredOn:'2026-09-07',skuId:'baranda',label:'Baranda',quantity:'2',source:{reference:'REM-2'}}];
  const result={lines:source.rentals.map(r=>({...line('2026-09-16',r.quantity,String(Number(r.quantity)*100)+'.00'),key:`${r.id}:2026-09-16`,label:r.label}))};
  const before=JSON.stringify(source);
  const rows=groupMachineRows(source,sheetRows(source,result),false);
@@ -177,4 +177,31 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
      {id:'doc-a',label:'RM001'},{id:'doc-r',label:'DV001'},{id:'doc-b',label:'RM002'}
    ]);
    assert.deepEqual(sheetDocuments(input,{kind:'rentals',index:0}),[]);
+ });
+
+ test('prior-cut deliveries become one opening balance; current deliveries keep their documents', () => {
+   const source = {...input, machineDays:[],period:{from:'2026-10-16',to:'2026-10-31',through:'2026-10-27'},rentals:[]};
+   source.rentals = [['05','5'],['07','2'],['10','1'],['16','4'],['16','3']].map(([day,quantity],index) => ({
+     ...input.rentals[0],id:`lot-${index}`,skuId:'gato',label:'Gato',quantity,deliveredOn:`2026-10-${day}`,
+     source:{reference:`movement-${index}`,documentId:`doc-${index}`,documentNumber:`RM-${index}`}
+   }));
+   const calculated = {lines:source.rentals.flatMap(r => Array.from({length:12},(_,i)=>({
+     ...line(`2026-10-${16+i}`,r.quantity,`${Number(r.quantity)*100}.00`),key:`${r.id}:2026-10-${16+i}`
+   })))};
+   const before = JSON.stringify(source);
+   const rows = groupMachineRows(source,sheetRows(source,calculated),false);
+   assert.equal(rows.length,3);
+   const opening = rows.find(r=>isOpeningBalance(source,r));
+   assert.equal(opening.quantity,'8');assert.equal(opening.days,'12');assert.equal(opening.from,'2026-10-16');
+   assert.equal(opening.net,'9600.00');assert.equal(sheetDocuments(source,opening).length,3);
+   assert.equal(rows.filter(r=>!isOpeningBalance(source,r)).length,2);
+   assert.equal(JSON.stringify(source),before);
+   const firstCut={...source,period:{from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'},rentals:source.rentals.slice(0,3)};
+   const firstLines={lines:firstCut.rentals.flatMap(r=>Array.from({length:16-Number(r.deliveredOn.slice(-2))},(_,i)=>{
+     const date=`2026-10-${String(Number(r.deliveredOn.slice(-2))+i).padStart(2,'0')}`;
+     return {...line(date,r.quantity,`${Number(r.quantity)*100}.00`),key:`${r.id}:${date}`};
+   }))};
+   const firstRows=groupMachineRows(firstCut,sheetRows(firstCut,firstLines),false);
+   assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['11','9','6']);
+   assert.ok(firstRows.every(r=>!isOpeningBalance(firstCut,r)));
  });
