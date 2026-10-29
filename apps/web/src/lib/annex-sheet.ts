@@ -323,7 +323,10 @@ export function groupMachineRows(
   groupDaily = true,
 ): SheetRow[] {
   const groups = new Map<string, SheetRow[]>();
-  const daily = rows.filter((row) => row.kind === "rentals");
+  const byName = new Intl.Collator("es", { sensitivity: "base", numeric: true });
+  const daily = rows
+    .filter((row) => row.kind === "rentals")
+    .sort((a, b) => byName.compare(a.label, b.label));
   for (const row of rows) {
     if (row.kind !== "machineDays") continue;
     const day = input.machineDays[row.index];
@@ -355,7 +358,7 @@ export function groupMachineRows(
           ...children,
         ])
       : daily),
-    ...[...groups].flatMap(([assetId, days]) => {
+    ...[...groups].sort((a, b) => byName.compare(a[1][0].label, b[1][0].label)).flatMap(([assetId, days]) => {
       days.sort((a, b) => a.from.localeCompare(b.from));
       const first = days[0];
       return [
