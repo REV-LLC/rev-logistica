@@ -58,7 +58,11 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(16);
     pdf.setTextColor(...dark);
+    const byX = right - pdf.getTextWidth("FINGE") - 2;
     pdf.text("FINGE", right, 15, { align: "right" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    pdf.text("by", byX, 15, { align: "right" });
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7);
     pdf.text("Finanzas · Inventario · Gestión", right, 20, { align: "right" });
