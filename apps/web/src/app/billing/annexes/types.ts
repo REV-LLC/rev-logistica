@@ -87,6 +87,7 @@ export type Rental = {
   minimumHistoryRanges?: Array<{ from: string; to: string; rentalId: string }>;
   label: string;
   deliveredOn: string;
+  billingStartsOn?: string;
   quantity: string;
   source: Source;
   returns: { date: string; quantity: string; source: Source }[];
