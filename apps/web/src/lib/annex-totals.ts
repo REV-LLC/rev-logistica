@@ -30,6 +30,7 @@ export function annexAmounts(
   totals: { rentalGross: string; rentalDiscount: string; rentalNet: string },
   transport: Parameters<typeof annexTransportTotals>[0],
   vatPercent: number,
+  additionalCharges: { quantity: string; unitPrice: string }[] = [],
 ) {
   const shipping = annexTransportTotals(transport);
   const add = (a: string, b: string) => {
@@ -37,7 +38,8 @@ export function annexAmounts(
     const cents = BigInt(a.replace(".", "")) + BigInt(b.replace(".", ""));
     return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
   };
-  const base = add(totals.rentalGross, shipping.total);
-  const subtotal = add(totals.rentalNet, shipping.total);
+  const extras = additionalCharges.reduce((total, row) => add(total, annexTransportTotals({outbound: row, return: {quantity: '0', unitPrice: '0'}}).total), '0.00');
+  const base = add(add(totals.rentalGross, shipping.total), extras);
+  const subtotal = add(add(totals.rentalNet, shipping.total), extras);
   return { base, subtotal, discount: totals.rentalDiscount, transport: shipping, ...annexTaxTotals(subtotal, vatPercent) };
 }

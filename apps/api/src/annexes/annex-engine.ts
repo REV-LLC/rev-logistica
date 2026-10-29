@@ -607,13 +607,15 @@ export function calculateAnnex(value: unknown) {
   const outbound = transportCharge(input.transport?.outbound);
   const returning = transportCharge(input.transport?.return);
   const transportTotal = outbound.plus(returning);
-  const subtotal = new D(sum('net')).plus(transportTotal);
+  const additionalTotal = (input.additionalCharges ?? []).reduce((total, charge) => total.plus(transportCharge(charge)), new D(0));
+  const subtotal = new D(sum('net')).plus(transportTotal).plus(additionalTotal);
   const vat = subtotal.mul(vatPercent).div(100).toDecimalPlaces(2, D.ROUND_HALF_UP);
   return {
     tax: { vatPercent, vat: vat.toFixed(2), total: subtotal.plus(vat).toFixed(2) },
     transport: { outbound: outbound.toFixed(2), return: returning.toFixed(2), total: transportTotal.toFixed(2) },
-    summary: { base: new D(sum('gross')).plus(transportTotal).toFixed(2), discount: sum('discount'), subtotal: subtotal.toFixed(2) },
-    engineVersion: '3',
+    summary: { base: new D(sum('gross')).plus(transportTotal).plus(additionalTotal).toFixed(2), discount: sum('discount'), subtotal: subtotal.toFixed(2) },
+    additionalChargesTotal: additionalTotal.toFixed(2),
+    engineVersion: '4',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,
     period: input.period,

@@ -127,7 +127,9 @@ export type MachineDay = {
   waiverReason?: string;
 };
 export type TransportCharge = { quantity: string; unitPrice: string };
+export type AdditionalCharge = TransportCharge & { id: string; type: "REPAIR" | "REPLACEMENT"; description: string };
 export type AnnexInput = {
+  additionalCharges?: AdditionalCharge[];
   observations?: string;
   transport?: { outbound: TransportCharge; return: TransportCharge };
   period: { from: string; to: string; through: string };
@@ -152,6 +154,7 @@ export type AnnexInput = {
   machineDays: MachineDay[];
 };
 export type Result = {
+  additionalChargesTotal?: string;
   summary?: { base: string; discount: string; subtotal: string };
   transport?: { outbound: string; return: string; total: string };
   tax?: { vatPercent: number; vat: string; total: string };

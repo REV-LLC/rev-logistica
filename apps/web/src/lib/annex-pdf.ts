@@ -2,7 +2,7 @@ import { annexAmounts } from "./annex-totals";
 import { isDailyAnnex } from "./annex-daily-scope";
 import { documentBranding, type DocumentBranding } from "./document-branding";
 import type { AnnexInput, Result, SourceIssue } from "../app/billing/annexes/types";
-import { groupMachineRows, isOpeningBalance, sheetDocuments, sheetRows } from "./annex-sheet";
+import { manualSheetRows, groupMachineRows, isOpeningBalance, sheetDocuments, sheetRows } from "./annex-sheet";
 export type AnnexExport = {
   input: AnnexInput;
   result: Result;
@@ -99,13 +99,13 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   };
   header(); tableHeader();
   let rowIndex = 0;
-  for (const row of groupMachineRows(data.input, sheetRows(data.input, data.result), false)) {
+  for (const row of [...groupMachineRows(data.input, sheetRows(data.input, data.result), false), ...manualSheetRows(data.input)]) {
     if (row.group) continue;
-    const documents = isOpeningBalance(data.input, row) ? "Saldo inicial" :
+    const documents = row.manualType ? row.reference : isOpeningBalance(data.input, row) ? "Saldo inicial" :
       sheetDocuments(data.input, row).map((doc) => doc.label).join("\n") || "-";
     const values = [
       row.supplement ? `${row.label} - Ajuste al mínimo` : row.label,
-      documents, row.mode, date(row.from), date(row.to), row.quantity, row.days,
+      documents, row.mode, row.from ? date(row.from) : "-", row.to ? date(row.to) : "-", row.quantity, row.days,
       row.included ? "Incluido" : money(row.basePrice),
       Number(row.discountPercent).toLocaleString("es-CO", { maximumFractionDigits: 6 }),
       row.included ? "-" : row.effectivePrice ? money(row.effectivePrice) : "-",
@@ -139,7 +139,7 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     }
     rowIndex++;
   }
-  const amounts = annexAmounts(data.result.totals, data.input.transport, data.input.policy.vatPercent ?? 0);
+  const amounts = annexAmounts(data.result.totals, data.input.transport, data.input.policy.vatPercent ?? 0, data.input.additionalCharges);
   // Transport follows the final equipment row and stays together on one sheet.
   y += 4;
   if (y + 31 > bottom) nextPage();

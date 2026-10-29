@@ -275,3 +275,25 @@ it('rejects negative or fractional transport quantities and prices with excess p
     expect(() => calculateAnnex({...fixture(),transport:{outbound,return:{quantity:'0',unitPrice:'0'}}})).toThrow();
   }
 });
+
+it('charges repairs and replacements once, before VAT, without affecting rentals', () => {
+  const input = fixture(); input.policy.vatPercent = 19;
+  input.additionalCharges = [
+    {id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},
+    {id:'replacement-1',type:'REPLACEMENT',description:'Pieza perdida',quantity:'1',unitPrice:'0.01'},
+  ];
+  const result = calculateAnnex(input);
+  expect(result.lines).toEqual([]);
+  expect(result.totals.rentalGross).toBe('0.00');
+  expect(result.summary.base).toBe('24.69');
+  expect(result.tax).toEqual({vatPercent:19,vat:'4.69',total:'29.38'});
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax.total).toBe('24.69');
+  input.additionalCharges.push({...input.additionalCharges[0]});
+  expect(() => calculateAnnex(input)).toThrow();
+});
+it('rejects invalid manual charges', () => {
+  for (const patch of [{quantity:'-1'}, {quantity:'1.5'}, {unitPrice:'-10'}, {description:'  '}, {type:'UNKNOWN'}]) {
+    expect(() => calculateAnnex({...fixture(),additionalCharges:[{id:'one',type:'REPAIR',description:'Reparación',quantity:'1',unitPrice:'10',...patch}]})).toThrow();
+  }
+});

@@ -20,6 +20,7 @@ import {
   Group,
   Paper,
   Modal,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -28,6 +29,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
+  manualSheetRows,
   applySheetChanges,
   editableKeys,
   sheetRows,
@@ -38,7 +40,7 @@ import {
   type SheetChange,
   type SheetRow,
 } from "@/lib/annex-sheet";
-import type { AnnexInput, Result } from "./types";
+import type { AdditionalCharge, AnnexInput, Result } from "./types";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
 
@@ -173,6 +175,12 @@ export default function AnnexSheet({
     index: number;
     indices?: number[];
   } | null>(null);
+  const [charge, setCharge] = useState<AdditionalCharge | null>(null);
+  const normalizeChargeNumber = (value: string | number, price = false) => {
+    const number = Number(value);
+    const bounded = Math.max(0, Math.min(price ? 9999999999.99 : 9999, Number.isFinite(number) ? number : 0));
+    return price ? bounded.toFixed(2) : String(Math.floor(bounded));
+  };
   const [rememberMinimum, setRememberMinimum] = useState(false);
   const [byMeters, setByMeters] = useState(false);
   const [meterPrice, setMeterPrice] = useState("0");
@@ -207,13 +215,13 @@ export default function AnnexSheet({
   const selected = useRef<{ id: string; key: string } | null>(null);
   const rows = useMemo(
     () =>
-      groupMachineRows(
+      [...groupMachineRows(
         input,
         sheetRows(input, result ?? lastResult).filter(
           (row) => mode === "all" || row.kind === mode,
         ),
         !isDailyAnnex(input),
-      ),
+      ), ...manualSheetRows(input)],
     [input, result, lastResult, mode],
   );
   const apply = (changes: SheetChange[]) => {
@@ -556,6 +564,7 @@ export default function AnnexSheet({
               editing &&
               !busy &&
               !row.group &&
+              !row.manualType &&
               !row.included &&
               row.status !== "Revisar modalidad",
             renderEditCell: textEditor,
@@ -571,6 +580,13 @@ export default function AnnexSheet({
           : undefined,
       renderCell: (props) => {
         const { row } = props;
+        if (row.manualType) {
+          if (column.key === 'label') return <Group gap={4} wrap="nowrap"><CellText text={row.label} />{editing && <Button size="compact-xs" variant="subtle" disabled={busy} onClick={() => setCharge({...input.additionalCharges![row.index]})}>Editar</Button>}</Group>;
+          if (column.key === 'documents') return <CellText text={row.reference} />;
+          if (['from', 'to', 'days', 'discountPercent'].includes(column.key)) return '—';
+          if (['basePrice', 'effectivePrice', 'net'].includes(column.key)) return money(String(row[column.key as 'basePrice' | 'net' | 'effectivePrice']));
+          return String(row[column.key as keyof SheetRow] ?? '');
+        }
         if (!row.group) {
           if (
             column.key === "label" &&
@@ -644,10 +660,7 @@ export default function AnnexSheet({
             </Text>
             <Text size="sm" c="dimmed">
               {input.period.from.split("-").reverse().join("/")} al{" "}
-              {input.period.to.split("-").reverse().join("/")}
-              {input.period.through !== input.period.to
-                ? ` · Registros hasta ${input.period.through.split("-").reverse().join("/")}`
-                : ""}
+              {input.period.through.split("-").reverse().join("/")}
             </Text>
           </div>
           <div>
@@ -663,6 +676,7 @@ export default function AnnexSheet({
         </Group>
         <Group gap="xs" align="end" className={styles.toolbar}>
           {actions}
+          {editing && (result ?? lastResult)?.additionalChargesTotal !== undefined && <Button size="xs" variant="light" disabled={busy} onClick={() => setCharge({id: crypto.randomUUID(), type: 'REPAIR', description: '', quantity: '1', unitPrice: '0.00'})}>Agregar reparación o reposición</Button>}
           <Button size="xs" variant="light" onClick={onConfigureCalendar}>
             Conf. domingos y festivos
           </Button>
@@ -844,6 +858,24 @@ export default function AnnexSheet({
   return (
     <>
       {expanded ? createPortal(sheet, document.body) : sheet}
+      <Modal opened={charge !== null} onClose={() => setCharge(null)} title="Reparación o reposición" classNames={{ content: glassStyles.theme }}>
+        {charge && <Stack>
+          <Select label="Tipo de cobro" data={[{value: 'REPAIR', label: 'Reparación'}, {value: 'REPLACEMENT', label: 'Reposición'}]} value={charge.type} allowDeselect={false} onChange={value => setCharge({...charge, type: value as AdditionalCharge['type']})} />
+          <TextInput label="Descripción" value={charge.description} maxLength={300} onChange={event => setCharge({...charge, description: event.currentTarget.value})} />
+          <NumberInput label="Cantidad" value={Number(charge.quantity)} min={0} max={9999} allowDecimal={false} allowNegative={false} onChange={value => setCharge({...charge, quantity: normalizeChargeNumber(value)})} />
+          <NumberInput label="Precio unitario" value={Number(charge.unitPrice)} min={0} max={9999999999.99} decimalScale={2} allowNegative={false} onChange={value => setCharge({...charge, unitPrice: normalizeChargeNumber(value, true)})} />
+          <Text>Total: {money(manualSheetRows({...input, additionalCharges: [charge]})[0].net)}</Text>
+          <Group justify="space-between">
+            {input.additionalCharges?.some(row => row.id === charge.id) && <Button color="red" variant="subtle" disabled={busy || !editing} onClick={() => {onChange({...input, additionalCharges: input.additionalCharges!.filter(row => row.id !== charge.id)}); setCharge(null);}}>Quitar fila</Button>}
+            <Button disabled={busy || !editing || !charge.description.trim() || (input.additionalCharges?.length === 200 && !input.additionalCharges.some(row => row.id === charge.id))} onClick={() => {
+              const rows = input.additionalCharges ?? [];
+              const next = {...charge, description: charge.description.trim()};
+              onChange({...input, additionalCharges: rows.some(row => row.id === charge.id) ? rows.map(row => row.id === charge.id ? next : row) : [...rows, next]});
+              setCharge(null);
+            }}>Aplicar al anexo</Button>
+          </Group>
+        </Stack>}
+      </Modal>
       <Modal
         classNames={{ content: glassStyles.theme }}
         opened={machine !== null}

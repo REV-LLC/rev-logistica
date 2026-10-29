@@ -69,3 +69,11 @@ it('stores observations, both transport rows and their server-calculated VAT in 
   expect(saved.revisions[0].result.summary.subtotal).toBe('165000.00');
   expect(saved.revisions[0].result.tax).toEqual({vatPercent:19,vat:'31350.00',total:'196350.00'});
 });
+
+it('persists manual repairs and replacements with recalculated totals', async () => {
+  const {service} = setup();
+  const additionalCharges = [{id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},{id:'replacement-1',type:'REPLACEMENT',description:'Pieza',quantity:'1',unitPrice:'0.01'}];
+  const saved = await service.save({...payload,input:{...input,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
+  expect(saved.revisions[0].input.additionalCharges).toEqual(additionalCharges);
+  expect(saved.revisions[0].result.tax.total).toBe('29.38');
+});
