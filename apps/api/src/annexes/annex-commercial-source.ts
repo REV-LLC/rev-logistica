@@ -1,3 +1,4 @@
+import { restoreStandaloneDailyCatalog } from './annex-catalog-daily';
 import { legacyCommercialBridge } from '../commercial-profiles/commercial-legacy-bridge';
 import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
 import { prepareCommercialV2 } from './annex-commercial-v2-source';
@@ -19,6 +20,8 @@ type Ledger = {
   effectiveAt: Date;
   quantity: Prisma.Decimal;
   movementType: string;
+  sku?: { chargeType: string } | null;
+  asset?: { sku: { chargeType: string } | null } | null;
 };
 // Inclusion is contextual, including the physical return day. A child left behind
 // must be reviewed rather than silently billed free in later cuts.
@@ -60,6 +63,7 @@ export async function applyCommercialComposition(
   siteId: string,
   history: AnnexInput[],
 ) {
+  const physicalLots = structuredClone(lots);
   let documents = await tx.document.findMany({
     where: {
       customerWorksiteId: siteId,
@@ -416,9 +420,16 @@ export async function applyCommercialComposition(
       rentals.push(lot);
     }
   }
-  return {
-    rentals: [...rentals, ...v2.rentals],
-    machineDays: [...machineDays, ...v2.machineDays],
-    issues: [...issues, ...v2.issues],
-  };
+  return restoreStandaloneDailyCatalog(
+    physicalLots,
+    new Map(
+      rows.map((row) => [row.id, (row.asset?.sku ?? row.sku)?.chargeType ?? '']),
+    ),
+    documents,
+    {
+      rentals: [...rentals, ...v2.rentals],
+      machineDays: [...machineDays, ...v2.machineDays],
+      issues: [...issues, ...v2.issues],
+    },
+  );
 }
