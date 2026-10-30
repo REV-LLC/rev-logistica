@@ -234,7 +234,12 @@ export default function SerialAssetCard({
             style={{
               width: "100%",
               height: "100%",
-              objectFit: showcase ? "cover" : "contain",
+              objectFit: "contain",
+              objectPosition: "center",
+              padding: showcase ? 16 : 8,
+              boxSizing: "border-box",
+              position: showcase || isContentSized ? "absolute" : undefined,
+              inset: showcase || isContentSized ? 0 : undefined,
               background: "var(--inventory-image-bg, #ffffff)",
             }}
           />

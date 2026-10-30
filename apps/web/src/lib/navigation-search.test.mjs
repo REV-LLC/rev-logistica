@@ -50,3 +50,16 @@ test('Mapa is a visible Operations link for Admin and Office, not only an unrend
   assert.match(operations, /href: "\/transport\/tracking",\s+label: "Mapa",\s+icon: IconMap2,\s+roles: \["ADMIN", "OFFICE"\]/);
   assert.equal((nav.match(/label: "Mapa"/g) ?? []).length, 1);
 });
+
+test('chat is a permanent, searchable Admin and Office sidebar link instead of a floating launcher', () => {
+  const nav = readFileSync(new URL('../components/Nav.tsx', import.meta.url), 'utf8');
+  const shell = readFileSync(new URL('../components/ResponsiveShell.tsx', import.meta.url), 'utf8');
+  assert.match(nav, /const assistantLink: NavLinkItem = \{\s+href: "\/office-assistant",\s+label: "Chat · Asistente Office",\s+icon: IconMessageCircle,\s+roles: \["ADMIN", "OFFICE"\]/);
+  assert.match(nav, /\[homeLink, assistantLink, \.\.\.quickLinks\]\.filter\(canShowLink\)/);
+  assert.match(nav, /canShowLink\(assistantLink\)[\s\S]*renderNavItem\(assistantLink\)[\s\S]*<ScrollArea/);
+  assert.doesNotMatch(shell, /OfficeAssistantLauncher/);
+  const chatEntries = buildNavigationSearchEntries([{ title: 'General', links: [
+    { href: '/office-assistant', label: 'Chat · Asistente Office' },
+  ] }]);
+  assert.equal(searchNavigation(chatEntries, 'chat')[0].href, '/office-assistant');
+});

@@ -1,7 +1,7 @@
-# Lista de precios editable con historial
+# Mejoras en el inventario y acceso al chat
 
-Admin y Office pueden editar el precio de alquiler y el valor de reposición de cada referencia desde Lista de precios.
+El chat ahora tiene un acceso permanente debajo del buscador del menú lateral para Admin y Office. Se retiró el botón flotante para que no tape los totales ni otros controles.
 
-Cada cambio realizado desde esta lista conserva los valores anteriores y nuevos, el motivo, la fecha y el usuario responsable. El historial se consulta desde las acciones de cada referencia.
+Las tarjetas de equipos se distribuyen según el espacio disponible y muestran más columnas en pantallas grandes, sin estirarse cuando hay pocos resultados.
 
-Si otra persona cambió los precios mientras tenías abierto el editor, se solicita actualizar la lista antes de guardar. El historial empieza con esta actualización; no reconstruye cambios anteriores ni modifica documentos ya guardados o modalidades particulares de cada equipo.
+Las fotos de los equipos se muestran completas, centradas y con un margen interior, sin recortar ni deformar el equipo.

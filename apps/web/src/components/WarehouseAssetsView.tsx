@@ -18,6 +18,7 @@ import {
 import SerialAssetCard from '@/components/SerialAssetCard';
 import DataTableToolbar from '@/components/tables/DataTableToolbar';
 import classes from '@/components/WarehouseAssetsView.module.css';
+import assetGrid from '@/components/AssetCardGrid.module.css';
 
 type AssetStatusFilter = 'ALL' | 'DAMAGED' | 'AVAILABLE' | 'WORKSITE' | 'WORKSHOP' | 'RESERVED' | 'INACTIVE' | 'TRANSIT' | 'UNKNOWN' | 'INCONSISTENT';
 type AssetOrder = 'NAME' | 'INTERNAL_ASC' | 'INTERNAL_DESC';
@@ -376,7 +377,7 @@ export default function WarehouseAssetsView({
                     <h3>{subfamily.name}</h3>
                     <span>{subfamily.items.length} {subfamily.items.length === 1 ? 'equipo' : 'equipos'}</span>
                   </div>
-                  <div className={classes.grid}>
+                  <div className={assetGrid.grid}>
                     {subfamily.items.map((item) => (
                       <SerialAssetCard
                         key={item.assetId}
