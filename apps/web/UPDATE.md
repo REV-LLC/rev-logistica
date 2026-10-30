@@ -1,5 +1,7 @@
-# Fondo blanco en las fotos del inventario
+# Inventario masivo con el mismo layout de equipos
 
-Las tarjetas de equipos y materiales ahora tienen fondo blanco sólido en toda el área de imagen, para integrar las fotos que ya tienen fondo blanco.
+Materiales y consumibles ahora usa la misma estructura visual que equipos: ancho completo, encabezado de bodega, buscador, familias y tarjetas que se distribuyen según el espacio disponible.
 
-Las imágenes siguen mostrándose completas y el resto de la tarjeta conserva el estilo cristal.
+Puedes buscar por nombre, referencia o familia, filtrar las existencias y ordenar las referencias. Se conservan las cantidades por dueño, el stock en obra, el detalle y las acciones de agregar stock, ajustar y configurar conjuntos.
+
+Las fotos mantienen el fondo blanco y se muestran completas, sin recortes.

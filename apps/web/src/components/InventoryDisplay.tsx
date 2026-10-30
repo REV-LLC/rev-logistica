@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
@@ -10,16 +10,17 @@ import {
   Button,
   Group,
   Paper,
-  SimpleGrid,
   Stack,
   Text,
   Title,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
+  IconBox,
 } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
 import assetGrid from '@/components/AssetCardGrid.module.css';
+import assetLayout from '@/components/WarehouseAssetsView.module.css';
 import { ownerColorById } from '@/lib/owner-color';
 import BulkInventoryDetails from '@/components/BulkInventoryDetails';
 import BulkInventoryCard from '@/components/BulkInventoryCard';
@@ -105,6 +106,11 @@ type SerialItem = {
   quantity: number;
 };
 
+function BulkFamilySection({ catalog, children }: { catalog: boolean; children: ReactNode }) {
+  return catalog ? <section className={assetLayout.family}>{children}</section>
+    : <Paper withBorder radius="md" p={{ base: 'sm', md: 'md' }}>{children}</Paper>;
+}
+
 export default function InventoryDisplay({
   bulk,
   serial,
@@ -122,6 +128,7 @@ export default function InventoryDisplay({
   showSerialOwnerChip = false,
   serialAssetScope,
   showWorksiteQuantities = false,
+  bulkCatalogLayout = false,
 }: {
   warehouseId?: string;
   customerWorksiteId?: string;
@@ -139,6 +146,7 @@ export default function InventoryDisplay({
   showSerialOwnerChip?: boolean;
   serialAssetScope?: 'own' | 'allied';
   showWorksiteQuantities?: boolean;
+  bulkCatalogLayout?: boolean;
 }) {
   const [kitFamilyId, setKitFamilyId] = useState<string | null>(null);
   const [enabledKitFamilies, setEnabledKitFamilies] = useState<Set<string>>(new Set());
@@ -359,11 +367,12 @@ export default function InventoryDisplay({
         warehouseId={warehouseId} customerWorksiteId={customerWorksiteId} isWorksiteView={isWorksiteView}
         imageUrl={savedImages[openedSkuId] ?? imageBySku.get(openedSkuId) ?? null}
         onClose={() => setOpenedSkuId(null)} onImageSaved={(skuId, url) => setSavedImages(current => ({ ...current, [skuId]: url }))} /> : null}
-      {showBulkSection && (
+      {(showBulkSection || bulkCatalogLayout) && (
         <section>
-          <Group justify="space-between" align="center" mb="sm">
-            <Title order={3}>STOCK MASIVO</Title>
+          <Group justify="space-between" align="center" mb="sm" className={bulkCatalogLayout ? assetLayout.sectionHeading : undefined}>
+            {bulkCatalogLayout ? <h2>Inventario masivo</h2> : <Title order={3}>STOCK MASIVO</Title>}
             <Group gap="xs">
+              {bulkCatalogLayout ? <span>{new Set(bulk.map(item => item.skuId)).size} referencias</span> : null}
               {onAddStock ? (
                 <Button color="green" size="xs" onClick={onAddStock}>
                   Agregar stock
@@ -379,15 +388,18 @@ export default function InventoryDisplay({
 
           <Stack gap="md">
             {bulkFamilyGroups.map((group) => (
-              <Paper key={group.id} withBorder radius="md" p={{ base: 'sm', md: 'md' }}>
+              <BulkFamilySection key={group.id} catalog={bulkCatalogLayout}>
                 <Stack gap="sm">
                   <Group justify="space-between" align="center" wrap="wrap">
-                    <div>
-                      <Text fw={800}>{group.name}</Text>
-                      <Text size="sm" c="dimmed">
-                        {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
-                      </Text>
-                    </div>
+                    <Group gap="sm" wrap="nowrap">
+                      {bulkCatalogLayout ? <div className={assetLayout.familyIcon}><IconBox size={24} /></div> : null}
+                      <div>
+                        <Text fw={800} className={bulkCatalogLayout ? assetLayout.familyName : undefined}>{group.name}</Text>
+                        <Text size="sm" c="dimmed">
+                          {group.itemCount} referencia{group.itemCount === 1 ? '' : 's'}
+                        </Text>
+                      </div>
+                    </Group>
                     <Group gap="xs">
                       {mayConfigureKits && enabledKitFamilies.has(group.id) ? <Button variant="light" size="xs" onClick={() => setKitFamilyId(group.id)}>Configurar conjunto</Button> : null}
                       {quantityBadge(group.totalQuantity, 'orange')}
@@ -399,7 +411,7 @@ export default function InventoryDisplay({
                     </Group>
                   </Group>
 
-                  <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
+                  <div className={assetGrid.grid}>
                     {group.items.map((item) => {
                       const grouped = 'owners' in item;
                       const ownersWithStock = (grouped ? item.owners : [{
@@ -429,9 +441,9 @@ export default function InventoryDisplay({
                         </BulkInventoryCard>
                       );
                     })}
-                  </SimpleGrid>
+                  </div>
                 </Stack>
-              </Paper>
+              </BulkFamilySection>
             ))}
           </Stack>
         </section>

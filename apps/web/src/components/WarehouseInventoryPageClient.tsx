@@ -55,6 +55,7 @@ import TableRowActions from '@/components/TableRowActions';
 import classes from '@/components/WarehouseInventoryPageClient.module.css';
 import glass from '@/components/InventoryGlass.module.css';
 import WarehouseAssetsView, { type OwnerAssetsResponse } from '@/components/WarehouseAssetsView';
+import WarehouseBulkView from '@/components/WarehouseBulkView';
 
 interface InventoryResponse {
   warehouseId: string;
@@ -1151,6 +1152,21 @@ export default function WarehouseInventoryPageClient({
           onDelete={deleteSerialAsset}
           error={error}
         /> : null}
+        </>
+      ) : isOwnInventory && inventoryView === 'BULK' ? (
+        <>
+          {(loading || warehousesLoading) && !currentInventory ? <Container size="xl" py="xl"><CollectionLoading label="Cargando materiales y consumibles" /></Container> : null}
+          {warehousesError ? <Alert color="red" title="No se pudieron cargar bodegas">{warehousesError}</Alert> : null}
+          {error ? <Alert color="red" title="No se pudo consultar el inventario">{error}</Alert> : null}
+          {currentInventory ? <WarehouseBulkView
+            items={currentInventory.bulk}
+            warehouseId={currentInventory.warehouseId}
+            warehouseName={assetsWarehouse?.name ?? 'Bodega'}
+            search={inventorySearch}
+            onSearchChange={setInventorySearch}
+            onAddStock={openAddStock}
+            onAdjust={openAdjust}
+          /> : !loading && !warehousesLoading && !warehouseId ? <Text c="dimmed" p="xl">No hay una bodega propia configurada.</Text> : null}
         </>
       ) : (
       <Container size="xl" py="xl">
