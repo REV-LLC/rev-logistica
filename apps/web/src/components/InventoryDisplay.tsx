@@ -19,6 +19,7 @@ import {
   IconAlertTriangle,
 } from '@tabler/icons-react';
 import SerialAssetCard from '@/components/SerialAssetCard';
+import assetGrid from '@/components/AssetCardGrid.module.css';
 import { ownerColorById } from '@/lib/owner-color';
 import BulkInventoryDetails from '@/components/BulkInventoryDetails';
 import BulkInventoryCard from '@/components/BulkInventoryCard';
@@ -456,10 +457,7 @@ export default function InventoryDisplay({
                   </Badge>
                 </Group>
 
-                <SimpleGrid
-                  cols={{ base: 1, sm: 2, md: 3, xl: compactSerialCards ? 4 : 3 }}
-                  spacing="sm"
-                >
+                <div className={assetGrid.grid}>
                   {group.items.map((item) => (
                     <SerialAssetCard
                       key={item.assetId}
@@ -484,7 +482,7 @@ export default function InventoryDisplay({
                       }
                     />
                   ))}
-                </SimpleGrid>
+                </div>
               </Stack>
             ))}
           </Stack>
