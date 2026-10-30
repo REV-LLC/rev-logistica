@@ -20,13 +20,13 @@ export default function BulkInventoryCard({ name, imageUrl, quantity, quantityLa
 
   return (
     <Paper withBorder radius="lg" style={{ overflow: 'hidden', height: '100%' }}>
-      <button type="button" onClick={onOpen} aria-label={`Abrir ${name}`} style={{ border: 0, padding: 0, width: '100%', cursor: 'pointer', aspectRatio: '16 / 9', background: 'var(--inventory-image-bg, var(--mantine-color-gray-0))', display: 'grid', placeItems: 'center' }}>
+      <button type="button" onClick={onOpen} aria-label={`Abrir ${name}`} style={{ border: 0, padding: 0, width: '100%', cursor: 'pointer', aspectRatio: '16 / 9', background: '#ffffff', display: 'grid', placeItems: 'center' }}>
         {imageUrl && !brokenImage ? (
           <AppImage src={imageUrl} alt={name} width={640} height={360}
             sizes="(max-width: 48em) 100vw, (max-width: 75em) 50vw, 33vw"
             style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 0 }} onError={() => setBrokenImage(true)} />
         ) : (
-          <Stack align="center" gap={6} c="dimmed"><IconPhoto size={36} stroke={1.4} /><Text size="sm">Sin imagen</Text></Stack>
+          <Stack align="center" gap={6} c="#667085"><IconPhoto size={36} stroke={1.4} /><Text size="sm">Sin imagen</Text></Stack>
         )}
       </button>
       <Stack p="md" gap="sm">

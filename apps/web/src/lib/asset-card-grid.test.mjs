@@ -20,3 +20,12 @@ test('equipment photos remain complete and centered with breathing room inside t
   assert.match(source, /padding: showcase \? 16 : 8/);
   assert.match(source, /boxSizing: "border-box"/);
 });
+
+test('asset and bulk photo areas stay solid white independently of the glass theme', () => {
+  for (const component of ['SerialAssetCard', 'BulkInventoryCard']) {
+    const source = readFileSync(new URL(`../components/${component}.tsx`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /var\(--inventory-image-bg/);
+    assert.match(source, /background: ["']#ffffff["']/);
+    assert.match(source, /#667085/);
+  }
+});
