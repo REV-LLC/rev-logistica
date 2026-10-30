@@ -262,7 +262,7 @@
 @media (max-width: 47.99em) {
   .page { border-radius: 0.85rem; min-height: calc(100dvh - 4.5rem); }
   .header, .toolbar, .content { padding-inline: 1rem; }
-  .header { padding-block: 1.25rem; }
+  .header { padding-block: 1.25rem; flex-wrap: wrap; gap: 1rem; }
   .typeChip { font-size: 0.72rem; padding: 0.58rem 0.7rem; }
   .searchRow { grid-template-columns: 1fr auto; }
   .search { grid-column: 1 / -1; }

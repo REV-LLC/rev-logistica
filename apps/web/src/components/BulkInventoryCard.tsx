@@ -19,17 +19,17 @@ export default function BulkInventoryCard({ name, imageUrl, quantity, quantityLa
   useEffect(() => setBrokenImage(false), [imageUrl]);
 
   return (
-    <Paper withBorder radius="lg" style={{ overflow: 'hidden', height: '100%' }}>
-      <button type="button" onClick={onOpen} aria-label={`Abrir ${name}`} style={{ border: 0, padding: 0, width: '100%', cursor: 'pointer', aspectRatio: '16 / 9', background: '#ffffff', display: 'grid', placeItems: 'center' }}>
+    <Paper withBorder radius="md" style={{ overflow: 'hidden', height: '100%' }}>
+      <button type="button" onClick={onOpen} aria-label={`Abrir ${name}`} style={{ border: 0, padding: 0, width: '100%', cursor: 'pointer', aspectRatio: '16 / 9', background: '#ffffff', display: 'grid', placeItems: 'center', position: 'relative' }}>
         {imageUrl && !brokenImage ? (
           <AppImage src={imageUrl} alt={name} width={640} height={360}
             sizes="(max-width: 48em) 100vw, (max-width: 75em) 50vw, 33vw"
-            style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 0 }} onError={() => setBrokenImage(true)} />
+            style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 0, position: 'absolute', inset: 0, padding: 16, boxSizing: 'border-box' }} onError={() => setBrokenImage(true)} />
         ) : (
           <Stack align="center" gap={6} c="#667085"><IconPhoto size={36} stroke={1.4} /><Text size="sm">Sin imagen</Text></Stack>
         )}
       </button>
-      <Stack p="md" gap="sm">
+      <Stack px={20} py={16} gap="sm">
         <Text fw={700} style={{ overflowWrap: 'anywhere' }}>{name}</Text>
         <Group justify="space-between"><Text size="sm" c="dimmed">{quantityLabel}</Text><Badge size="lg" color={quantity < 0 ? 'red' : 'teal'} variant="light">{quantity.toLocaleString('es-CO')}</Badge></Group>
         {children}

@@ -150,7 +150,7 @@ function getHeaderCopy(
     inventoryScope === "own"
   ) {
     return inventoryView === "bulk"
-      ? { title: "Bulk", subtitle: "Bodega propia" }
+      ? { title: "Materiales", subtitle: "Bodega propia" }
       : { title: "Equipos", subtitle: "Bodega propia" };
   }
 
