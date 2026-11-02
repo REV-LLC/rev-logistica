@@ -214,3 +214,11 @@ test('manual rows never allow a paste to mutate an inventory rental', async()=>{
  assert.throws(()=>applySheetChanges(source,[{row,key:'effectivePrice',value:'9'}]),/Usa Editar/);
  assert.equal(source.additionalCharges[0].unitPrice,'12.34');
 });
+
+test('area quantity is displayed while day adjustments retain physical pieces',()=>{
+ const areaInput={...input,machineDays:[],rentals:[{...input.rentals[0],billingAreaM2:'0.72'}]};
+ const rows=sheetRows(areaInput,{lines:[{...line('2026-09-16','3'),billableAreaM2:'2.16',billableUnits:'1'}]});
+ assert.equal(rows[0].mode,'M²/D');assert.equal(rows[0].quantity,'3');assert.equal(rows[0].areaM2,'2.16');
+ const next=applySheetChanges(areaInput,[{row:rows[0],key:'days',value:'2'}],'');
+ assert.equal(next.rentals[0].dayAdjustments[0].quantity,'3');
+});

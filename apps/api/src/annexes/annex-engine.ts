@@ -59,6 +59,7 @@ export type AnnexLine = {
   label: string;
   date: string;
   quantity: string;
+  billableAreaM2?: string;
   reportedHours: string | null;
   billableUnits: string;
   basePrice: string;
@@ -134,6 +135,7 @@ export function calculateAnnex(value: unknown) {
     label: string;
     date: string;
     quantity: Prisma.Decimal;
+    areaM2?: Prisma.Decimal;
     units: Prisma.Decimal;
     reportedHours: string | null;
     pricing: AnnexInput['rentals'][number]['pricing'];
@@ -143,13 +145,14 @@ export function calculateAnnex(value: unknown) {
     waived?: boolean;
   }) {
     const prices = price(params.pricing);
-    const gross = params.quantity
+    const billedQuantity = params.quantity.times(params.areaM2 ?? 1);
+    const gross = billedQuantity
       .times(params.units)
       .times(prices.base)
       .toDecimalPlaces(2, D.ROUND_HALF_UP);
     const net = params.waived
       ? new D(0)
-      : params.quantity
+      : billedQuantity
           .times(params.units)
           .times(prices.effective)
           .toDecimalPlaces(2, D.ROUND_HALF_UP);
@@ -159,6 +162,7 @@ export function calculateAnnex(value: unknown) {
       label: params.label,
       date: params.date,
       quantity: params.quantity.toString(),
+      ...(params.areaM2 ? { billableAreaM2: billedQuantity.toString() } : {}),
       reportedHours: params.reportedHours,
       billableUnits: params.units.toString(),
       basePrice: prices.base.toFixed(2),
@@ -205,6 +209,8 @@ export function calculateAnnex(value: unknown) {
       if (rental.billingStartsOn < rental.deliveredOn) fail('El cobro no puede comenzar antes de la entrega');
     }
     const initial = positive(rental.quantity, 'Cantidad');
+    const areaM2 = rental.billingAreaM2 === undefined ? undefined : positive(rental.billingAreaM2, 'Área por pieza');
+    if (areaM2 && (rental.assetId || rental.metering || rental.cutting)) fail('El cobro por área requiere alquiler diario de piezas');
     if (rental.assetId && !initial.eq(1))
       fail('Un activo serializado debe tener cantidad uno');
     price(rentalPricing);
@@ -358,6 +364,7 @@ export function calculateAnnex(value: unknown) {
         label: rental.label,
         date,
         quantity: balance,
+        areaM2,
         units: new D(1),
         reportedHours: null,
         pricing: rentalPricing,
@@ -406,7 +413,7 @@ export function calculateAnnex(value: unknown) {
           index === affected.length - 1
             ? Math.max(0, adjustment.days - index)
             : Number(index < adjustment.days);
-        const quantity = new D(line.quantity);
+        const quantity = new D(line.billableAreaM2 ?? line.quantity);
         const gross = quantity
           .times(prices.base)
           .toDecimalPlaces(2, D.ROUND_HALF_UP)
@@ -493,6 +500,7 @@ export function calculateAnnex(value: unknown) {
             label: rental.label,
             date,
             quantity,
+            areaM2,
             units: extra,
             reportedHours: null,
             pricing: rentalPricing,
@@ -506,11 +514,11 @@ export function calculateAnnex(value: unknown) {
           });
           const supplement = lines[lines.length - 1];
           const prices = price(rentalPricing);
-          const gross = quantity
+          const gross = quantity.times(areaM2 ?? 1)
             .times(prices.base)
             .toDecimalPlaces(2, D.ROUND_HALF_UP)
             .times(extra);
-          const net = quantity
+          const net = quantity.times(areaM2 ?? 1)
             .times(prices.effective)
             .toDecimalPlaces(2, D.ROUND_HALF_UP)
             .times(extra);
@@ -615,7 +623,7 @@ export function calculateAnnex(value: unknown) {
     transport: { outbound: outbound.toFixed(2), return: returning.toFixed(2), total: transportTotal.toFixed(2) },
     summary: { base: new D(sum('gross')).plus(transportTotal).plus(additionalTotal).toFixed(2), discount: sum('discount'), subtotal: subtotal.toFixed(2) },
     additionalChargesTotal: additionalTotal.toFixed(2),
-    engineVersion: '4',
+    engineVersion: '5',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,
     period: input.period,

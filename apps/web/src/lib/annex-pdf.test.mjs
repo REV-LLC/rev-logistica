@@ -87,3 +87,11 @@ test('manual repairs and replacements print in the item table and contribute to 
   for(const text of ['Soldadura marco','Pieza perdida','$ 24,68','$ 124,69','$ 23,69','$ 148,38']) assert.ok(pdf.text.includes(text),text);
   assert.ok(pdf.text.indexOf('Pieza perdida')<pdf.text.indexOf('Transporte'));
 });
+
+test('area billing prints physical pieces and square metres in separate columns',async()=>{
+ const data=fixture(1,0);
+ data.input.rentals[0].billingAreaM2='0.72';data.input.rentals[0].quantity='3';
+ Object.assign(data.result.lines[0],{quantity:'3',billableAreaM2:'2.16',billableUnits:'1'});
+ const pdf=await inspect(await createAnnexPdf(data));
+ for(const value of ['Cant.','m²','2.16','M²/D']) assert.ok(pdf.text.includes(value),value);
+});

@@ -297,3 +297,29 @@ it('rejects invalid manual charges', () => {
     expect(() => calculateAnnex({...fixture(),additionalCharges:[{id:'one',type:'REPAIR',description:'Reparación',quantity:'1',unitPrice:'10',...patch}]})).toThrow();
   }
 });
+
+describe('daily billing by square metre', () => {
+  it('preserves pieces and converts partial returns to billable area with discounts', () => {
+    const input = fixture(); input.period.through = '2026-09-04';
+    input.rentals = [{ ...rental(), billingAreaM2: '0.72', pricing: { basePrice: '2750', discountPercent: '10' },
+      returns: [{date:'2026-09-03',quantity:'2',source:{reference:'return',origin:'INVENTORY'}}] }];
+    const result = calculateAnnex(input);
+    expect(result.lines.map(l => [l.quantity,l.billableAreaM2,l.gross,l.net])).toEqual([
+      ['3','2.16','5940.00','5346.00'],['3','2.16','5940.00','5346.00'],['1','0.72','1980.00','1782.00']]);
+    expect(result.totals.rentalNet).toBe('12474.00');
+  });
+  it('applies manual day adjustments and minimum days to the area, never to stock', () => {
+    const input = fixture(); input.period.through = '2026-09-02';
+    input.rentals = [{...rental(),billingAreaM2:'0.72',pricing:{basePrice:'2750'},
+      dayAdjustments:[{from:'2026-09-02',to:'2026-09-02',days:2,quantity:'3'}]}];
+    expect(calculateAnnex(input).totals.rentalNet).toBe('11880.00');
+    input.rentals[0].dayAdjustments=[];
+    input.rentals[0].returns=[{date:'2026-09-02',quantity:'3',source:{reference:'return',origin:'INVENTORY'}}];
+    input.policy.minimumDaysBySku={'sku-1':3};
+    expect(calculateAnnex(input).totals.rentalNet).toBe('17820.00');
+  });
+  it('rejects zero area instead of silently billing zero', () => {
+    const input=fixture();input.rentals=[{...rental(),billingAreaM2:'0'}];
+    expect(()=>calculateAnnex(input)).toThrow('Área por pieza');
+  });
+});

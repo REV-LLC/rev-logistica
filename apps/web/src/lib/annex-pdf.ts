@@ -34,8 +34,8 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   });
   const dark: [number, number, number] = [28, 40, 49];
   const muted: [number, number, number] = [91, 105, 114];
-  const widths = [81, 29, 10, 19, 19, 12, 10, 25, 13, 25, 30];
-  const headings = ["Equipo", "Documento", "Cobro", "Desde", "Hasta", "Cant.", "Días", "Precio base", "Dto. %", "Precio final", "Total"];
+  const widths = [65, 29, 10, 19, 19, 12, 16, 10, 25, 13, 25, 30];
+  const headings = ["Equipo", "Documento", "Cobro", "Desde", "Hasta", "Cant.", "m²", "Días", "Precio base", "Dto. %", "Precio final", "Total"];
   const left = 12, right = 285, bottom = 195;
   let y = 0;
   const header = () => {
@@ -105,7 +105,7 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
       sheetDocuments(data.input, row).map((doc) => doc.label).join("\n") || "-";
     const values = [
       row.supplement ? `${row.label} - Ajuste al mínimo` : row.label,
-      documents, row.mode, row.from ? date(row.from) : "-", row.to ? date(row.to) : "-", row.quantity, row.days,
+      documents, row.mode, row.from ? date(row.from) : "-", row.to ? date(row.to) : "-", row.quantity, row.areaM2 ?? "-", row.days,
       row.included ? "Incluido" : money(row.basePrice),
       Number(row.discountPercent).toLocaleString("es-CO", { maximumFractionDigits: 6 }),
       row.included ? "-" : row.effectivePrice ? money(row.effectivePrice) : "-",

@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException, Optional, Logger } from '@nestjs/common';
-import { ChargeType, Prisma, SkuControlType, WarehouseType } from '@prisma/client';
+import { ChargeType, RentalQuantityBasis, Prisma, SkuControlType, WarehouseType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { SKU_WEIGHT_UNITS } from './skus.constants';
+import { validateRentalQuantityBasis } from './rental-quantity-basis';
 import { validateImplementClassification } from '../inventory/implement-classification';
 
 @Injectable()
@@ -64,6 +65,7 @@ export class SkusService {
         closedLengthMeters: true,
         extendedLengthMeters: true,
         areaM2: true,
+        rentalQuantityBasis: true,
         unitWeight: true,
         active: true,
         isImplement: true,
@@ -189,6 +191,7 @@ export class SkusService {
     closedLengthMeters?: number;
     extendedLengthMeters?: number;
     areaM2?: number;
+    rentalQuantityBasis?: RentalQuantityBasis;
     unitWeight?: number;
     active?: boolean;
   }) {
@@ -206,6 +209,7 @@ export class SkusService {
     validateImplementClassification(assetFamily.controlType, payload.isImplement ?? false, payload.isConsumable ?? false);
 
     const chargeConfig = this.resolveCreateChargeConfig(payload.chargeType, payload.minimumChargeHours);
+    validateRentalQuantityBasis(payload.rentalQuantityBasis ?? 'UNIT', chargeConfig.chargeType, assetFamily.controlType, payload.areaM2);
 
     try {
       const created = await this.prisma.sku.create({
@@ -224,6 +228,7 @@ export class SkusService {
           closedLengthMeters: payload.closedLengthMeters ?? null,
           extendedLengthMeters: payload.extendedLengthMeters ?? null,
           areaM2: payload.areaM2 ?? null,
+          rentalQuantityBasis: payload.rentalQuantityBasis ?? RentalQuantityBasis.UNIT,
           unitWeight: payload.unitWeight ?? null,
           active: payload.active ?? true,
           isImplement: payload.isImplement ?? false,
@@ -245,6 +250,7 @@ export class SkusService {
           closedLengthMeters: true,
           extendedLengthMeters: true,
           areaM2: true,
+          rentalQuantityBasis: true,
           unitWeight: true,
           active: true,
           createdAt: true,
@@ -296,6 +302,7 @@ export class SkusService {
       closedLengthMeters?: number;
       extendedLengthMeters?: number;
       areaM2?: number;
+      rentalQuantityBasis?: RentalQuantityBasis;
       unitWeight?: number;
       active?: boolean;
     },
@@ -307,6 +314,8 @@ export class SkusService {
         assetFamilyId: true,
         assetSubfamilyId: true,
         chargeType: true,
+        rentalQuantityBasis: true,
+        areaM2: true,
         minimumChargeHours: true,
         isImplement: true,
         isConsumable: true,
@@ -337,6 +346,8 @@ export class SkusService {
       sku.chargeType,
       sku.minimumChargeHours == null ? null : Number(sku.minimumChargeHours),
     );
+    validateRentalQuantityBasis(payload.rentalQuantityBasis ?? sku.rentalQuantityBasis ?? 'UNIT',
+      payload.chargeType ?? sku.chargeType, targetAssetFamily.controlType, payload.areaM2 ?? sku.areaM2);
 
     try {
       const updated = await this.prisma.sku.update({
@@ -356,6 +367,7 @@ export class SkusService {
           closedLengthMeters: payload.closedLengthMeters ?? undefined,
           extendedLengthMeters: payload.extendedLengthMeters ?? undefined,
           areaM2: payload.areaM2 ?? undefined,
+          rentalQuantityBasis: payload.rentalQuantityBasis,
           unitWeight: payload.unitWeight ?? undefined,
           active: payload.active,
           isImplement: payload.isImplement,
@@ -377,6 +389,7 @@ export class SkusService {
           closedLengthMeters: true,
           extendedLengthMeters: true,
           areaM2: true,
+          rentalQuantityBasis: true,
           unitWeight: true,
           active: true,
           createdAt: true,

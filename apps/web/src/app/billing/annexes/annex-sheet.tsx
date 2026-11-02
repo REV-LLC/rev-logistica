@@ -395,6 +395,7 @@ export default function AnnexSheet({
       ),
     },
     { key: "quantity", name: "Cant.", width: 55 },
+    { key: "areaM2", name: "m²", width: 65, renderCell: ({ row }: { row: SheetRow }) => row.areaM2 ?? "—" },
     {
       key: "days",
       name: "Días",
@@ -407,7 +408,7 @@ export default function AnnexSheet({
         editing &&
         row.kind === "rentals" &&
         !row.supplement &&
-        row.mode === "D" &&
+        ["D", "M²/D"].includes(row.mode) &&
         row.days !== "—" &&
         row.status !== "Exento" ? (
           <DaysCell
@@ -791,6 +792,7 @@ export default function AnnexSheet({
                 "effectivePrice",
                 "discountPercent",
                 "quantity",
+                "areaM2",
                 "days",
                 "units",
               ].includes(selected.current.key)

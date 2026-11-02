@@ -1,3 +1,4 @@
+import { applyCatalogQuantityBasis } from './annex-quantity-basis';
 import { dailyRentals } from './annex-daily-scope';
 import { applyDailyBillingStart, billingStartRuleSchema, billingStartSettingKey } from './annex-billing-start';
 import {
@@ -80,6 +81,8 @@ export class AnnexSourceService {
                 id: true,
                 name: true,
                 price: true,
+                areaM2: true,
+                rentalQuantityBasis: true,
                 chargeType: true,
                 minimumChargeHours: true,
                 assetFamily: { select: { name: true } },
@@ -92,6 +95,8 @@ export class AnnexSourceService {
                     id: true,
                     name: true,
                     price: true,
+                    areaM2: true,
+                    rentalQuantityBasis: true,
                     chargeType: true,
                     minimumChargeHours: true,
                     assetFamily: { select: { name: true } },
@@ -328,6 +333,7 @@ export class AnnexSourceService {
         }
         policy.minimumDaysBySku = resolved.days;
         policy.minimumHoursByAsset = resolved.hours;
+        applyCatalogQuantityBasis(source.rentals, rows.flatMap(row => row.sku ? [row.sku] : []));
         const input: AnnexInput = {
           period,
           policy,

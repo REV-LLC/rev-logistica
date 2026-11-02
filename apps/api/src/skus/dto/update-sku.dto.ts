@@ -6,7 +6,7 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
-import { ChargeType } from '@prisma/client';
+import { ChargeType, RentalQuantityBasis } from '@prisma/client';
 
 export class UpdateSkuDto {
   @IsOptional() @IsBoolean() isImplement?: boolean;
@@ -70,6 +70,10 @@ export class UpdateSkuDto {
   @IsOptional()
   @IsNumber()
   areaM2?: number;
+
+  @IsOptional()
+  @IsEnum(RentalQuantityBasis)
+  rentalQuantityBasis?: RentalQuantityBasis;
 
   @IsOptional()
   @IsBoolean()
