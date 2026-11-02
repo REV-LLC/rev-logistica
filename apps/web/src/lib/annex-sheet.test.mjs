@@ -31,7 +31,7 @@ test('price replaces percent, keeps base and preserves report and inventory sour
  const row=sheetRows(input,result)[0];
  const discounted=applySheetChanges(input,[{row,key:'discountPercent',value:'10'}],'Acuerdo');
  const next=applySheetChanges(discounted,[{row,key:'effectivePrice',value:'80'}],'');
- assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',effectivePrice:'80',adjustmentReason:'Acuerdo'});
+ assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'80',adjustmentReason:'Acuerdo'});
  assert.deepEqual(next.rentals[0].source,input.rentals[0].source);
 });
 test('protected cells, invalid numbers and conflicting segments reject whole batch',()=>{
@@ -47,10 +47,10 @@ test('protected cells, invalid numbers and conflicting segments reject whole bat
 test('editing and pasting discounts needs no reason; effective price works too',()=>{
  const rows=sheetRows(input,result);
  const next=applySheetChanges(input,[{row:rows[0],key:'discountPercent',value:'10'},{row:rows[3],key:'discountPercent',value:'20'}]);
- assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',discountPercent:'10'});
- assert.deepEqual(next.machineDays[0].pricing,{basePrice:'80000',discountPercent:'20'});
+ assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'10'});
+ assert.deepEqual(next.machineDays[0].pricing,{basePrice:'80000',adjustmentSource:'MANUAL',discountPercent:'20'});
  const priced=applySheetChanges(next,[{row:rows[0],key:'effectivePrice',value:'80'}]);
- assert.deepEqual(priced.rentals[0].pricing,{basePrice:'100',effectivePrice:'80'});
+ assert.deepEqual(priced.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'80'});
 });
 
 test('clearing a discount restores zero and removes a previous effective price',()=>{
@@ -58,11 +58,11 @@ test('clearing a discount restores zero and removes a previous effective price',
  const discounted=applySheetChanges(input,[{row,key:'discountPercent',value:'15'}]);
  for(const value of ['', '   ']) {
   const cleared=applySheetChanges(discounted,[{row,key:'discountPercent',value}]);
-  assert.deepEqual(cleared.rentals[0].pricing,{basePrice:'100',discountPercent:'0'});
+  assert.deepEqual(cleared.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'0'});
  }
  const priced=applySheetChanges(input,[{row,key:'effectivePrice',value:'85'}]);
- assert.deepEqual(applySheetChanges(priced,[{row,key:'discountPercent',value:''}]).rentals[0].pricing,{basePrice:'100',discountPercent:'0'});
- assert.deepEqual(applySheetChanges(input,[{row,key:'effectivePrice',value:''}]).rentals[0].pricing,{basePrice:'100',effectivePrice:'0'});
+ assert.deepEqual(applySheetChanges(priced,[{row,key:'discountPercent',value:''}]).rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'0'});
+ assert.deepEqual(applySheetChanges(input,[{row,key:'effectivePrice',value:''}]).rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'0'});
 });
 
 test('all editable numeric columns normalize blanks in multirow paste',()=>{

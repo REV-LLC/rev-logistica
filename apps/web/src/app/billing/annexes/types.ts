@@ -67,6 +67,7 @@ export type Pricing = {
   discountPercent?: string;
   effectivePrice?: string;
   adjustmentReason?: string;
+  adjustmentSource?: "MANUAL" | "CUSTOMER";
 };
 export type Source = {
   documentId?: string;
@@ -93,7 +94,12 @@ export type Rental = {
   billingStartsOn?: string;
   quantity: string;
   source: Source;
-  returns: { date: string; quantity: string; source: Source }[];
+  returns: {
+    date: string;
+    billingCutoffDate?: string;
+    quantity: string;
+    source: Source;
+  }[];
   pricing: Pricing;
   commercial?: CommercialSnapshot;
   includedIn?: Inclusion;
@@ -128,7 +134,11 @@ export type MachineDay = {
   waiverReason?: string;
 };
 export type TransportCharge = { quantity: string; unitPrice: string };
-export type AdditionalCharge = TransportCharge & { id: string; type: "REPAIR" | "REPLACEMENT"; description: string };
+export type AdditionalCharge = TransportCharge & {
+  id: string;
+  type: "REPAIR" | "REPLACEMENT";
+  description: string;
+};
 export type AnnexInput = {
   additionalCharges?: AdditionalCharge[];
   observations?: string;

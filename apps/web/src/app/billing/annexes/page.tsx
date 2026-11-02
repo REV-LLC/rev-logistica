@@ -1,7 +1,8 @@
 "use client";
 import { newAnnexPeriod } from "@/lib/annex-url";
 import glassStyles from "./annex-glass.module.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { startAnnexLiveRefresh } from "@/lib/annex-live-refresh";
 import {
   ActionIcon,
   NumberInput,
@@ -48,6 +49,22 @@ import type {
   Result,
   SourceIssue,
 } from "./types";
+type Consultation = {
+  input: AnnexInput;
+  result: Result;
+  sourceIssues: SourceIssue[];
+  revision: number;
+};
+function loadLive(
+  site: string,
+  period: AnnexInput["period"],
+  signal?: AbortSignal,
+) {
+  return api<Consultation>(
+    `/annexes/live?${new URLSearchParams({ customerWorksiteId: site, ...period })}`,
+    { signal, cache: "no-store" },
+  );
+}
 const money = (value: string) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP" }).format(
     Number(value),
@@ -106,6 +123,62 @@ export default function AnnexesPage() {
   const [editing, setEditing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [sendData, setSendData] = useState<AnnexExport | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const stopRefresh = useRef<(() => void) | null>(null);
+  const foregroundRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => foregroundRequest.current?.abort(), []);
+  const applyConsultation = useCallback((data: Consultation) => {
+    setInput(data.input);
+    setResult(data.result);
+    setIssues(data.sourceIssues ?? []);
+    setRevision(data.revision);
+    setLiveError(null);
+  }, []);
+  async function consult(targetPeriod = period) {
+    if (!site) throw new Error("Selecciona una obra");
+    stopRefresh.current?.();
+    foregroundRequest.current?.abort();
+    const controller = new AbortController();
+    foregroundRequest.current = controller;
+    const data = await loadLive(site, targetPeriod, controller.signal);
+    if (controller.signal.aborted)
+      throw new DOMException("Consulta cancelada", "AbortError");
+    applyConsultation(data);
+    return data;
+  }
+  const liveEnabled =
+    hasInput &&
+    !historicalOnly &&
+    !editing &&
+    !dirty &&
+    !busy &&
+    !printing &&
+    !sendData;
+  useEffect(() => {
+    if (!liveEnabled || !site) return;
+    const stop = startAnnexLiveRefresh({
+      window,
+      document,
+      load: (signal) => loadLive(site, period, signal),
+      apply: applyConsultation,
+      onError: () =>
+        setLiveError(
+          "No se pudo actualizar el anexo. Se volverá a intentar automáticamente al recuperar la conexión.",
+        ),
+    });
+    stopRefresh.current = stop;
+    return () => {
+      stop();
+      if (stopRefresh.current === stop) stopRefresh.current = null;
+    };
+  }, [
+    liveEnabled,
+    site,
+    period.from,
+    period.to,
+    period.through,
+    applyConsultation,
+  ]);
   const baseline = useRef<{
     input: AnnexInput;
     result: Result | null;
@@ -115,7 +188,8 @@ export default function AnnexesPage() {
     dirty: boolean;
   } | null>(null);
   function beginEditing() {
-    if (!input || busy || historicalOnly) return;
+    if (!input || busy || printing || historicalOnly) return;
+    stopRefresh.current?.();
     baseline.current = structuredClone({
       input,
       result,
@@ -144,6 +218,7 @@ export default function AnnexesPage() {
     setError(null);
     setPreviewError(null);
     baseline.current = null;
+    void prepare(previous.period);
   }
   const [calendarOpened, setCalendarOpened] = useState(false);
   const [reviewOpened, setReviewOpened] = useState(false);
@@ -174,49 +249,41 @@ export default function AnnexesPage() {
     setBusy(true);
     (async () => {
       try {
-        const available = await api<typeof sites>(
-          `/customers/${target.customer}/worksites`,
-          { signal: controller.signal },
-        );
+        const [available, stored] = await Promise.all([
+          api<typeof sites>(`/customers/${target.customer}/worksites`, {
+            signal: controller.signal,
+          }),
+          api<Draft[]>(
+            `/annexes/drafts?customerWorksiteId=${target.worksite}`,
+            { signal: controller.signal },
+          ),
+        ]);
         if (!available.some((s) => s.id === target.worksite))
           throw new Error(
             "La obra del enlace no pertenece al cliente o no está disponible.",
           );
-        const stored = await api<Draft[]>(
-          `/annexes/drafts?customerWorksiteId=${target.worksite}`,
-          { signal: controller.signal },
-        );
         const saved = stored.find(
           (d) =>
             d.periodFrom.slice(0, 10) === target.period.from &&
             d.periodTo.slice(0, 10) === target.period.to,
         );
         const latest = saved?.revisions[0];
-        const data =
-          latest ??
-          (await api<{
-            input: AnnexInput;
-            result: Result;
-            sourceIssues: SourceIssue[];
-          }>(
-            `/annexes/prepare?${new URLSearchParams({ customerWorksiteId: target.worksite!, ...target.period })}`,
-            { signal: controller.signal },
-          ));
+        const historical = latest && !isDailyAnnex(latest.input);
+        const data = historical
+          ? {
+              ...latest,
+              sourceIssues: latest.sourceIssues ?? [],
+              revision: saved!.revision,
+            }
+          : await loadLive(target.worksite!, target.period, controller.signal);
         if (controller.signal.aborted) return;
         setSites(available);
         setDrafts(stored);
-        setInput(data.input);
+        applyConsultation(data);
         setPeriod(data.input.period);
-        setResult(data.result);
-        setIssues(data.sourceIssues ?? []);
-        setRevision(saved?.revision ?? 0);
         setEditing(false);
         setDirty(false);
         setReason("");
-        if (latest && latest.input.period.through !== target.period.through)
-          setMessage(
-            `Se abrió la última versión guardada, con fecha final ${latest.input.period.through}.`,
-          );
       } catch (e) {
         if (!controller.signal.aborted)
           setError(
@@ -341,116 +408,31 @@ export default function AnnexesPage() {
       setBusy(false);
     }
   }
-  async function prepare(refresh = false) {
-    if (!site || (refresh && historicalOnly)) return;
+  async function prepare(targetPeriod = period) {
+    if (!site) return;
     setBusy(true);
     setError(null);
     try {
-      const data = await api<{
-        input: AnnexInput;
-        result: Result;
-        sourceIssues: SourceIssue[];
-      }>(
-        `/annexes/prepare?${new URLSearchParams({ customerWorksiteId: site, ...period })}`,
-      );
-      if (refresh && input) {
-        const selections = new Map(
-          [...input.rentals, ...input.machineDays].flatMap((source) => {
-            const id = "id" in source ? source.id : source.rentalId;
-            return id && source.commercial?.selectedModeId
-              ? [[id, source.commercial.selectedModeId] as const]
-              : [];
-          }),
-        );
-        for (const [rentalId, modeId] of selections)
-          data.input = await api<AnnexInput>("/annexes/select-mode", {
-            method: "POST",
-            json: { input: data.input, rentalId, modeId },
-          });
-        const oldLots = new Map(input.rentals.map((r) => [r.id, r]));
-        const oldDays = new Map(
-          input.machineDays.map((d) => [`${d.assetId}:${d.date}`, d]),
-        );
-        const removedLots = input.rentals.filter(
-          (r) => !data.input.rentals.some((n) => n.id === r.id),
-        );
-        const removedDays = input.machineDays.filter(
-          (d) =>
-            !data.input.machineDays.some(
-              (n) => n.assetId === d.assetId && n.date === d.date,
-            ),
-        );
-        if (removedLots.length || removedDays.length) {
-          throw new Error(
-            "Los movimientos nuevos eliminan líneas existentes. Se conservó el borrador sin cambios; revisa la conciliación antes de regenerarlo.",
-          );
-        }
-        data.input.additionalCharges = input.additionalCharges;
-        data.input.observations = input.observations;
-        data.input.transport = input.transport;
-        data.input.policy = {
-          ...input.policy,
-          minimumDaysByRental: {
-            ...data.input.policy.minimumDaysByRental,
-            ...input.policy.minimumDaysByRental,
-          },
-          minimumDaysBySku: {
-            ...data.input.policy.minimumDaysBySku,
-            ...input.policy.minimumDaysBySku,
-          },
-          minimumHoursByAsset: {
-            ...data.input.policy.minimumHoursByAsset,
-            ...input.policy.minimumHoursByAsset,
-          },
-        };
-        data.input.rentals = data.input.rentals.map((r) => {
-          const old = oldLots.get(r.id);
-          return old
-            ? {
-                ...r,
-                pricing: old.pricing,
-                waivedDays: old.waivedDays,
-                dayAdjustments: old.dayAdjustments,
-                modeArchive: old.modeArchive,
-                metering: old.metering ?? old.cutting,
-              }
-            : r;
-        });
-        data.input.machineDays = data.input.machineDays.map((d) => {
-          const old = oldDays.get(`${d.assetId}:${d.date}`);
-          return old ? { ...d, ...old, rentalContext: d.rentalContext } : d;
-        });
-        const refreshedResult = await api<Result>("/annexes/preview", {
-          method: "POST",
-          json: data.input,
-        });
-        setInput(data.input);
-        setResult(refreshedResult);
-        setIssues(data.sourceIssues);
-        setDirty(true);
-        setReason("Actualización de movimientos y corte de datos");
-        setMessage(
-          "Se conservaron los ajustes de días, descuentos, excepciones y reportes. Revisa antes de guardar.",
-        );
-      } else {
-        setUrlReady(true);
-        setInput(data.input);
-        setResult(data.result);
-        setIssues(data.sourceIssues);
-        setRevision(0);
-        setEditing(false);
-        setDirty(false);
-        setReason("Preparación desde movimientos de inventario");
-        setMessage(null);
-      }
+      const data = await consult(targetPeriod);
+      setPeriod(data.input.period);
+      setUrlReady(true);
+      setEditing(false);
+      setDirty(false);
+      baseline.current = null;
+      setReason("");
+      setMessage(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo preparar");
+      setLiveError("No se pudo consultar la información actual del anexo.");
+      setError(
+        e instanceof Error ? e.message : "No se pudo consultar el anexo",
+      );
     } finally {
       setBusy(false);
     }
   }
   async function calculate(save: boolean) {
     if (!input || !site) return;
+    stopRefresh.current?.();
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -471,6 +453,7 @@ export default function AnnexesPage() {
           },
         });
         setRevision(draft.revision);
+        setInput(draft.revisions[0].input);
         setResult(draft.revisions[0].result);
         setDirty(false);
         setEditing(false);
@@ -480,6 +463,13 @@ export default function AnnexesPage() {
           draft,
           ...existing.filter((d) => d.id !== draft.id),
         ]);
+        try {
+          await consult(input.period);
+        } catch {
+          setLiveError(
+            "Los cambios se guardaron, pero no se pudo actualizar el anexo con los últimos movimientos. Se reintentará automáticamente.",
+          );
+        }
       } else
         setResult(
           await api<Result>("/annexes/preview", {
@@ -494,6 +484,9 @@ export default function AnnexesPage() {
     }
   }
   function reset() {
+    stopRefresh.current?.();
+    foregroundRequest.current?.abort();
+    setLiveError(null);
     setUrlReady(true);
     setEditing(false);
     baseline.current = null;
@@ -513,22 +506,24 @@ export default function AnnexesPage() {
     setPeriod(newAnnexPeriod(period.from, period.through));
   }
   function changeContext() {
-    if (busy) return false;
-    if (dirty && !window.confirm("Se descartarán los cambios sin guardar. ¿Continuar?")) return false;
+    if (busy || printing) return false;
+    if (
+      dirty &&
+      !window.confirm("Se descartarán los cambios sin guardar. ¿Continuar?")
+    )
+      return false;
     reset();
     return true;
   }
   function changeDate(key: "from" | "through", value: string) {
     if (value === period[key]) return;
-    // Keep the existing flow for advancing a saved cut while editing it.
-    if (input && editing && !dirty && key === "through" &&
-        value >= input.period.from && value <= input.period.to) {
-      setPeriod({ ...period, through: value });
-      return;
-    }
     if (!changeContext()) return;
-    setPeriod(newAnnexPeriod(key === "from" ? value : period.from,
-      key === "through" ? value : period.through));
+    setPeriod(
+      newAnnexPeriod(
+        key === "from" ? value : period.from,
+        key === "through" ? value : period.through,
+      ),
+    );
   }
   const [extrasSupported, setExtrasSupported] = useState(false);
   useEffect(() => {
@@ -536,7 +531,12 @@ export default function AnnexesPage() {
   }, [result]);
   const vatPercent = input?.policy.vatPercent ?? 0;
   const taxTotals = result
-    ? annexAmounts(result.totals, input?.transport, vatPercent, input?.additionalCharges)
+    ? annexAmounts(
+        result.totals,
+        input?.transport,
+        vatPercent,
+        input?.additionalCharges,
+      )
     : null;
   return (
     <Container
@@ -553,7 +553,13 @@ export default function AnnexesPage() {
             </Text>
           </div>
           <Badge color={editing ? "orange" : "blue"}>
-            {editing ? "Editando" : "Consulta"}
+            {editing
+              ? "Editando"
+              : historicalOnly || !input
+                ? "Consulta"
+                : liveError
+                  ? "Sin actualizar"
+                  : "En vivo"}
             {revision ? ` · versión ${revision}` : ""}
           </Badge>
         </Group>
@@ -562,6 +568,7 @@ export default function AnnexesPage() {
             {error}
           </Alert>
         ) : null}
+        {liveError ? <Alert color="yellow">{liveError}</Alert> : null}
         {message ? <Alert color="green">{message}</Alert> : null}
         <Paper withBorder radius="md" className={selectorStyles.card}>
           <UnstyledButton
@@ -581,7 +588,10 @@ export default function AnnexesPage() {
                   sites.find((s) => s.id === site)?.worksite.name ||
                   "Obra por seleccionar"}{" "}
                 · {period.from.split("-").reverse().join("/")} –{" "}
-                {(input?.period.through ?? period.through).split("-").reverse().join("/")}
+                {(input?.period.through ?? period.through)
+                  .split("-")
+                  .reverse()
+                  .join("/")}
               </Text>
             </div>
             <IconChevronDown
@@ -603,7 +613,7 @@ export default function AnnexesPage() {
                       label: c.name,
                     }))}
                     value={customer}
-                    disabled={busy}
+                    disabled={busy || printing}
                     onChange={(v) => {
                       if (v === customer || !changeContext()) return;
                       setCustomer(v);
@@ -620,7 +630,7 @@ export default function AnnexesPage() {
                       label: s.alias || s.worksite.name,
                     }))}
                     value={site}
-                    disabled={busy || !customer}
+                    disabled={busy || printing || !customer}
                     onChange={(v) => {
                       if (v === site || !changeContext()) return;
                       setSite(v);
@@ -641,26 +651,12 @@ export default function AnnexesPage() {
                       }
                       value={period[key]}
                       min={key === "through" ? period.from : undefined}
-                      disabled={busy}
+                      disabled={busy || printing}
                       onChange={(e) => changeDate(key, e.currentTarget.value)}
                     />
                   ))}
                 </SimpleGrid>
                 <Group>
-                  {input ? (
-                    <Button
-                      variant="light"
-                      disabled={
-                        busy ||
-                        !editing ||
-                        historicalOnly ||
-                        dirty
-                      }
-                      onClick={() => prepare(true)}
-                    >
-                      Actualizar movimientos y cortes
-                    </Button>
-                  ) : null}
                   <Button
                     onClick={() => prepare()}
                     disabled={!site || input !== null}
@@ -668,7 +664,6 @@ export default function AnnexesPage() {
                   >
                     Ver anexo desde inventario
                   </Button>
-
                 </Group>
                 {!input && drafts.length ? (
                   <Stack gap="xs">
@@ -677,9 +672,13 @@ export default function AnnexesPage() {
                       <Button
                         key={d.id}
                         variant="light"
-                        disabled={busy}
+                        disabled={busy || printing}
                         onClick={() => {
                           const r = d.revisions[0];
+                          if (isDailyAnnex(r.input)) {
+                            void prepare(r.input.period);
+                            return;
+                          }
                           setEditing(false);
                           baseline.current = null;
                           setInput(r.input);
@@ -692,7 +691,10 @@ export default function AnnexesPage() {
                           setError(null);
                         }}
                       >
-                        {d.periodFrom.slice(0, 10)} — {(d.revisions[0]?.input.period.through ?? d.periodTo).slice(0, 10)}{" "}
+                        {d.periodFrom.slice(0, 10)} —{" "}
+                        {(
+                          d.revisions[0]?.input.period.through ?? d.periodTo
+                        ).slice(0, 10)}{" "}
                         · revisión {d.revision}
                       </Button>
                     ))}
@@ -745,7 +747,7 @@ export default function AnnexesPage() {
                       <Button
                         size="xs"
                         variant="default"
-                        disabled={busy}
+                        disabled={busy || printing}
                         onClick={cancelEditing}
                       >
                         Cancelar
@@ -755,7 +757,7 @@ export default function AnnexesPage() {
                     <>
                       <Button
                         size="xs"
-                        disabled={busy || historicalOnly}
+                        disabled={busy || printing || historicalOnly}
                         onClick={beginEditing}
                       >
                         Editar
@@ -768,7 +770,7 @@ export default function AnnexesPage() {
                             aria-label="Guardar anexo"
                             variant="light"
                             loading={busy}
-                            disabled={historicalOnly}
+                            disabled={historicalOnly || printing}
                             onClick={() => calculate(true)}
                           >
                             <IconDeviceFloppy size={20} />
@@ -778,35 +780,68 @@ export default function AnnexesPage() {
                     </>
                   )}
                   <Tooltip label="Imprimir anexo" withinPortal>
-                    <ActionIcon size={28} p={2} aria-label="Imprimir anexo"
-                      variant="light" loading={printing}
-                      disabled={historicalOnly || editing || busy || !result || dirty}
+                    <ActionIcon
+                      size={28}
+                      p={2}
+                      aria-label="Imprimir anexo"
+                      variant="light"
+                      loading={printing}
+                      disabled={
+                        historicalOnly ||
+                        editing ||
+                        busy ||
+                        printing ||
+                        !result ||
+                        dirty
+                      }
                       onClick={async () => {
                         if (!result) return;
                         const preview = window.open("about:blank", "_blank");
                         if (!preview) {
-                          setError("Permite las ventanas emergentes para imprimir el anexo.");
+                          setError(
+                            "Permite las ventanas emergentes para imprimir el anexo.",
+                          );
                           return;
                         }
                         preview.opener = null;
+                        stopRefresh.current?.();
                         setPrinting(true);
                         try {
-                          const { createAnnexPdf } = await import("@/lib/annex-pdf");
-                          const blob = await createAnnexPdf({
-                            input, result, revision, issues,
-                            customer: customers.find((c) => c.id === customer)?.name ?? "Cliente",
-                            worksite: sites.find((s) => s.id === site)?.alias || sites.find((s) => s.id === site)?.worksite.name || "Obra",
-                          }, { print: true });
+                          const current = await consult();
+                          const { createAnnexPdf } =
+                            await import("@/lib/annex-pdf");
+                          const blob = await createAnnexPdf(
+                            {
+                              input: current.input,
+                              result: current.result,
+                              revision: current.revision,
+                              issues: current.sourceIssues,
+                              customer:
+                                customers.find((c) => c.id === customer)
+                                  ?.name ?? "Cliente",
+                              worksite:
+                                sites.find((s) => s.id === site)?.alias ||
+                                sites.find((s) => s.id === site)?.worksite
+                                  .name ||
+                                "Obra",
+                            },
+                            { print: true },
+                          );
                           const url = URL.createObjectURL(blob);
                           if (!preview.closed) preview.location.replace(url);
                           setTimeout(() => URL.revokeObjectURL(url), 60000);
                         } catch (error) {
                           preview.close();
-                          setError(error instanceof Error ? error.message : "No se pudo imprimir el anexo");
+                          setError(
+                            error instanceof Error
+                              ? error.message
+                              : "No se pudo imprimir el anexo",
+                          );
                         } finally {
                           setPrinting(false);
                         }
-                      }}>
+                      }}
+                    >
                       <IconPrinter size={20} />
                     </ActionIcon>
                   </Tooltip>
@@ -817,16 +852,25 @@ export default function AnnexesPage() {
                       aria-label="Compartir anexo"
                       variant="light"
                       disabled={
-                        historicalOnly || editing || busy || !result || dirty
+                        historicalOnly ||
+                        editing ||
+                        busy ||
+                        printing ||
+                        !result ||
+                        dirty
                       }
-                      onClick={() => {
+                      onClick={async () => {
                         if (!result) return;
-                        setSendData(
-                          structuredClone({
-                            input,
-                            result,
-                            revision,
-                            issues,
+                        stopRefresh.current?.();
+                        setBusy(true);
+                        setError(null);
+                        try {
+                          const current = await consult();
+                          setSendData({
+                            input: current.input,
+                            result: current.result,
+                            revision: current.revision,
+                            issues: current.sourceIssues,
                             customer:
                               customers.find((c) => c.id === customer)?.name ??
                               "Cliente",
@@ -834,8 +878,16 @@ export default function AnnexesPage() {
                               sites.find((s) => s.id === site)?.alias ||
                               sites.find((s) => s.id === site)?.worksite.name ||
                               "Obra",
-                          }),
-                        );
+                          });
+                        } catch (error) {
+                          setError(
+                            error instanceof Error
+                              ? error.message
+                              : "No se pudo actualizar el anexo para compartir",
+                          );
+                        } finally {
+                          setBusy(false);
+                        }
                       }}
                     >
                       <svg

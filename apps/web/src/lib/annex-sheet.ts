@@ -346,6 +346,7 @@ export function applySheetChanges(
     const { basePrice } = source.pricing;
     source.pricing = {
       basePrice,
+      adjustmentSource: "MANUAL",
       ...(adjustmentReason ? { adjustmentReason } : {}),
       [key]: normalized,
     };
