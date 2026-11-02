@@ -68,9 +68,36 @@ export async function applyCommercialComposition(
     where: {
       customerWorksiteId: siteId,
       status: 'CONFIRMED',
-      docDate: {
-        lt: new Date(Date.parse(period.through + 'T05:00:00Z') + 86400000),
-      },
+      OR: [
+        {
+          docDate: {
+            lt: new Date(Date.parse(period.through + 'T05:00:00Z') + 86400000),
+          },
+        },
+        {
+          id: {
+            in: [
+              ...new Set(
+                rows.flatMap((row) =>
+                  row.refDocumentId ? [row.refDocumentId] : [],
+                ),
+              ),
+            ],
+          },
+        },
+        {
+          type: 'RETURN',
+          items: {
+            some: {
+              billingCutoffDate: {
+                lt: new Date(
+                  Date.parse(period.through + 'T05:00:00Z') + 86400000,
+                ),
+              },
+            },
+          },
+        },
+      ],
     },
     take: 5001,
     include: {
@@ -145,7 +172,9 @@ export async function applyCommercialComposition(
     const reviewed = bridgeBySource.get(lot.source.reference);
     if (
       handledV2.has(lot.id) &&
-      (!reviewed || reviewed.effectiveFrom <= period.from || lot.deliveredOn >= reviewed.effectiveFrom)
+      (!reviewed ||
+        reviewed.effectiveFrom <= period.from ||
+        lot.deliveredOn >= reviewed.effectiveFrom)
     )
       continue;
     if (reviewed)
@@ -423,7 +452,10 @@ export async function applyCommercialComposition(
   return restoreStandaloneDailyCatalog(
     physicalLots,
     new Map(
-      rows.map((row) => [row.id, (row.asset?.sku ?? row.sku)?.chargeType ?? '']),
+      rows.map((row) => [
+        row.id,
+        (row.asset?.sku ?? row.sku)?.chargeType ?? '',
+      ]),
     ),
     documents,
     {

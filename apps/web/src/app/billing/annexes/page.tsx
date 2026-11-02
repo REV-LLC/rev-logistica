@@ -654,13 +654,11 @@ export default function AnnexesPage() {
                         busy ||
                         !editing ||
                         historicalOnly ||
-                        dirty ||
-                        revision === 0 ||
-                        period.through === input.period.through
+                        dirty
                       }
                       onClick={() => prepare(true)}
                     >
-                      Actualizar movimientos hasta la fecha elegida
+                      Actualizar movimientos y cortes
                     </Button>
                   ) : null}
                   <Button

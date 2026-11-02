@@ -137,7 +137,16 @@ const baseRentalSchema = z
     billingAreaM2: decimal.optional(),
     source,
     returns: z
-      .array(z.object({ date, quantity: decimal, source }).strict())
+      .array(
+        z
+          .object({
+            date,
+            billingCutoffDate: date.optional(),
+            quantity: decimal,
+            source,
+          })
+          .strict(),
+      )
       .max(200),
     pricing,
     commercial: commercial.optional(),
@@ -184,21 +193,37 @@ const rentalSchema = baseRentalSchema
       .optional(),
   })
   .strict();
-const transportCharge = z.object({
-  quantity: z.string().regex(/^\d{1,4}$/),
-  unitPrice: money,
-}).strict();
+const transportCharge = z
+  .object({
+    quantity: z.string().regex(/^\d{1,4}$/),
+    unitPrice: money,
+  })
+  .strict();
 export const annexInputSchema = z
   .object({
-    additionalCharges: z.array(z.object({
-      id: id,
-      type: z.enum(['REPAIR', 'REPLACEMENT']),
-      description: z.string().trim().min(1).max(300),
-      quantity: z.string().regex(/^\d{1,4}$/),
-      unitPrice: money,
-    }).strict()).max(200).refine(rows => new Set(rows.map(row => row.id)).size === rows.length, 'Identificadores duplicados').optional(),
+    additionalCharges: z
+      .array(
+        z
+          .object({
+            id: id,
+            type: z.enum(['REPAIR', 'REPLACEMENT']),
+            description: z.string().trim().min(1).max(300),
+            quantity: z.string().regex(/^\d{1,4}$/),
+            unitPrice: money,
+          })
+          .strict(),
+      )
+      .max(200)
+      .refine(
+        (rows) => new Set(rows.map((row) => row.id)).size === rows.length,
+        'Identificadores duplicados',
+      )
+      .optional(),
     observations: z.string().max(5000).optional(),
-    transport: z.object({ outbound: transportCharge, return: transportCharge }).strict().optional(),
+    transport: z
+      .object({ outbound: transportCharge, return: transportCharge })
+      .strict()
+      .optional(),
     period: z.object({ from: date, to: date, through: date }).strict(),
     policy: z
       .object({
