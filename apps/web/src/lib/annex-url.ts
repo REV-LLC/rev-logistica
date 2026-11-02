@@ -57,3 +57,9 @@ export function annexLocationUrl(current: string, value: AnnexLocation) {
   }
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+// New annexes must use the visible end date, never a stale hidden cut boundary.
+// Saved revisions keep their original identity when advancing their data cutoff.
+export function newAnnexPeriod(from: string, through: string): AnnexLocation["period"] {
+  return { from, to: through, through };
+}
