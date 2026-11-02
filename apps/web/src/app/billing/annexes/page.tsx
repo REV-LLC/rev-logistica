@@ -1,4 +1,5 @@
 "use client";
+import { newAnnexPeriod } from "@/lib/annex-url";
 import glassStyles from "./annex-glass.module.css";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -69,18 +70,7 @@ function initialPeriod() {
   const second = yesterday.getUTCDate() > 15;
   return {
     from: `${prefix}${second ? "16" : "01"}`,
-    to: second
-      ? new Date(
-          Date.UTC(
-            yesterday.getUTCFullYear(),
-            yesterday.getUTCMonth() + 1,
-            0,
-            12,
-          ),
-        )
-          .toISOString()
-          .slice(0, 10)
-      : `${prefix}15`,
+    to: through,
     through,
   };
 }
@@ -632,13 +622,12 @@ export default function AnnexesPage() {
                           (!editing || key !== "through" || dirty))
                       }
                       onChange={(e) =>
-                        setPeriod({
-                          ...period,
-                          [key]: e.currentTarget.value,
-                          // Keep the saved cut identity while its billed end advances.
-                          ...(!input && key === "through" && e.currentTarget.value > period.to
-                            ? { to: e.currentTarget.value } : {}),
-                        })
+                        setPeriod(input
+                          ? { ...period, [key]: e.currentTarget.value }
+                          : newAnnexPeriod(
+                              key === "from" ? e.currentTarget.value : period.from,
+                              key === "through" ? e.currentTarget.value : period.through,
+                            ))
                       }
                     />
                   ))}
