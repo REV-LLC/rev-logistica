@@ -505,6 +505,30 @@ export default function AnnexesPage() {
     setDirty(false);
     setReason("");
     setMessage(null);
+    setError(null);
+    setPreviewError(null);
+    setReport(null);
+    setCalendarOpened(false);
+    setReviewOpened(false);
+    setPeriod(newAnnexPeriod(period.from, period.through));
+  }
+  function changeContext() {
+    if (busy) return false;
+    if (dirty && !window.confirm("Se descartarán los cambios sin guardar. ¿Continuar?")) return false;
+    reset();
+    return true;
+  }
+  function changeDate(key: "from" | "through", value: string) {
+    if (value === period[key]) return;
+    // Keep the existing flow for advancing a saved cut while editing it.
+    if (input && editing && !dirty && key === "through" &&
+        value >= input.period.from && value <= input.period.to) {
+      setPeriod({ ...period, through: value });
+      return;
+    }
+    if (!changeContext()) return;
+    setPeriod(newAnnexPeriod(key === "from" ? value : period.from,
+      key === "through" ? value : period.through));
   }
   const [extrasSupported, setExtrasSupported] = useState(false);
   useEffect(() => {
@@ -579,8 +603,9 @@ export default function AnnexesPage() {
                       label: c.name,
                     }))}
                     value={customer}
-                    disabled={busy || input !== null}
+                    disabled={busy}
                     onChange={(v) => {
+                      if (v === customer || !changeContext()) return;
                       setCustomer(v);
                       setSites([]);
                       setSite(null);
@@ -595,8 +620,9 @@ export default function AnnexesPage() {
                       label: s.alias || s.worksite.name,
                     }))}
                     value={site}
-                    disabled={busy || !customer || input !== null}
+                    disabled={busy || !customer}
                     onChange={(v) => {
+                      if (v === site || !changeContext()) return;
                       setSite(v);
                       setDrafts([]);
                     }}
@@ -615,20 +641,8 @@ export default function AnnexesPage() {
                       }
                       value={period[key]}
                       min={key === "through" ? period.from : undefined}
-                      max={key === "through" && input ? input.period.to : undefined}
-                      disabled={
-                        busy ||
-                        (input !== null &&
-                          (!editing || key !== "through" || dirty))
-                      }
-                      onChange={(e) =>
-                        setPeriod(input
-                          ? { ...period, [key]: e.currentTarget.value }
-                          : newAnnexPeriod(
-                              key === "from" ? e.currentTarget.value : period.from,
-                              key === "through" ? e.currentTarget.value : period.through,
-                            ))
-                      }
+                      disabled={busy}
+                      onChange={(e) => changeDate(key, e.currentTarget.value)}
                     />
                   ))}
                 </SimpleGrid>
@@ -656,24 +670,7 @@ export default function AnnexesPage() {
                   >
                     Ver anexo desde inventario
                   </Button>
-                  {input ? (
-                    <Button
-                      color="gray"
-                      variant="light"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          !dirty ||
-                          window.confirm(
-                            "Se descartarán los cambios sin guardar. ¿Continuar?",
-                          )
-                        )
-                          reset();
-                      }}
-                    >
-                      Cambiar obra / abrir otro anexo
-                    </Button>
-                  ) : null}
+
                 </Group>
                 {!input && drafts.length ? (
                   <Stack gap="xs">
