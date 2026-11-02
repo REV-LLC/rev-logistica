@@ -32,6 +32,7 @@ export function applyCustomerPricing(rentals: AnnexInput['rentals'], value: unkn
     rental.pricing = {
       basePrice: base.toFixed(2), effectivePrice: agreedPrice.toFixed(2),
       adjustmentReason: 'Tarifa acordada para el cliente',
+      adjustmentSource: 'CUSTOMER',
     };
   }
 }

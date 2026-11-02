@@ -11,7 +11,7 @@ describe('customer annex pricing',()=>{
  });
  it('keeps the catalog base and applies the exact agreed rate per m²',()=>{
   const r=rental();applyCustomerPricing([r],agreement);
-  expect(r.pricing).toEqual({basePrice:'3000.00',effectivePrice:'2750.00',adjustmentReason:'Tarifa acordada para el cliente'});
+  expect(r.pricing).toEqual({basePrice:'3000.00',effectivePrice:'2750.00',adjustmentReason:'Tarifa acordada para el cliente',adjustmentSource:'CUSTOMER'});
   const input:AnnexInput={period:{from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'},policy:{version:'test',includeReturnDay:true,excludedWeekdays:[],excludeHolidays:false,holidays:[],holidayCalendarConfirmed:true,minimumHoursPerMachineDay:'6'},rentals:[r],machineDays:[]};
   expect(calculateAnnex(input).totals).toEqual({rentalGross:'324000.00',rentalDiscount:'27000.00',rentalNet:'297000.00'});
  });

@@ -16,6 +16,7 @@ const pricing = z
     discountPercent: decimal.optional(),
     effectivePrice: money.optional(),
     adjustmentReason: reason.optional(),
+    adjustmentSource: z.enum(['MANUAL', 'CUSTOMER']).optional(),
   })
   .strict()
   .refine(

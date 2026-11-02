@@ -2,6 +2,7 @@ import {
   applyCustomerPricing,
   customerPricingKey,
 } from './annex-customer-pricing';
+import { applySavedAnnexRules } from './annex-live-rules';
 import { applyCatalogQuantityBasis } from './annex-quantity-basis';
 import { dailyRentals } from './annex-daily-scope';
 import {
@@ -37,6 +38,7 @@ export class AnnexSourceService {
     from: string,
     to: string,
     through: string,
+    live = false,
   ) {
     if (!z.string().uuid().safeParse(customerWorksiteId).success)
       throw new BadRequestException('Obra inválida');
@@ -171,22 +173,37 @@ export class AnnexSourceService {
           message:
             'Tarifas tomadas del catálogo actual. Revisa su vigencia para este período',
         });
-        const [saved, setting, customerPricing] = await Promise.all([
-          tx.annexDraft.findMany({
-            where: {
-              customerWorksiteId,
-              periodTo: { lt: new Date(`${from}T00:00:00Z`) },
-            },
-            orderBy: { periodFrom: 'desc' },
-            include: { revisions: { orderBy: { revision: 'desc' }, take: 1 } },
-          }),
-          tx.appSetting.findUnique({
-            where: { key: worksiteMinimumKey(customerWorksiteId) },
-          }),
-          tx.appSetting.findUnique({
-            where: { key: customerPricingKey(site.customerId) },
-          }),
-        ]);
+        const [saved, setting, customerPricing, currentDraft] =
+          await Promise.all([
+            tx.annexDraft.findMany({
+              where: {
+                customerWorksiteId,
+                periodTo: { lt: new Date(`${from}T00:00:00Z`) },
+              },
+              orderBy: { periodFrom: 'desc' },
+              include: {
+                revisions: { orderBy: { revision: 'desc' }, take: 1 },
+              },
+            }),
+            tx.appSetting.findUnique({
+              where: { key: worksiteMinimumKey(customerWorksiteId) },
+            }),
+            tx.appSetting.findUnique({
+              where: { key: customerPricingKey(site.customerId) },
+            }),
+            live
+              ? tx.annexDraft.findFirst({
+                  where: {
+                    customerWorksiteId,
+                    periodFrom: new Date(`${from}T00:00:00Z`),
+                    periodTo: new Date(`${to}T00:00:00Z`),
+                  },
+                  include: {
+                    revisions: { orderBy: { revision: 'desc' }, take: 1 },
+                  },
+                })
+              : null,
+          ]);
         const history = saved.flatMap((draft) => {
           const parsed = annexInputSchema.safeParse(draft.revisions[0]?.input);
           return parsed.success
@@ -383,18 +400,36 @@ export class AnnexSourceService {
           rows.flatMap((row) => (row.sku ? [row.sku] : [])),
         );
         applyCustomerPricing(source.rentals, customerPricing?.value);
-        const input: AnnexInput = {
+        let input: AnnexInput = {
           period,
           policy,
           rentals: source.rentals,
           machineDays: source.machineDays,
         };
+        if (currentDraft?.revisions[0]) {
+          const parsed = annexInputSchema.safeParse(
+            currentDraft.revisions[0].input,
+          );
+          if (!parsed.success)
+            throw new BadRequestException(
+              'No se pudieron leer las reglas guardadas de este anexo',
+            );
+          const applied = applySavedAnnexRules(input, parsed.data);
+          input = applied.input;
+          source.issues.push(...applied.issues);
+        }
         return {
           site,
           input,
           result: calculateAnnex(input),
           sourceIssues: source.issues,
           ledgerCount: rows.length,
+          ...(live
+            ? {
+                revision: currentDraft?.revision ?? 0,
+                consultedAt: new Date().toISOString(),
+              }
+            : {}),
         };
       },
       {
