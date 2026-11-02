@@ -20,6 +20,7 @@ export type SheetRow = {
   from: string;
   to: string;
   quantity: string;
+  areaM2?: string;
   days: string;
   hours: string;
   units: string;
@@ -165,7 +166,7 @@ export function sheetRows(
           reference:
             rental?.source.reference ??
             day!.reports.map((r) => r.source.reference).join(", "),
-          mode: source.includedIn
+          mode: rental?.billingAreaM2 ? "M²/D" : source.includedIn
             ? "Incluido"
             : source.commercial?.mode?.unit
               ? { DAY: "D", HOUR: "HR", METER: "M" }[
@@ -187,6 +188,7 @@ export function sheetRows(
             rental?.commercialInterval?.to ??
             input.period.through,
           quantity: first?.quantity ?? (rental ? "—" : "1"),
+          areaM2: first?.billableAreaM2,
           days:
             (rental?.metering ?? rental?.cutting)
               ? "—"
@@ -276,7 +278,7 @@ export function applySheetChanges(
     if (key === "days") {
       if (
         row.kind !== "rentals" ||
-        row.mode !== "D" ||
+        !["D", "M²/D"].includes(row.mode) ||
         row.supplement ||
         row.status !== "Calculado"
       )

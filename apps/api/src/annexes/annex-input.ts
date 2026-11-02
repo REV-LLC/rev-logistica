@@ -134,6 +134,7 @@ const baseRentalSchema = z
     deliveredOn: date,
     billingStartsOn: date.optional(),
     quantity: decimal,
+    billingAreaM2: decimal.optional(),
     source,
     returns: z
       .array(z.object({ date, quantity: decimal, source }).strict())

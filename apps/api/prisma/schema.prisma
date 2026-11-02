@@ -299,6 +299,11 @@ enum SkuControlType {
   SERIAL
 }
 
+enum RentalQuantityBasis {
+  UNIT
+  AREA_M2
+}
+
 enum ChargeType {
   DAY
   HOUR
@@ -744,6 +749,7 @@ model Sku {
   closedLengthMeters   Decimal?   @db.Decimal(10, 2)
   extendedLengthMeters Decimal?   @db.Decimal(10, 2)
   areaM2               Decimal?
+  rentalQuantityBasis  RentalQuantityBasis @default(UNIT)
   unitWeight           Decimal?
   active               Boolean    @default(true)
   isImplement          Boolean    @default(false)

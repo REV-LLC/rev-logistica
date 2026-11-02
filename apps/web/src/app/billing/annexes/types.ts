@@ -75,6 +75,7 @@ export type Source = {
   origin: "INVENTORY" | "PHYSICAL" | "DIGITAL";
 };
 export type Rental = {
+  billingAreaM2?: string;
   modeArchive?: {
     metering?: Metering;
     dayAdjustments?: Rental["dayAdjustments"];
@@ -164,6 +165,7 @@ export type Result = {
     label: string;
     date: string;
     quantity: string;
+    billableAreaM2?: string;
     reportedHours: string | null;
     billableUnits: string;
     basePrice: string;
