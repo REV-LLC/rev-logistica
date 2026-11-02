@@ -1,3 +1,4 @@
+import { applyCustomerPricing, customerPricingKey } from './annex-customer-pricing';
 import { applyCatalogQuantityBasis } from './annex-quantity-basis';
 import { dailyRentals } from './annex-daily-scope';
 import { applyDailyBillingStart, billingStartRuleSchema, billingStartSettingKey } from './annex-billing-start';
@@ -51,6 +52,7 @@ export class AnnexSourceService {
           where: { id: customerWorksiteId },
           select: {
             id: true,
+            customerId: true,
             customer: { select: { name: true } },
             worksite: { select: { name: true } },
           },
@@ -143,7 +145,7 @@ export class AnnexSourceService {
           message:
             'Tarifas tomadas del catálogo actual. Revisa su vigencia para este período',
         });
-        const [saved, setting] = await Promise.all([
+        const [saved, setting, customerPricing] = await Promise.all([
           tx.annexDraft.findMany({
             where: {
               customerWorksiteId,
@@ -155,6 +157,7 @@ export class AnnexSourceService {
           tx.appSetting.findUnique({
             where: { key: worksiteMinimumKey(customerWorksiteId) },
           }),
+          tx.appSetting.findUnique({ where: { key: customerPricingKey(site.customerId) } }),
         ]);
         const history = saved.flatMap((draft) => {
           const parsed = annexInputSchema.safeParse(draft.revisions[0]?.input);
@@ -334,6 +337,7 @@ export class AnnexSourceService {
         policy.minimumDaysBySku = resolved.days;
         policy.minimumHoursByAsset = resolved.hours;
         applyCatalogQuantityBasis(source.rentals, rows.flatMap(row => row.sku ? [row.sku] : []));
+        applyCustomerPricing(source.rentals, customerPricing?.value);
         const input: AnnexInput = {
           period,
           policy,
