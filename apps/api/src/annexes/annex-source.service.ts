@@ -1,7 +1,14 @@
-import { applyCustomerPricing, customerPricingKey } from './annex-customer-pricing';
+import {
+  applyCustomerPricing,
+  customerPricingKey,
+} from './annex-customer-pricing';
 import { applyCatalogQuantityBasis } from './annex-quantity-basis';
 import { dailyRentals } from './annex-daily-scope';
-import { applyDailyBillingStart, billingStartRuleSchema, billingStartSettingKey } from './annex-billing-start';
+import {
+  applyDailyBillingStart,
+  billingStartRuleSchema,
+  billingStartSettingKey,
+} from './annex-billing-start';
 import {
   BadRequestException,
   Injectable,
@@ -59,8 +66,25 @@ export class AnnexSourceService {
         });
         if (!site) throw new NotFoundException('Obra no encontrada');
         const end = new Date(Date.parse(`${through}T05:00:00Z`) + 86400000);
+        // A later physical return can carry an earlier billing cut. Load the
+        // intervening ledger too so FIFO remains physical and quantities stay intact.
+        const laterReturn = await tx.stockLedger.aggregate({
+          where: {
+            customerWorksiteId,
+            effectiveAt: { gte: end },
+            document: {
+              status: 'CONFIRMED',
+              type: 'RETURN',
+              items: { some: { billingCutoffDate: { lt: end } } },
+            },
+          },
+          _max: { effectiveAt: true },
+        });
+        const physicalEnd = laterReturn._max.effectiveAt
+          ? new Date(laterReturn._max.effectiveAt.getTime() + 1)
+          : end;
         const rows = await tx.stockLedger.findMany({
-          where: { customerWorksiteId, effectiveAt: { lt: end } },
+          where: { customerWorksiteId, effectiveAt: { lt: physicalEnd } },
           orderBy: [
             { effectiveAt: 'asc' },
             { appendOrder: { sort: 'asc', nulls: 'first' } },
@@ -106,7 +130,25 @@ export class AnnexSourceService {
                 },
               },
             },
-            document: { select: { status: true, consecutive: true, type: true, docDate: true, notes: true } },
+            document: {
+              select: {
+                id: true,
+                status: true,
+                consecutive: true,
+                type: true,
+                docDate: true,
+                notes: true,
+                items: {
+                  select: {
+                    skuId: true,
+                    assetId: true,
+                    condition: true,
+                    quantity: true,
+                    billingCutoffDate: true,
+                  },
+                },
+              },
+            },
           },
         });
         if (rows.length > 50000)
@@ -123,22 +165,6 @@ export class AnnexSourceService {
           })),
           period,
         );
-        const cuts = await tx.documentItem.count({
-          where: {
-            document: { customerWorksiteId, docDate: { lt: end } },
-            OR: [
-              { billingCutoffDate: { not: null } },
-              { returnedAt: { not: null } },
-            ],
-          },
-        });
-        if (cuts)
-          source.issues.push({
-            code: 'COMMERCIAL_CUTS',
-            reference: site.id,
-            message:
-              'Hay cortes/devoluciones por ítem que requieren conciliarse con el historial físico antes de cobrar',
-          });
         source.issues.push({
           code: 'CATALOG_PRICE_REVIEW',
           reference: site.id,
@@ -157,7 +183,9 @@ export class AnnexSourceService {
           tx.appSetting.findUnique({
             where: { key: worksiteMinimumKey(customerWorksiteId) },
           }),
-          tx.appSetting.findUnique({ where: { key: customerPricingKey(site.customerId) } }),
+          tx.appSetting.findUnique({
+            where: { key: customerPricingKey(site.customerId) },
+          }),
         ]);
         const history = saved.flatMap((draft) => {
           const parsed = annexInputSchema.safeParse(draft.revisions[0]?.input);
@@ -190,16 +218,26 @@ export class AnnexSourceService {
         source.rentals = daily.rentals;
         const documentsByMovement = new Map(rows.map((row) => [row.id, row]));
         for (const rental of source.rentals) {
-          for (const sourceRef of [rental.source, ...rental.returns.map((item) => item.source)]) {
-            const movement = documentsByMovement.get(sourceRef.reference);
+          for (const sourceRef of [
+            rental.source,
+            ...rental.returns.map((item) => item.source),
+          ]) {
+            const movement = documentsByMovement.get(
+              sourceRef.reference.split(':cutoff:')[0],
+            );
             if (movement?.refDocumentId && movement.document) {
               sourceRef.documentId = movement.refDocumentId;
-              sourceRef.documentNumber = movement.document.consecutive ?? undefined;
+              sourceRef.documentNumber =
+                movement.document.consecutive ?? undefined;
             }
           }
         }
-        const billingSetting = await tx.appSetting.findUnique({ where: { key: billingStartSettingKey } });
-        const billingRule = billingSetting ? billingStartRuleSchema.parse(billingSetting.value) : null;
+        const billingSetting = await tx.appSetting.findUnique({
+          where: { key: billingStartSettingKey },
+        });
+        const billingRule = billingSetting
+          ? billingStartRuleSchema.parse(billingSetting.value)
+          : null;
         applyDailyBillingStart(source.rentals, rows, billingRule);
         source.machineDays = [];
         if (daily.excluded)
@@ -241,8 +279,12 @@ export class AnnexSourceService {
             reconstructed = false;
           for (
             let time = Date.parse(
-              [rental.commercialInterval?.from ?? rental.deliveredOn, rental.billingStartsOn ?? rental.deliveredOn].sort().at(-1) +
-                'T00:00:00Z',
+              [
+                rental.commercialInterval?.from ?? rental.deliveredOn,
+                rental.billingStartsOn ?? rental.deliveredOn,
+              ]
+                .sort()
+                .at(-1) + 'T00:00:00Z',
             );
             time < Date.parse(from + 'T00:00:00Z');
             time += 86400000
@@ -336,7 +378,10 @@ export class AnnexSourceService {
         }
         policy.minimumDaysBySku = resolved.days;
         policy.minimumHoursByAsset = resolved.hours;
-        applyCatalogQuantityBasis(source.rentals, rows.flatMap(row => row.sku ? [row.sku] : []));
+        applyCatalogQuantityBasis(
+          source.rentals,
+          rows.flatMap((row) => (row.sku ? [row.sku] : [])),
+        );
         applyCustomerPricing(source.rentals, customerPricing?.value);
         const input: AnnexInput = {
           period,

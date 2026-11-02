@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { inventoryBusinessDay } from '../inventory/business-date-ledger-order';
 import type { AnnexInput } from './annex-input';
+import { returnBillingSlices } from './annex-return-cutoffs';
 export type InventorySourceRow = {
   id: string;
   movementType: string;
@@ -15,7 +17,18 @@ export type InventorySourceRow = {
     price: Prisma.Decimal | null;
     chargeType: string;
   } | null;
-  document: { status: string; consecutive: string | null } | null;
+  document: {
+    status: string;
+    consecutive: string | null;
+    id?: string;
+    items?: Array<{
+      skuId: string | null;
+      assetId: string | null;
+      condition: string | null;
+      quantity: Prisma.Decimal | null;
+      billingCutoffDate: Date | null;
+    }>;
+  } | null;
 };
 export type SourceIssue = { code: string; reference: string; message: string };
 export function inventoryToAnnex(
@@ -26,6 +39,7 @@ export function inventoryToAnnex(
   const rentals: AnnexInput['rentals'] = [];
   const machineDays: AnnexInput['machineDays'] = [];
   const groups = new Map<string, InventorySourceRow[]>();
+  const billingSlices = returnBillingSlices(rows);
   for (const row of rows) {
     const key = `${row.assetId ?? row.sku?.id ?? row.id}:${row.ownerWarehouseId}`;
     const group = groups.get(key) ?? [];
@@ -93,23 +107,41 @@ export function inventoryToAnnex(
           },
         });
       } else {
-        let remaining = delta.negated();
-        for (const lot of lots) {
-          if (remaining.isZero()) break;
-          const amount = Prisma.Decimal.min(lot.remaining, remaining);
-          if (amount.isZero()) continue;
-          lot.remaining = lot.remaining.minus(amount);
-          remaining = remaining.minus(amount);
-          lot.input.returns.push({
-            date,
-            quantity: amount.toString(),
-            source: { reference: row.id, origin: 'INVENTORY' },
-          });
+        const slices = billingSlices.get(row.id) ?? [
+          { quantity: delta.negated(), cutoff: undefined },
+        ];
+        for (const slice of slices) {
+          let remaining = slice.quantity;
+          for (const lot of lots) {
+            if (remaining.isZero()) break;
+            const amount = Prisma.Decimal.min(lot.remaining, remaining);
+            if (amount.isZero()) continue;
+            if (slice.cutoff && slice.cutoff < lot.input.deliveredOn) {
+              throw new BadRequestException(
+                `El corte de ${row.document?.consecutive ?? 'la devolución'} para ${sku.name} es anterior a la entrega`,
+              );
+            }
+            lot.remaining = lot.remaining.minus(amount);
+            remaining = remaining.minus(amount);
+            lot.input.returns.push({
+              date,
+              ...(slice.cutoff ? { billingCutoffDate: slice.cutoff } : {}),
+              quantity: amount.toString(),
+              source: {
+                reference:
+                  slices.length > 1
+                    ? `${row.id}:cutoff:${slice.cutoff}`
+                    : row.id,
+                origin: 'INVENTORY',
+              },
+            });
+          }
+          if (remaining.gt(0)) {
+            problem = 'Devolución sin saldo de origen suficiente';
+            break;
+          }
         }
-        if (remaining.gt(0)) {
-          problem = 'Devolución sin saldo de origen suficiente';
-          break;
-        }
+        if (problem) break;
       }
     }
     if (problem) {
@@ -124,7 +156,11 @@ export function inventoryToAnnex(
     if (!sku) continue;
     const relevant = lots.filter(
       (l) =>
-        l.remaining.gt(0) || l.input.returns.some((r) => r.date >= period.from),
+        l.input.deliveredOn <= period.through &&
+        (l.remaining.gt(0) ||
+          l.input.returns.some(
+            (r) => (r.billingCutoffDate ?? r.date) >= period.from,
+          )),
     );
     if (!relevant.length) continue;
     if (sku.price?.lt(0)) {
@@ -178,7 +214,10 @@ export function inventoryToAnnex(
         if (!lot.input.assetId) continue;
         const end = lot.remaining.gt(0)
           ? period.through
-          : lot.input.returns[lot.input.returns.length - 1].date;
+          : lot.input.returns
+              .map((r) => r.billingCutoffDate ?? r.date)
+              .sort()
+              .at(-1)!;
         for (
           let time = Date.parse(
             `${lot.input.deliveredOn < period.from ? period.from : lot.input.deliveredOn}T00:00:00Z`,
