@@ -137,6 +137,41 @@ export class AnnexSourceService {
           },
         });
         if (!site) throw new NotFoundException('Obra no encontrada');
+        const currentDraft = live
+          ? await tx.annexDraft.findFirst({
+              where: {
+                customerWorksiteId,
+                periodFrom: new Date(`${from}T00:00:00Z`),
+                periodTo: new Date(`${to}T00:00:00Z`),
+              },
+              include: {
+                revisions: { orderBy: { revision: 'desc' }, take: 1 },
+              },
+            })
+          : null;
+        const invoiced = currentDraft?.revisions[0];
+        if (invoiced?.invoiceNumber) {
+          const storedInput = annexInputSchema.safeParse(invoiced.input);
+          if (!storedInput.success)
+            throw new BadRequestException(
+              'No se pudo leer la versión facturada del anexo',
+            );
+          return {
+            site,
+            input: storedInput.data,
+            result: invoiced.result as unknown as ReturnType<
+              typeof calculateAnnex
+            >,
+            sourceIssues: invoiced.sourceIssues as unknown as ReturnType<
+              typeof inventoryToAnnex
+            >['issues'],
+            ledgerCount: 0,
+            revision: currentDraft!.revision,
+            invoiceNumber: invoiced.invoiceNumber,
+            draftId: currentDraft!.id,
+            consultedAt: new Date().toISOString(),
+          };
+        }
         const end = new Date(Date.parse(`${through}T05:00:00Z`) + 86400000);
         // A later physical return can carry an earlier billing cut. Load the
         // intervening ledger too so FIFO remains physical and quantities stay intact.
@@ -243,37 +278,24 @@ export class AnnexSourceService {
           message:
             'Tarifas tomadas del catálogo actual. Revisa su vigencia para este período',
         });
-        const [saved, setting, customerPricing, currentDraft] =
-          await Promise.all([
-            tx.annexDraft.findMany({
-              where: {
-                customerWorksiteId,
-                periodTo: { lt: new Date(`${from}T00:00:00Z`) },
-              },
-              orderBy: { periodFrom: 'desc' },
-              include: {
-                revisions: { orderBy: { revision: 'desc' }, take: 1 },
-              },
-            }),
-            tx.appSetting.findUnique({
-              where: { key: worksiteMinimumKey(customerWorksiteId) },
-            }),
-            tx.appSetting.findUnique({
-              where: { key: customerPricingKey(site.customerId) },
-            }),
-            live
-              ? tx.annexDraft.findFirst({
-                  where: {
-                    customerWorksiteId,
-                    periodFrom: new Date(`${from}T00:00:00Z`),
-                    periodTo: new Date(`${to}T00:00:00Z`),
-                  },
-                  include: {
-                    revisions: { orderBy: { revision: 'desc' }, take: 1 },
-                  },
-                })
-              : null,
-          ]);
+        const [saved, setting, customerPricing] = await Promise.all([
+          tx.annexDraft.findMany({
+            where: {
+              customerWorksiteId,
+              periodTo: { lt: new Date(`${from}T00:00:00Z`) },
+            },
+            orderBy: { periodFrom: 'desc' },
+            include: {
+              revisions: { orderBy: { revision: 'desc' }, take: 1 },
+            },
+          }),
+          tx.appSetting.findUnique({
+            where: { key: worksiteMinimumKey(customerWorksiteId) },
+          }),
+          tx.appSetting.findUnique({
+            where: { key: customerPricingKey(site.customerId) },
+          }),
+        ]);
         const history = saved.flatMap((draft) => {
           const parsed = annexInputSchema.safeParse(draft.revisions[0]?.input);
           return parsed.success
@@ -497,6 +519,9 @@ export class AnnexSourceService {
           ...(live
             ? {
                 revision: currentDraft?.revision ?? 0,
+                invoiceNumber:
+                  currentDraft?.revisions[0]?.invoiceNumber ?? null,
+                draftId: currentDraft?.id ?? null,
                 consultedAt: new Date().toISOString(),
               }
             : {}),

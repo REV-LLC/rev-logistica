@@ -91,3 +91,19 @@ it('saves detailed transport and a linked replacement without dropping their met
   expect(saved.revisions[0].result.summary.subtotal).toBe('222.35');
   expect(saved.revisions[0].result.tax.total).toBe('264.60');
 });
+
+it('stores an uppercase invoice tag on the exact saved revision',async()=>{
+ const {service,tx}=setup();
+ const saved=await service.save({...payload,invoiceNumber:'  fe-3862 a  '},'author');
+ expect(saved.revisions[0].invoiceNumber).toBe('FE-3862 A');
+ expect(tx.annexDraftRevision.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({invoiceNumber:'FE-3862 A',createdBy:'author'})}));
+});
+it('preserves existing invoice metadata for older clients and allows explicit removal in a new revision',async()=>{
+ const {service,tx}=setup();
+ tx.annexDraft.findMany.mockResolvedValue([{id:'draft',periodFrom:new Date('2026-09-16'),periodTo:new Date('2026-09-30'),revision:1,revisions:[{invoiceNumber:'FE-100'}]}]);
+ expect((await service.save({...payload,expectedRevision:1},'author')).revisions[0].invoiceNumber).toBe('FE-100');
+ expect((await service.save({...payload,expectedRevision:1,invoiceNumber:null},'author')).revisions[0].invoiceNumber).toBeNull();
+});
+it.each(['', '   ', 'a'.repeat(81), 'FE\n100'])('rejects invalid invoice tags before creating a revision',async invoiceNumber=>{
+ const {service,tx}=setup();await expect(service.save({...payload,invoiceNumber},'author')).rejects.toThrow();expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
+});

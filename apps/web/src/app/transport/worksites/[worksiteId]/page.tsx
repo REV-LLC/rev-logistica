@@ -28,6 +28,7 @@ import {
 import PageHeaderCard from '@/components/dashboard/PageHeaderCard';
 import StatCard from '@/components/dashboard/StatCard';
 import { api, ApiError } from '@/lib/api';
+import { annexBrowseUrl } from '@/lib/annex-url';
 import InventoryDisplay from '@/components/InventoryDisplay';
 import LedgerTable, { LedgerItem } from '@/components/LedgerTable';
 import WorksiteBalancePdfButton from '@/components/worksites/WorksiteBalancePdfButton';
@@ -292,6 +293,7 @@ export default function ObraDetailPage() {
                       Acciones rapidas
                     </Text>
                     <Stack gap={6} mt={6}>
+                      <Button size="xs" variant="light" component={Link} href={annexBrowseUrl({customer:worksite.customer.id,worksite:worksite.id})}>Ver anexos</Button>
                       <Button
                         size="xs"
                         variant="light"

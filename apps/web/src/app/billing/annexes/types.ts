@@ -197,6 +197,7 @@ export type Result = {
 };
 export type SourceIssue = { code: string; reference: string; message: string };
 export type Draft = {
+  customerWorksiteId: string;
   id: string;
   revision: number;
   periodFrom: string;
@@ -205,6 +206,8 @@ export type Draft = {
     input: AnnexInput;
     result: Result;
     sourceIssues?: SourceIssue[];
+    invoiceNumber?: string | null;
+    createdAt?: string;
     through: string;
     reason: string;
   }[];

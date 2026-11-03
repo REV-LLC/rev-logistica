@@ -24,3 +24,14 @@ test('new October monthly cut replaces the hidden November boundary in either ed
  }
  assert.throws(()=>readAnnexLocation('?from=2026-10-01&to=2026-11-01&through=2026-11-01',period));
 });
+
+test('folder links prefilter a customer or worksite without generating an annex',async()=>{
+ const {annexBrowseUrl}=await import('./annex-url.ts');
+ assert.deepEqual(readAnnexLocation(annexBrowseUrl({customer:'client',worksite:'site'}).split('?')[1],period),{customer:'client',worksite:'site',period,browse:true});
+ assert.equal(readAnnexLocation(annexBrowseUrl({customer:'client'}).split('?')[1],period).worksite,null);
+ const url=annexBrowseUrl({customer:'client',worksite:'site',draft:'saved',period});
+ assert.equal(readAnnexLocation(url.split('?')[1],period).draft,'saved');
+ assert.throws(()=>readAnnexLocation('?draft=saved',period));
+ const folder=annexLocationUrl('http://localhost/billing/annexes?draft=old',{customer:'client',worksite:'site',period,browse:true});
+ assert.equal(new URL(folder,'http://localhost').searchParams.has('draft'),false);
+});

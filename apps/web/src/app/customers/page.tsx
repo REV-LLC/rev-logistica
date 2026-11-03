@@ -41,6 +41,7 @@ import { useClientTableData } from '@/components/tables/useClientTableData';
 import TableRowActions from '@/components/TableRowActions';
 import WorksiteAddressField from '@/components/worksites/WorksiteAddressField';
 import { api, ApiError } from '@/lib/api';
+import { annexBrowseUrl } from '@/lib/annex-url';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import glass from '../employees/directory.module.css';
 import tableGlass from '@/components/tables/GlassDataTable.module.css';
@@ -206,13 +207,14 @@ function CustomerDetails({
           <Stack gap="xs">
             {worksites.map((entry) => (
               <Paper key={entry.id} withBorder radius="md" p="sm">
-                <Group justify="space-between" align="center" gap="sm" wrap="nowrap">
+                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
                   <div style={{ minWidth: 0 }}>
                     <Text fw={700} size="sm">{entry.worksite.name}</Text>
                     <Text size="xs" c="dimmed" lineClamp={2}>
                       {entry.alias ?? 'Sin alias'} · {entry.worksite.address ?? 'Sin dirección'}
                     </Text>
                   </div>
+                  <Button component={Link} size="xs" variant="light" href={annexBrowseUrl({customer:customer.id,worksite:entry.id})}>Anexos</Button>
                   <Button
                     component={Link}
                     href={`/transport/worksites/${entry.id}`}
@@ -231,6 +233,7 @@ function CustomerDetails({
 
       {onEdit ? (
         <Group className="mobile-actions">
+          <Button component={Link} variant="light" href={annexBrowseUrl({customer:customer.id})}>Ver anexos</Button>
           {onCreateUpdateLink ? (
             <Button variant="default" leftSection={<IconLink size={16} />} onClick={() => onCreateUpdateLink(customer)}>
               Copiar enlace de actualización
