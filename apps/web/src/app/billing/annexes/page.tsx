@@ -35,8 +35,9 @@ import {
 } from "@tabler/icons-react";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import { annexReviewNotices } from "@/lib/annex-review";
-import { annexAmounts, annexTransportTotals } from "@/lib/annex-totals";
+import { annexAmounts } from "@/lib/annex-totals";
 import AnnexSheet from "./annex-sheet";
+import AnnexTransport from "./annex-transport";
 import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
 import type { AnnexExport } from "@/lib/annex-pdf";
@@ -916,36 +917,7 @@ export default function AnnexesPage() {
               }}
             />
             {extrasSupported ? <>
-            <Paper withBorder p="sm">
-              <Title order={4} mb="xs">Transporte</Title>
-              <Table.ScrollContainer minWidth={500}>
-                <Table aria-label="Transportes del anexo">
-                  <Table.Thead><Table.Tr><Table.Th>Trayecto</Table.Th><Table.Th>Cantidad</Table.Th><Table.Th>Precio unitario</Table.Th><Table.Th ta="right">Total</Table.Th></Table.Tr></Table.Thead>
-                  <Table.Tbody>
-                    {([['outbound', 'Ida'], ['return', 'Regreso']] as const).map(([key, label]) => {
-                      const charge = input.transport?.[key] ?? { quantity: '0', unitPrice: '0' };
-                      const update = (field: 'quantity' | 'unitPrice', value: string | number) => {
-                        const numeric = Number(value === '' ? 0 : value);
-                        if (!Number.isFinite(numeric) || numeric < 0) return;
-                        const normalized = field === 'quantity' ? String(Math.min(9999, Math.trunc(numeric))) : Math.min(9999999999.99, numeric).toFixed(2);
-                        edit({ ...input, transport: {
-                          outbound: input.transport?.outbound ?? { quantity: '0', unitPrice: '0' },
-                          return: input.transport?.return ?? { quantity: '0', unitPrice: '0' },
-                          [key]: { ...charge, [field]: normalized },
-                        } });
-                      };
-                      return <Table.Tr key={key}>
-                        <Table.Td>{label}</Table.Td>
-                        <Table.Td>{editing ? <NumberInput aria-label={`Cantidad transporte ${label.toLowerCase()}`} size="xs" value={Number(charge.quantity)} min={0} max={9999} allowDecimal={false} allowNegative={false} disabled={busy} onChange={(value) => update('quantity', value)} /> : charge.quantity}</Table.Td>
-                        <Table.Td>{editing ? <NumberInput aria-label={`Precio transporte ${label.toLowerCase()}`} size="xs" value={Number(charge.unitPrice)} min={0} max={9999999999.99} decimalScale={2} allowNegative={false} disabled={busy} onChange={(value) => update('unitPrice', value)} /> : money(charge.unitPrice)}</Table.Td>
-                        <Table.Td ta="right">{money(annexTransportTotals(input.transport)[key])}</Table.Td>
-                      </Table.Tr>;
-                    })}
-                  </Table.Tbody>
-                  <Table.Tfoot><Table.Tr><Table.Th colSpan={3}>Total transporte</Table.Th><Table.Th ta="right">{money(annexTransportTotals(input.transport).total)}</Table.Th></Table.Tr></Table.Tfoot>
-                </Table>
-              </Table.ScrollContainer>
-            </Paper>
+            <AnnexTransport input={input} editing={editing} busy={busy} onChange={edit} />
             <Textarea label="Observaciones" description="Este texto aparecerá en la impresión y en el PDF del anexo."
               placeholder="Escribe las observaciones del anexo" autosize minRows={3} maxRows={10} maxLength={5000}
               value={input.observations ?? ''} readOnly={!editing} disabled={busy}

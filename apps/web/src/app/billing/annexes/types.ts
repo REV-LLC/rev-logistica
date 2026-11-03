@@ -134,15 +134,21 @@ export type MachineDay = {
   waiverReason?: string;
 };
 export type TransportCharge = { quantity: string; unitPrice: string };
+export type TransportRow = TransportCharge & {
+  id: string;
+  direction: "outbound" | "return";
+  description: string;
+};
 export type AdditionalCharge = TransportCharge & {
   id: string;
+  skuId?: string;
   type: "REPAIR" | "REPLACEMENT";
   description: string;
 };
 export type AnnexInput = {
   additionalCharges?: AdditionalCharge[];
   observations?: string;
-  transport?: { outbound: TransportCharge; return: TransportCharge };
+  transport?: { outbound: TransportCharge; return: TransportCharge; rows?: TransportRow[] };
   period: { from: string; to: string; through: string };
   policy: {
     version: string;

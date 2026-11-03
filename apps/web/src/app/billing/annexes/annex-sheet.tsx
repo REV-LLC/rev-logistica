@@ -1,5 +1,6 @@
 "use client";
 import glassStyles from "./annex-glass.module.css";
+import AnnexChargeEditor from "./annex-charge-editor";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -176,11 +177,6 @@ export default function AnnexSheet({
     indices?: number[];
   } | null>(null);
   const [charge, setCharge] = useState<AdditionalCharge | null>(null);
-  const normalizeChargeNumber = (value: string | number, price = false) => {
-    const number = Number(value);
-    const bounded = Math.max(0, Math.min(price ? 9999999999.99 : 9999, Number.isFinite(number) ? number : 0));
-    return price ? bounded.toFixed(2) : String(Math.floor(bounded));
-  };
   const [rememberMinimum, setRememberMinimum] = useState(false);
   const [byMeters, setByMeters] = useState(false);
   const [meterPrice, setMeterPrice] = useState("0");
@@ -860,24 +856,16 @@ export default function AnnexSheet({
   return (
     <>
       {expanded ? createPortal(sheet, document.body) : sheet}
-      <Modal opened={charge !== null} onClose={() => setCharge(null)} title="Reparación o reposición" classNames={{ content: glassStyles.theme }}>
-        {charge && <Stack>
-          <Select label="Tipo de cobro" data={[{value: 'REPAIR', label: 'Reparación'}, {value: 'REPLACEMENT', label: 'Reposición'}]} value={charge.type} allowDeselect={false} onChange={value => setCharge({...charge, type: value as AdditionalCharge['type']})} />
-          <TextInput label="Descripción" value={charge.description} maxLength={300} onChange={event => setCharge({...charge, description: event.currentTarget.value})} />
-          <NumberInput label="Cantidad" value={Number(charge.quantity)} min={0} max={9999} allowDecimal={false} allowNegative={false} onChange={value => setCharge({...charge, quantity: normalizeChargeNumber(value)})} />
-          <NumberInput label="Precio unitario" value={Number(charge.unitPrice)} min={0} max={9999999999.99} decimalScale={2} allowNegative={false} onChange={value => setCharge({...charge, unitPrice: normalizeChargeNumber(value, true)})} />
-          <Text>Total: {money(manualSheetRows({...input, additionalCharges: [charge]})[0].net)}</Text>
-          <Group justify="space-between">
-            {input.additionalCharges?.some(row => row.id === charge.id) && <Button color="red" variant="subtle" disabled={busy || !editing} onClick={() => {onChange({...input, additionalCharges: input.additionalCharges!.filter(row => row.id !== charge.id)}); setCharge(null);}}>Quitar fila</Button>}
-            <Button disabled={busy || !editing || !charge.description.trim() || (input.additionalCharges?.length === 200 && !input.additionalCharges.some(row => row.id === charge.id))} onClick={() => {
-              const rows = input.additionalCharges ?? [];
-              const next = {...charge, description: charge.description.trim()};
-              onChange({...input, additionalCharges: rows.some(row => row.id === charge.id) ? rows.map(row => row.id === charge.id ? next : row) : [...rows, next]});
-              setCharge(null);
-            }}>Aplicar al anexo</Button>
-          </Group>
-        </Stack>}
-      </Modal>
+      {charge && <AnnexChargeEditor key={charge.id} initial={charge}
+        disabled={busy || !editing || ((input.additionalCharges?.length ?? 0) >= 200 && !input.additionalCharges?.some(row => row.id === charge.id))}
+        removable={!!input.additionalCharges?.some(row => row.id === charge.id)}
+        onClose={() => setCharge(null)}
+        onRemove={() => {onChange({...input, additionalCharges: input.additionalCharges!.filter(row => row.id !== charge.id)}); setCharge(null);}}
+        onApply={next => {
+          const rows = input.additionalCharges ?? [];
+          onChange({...input, additionalCharges: rows.some(row => row.id === next.id) ? rows.map(row => row.id === next.id ? next : row) : [...rows, next]});
+          setCharge(null);
+        }} />}
       <Modal
         classNames={{ content: glassStyles.theme }}
         opened={machine !== null}
