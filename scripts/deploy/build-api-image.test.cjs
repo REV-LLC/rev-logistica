@@ -5,7 +5,71 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
+const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
+
+test('a reset metadata connection is retried with fresh connections before private-package validation', async () => {
+  const requests = [];
+  const sleeps = [];
+  const metadata = { visibility: 'private', repository: { id: 42 } };
+  const result = await readPackageMetadata('test-only-token', {
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (requests.length === 1) throw new TypeError('ECONNRESET with sensitive transport details');
+      return new Response(JSON.stringify(metadata), { status: 200 });
+    },
+    sleep: async (ms) => sleeps.push(ms),
+  });
+  privatePackage(result, '42');
+  assert.deepEqual(result, metadata);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(sleeps, [250]);
+  for (const { url, options } of requests) {
+    assert.equal(url, 'https://api.github.com/orgs/REV-LLC/packages/container/rev-logistica-api');
+    assert.equal(options.headers.connection, 'close');
+    assert.equal(options.redirect, 'error');
+    assert(options.signal instanceof AbortSignal);
+  }
+});
+
+test('network exhaustion and repeated server failures fail closed within the retry budget without raw errors', async (t) => {
+  const timeouts = [];
+  t.mock.method(AbortSignal, 'timeout', (ms) => { timeouts.push(ms); return new AbortController().signal; });
+  for (const fail of [async () => { throw new Error('test-only-token transport detail'); }, async () => new Response('server failure', { status: 503 })]) {
+    let attempts = 0;
+    const sleeps = [];
+    await assert.rejects(readPackageMetadata('test-only-token', { fetchImpl: async () => { attempts++; return fail(); }, sleep: async (ms) => sleeps.push(ms) }), (error) => {
+      assert.equal(error.message, 'Package visibility could not be checked after 3 attempts; refusing to publish');
+      return true;
+    });
+    assert.equal(attempts, 3);
+    assert.deepEqual(sleeps, [250, 500]);
+  }
+  assert.deepEqual(timeouts, Array(6).fill(6000));
+  assert(3 * 6000 + 250 + 500 < 20_000);
+});
+
+test('authorization failures never retry and a missing package still returns null', async () => {
+  for (const status of [401, 403, 404]) {
+    let attempts = 0;
+    const read = readPackageMetadata('test-only-token', { fetchImpl: async () => { attempts++; return new Response('', { status }); }, sleep: async () => assert.fail('Authorization and 404 must not retry') });
+    if (status === 404) assert.equal(await read, null);
+    else await assert.rejects(read, new RegExp(`\\(${status}\\); refusing to publish`));
+    assert.equal(attempts, 1);
+  }
+});
+
+test('retried metadata never bypasses the public-package publication guard', async () => {
+  let attempts = 0;
+  const metadata = await readPackageMetadata('test-only-token', { fetchImpl: async () => ++attempts === 1 ? new Response('', { status: 502 }) : new Response(JSON.stringify({ visibility: 'public', repository: { id: 42 } }), { status: 200 }), sleep: async () => {} });
+  assert.throws(() => privatePackage(metadata, '42'), /must be private/);
+  assert.equal(attempts, 2);
+});
+
+test('malformed metadata fails closed immediately without exposing response data', async () => {
+  let attempts = 0;
+  await assert.rejects(readPackageMetadata('test-only-token', { fetchImpl: async () => { attempts++; return new Response('test-only-token invalid JSON', { status: 200 }); }, sleep: async () => assert.fail('Malformed metadata must not retry') }), { message: 'Package metadata response is unreadable; refusing to publish' });
+  assert.equal(attempts, 1);
+});
 
 test('binds the unique build tag to reviewed source and current workflow run', () => {
   const proof = { repository: 'REV-LLC/rev-logistica', sourceSha: 'a'.repeat(40), sourceTree: 'b'.repeat(40), sourceBuildRunId: '123' };
