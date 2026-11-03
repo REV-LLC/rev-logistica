@@ -34,9 +34,28 @@ test('price replaces percent, keeps base and preserves report and inventory sour
  assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'80',adjustmentReason:'Acuerdo'});
  assert.deepEqual(next.rentals[0].source,input.rentals[0].source);
 });
+test('a higher final price raises only this annex base and keeps its override for later discounts',()=>{
+ const source=structuredClone(input), before=JSON.stringify(source);
+ const row=sheetRows(source,result)[0];
+ const raised=applySheetChanges(source,[{row,key:'effectivePrice',value:'150,25'}]);
+ assert.deepEqual(raised.rentals[0].pricing,{basePrice:'150.25',basePriceOverride:'150.25',effectivePrice:'150.25',adjustmentSource:'MANUAL'});
+ assert.equal(JSON.stringify(source),before);
+ assert.deepEqual(raised.machineDays,source.machineDays);
+ const discounted=applySheetChanges(raised,[{row,key:'discountPercent',value:'10'}]);
+ assert.deepEqual(discounted.rentals[0].pricing,{basePrice:'150.25',basePriceOverride:'150.25',discountPercent:'10',adjustmentSource:'MANUAL'});
+ const lower=applySheetChanges(raised,[{row,key:'effectivePrice',value:'120'}]);
+ assert.equal(lower.rentals[0].pricing.basePrice,'150.25');
+ assert.equal(lower.rentals[0].pricing.basePriceOverride,'150.25');
+ const higher=applySheetChanges(lower,[{row,key:'effectivePrice',value:'200'}]);
+ assert.equal(higher.rentals[0].pricing.basePrice,'200');
+ assert.equal(higher.rentals[0].pricing.basePriceOverride,'200');
+ source.rentals[0].pricing.basePrice='0';
+ const fromZero=applySheetChanges(source,[{row,key:'effectivePrice',value:'0.01'}]);
+ assert.equal(fromZero.rentals[0].pricing.basePrice,'0.01');
+});
 test('protected cells, invalid numbers and conflicting segments reject whole batch',()=>{
  const rows=sheetRows(input,result), before=JSON.stringify(input);
- for (const [key,value] of [['basePrice','99'],['discountPercent','101'],['effectivePrice','101'],['effectivePrice','=1+2'],['discountPercent','-1']]) {
+ for (const [key,value] of [['basePrice','99'],['discountPercent','101'],['effectivePrice','-1'],['effectivePrice','=1+2'],['discountPercent','-1']]) {
    assert.throws(()=>applySheetChanges(input,[{row:rows[0],key:'discountPercent',value:'10'},{row:rows[1],key,value}],'Acuerdo'));
  }
  assert.equal(JSON.stringify(input),before);
@@ -160,6 +179,9 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
  const edited=applySheetChanges(source,[{row:rows[0],key:'discountPercent',value:'15'},{row:rows[0],key:'days',value:'2'}]);
  assert.deepEqual(edited.rentals.map(r=>r.pricing.discountPercent),['15','15']);
  assert.deepEqual(edited.rentals.map(r=>r.dayAdjustments[0].quantity),['1','2']);
+ const raised=applySheetChanges(source,[{row:rows[0],key:'effectivePrice',value:'125.50'}]);
+ assert.deepEqual(raised.rentals.map(r=>r.pricing.basePriceOverride),['125.50','125.50']);
+ assert.deepEqual(raised.rentals.map(r=>r.pricing.effectivePrice),['125.50','125.50']);
  assert.equal(JSON.stringify(source),before);
  const different=sheetRows(source,result);different[1].effectivePrice='90';
  assert.equal(groupMachineRows(source,different,false).length,2);
