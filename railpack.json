@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "steps": {
+    "install": {
+      "deployOutputs": [],
+      "commands": [
+        {
+          "path": "/app/node_modules/.bin"
+        },
+        {
+          "src": "package.json",
+          "dest": "package.json"
+        },
+        {
+          "src": "package-lock.json",
+          "dest": "package-lock.json"
+        },
+        {
+          "src": "apps/api/package.json",
+          "dest": "apps/api/package.json"
+        },
+        {
+          "src": "apps/web/package.json",
+          "dest": "apps/web/package.json"
+        },
+        "npm ci --workspace apps/api --include-workspace-root=false --include=dev --no-audit --no-fund"
+      ]
+    }
+  }
+}
