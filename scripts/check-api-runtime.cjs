@@ -58,7 +58,7 @@ async function checkRuntime() {
   });
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   // Exercise the ESM PDF engine and its packaged WASM after dev packages go away.
-  const { PdfDocument } = await import(apiRequire.resolve('ts-pdf-edit'));
+  const { PdfDocument } = await import('ts-pdf-edit');
   const document = await PdfDocument.open(new Uint8Array(pdf));
   try {
     assert.equal(document.pageCount, 1);
