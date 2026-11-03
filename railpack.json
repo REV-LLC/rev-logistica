@@ -25,6 +25,45 @@
         },
         "npm ci --workspace apps/api --include-workspace-root=false --include=dev --no-audit --no-fund"
       ]
+    },
+    "runtime": {
+      "inputs": [
+        {
+          "step": "build"
+        }
+      ],
+      "commands": [
+        "npm prune --workspace apps/api --include-workspace-root=false --omit=dev --ignore-scripts --no-audit --no-fund",
+        "node scripts/check-api-runtime.cjs"
+      ],
+      "deployOutputs": []
     }
+  },
+  "deploy": {
+    "inputs": [
+      {
+        "step": "packages:mise",
+        "include": [
+          "/mise/shims",
+          "/mise/installs",
+          "/usr/local/bin/mise",
+          "/etc/mise/config.toml",
+          "/root/.local/state/mise"
+        ]
+      },
+      {
+        "step": "runtime",
+        "include": [
+          "/app/node_modules",
+          "/app/package.json",
+          "/app/package-lock.json",
+          "/app/apps/api/package.json",
+          "/app/apps/api/dist",
+          "/app/apps/api/prisma",
+          "/app/apps/api/prisma.config.ts",
+          "/app/apps/api/assets"
+        ]
+      }
+    ]
   }
 }
