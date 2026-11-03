@@ -1,3 +1,9 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import {
+  AnnexSharingService,
+  type AnnexPdfUpload,
+} from './annex-sharing.service';
 import { assertDailyAnnex } from './annex-daily-scope';
 import { selectAnnexMode } from './annex-mode-selection';
 import { AnnexSourceService } from './annex-source.service';
@@ -12,6 +18,8 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -26,7 +34,28 @@ export class AnnexesController {
   constructor(
     private readonly annexes: AnnexesService,
     private readonly source: AnnexSourceService,
+    private readonly sharing: AnnexSharingService,
   ) {}
+  @Get('worksites/:id/recipients')
+  @Header('Cache-Control', 'no-store')
+  recipients(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.sharing.recipients(id);
+  }
+  @Post('worksites/:id/send')
+  @UseInterceptors(
+    FileInterceptor('pdf', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 6 },
+    }),
+  )
+  send(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+    @UploadedFile() pdf: AnnexPdfUpload | undefined,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.sharing.send(id, body, pdf, req.user.sub);
+  }
   @Get('charge-options')
   @Header('Cache-Control', 'no-store')
   chargeOptions(@Query('customerWorksiteId', new ParseUUIDPipe()) id: string) {

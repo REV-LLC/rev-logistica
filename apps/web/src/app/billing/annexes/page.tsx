@@ -1185,7 +1185,7 @@ export default function AnnexesPage() {
             ) : null}
           </>
         ) : null}
-        <AnnexSend data={sendData} onClose={() => setSendData(null)} />
+        <AnnexSend data={sendData} customerWorksiteId={site} onClose={() => setSendData(null)} />
         <Modal
           classNames={{ content: glassStyles.theme }}
           opened={report !== null}
