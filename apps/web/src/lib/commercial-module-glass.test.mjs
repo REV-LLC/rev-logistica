@@ -25,10 +25,11 @@ test('price type switches keep a local loader after the first load, including an
   assert.match(prices, /aria-label="Buscar referencias"/);
 });
 
-test('price query and CSV retain owned-equipment scope and the selected control type', () => {
-  assert.match(prices, /new URLSearchParams\(\{ controlType: targetControlType, ownOnly: 'true' \}\)/);
+test('price query and CSV include provider references and retain the selected control type', () => {
+  assert.match(prices, /new URLSearchParams\(\{ controlType: targetControlType \}\)/);
+  assert.doesNotMatch(prices, /ownOnly/);
   assert.match(prices, /const rows = filteredItems\.map/);
-  assert.match(prices, /lista-precios-propios-\$\{controlType\.toLowerCase\(\)\}\.csv/);
+  assert.match(prices, /lista-precios-\$\{controlType\.toLowerCase\(\)\}\.csv/);
   assert.match(prices, /toNumber\(item\.price\) \?\? ''/);
   assert.match(prices, /text\.replace\(\/"\/g, '""'\)/);
   assert.equal((prices.match(/variant="glass"/g) ?? []).length, 2);
