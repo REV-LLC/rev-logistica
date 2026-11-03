@@ -1,4 +1,5 @@
 "use client";
+import { openDatePicker } from "@/lib/date-picker";
 import glassStyles from "./annex-glass.module.css";
 import AnnexChargeEditor from "./annex-charge-editor";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
@@ -913,6 +914,7 @@ export default function AnnexSheet({
                   <TextInput
                     label="Fecha"
                     type="date"
+                    onClick={(event) => openDatePicker(event.currentTarget)}
                     value={report.date}
                     readOnly={report.date < input.period.from}
                     onChange={(e) => {

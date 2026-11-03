@@ -1,3 +1,7 @@
+import { MailModule } from '../mail/mail.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { IdempotencyService } from '../common/idempotency.service';
+import { AnnexSharingService } from './annex-sharing.service';
 import { AnnexSourceService } from './annex-source.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
@@ -5,8 +9,13 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AnnexesController } from './annexes.controller';
 import { AnnexesService } from './annexes.service';
 @Module({
-  imports: [AuthModule, PrismaModule],
+  imports: [AuthModule, PrismaModule, MailModule, NotificationsModule],
   controllers: [AnnexesController],
-  providers: [AnnexesService, AnnexSourceService],
+  providers: [
+    AnnexesService,
+    AnnexSourceService,
+    AnnexSharingService,
+    IdempotencyService,
+  ],
 })
 export class AnnexesModule {}
