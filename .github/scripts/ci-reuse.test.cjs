@@ -18,7 +18,7 @@ const context = {
   runId: 200, eventName: 'pull_request', refName: '319/merge',
 };
 const requiredSteps = {
-  'Build API and Web': ['Test CI reuse gate', 'Install dependencies',
+  'Build API and Web': ['Test CI reuse gate', 'Test API image promotion guards', 'Install dependencies',
     'Generate Prisma client', 'Build API', 'Test PDF editor text fidelity',
     'Test API inventory and document regressions', 'Build Web',
     'Prune API runtime dependencies', 'Verify API runtime'],
