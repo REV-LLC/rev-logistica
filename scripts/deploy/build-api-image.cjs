@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process');
 
 const REPOSITORY = 'REV-LLC/rev-logistica';
 const IMAGE_REPOSITORY = 'ghcr.io/rev-llc/rev-logistica-api';
+const CACHE_REF = `${IMAGE_REPOSITORY}:buildcache-v2`;
 const PACKAGE_ROUTE = '/orgs/REV-LLC/packages/container/rev-logistica-api';
 const RAILPACK_VERSION = '0.43.0';
 // Official release asset + checksums.txt, verified against GitHub's asset digest:
@@ -16,6 +17,16 @@ const BUILD_VALUES = Object.freeze({
   DATABASE_URL: 'postgresql://build:build@127.0.0.1:1/build',
   RAILPACK_NODE_VERSION: '22.23.4',
 });
+const API_CONTEXT_PATHS = Object.freeze([
+  'package.json',
+  'package-lock.json',
+  '.npmrc',
+  'railpack.json',
+  'railway.json',
+  'apps/api',
+  'apps/web/package.json',
+  'scripts/check-api-runtime.cjs',
+]);
 
 function validateProof(proof, environment) {
   assert.equal(proof.repository, REPOSITORY);
@@ -92,7 +103,7 @@ function prepareArguments(directory, workDirectory) {
 function buildArguments(directory, workDirectory, imageTag) {
   const secretHash = crypto.createHash('sha256').update(Object.entries(BUILD_VALUES).map(([name, value]) => `${name}=${value}`).join('\n')).digest('hex');
   const secrets = Object.keys(BUILD_VALUES).flatMap((name) => ['--secret', `id=${name},env=${name}`]);
-  return ['buildx', 'build', '--platform', 'linux/amd64', '--build-arg', `BUILDKIT_SYNTAX=${FRONTEND}`, '--build-arg', `secrets-hash=${secretHash}`, '--build-arg', 'cache-key=rev-logistica-api', ...secrets, '--cache-from', `type=registry,ref=${IMAGE_REPOSITORY}:buildcache`, '--cache-to', 'type=inline', '--provenance=false', '--load', '--tag', imageTag, '--metadata-file', path.join(workDirectory, 'build-metadata.json'), '--file', path.join(workDirectory, 'railpack-plan.json'), directory];
+  return ['buildx', 'build', '--platform', 'linux/amd64', '--build-arg', `BUILDKIT_SYNTAX=${FRONTEND}`, '--build-arg', `secrets-hash=${secretHash}`, '--build-arg', 'cache-key=rev-logistica-api', ...secrets, '--cache-from', `type=registry,ref=${CACHE_REF}`, '--cache-from', `type=registry,ref=${IMAGE_REPOSITORY}:buildcache`, '--cache-to', `type=registry,ref=${CACHE_REF},mode=max`, '--provenance=false', '--load', '--tag', imageTag, '--metadata-file', path.join(workDirectory, 'build-metadata.json'), '--file', path.join(workDirectory, 'railpack-plan.json'), directory];
 }
 
 function createBuildEnvironment(environment) {
@@ -119,6 +130,9 @@ function verifyPublishedImage(registry, manifest, localImage) {
 
 function exportReleaseContext(repositoryDirectory, workDirectory, sourceSha) {
   assert(/^[0-9a-f]{40}$/.test(sourceSha), 'A complete release commit is required');
+  const tracked = execFileSync('git', ['ls-tree', '-r', '--name-only', '-z', sourceSha, '--', ...API_CONTEXT_PATHS], { cwd: repositoryDirectory, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }).split('\0').filter(Boolean);
+  const files = tracked.filter((file) => !file.split('/').some((part) => part === '.env' || part.startsWith('.env.')));
+  assert(files.length > 0, 'The reviewed tree has no API build context');
   const context = path.join(workDirectory, 'context');
   fs.mkdirSync(context);
   const archive = path.join(workDirectory, 'source.tar');
@@ -126,7 +140,7 @@ function exportReleaseContext(repositoryDirectory, workDirectory, sourceSha) {
   // buffering limit, checkout metadata, untracked .env, caches or runner logs.
   const output = fs.openSync(archive, 'wx', 0o600);
   try {
-    execFileSync('git', ['archive', '--format=tar', sourceSha], { cwd: repositoryDirectory, stdio: ['ignore', output, 'inherit'] });
+    execFileSync('git', ['archive', '--format=tar', sourceSha, '--', ...files.map((file) => `:(literal)${file}`)], { cwd: repositoryDirectory, stdio: ['ignore', output, 'inherit'] });
   } finally {
     fs.closeSync(output);
   }
@@ -179,9 +193,8 @@ async function main() {
   const imageRef = verifyDigest(registry.digest);
   const manifest = JSON.parse(execFileSync('docker', ['buildx', 'imagetools', 'inspect', imageRef, '--raw'], { encoding: 'utf8', env: buildEnvironment }));
   verifyPublishedImage(registry, manifest, imageDetails);
-  // Mutable tag is only a build cache; staging and production never consume it.
-  run('docker', ['tag', imageTag, `${IMAGE_REPOSITORY}:buildcache`]);
-  run('docker', ['push', `${IMAGE_REPOSITORY}:buildcache`]);
+  // BuildKit exported the separate max-mode cache; never replace it with the
+  // final runtime image, which omits the intermediate install/build layers.
   const evidence = { ...proof, imageRef, imageRepository: IMAGE_REPOSITORY, imageTag, platform: 'linux/amd64', railpackVersion: RAILPACK_VERSION, frontend: FRONTEND, railpackArchiveSha256: RAILPACK_SHA256, buildStartedAt, publishedAt: new Date().toISOString(), runtimeSmoke: 'passed', packageVisibility: 'private', localImageBytes: imageDetails.Size };
   fs.writeFileSync(environment.BUILD_EVIDENCE_PATH, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
   if (environment.GITHUB_OUTPUT) fs.appendFileSync(environment.GITHUB_OUTPUT, `image-ref=${imageRef}\nimage-repository=${IMAGE_REPOSITORY}\n`);
@@ -189,5 +202,5 @@ async function main() {
   console.log(`Published private immutable image ${imageRef}`);
 }
 
-module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext };
+module.exports = { IMAGE_REPOSITORY, CACHE_REF, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, API_CONTEXT_PATHS, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });

@@ -150,7 +150,7 @@ async function validateRelease(c, github) {
       ci.conclusion !== 'success' || cleanPath(ci.path) !== '.github/workflows/ci.yml') fail('Release CI evidence is not valid');
   if (delivery?.id !== c.buildRunId || delivery.repository?.id !== c.repositoryId ||
       delivery.head_repository?.id !== c.repositoryId || !SHA.test(delivery.head_sha || '') ||
-      delivery.event !== 'workflow_dispatch' ||
+      !['push', 'workflow_dispatch'].includes(delivery.event) ||
       cleanPath(delivery.path) !== '.github/workflows/api-image-promotion.yml' ||
       !['in_progress', 'completed'].includes(delivery.status)) fail('Untrusted delivery run');
   if (delivery.head_sha !== c.sourceSha || delivery.head_branch !== 'production') fail('Delivery must target production HEAD');

@@ -1,37 +1,17 @@
-name: Dispatch verified API delivery
+name: Retired API delivery listener
 
+# Automatic delivery starts directly on production pushes, concurrently with CI.
+# Keep this former listener manual-only so CI completion cannot dispatch a
+# second image build. Manual retries use the API image promotion workflow.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [production]
+  workflow_dispatch:
 
-# workflow_run runs on the default branch. This secret-free listener dispatches
-# the actual delivery on production so environment branch restrictions stay
-# production-only. The delivery verifies the source SHA and CI independently.
 permissions:
   contents: read
-  actions: write
 
 jobs:
-  dispatch:
-    if: >-
-      vars.API_IMAGE_PROMOTION_ENABLED == 'true' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'production' &&
-      github.event.workflow_run.head_repository.id == github.repository_id
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-      - name: Dispatch guarded production workflow
-        run: node .github/scripts/dispatch-api-image.cjs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          API_IMAGE_PROMOTION_ENABLED: ${{ vars.API_IMAGE_PROMOTION_ENABLED }}
+      - name: Show current delivery entry point
+        run: echo "Automatic delivery starts on production push. Use API image promotion for a manual retry."
