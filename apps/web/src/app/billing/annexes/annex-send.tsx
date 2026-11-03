@@ -1,5 +1,5 @@
 "use client";
-import glassStyles from "./annex-glass.module.css";
+import styles from "./annex-send.module.css";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Autocomplete, Button, Modal, Stack, Text } from "@mantine/core";
 import {
@@ -143,7 +143,8 @@ export default function AnnexSend({
   }
   return (
     <Modal
-      classNames={{ content: glassStyles.theme }}
+      classNames={{ content: styles.content, header: styles.header, body: styles.body }}
+      overlayProps={{ backgroundOpacity: 0.3, blur: 2 }}
       opened={!!data}
       onClose={() => {
         if (!sendingRef.current) onClose();
