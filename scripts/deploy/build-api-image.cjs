@@ -32,6 +32,39 @@ function privatePackage(metadata, repositoryId) {
   assert.equal(String(metadata.repository?.id), String(repositoryId), 'The package must be connected to the expected repository');
 }
 
+async function readPackageMetadata(token, { fetchImpl = fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response;
+    try {
+      response = await fetchImpl(`https://api.github.com${PACKAGE_ROUTE}`, {
+        redirect: 'error',
+        // Blocking Docker commands can outlive an idle pooled connection.
+        headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', connection: 'close' },
+        signal: AbortSignal.timeout(6000),
+      });
+    } catch {
+      // Do not expose raw transport errors or request headers.
+    }
+    if (response?.status === 404) {
+      await response.body?.cancel().catch(() => {});
+      return null;
+    }
+    if (response && !(response.status >= 500 && response.status <= 599)) {
+      assert(response.ok, `Package visibility could not be checked (${response.status}); refusing to publish`);
+      try {
+        return await response.json();
+      } catch (error) {
+        // An interrupted or unreadable response cannot authorize publication.
+        if (error instanceof SyntaxError) throw new Error('Package metadata response is unreadable; refusing to publish');
+      }
+    } else {
+      await response?.body?.cancel().catch(() => {});
+    }
+    if (attempt < 2) await sleep(250 * (attempt + 1));
+  }
+  throw new Error('Package visibility could not be checked after 3 attempts; refusing to publish');
+}
+
 async function ensurePrivatePackage({ github, run, workDirectory, repositoryId, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   let metadata = await github(PACKAGE_ROUTE);
   if (!metadata) {
@@ -122,16 +155,7 @@ async function main() {
   // Build children receive no GitHub/Railway tokens or deployment configuration.
   const buildEnvironment = createBuildEnvironment(environment);
   const run = (binary, args, options = {}) => execFileSync(binary, args, { stdio: 'inherit', env: buildEnvironment, ...options });
-  const github = async (route) => {
-    const response = await fetch(`https://api.github.com${route}`, {
-      redirect: 'error',
-      headers: { authorization: `Bearer ${environment.GH_TOKEN}`, accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (response.status === 404) return null;
-    assert(response.ok, `Package visibility could not be checked (${response.status}); refusing to publish`);
-    return response.json();
-  };
+  const github = () => readPackageMetadata(environment.GH_TOKEN);
   await ensurePrivatePackage({ github, run, workDirectory, repositoryId: environment.GITHUB_REPOSITORY_ID });
 
   const archive = path.join(workDirectory, 'railpack.tar.gz');
@@ -165,5 +189,5 @@ async function main() {
   console.log(`Published private immutable image ${imageRef}`);
 }
 
-module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext };
+module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
