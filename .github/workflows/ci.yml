@@ -38,6 +38,9 @@ jobs:
       - name: Test CI reuse gate
         run: node --test .github/scripts/ci-reuse.test.cjs
 
+      - name: Test API image promotion guards
+        run: node --test .github/scripts/api-image-source.test.cjs scripts/deploy/build-api-image.test.cjs scripts/deploy/promote-api-image.test.cjs scripts/deploy/recover-api-image.test.cjs
+
       - name: Determine reusable validation
         id: reuse
         continue-on-error: true

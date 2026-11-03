@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "description": "Read-only baseline before immutable-image promotion; staging and production built concurrently from GitHub source",
+  "releaseSha": "0480504044161d55b04cdf3d35777903350b1b5e",
+  "releasePr": "https://github.com/REV-LLC/rev-logistica/pull/323",
+  "ciRunId": 41702371952,
+  "ci": {
+    "createdAt": "2026-11-03T19:20:37Z",
+    "completedAt": "2026-11-03T19:21:12Z",
+    "elapsedSeconds": 35.0,
+    "jobs": [
+      {
+        "completedAt": "2026-11-03T19:21:08Z",
+        "conclusion": "success",
+        "name": "Web request regressions",
+        "startedAt": "2026-11-03T19:20:41Z",
+        "status": "completed",
+        "elapsedSeconds": 27.0
+      },
+      {
+        "completedAt": "2026-11-03T19:21:12Z",
+        "conclusion": "success",
+        "name": "Build API and Web",
+        "startedAt": "2026-11-03T19:20:41Z",
+        "status": "completed",
+        "elapsedSeconds": 31.0
+      }
+    ]
+  },
+  "api": {
+    "production": {
+      "deploymentId": "ecb27a86-7cab-4938-a53f-5c902dfd5760",
+      "createdAt": "2026-11-03T19:20:37.231Z",
+      "firstBuildLogAt": "2026-11-03T19:21:23.062891517Z",
+      "imagePushCompletedAt": "2026-11-03T19:22:40.787485076Z",
+      "healthyAt": "2026-11-03T19:23:00.457290587Z",
+      "imageBytes": 363017602,
+      "deploymentCreatedToHealthySeconds": 143.22629,
+      "ciCreatedToHealthySeconds": 143.45729,
+      "ciCompletedToHealthySeconds": 108.45729,
+      "firstBuildLogToHealthySeconds": 97.394399,
+      "createdToFirstBuildLogSeconds": 45.831891,
+      "ciCompletedToFirstBuildLogSeconds": 11.062891,
+      "buildBeforeImagePushCompleteSeconds": 77.724594,
+      "imagePushCompleteToHealthySeconds": 19.669805,
+      "imagePushSeconds": 14.795,
+      "steps": [
+        {
+          "command": "npm ci --workspace apps/api --include-workspace-root=false --include=dev --no-audit --no-fund",
+          "startedAt": "2026-11-03T19:21:36.886520799Z",
+          "completedAt": "2026-11-03T19:21:49.92596815Z",
+          "seconds": 13.039448
+        },
+        {
+          "command": "npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build",
+          "startedAt": "2026-11-03T19:21:50.42437739Z",
+          "completedAt": "2026-11-03T19:22:08.493154445Z",
+          "seconds": 18.068777
+        },
+        {
+          "command": "npm prune --workspace apps/api --include-workspace-root=false --omit=dev --ignore-scripts --no-audit --no-fund",
+          "startedAt": "2026-11-03T19:22:08.49446413Z",
+          "completedAt": "2026-11-03T19:22:10.023274917Z",
+          "seconds": 1.52881
+        },
+        {
+          "command": "node scripts/check-api-runtime.cjs",
+          "startedAt": "2026-11-03T19:22:10.024530812Z",
+          "completedAt": "2026-11-03T19:22:11.383455864Z",
+          "seconds": 1.358925
+        },
+        {
+          "command": "exporting to docker image format",
+          "startedAt": "2026-11-03T19:22:18.63087254Z",
+          "completedAt": "2026-11-03T19:22:25.691592558Z",
+          "seconds": 7.06072
+        }
+      ]
+    },
+    "staging": {
+      "deploymentId": "c9103543-d8bf-4ec7-9474-903752be016f",
+      "createdAt": "2026-11-03T19:20:37.231Z",
+      "firstBuildLogAt": "2026-11-03T19:21:24.730965773Z",
+      "imagePushCompletedAt": "2026-11-03T19:24:16.229173421Z",
+      "healthyAt": "2026-11-03T19:24:39.945694147Z",
+      "imageBytes": 363056918,
+      "deploymentCreatedToHealthySeconds": 242.714694,
+      "ciCreatedToHealthySeconds": 242.945694,
+      "ciCompletedToHealthySeconds": 207.945694,
+      "firstBuildLogToHealthySeconds": 195.214729,
+      "createdToFirstBuildLogSeconds": 47.499965,
+      "ciCompletedToFirstBuildLogSeconds": 12.730965,
+      "buildBeforeImagePushCompleteSeconds": 171.498208,
+      "imagePushCompleteToHealthySeconds": 23.716521,
+      "imagePushSeconds": 9.235,
+      "steps": [
+        {
+          "command": "npm ci --workspace apps/api --include-workspace-root=false --include=dev --no-audit --no-fund",
+          "startedAt": "2026-11-03T19:21:48.583918272Z",
+          "completedAt": "2026-11-03T19:22:28.43072739Z",
+          "seconds": 39.846809
+        },
+        {
+          "command": "npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build",
+          "startedAt": "2026-11-03T19:22:34.539385939Z",
+          "completedAt": "2026-11-03T19:23:07.494014537Z",
+          "seconds": 32.954629
+        },
+        {
+          "command": "npm prune --workspace apps/api --include-workspace-root=false --omit=dev --ignore-scripts --no-audit --no-fund",
+          "startedAt": "2026-11-03T19:23:07.506468852Z",
+          "completedAt": "2026-11-03T19:23:10.166694195Z",
+          "seconds": 2.660226
+        },
+        {
+          "command": "node scripts/check-api-runtime.cjs",
+          "startedAt": "2026-11-03T19:23:10.172292227Z",
+          "completedAt": "2026-11-03T19:23:12.93897531Z",
+          "seconds": 2.766683
+        },
+        {
+          "command": "exporting to docker image format",
+          "startedAt": "2026-11-03T19:23:51.495737283Z",
+          "completedAt": "2026-11-03T19:24:06.646819037Z",
+          "seconds": 15.151082
+        }
+      ]
+    }
+  },
+  "comparisonRules": [
+    "Measure total pipeline time from the same starting event (CI created or deployment created), not only the final production promotion.",
+    "The prior staging and production builds ran concurrently; their elapsed times cannot be added.",
+    "A first GHCR bootstrap/cold image build and newly changed CI workflow running full validation is not a fair steady-state comparison against a warm 35-second reused CI baseline.",
+    "Recommend a second controlled workflow_dispatch for the same production SHA and successful source CI run, after the first delivery is verified, to measure private-registry cache and promotion overhead without another code change.",
+    "A cached-image promotion still must execute pre-deploy migrations, image pull, API startup and health checks.",
+    "Sequential staging verification can add elapsed time versus the prior concurrent production path even while avoiding a second build; report build resource savings separately from user-visible release time."
+  ]
+}

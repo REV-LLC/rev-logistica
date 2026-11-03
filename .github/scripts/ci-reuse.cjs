@@ -11,6 +11,7 @@ const MAX_CANDIDATES = 20;
 const SHA = /^[0-9a-f]{40}$/;
 const VALIDATION_STEPS = {
   'Build API and Web': [
+    'Test API image promotion guards',
     'Install dependencies',
     'Generate Prisma client',
     'Build API',
