@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  # A manual run always performs the full suite, regardless of prior evidence.
+  workflow_dispatch:
   pull_request:
     branches:
       - dev
@@ -10,6 +12,10 @@ on:
       - dev
       - production
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   build:
     name: Build API and Web
@@ -18,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -25,36 +33,94 @@ jobs:
           node-version: 20
           cache: npm
 
+      # This job always produces a fresh check for the current SHA. Identical
+      # trees can reuse only a recent successful push that ran every validation.
+      - name: Test CI reuse gate
+        run: node --test .github/scripts/ci-reuse.test.cjs
+
+      - name: Determine reusable validation
+        id: reuse
+        continue-on-error: true
+        run: node .github/scripts/ci-reuse.cjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Reuse previous validation
+        if: steps.reuse.outcome == 'success' && steps.reuse.outputs.reuse == 'true'
+        run: echo "Identical Git tree validated by run $SOURCE_RUN_ID. See the job summary."
+        env:
+          SOURCE_RUN_ID: ${{ steps.reuse.outputs.source-run-id }}
+
       - name: Install dependencies
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm ci
 
       - name: Generate Prisma client
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/api exec prisma generate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rev_logistica
 
       - name: Build API
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/api run build
 
       - name: Test PDF editor text fidelity
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: node --test apps/api/test/pdf-editor.test.mjs
 
       - name: Test API inventory and document regressions
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/api test -- --runInBand
 
       - name: Build Web
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/web run build
+
+      - name: Prune API runtime dependencies
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
+        run: npm prune --workspace apps/api --include-workspace-root=false --omit=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Verify API runtime
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
+        run: node scripts/check-api-runtime.cjs
 
   web-regressions:
     name: Web request regressions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           # These existing node:test files import TypeScript source directly.
           # Keep the application build runtime unchanged in the build job.
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm --workspace apps/web test
+
+      - name: Test CI reuse gate
+        run: node --test .github/scripts/ci-reuse.test.cjs
+
+      - name: Determine reusable validation
+        id: reuse
+        continue-on-error: true
+        run: node .github/scripts/ci-reuse.cjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Reuse previous validation
+        if: steps.reuse.outcome == 'success' && steps.reuse.outputs.reuse == 'true'
+        run: echo "Identical Git tree validated by run $SOURCE_RUN_ID. See the job summary."
+        env:
+          SOURCE_RUN_ID: ${{ steps.reuse.outputs.source-run-id }}
+
+      - name: Install web dependencies
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
+        run: npm ci --workspace apps/web --include-workspace-root=false --include=dev --no-audit --no-fund
+
+      - name: Test web regressions
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
+        run: npm --workspace apps/web test
