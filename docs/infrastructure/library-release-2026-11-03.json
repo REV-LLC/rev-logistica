@@ -1,0 +1,39 @@
+{
+  "releasePR": "https://github.com/REV-LLC/rev-logistica/pull/323",
+  "commit": "0480504044161d55b04cdf3d35777903350b1b5e",
+  "ciRunId": 41702371952,
+  "scope": "Biblioteca y archivado de anexos publicados primero por instrucción explícita del usuario; migración nullable invoiceNumber.",
+  "productionFrontend": {
+    "url": "https://app.revcontractorsllc.com/billing/annexes?browse=1",
+    "deploymentId": "dpl_Bbqj8mkruJQvmTPjmpCsMigHkC5F",
+    "status": "READY",
+    "uiVerified": "Cliente → obra → anexo existente; sin modificar datos; consola sin errores"
+  },
+  "api": {
+    "production": {
+      "deploymentId": "ecb27a86-7cab-4938-a53f-5c902dfd5760",
+      "status": "SUCCESS",
+      "createdAt": "2026-11-03T19:20:37.231Z",
+      "healthyAt": "2026-11-03T19:23:00.457290587Z",
+      "totalThroughHealthSeconds": 143.22629,
+      "imageDigest": "sha256:4d3984aa377700b0c3e207ab3d05d53229431fb373837e3b815bff526f18c5d8"
+    },
+    "staging": {
+      "deploymentId": "c9103543-d8bf-4ec7-9474-903752be016f",
+      "status": "SUCCESS",
+      "createdAt": "2026-11-03T19:20:37.231Z",
+      "healthyAt": null,
+      "totalThroughHealthSeconds": null,
+      "imageDigest": "sha256:fd93537191de2b15df73d2464c9543a2906c81bdece46b8546e19c1b5f162151"
+    }
+  },
+  "stagingFrontend": {
+    "deploymentId": "82f868af-3cd3-4dd7-b728-31a21f43d902",
+    "commit": "0480504044161d55b04cdf3d35777903350b1b5e",
+    "createdAt": "2026-11-03T19:27:00.380Z",
+    "readyAt": "2026-11-03T19:28:51.545891524Z",
+    "elapsedSeconds": 111.166,
+    "installSeconds": 11.3,
+    "buildSeconds": 27.805
+  }
+}
