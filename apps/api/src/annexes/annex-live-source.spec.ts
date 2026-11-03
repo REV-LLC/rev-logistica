@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { calculateAnnex } from './annex-engine';
 import { AnnexSourceService } from './annex-source.service';
 import type { AnnexInput } from './annex-input';
 jest.mock('./annex-commercial-source', () => ({
@@ -37,13 +38,34 @@ it('reads the database on each consultation and applies saved rules without crea
     transport: {
       outbound: { quantity: '0', unitPrice: '0' },
       rows: [
-        {id:'delivery-trip',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'30'},
-        {id:'return-trip',direction:'return',description:'Recogida',quantity:'1',unitPrice:'20'},
+        {
+          id: 'delivery-trip',
+          direction: 'outbound',
+          description: 'Entrega',
+          quantity: '1',
+          unitPrice: '30',
+        },
+        {
+          id: 'return-trip',
+          direction: 'return',
+          description: 'Recogida',
+          quantity: '1',
+          unitPrice: '20',
+        },
       ],
       return: { quantity: '0', unitPrice: '0' },
     },
   };
-  saved.additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'0.01'}];
+  saved.additionalCharges = [
+    {
+      id: 'replacement',
+      skuId: 'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',
+      type: 'REPLACEMENT',
+      description: 'Pieza perdida',
+      quantity: '2',
+      unitPrice: '0.01',
+    },
+  ];
   const sku = {
     id: 'sku',
     name: 'Equipo',
@@ -102,4 +124,63 @@ it('reads the database on each consultation and applies saved rules without crea
   expect(tx.stockLedger.findMany).toHaveBeenCalledTimes(2);
   expect(tx.annexDraft.findFirst).toHaveBeenCalledTimes(2);
   expect(saved.rentals[0].quantity).toBe('1');
+});
+
+it('opens an invoiced snapshot without reading or recalculating current inventory', async () => {
+  const input: AnnexInput = {
+    period: { from: '2026-11-01', to: '2026-11-15', through: '2026-11-03' },
+    policy: {
+      version: 'test',
+      vatPercent: 19,
+      includeReturnDay: true,
+      excludedWeekdays: [],
+      excludeHolidays: false,
+      holidays: [],
+      holidayCalendarConfirmed: true,
+      minimumHoursPerMachineDay: '6',
+    },
+    rentals: [],
+    machineDays: [],
+    transport: {
+      outbound: { quantity: '1', unitPrice: '50000' },
+      return: { quantity: '0', unitPrice: '0' },
+    },
+  };
+  const savedResult = calculateAnnex(input);
+  const tx = {
+    customerWorksite: {
+      findUnique: async () => ({ id: 'site', customerId: 'customer' }),
+    },
+    annexDraft: {
+      findFirst: jest.fn(async () => ({
+        id: 'draft',
+        revision: 2,
+        revisions: [
+          {
+            input,
+            result: savedResult,
+            sourceIssues: [],
+            invoiceNumber: 'FE-3862',
+          },
+        ],
+      })),
+    },
+    stockLedger: { findMany: jest.fn(), aggregate: jest.fn() },
+  };
+  const service = new AnnexSourceService({
+    $transaction: (fn) => fn(tx),
+  } as never);
+  const result = await service.prepare(
+    '00000000-0000-4000-8000-000000000001',
+    '2026-11-01',
+    '2026-11-15',
+    '2026-11-10',
+    true,
+  );
+  expect(result.input.period.through).toBe('2026-11-03');
+  expect(result.result).toEqual(savedResult);
+  expect(result.invoiceNumber).toBe('FE-3862');
+  expect(result.draftId).toBe('draft');
+  expect(tx.stockLedger.findMany).not.toHaveBeenCalled();
+  expect(tx.stockLedger.aggregate).not.toHaveBeenCalled();
 });

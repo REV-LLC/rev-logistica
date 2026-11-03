@@ -430,3 +430,13 @@ siendo un anexo de alquiler sin IVA, no una factura.
 `policy.vatPercent` admite únicamente 0 o 19 y se conserva en el JSON de cada revisión. No requiere migración. Las preparaciones nuevas proponen 19; una revisión antigua sin el campo se interpreta como 0 para no añadir impuestos retroactivamente. Cambiarlo exige Editar y Guardar; cancelar restaura la selección anterior.
 
 El servidor calcula `result.tax` sobre `rentalNet`, redondeando el IVA a dos decimales una sola vez. Pantalla y PDF aplican el mismo cálculo en centavos, muestran el desglose y toman la selección del anexo. El PDF conserva su condición de documento para revisión, no factura fiscal. Las filas diarias son planas y los avisos de origen quedan agrupados detrás del icono de alerta. La interfaz y el PDF usan cristal oscuro.
+
+## Archivo de anexos y asociación de factura
+
+La página de anexos muestra un explorador de clientes, sus obras vinculadas y los anexos guardados por período. El listado carga únicamente los metadatos de la última revisión y pagina los anexos de cada obra; los datos completos se consultan al abrir el archivo. Las vistas de cliente y obra incluyen accesos al explorador filtrado (`browse=1`), sin generar un anexo al navegar.
+
+Al guardar se puede marcar «Facturado» e ingresar manualmente un número de factura de hasta 80 caracteres. El servidor normaliza el valor a mayúsculas y lo guarda en `AnnexDraftRevision.invoiceNumber`, junto con el autor y los valores de esa revisión. Las revisiones existentes conservan un valor nulo. Si un cliente anterior omite el campo, se mantiene la asociación previa; una eliminación explícita queda registrada como una nueva revisión sin factura.
+
+Los anexos facturados abren la versión guardada: la consulta devuelve su `input`, `result` y alertas sin leer el inventario ni recalcular importes. La impresión y el envío usan esos mismos valores. Los anexos sin factura conservan la consulta en vivo y las ediciones siguen sujetas al control de revisión concurrente existente.
+
+La migración `20261103210000_annex_invoice_number` agrega únicamente la columna nullable del número de factura. El despliegue de la API ejecuta las migraciones antes de arrancar.

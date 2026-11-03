@@ -36,6 +36,15 @@ export class AnnexesController {
     private readonly source: AnnexSourceService,
     private readonly sharing: AnnexSharingService,
   ) {}
+  @Get('library')
+  @Header('Cache-Control', 'no-store')
+  library(
+    @Query('customerId') customerId?: string,
+    @Query('customerWorksiteId') customerWorksiteId?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.annexes.library({ customerId, customerWorksiteId, cursor });
+  }
   @Get('worksites/:id/recipients')
   @Header('Cache-Control', 'no-store')
   recipients(@Param('id', new ParseUUIDPipe()) id: string) {

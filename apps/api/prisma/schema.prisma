@@ -1802,6 +1802,7 @@ model AnnexDraft {
 }
 
 model AnnexDraftRevision {
+  invoiceNumber String? @db.VarChar(80)
   id           String @id @default(uuid())
   draftId      String
   revision     Int

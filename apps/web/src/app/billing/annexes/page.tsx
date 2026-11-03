@@ -39,6 +39,7 @@ import { annexReviewNotices } from "@/lib/annex-review";
 import { annexAmounts } from "@/lib/annex-totals";
 import AnnexSheet from "./annex-sheet";
 import AnnexTransport from "./annex-transport";
+import AnnexLibrary from "./annex-library";
 import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
 import type { AnnexExport } from "@/lib/annex-pdf";
@@ -56,6 +57,8 @@ type Consultation = {
   result: Result;
   sourceIssues: SourceIssue[];
   revision: number;
+  invoiceNumber?: string | null;
+  draftId?: string | null;
 };
 function loadLive(
   site: string,
@@ -109,13 +112,24 @@ export default function AnnexesPage() {
   const [input, setInput] = useState<AnnexInput | null>(null),
     [result, setResult] = useState<Result | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(true);
+  const [invoiceNumber, setInvoiceNumber] = useState<string | null>(null);
+  const [openedDraft, setOpenedDraft] = useState<string | null>(null);
+  const [saveOpened, setSaveOpened] = useState(false);
+  const [markInvoiced, setMarkInvoiced] = useState(false);
+  const [invoiceTag, setInvoiceTag] = useState("");
+  function openSave() {
+    stopRefresh.current?.();
+    setMarkInvoiced(!!invoiceNumber);
+    setInvoiceTag(invoiceNumber ?? "");
+    setSaveOpened(true);
+  }
+
   const hasInput = input !== null;
   const historicalOnly = input !== null && !isDailyAnnex(input);
   useEffect(() => {
     setSelectorOpen(!hasInput);
   }, [hasInput]);
-  const [issues, setIssues] = useState<SourceIssue[]>([]),
-    [drafts, setDrafts] = useState<Draft[]>([]);
+  const [issues, setIssues] = useState<SourceIssue[]>([]);
   const [revision, setRevision] = useState(0),
     [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false),
@@ -134,6 +148,8 @@ export default function AnnexesPage() {
     setResult(data.result);
     setIssues(data.sourceIssues ?? []);
     setRevision(data.revision);
+    setInvoiceNumber(data.invoiceNumber ?? null);
+    setOpenedDraft(data.draftId ?? null);
     setLiveError(null);
   }, []);
   async function consult(targetPeriod = period) {
@@ -151,11 +167,13 @@ export default function AnnexesPage() {
   const liveEnabled =
     hasInput &&
     !historicalOnly &&
+    !invoiceNumber &&
     !editing &&
     !dirty &&
     !busy &&
     !printing &&
-    !sendData;
+    !sendData &&
+    !saveOpened;
   useEffect(() => {
     if (!liveEnabled || !site) return;
     const stop = startAnnexLiveRefresh({
@@ -251,36 +269,60 @@ export default function AnnexesPage() {
     setBusy(true);
     (async () => {
       try {
-        const [available, stored] = await Promise.all([
+        const [available, stored, exactSaved] = await Promise.all([
           api<typeof sites>(`/customers/${target.customer}/worksites`, {
             signal: controller.signal,
           }),
-          api<Draft[]>(
-            `/annexes/drafts?customerWorksiteId=${target.worksite}`,
-            { signal: controller.signal },
-          ),
+          target.browse || target.draft
+            ? Promise.resolve([] as Draft[])
+            : api<Draft[]>(
+                `/annexes/drafts?customerWorksiteId=${target.worksite}`,
+                { signal: controller.signal },
+              ),
+          target.draft
+            ? api<Draft>(
+                `/annexes/drafts/${encodeURIComponent(target.draft)}`,
+                { signal: controller.signal },
+              )
+            : Promise.resolve(undefined),
         ]);
         if (!available.some((s) => s.id === target.worksite))
           throw new Error(
             "La obra del enlace no pertenece al cliente o no está disponible.",
           );
-        const saved = stored.find(
-          (d) =>
-            d.periodFrom.slice(0, 10) === target.period.from &&
-            d.periodTo.slice(0, 10) === target.period.to,
-        );
+        if (target.browse && !target.draft) {
+          setSites(available);
+          return;
+        }
+        const saved = target.draft
+          ? exactSaved
+          : stored.find(
+              (d) =>
+                d.periodFrom.slice(0, 10) === target.period.from &&
+                d.periodTo.slice(0, 10) === target.period.to,
+            );
+        if (saved && saved.customerWorksiteId !== target.worksite)
+          throw new Error(
+            "El anexo del enlace no pertenece a la obra seleccionada.",
+          );
         const latest = saved?.revisions[0];
-        const historical = latest && !isDailyAnnex(latest.input);
+        const historical =
+          latest && (!isDailyAnnex(latest.input) || !!latest.invoiceNumber);
         const data = historical
           ? {
               ...latest,
               sourceIssues: latest.sourceIssues ?? [],
               revision: saved!.revision,
+              invoiceNumber: latest.invoiceNumber ?? null,
+              draftId: saved!.id,
             }
-          : await loadLive(target.worksite!, target.period, controller.signal);
+          : await loadLive(
+              target.worksite!,
+              latest?.input.period ?? target.period,
+              controller.signal,
+            );
         if (controller.signal.aborted) return;
         setSites(available);
-        setDrafts(stored);
         applyConsultation(data);
         setPeriod(data.input.period);
         setEditing(false);
@@ -306,13 +348,15 @@ export default function AnnexesPage() {
       customer,
       worksite: site,
       period: input?.period ?? period,
+      browse: !input,
+      ...(openedDraft ? { draft: openedDraft } : {}),
     });
     if (
       `${window.location.pathname}${window.location.search}${window.location.hash}` !==
       next
     )
       window.history.replaceState(window.history.state, "", next);
-  }, [urlReady, editing, busy, customer, site, period, input]);
+  }, [urlReady, editing, busy, customer, site, period, input, openedDraft]);
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
@@ -342,20 +386,6 @@ export default function AnnexesPage() {
       });
     return () => controller.abort();
   }, [customer]);
-  useEffect(() => {
-    if (!site) return;
-    const controller = new AbortController();
-    api<Draft[]>(`/annexes/drafts?customerWorksiteId=${site}`, {
-      signal: controller.signal,
-    })
-      .then((d) => {
-        if (!controller.signal.aborted) setDrafts(d);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
-      });
-    return () => controller.abort();
-  }, [site]);
   useEffect(() => {
     if (!dirty) return;
     const listener = (event: BeforeUnloadEvent) => {
@@ -432,7 +462,7 @@ export default function AnnexesPage() {
       setBusy(false);
     }
   }
-  async function calculate(save: boolean) {
+  async function calculate(save: boolean, selectedInvoice?: string | null) {
     if (!input || !site) return;
     stopRefresh.current?.();
     setBusy(true);
@@ -445,6 +475,9 @@ export default function AnnexesPage() {
           json: {
             customerWorksiteId: site,
             expectedRevision: revision,
+            ...(selectedInvoice !== undefined
+              ? { invoiceNumber: selectedInvoice }
+              : {}),
             reason:
               reason.trim() ||
               (revision
@@ -455,16 +488,15 @@ export default function AnnexesPage() {
           },
         });
         setRevision(draft.revision);
+        setInvoiceNumber(draft.revisions[0].invoiceNumber ?? null);
+        setOpenedDraft(draft.id);
+        setSaveOpened(false);
         setInput(draft.revisions[0].input);
         setResult(draft.revisions[0].result);
         setDirty(false);
         setEditing(false);
         baseline.current = null;
         setMessage(`Anexo guardado · versión ${draft.revision}`);
-        setDrafts((existing) => [
-          draft,
-          ...existing.filter((d) => d.id !== draft.id),
-        ]);
         try {
           await consult(input.period);
         } catch {
@@ -497,6 +529,9 @@ export default function AnnexesPage() {
     setResult(null);
     setIssues([]);
     setRevision(0);
+    setInvoiceNumber(null);
+    setOpenedDraft(null);
+    setSaveOpened(false);
     setDirty(false);
     setReason("");
     setMessage(null);
@@ -557,14 +592,45 @@ export default function AnnexesPage() {
           <Badge color={editing ? "orange" : "blue"}>
             {editing
               ? "Editando"
-              : historicalOnly || !input
-                ? "Consulta"
-                : liveError
-                  ? "Sin actualizar"
-                  : "En vivo"}
+              : invoiceNumber
+                ? "Facturado"
+                : historicalOnly || !input
+                  ? "Consulta"
+                  : liveError
+                    ? "Sin actualizar"
+                    : "En vivo"}
             {revision ? ` · versión ${revision}` : ""}
           </Badge>
         </Group>
+        {input && (
+          <Group>
+            <Button
+              size="xs"
+              variant="light"
+              disabled={busy || printing}
+              onClick={() => changeContext()}
+            >
+              Volver al explorador
+            </Button>
+            {invoiceNumber && (
+              <Badge color="green" size="lg" maw="100%" title={invoiceNumber}>
+                Facturado · {invoiceNumber}
+              </Badge>
+            )}
+          </Group>
+        )}
+        {!input && (
+          <AnnexLibrary
+            customerId={customer}
+            worksiteId={site}
+            disabled={busy || printing}
+            onNavigate={(nextCustomer, nextSite) => {
+              if (!changeContext()) return;
+              setCustomer(nextCustomer);
+              setSite(nextSite);
+            }}
+          />
+        )}
         {error ? (
           <Alert color="red" title="No se pudo completar">
             {error}
@@ -621,7 +687,6 @@ export default function AnnexesPage() {
                       setCustomer(v);
                       setSites([]);
                       setSite(null);
-                      setDrafts([]);
                     }}
                   />
                   <Select
@@ -636,7 +701,6 @@ export default function AnnexesPage() {
                     onChange={(v) => {
                       if (v === site || !changeContext()) return;
                       setSite(v);
-                      setDrafts([]);
                     }}
                   />
                 </SimpleGrid>
@@ -668,41 +732,6 @@ export default function AnnexesPage() {
                     Ver anexo desde inventario
                   </Button>
                 </Group>
-                {!input && drafts.length ? (
-                  <Stack gap="xs">
-                    <Text fw={600}>Anexos guardados</Text>
-                    {drafts.map((d) => (
-                      <Button
-                        key={d.id}
-                        variant="light"
-                        disabled={busy || printing}
-                        onClick={() => {
-                          const r = d.revisions[0];
-                          if (isDailyAnnex(r.input)) {
-                            void prepare(r.input.period);
-                            return;
-                          }
-                          setEditing(false);
-                          baseline.current = null;
-                          setInput(r.input);
-                          setPeriod(r.input.period);
-                          setResult(r.result);
-                          setIssues(r.sourceIssues ?? []);
-                          setRevision(d.revision);
-                          setReason("");
-                          setDirty(false);
-                          setError(null);
-                        }}
-                      >
-                        {d.periodFrom.slice(0, 10)} —{" "}
-                        {(
-                          d.revisions[0]?.input.period.through ?? d.periodTo
-                        ).slice(0, 10)}{" "}
-                        · revisión {d.revision}
-                      </Button>
-                    ))}
-                  </Stack>
-                ) : null}
               </Stack>
             </div>
           </Collapse>
@@ -743,7 +772,7 @@ export default function AnnexesPage() {
                           aria-label="Guardar cambios"
                           loading={busy}
                           disabled={period.through !== input.period.through}
-                          onClick={() => calculate(true)}
+                          onClick={openSave}
                         >
                           <IconDeviceFloppy size={20} />
                         </ActionIcon>
@@ -775,7 +804,7 @@ export default function AnnexesPage() {
                             variant="light"
                             loading={busy}
                             disabled={historicalOnly || printing}
-                            onClick={() => calculate(true)}
+                            onClick={openSave}
                           >
                             <IconDeviceFloppy size={20} />
                           </ActionIcon>
@@ -919,13 +948,31 @@ export default function AnnexesPage() {
                 setReport(structuredClone(input.machineDays[i]));
               }}
             />
-            {extrasSupported ? <>
-            <AnnexTransport input={input} editing={editing} busy={busy} onChange={edit} />
-            <Textarea label="Observaciones" description="Este texto aparecerá en la impresión y en el PDF del anexo."
-              placeholder="Escribe las observaciones del anexo" autosize minRows={3} maxRows={10} maxLength={5000}
-              value={input.observations ?? ''} readOnly={!editing} disabled={busy}
-              onChange={(event) => edit({ ...input, observations: event.currentTarget.value })} />
-            </> : null}
+            {extrasSupported ? (
+              <>
+                <AnnexTransport
+                  input={input}
+                  editing={editing}
+                  busy={busy}
+                  onChange={edit}
+                />
+                <Textarea
+                  label="Observaciones"
+                  description="Este texto aparecerá en la impresión y en el PDF del anexo."
+                  placeholder="Escribe las observaciones del anexo"
+                  autosize
+                  minRows={3}
+                  maxRows={10}
+                  maxLength={5000}
+                  value={input.observations ?? ""}
+                  readOnly={!editing}
+                  disabled={busy}
+                  onChange={(event) =>
+                    edit({ ...input, observations: event.currentTarget.value })
+                  }
+                />
+              </>
+            ) : null}
             {previewError ? (
               <Alert color="red">
                 No se pudo recalcular: {previewError}
@@ -1187,7 +1234,82 @@ export default function AnnexesPage() {
             ) : null}
           </>
         ) : null}
-        <AnnexSend data={sendData} customerWorksiteId={site} onClose={() => setSendData(null)} />
+        <Modal
+          opened={saveOpened}
+          onClose={() => {
+            if (!busy) setSaveOpened(false);
+          }}
+          title="Guardar anexo"
+          classNames={{ content: glassStyles.theme }}
+          closeOnClickOutside={!busy}
+          closeOnEscape={!busy}
+          withCloseButton={!busy}
+        >
+          <Stack>
+            <Text size="sm">
+              El anexo quedará guardado en la carpeta del cliente y la obra
+              seleccionados.
+            </Text>
+            <Checkbox
+              label="Marcar como facturado"
+              checked={markInvoiced}
+              disabled={busy}
+              onChange={(event) => setMarkInvoiced(event.currentTarget.checked)}
+            />
+            {markInvoiced && (
+              <TextInput
+                label="Número de factura"
+                placeholder="Ej. FE-3862"
+                description="Ingresa manualmente la factura asociada a este anexo."
+                value={invoiceTag}
+                maxLength={80}
+                autoCapitalize="characters"
+                styles={{ input: { textTransform: "uppercase" } }}
+                disabled={busy}
+                onChange={(event) =>
+                  setInvoiceTag(
+                    event.currentTarget.value.toLocaleUpperCase("es-CO"),
+                  )
+                }
+              />
+            )}
+            {markInvoiced && (
+              <Text size="sm" c="dimmed">
+                Al abrirlo se mostrará esta versión guardada, sin recalcular sus
+                valores.
+              </Text>
+            )}
+            {error && <Alert color="red">{error}</Alert>}
+            <Group justify="end">
+              <Button
+                variant="default"
+                disabled={busy}
+                onClick={() => setSaveOpened(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                loading={busy}
+                disabled={markInvoiced && !invoiceTag.trim()}
+                onClick={() =>
+                  calculate(
+                    true,
+                    markInvoiced
+                      ? invoiceTag.trim().toLocaleUpperCase("es-CO")
+                      : null,
+                  )
+                }
+              >
+                Guardar anexo
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+        <AnnexSend
+          data={sendData}
+          customerWorksiteId={site}
+          onClose={() => setSendData(null)}
+        />
         <Modal
           classNames={{ content: glassStyles.theme }}
           opened={report !== null}
