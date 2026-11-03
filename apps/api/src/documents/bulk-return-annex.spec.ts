@@ -52,5 +52,9 @@ describe('BULK FIFO compatibility with unchanged annex and billing engines', () 
     expect(physical.issues).toEqual([]);
     expect(physical.rentals.map(r => r.returns[0]?.quantity)).toEqual(['8', '2']);
     expect(returned.items.map(i => i.sourceDocumentItemId)).toEqual(['line-0', 'line-1']);
+    const cutReturn = { ...returned, items: returned.items.map(item => ({ ...item, billingCutoffDate: date(2) })) };
+    const cutPrepared = prepareCommercialV2([...deliveries, cutReturn] as never, lots, [], period, 'site', []);
+    expect(calculateAnnex({ period, policy, rentals: cutPrepared.rentals, machineDays: cutPrepared.machineDays }).totals.rentalNet).toBe('4400.00');
+    expect(cutPrepared.rentals.flatMap(r => r.returns).every(r => r.date === '2026-10-03' && r.billingCutoffDate === '2026-10-02')).toBe(true);
   });
 });

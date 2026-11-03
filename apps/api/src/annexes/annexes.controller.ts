@@ -5,6 +5,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Post,
@@ -26,6 +27,16 @@ export class AnnexesController {
     private readonly annexes: AnnexesService,
     private readonly source: AnnexSourceService,
   ) {}
+  @Get('live')
+  @Header('Cache-Control', 'no-store')
+  live(
+    @Query('customerWorksiteId') id: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('through') through: string,
+  ) {
+    return this.source.prepare(id, from, to, through, true);
+  }
   @Get('prepare') prepare(
     @Query('customerWorksiteId') id: string,
     @Query('from') from: string,

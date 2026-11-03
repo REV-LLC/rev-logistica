@@ -59,6 +59,7 @@ export type AnnexLine = {
   label: string;
   date: string;
   quantity: string;
+  billableAreaM2?: string;
   reportedHours: string | null;
   billableUnits: string;
   basePrice: string;
@@ -134,6 +135,7 @@ export function calculateAnnex(value: unknown) {
     label: string;
     date: string;
     quantity: Prisma.Decimal;
+    areaM2?: Prisma.Decimal;
     units: Prisma.Decimal;
     reportedHours: string | null;
     pricing: AnnexInput['rentals'][number]['pricing'];
@@ -143,13 +145,14 @@ export function calculateAnnex(value: unknown) {
     waived?: boolean;
   }) {
     const prices = price(params.pricing);
-    const gross = params.quantity
+    const billedQuantity = params.quantity.times(params.areaM2 ?? 1);
+    const gross = billedQuantity
       .times(params.units)
       .times(prices.base)
       .toDecimalPlaces(2, D.ROUND_HALF_UP);
     const net = params.waived
       ? new D(0)
-      : params.quantity
+      : billedQuantity
           .times(params.units)
           .times(prices.effective)
           .toDecimalPlaces(2, D.ROUND_HALF_UP);
@@ -159,6 +162,7 @@ export function calculateAnnex(value: unknown) {
       label: params.label,
       date: params.date,
       quantity: params.quantity.toString(),
+      ...(params.areaM2 ? { billableAreaM2: billedQuantity.toString() } : {}),
       reportedHours: params.reportedHours,
       billableUnits: params.units.toString(),
       basePrice: prices.base.toFixed(2),
@@ -173,7 +177,15 @@ export function calculateAnnex(value: unknown) {
       waived: params.waived ?? false,
     });
   }
-  for (const rental of input.rentals) {
+  for (const originalRental of input.rentals) {
+    // Saved input keeps physical return dates; billing uses the explicit last payable day.
+    const rental = {
+      ...originalRental,
+      returns: originalRental.returns.map((event) => ({
+        ...event,
+        date: event.billingCutoffDate ?? event.date,
+      })),
+    };
     if (rental.includedIn && rental.commercial?.schemaVersion !== 2) continue;
     if (rental.commercial?.status === 'REVIEW') {
       issues.push({
@@ -200,7 +212,18 @@ export function calculateAnnex(value: unknown) {
       ? { basePrice: '0.00' }
       : rental.pricing;
     timestamp(rental.deliveredOn);
+    if (rental.billingStartsOn) {
+      timestamp(rental.billingStartsOn);
+      if (rental.billingStartsOn < rental.deliveredOn)
+        fail('El cobro no puede comenzar antes de la entrega');
+    }
     const initial = positive(rental.quantity, 'Cantidad');
+    const areaM2 =
+      rental.billingAreaM2 === undefined
+        ? undefined
+        : positive(rental.billingAreaM2, 'Área por pieza');
+    if (areaM2 && (rental.assetId || rental.metering || rental.cutting))
+      fail('El cobro por área requiere alquiler diario de piezas');
     if (rental.assetId && !initial.eq(1))
       fail('Un activo serializado debe tener cantidad uno');
     price(rentalPricing);
@@ -217,6 +240,11 @@ export function calculateAnnex(value: unknown) {
       'Devoluciones del alquiler',
     );
     let returned = new D(0);
+    for (const event of originalRental.returns) {
+      timestamp(event.date);
+      if (event.date < rental.deliveredOn)
+        fail('Devolución anterior a la entrega');
+    }
     for (const event of rental.returns) {
       timestamp(event.date);
       if (event.date < rental.deliveredOn)
@@ -318,11 +346,19 @@ export function calculateAnnex(value: unknown) {
     for (const date of activeDates) {
       if (date < rental.deliveredOn) continue;
       let balance = initial;
+      if (date < (rental.billingStartsOn ?? rental.deliveredOn)) {
+        if (date !== rental.deliveredOn) continue;
+        // A same-day rental still bills once, even when the remaining units start tomorrow.
+        balance = rental.returns
+          .filter((event) => event.date === date)
+          .reduce((sum, event) => sum.plus(event.quantity), new D(0));
+      }
       for (const event of rental.returns) {
         // Even an exclusive return-day policy bills a same-day rental once.
         const remove =
           event.date < date ||
-          (!input.policy.includeReturnDay &&
+          (!event.billingCutoffDate &&
+            !input.policy.includeReturnDay &&
             event.date === date &&
             date !== rental.deliveredOn);
         if (remove) balance = balance.minus(event.quantity);
@@ -348,6 +384,7 @@ export function calculateAnnex(value: unknown) {
         label: rental.label,
         date,
         quantity: balance,
+        areaM2,
         units: new D(1),
         reportedHours: null,
         pricing: rentalPricing,
@@ -396,7 +433,7 @@ export function calculateAnnex(value: unknown) {
           index === affected.length - 1
             ? Math.max(0, adjustment.days - index)
             : Number(index < adjustment.days);
-        const quantity = new D(line.quantity);
+        const quantity = new D(line.billableAreaM2 ?? line.quantity);
         const gross = quantity
           .times(prices.base)
           .toDecimalPlaces(2, D.ROUND_HALF_UP)
@@ -451,26 +488,36 @@ export function calculateAnnex(value: unknown) {
             (sum, r) => sum.plus(r.priorBillableDays ?? 0),
             new D(0),
           );
-        const returnsByDate = new Map<string, Prisma.Decimal>();
+        const returnsByDate = new Map<
+          string,
+          { date: string; quantity: Prisma.Decimal; includeDay: boolean }
+        >();
         for (const event of rental.returns) {
           if (
             event.date >= from &&
             event.date <= through &&
             (!interval ||
               (event.date >= interval.from && event.date <= interval.to))
-          )
-            returnsByDate.set(
-              event.date,
-              (returnsByDate.get(event.date) ?? new D(0)).plus(event.quantity),
-            );
+          ) {
+            const includeDay =
+              Boolean(event.billingCutoffDate) || input.policy.includeReturnDay;
+            const key = `${event.date}:${includeDay}`;
+            returnsByDate.set(key, {
+              date: event.date,
+              includeDay,
+              quantity: (returnsByDate.get(key)?.quantity ?? new D(0)).plus(
+                event.quantity,
+              ),
+            });
+          }
         }
-        for (const [date, quantity] of returnsByDate) {
+        for (const { date, quantity, includeDay } of returnsByDate.values()) {
           const credited = ordinary
             .filter(
               (line) =>
                 line.date <= date &&
                 !line.waived &&
-                (input.policy.includeReturnDay ||
+                (includeDay ||
                   line.date !== date ||
                   date === rental.deliveredOn),
             )
@@ -483,6 +530,7 @@ export function calculateAnnex(value: unknown) {
             label: rental.label,
             date,
             quantity,
+            areaM2,
             units: extra,
             reportedHours: null,
             pricing: rentalPricing,
@@ -497,10 +545,12 @@ export function calculateAnnex(value: unknown) {
           const supplement = lines[lines.length - 1];
           const prices = price(rentalPricing);
           const gross = quantity
+            .times(areaM2 ?? 1)
             .times(prices.base)
             .toDecimalPlaces(2, D.ROUND_HALF_UP)
             .times(extra);
           const net = quantity
+            .times(areaM2 ?? 1)
             .times(prices.effective)
             .toDecimalPlaces(2, D.ROUND_HALF_UP)
             .times(extra);
@@ -591,8 +641,54 @@ export function calculateAnnex(value: unknown) {
   );
   const sum = (field: 'gross' | 'discount' | 'net') =>
     lines.reduce((total, line) => total.plus(line[field]), new D(0)).toFixed(2);
+  const vatPercent = input.policy.vatPercent ?? 0;
+  const transportCharge = (
+    charge?: NonNullable<AnnexInput['transport']>['outbound'],
+  ) =>
+    charge
+      ? new D(charge.quantity)
+          .mul(charge.unitPrice)
+          .toDecimalPlaces(2, D.ROUND_HALF_UP)
+      : new D(0);
+  const directionalTotal = (direction: 'outbound' | 'return') =>
+    input.transport?.rows !== undefined
+      ? input.transport.rows
+          .filter((row) => row.direction === direction)
+          .reduce((total, row) => total.plus(transportCharge(row)), new D(0))
+      : transportCharge(input.transport?.[direction]);
+  const outbound = directionalTotal('outbound');
+  const returning = directionalTotal('return');
+  const transportTotal = outbound.plus(returning);
+  const additionalTotal = (input.additionalCharges ?? []).reduce(
+    (total, charge) => total.plus(transportCharge(charge)),
+    new D(0),
+  );
+  const subtotal = new D(sum('net')).plus(transportTotal).plus(additionalTotal);
+  const vat = subtotal
+    .mul(vatPercent)
+    .div(100)
+    .toDecimalPlaces(2, D.ROUND_HALF_UP);
   return {
-    engineVersion: '2',
+    tax: {
+      vatPercent,
+      vat: vat.toFixed(2),
+      total: subtotal.plus(vat).toFixed(2),
+    },
+    transport: {
+      outbound: outbound.toFixed(2),
+      return: returning.toFixed(2),
+      total: transportTotal.toFixed(2),
+    },
+    summary: {
+      base: new D(sum('gross'))
+        .plus(transportTotal)
+        .plus(additionalTotal)
+        .toFixed(2),
+      discount: sum('discount'),
+      subtotal: subtotal.toFixed(2),
+    },
+    additionalChargesTotal: additionalTotal.toFixed(2),
+    engineVersion: '6',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,
     period: input.period,

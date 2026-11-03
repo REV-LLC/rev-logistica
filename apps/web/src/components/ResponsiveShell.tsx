@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { AppShell, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useState } from "react";
-import OfficeAssistantLauncher from "@/components/OfficeAssistantLauncher";
 import Nav from "@/components/Nav";
 import styles from './ResponsiveShell.module.css';
 
@@ -151,7 +150,7 @@ function getHeaderCopy(
     inventoryScope === "own"
   ) {
     return inventoryView === "bulk"
-      ? { title: "Bulk", subtitle: "Bodega propia" }
+      ? { title: "Materiales", subtitle: "Bodega propia" }
       : { title: "Equipos", subtitle: "Bodega propia" };
   }
 
@@ -267,7 +266,6 @@ export default function ResponsiveShell({
         <Nav onNavigate={close} />
       </AppShell.Navbar>
       <AppShell.Main>{children}</AppShell.Main>
-      <OfficeAssistantLauncher />
     </AppShell>
   );
 }

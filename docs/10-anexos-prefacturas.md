@@ -424,3 +424,9 @@ ajustes manuales de días. El motor mantiene compatibilidad con los históricos:
 las revisiones ya guardadas no se migran ni recortan; si contienen otra modalidad,
 la pantalla las muestra en consulta y bloquea edición y envío. El PDF actual sigue
 siendo un anexo de alquiler sin IVA, no una factura.
+
+### IVA y presentación (2026-10-28)
+
+`policy.vatPercent` admite únicamente 0 o 19 y se conserva en el JSON de cada revisión. No requiere migración. Las preparaciones nuevas proponen 19; una revisión antigua sin el campo se interpreta como 0 para no añadir impuestos retroactivamente. Cambiarlo exige Editar y Guardar; cancelar restaura la selección anterior.
+
+El servidor calcula `result.tax` sobre `rentalNet`, redondeando el IVA a dos decimales una sola vez. Pantalla y PDF aplican el mismo cálculo en centavos, muestran el desglose y toman la selección del anexo. El PDF conserva su condición de documento para revisión, no factura fiscal. Las filas diarias son planas y los avisos de origen quedan agrupados detrás del icono de alerta. La interfaz y el PDF usan cristal oscuro.

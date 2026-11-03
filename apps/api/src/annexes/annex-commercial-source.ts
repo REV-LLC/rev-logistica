@@ -1,3 +1,4 @@
+import { restoreStandaloneDailyCatalog } from './annex-catalog-daily';
 import { legacyCommercialBridge } from '../commercial-profiles/commercial-legacy-bridge';
 import { usesCommercialV2 } from '../commercial-profiles/commercial-cutoff';
 import { prepareCommercialV2 } from './annex-commercial-v2-source';
@@ -19,6 +20,8 @@ type Ledger = {
   effectiveAt: Date;
   quantity: Prisma.Decimal;
   movementType: string;
+  sku?: { chargeType: string } | null;
+  asset?: { sku: { chargeType: string } | null } | null;
 };
 // Inclusion is contextual, including the physical return day. A child left behind
 // must be reviewed rather than silently billed free in later cuts.
@@ -60,13 +63,41 @@ export async function applyCommercialComposition(
   siteId: string,
   history: AnnexInput[],
 ) {
+  const physicalLots = structuredClone(lots);
   let documents = await tx.document.findMany({
     where: {
       customerWorksiteId: siteId,
       status: 'CONFIRMED',
-      docDate: {
-        lt: new Date(Date.parse(period.through + 'T05:00:00Z') + 86400000),
-      },
+      OR: [
+        {
+          docDate: {
+            lt: new Date(Date.parse(period.through + 'T05:00:00Z') + 86400000),
+          },
+        },
+        {
+          id: {
+            in: [
+              ...new Set(
+                rows.flatMap((row) =>
+                  row.refDocumentId ? [row.refDocumentId] : [],
+                ),
+              ),
+            ],
+          },
+        },
+        {
+          type: 'RETURN',
+          items: {
+            some: {
+              billingCutoffDate: {
+                lt: new Date(
+                  Date.parse(period.through + 'T05:00:00Z') + 86400000,
+                ),
+              },
+            },
+          },
+        },
+      ],
     },
     take: 5001,
     include: {
@@ -141,7 +172,9 @@ export async function applyCommercialComposition(
     const reviewed = bridgeBySource.get(lot.source.reference);
     if (
       handledV2.has(lot.id) &&
-      (!reviewed || reviewed.effectiveFrom <= period.from || lot.deliveredOn >= reviewed.effectiveFrom)
+      (!reviewed ||
+        reviewed.effectiveFrom <= period.from ||
+        lot.deliveredOn >= reviewed.effectiveFrom)
     )
       continue;
     if (reviewed)
@@ -416,9 +449,19 @@ export async function applyCommercialComposition(
       rentals.push(lot);
     }
   }
-  return {
-    rentals: [...rentals, ...v2.rentals],
-    machineDays: [...machineDays, ...v2.machineDays],
-    issues: [...issues, ...v2.issues],
-  };
+  return restoreStandaloneDailyCatalog(
+    physicalLots,
+    new Map(
+      rows.map((row) => [
+        row.id,
+        (row.asset?.sku ?? row.sku)?.chargeType ?? '',
+      ]),
+    ),
+    documents,
+    {
+      rentals: [...rentals, ...v2.rentals],
+      machineDays: [...machineDays, ...v2.machineDays],
+      issues: [...issues, ...v2.issues],
+    },
+  );
 }

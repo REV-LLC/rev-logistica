@@ -4,10 +4,11 @@ import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkusController } from './skus.controller';
 import { SkusService } from './skus.service';
+import { SkuPricingService } from './sku-pricing.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, InventoryModule],
   controllers: [SkusController],
-  providers: [SkusService],
+  providers: [SkusService, SkuPricingService],
 })
 export class SkusModule {}

@@ -20,6 +20,9 @@ import {
   IconListSearch,
   IconRefresh,
   IconTag,
+  IconPencil,
+  IconHistory,
+  IconSettings,
 } from '@tabler/icons-react';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import StatCard from '@/components/dashboard/StatCard';
@@ -31,6 +34,9 @@ import { api, ApiError } from '@/lib/api';
 import glass from '../../employees/directory.module.css';
 import tableGlass from '@/components/tables/GlassDataTable.module.css';
 import styles from './price-list.module.css';
+import RentalQuantityBasisModal from '@/components/RentalQuantityBasisModal';
+import PriceListPricingModal from '@/components/PriceListPricingModal';
+import { getCurrentUserRole } from '@/lib/auth';
 
 type ControlType = 'BULK' | 'SERIAL';
 
@@ -41,6 +47,8 @@ type PriceListSku = {
   replacementValue: number | string | null;
   chargeType: 'DAY' | 'HOUR' | string;
   minimumChargeHours: number | string | null;
+  rentalQuantityBasis?: 'UNIT' | 'AREA_M2';
+  areaM2?: number | string | null;
   active: boolean;
   assetFamily: {
     id: string;
@@ -70,17 +78,17 @@ function formatMoney(value: number | string | null | undefined) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(parsed);
 }
 
-function formatChargeType(chargeType: string, minimumChargeHours: number | string | null) {
+function formatChargeType(chargeType: string, minimumChargeHours: number | string | null, basis = 'UNIT') {
   if (chargeType === 'HOUR') {
     const minimum = toNumber(minimumChargeHours);
     return minimum ? `Hora (min. ${minimum} h)` : 'Hora';
   }
 
-  if (chargeType === 'DAY') return 'Dia';
+  if (chargeType === 'DAY') return basis === 'AREA_M2' ? 'm² × día' : 'Unidad × día';
 
   return chargeType || '-';
 }
@@ -97,6 +105,11 @@ export default function PriceListPage() {
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ item: PriceListSku; tab: 'edit' | 'history' } | null>(null);
+  const [savedNotice, setSavedNotice] = useState(false);
+  const [basisReference, setBasisReference] = useState<PriceListSku | null>(null);
+  const [basisSaved, setBasisSaved] = useState(false);
+  const canEdit = ['ADMIN', 'OFFICE'].includes(getCurrentUserRole() ?? '');
 
   const loadItems = async (targetControlType = controlType) => {
     setLoading(true);
@@ -204,7 +217,7 @@ export default function PriceListPage() {
       width: '16%',
       sortValue: (item) => item.chargeType,
       mobile: { label: 'Tipo de cobro', priority: 'detail' },
-      cell: (item) => formatChargeType(item.chargeType, item.minimumChargeHours),
+      cell: (item) => formatChargeType(item.chargeType, item.minimumChargeHours, item.rentalQuantityBasis),
     },
     {
       id: 'status',
@@ -235,7 +248,7 @@ export default function PriceListPage() {
       item.assetFamily.name,
       toNumber(item.price) ?? '',
       toNumber(item.replacementValue) ?? '',
-      formatChargeType(item.chargeType, item.minimumChargeHours),
+      formatChargeType(item.chargeType, item.minimumChargeHours, item.rentalQuantityBasis),
       item.active ? 'Activo' : 'Inactivo',
     ]);
 
@@ -309,6 +322,8 @@ export default function PriceListPage() {
             {error}
           </Alert>
         ) : null}
+        {basisSaved ? <Alert color="green" onClose={() => setBasisSaved(false)} withCloseButton>Base de cobro actualizada.</Alert> : null}
+        {savedNotice ? <Alert color="green" onClose={() => setSavedNotice(false)} withCloseButton>Precios actualizados. El cambio quedó registrado en el historial.</Alert> : null}
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" visibleFrom="md" className={styles.metrics}>
           <StatCard
@@ -346,6 +361,11 @@ export default function PriceListPage() {
               rows={priceTable.rows}
               columns={priceColumns}
               getRowId={(item) => item.id}
+              actions={canEdit ? item => [
+                { key: 'edit', label: 'Editar precios', icon: <IconPencil size={16} />, onClick: () => setSelected({ item, tab: 'edit' }) },
+                ...(item.controlType === 'BULK' && item.chargeType === 'DAY' ? [{key: 'basis', label: 'Configurar base de cobro', icon: <IconSettings size={16} />, onClick: () => setBasisReference(item)}] : []),
+                { key: 'history', label: 'Ver historial de precios', icon: <IconHistory size={16} />, onClick: () => setSelected({ item, tab: 'history' }) },
+              ] : undefined}
               loading={loading}
               sort={priceTable.sort}
               onSortChange={priceTable.onSortChange}
@@ -362,6 +382,14 @@ export default function PriceListPage() {
           </Stack>
         </section>
       </Stack>
+      {basisReference ? <RentalQuantityBasisModal key={basisReference.id} reference={basisReference} onClose={() => setBasisReference(null)} onSaved={updated => {
+        setItems(previous => previous.map(item => item.id === updated.id ? { ...item, ...updated } : item));
+        setBasisReference(null); setBasisSaved(true);
+      }} /> : null}
+      {selected ? <PriceListPricingModal key={selected.item.id} reference={selected.item} initialTab={selected.tab} onClose={() => setSelected(null)} onSaved={updated => {
+        setItems(previous => previous.map(item => item.id === updated.id ? { ...item, ...updated } : item));
+        setSelected(null); setSavedNotice(true);
+      }} /> : null}
     </Container>
   );
 }

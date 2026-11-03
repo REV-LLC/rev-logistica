@@ -49,3 +49,45 @@ it('rejects non-daily writes before acquiring locks or storing a revision', asyn
   expect(tx.$queryRaw).not.toHaveBeenCalled();
   expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
 });
+
+it.each([0, 19])('persists the selected VAT rate %s in the revision', async (vatPercent) => {
+  const { service } = setup();
+  const saved = await service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent } } }, 'author');
+  expect(saved.revisions[0].input.policy.vatPercent).toBe(vatPercent);
+  expect(saved.revisions[0].result.tax.vatPercent).toBe(vatPercent);
+});
+it('rejects VAT rates outside the supported choices', async () => {
+  const { service } = setup();
+  await expect(service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent: 5 } } }, 'author')).rejects.toThrow();
+});
+it('stores observations, both transport rows and their server-calculated VAT in the saved revision', async () => {
+  const { service } = setup();
+  const observations = 'Entregar copia al residente.\nCoordinar regreso.';
+  const transport = {outbound:{quantity:'2',unitPrice:'60000'},return:{quantity:'1',unitPrice:'45000'}};
+  const saved = await service.save({...payload,input:{...input,observations,transport,policy:{...input.policy,vatPercent:19}}},'author');
+  expect(saved.revisions[0].input).toMatchObject({observations,transport});
+  expect(saved.revisions[0].result.summary.subtotal).toBe('165000.00');
+  expect(saved.revisions[0].result.tax).toEqual({vatPercent:19,vat:'31350.00',total:'196350.00'});
+});
+
+it('persists manual repairs and replacements with recalculated totals', async () => {
+  const {service} = setup();
+  const additionalCharges = [{id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},{id:'replacement-1',type:'REPLACEMENT',description:'Pieza',quantity:'1',unitPrice:'0.01'}];
+  const saved = await service.save({...payload,input:{...input,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
+  expect(saved.revisions[0].input.additionalCharges).toEqual(additionalCharges);
+  expect(saved.revisions[0].result.tax.total).toBe('29.38');
+});
+
+it('saves detailed transport and a linked replacement without dropping their metadata', async () => {
+  const {service} = setup();
+  const transport = {outbound:{quantity:'0',unitPrice:'0'},return:{quantity:'0',unitPrice:'0'},rows:[
+    {id:'trip-1',direction:'outbound',description:'Entrega inicial',quantity:'1',unitPrice:'12.34'},
+    {id:'trip-2',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
+    {id:'trip-3',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
+  ]};
+  const additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'100'}];
+  const saved = await service.save({...payload,input:{...input,transport,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
+  expect(saved.revisions[0].input).toMatchObject({transport,additionalCharges});
+  expect(saved.revisions[0].result.summary.subtotal).toBe('222.35');
+  expect(saved.revisions[0].result.tax.total).toBe('264.60');
+});

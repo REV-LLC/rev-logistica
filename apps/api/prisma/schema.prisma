@@ -299,6 +299,11 @@ enum SkuControlType {
   SERIAL
 }
 
+enum RentalQuantityBasis {
+  UNIT
+  AREA_M2
+}
+
 enum ChargeType {
   DAY
   HOUR
@@ -477,6 +482,7 @@ model User {
   assetConditionEvents          AssetConditionEvent[]
   assetsDeleted                 Asset[]                 @relation("AssetDeletedBy")
   appSettingChanges             AppSettingAudit[]       @relation("AppSettingUpdatedBy")
+  skuPriceChanges               SkuPriceChange[]
   worksiteFuelReceipts          WorksiteFuelReceipt[]   @relation("WorksiteFuelReceiptCreatedBy")
   assetFuelings                 AssetFueling[]          @relation("AssetFuelingCreatedBy")
   vehicleFuelings               VehicleFueling[]        @relation("VehicleFuelingCreatedBy")
@@ -510,6 +516,26 @@ model AppSetting {
   auditEntries AppSettingAudit[]
 
   @@index([category])
+}
+
+model SkuPriceChange {
+  id                  String   @id @default(uuid())
+  skuId               String
+  oldPrice            Decimal?
+  newPrice            Decimal?
+  oldReplacementValue Decimal?
+  newReplacementValue Decimal?
+  reason              String
+  changedByUserId     String
+  changedByName       String
+  changedByEmail      String
+  createdAt           DateTime @default(now())
+
+  sku       Sku  @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  changedBy User @relation(fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([skuId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([changedByUserId])
 }
 
 model AppSettingAudit {
@@ -705,6 +731,7 @@ model AssetSubfamily {
 }
 
 model Sku {
+  priceChanges SkuPriceChange[]
   implementBridges     ImplementIdentityBridge[]
   id                   String     @id @default(uuid())
   name                 String
@@ -722,6 +749,7 @@ model Sku {
   closedLengthMeters   Decimal?   @db.Decimal(10, 2)
   extendedLengthMeters Decimal?   @db.Decimal(10, 2)
   areaM2               Decimal?
+  rentalQuantityBasis  RentalQuantityBasis @default(UNIT)
   unitWeight           Decimal?
   active               Boolean    @default(true)
   isImplement          Boolean    @default(false)

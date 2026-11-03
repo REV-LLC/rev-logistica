@@ -67,12 +67,16 @@ export type Pricing = {
   discountPercent?: string;
   effectivePrice?: string;
   adjustmentReason?: string;
+  adjustmentSource?: "MANUAL" | "CUSTOMER";
 };
 export type Source = {
+  documentId?: string;
+  documentNumber?: string;
   reference: string;
   origin: "INVENTORY" | "PHYSICAL" | "DIGITAL";
 };
 export type Rental = {
+  billingAreaM2?: string;
   modeArchive?: {
     metering?: Metering;
     dayAdjustments?: Rental["dayAdjustments"];
@@ -87,9 +91,15 @@ export type Rental = {
   minimumHistoryRanges?: Array<{ from: string; to: string; rentalId: string }>;
   label: string;
   deliveredOn: string;
+  billingStartsOn?: string;
   quantity: string;
   source: Source;
-  returns: { date: string; quantity: string; source: Source }[];
+  returns: {
+    date: string;
+    billingCutoffDate?: string;
+    quantity: string;
+    source: Source;
+  }[];
   pricing: Pricing;
   commercial?: CommercialSnapshot;
   includedIn?: Inclusion;
@@ -123,10 +133,26 @@ export type MachineDay = {
   pricing: Pricing;
   waiverReason?: string;
 };
+export type TransportCharge = { quantity: string; unitPrice: string };
+export type TransportRow = TransportCharge & {
+  id: string;
+  direction: "outbound" | "return";
+  description: string;
+};
+export type AdditionalCharge = TransportCharge & {
+  id: string;
+  skuId?: string;
+  type: "REPAIR" | "REPLACEMENT";
+  description: string;
+};
 export type AnnexInput = {
+  additionalCharges?: AdditionalCharge[];
+  observations?: string;
+  transport?: { outbound: TransportCharge; return: TransportCharge; rows?: TransportRow[] };
   period: { from: string; to: string; through: string };
   policy: {
     version: string;
+    vatPercent?: 0 | 19;
     includeReturnDay: boolean;
     excludedWeekdays: number[];
     excludeHolidays: boolean;
@@ -145,12 +171,17 @@ export type AnnexInput = {
   machineDays: MachineDay[];
 };
 export type Result = {
+  additionalChargesTotal?: string;
+  summary?: { base: string; discount: string; subtotal: string };
+  transport?: { outbound: string; return: string; total: string };
+  tax?: { vatPercent: number; vat: string; total: string };
   lines: {
     key: string;
     kind: string;
     label: string;
     date: string;
     quantity: string;
+    billableAreaM2?: string;
     reportedHours: string | null;
     billableUnits: string;
     basePrice: string;

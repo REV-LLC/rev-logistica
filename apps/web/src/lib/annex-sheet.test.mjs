@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sheetRows, applySheetChanges, groupMachineRows } from './annex-sheet.ts';
+import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments, isOpeningBalance } from './annex-sheet.ts';
 const input = {
  period:{from:'2026-09-16',to:'2026-09-30',through:'2026-09-20'},
  rentals:[{id:'lot',label:'Plataforma',quantity:'3',deliveredOn:'2026-09-16',source:{reference:'REM-1'},pricing:{basePrice:'100'},returns:[],waivedDays:[]}],
@@ -31,7 +31,7 @@ test('price replaces percent, keeps base and preserves report and inventory sour
  const row=sheetRows(input,result)[0];
  const discounted=applySheetChanges(input,[{row,key:'discountPercent',value:'10'}],'Acuerdo');
  const next=applySheetChanges(discounted,[{row,key:'effectivePrice',value:'80'}],'');
- assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',effectivePrice:'80',adjustmentReason:'Acuerdo'});
+ assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'80',adjustmentReason:'Acuerdo'});
  assert.deepEqual(next.rentals[0].source,input.rentals[0].source);
 });
 test('protected cells, invalid numbers and conflicting segments reject whole batch',()=>{
@@ -47,10 +47,10 @@ test('protected cells, invalid numbers and conflicting segments reject whole bat
 test('editing and pasting discounts needs no reason; effective price works too',()=>{
  const rows=sheetRows(input,result);
  const next=applySheetChanges(input,[{row:rows[0],key:'discountPercent',value:'10'},{row:rows[3],key:'discountPercent',value:'20'}]);
- assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',discountPercent:'10'});
- assert.deepEqual(next.machineDays[0].pricing,{basePrice:'80000',discountPercent:'20'});
+ assert.deepEqual(next.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'10'});
+ assert.deepEqual(next.machineDays[0].pricing,{basePrice:'80000',adjustmentSource:'MANUAL',discountPercent:'20'});
  const priced=applySheetChanges(next,[{row:rows[0],key:'effectivePrice',value:'80'}]);
- assert.deepEqual(priced.rentals[0].pricing,{basePrice:'100',effectivePrice:'80'});
+ assert.deepEqual(priced.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'80'});
 });
 
 test('clearing a discount restores zero and removes a previous effective price',()=>{
@@ -58,11 +58,11 @@ test('clearing a discount restores zero and removes a previous effective price',
  const discounted=applySheetChanges(input,[{row,key:'discountPercent',value:'15'}]);
  for(const value of ['', '   ']) {
   const cleared=applySheetChanges(discounted,[{row,key:'discountPercent',value}]);
-  assert.deepEqual(cleared.rentals[0].pricing,{basePrice:'100',discountPercent:'0'});
+  assert.deepEqual(cleared.rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'0'});
  }
  const priced=applySheetChanges(input,[{row,key:'effectivePrice',value:'85'}]);
- assert.deepEqual(applySheetChanges(priced,[{row,key:'discountPercent',value:''}]).rentals[0].pricing,{basePrice:'100',discountPercent:'0'});
- assert.deepEqual(applySheetChanges(input,[{row,key:'effectivePrice',value:''}]).rentals[0].pricing,{basePrice:'100',effectivePrice:'0'});
+ assert.deepEqual(applySheetChanges(priced,[{row,key:'discountPercent',value:''}]).rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',discountPercent:'0'});
+ assert.deepEqual(applySheetChanges(input,[{row,key:'effectivePrice',value:''}]).rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'0'});
 });
 
 test('all editable numeric columns normalize blanks in multirow paste',()=>{
@@ -137,4 +137,88 @@ test('configured modes are offered by ID and physical compositions distinguish t
  {...input.rentals[0],id:'other',commercial:{status:'REVIEW',frozenProfile:profile,mode:profile.modes[1],parts:[{label:'Implemento libre',quantity:1}]}}]};
  const rows=sheetRows(data,null);assert.equal(rows[0].label,'Plataforma · sin accesorios');assert.equal(rows[1].label,'Plataforma · con 1 × Implemento libre');
  assert.equal(rows[1].mode,'M');assert.deepEqual(sheetModeOptions(data,rows[1]).map(o=>[o.value,o.label]),[['day','D'],['meter','M']]);
+});
+
+test('daily-only presentation keeps rental rows and minimum supplements without group headers',()=>{
+ const daily=structuredClone(input);daily.machineDays=[];daily.policy={minimumDaysBySku:{sku:10}};daily.rentals[0].skuId='sku';
+ const calculated={lines:[line('2026-09-16','3','300.00'),{...line('2026-09-16','1','900.00'),key:'lot:minimum:2026-09-16',billableUnits:'9',reason:'Completa el mínimo'}]};
+ const rows=sheetRows(daily,calculated), flat=groupMachineRows(daily,rows,false);
+ assert.deepEqual(flat,rows);assert.equal(flat.some(row=>row.group),false);
+ assert.equal(flat[1].supplement,true);assert.equal(flat[0].label,'Plataforma');
+ assert.equal(flat.reduce((total,row)=>total+Number(row.net),0),1200);
+});
+
+test('daily bulk rows consolidate matching charges, retain sources and edit all original lots',()=>{
+ const source=structuredClone(input);source.machineDays=[];
+ source.rentals=[{...source.rentals[0],id:'b',deliveredOn:'2026-09-05',skuId:'baranda',label:'Baranda',quantity:'1'},
+ {...source.rentals[0],id:'a',deliveredOn:'2026-09-07',skuId:'baranda',label:'Baranda',quantity:'2',source:{reference:'REM-2'}}];
+ const result={lines:source.rentals.map(r=>({...line('2026-09-16',r.quantity,String(Number(r.quantity)*100)+'.00'),key:`${r.id}:2026-09-16`,label:r.label}))};
+ const before=JSON.stringify(source);
+ const rows=groupMachineRows(source,sheetRows(source,result),false);
+ assert.equal(rows.length,1);assert.equal(rows[0].quantity,'3');assert.equal(rows[0].days,'1');assert.equal(rows[0].net,'300.00');
+ assert.equal(rows[0].members.length,2);assert.match(rows[0].reference,/REM-1/);assert.match(rows[0].reference,/REM-2/);
+ const edited=applySheetChanges(source,[{row:rows[0],key:'discountPercent',value:'15'},{row:rows[0],key:'days',value:'2'}]);
+ assert.deepEqual(edited.rentals.map(r=>r.pricing.discountPercent),['15','15']);
+ assert.deepEqual(edited.rentals.map(r=>r.dayAdjustments[0].quantity),['1','2']);
+ assert.equal(JSON.stringify(source),before);
+ const different=sheetRows(source,result);different[1].effectivePrice='90';
+ assert.equal(groupMachineRows(source,different,false).length,2);
+ different[1].effectivePrice='100';different[1].to='2026-09-17';
+ assert.equal(groupMachineRows(source,different,false).length,2);
+});
+
+ test('document links retain every consolidated origin and deduplicate returns', () => {
+   const source = {documentId:'doc-a', documentNumber:'RM001',reference:'ledger-a'};
+   const linked = {...input, rentals:[
+     {...input.rentals[0],source,returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+     {...input.rentals[0],source:{documentId:'doc-b',documentNumber:'RM002'},returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+   ]};
+   assert.deepEqual(sheetDocuments(linked,{members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]}),[
+     {id:'doc-a',label:'RM001'},{id:'doc-r',label:'DV001'},{id:'doc-b',label:'RM002'}
+   ]);
+   assert.deepEqual(sheetDocuments(input,{kind:'rentals',index:0}),[]);
+ });
+
+ test('prior-cut deliveries become one opening balance; current deliveries keep their documents', () => {
+   const source = {...input, machineDays:[],period:{from:'2026-10-16',to:'2026-10-31',through:'2026-10-27'},rentals:[]};
+   source.rentals = [['05','5'],['07','2'],['10','1'],['16','4'],['16','3']].map(([day,quantity],index) => ({
+     ...input.rentals[0],id:`lot-${index}`,skuId:'gato',label:'Gato',quantity,deliveredOn:`2026-10-${day}`,
+     source:{reference:`movement-${index}`,documentId:`doc-${index}`,documentNumber:`RM-${index}`}
+   }));
+   const calculated = {lines:source.rentals.flatMap(r => Array.from({length:12},(_,i)=>({
+     ...line(`2026-10-${16+i}`,r.quantity,`${Number(r.quantity)*100}.00`),key:`${r.id}:2026-10-${16+i}`
+   })))};
+   const before = JSON.stringify(source);
+   const rows = groupMachineRows(source,sheetRows(source,calculated),false);
+   assert.equal(rows.length,3);
+   const opening = rows.find(r=>isOpeningBalance(source,r));
+   assert.equal(opening.quantity,'8');assert.equal(opening.days,'12');assert.equal(opening.from,'2026-10-16');
+   assert.equal(opening.net,'9600.00');assert.equal(sheetDocuments(source,opening).length,3);
+   assert.equal(rows.filter(r=>!isOpeningBalance(source,r)).length,2);
+   assert.equal(JSON.stringify(source),before);
+   const firstCut={...source,period:{from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'},rentals:source.rentals.slice(0,3)};
+   const firstLines={lines:firstCut.rentals.flatMap(r=>Array.from({length:16-Number(r.deliveredOn.slice(-2))},(_,i)=>{
+     const date=`2026-10-${String(Number(r.deliveredOn.slice(-2))+i).padStart(2,'0')}`;
+     return {...line(date,r.quantity,`${Number(r.quantity)*100}.00`),key:`${r.id}:${date}`};
+   }))};
+   const firstRows=groupMachineRows(firstCut,sheetRows(firstCut,firstLines),false);
+   assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['11','9','6']);
+   assert.ok(firstRows.every(r=>!isOpeningBalance(firstCut,r)));
+ });
+
+test('manual rows never allow a paste to mutate an inventory rental', async()=>{
+ const {manualSheetRows}=await import('./annex-sheet.ts');
+ const source={rentals:[],machineDays:[],additionalCharges:[{id:'r',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'}]};
+ const [row]=manualSheetRows(source);
+ assert.equal(row.reference,'Reparación');assert.equal(row.net,'24.68');
+ assert.throws(()=>applySheetChanges(source,[{row,key:'effectivePrice',value:'9'}]),/Usa Editar/);
+ assert.equal(source.additionalCharges[0].unitPrice,'12.34');
+});
+
+test('area quantity is displayed while day adjustments retain physical pieces',()=>{
+ const areaInput={...input,machineDays:[],rentals:[{...input.rentals[0],billingAreaM2:'0.72'}]};
+ const rows=sheetRows(areaInput,{lines:[{...line('2026-09-16','3'),billableAreaM2:'2.16',billableUnits:'1'}]});
+ assert.equal(rows[0].mode,'M²/D');assert.equal(rows[0].quantity,'3');assert.equal(rows[0].areaM2,'2.16');
+ const next=applySheetChanges(areaInput,[{row:rows[0],key:'days',value:'2'}],'');
+ assert.equal(next.rentals[0].dayAdjustments[0].quantity,'3');
 });

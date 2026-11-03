@@ -52,20 +52,32 @@ export function prepareCommercialV2(
     itemId,
     lot: {
       ...lot,
-      label: documentDeliveryLabel(lot.label, origins.get(itemId)?.item.deliveryFuel),
-      returns: itemId.startsWith('legacy-origin:') || itemId.startsWith('implement-origin:')
-        ? lot.returns
-        : documents
-            .filter((d) => d.type === 'RETURN')
-            .flatMap((d) =>
-              d.items
-                .filter((i) => i.sourceDocumentItemId === itemId)
-                .map((i) => ({
-                  date: commercialBusinessDate(d.docDate),
-                  quantity: String(i.assetId ? 1 : (i.quantity ?? 1)),
-                  source: { reference: i.id, origin: 'INVENTORY' as const },
-                })),
-            ),
+      label: documentDeliveryLabel(
+        lot.label,
+        origins.get(itemId)?.item.deliveryFuel,
+      ),
+      returns:
+        itemId.startsWith('legacy-origin:') ||
+        itemId.startsWith('implement-origin:')
+          ? lot.returns
+          : documents
+              .filter((d) => d.type === 'RETURN')
+              .flatMap((d) =>
+                d.items
+                  .filter((i) => i.sourceDocumentItemId === itemId)
+                  .map((i) => ({
+                    date: commercialBusinessDate(d.docDate),
+                    ...(i.billingCutoffDate
+                      ? {
+                          billingCutoffDate: commercialBusinessDate(
+                            i.billingCutoffDate,
+                          ),
+                        }
+                      : {}),
+                    quantity: String(i.assetId ? 1 : (i.quantity ?? 1)),
+                    source: { reference: i.id, origin: 'INVENTORY' as const },
+                  })),
+              ),
     },
   }));
   const invalidMovement = new Set<string>();
@@ -125,6 +137,13 @@ export function prepareCommercialV2(
           .filter((i) => i.sourceDocumentItemId === id)
           .map((i) => ({
             date: commercialBusinessDate(d.docDate),
+            ...(i.billingCutoffDate
+              ? {
+                  billingCutoffDate: commercialBusinessDate(
+                    i.billingCutoffDate,
+                  ),
+                }
+              : {}),
             quantity: String(i.quantity ?? 1),
             source: { reference: i.id, origin: 'INVENTORY' as const },
           })),

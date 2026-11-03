@@ -1,4 +1,5 @@
 "use client";
+import glassStyles from "./annex-glass.module.css";
 import { useEffect, useState } from "react";
 import { Alert, Button, Modal, Stack, Text, TextInput } from "@mantine/core";
 import {
@@ -47,10 +48,16 @@ export default function AnnexSend({
     ? `Anexo de alquiler · ${data.worksite} · ${data.input.period.from} al ${data.input.period.to}`
     : "";
   const message = data
-    ? `${subject}\nCliente: ${data.customer}\nRegistros hasta: ${data.input.period.through}\nDocumento para revisión. Alquiler por día sin IVA.`
+    ? `${subject}\nCliente: ${data.customer}\nRegistros hasta: ${data.input.period.through}\nDocumento para revisión. IVA aplicado: ${data.input.policy.vatPercent ?? 0} %.`
     : "";
   return (
-    <Modal opened={!!data} onClose={onClose} title="Enviar anexo" size="md">
+    <Modal
+      classNames={{ content: glassStyles.theme }}
+      opened={!!data}
+      onClose={onClose}
+      title="Enviar anexo"
+      size="md"
+    >
       <Stack>
         <Text size="sm">
           WhatsApp y correo abren un mensaje para que lo revises y envíes. Se

@@ -1,4 +1,15 @@
+import {
+  applyCustomerPricing,
+  customerPricingKey,
+} from './annex-customer-pricing';
+import { applySavedAnnexRules } from './annex-live-rules';
+import { applyCatalogQuantityBasis } from './annex-quantity-basis';
 import { dailyRentals } from './annex-daily-scope';
+import {
+  applyDailyBillingStart,
+  billingStartRuleSchema,
+  billingStartSettingKey,
+} from './annex-billing-start';
 import {
   BadRequestException,
   Injectable,
@@ -27,6 +38,7 @@ export class AnnexSourceService {
     from: string,
     to: string,
     through: string,
+    live = false,
   ) {
     if (!z.string().uuid().safeParse(customerWorksiteId).success)
       throw new BadRequestException('Obra inválida');
@@ -34,6 +46,7 @@ export class AnnexSourceService {
     const period = { from, to, through };
     const policy: AnnexInput['policy'] = {
       version: 'REV-INITIAL-1',
+      vatPercent: 19,
       includeReturnDay: true,
       excludedWeekdays: [],
       excludeHolidays: false,
@@ -48,14 +61,32 @@ export class AnnexSourceService {
           where: { id: customerWorksiteId },
           select: {
             id: true,
+            customerId: true,
             customer: { select: { name: true } },
             worksite: { select: { name: true } },
           },
         });
         if (!site) throw new NotFoundException('Obra no encontrada');
         const end = new Date(Date.parse(`${through}T05:00:00Z`) + 86400000);
+        // A later physical return can carry an earlier billing cut. Load the
+        // intervening ledger too so FIFO remains physical and quantities stay intact.
+        const laterReturn = await tx.stockLedger.aggregate({
+          where: {
+            customerWorksiteId,
+            effectiveAt: { gte: end },
+            document: {
+              status: 'CONFIRMED',
+              type: 'RETURN',
+              items: { some: { billingCutoffDate: { lt: end } } },
+            },
+          },
+          _max: { effectiveAt: true },
+        });
+        const physicalEnd = laterReturn._max.effectiveAt
+          ? new Date(laterReturn._max.effectiveAt.getTime() + 1)
+          : end;
         const rows = await tx.stockLedger.findMany({
-          where: { customerWorksiteId, effectiveAt: { lt: end } },
+          where: { customerWorksiteId, effectiveAt: { lt: physicalEnd } },
           orderBy: [
             { effectiveAt: 'asc' },
             { appendOrder: { sort: 'asc', nulls: 'first' } },
@@ -78,6 +109,8 @@ export class AnnexSourceService {
                 id: true,
                 name: true,
                 price: true,
+                areaM2: true,
+                rentalQuantityBasis: true,
                 chargeType: true,
                 minimumChargeHours: true,
                 assetFamily: { select: { name: true } },
@@ -90,6 +123,8 @@ export class AnnexSourceService {
                     id: true,
                     name: true,
                     price: true,
+                    areaM2: true,
+                    rentalQuantityBasis: true,
                     chargeType: true,
                     minimumChargeHours: true,
                     assetFamily: { select: { name: true } },
@@ -97,7 +132,25 @@ export class AnnexSourceService {
                 },
               },
             },
-            document: { select: { status: true, consecutive: true } },
+            document: {
+              select: {
+                id: true,
+                status: true,
+                consecutive: true,
+                type: true,
+                docDate: true,
+                notes: true,
+                items: {
+                  select: {
+                    skuId: true,
+                    assetId: true,
+                    condition: true,
+                    quantity: true,
+                    billingCutoffDate: true,
+                  },
+                },
+              },
+            },
           },
         });
         if (rows.length > 50000)
@@ -114,41 +167,43 @@ export class AnnexSourceService {
           })),
           period,
         );
-        const cuts = await tx.documentItem.count({
-          where: {
-            document: { customerWorksiteId, docDate: { lt: end } },
-            OR: [
-              { billingCutoffDate: { not: null } },
-              { returnedAt: { not: null } },
-            ],
-          },
-        });
-        if (cuts)
-          source.issues.push({
-            code: 'COMMERCIAL_CUTS',
-            reference: site.id,
-            message:
-              'Hay cortes/devoluciones por ítem que requieren conciliarse con el historial físico antes de cobrar',
-          });
         source.issues.push({
           code: 'CATALOG_PRICE_REVIEW',
           reference: site.id,
           message:
             'Tarifas tomadas del catálogo actual. Revisa su vigencia para este período',
         });
-        const [saved, setting] = await Promise.all([
-          tx.annexDraft.findMany({
-            where: {
-              customerWorksiteId,
-              periodTo: { lt: new Date(`${from}T00:00:00Z`) },
-            },
-            orderBy: { periodFrom: 'desc' },
-            include: { revisions: { orderBy: { revision: 'desc' }, take: 1 } },
-          }),
-          tx.appSetting.findUnique({
-            where: { key: worksiteMinimumKey(customerWorksiteId) },
-          }),
-        ]);
+        const [saved, setting, customerPricing, currentDraft] =
+          await Promise.all([
+            tx.annexDraft.findMany({
+              where: {
+                customerWorksiteId,
+                periodTo: { lt: new Date(`${from}T00:00:00Z`) },
+              },
+              orderBy: { periodFrom: 'desc' },
+              include: {
+                revisions: { orderBy: { revision: 'desc' }, take: 1 },
+              },
+            }),
+            tx.appSetting.findUnique({
+              where: { key: worksiteMinimumKey(customerWorksiteId) },
+            }),
+            tx.appSetting.findUnique({
+              where: { key: customerPricingKey(site.customerId) },
+            }),
+            live
+              ? tx.annexDraft.findFirst({
+                  where: {
+                    customerWorksiteId,
+                    periodFrom: new Date(`${from}T00:00:00Z`),
+                    periodTo: new Date(`${to}T00:00:00Z`),
+                  },
+                  include: {
+                    revisions: { orderBy: { revision: 'desc' }, take: 1 },
+                  },
+                })
+              : null,
+          ]);
         const history = saved.flatMap((draft) => {
           const parsed = annexInputSchema.safeParse(draft.revisions[0]?.input);
           return parsed.success
@@ -178,6 +233,29 @@ export class AnnexSourceService {
         );
         const daily = dailyRentals(commercial.rentals, commercial.machineDays);
         source.rentals = daily.rentals;
+        const documentsByMovement = new Map(rows.map((row) => [row.id, row]));
+        for (const rental of source.rentals) {
+          for (const sourceRef of [
+            rental.source,
+            ...rental.returns.map((item) => item.source),
+          ]) {
+            const movement = documentsByMovement.get(
+              sourceRef.reference.split(':cutoff:')[0],
+            );
+            if (movement?.refDocumentId && movement.document) {
+              sourceRef.documentId = movement.refDocumentId;
+              sourceRef.documentNumber =
+                movement.document.consecutive ?? undefined;
+            }
+          }
+        }
+        const billingSetting = await tx.appSetting.findUnique({
+          where: { key: billingStartSettingKey },
+        });
+        const billingRule = billingSetting
+          ? billingStartRuleSchema.parse(billingSetting.value)
+          : null;
+        applyDailyBillingStart(source.rentals, rows, billingRule);
         source.machineDays = [];
         if (daily.excluded)
           source.issues.push({
@@ -218,8 +296,12 @@ export class AnnexSourceService {
             reconstructed = false;
           for (
             let time = Date.parse(
-              (rental.commercialInterval?.from ?? rental.deliveredOn) +
-                'T00:00:00Z',
+              [
+                rental.commercialInterval?.from ?? rental.deliveredOn,
+                rental.billingStartsOn ?? rental.deliveredOn,
+              ]
+                .sort()
+                .at(-1) + 'T00:00:00Z',
             );
             time < Date.parse(from + 'T00:00:00Z');
             time += 86400000
@@ -313,18 +395,41 @@ export class AnnexSourceService {
         }
         policy.minimumDaysBySku = resolved.days;
         policy.minimumHoursByAsset = resolved.hours;
-        const input: AnnexInput = {
+        applyCatalogQuantityBasis(
+          source.rentals,
+          rows.flatMap((row) => (row.sku ? [row.sku] : [])),
+        );
+        applyCustomerPricing(source.rentals, customerPricing?.value);
+        let input: AnnexInput = {
           period,
           policy,
           rentals: source.rentals,
           machineDays: source.machineDays,
         };
+        if (currentDraft?.revisions[0]) {
+          const parsed = annexInputSchema.safeParse(
+            currentDraft.revisions[0].input,
+          );
+          if (!parsed.success)
+            throw new BadRequestException(
+              'No se pudieron leer las reglas guardadas de este anexo',
+            );
+          const applied = applySavedAnnexRules(input, parsed.data);
+          input = applied.input;
+          source.issues.push(...applied.issues);
+        }
         return {
           site,
           input,
           result: calculateAnnex(input),
           sourceIssues: source.issues,
           ledgerCount: rows.length,
+          ...(live
+            ? {
+                revision: currentDraft?.revision ?? 0,
+                consultedAt: new Date().toISOString(),
+              }
+            : {}),
         };
       },
       {

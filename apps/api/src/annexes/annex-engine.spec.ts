@@ -245,3 +245,106 @@ describe('minimums across rental cuts', () => {
     expect(calculateAnnex(input).lines[0].kind).toBe('METER');
   });
 });
+
+it('calculates VAT after discounts and rounds the tax once to cents', () => {
+  const input = fixture();
+  input.period = { from: '2026-09-02', to: '2026-09-02', through: '2026-09-02' };
+  input.policy.vatPercent = 19;
+  input.rentals = [{ ...rental(), quantity: '1', pricing: { basePrice: '1', discountPercent: '50', adjustmentReason: 'Acuerdo' } }];
+  expect(calculateAnnex(input).tax).toEqual({ vatPercent: 19, vat: '0.10', total: '0.60' });
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax).toEqual({ vatPercent: 0, vat: '0.00', total: '0.50' });
+  delete input.policy.vatPercent;
+  expect(calculateAnnex(input).tax.vatPercent).toBe(0);
+});
+
+it('adds manual transport before VAT without discounting it with equipment', () => {
+  const input = fixture(); input.period.through = '2026-09-01'; input.policy.vatPercent = 19;
+  input.rentals = [{ ...rental(), deliveredOn: '2026-09-01', quantity: '1', pricing: { basePrice: '100', discountPercent: '10' } }];
+  input.transport = { outbound: { quantity: '3', unitPrice: '12.34' }, return: { quantity: '1', unitPrice: '0.01' } };
+  const result = calculateAnnex(input);
+  expect(result.totals).toEqual({ rentalGross: '100.00', rentalDiscount: '10.00', rentalNet: '90.00' });
+  expect(result.transport).toEqual({ outbound: '37.02', return: '0.01', total: '37.03' });
+  expect(result.summary).toEqual({ base: '137.03', discount: '10.00', subtotal: '127.03' });
+  expect(result.tax).toEqual({ vatPercent: 19, vat: '24.14', total: '151.17' });
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax.total).toBe('127.03');
+});
+it('rejects negative or fractional transport quantities and prices with excess precision', () => {
+  for (const outbound of [{quantity:'-1',unitPrice:'10'}, {quantity:'1.5',unitPrice:'10'}, {quantity:'1',unitPrice:'-10'}, {quantity:'1',unitPrice:'1.001'}]) {
+    expect(() => calculateAnnex({...fixture(),transport:{outbound,return:{quantity:'0',unitPrice:'0'}}})).toThrow();
+  }
+});
+
+it('charges repairs and replacements once, before VAT, without affecting rentals', () => {
+  const input = fixture(); input.policy.vatPercent = 19;
+  input.additionalCharges = [
+    {id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},
+    {id:'replacement-1',type:'REPLACEMENT',description:'Pieza perdida',quantity:'1',unitPrice:'0.01'},
+  ];
+  const result = calculateAnnex(input);
+  expect(result.lines).toEqual([]);
+  expect(result.totals.rentalGross).toBe('0.00');
+  expect(result.summary.base).toBe('24.69');
+  expect(result.tax).toEqual({vatPercent:19,vat:'4.69',total:'29.38'});
+  input.policy.vatPercent = 0;
+  expect(calculateAnnex(input).tax.total).toBe('24.69');
+  input.additionalCharges.push({...input.additionalCharges[0]});
+  expect(() => calculateAnnex(input)).toThrow();
+});
+it('rejects invalid manual charges', () => {
+  for (const patch of [{quantity:'-1'}, {quantity:'1.5'}, {unitPrice:'-10'}, {description:'  '}, {type:'UNKNOWN'}]) {
+    expect(() => calculateAnnex({...fixture(),additionalCharges:[{id:'one',type:'REPAIR',description:'Reparación',quantity:'1',unitPrice:'10',...patch}]})).toThrow();
+  }
+});
+
+describe('daily billing by square metre', () => {
+  it('preserves pieces and converts partial returns to billable area with discounts', () => {
+    const input = fixture(); input.period.through = '2026-09-04';
+    input.rentals = [{ ...rental(), billingAreaM2: '0.72', pricing: { basePrice: '2750', discountPercent: '10' },
+      returns: [{date:'2026-09-03',quantity:'2',source:{reference:'return',origin:'INVENTORY'}}] }];
+    const result = calculateAnnex(input);
+    expect(result.lines.map(l => [l.quantity,l.billableAreaM2,l.gross,l.net])).toEqual([
+      ['3','2.16','5940.00','5346.00'],['3','2.16','5940.00','5346.00'],['1','0.72','1980.00','1782.00']]);
+    expect(result.totals.rentalNet).toBe('12474.00');
+  });
+  it('applies manual day adjustments and minimum days to the area, never to stock', () => {
+    const input = fixture(); input.period.through = '2026-09-02';
+    input.rentals = [{...rental(),billingAreaM2:'0.72',pricing:{basePrice:'2750'},
+      dayAdjustments:[{from:'2026-09-02',to:'2026-09-02',days:2,quantity:'3'}]}];
+    expect(calculateAnnex(input).totals.rentalNet).toBe('11880.00');
+    input.rentals[0].dayAdjustments=[];
+    input.rentals[0].returns=[{date:'2026-09-02',quantity:'3',source:{reference:'return',origin:'INVENTORY'}}];
+    input.policy.minimumDaysBySku={'sku-1':3};
+    expect(calculateAnnex(input).totals.rentalNet).toBe('17820.00');
+  });
+  it('rejects zero area instead of silently billing zero', () => {
+    const input=fixture();input.rentals=[{...rental(),billingAreaM2:'0'}];
+    expect(()=>calculateAnnex(input)).toThrow('Área por pieza');
+  });
+});
+
+it('sums transport rows once per direction, superseding legacy aggregates', () => {
+  const input = fixture(); input.policy.vatPercent = 19;
+  input.transport = {outbound:{quantity:'9',unitPrice:'100'},return:{quantity:'1',unitPrice:'50'},rows:[
+    {id:'one',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'12.34'},
+    {id:'two',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
+    {id:'three',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
+  ]};
+  expect(calculateAnnex(input).transport).toEqual({outbound:'12.35',return:'10.00',total:'22.35'});
+  expect(calculateAnnex(input).tax.total).toBe('26.60');
+  input.transport.rows = [];
+  expect(calculateAnnex(input).transport.total).toBe('0.00');
+});
+it('rejects malformed transport rows and duplicate ids', () => {
+  const row = {id:'one',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'10'};
+  const transport = {outbound:{quantity:'0',unitPrice:'0'},return:{quantity:'0',unitPrice:'0'}};
+  for (const rows of [[row,row], [{...row,direction:'other'}], [{...row,description:' '}], [{...row,unitPrice:'1.001'}]]) {
+    expect(() => calculateAnnex({...fixture(),transport:{...transport,rows}})).toThrow();
+  }
+});
+it('preserves the reference associated with a replacement charge', () => {
+  const input = fixture();
+  input.additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza',quantity:'2',unitPrice:'100'}];
+  expect(calculateAnnex(input).additionalChargesTotal).toBe('200.00');
+});

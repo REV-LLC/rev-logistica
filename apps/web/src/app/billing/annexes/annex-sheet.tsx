@@ -1,4 +1,6 @@
 "use client";
+import glassStyles from "./annex-glass.module.css";
+import AnnexChargeEditor from "./annex-charge-editor";
 import { isDailyAnnex } from "@/lib/annex-daily-scope";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -19,6 +21,7 @@ import {
   Group,
   Paper,
   Modal,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -27,15 +30,18 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
+  manualSheetRows,
   applySheetChanges,
   editableKeys,
   sheetRows,
+  sheetDocuments,
+  isOpeningBalance,
   sheetModeOptions,
   groupMachineRows,
   type SheetChange,
   type SheetRow,
 } from "@/lib/annex-sheet";
-import type { AnnexInput, Result } from "./types";
+import type { AdditionalCharge, AnnexInput, Result } from "./types";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
 
@@ -168,7 +174,9 @@ export default function AnnexSheet({
     label: string;
     kind: SheetRow["kind"];
     index: number;
+    indices?: number[];
   } | null>(null);
+  const [charge, setCharge] = useState<AdditionalCharge | null>(null);
   const [rememberMinimum, setRememberMinimum] = useState(false);
   const [byMeters, setByMeters] = useState(false);
   const [meterPrice, setMeterPrice] = useState("0");
@@ -203,12 +211,13 @@ export default function AnnexSheet({
   const selected = useRef<{ id: string; key: string } | null>(null);
   const rows = useMemo(
     () =>
-      groupMachineRows(
+      [...groupMachineRows(
         input,
         sheetRows(input, result ?? lastResult).filter(
           (row) => mode === "all" || row.kind === mode,
         ),
-      ),
+        !isDailyAnnex(input),
+      ), ...manualSheetRows(input)],
     [input, result, lastResult, mode],
   );
   const apply = (changes: SheetChange[]) => {
@@ -235,13 +244,94 @@ export default function AnnexSheet({
   const employeeNames = new Map(
     employees.map((e) => [e.id, `${e.name} ${e.lastName}`]),
   );
+  const minimumControl = (row: SheetRow) => (
+    <Tooltip label="Configurar mínimo de cobro" withinPortal>
+      <ActionIcon
+        size={22}
+        p={1}
+        variant="light"
+        disabled={
+          busy || !editing || row.included || row.status === "Revisar modalidad"
+        }
+        aria-label={`Configurar mínimo de cobro: ${row.label}`}
+        onClick={() => {
+          setMachine({
+            assetId: row.assetId ?? row.skuId!,
+            label: row.label,
+            kind: row.kind,
+            index: row.index,
+            indices: row.members?.map((member) => member.index),
+          });
+          setMinimum(
+            row.kind === "rentals"
+              ? String(
+                  input.policy.minimumDaysByRental?.[row.rentalId!] ??
+                    input.policy.minimumDaysBySku?.[row.skuId!] ??
+                    0,
+                )
+              : (input.policy.minimumHoursByAsset?.[row.assetId!] ??
+                  input.policy.minimumHoursPerMachineDay),
+          );
+          const cutting =
+            row.kind === "rentals"
+              ? (input.rentals[row.index].metering ??
+                input.rentals[row.index].cutting)
+              : undefined;
+          setByMeters(Boolean(cutting));
+          setMeterPrice(cutting?.pricing.basePrice ?? "0");
+          setMeterMinimum(cutting?.minimumMeters ?? "0");
+          setCutReports(structuredClone(cutting?.reports ?? []));
+          setRememberMinimum(false);
+          setMinimumError(null);
+        }}
+      >
+        <IconSettings size={18} stroke={1.8} />
+      </ActionIcon>
+    </Tooltip>
+  );
   const columns: Column<SheetRow>[] = [
     {
       key: "label",
       name: "Equipo",
-      width: 170,
+      width: isDailyAnnex(input) ? "minmax(220px, 1fr)" : 170,
       frozen: true,
-      renderCell: ({ row }: { row: SheetRow }) => <CellText text={row.label} />,
+      renderCell: ({ row }: { row: SheetRow }) => (
+        <Group gap={4} wrap="nowrap" className={styles.groupTitle}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <CellText
+              text={
+                row.supplement ? `${row.label} · Ajuste al mínimo` : row.label
+              }
+            />
+          </span>
+          {isDailyAnnex(input) && editing && !row.included && !row.supplement
+            ? minimumControl(row)
+            : null}
+        </Group>
+      ),
+    },
+    {
+      key: "documents",
+      name: "Documento",
+      width: 145,
+      renderCell: ({ row }: { row: SheetRow }) => {
+        if (isOpeningBalance(input, row)) return <CellText text="Saldo inicial" />;
+        const documents = sheetDocuments(input, row);
+        return documents.length ? (
+          <div style={{ overflowX: "auto", display: "flex", gap: 8 }}>
+            {documents.map((document) => (
+              <a key={document.id}
+                href={`/inventory/ledger/document/${encodeURIComponent(document.id)}`}
+                target="_blank" rel="noopener noreferrer"
+                title={`Abrir ${document.label} en otra pestaña`}
+                onClick={(event) => event.stopPropagation()}
+                style={{ color: "var(--mantine-color-blue-4)", whiteSpace: "nowrap" }}>
+                {document.label}
+              </a>
+            ))}
+          </div>
+        ) : <span title="Sin documento vinculado">—</span>;
+      },
     },
     {
       key: "mode",
@@ -301,6 +391,7 @@ export default function AnnexSheet({
       ),
     },
     { key: "quantity", name: "Cant.", width: 55 },
+    { key: "areaM2", name: "m²", width: 65, renderCell: ({ row }: { row: SheetRow }) => row.areaM2 ?? "—" },
     {
       key: "days",
       name: "Días",
@@ -313,7 +404,7 @@ export default function AnnexSheet({
         editing &&
         row.kind === "rentals" &&
         !row.supplement &&
-        row.mode === "D" &&
+        ["D", "M²/D"].includes(row.mode) &&
         row.days !== "—" &&
         row.status !== "Exento" ? (
           <DaysCell
@@ -470,6 +561,7 @@ export default function AnnexSheet({
               editing &&
               !busy &&
               !row.group &&
+              !row.manualType &&
               !row.included &&
               row.status !== "Revisar modalidad",
             renderEditCell: textEditor,
@@ -481,14 +573,22 @@ export default function AnnexSheet({
       ...column,
       colSpan: (args) =>
         args.type === "ROW" && args.row.group && column.key === "mode"
-          ? columns.length - 1
+          ? columns.length - columns.findIndex((item) => item.key === "mode")
           : undefined,
       renderCell: (props) => {
         const { row } = props;
+        if (row.manualType) {
+          if (column.key === 'label') return <Group gap={4} wrap="nowrap"><CellText text={row.label} />{editing && <Button size="compact-xs" variant="subtle" disabled={busy} onClick={() => setCharge({...input.additionalCharges![row.index]})}>Editar</Button>}</Group>;
+          if (column.key === 'documents') return <CellText text={row.reference} />;
+          if (['from', 'to', 'days', 'discountPercent'].includes(column.key)) return '—';
+          if (['basePrice', 'effectivePrice', 'net'].includes(column.key)) return money(String(row[column.key as 'basePrice' | 'net' | 'effectivePrice']));
+          return String(row[column.key as keyof SheetRow] ?? '');
+        }
         if (!row.group) {
           if (
             column.key === "label" &&
-            (row.kind === "machineDays" || input.policy.minimumDaysBySku)
+            (row.kind === "machineDays" ||
+              (!isDailyAnnex(input) && input.policy.minimumDaysBySku))
           )
             return (
               <CellText
@@ -516,51 +616,7 @@ export default function AnnexSheet({
                   <CellText text={row.label} />
                 </span>
               </Tooltip>
-              <Tooltip label="Configurar mínimo de cobro" withinPortal>
-                <ActionIcon
-                  size={22}
-                  p={1}
-                  variant="light"
-                  disabled={
-                    busy ||
-                    !editing ||
-                    row.included ||
-                    row.status === "Revisar modalidad"
-                  }
-                  aria-label={`Configurar mínimo de cobro: ${row.label}`}
-                  onClick={() => {
-                    setMachine({
-                      assetId: row.assetId ?? row.skuId!,
-                      label: row.label,
-                      kind: row.kind,
-                      index: row.index,
-                    });
-                    setMinimum(
-                      row.kind === "rentals"
-                        ? String(
-                            input.policy.minimumDaysByRental?.[row.rentalId!] ??
-                              input.policy.minimumDaysBySku?.[row.skuId!] ??
-                              0,
-                          )
-                        : (input.policy.minimumHoursByAsset?.[row.assetId!] ??
-                            input.policy.minimumHoursPerMachineDay),
-                    );
-                    const cutting =
-                      row.kind === "rentals"
-                        ? (input.rentals[row.index].metering ??
-                          input.rentals[row.index].cutting)
-                        : undefined;
-                    setByMeters(Boolean(cutting));
-                    setMeterPrice(cutting?.pricing.basePrice ?? "0");
-                    setMeterMinimum(cutting?.minimumMeters ?? "0");
-                    setCutReports(structuredClone(cutting?.reports ?? []));
-                    setRememberMinimum(false);
-                    setMinimumError(null);
-                  }}
-                >
-                  <IconSettings size={18} stroke={1.8} />
-                </ActionIcon>
-              </Tooltip>
+              {minimumControl(row)}
             </Group>
           );
         if (column.key === "mode")
@@ -588,7 +644,7 @@ export default function AnnexSheet({
     <Paper
       withBorder
       p="xs"
-      className={`${styles.sheet} ${expanded ? styles.expanded : ""}`}
+      className={`${glassStyles.theme} ${styles.sheet} ${expanded ? styles.expanded : ""}`}
     >
       <Stack gap={6} className={styles.content}>
         <Group justify="space-between">
@@ -601,10 +657,7 @@ export default function AnnexSheet({
             </Text>
             <Text size="sm" c="dimmed">
               {input.period.from.split("-").reverse().join("/")} al{" "}
-              {input.period.to.split("-").reverse().join("/")}
-              {input.period.through !== input.period.to
-                ? ` · Registros hasta ${input.period.through.split("-").reverse().join("/")}`
-                : ""}
+              {input.period.through.split("-").reverse().join("/")}
             </Text>
           </div>
           <div>
@@ -620,26 +673,29 @@ export default function AnnexSheet({
         </Group>
         <Group gap="xs" align="end" className={styles.toolbar}>
           {actions}
+          {editing && (result ?? lastResult)?.additionalChargesTotal !== undefined && <Button size="xs" variant="light" disabled={busy} onClick={() => setCharge({id: crypto.randomUUID(), type: 'REPAIR', description: '', quantity: '1', unitPrice: '0.00'})}>Agregar reparación o reposición</Button>}
           <Button size="xs" variant="light" onClick={onConfigureCalendar}>
             Conf. domingos y festivos
           </Button>
 
-          <Select
-            aria-label="Tipo de cobro"
-            size="xs"
-            w={95}
-            value={mode}
-            onChange={(v) => {
-              setMode(v);
-              selected.current = null;
-            }}
-            allowDeselect={false}
-            data={[
-              { value: "all", label: "Todos" },
-              { value: "rentals", label: "Por día" },
-              { value: "machineDays", label: "Por hora" },
-            ]}
-          />
+          {!isDailyAnnex(input) ? (
+            <Select
+              aria-label="Tipo de cobro"
+              size="xs"
+              w={95}
+              value={mode}
+              onChange={(v) => {
+                setMode(v);
+                selected.current = null;
+              }}
+              allowDeselect={false}
+              data={[
+                { value: "all", label: "Todos" },
+                { value: "rentals", label: "Por día" },
+                { value: "machineDays", label: "Por hora" },
+              ]}
+            />
+          ) : null}
           <Tooltip
             label={
               expanded ? "Salir de pantalla completa" : "Pantalla completa"
@@ -732,6 +788,7 @@ export default function AnnexSheet({
                 "effectivePrice",
                 "discountPercent",
                 "quantity",
+                "areaM2",
                 "days",
                 "units",
               ].includes(selected.current.key)
@@ -746,7 +803,15 @@ export default function AnnexSheet({
           }}
         >
           <DataGrid
-            className={`rdg-light ${styles.grid}`}
+            className={`rdg-dark ${styles.grid}`}
+            style={{
+              height: expanded
+                ? undefined
+                : Math.max(
+                    92,
+                    34 + rows.reduce((height, row) => height + (row.group ? 36 : 30), 0),
+                  ),
+            }}
             aria-label="Hoja editable del anexo"
             columns={columns}
             rows={rows}
@@ -791,7 +856,18 @@ export default function AnnexSheet({
   return (
     <>
       {expanded ? createPortal(sheet, document.body) : sheet}
+      {charge && <AnnexChargeEditor key={charge.id} initial={charge}
+        disabled={busy || !editing || ((input.additionalCharges?.length ?? 0) >= 200 && !input.additionalCharges?.some(row => row.id === charge.id))}
+        removable={!!input.additionalCharges?.some(row => row.id === charge.id)}
+        onClose={() => setCharge(null)}
+        onRemove={() => {onChange({...input, additionalCharges: input.additionalCharges!.filter(row => row.id !== charge.id)}); setCharge(null);}}
+        onApply={next => {
+          const rows = input.additionalCharges ?? [];
+          onChange({...input, additionalCharges: rows.some(row => row.id === next.id) ? rows.map(row => row.id === next.id ? next : row) : [...rows, next]});
+          setCharge(null);
+        }} />}
       <Modal
+        classNames={{ content: glassStyles.theme }}
         opened={machine !== null}
         onClose={() => setMachine(null)}
         title={`Configuración de cobro · ${machine?.label ?? ""}`}
@@ -996,11 +1072,11 @@ export default function AnnexSheet({
                   return;
                 }
                 if (daily) {
-                  delete next.rentals[machine.index].metering;
-                  next.policy.minimumDaysByRental = {
-                    ...next.policy.minimumDaysByRental,
-                    [next.rentals[machine.index].id]: Number(value),
-                  };
+                  next.policy.minimumDaysByRental = { ...next.policy.minimumDaysByRental };
+                  for (const index of machine.indices ?? [machine.index]) {
+                    delete next.rentals[index].metering;
+                    next.policy.minimumDaysByRental[next.rentals[index].id] = Number(value);
+                  }
                 } else
                   next.policy.minimumHoursByAsset = {
                     ...next.policy.minimumHoursByAsset,

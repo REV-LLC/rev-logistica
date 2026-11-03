@@ -204,7 +204,7 @@ export default function SerialAssetCard({
           minWidth: 0,
           height: showcase ? "auto" : isContentSized ? "auto" : "62%",
           aspectRatio: showcase || isContentSized ? "16 / 9" : undefined,
-          background: "var(--inventory-image-bg, #ffffff)",
+          background: "#ffffff",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -234,15 +234,20 @@ export default function SerialAssetCard({
             style={{
               width: "100%",
               height: "100%",
-              objectFit: showcase ? "cover" : "contain",
-              background: "var(--inventory-image-bg, #ffffff)",
+              objectFit: "contain",
+              objectPosition: "center",
+              padding: showcase ? 16 : 8,
+              boxSizing: "border-box",
+              position: showcase || isContentSized ? "absolute" : undefined,
+              inset: showcase || isContentSized ? 0 : undefined,
+              background: "#ffffff",
             }}
           />
         ) : (
-          <Center className="asset-card-image-placeholder">
+          <Center className="asset-card-image-placeholder" style={{ background: '#ffffff', color: '#667085' }}>
             <Stack align="center" gap={4}>
               <IconPhotoOff size={25} stroke={1.6} aria-hidden="true" />
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="#667085">
                 Sin foto
               </Text>
             </Stack>

@@ -1,7 +1,9 @@
 import type { AnnexInput, Result } from "../app/billing/annexes/types";
 
 export type SheetRow = {
+  manualType?: "REPAIR" | "REPLACEMENT";
   id: string;
+  members?: SheetRow[];
   group?: boolean;
   assetId?: string;
   accessoryId?: string;
@@ -18,6 +20,7 @@ export type SheetRow = {
   from: string;
   to: string;
   quantity: string;
+  areaM2?: string;
   days: string;
   hours: string;
   units: string;
@@ -28,6 +31,36 @@ export type SheetRow = {
   net: string;
   status: string;
 };
+/** An opening balance is physical stock delivered before this cut, not proof of payment. */
+export function isOpeningBalance(input: AnnexInput, row: SheetRow): boolean {
+  return (row.members ?? [row]).every((member) => {
+    if (member.kind !== "rentals") return false;
+    const rental = input.rentals[member.index];
+    return Boolean(rental && rental.deliveredOn < input.period.from &&
+      (!rental.billingStartsOn || rental.billingStartsOn <= input.period.from) &&
+      (!rental.commercialInterval || rental.commercialInterval.from <= input.period.from));
+  });
+}
+
+/** Keep every source document when identical rental lots share a display row. */
+export function sheetDocuments(input: AnnexInput, row: SheetRow) {
+  const documents = new Map<string, { id: string; label: string }>();
+  for (const member of row.members ?? [row]) {
+    const item = input[member.kind][member.index];
+    if (!item) continue;
+    const sources = member.kind === "rentals"
+      ? [input.rentals[member.index].source, ...input.rentals[member.index].returns.map((entry) => entry.source)]
+      : input.machineDays[member.index].reports.map((report) => report.source);
+    for (const source of sources) {
+      if (source.documentId) documents.set(source.documentId, {
+        id: source.documentId,
+        label: source.documentNumber || "Ver documento",
+      });
+    }
+  }
+  return [...documents.values()];
+}
+
 export const editableKeys = [
   "discountPercent",
   "effectivePrice",
@@ -133,7 +166,7 @@ export function sheetRows(
           reference:
             rental?.source.reference ??
             day!.reports.map((r) => r.source.reference).join(", "),
-          mode: source.includedIn
+          mode: rental?.billingAreaM2 ? "M²/D" : source.includedIn
             ? "Incluido"
             : source.commercial?.mode?.unit
               ? { DAY: "D", HOUR: "HR", METER: "M" }[
@@ -155,6 +188,7 @@ export function sheetRows(
             rental?.commercialInterval?.to ??
             input.period.through,
           quantity: first?.quantity ?? (rental ? "—" : "1"),
+          areaM2: first?.billableAreaM2,
           days:
             (rental?.metering ?? rental?.cutting)
               ? "—"
@@ -221,7 +255,10 @@ export function applySheetChanges(
 ): AnnexInput {
   const next = structuredClone(input);
   const seen = new Map<string, string>();
-  for (const { row, key, value } of changes) {
+  for (const { row, key, value } of changes.flatMap((change) =>
+    (change.row.members ?? [change.row]).map((row) => ({ ...change, row })),
+  )) {
+    if (row.manualType) throw new Error("Usa Editar en la fila de reparación o reposición.");
     if (row.included || row.status === "Revisar modalidad")
       throw new Error("Esta fila no tiene un cobro independiente editable.");
     if (row.group)
@@ -241,7 +278,7 @@ export function applySheetChanges(
     if (key === "days") {
       if (
         row.kind !== "rentals" ||
-        row.mode !== "D" ||
+        !["D", "M²/D"].includes(row.mode) ||
         row.supplement ||
         row.status !== "Calculado"
       )
@@ -309,6 +346,7 @@ export function applySheetChanges(
     const { basePrice } = source.pricing;
     source.pricing = {
       basePrice,
+      adjustmentSource: "MANUAL",
       ...(adjustmentReason ? { adjustmentReason } : {}),
       [key]: normalized,
     };
@@ -317,12 +355,59 @@ export function applySheetChanges(
 }
 
 // Asset identity keeps distinct machines separate even when they share a label.
+// Consolidate presentation only: keep every source row for atomic edits.
+function consolidateDailyRows(input: AnnexInput, rows: SheetRow[]): SheetRow[] {
+  const output: SheetRow[] = [];
+  const groups = new Map<string, SheetRow>();
+  for (const row of rows) {
+    const lot = input.rentals[row.index];
+    if (!row.skuId || row.assetId || row.accessoryId || row.supplement ||
+      row.included || row.mode !== "D" || row.status !== "Calculado" ||
+      lot.commercial || lot.metering || lot.cutting) {
+      output.push(row);
+      continue;
+    }
+    const key = JSON.stringify([
+      isOpeningBalance(input, row) ? "OPENING_BALANCE" : ["DELIVERY", lot.source.documentId ?? lot.source.reference],
+      row.skuId, row.label, row.from, row.to, row.days, row.basePrice,
+      row.effectivePrice, row.discountPercent, row.adjustmentReason,
+      input.policy?.minimumDaysByRental?.[lot.id] ?? input.policy?.minimumDaysBySku?.[row.skuId] ?? 0,
+    ]);
+    const previous = groups.get(key);
+    if (!previous) {
+      const copy = { ...row };
+      output.push(copy);
+      groups.set(key, copy);
+      continue;
+    }
+    const members = [...(previous.members ?? [{ ...previous }]), row];
+    previous.members = members;
+    previous.id = `combined:${members.map((member) => member.id).join("|")}`;
+    const precision = Math.max(...members.map((member) => member.quantity.split(".")[1]?.length ?? 0));
+    const scale = 10n ** BigInt(precision);
+    const quantity = members.reduce((total, member) => {
+      const [whole, fraction = ""] = member.quantity.split(".");
+      return total + BigInt(whole) * scale + BigInt(fraction.padEnd(precision, "0") || "0");
+    }, 0n);
+    previous.quantity = precision
+      ? `${quantity / scale}.${String(quantity % scale).padStart(precision, "0")}`.replace(/\.?0+$/, "")
+      : String(quantity);
+    previous.net = amount(members.reduce((total, member) => total + cents(member.net), 0n));
+    previous.reference = [...new Set(members.map((member) => member.reference))].join(", ");
+  }
+  return output;
+}
+
 export function groupMachineRows(
   input: AnnexInput,
   rows: SheetRow[],
+  groupDaily = true,
 ): SheetRow[] {
   const groups = new Map<string, SheetRow[]>();
-  const daily = rows.filter((row) => row.kind === "rentals");
+  const byName = new Intl.Collator("es", { sensitivity: "base", numeric: true });
+  const rentalRows = rows.filter((row) => row.kind === "rentals");
+  const daily = (groupDaily ? rentalRows : consolidateDailyRows(input, rentalRows))
+    .sort((a, b) => byName.compare(a.label, b.label));
   for (const row of rows) {
     if (row.kind !== "machineDays") continue;
     const day = input.machineDays[row.index];
@@ -333,7 +418,7 @@ export function groupMachineRows(
     groups.set(key, days);
   }
   return [
-    ...(input.policy?.minimumDaysBySku
+    ...(groupDaily && input.policy?.minimumDaysBySku
       ? [
           ...daily
             .reduce((map, row) => {
@@ -354,7 +439,7 @@ export function groupMachineRows(
           ...children,
         ])
       : daily),
-    ...[...groups].flatMap(([assetId, days]) => {
+    ...[...groups].sort((a, b) => byName.compare(a[1][0].label, b[1][0].label)).flatMap(([assetId, days]) => {
       days.sort((a, b) => a.from.localeCompare(b.from));
       const first = days[0];
       return [
@@ -363,4 +448,17 @@ export function groupMachineRows(
       ];
     }),
   ];
+}
+
+/** One-off charges share the item table but never affect inventory or rental days. */
+export function manualSheetRows(input: AnnexInput): SheetRow[] {
+  return (input.additionalCharges ?? []).map((charge, index) => {
+    const [whole, fraction = ''] = charge.unitPrice.split('.');
+    const price = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+    return {id: `manual:${charge.id}`, manualType: charge.type, kind: 'rentals', index,
+      label: charge.description, reference: charge.type === 'REPAIR' ? 'Reparación' : 'Reposición',
+      mode: 'UND', from: '', to: '', quantity: charge.quantity, days: '—', hours: '', units: '',
+      basePrice: amount(price), effectivePrice: amount(price), discountPercent: '0',
+      adjustmentReason: '', net: amount(price * BigInt(charge.quantity)), status: 'Manual'};
+  });
 }

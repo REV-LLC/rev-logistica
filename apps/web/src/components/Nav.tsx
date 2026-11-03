@@ -45,6 +45,7 @@ import {
   IconHome,
   IconRulerMeasure,
   IconMap2,
+  IconMessageCircle,
   IconSettings,
   IconTag,
   IconTools,
@@ -369,6 +370,12 @@ const quickLinks: NavLinkItem[] = [
   },
 ];
 const defaultExpandedSections = new Set(["Operación"]);
+const assistantLink: NavLinkItem = {
+  href: "/office-assistant",
+  label: "Chat · Asistente Office",
+  icon: IconMessageCircle,
+  roles: ["ADMIN", "OFFICE"],
+};
 
 type NavProps = {
   onNavigate?: () => void;
@@ -895,11 +902,14 @@ export default function Nav({ onNavigate }: NavProps) {
       <SidebarSearch
         key={routeKey}
         entries={buildNavigationSearchEntries([
-          { title: 'General', links: [homeLink, ...quickLinks].filter(canShowLink) },
+          { title: 'General', links: [homeLink, assistantLink, ...quickLinks].filter(canShowLink) },
           ...orderedSections,
         ])}
         onNavigate={onNavigate}
       />
+      {canShowLink(assistantLink) ? (
+        <Box style={{ flexShrink: 0 }}>{renderNavItem(assistantLink)}</Box>
+      ) : null}
       <ScrollArea
         viewportRef={scrollViewportRef}
         type="auto"
