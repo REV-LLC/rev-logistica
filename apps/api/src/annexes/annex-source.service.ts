@@ -33,6 +33,76 @@ import {
 @Injectable()
 export class AnnexSourceService {
   constructor(private readonly prisma: PrismaService) {}
+  async chargeOptions(customerWorksiteId: string) {
+    if (!z.string().uuid().safeParse(customerWorksiteId).success)
+      throw new BadRequestException('Obra inválida');
+    const site = await this.prisma.customerWorksite.findUnique({
+      where: { id: customerWorksiteId },
+      select: { id: true },
+    });
+    if (!site) throw new NotFoundException('Obra no encontrada');
+    const skuSelect = {
+      id: true,
+      name: true,
+      price: true,
+      replacementValue: true,
+    } as const;
+    // Include every historical delivery, even if its equipment has already returned.
+    const rows = await this.prisma.stockLedger.findMany({
+      where: {
+        customerWorksiteId,
+        reversedByDocumentId: null,
+        AND: [
+          {
+            OR: [
+              { movementType: 'OUT', quantity: { lt: 0 } },
+              { movementType: 'ON_SITE', quantity: { gt: 0 } },
+            ],
+          },
+          {
+            OR: [
+              { refDocumentId: null },
+              { document: { status: 'CONFIRMED' } },
+            ],
+          },
+        ],
+      },
+      select: {
+        sku: { select: skuSelect },
+        asset: {
+          select: { id: true, publicCode: true, sku: { select: skuSelect } },
+        },
+      },
+      distinct: ['assetId', 'skuId'],
+    });
+    const options = new Map<
+      string,
+      {
+        id: string;
+        skuId: string;
+        assetId?: string;
+        label: string;
+        price: string | null;
+        replacementValue: string | null;
+      }
+    >();
+    for (const row of rows) {
+      const sku = row.asset?.sku ?? row.sku;
+      if (!sku) continue;
+      const id = row.asset ? `asset:${row.asset.id}` : `sku:${sku.id}`;
+      options.set(id, {
+        id,
+        skuId: sku.id,
+        ...(row.asset ? { assetId: row.asset.id } : {}),
+        label: row.asset ? `${row.asset.publicCode} · ${sku.name}` : sku.name,
+        price: sku.price?.toString() ?? null,
+        replacementValue: sku.replacementValue?.toString() ?? null,
+      });
+    }
+    return [...options.values()].sort((a, b) =>
+      a.label.localeCompare(b.label, 'es', { numeric: true }),
+    );
+  }
   async prepare(
     customerWorksiteId: string,
     from: string,

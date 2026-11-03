@@ -208,6 +208,7 @@ export const annexInputSchema = z
           .object({
             id: id,
             skuId: z.string().uuid().optional(),
+            assetId: z.string().uuid().optional(),
             type: z.enum(['REPAIR', 'REPLACEMENT']),
             description: z.string().trim().min(1).max(300),
             quantity: z.string().regex(/^\d{1,4}$/),

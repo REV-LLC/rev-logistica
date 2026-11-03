@@ -725,6 +725,7 @@ export default function AnnexesPage() {
                 "Obra"
               }
               employees={employees}
+              customerWorksiteId={site!}
               input={input}
               result={result}
               busy={busy}

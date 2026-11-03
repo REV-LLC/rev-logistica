@@ -142,6 +142,7 @@ export type TransportRow = TransportCharge & {
 export type AdditionalCharge = TransportCharge & {
   id: string;
   skuId?: string;
+  assetId?: string;
   type: "REPAIR" | "REPLACEMENT";
   description: string;
 };

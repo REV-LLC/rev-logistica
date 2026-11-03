@@ -155,7 +155,9 @@ export default function AnnexSheet({
   employees,
   customerName,
   worksiteName,
+  customerWorksiteId,
 }: {
+  customerWorksiteId: string;
   customerName: string;
   worksiteName: string;
   employees: { id: string; name: string; lastName: string }[];
@@ -673,7 +675,7 @@ export default function AnnexSheet({
         </Group>
         <Group gap="xs" align="end" className={styles.toolbar}>
           {actions}
-          {editing && (result ?? lastResult)?.additionalChargesTotal !== undefined && <Button size="xs" variant="light" disabled={busy} onClick={() => setCharge({id: crypto.randomUUID(), type: 'REPAIR', description: '', quantity: '1', unitPrice: '0.00'})}>Agregar reparación o reposición</Button>}
+          {editing && (result ?? lastResult)?.additionalChargesTotal !== undefined && <Button size="xs" variant="light" disabled={busy} onClick={() => setCharge({id: crypto.randomUUID(), type: 'REPLACEMENT', description: '', quantity: '1', unitPrice: '0.00'})}>Reposición o reparación</Button>}
           <Button size="xs" variant="light" onClick={onConfigureCalendar}>
             Conf. domingos y festivos
           </Button>
@@ -856,7 +858,7 @@ export default function AnnexSheet({
   return (
     <>
       {expanded ? createPortal(sheet, document.body) : sheet}
-      {charge && <AnnexChargeEditor key={charge.id} initial={charge}
+      {charge && <AnnexChargeEditor key={charge.id} initial={charge} customerWorksiteId={customerWorksiteId}
         disabled={busy || !editing || ((input.additionalCharges?.length ?? 0) >= 200 && !input.additionalCharges?.some(row => row.id === charge.id))}
         removable={!!input.additionalCharges?.some(row => row.id === charge.id)}
         onClose={() => setCharge(null)}

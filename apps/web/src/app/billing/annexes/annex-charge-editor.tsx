@@ -9,14 +9,15 @@ import {
   Select,
   Stack,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { api } from "@/lib/api";
 import type { AdditionalCharge } from "./types";
 import glassStyles from "./annex-glass.module.css";
-type Sku = {
+type WorksiteTag = {
   id: string;
-  name: string;
+  skuId: string;
+  assetId?: string;
+  label: string;
   price: string | number | null;
   replacementValue: string | number | null;
 };
@@ -24,6 +25,7 @@ const money = (value: string) =>
   Number(value).toLocaleString("es-CO", { style: "currency", currency: "COP" });
 export default function AnnexChargeEditor({
   initial,
+  customerWorksiteId,
   disabled,
   removable,
   onApply,
@@ -31,6 +33,7 @@ export default function AnnexChargeEditor({
   onClose,
 }: {
   initial: AdditionalCharge;
+  customerWorksiteId: string;
   disabled: boolean;
   removable: boolean;
   onApply: (charge: AdditionalCharge) => void;
@@ -38,7 +41,7 @@ export default function AnnexChargeEditor({
   onClose: () => void;
 }) {
   const [charge, setCharge] = useState(initial);
-  const [skus, setSkus] = useState<Sku[]>([]);
+  const [skus, setSkus] = useState<WorksiteTag[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,10 +49,16 @@ export default function AnnexChargeEditor({
   const [error, setError] = useState<string | null>(null);
   const replacement = charge.type === "REPLACEMENT";
   useEffect(() => {
-    if (!replacement) return;
     let active = true;
+    const controller = new AbortController();
     setLoading(true);
-    api<Sku[]>("/skus")
+    setLoaded(false);
+    setSkus([]);
+    setError(null);
+    api<WorksiteTag[]>(
+      `/annexes/charge-options?customerWorksiteId=${encodeURIComponent(customerWorksiteId)}`,
+      { signal: controller.signal },
+    )
       .then((rows) => {
         if (active) {
           setSkus(rows);
@@ -62,7 +71,7 @@ export default function AnnexChargeEditor({
           setError(
             error instanceof Error
               ? error.message
-              : "No se pudo consultar el catálogo.",
+              : "No se pudieron consultar los tags de la obra.",
           );
       })
       .finally(() => {
@@ -70,14 +79,37 @@ export default function AnnexChargeEditor({
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [replacement]);
-  const selected = skus.find((row) => row.id === charge.skuId);
-  const locked = disabled || saving;
+  }, [customerWorksiteId]);
+  const selected = skus.find((row) =>
+    charge.assetId
+      ? row.assetId === charge.assetId
+      : !row.assetId && row.skuId === charge.skuId,
+  );
+  const missingPrice =
+    !selected?.replacementValue || Number(selected.replacementValue) === 0;
+  function selectTag(value: string | null) {
+    const tag = skus.find((row) => row.id === value);
+    setCharge({
+      ...charge,
+      skuId: tag?.skuId,
+      assetId: tag?.assetId,
+      description: tag?.label.slice(0, 300) ?? "",
+      quantity: tag?.assetId ? "1" : charge.quantity,
+      unitPrice:
+        replacement && tag?.replacementValue != null
+          ? Number(tag.replacementValue).toFixed(2)
+          : "0.00",
+    });
+  }
+  const locked = disabled || saving || loading;
   const valid =
+    loaded &&
+    !!selected &&
     charge.description.trim() &&
     Number(charge.quantity) > 0 &&
-    (!replacement || (loaded && !!selected && Number(charge.unitPrice) > 0));
+    Number(charge.unitPrice) > 0;
   const normalized = () => ({
     ...charge,
     description: charge.description.trim(),
@@ -99,7 +131,7 @@ export default function AnnexChargeEditor({
     setSaving(true);
     setError(null);
     try {
-      await api(`/skus/${selected.id}/pricing`, {
+      await api(`/skus/${selected.skuId}/pricing`, {
         method: "PATCH",
         json: {
           price: selected.price === null ? null : String(selected.price),
@@ -135,7 +167,7 @@ export default function AnnexChargeEditor({
         closeOnClickOutside={!saving}
         closeOnEscape={!saving}
         withCloseButton={!saving}
-        title="Reparación o reposición"
+        title="Reposición o reparación"
         classNames={{ content: glassStyles.theme }}
       >
         <Stack>
@@ -151,50 +183,44 @@ export default function AnnexChargeEditor({
             disabled={locked}
             onChange={(value) => {
               setError(null);
-              setCharge({ ...charge, type: value as AdditionalCharge["type"] });
+              const type = value as AdditionalCharge["type"];
+              setCharge({
+                ...charge,
+                type,
+                unitPrice:
+                  type === "REPLACEMENT" && selected?.replacementValue != null
+                    ? Number(selected.replacementValue).toFixed(2)
+                    : "0.00",
+              });
             }}
           />
-          {replacement && (
-            <Select
-              label="Equipo o referencia"
-              placeholder={
-                loading ? "Consultando catálogo…" : "Selecciona el equipo"
-              }
-              searchable
-              data={skus.map((row) => ({ value: row.id, label: row.name }))}
-              value={charge.skuId ?? null}
-              disabled={locked || loading}
-              onChange={(value) => {
-                const sku = skus.find((row) => row.id === value);
-                setCharge({
-                  ...charge,
-                  skuId: value ?? undefined,
-                  description: sku?.name.slice(0, 300) ?? charge.description,
-                  unitPrice:
-                    sku?.replacementValue == null
-                      ? "0.00"
-                      : Number(sku.replacementValue).toFixed(2),
-                });
-              }}
-            />
-          )}
-          {replacement && selected && (
+          <Select
+            label="Tag de la obra"
+            placeholder={
+              loading
+                ? "Consultando tags…"
+                : "Escribe el tag o nombre del equipo"
+            }
+            searchable
+            clearable
+            nothingFoundMessage="No se encontraron tags en esta obra"
+            data={skus.map((row) => ({ value: row.id, label: row.label }))}
+            value={selected?.id ?? null}
+            disabled={locked}
+            onChange={selectTag}
+          />
+          {loaded && skus.length === 0 && (
             <Text size="sm" c="dimmed">
-              {selected.replacementValue == null ||
-              Number(selected.replacementValue) === 0
-                ? "Este equipo no tiene precio de reposición. Ingresa el valor para este cobro."
-                : `Precio de reposición del catálogo: ${money(String(selected.replacementValue))}`}
+              Esta obra no tiene equipos entregados registrados.
             </Text>
           )}
-          <TextInput
-            label="Descripción"
-            value={charge.description}
-            maxLength={300}
-            disabled={locked}
-            onChange={(event) =>
-              setCharge({ ...charge, description: event.currentTarget.value })
-            }
-          />
+          {selected && replacement && (
+            <Text size="sm" c="dimmed">
+              {missingPrice
+                ? "Este tag no tiene precio de reposición. Ingresa el valor por unidad."
+                : `Precio de reposición: ${money(String(selected.replacementValue))}`}
+            </Text>
+          )}
           <NumberInput
             label="Cantidad"
             value={Number(charge.quantity)}
@@ -202,7 +228,7 @@ export default function AnnexChargeEditor({
             max={9999}
             allowDecimal={false}
             allowNegative={false}
-            disabled={locked}
+            disabled={locked || !!selected?.assetId}
             onChange={(value) =>
               setCharge({
                 ...charge,
@@ -210,25 +236,27 @@ export default function AnnexChargeEditor({
               })
             }
           />
-          <NumberInput
-            label="Precio unitario"
-            prefix="$ "
-            thousandSeparator="."
-            decimalSeparator=","
-            decimalScale={2}
-            fixedDecimalScale
-            value={Number(charge.unitPrice)}
-            min={0}
-            max={9999999999.99}
-            allowNegative={false}
-            disabled={locked}
-            onChange={(value) =>
-              setCharge({
-                ...charge,
-                unitPrice: (Number(value) || 0).toFixed(2),
-              })
-            }
-          />
+          {selected && (!replacement || missingPrice) && (
+            <NumberInput
+              label="Precio unitario"
+              prefix="$ "
+              thousandSeparator="."
+              decimalSeparator=","
+              decimalScale={2}
+              fixedDecimalScale
+              value={Number(charge.unitPrice)}
+              min={0}
+              max={9999999999.99}
+              allowNegative={false}
+              disabled={locked}
+              onChange={(value) =>
+                setCharge({
+                  ...charge,
+                  unitPrice: (Number(value) || 0).toFixed(2),
+                })
+              }
+            />
+          )}
           <Text>
             Total:{" "}
             {money(
@@ -247,7 +275,7 @@ export default function AnnexChargeEditor({
               </Button>
             )}
             <Button disabled={locked || !valid} onClick={apply}>
-              Aplicar al anexo
+              Agregar al anexo
             </Button>
           </Group>
         </Stack>
@@ -265,7 +293,7 @@ export default function AnnexChargeEditor({
       >
         <Stack>
           <Text>
-            ¿Quieres actualizar el precio de reposición de {selected?.name} en
+            ¿Quieres actualizar el precio de reposición de {selected?.label} en
             el catálogo con {money(charge.unitPrice)} por unidad?
           </Text>
           <Text size="sm" c="dimmed">

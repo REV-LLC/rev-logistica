@@ -85,7 +85,7 @@ it('saves detailed transport and a linked replacement without dropping their met
     {id:'trip-2',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
     {id:'trip-3',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
   ]};
-  const additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'100'}];
+  const additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',assetId:'00000000-0000-4000-8000-000000000003',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'100'}];
   const saved = await service.save({...payload,input:{...input,transport,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
   expect(saved.revisions[0].input).toMatchObject({transport,additionalCharges});
   expect(saved.revisions[0].result.summary.subtotal).toBe('222.35');
