@@ -64,6 +64,7 @@ export type Inclusion = {
 };
 export type Pricing = {
   basePrice: string;
+  basePriceOverride?: string;
   discountPercent?: string;
   effectivePrice?: string;
   adjustmentReason?: string;

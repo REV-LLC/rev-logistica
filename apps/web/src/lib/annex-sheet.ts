@@ -335,17 +335,16 @@ export function applySheetChanges(
       throw new Error(
         "Usa un número sin separadores de miles ni fórmulas. Precio: hasta 2 decimales; descuento: hasta 6.",
       );
-    if (
-      Number(normalized) >
-      (key === "discountPercent" ? 100 : Number(source.pricing.basePrice))
-    )
-      throw new Error(
-        "El descuento debe estar entre 0 y 100; el precio acordado no puede superar el precio base.",
-      );
+    if (key === "discountPercent" && Number(normalized) > 100)
+      throw new Error("El descuento debe estar entre 0 y 100.");
     const adjustmentReason = reason.trim() || source.pricing.adjustmentReason;
-    const { basePrice } = source.pricing;
+    const raised = key === "effectivePrice" &&
+      Number(normalized) > Number(source.pricing.basePrice);
+    const basePrice = raised ? normalized : source.pricing.basePrice;
+    const basePriceOverride = raised ? normalized : source.pricing.basePriceOverride;
     source.pricing = {
       basePrice,
+      ...(basePriceOverride !== undefined ? { basePriceOverride } : {}),
       adjustmentSource: "MANUAL",
       ...(adjustmentReason ? { adjustmentReason } : {}),
       [key]: normalized,
