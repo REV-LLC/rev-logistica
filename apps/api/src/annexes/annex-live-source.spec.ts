@@ -35,10 +35,15 @@ it('reads the database on each consultation and applies saved rules without crea
     ],
     machineDays: [],
     transport: {
-      outbound: { quantity: '1', unitPrice: '50' },
+      outbound: { quantity: '0', unitPrice: '0' },
+      rows: [
+        {id:'delivery-trip',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'30'},
+        {id:'return-trip',direction:'return',description:'Recogida',quantity:'1',unitPrice:'20'},
+      ],
       return: { quantity: '0', unitPrice: '0' },
     },
   };
+  saved.additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'0.01'}];
   const sku = {
     id: 'sku',
     name: 'Equipo',
@@ -86,11 +91,13 @@ it('reads the database on each consultation and applies saved rules without crea
       saved.period.through,
       true,
     );
-  expect((await query()).result.summary.subtotal).toBe('320.00');
+  expect((await query()).result.summary.subtotal).toBe('320.02');
   rows[0].quantity = new Prisma.Decimal(-2);
   sku.price = new Prisma.Decimal(200);
   const second = await query();
-  expect(second.result.summary.subtotal).toBe('1130.00');
+  expect(second.result.summary.subtotal).toBe('1130.02');
+  expect(second.input.transport?.rows).toEqual(saved.transport!.rows);
+  expect(second.input.additionalCharges).toEqual(saved.additionalCharges);
   expect(second.revision).toBe(3);
   expect(tx.stockLedger.findMany).toHaveBeenCalledTimes(2);
   expect(tx.annexDraft.findFirst).toHaveBeenCalledTimes(2);

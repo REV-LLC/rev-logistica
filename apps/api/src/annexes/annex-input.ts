@@ -207,6 +207,8 @@ export const annexInputSchema = z
         z
           .object({
             id: id,
+            skuId: z.string().uuid().optional(),
+            assetId: z.string().uuid().optional(),
             type: z.enum(['REPAIR', 'REPLACEMENT']),
             description: z.string().trim().min(1).max(300),
             quantity: z.string().regex(/^\d{1,4}$/),
@@ -222,7 +224,28 @@ export const annexInputSchema = z
       .optional(),
     observations: z.string().max(5000).optional(),
     transport: z
-      .object({ outbound: transportCharge, return: transportCharge })
+      .object({
+        outbound: transportCharge,
+        return: transportCharge,
+        rows: z
+          .array(
+            z
+              .object({
+                id,
+                direction: z.enum(['outbound', 'return']),
+                description: z.string().trim().min(1).max(300),
+                quantity: z.string().regex(/^\d{1,4}$/),
+                unitPrice: money,
+              })
+              .strict(),
+          )
+          .max(200)
+          .refine(
+            (rows) => new Set(rows.map((row) => row.id)).size === rows.length,
+            'Identificadores duplicados',
+          )
+          .optional(),
+      })
       .strict()
       .optional(),
     period: z.object({ from: date, to: date, through: date }).strict(),

@@ -650,8 +650,14 @@ export function calculateAnnex(value: unknown) {
           .mul(charge.unitPrice)
           .toDecimalPlaces(2, D.ROUND_HALF_UP)
       : new D(0);
-  const outbound = transportCharge(input.transport?.outbound);
-  const returning = transportCharge(input.transport?.return);
+  const directionalTotal = (direction: 'outbound' | 'return') =>
+    input.transport?.rows !== undefined
+      ? input.transport.rows
+          .filter((row) => row.direction === direction)
+          .reduce((total, row) => total.plus(transportCharge(row)), new D(0))
+      : transportCharge(input.transport?.[direction]);
+  const outbound = directionalTotal('outbound');
+  const returning = directionalTotal('return');
   const transportTotal = outbound.plus(returning);
   const additionalTotal = (input.additionalCharges ?? []).reduce(
     (total, charge) => total.plus(transportCharge(charge)),

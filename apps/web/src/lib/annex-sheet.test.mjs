@@ -222,3 +222,17 @@ test('area quantity is displayed while day adjustments retain physical pieces',(
  const next=applySheetChanges(areaInput,[{row:rows[0],key:'days',value:'2'}],'');
  assert.equal(next.rentals[0].dayAdjustments[0].quantity,'3');
 });
+
+test('tag replacement and repair charges follow every rental row with their own document label',async()=>{
+ const {manualSheetRows}=await import('./annex-sheet.ts');
+ const source={...input,machineDays:[],additionalCharges:[
+  {id:'replacement',type:'REPLACEMENT',assetId:'asset',skuId:'sku',description:'FM-002 · Formaleta',quantity:'1',unitPrice:'150000'},
+  {id:'repair',type:'REPAIR',skuId:'sku',description:'Formaleta',quantity:'2',unitPrice:'25000'},
+ ]};
+ const rentalRows=groupMachineRows(source,sheetRows(source,result),false);
+ const all=[...rentalRows,...manualSheetRows(source)];
+ assert.ok(rentalRows.length>0);
+ assert.equal(all.at(-2).reference,'Reposición');assert.equal(all.at(-2).label,'FM-002 · Formaleta');
+ assert.equal(all.at(-2).net,'150000.00');assert.equal(all.at(-1).reference,'Reparación');
+ assert.equal(all.at(-1).net,'50000.00');assert.ok(all.slice(0,-2).every(row=>!row.manualType));
+});

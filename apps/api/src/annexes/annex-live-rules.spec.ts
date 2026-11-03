@@ -148,3 +148,28 @@ describe('live annex saved rules', () => {
     expect(saved.rentals[0].dayAdjustments).toHaveLength(1);
   });
 });
+
+it('preserves detailed transport and linked replacements when reapplying saved rules', () => {
+  const fresh = fixture(), saved = fixture();
+  saved.transport = {outbound:{quantity:'0',unitPrice:'0'},return:{quantity:'0',unitPrice:'0'},rows:[
+    {id:'trip-1',direction:'outbound',description:'Entrega inicial',quantity:'1',unitPrice:'60'},
+    {id:'trip-2',direction:'return',description:'Recogida parcial',quantity:'1',unitPrice:'40'},
+  ]};
+  saved.additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'20'}];
+  const {input} = applySavedAnnexRules(fresh, saved);
+  expect(input.transport).toEqual(saved.transport);
+  expect(input.additionalCharges).toEqual(saved.additionalCharges);
+  expect(input.transport?.rows).not.toBe(saved.transport.rows);
+  expect(input.additionalCharges).not.toBe(saved.additionalCharges);
+  const result = calculateAnnex(input);
+  expect(result.transport).toEqual({outbound:'60.00',return:'40.00',total:'100.00'});
+  expect(result.additionalChargesTotal).toBe('40.00');
+  expect(result.summary.subtotal).toBe('138380.00');
+  // Deleting every manual row must not restore legacy totals on the next refresh.
+  fresh.transport = {outbound:{quantity:'1',unitPrice:'999'},return:{quantity:'1',unitPrice:'999'}};
+  saved.transport.rows = [];
+  saved.additionalCharges = [];
+  const cleared = calculateAnnex(applySavedAnnexRules(fresh, saved).input);
+  expect(cleared.transport.total).toBe('0.00');
+  expect(cleared.additionalChargesTotal).toBe('0.00');
+});

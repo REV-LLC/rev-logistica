@@ -1,4 +1,4 @@
-import { annexAmounts } from "./annex-totals";
+import { annexAmounts, annexTransportRows, annexTransportTotals } from "./annex-totals";
 import { isDailyAnnex } from "./annex-daily-scope";
 import { documentBranding, type DocumentBranding } from "./document-branding";
 import type { AnnexInput, Result, SourceIssue } from "../app/billing/annexes/types";
@@ -148,18 +148,22 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   pdf.setFillColor(233, 238, 241); pdf.rect(left, y, 273, 7, "F");
   pdf.setFontSize(7);
   pdf.text("Trayecto", left + 2, y + 4.5);
+  pdf.text("Descripción", left + 25, y + 4.5);
   pdf.text("Cantidad", 175, y + 4.5, { align: "right" });
   pdf.text("Precio unitario", 230, y + 4.5, { align: "right" });
   pdf.text("Total", right - 2, y + 4.5, { align: "right" });
   y += 7;
-  for (const [key, label] of [["outbound", "Ida"], ["return", "Regreso"]] as const) {
-    const charge = data.input.transport?.[key] ?? { quantity: "0", unitPrice: "0" };
+  for (const charge of annexTransportRows(data.input.transport)) {
+    const description = pdf.splitTextToSize(charge.description, 110) as string[];
+    const height = Math.max(6, description.length * 3.5 + 2);
+    if (y + height + 12 > bottom) nextPage();
     pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
-    pdf.text(label, left + 2, y + 3.5);
+    pdf.text(charge.direction === 'outbound' ? 'Ida' : 'Regreso', left + 2, y + 3.5);
+    pdf.text(description, left + 25, y + 3.5);
     pdf.text(charge.quantity, 175, y + 3.5, { align: "right" });
     pdf.text(money(charge.unitPrice), 230, y + 3.5, { align: "right" });
-    pdf.text(money(amounts.transport[key]), right - 2, y + 3.5, { align: "right" });
-    y += 5; pdf.setDrawColor(218, 226, 231); pdf.line(left, y, right, y);
+    pdf.text(money(annexTransportTotals({outbound: charge, return: {quantity:'0',unitPrice:'0'}}).total), right - 2, y + 3.5, { align: "right" });
+    y += height; pdf.setDrawColor(218, 226, 231); pdf.line(left, y, right, y);
   }
   pdf.setFont("helvetica", "bold");
   pdf.text("Total transporte", left + 2, y + 4);

@@ -323,3 +323,28 @@ describe('daily billing by square metre', () => {
     expect(()=>calculateAnnex(input)).toThrow('Área por pieza');
   });
 });
+
+it('sums transport rows once per direction, superseding legacy aggregates', () => {
+  const input = fixture(); input.policy.vatPercent = 19;
+  input.transport = {outbound:{quantity:'9',unitPrice:'100'},return:{quantity:'1',unitPrice:'50'},rows:[
+    {id:'one',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'12.34'},
+    {id:'two',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
+    {id:'three',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
+  ]};
+  expect(calculateAnnex(input).transport).toEqual({outbound:'12.35',return:'10.00',total:'22.35'});
+  expect(calculateAnnex(input).tax.total).toBe('26.60');
+  input.transport.rows = [];
+  expect(calculateAnnex(input).transport.total).toBe('0.00');
+});
+it('rejects malformed transport rows and duplicate ids', () => {
+  const row = {id:'one',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'10'};
+  const transport = {outbound:{quantity:'0',unitPrice:'0'},return:{quantity:'0',unitPrice:'0'}};
+  for (const rows of [[row,row], [{...row,direction:'other'}], [{...row,description:' '}], [{...row,unitPrice:'1.001'}]]) {
+    expect(() => calculateAnnex({...fixture(),transport:{...transport,rows}})).toThrow();
+  }
+});
+it('preserves the reference associated with a replacement charge', () => {
+  const input = fixture();
+  input.additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',type:'REPLACEMENT',description:'Pieza',quantity:'2',unitPrice:'100'}];
+  expect(calculateAnnex(input).additionalChargesTotal).toBe('200.00');
+});

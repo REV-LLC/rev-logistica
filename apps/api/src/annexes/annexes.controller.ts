@@ -27,6 +27,11 @@ export class AnnexesController {
     private readonly annexes: AnnexesService,
     private readonly source: AnnexSourceService,
   ) {}
+  @Get('charge-options')
+  @Header('Cache-Control', 'no-store')
+  chargeOptions(@Query('customerWorksiteId', new ParseUUIDPipe()) id: string) {
+    return this.source.chargeOptions(id);
+  }
   @Get('live')
   @Header('Cache-Control', 'no-store')
   live(

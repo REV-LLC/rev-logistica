@@ -26,3 +26,19 @@ test('one-off charges are added before tax with exact cents', async()=>{
   const result=annexAmounts({rentalGross:'100.00',rentalDiscount:'10.00',rentalNet:'90.00'},undefined,19,[{quantity:'2',unitPrice:'12.34'},{quantity:'1',unitPrice:'0.01'}]);
   assert.equal(result.base,'124.69');assert.equal(result.subtotal,'114.69');assert.equal(result.vat,'21.79');assert.equal(result.total,'136.48');
 });
+
+test('transport rows replace legacy aggregates, retain descriptions and sum exact cents', async () => {
+  const {annexTransportRows, annexTransportTotals, annexAmounts} = await import('./annex-totals.ts');
+  const transport = {outbound:{quantity:'9',unitPrice:'100'},return:{quantity:'2',unitPrice:'50'},rows:[
+    {id:'one',direction:'outbound',description:'Entrega',quantity:'1',unitPrice:'12.34'},
+    {id:'two',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
+    {id:'three',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
+  ]};
+  assert.equal(annexTransportRows(transport).length, 3);
+  assert.deepEqual(annexTransportTotals(transport), {outbound:'12.35',return:'10.00',total:'22.35'});
+  assert.equal(annexAmounts({rentalGross:'0.00',rentalDiscount:'0.00',rentalNet:'0.00'},transport,19).total,'26.60');
+  assert.equal(annexTransportTotals({...transport,rows:[]}).total,'0.00');
+  assert.deepEqual(annexTransportRows({outbound:{quantity:'3',unitPrice:'10'},return:{quantity:'0',unitPrice:'0'}}),[
+    {id:'legacy-outbound',direction:'outbound',description:'Transporte de ida',quantity:'3',unitPrice:'10'},
+  ]);
+});
