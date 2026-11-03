@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import {
   modeSchema,
@@ -13,6 +14,8 @@ const reason = z.string().trim().min(1).max(500);
 const pricing = z
   .object({
     basePrice: money,
+    // A manual increase belongs to this annex revision, never to the SKU/customer.
+    basePriceOverride: money.optional(),
     discountPercent: decimal.optional(),
     effectivePrice: money.optional(),
     adjustmentReason: reason.optional(),
@@ -22,7 +25,21 @@ const pricing = z
   .refine(
     (p) => !(p.discountPercent !== undefined && p.effectivePrice !== undefined),
     'Usa descuento o precio efectivo, no ambos',
-  );
+  )
+  .transform((p) => {
+    const raised = p.effectivePrice !== undefined &&
+      new Prisma.Decimal(p.effectivePrice).gt(p.basePrice);
+    const override = raised
+      ? Prisma.Decimal.max(p.basePriceOverride ?? '0', p.effectivePrice!).toFixed(2)
+      : p.basePriceOverride;
+    if (override === undefined) return p;
+    return {
+      ...p,
+      basePrice: Prisma.Decimal.max(p.basePrice, override).toFixed(2),
+      basePriceOverride: override,
+      adjustmentSource: 'MANUAL' as const,
+    };
+  });
 const source = z
   .object({
     reference: id,

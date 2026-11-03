@@ -688,7 +688,7 @@ export function calculateAnnex(value: unknown) {
       subtotal: subtotal.toFixed(2),
     },
     additionalChargesTotal: additionalTotal.toFixed(2),
-    engineVersion: '6',
+    engineVersion: '7',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,
     period: input.period,

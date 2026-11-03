@@ -69,6 +69,17 @@ describe('annex calculation', () => {
     const line = calculateAnnex(input).lines[0];
     expect(line.net).toBe('6.00'); expect(line.discount).toBe('12.00'); expect(line.discountPercent).toBe('66.666666666667');
   });
+  it.each(['0', '100'])('raises a local base of %s to the final price with no negative discount', basePrice => {
+    const input = fixture();
+    input.period = { from: '2026-09-02', to: '2026-09-02', through: '2026-09-02' };
+    input.policy.vatPercent = 19;
+    input.rentals = [{ ...rental(), pricing: { basePrice, effectivePrice: '125.55' } }];
+    const original = JSON.stringify(input);
+    const result = calculateAnnex(input);
+    expect(result.lines[0]).toMatchObject({basePrice: '125.55', effectivePrice: '125.550000000000', discountPercent: '0.000000000000', gross: '376.65', discount: '0.00', net: '376.65'});
+    expect(result.tax).toEqual({vatPercent: 19, vat: '71.56', total: '448.21'});
+    expect(JSON.stringify(input)).toBe(original);
+  });
   it('preserves an explicit failure waiver and its reason', () => {
     const input = fixture(); const day = machineDay(); day.waiverReason = 'Equipo no funcionó'; input.machineDays = [day];
     const line = calculateAnnex(input).lines[0]; expect(line.net).toBe('0.00'); expect(line.gross).toBe('480000.00'); expect(line.waived).toBe(true);
