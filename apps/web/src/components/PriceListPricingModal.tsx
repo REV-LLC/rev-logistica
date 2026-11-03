@@ -85,7 +85,7 @@ export default function PriceListPricingModal({ reference, initialTab, onClose, 
       <Tabs.Panel value="edit">
         <Stack>
           {saveError ? <Alert color="red" role="alert">{saveError}</Alert> : null}
-          <NumberInput label="Precio de alquiler (COP)" value={price} onChange={setPrice} min={0} max={999999999999.99} decimalScale={2} thousandSeparator="." decimalSeparator="," disabled={saving} />
+          <NumberInput label="Precio de alquiler al cliente (COP)" value={price} onChange={setPrice} min={0} max={999999999999.99} decimalScale={2} thousandSeparator="." decimalSeparator="," disabled={saving} />
           <NumberInput label="Valor de reposición (COP)" value={replacement} onChange={setReplacement} min={0} max={999999999999.99} decimalScale={2} thousandSeparator="." decimalSeparator="," disabled={saving} />
           <Textarea label="Motivo del cambio" required value={reason} onChange={event => setReason(event.currentTarget.value)} maxLength={500} minRows={2} disabled={saving} />
           <Group justify="flex-end"><Button variant="default" onClick={onClose} disabled={saving}>Cancelar</Button><Button leftSection={<IconDeviceFloppy size={16} />} onClick={() => void save()} loading={saving}>Guardar cambios</Button></Group>

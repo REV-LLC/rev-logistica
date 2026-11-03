@@ -22,20 +22,27 @@ const INSTANCE_QUERY = `query Instance($serviceId:String!,$environmentId:String!
   }
 }`;
 const DEPLOYMENT_QUERY = `query Deployment($id:String!){deployment(id:$id){${DEPLOYMENT_FIELDS}}}`;
-const PATCH = `mutation Patch($environmentId:String!,$patch:EnvironmentConfig!,$message:String!){
+const PATCH = `mutation Patch($environmentId:String!,$patch:EnvironmentConfig!,$message:String!,$skipDeploys:Boolean!){
   environmentPatchCommit(environmentId:$environmentId,patch:$patch,
-    skipDeploys:true,commitMessage:$message)
-}`;
-const DEPLOY = `mutation Deploy($environmentId:String!,$serviceId:String!){
-  serviceInstanceDeployV2(environmentId:$environmentId,serviceId:$serviceId)
+    skipDeploys:$skipDeploys,commitMessage:$message)
 }`;
 const NATIVE_ROLLBACK = 'mutation Rollback($id:String!){deploymentRollback(id:$id)}';
-const fail = (message) => { throw new Error(message); };
+class PromotionFailure extends Error {
+  constructor(message, code = 'VALIDATION_FAILED') { super(message); this.code = code; }
+}
+const fail = (message, code) => { throw new PromotionFailure(message, code); };
 class RequestFailure extends Error {
   constructor(provider, rejected = false) {
     super(`${provider} request failed`);
     this.rejected = rejected;
   }
+}
+function diagnostic(error) {
+  if (error instanceof PromotionFailure) return { code: error.code, message: error.message };
+  if (error instanceof RequestFailure) return error.rejected
+    ? { code: 'API_REQUEST_REJECTED', message: 'An API rejected the request before execution.' }
+    : { code: 'API_REQUEST_AMBIGUOUS', message: 'An API response could not be confirmed.' };
+  return { code: 'UNEXPECTED_ERROR', message: 'An unexpected failure prevented verification.' };
 }
 const id = (value) => Number.isSafeInteger(value) && value > 0;
 const cleanPath = (value) => typeof value === 'string' && value.split('@')[0];
@@ -192,73 +199,46 @@ function deploymentPatch(c, imageRef, includeCredentials = true) {
   } } };
 }
 
-function previousSourcePatch(c, evidence) {
-  const patch = deploymentPatch(c, evidence.previousImageRef, false);
-  if (!evidence.previousImageRef) {
-    const git = evidence.previousGitSource;
-    if (!git || git.repo !== c.repository || git.branch !== 'production' ||
-        !SHA.test(git.commitSha || '')) fail('The previous source cannot be safely restored');
-    patch.services[c.serviceId].source = { ...git, image: null };
-    patch.services[c.serviceId].configFile = '/railway.json';
-  } else imageDigest(evidence.previousImageRef, c.imageRepository);
-  return patch;
+function assertImageSource(d, expectedImage) {
+  if (d.meta?.image !== expectedImage || d.meta?.repo || d.meta?.commitHash) {
+    fail('Deployment source is not the requested immutable Docker image', 'IMAGE_SOURCE_MISMATCH');
+  }
 }
 
-function sameActiveDeployments(a, b) {
-  const state = (s) => (s.activeDeployments || []).map((d) =>
-    `${d.id}:${d.status}:${d.deploymentStopped === true}`).sort();
-  return JSON.stringify(state(a)) === JSON.stringify(state(b));
+function runtimeMatches(d) {
+  const deploy = d?.meta?.serviceManifest?.deploy;
+  return deploy && Object.entries(RUNTIME).every(([key, value]) =>
+    JSON.stringify(deploy[key]) === JSON.stringify(value));
 }
 
-async function reconcileDeployFailure(c, before, evidence, error, clients, options) {
-  const { clock, sleep, writeEvidence } = options;
-  const definiteRejection = error instanceof RequestFailure && error.rejected;
-  evidence.deployRequestOutcome = definiteRejection ? 'rejected' : 'ambiguous';
-  const attempts = definiteRejection ? 1 : 6;
-  for (let attempt = 0; attempt < attempts; attempt++) {
+async function waitForImageDeployment(c, before, expectedImage, clients, { clock, sleep, timeoutMs }) {
+  const deadline = clock() + timeoutMs;
+  while (clock() < deadline) {
     const { serviceInstance: observed } = await clients.railway(INSTANCE_QUERY,
       { serviceId: c.serviceId, environmentId: c.environmentId });
     assertInstance(c, observed);
-    if (observed.source?.image !== evidence.imageRef || observed.source?.repo) fail('Source changed during deployment reconciliation');
+    const atTarget = observed.source?.image === expectedImage && !observed.source?.repo;
+    const atBaseline = (observed.source?.image || null) === (before.source?.image || null) &&
+      (observed.source?.repo || null) === (before.source?.repo || null);
+    if (!atTarget && !atBaseline) fail('Source changed while waiting for image deployment', 'SOURCE_CHANGED');
     const latest = observed.latestDeployment;
-    if (latest) assertDeployment(c, latest, latest.id);
-    if (latest?.id !== before.latestDeployment?.id && UUID.test(latest?.id || '') &&
-        observedDigest(latest) === evidence.imageDigest) {
+    if (latest && latest.id !== before.latestDeployment?.id) {
+      if (!UUID.test(latest.id || '')) fail('New deployment ID is invalid', 'INVALID_DEPLOYMENT_ID');
       assertDeployment(c, latest, latest.id);
-      evidence.deploymentIdAdopted = true;
-      return latest.id;
+      // Bind the ID to Docker provenance before polling it. A previous Git
+      // deployment must never become evidence for an image configuration.
+      if (latest.meta?.image || latest.meta?.repo || latest.meta?.commitHash) {
+        assertImageSource(latest, expectedImage);
+        if (!atTarget) fail('Image configuration is not active', 'SOURCE_CHANGED');
+        return latest.id;
+      }
+      if (['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED'].includes(latest.status)) {
+        fail('Image deployment failed before source metadata was available', 'DEPLOYMENT_FAILED');
+      }
     }
-    // A definite rejection plus the unchanged, still-running baseline proves
-    // no deployment was created. Restore only configuration, never redeploy.
-    // A transport timeout cannot provide that proof and must remain fail-closed.
-    const baseline = before.latestDeployment;
-    const oldRunning = baseline && observed.activeDeployments?.some((d) =>
-      d.id === baseline.id && d.status === 'SUCCESS' && !d.deploymentStopped);
-    if (definiteRejection && oldRunning && latest?.id === baseline.id &&
-        latest.status === 'SUCCESS' && !latest.deploymentStopped &&
-        observedDigest(latest) === evidence.previousImageDigest && sameActiveDeployments(before, observed)) {
-      const patch = previousSourcePatch(c, evidence);
-      const restored = await clients.railway(PATCH, { environmentId: c.environmentId, patch,
-        message: 'Restore previous API source after a rejected deployment request' });
-      if (!restored.environmentPatchCommit) fail('Previous source configuration could not be restored');
-      const { serviceInstance: after } = await clients.railway(INSTANCE_QUERY,
-        { serviceId: c.serviceId, environmentId: c.environmentId });
-      assertInstance(c, after);
-      const expected = patch.services[c.serviceId].source;
-      if ((after.source?.image || null) !== (expected.image || null) ||
-          (after.source?.repo || null) !== (expected.repo || null) ||
-          after.latestDeployment?.id !== baseline.id || !sameActiveDeployments(before, after)) fail('Concurrent change prevented confirmation of the restored source');
-      const health = await clients.health(c.healthUrl);
-      if (health?.ok !== true || health.service !== 'rev-logistica-api') fail('Previous API health could not be confirmed');
-      evidence.failurePhase = 'configured'; evidence.phase = 'config-restored'; evidence.success = false;
-      evidence.configurationRestored = true; evidence.previousDeploymentStillRunning = true;
-      evidence.restoredAt = new Date(clock()).toISOString();
-      await writeEvidence(c.outputPath, evidence);
-      fail('Deployment was rejected; the previous source configuration and running API were preserved');
-    }
-    if (attempt + 1 < attempts) await sleep(5_000);
+    await sleep(5_000);
   }
-  fail('Deployment response was ambiguous; an operator must reconcile the configuration before retrying');
+  fail('No new deployment for the requested image was observed', 'IMAGE_DEPLOYMENT_TIMEOUT');
 }
 
 async function waitHealthy(c, deploymentId, expectedDigest, clients, options) {
@@ -267,16 +247,18 @@ async function waitHealthy(c, deploymentId, expectedDigest, clients, options) {
   while (clock() < deadline) {
     const { deployment: d } = await clients.railway(DEPLOYMENT_QUERY, { id: deploymentId });
     assertDeployment(c, d, deploymentId);
-    if (['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED'].includes(d.status) || d.deploymentStopped) fail('Deployment failed or was superseded');
+    if (['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED'].includes(d.status)) fail('Deployment failed or was superseded', 'DEPLOYMENT_FAILED');
+    if (options.expectedImage) assertImageSource(d, options.expectedImage);
     if (d.status === 'SUCCESS') {
-      if (observedDigest(d) !== expectedDigest) fail('Running image digest does not match the verified image');
+      if (d.deploymentStopped) fail('Successful deployment is stopped', 'DEPLOYMENT_STOPPED');
+      if (observedDigest(d) !== expectedDigest) fail('Running image digest does not match the verified image', 'IMAGE_DIGEST_MISMATCH');
       const body = await clients.health(c.healthUrl);
-      if (body?.ok !== true || body.service !== 'rev-logistica-api') fail('API health response is not valid');
+      if (body?.ok !== true || body.service !== 'rev-logistica-api') fail('API health response is not valid', 'HEALTH_RESPONSE_INVALID');
       return d;
     }
     await sleep(5_000);
   }
-  fail('Deployment health verification timed out');
+  fail('Deployment health verification timed out', 'HEALTH_TIMEOUT');
 }
 
 async function promote(c, clients, { readEvidence, writeEvidence,
@@ -348,53 +330,72 @@ async function promote(c, clients, { readEvidence, writeEvidence,
   };
   await writeEvidence(c.outputPath, evidence);
   try {
-    const patch = deploymentPatch(c, target, c.action !== 'rollback');
-    if (nativeRollback) {
-      patch.services[c.serviceId].source = { ...nativeRollback.git, image: null };
-      patch.services[c.serviceId].configFile = '/railway.json';
-    }
-    const committed = await clients.railway(PATCH, { environmentId: c.environmentId, patch,
-      message: `API image ${c.action}: ${c.sourceSha} ${evidence.imageDigest}` });
-    if (!committed.environmentPatchCommit) fail('Railway did not confirm the image configuration');
-    evidence.phase = 'configured'; await writeEvidence(c.outputPath, evidence);
-    if (nativeRollback) {
-      const rolledBack = await clients.railway(NATIVE_ROLLBACK, { id: nativeRollback.id });
-      if (rolledBack.deploymentRollback !== true) fail('Railway did not confirm the native rollback');
-      const deadline = clock() + timeoutMs;
-      while (!evidence.deploymentId && clock() < deadline) {
-        const { serviceInstance: s } = await clients.railway(INSTANCE_QUERY, { serviceId: c.serviceId, environmentId: c.environmentId });
-        assertInstance(c, s);
-        if (s.latestDeployment?.id !== before.latestDeployment.id && UUID.test(s.latestDeployment?.id || '')) evidence.deploymentId = s.latestDeployment.id;
-        else await sleep(5_000);
-      }
-      if (!evidence.deploymentId) fail('Native rollback did not create a recoverable deployment');
+    const alreadyRunning = !nativeRollback && c.action !== 'rollback' &&
+      before.source?.image === target && !before.source?.repo && old?.status === 'SUCCESS' &&
+      !old.deploymentStopped && old.meta?.image === target && !old.meta?.repo && !old.meta?.commitHash &&
+      observedDigest(old) === evidence.imageDigest && runtimeMatches(old);
+    if (alreadyRunning) {
+      evidence.deploymentId = old.id;
+      evidence.existingDeploymentVerified = true;
     } else {
+      const patch = deploymentPatch(c, target, c.action !== 'rollback');
+      if (nativeRollback) {
+        patch.services[c.serviceId].source = { ...nativeRollback.git, image: null };
+        patch.services[c.serviceId].configFile = '/railway.json';
+      }
+      evidence.phase = 'patching'; await writeEvidence(c.outputPath, evidence);
       try {
-        const deployed = await clients.railway(DEPLOY, { environmentId: c.environmentId, serviceId: c.serviceId });
-        if (!UUID.test(deployed.serviceInstanceDeployV2 || '')) throw new RequestFailure('Railway deployment');
-        evidence.deploymentId = deployed.serviceInstanceDeployV2;
+        const committed = await clients.railway(PATCH, { environmentId: c.environmentId, patch,
+          skipDeploys: Boolean(nativeRollback),
+          message: `API image ${c.action}: ${c.sourceSha} ${evidence.imageDigest}` });
+        if (!committed.environmentPatchCommit) fail('Railway did not confirm the image configuration', 'PATCH_NOT_CONFIRMED');
+        if (UUID.test(committed.environmentPatchCommit)) evidence.configurationWorkflowId = committed.environmentPatchCommit;
       } catch (error) {
-        evidence.deploymentId = await reconcileDeployFailure(c, before, evidence, error, clients,
-          { clock, sleep, writeEvidence });
+        // The configuration commit itself triggers image deployments. A lost
+        // response can only be recovered by observing that exact image; never
+        // issue DeployV2, which reuses the previously associated Git commit.
+        if (nativeRollback || !(error instanceof RequestFailure) || error.rejected) throw error;
+        evidence.deployRequestOutcome = 'ambiguous';
+      }
+      evidence.phase = 'configured'; await writeEvidence(c.outputPath, evidence);
+      if (nativeRollback) {
+        const rolledBack = await clients.railway(NATIVE_ROLLBACK, { id: nativeRollback.id });
+        if (rolledBack.deploymentRollback !== true) fail('Railway did not confirm the native rollback', 'ROLLBACK_NOT_CONFIRMED');
+        const deadline = clock() + timeoutMs;
+        while (!evidence.deploymentId && clock() < deadline) {
+          const { serviceInstance: instance } = await clients.railway(INSTANCE_QUERY,
+            { serviceId: c.serviceId, environmentId: c.environmentId });
+          assertInstance(c, instance);
+          const latest = instance.latestDeployment;
+          if (latest?.id !== before.latestDeployment.id && UUID.test(latest?.id || '')) {
+            assertDeployment(c, latest, latest.id);
+            evidence.deploymentId = latest.id;
+          } else await sleep(5_000);
+        }
+        if (!evidence.deploymentId) fail('Native rollback did not create a recoverable deployment', 'ROLLBACK_DEPLOYMENT_TIMEOUT');
+      } else {
+        evidence.deploymentId = await waitForImageDeployment(c, before, target, clients, { clock, sleep, timeoutMs });
       }
     }
     evidence.phase = 'deploying';
     await writeEvidence(c.outputPath, evidence);
-    await waitHealthy(c, evidence.deploymentId, evidence.imageDigest, clients, { clock, sleep, timeoutMs });
+    await waitHealthy(c, evidence.deploymentId, evidence.imageDigest, clients,
+      { clock, sleep, timeoutMs, expectedImage: nativeRollback ? undefined : target });
     const { serviceInstance: after } = await clients.railway(INSTANCE_QUERY, { serviceId: c.serviceId, environmentId: c.environmentId });
     assertInstance(c, after);
     if ((nativeRollback ? after.source?.repo !== c.repository || after.source?.image :
         after.source?.image !== target || after.source?.repo) ||
-        after.latestDeployment?.id !== evidence.deploymentId) fail('Deployment was superseded by a concurrent configuration change');
+        after.latestDeployment?.id !== evidence.deploymentId) fail('Deployment was superseded by a concurrent configuration change', 'SOURCE_CHANGED');
     evidence.success = true; evidence.phase = 'healthy'; evidence.healthCheck = { ok: true };
     evidence.verifiedAt = new Date(clock()).toISOString();
     await writeEvidence(c.outputPath, evidence);
     return evidence;
-  } catch {
-    evidence.success = false; evidence.failurePhase ||= evidence.phase;
-    if (evidence.phase !== 'config-restored') evidence.phase = 'failed';
+  } catch (error) {
+    const safe = diagnostic(error);
+    evidence.success = false; evidence.failurePhase = evidence.phase; evidence.phase = 'failed';
+    evidence.failureCode = safe.code; evidence.failureMessage = safe.message;
     await writeEvidence(c.outputPath, evidence);
-    fail('Image promotion failed. Inspect deployment status and sanitized evidence before retrying or rolling back.');
+    fail(safe.message, safe.code);
   }
 }
 
@@ -409,9 +410,10 @@ async function main(env = process.env, action = process.argv[2]) {
   });
   process.stdout.write(`API ${action} verified: ${evidence.deploymentId} ${evidence.imageDigest}\n`);
 }
-if (require.main === module) main().catch(() => {
-  // No raw request/response/errors: provider errors may contain credentials.
-  process.stderr.write('API image promotion did not complete; check deployment status and sanitized evidence.\n');
+if (require.main === module) main().catch((error) => {
+  // Only local static diagnostics may reach logs; never provider responses.
+  const safe = diagnostic(error);
+  process.stderr.write(`API image promotion did not complete [${safe.code}]: ${safe.message}\n`);
   process.exitCode = 1;
 });
 
