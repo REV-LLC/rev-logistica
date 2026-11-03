@@ -3,8 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
+const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
 
 test('binds the unique build tag to reviewed source and current workflow run', () => {
   const proof = { repository: 'REV-LLC/rev-logistica', sourceSha: 'a'.repeat(40), sourceTree: 'b'.repeat(40), sourceBuildRunId: '123' };
@@ -77,7 +78,44 @@ test('builds exactly once for amd64, loads for smoke testing and does not push b
   assert(!args.includes('--push'));
   assert(args.includes(`BUILDKIT_SYNTAX=${FRONTEND}`));
   assert(args.includes('id=DATABASE_URL,env=DATABASE_URL'));
+  assert(args.includes('id=RAILPACK_NODE_VERSION,env=RAILPACK_NODE_VERSION'));
   assert(!args.some((arg) => /GH_TOKEN|RAILWAY_TOKEN|ghp_|github_pat_/.test(arg)));
+});
+
+test('every plan binding is supplied consistently to prepare, Docker, its hash and the isolated child environment', () => {
+  const prepare = prepareArguments('/repo', '/tmp/work');
+  const build = buildArguments('/repo', '/tmp/work', `${IMAGE_REPOSITORY}:test`);
+  const environment = createBuildEnvironment({ PATH: '/bin', HOME: '/runner', DOCKER_CONFIG: '/isolated', DATABASE_URL: 'must-not-use-real-database', RAILPACK_NODE_VERSION: 'wrong', GH_TOKEN: 'must-not-pass', RAILWAY_TOKEN: 'must-not-pass', JWT_SECRET: 'must-not-pass' });
+  assert.deepEqual(environment, { PATH: '/bin', HOME: '/runner', DOCKER_CONFIG: '/isolated', ...BUILD_VALUES });
+  const suppliedNames = [];
+  for (let i = 0; i < build.length; i++) if (build[i] === '--secret') suppliedNames.push(build[i + 1]);
+  assert.deepEqual(suppliedNames, Object.keys(BUILD_VALUES).map((name) => `id=${name},env=${name}`));
+  for (const [name, value] of Object.entries(BUILD_VALUES)) assert(prepare.includes(`${name}=${value}`));
+  const hash = crypto.createHash('sha256').update(Object.entries(BUILD_VALUES).map(([name, value]) => `${name}=${value}`).join('\n')).digest('hex');
+  assert(build.includes(`secrets-hash=${hash}`));
+  validatePlanSecrets({ secrets: Object.keys(BUILD_VALUES) });
+});
+
+test('unknown or malformed required plan secrets fail closed before Docker', () => {
+  for (const secrets of [['DATABASE_URL', 'JWT_SECRET'], ['DATABASE_URL', '*'], ['__proto__'], [null], 'DATABASE_URL', undefined]) {
+    assert.throws(() => validatePlanSecrets({ secrets }));
+  }
+});
+
+test('actual Railpack API plan declares only the two supplied build bindings', { skip: !process.env.RAILPACK_TEST_BINARY }, (t) => {
+  const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'api-railpack-plan-test-'));
+  t.after(() => fs.rmSync(workDirectory, { recursive: true, force: true }));
+  const repository = path.resolve(__dirname, '../..');
+  execFileSync(process.env.RAILPACK_TEST_BINARY, prepareArguments(repository, workDirectory), { env: createBuildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+  const plan = JSON.parse(fs.readFileSync(path.join(workDirectory, 'railpack-plan.json'), 'utf8'));
+  validatePlanSecrets(plan);
+  assert.deepEqual([...plan.secrets].sort(), Object.keys(BUILD_VALUES).sort());
+  const args = buildArguments(repository, workDirectory, `${IMAGE_REPOSITORY}:test`);
+  const environment = createBuildEnvironment(process.env);
+  for (const name of plan.secrets) {
+    assert(args.includes(`id=${name},env=${name}`));
+    assert.equal(environment[name], BUILD_VALUES[name]);
+  }
 });
 
 test('accepts only immutable digests in the fixed private package', () => {
