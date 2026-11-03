@@ -68,6 +68,30 @@ function verifyPublishedImage(registry, manifest, localImage) {
   return imageRef;
 }
 
+function exportReleaseContext(repositoryDirectory, workDirectory, sourceSha) {
+  assert(/^[0-9a-f]{40}$/.test(sourceSha), 'A complete release commit is required');
+  const context = path.join(workDirectory, 'context');
+  fs.mkdirSync(context);
+  const archive = path.join(workDirectory, 'source.tar');
+  // Archive Git objects directly to a descriptor: no shell pipeline, output
+  // buffering limit, checkout metadata, untracked .env, caches or runner logs.
+  const output = fs.openSync(archive, 'wx', 0o600);
+  try {
+    execFileSync('git', ['archive', '--format=tar', sourceSha], { cwd: repositoryDirectory, stdio: ['ignore', output, 'inherit'] });
+  } finally {
+    fs.closeSync(output);
+  }
+  const input = fs.openSync(archive, 'r');
+  try {
+    execFileSync('tar', ['-xf', '-', '-C', context], { stdio: [input, 'inherit', 'inherit'] });
+  } finally {
+    fs.closeSync(input);
+    fs.unlinkSync(archive);
+  }
+  assert(!fs.existsSync(path.join(context, '.git')), 'Git metadata cannot enter the image context');
+  return context;
+}
+
 async function main() {
   const environment = process.env;
   assert.equal(process.platform, 'linux', 'Build only on the Linux runner');
@@ -75,8 +99,9 @@ async function main() {
   assert(environment.GH_TOKEN, 'Missing package verification token');
   const proof = JSON.parse(fs.readFileSync(environment.SOURCE_EVIDENCE_PATH, 'utf8'));
   const imageTag = validateProof(proof, environment);
-  const directory = fs.realpathSync(process.cwd());
+  const repositoryDirectory = fs.realpathSync(process.cwd());
   const workDirectory = fs.mkdtempSync(path.join(environment.RUNNER_TEMP, 'api-image-build-'));
+  const directory = exportReleaseContext(repositoryDirectory, workDirectory, proof.sourceSha);
   fs.mkdirSync(path.join(workDirectory, 'bin'));
   // Build children receive no GitHub/Railway tokens or deployment configuration.
   const buildEnvironment = { PATH: environment.PATH, HOME: environment.HOME, DOCKER_CONFIG: environment.DOCKER_CONFIG, DATABASE_URL: BUILD_DATABASE_URL };
@@ -123,5 +148,5 @@ async function main() {
   console.log(`Published private immutable image ${imageRef}`);
 }
 
-module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage };
+module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage, exportReleaseContext };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });

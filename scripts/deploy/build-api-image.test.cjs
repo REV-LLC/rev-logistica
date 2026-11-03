@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage } = require('./build-api-image.cjs');
+const { execFileSync } = require('node:child_process');
+const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
 
 test('binds the unique build tag to reviewed source and current workflow run', () => {
   const proof = { repository: 'REV-LLC/rev-logistica', sourceSha: 'a'.repeat(40), sourceTree: 'b'.repeat(40), sourceBuildRunId: '123' };
@@ -90,4 +91,32 @@ test('registry digest must resolve to the exact local image that passed the runt
   assert.equal(verifyPublishedImage({ digest }, { config: { digest: localImage.Id } }, localImage), `${IMAGE_REPOSITORY}@${digest}`);
   assert.throws(() => verifyPublishedImage({ digest }, { config: { digest } }, localImage));
   assert.throws(() => verifyPublishedImage({ digest }, {}, localImage));
+});
+
+test('release context comes from the exact Git tree and excludes checkout metadata, untracked secrets and logs', (t) => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'api-source-context-test-'));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const repository = path.join(temporary, 'repository');
+  fs.mkdirSync(repository);
+  const git = (args) => execFileSync('git', args, { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git(['init', '-q']);
+  fs.mkdirSync(path.join(repository, 'scripts'));
+  fs.writeFileSync(path.join(repository, 'package.json'), '{"name":"reviewed-source"}\n');
+  fs.writeFileSync(path.join(repository, 'scripts/check-api-runtime.cjs'), 'console.log("reviewed checker")\n');
+  git(['add', 'package.json', 'scripts/check-api-runtime.cjs']);
+  git(['-c', 'user.name=Runtime test', '-c', 'user.email=runtime@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'reviewed tree']);
+  const sha = git(['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(repository, 'package.json'), '{"name":"modified-checkout"}\n');
+  fs.writeFileSync(path.join(repository, '.env'), 'UNTRACKED_SECRET=must-not-enter-build\n');
+  fs.writeFileSync(path.join(repository, 'runner.log'), 'not source\n');
+  fs.mkdirSync(path.join(repository, 'node_modules'));
+  fs.writeFileSync(path.join(repository, 'node_modules/cache'), 'not source\n');
+  const workDirectory = path.join(temporary, 'build');
+  fs.mkdirSync(workDirectory);
+  const context = exportReleaseContext(repository, workDirectory, sha);
+  assert.equal(fs.readFileSync(path.join(context, 'package.json'), 'utf8'), '{"name":"reviewed-source"}\n');
+  assert.equal(fs.readFileSync(path.join(context, 'scripts/check-api-runtime.cjs'), 'utf8'), 'console.log("reviewed checker")\n');
+  for (const relative of ['.git', '.env', 'runner.log', 'node_modules']) assert(!fs.existsSync(path.join(context, relative)));
+  assert(!fs.existsSync(path.join(workDirectory, 'source.tar')));
+  assert.throws(() => exportReleaseContext(repository, path.join(temporary, 'bad'), 'production'));
 });

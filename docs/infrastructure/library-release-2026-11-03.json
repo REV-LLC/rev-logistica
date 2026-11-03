@@ -22,8 +22,8 @@
       "deploymentId": "c9103543-d8bf-4ec7-9474-903752be016f",
       "status": "SUCCESS",
       "createdAt": "2026-11-03T19:20:37.231Z",
-      "healthyAt": null,
-      "totalThroughHealthSeconds": null,
+      "healthyAt": "2026-11-03T19:24:39.945694147Z",
+      "totalThroughHealthSeconds": 242.714694,
       "imageDigest": "sha256:fd93537191de2b15df73d2464c9543a2906c81bdece46b8546e19c1b5f162151"
     }
   },
