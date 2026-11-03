@@ -3,7 +3,7 @@
   "build": {
     "builder": "RAILPACK",
     "buildCommand": "npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build",
-    "railpackVersion": "0.43.0"
+    "railpackVersion": "v0.43.0"
   },
   "deploy": {
     "preDeployCommand": [
