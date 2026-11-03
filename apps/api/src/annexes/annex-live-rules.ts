@@ -8,6 +8,7 @@ import { selectAnnexMode } from './annex-mode-selection';
 
 type Pricing = AnnexInput['rentals'][number]['pricing'];
 function manualPricing(pricing: Pricing) {
+  if (pricing.basePriceOverride !== undefined) return true;
   if (pricing.adjustmentSource) return pricing.adjustmentSource === 'MANUAL';
   // Compatibility for saved configurations created before provenance was recorded.
   if (pricing.discountPercent !== undefined) return true;
@@ -64,15 +65,16 @@ export function applySavedAnnexRules(fresh: AnnexInput, saved: AnnexInput) {
       !rental.includedIn &&
       !rental.commercial?.contextualZero
     ) {
-      const base =
-        old.pricing.effectivePrice === undefined
-          ? rental.pricing.basePrice
-          : Prisma.Decimal.max(
-              rental.pricing.basePrice,
-              old.pricing.effectivePrice,
-            ).toFixed(2);
+      const base = Prisma.Decimal.max(
+        rental.pricing.basePrice,
+        old.pricing.basePriceOverride ?? '0',
+        old.pricing.effectivePrice ?? '0',
+      ).toFixed(2);
       rental.pricing = {
         basePrice: base,
+        ...(old.pricing.basePriceOverride !== undefined
+          ? { basePriceOverride: old.pricing.basePriceOverride }
+          : {}),
         adjustmentSource: 'MANUAL',
         ...(old.pricing.adjustmentReason
           ? { adjustmentReason: old.pricing.adjustmentReason }

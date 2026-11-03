@@ -7,6 +7,7 @@ const input = {
 const payload = { customerWorksiteId: 'd30745f6-5bf5-48b5-bd37-74c8db9e654e', expectedRevision: 0, reason: 'Primer corte', input };
 function setup() {
   const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: payload.customerWorksiteId }]),
+    sku: { count: jest.fn().mockResolvedValue(1) },
     annexDraft: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockImplementation(async ({data}) => ({id: 'draft', ...data})), update: jest.fn().mockImplementation(async ({data}) => ({id: 'draft', ...data})) },
     annexDraftRevision: { create: jest.fn().mockImplementation(async ({data}) => data) },
   };
@@ -48,6 +49,18 @@ it('rejects non-daily writes before acquiring locks or storing a revision', asyn
   await expect(service.save({ ...payload, input: { ...input, machineDays: [{ assetId: 'machine', label: 'machine', date: '2026-09-16', status: 'PENDING', reports: [], pricing: { basePrice: '0' } }] } }, 'author')).rejects.toThrow('solo admite');
   expect(tx.$queryRaw).not.toHaveBeenCalled();
   expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
+});
+
+it('saves an exceptional final price as a base override only in the annex revision', async () => {
+  const {service, tx} = setup();
+  const rental = {id:'lot',skuId:'sku',label:'Equipo',deliveredOn:'2026-09-16',quantity:'2',source:{reference:'rem',origin:'INVENTORY'},returns:[],waivedDays:[],pricing:{basePrice:'100',effectivePrice:'150.25',adjustmentSource:'MANUAL'}};
+  const original = JSON.stringify(rental);
+  const saved = await service.save({...payload,input:{...input,rentals:[rental]}}, 'author');
+  expect(saved.revisions[0].input.rentals[0].pricing).toEqual({basePrice:'150.25',basePriceOverride:'150.25',effectivePrice:'150.25',adjustmentSource:'MANUAL'});
+  expect(saved.revisions[0].result.totals.rentalNet).toBe('3005.00');
+  expect(saved.revisions[0].result.totals.rentalDiscount).toBe('0.00');
+  expect(tx.annexDraft.create).toHaveBeenCalledWith({data:expect.objectContaining({customerWorksiteId:payload.customerWorksiteId,periodFrom:new Date('2026-09-16T00:00:00Z'),periodTo:new Date('2026-09-30T00:00:00Z')})});
+  expect(JSON.stringify(rental)).toBe(original);
 });
 
 it.each([0, 19])('persists the selected VAT rate %s in the revision', async (vatPercent) => {

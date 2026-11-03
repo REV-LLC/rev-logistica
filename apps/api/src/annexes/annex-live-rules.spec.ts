@@ -118,6 +118,26 @@ describe('live annex saved rules', () => {
     expect(input.rentals.map((r) => r.id)).toEqual(['new-lot']);
     expect(calculateAnnex(input).totals.rentalNet).toBe('138240.00');
   });
+  it('retains an annex-only raised base through reloads and later discounts', () => {
+    const fresh = fixture(), saved = fixture();
+    saved.rentals[0].pricing = {
+      basePrice: '3500.25', basePriceOverride: '3500.25',
+      effectivePrice: '3500.25', adjustmentSource: 'MANUAL',
+    };
+    const original = JSON.stringify(fresh);
+    const first = applySavedAnnexRules(fresh, saved).input;
+    expect(first.rentals[0].pricing.basePrice).toBe('3500.25');
+    expect(calculateAnnex(first).lines[0].discountPercent).toBe('0.000000000000');
+    delete first.rentals[0].pricing.effectivePrice;
+    first.rentals[0].pricing.discountPercent = '10';
+    const reloaded = applySavedAnnexRules(fresh, first).input;
+    expect(reloaded.rentals[0].pricing.basePriceOverride).toBe('3500.25');
+    expect(calculateAnnex(reloaded).lines[0].effectivePrice).toBe('3150.225000000000');
+    expect(JSON.stringify(fresh)).toBe(original);
+    // A later catalog increase still sets the floor for the base.
+    fresh.rentals[0].pricing.basePrice = '4000';
+    expect(applySavedAnnexRules(fresh, first).input.rentals[0].pricing.basePrice).toBe('4000.00');
+  });
   it('applies saved minima, calendar exclusions and valid manual day adjustments', () => {
     const fresh = fixture(),
       saved = fixture();

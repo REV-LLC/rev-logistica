@@ -95,10 +95,12 @@ it('reads the database on each consultation and applies saved rules without crea
     },
     annexDraft: {
       findMany: async () => [],
-      findFirst: jest.fn(async () => ({
-        revision: 3,
-        revisions: [{ input: saved }],
-      })),
+      findFirst: jest.fn(async ({where}: {where: {customerWorksiteId: string; periodFrom: Date; periodTo: Date}}) =>
+        where.customerWorksiteId === '00000000-0000-4000-8000-000000000001' &&
+        where.periodFrom.toISOString().slice(0, 10) === saved.period.from &&
+        where.periodTo.toISOString().slice(0, 10) === saved.period.to
+          ? {revision: 3, revisions: [{input: saved}]}
+          : null),
     },
     appSetting: { findUnique: async () => null },
   };
@@ -124,6 +126,19 @@ it('reads the database on each consultation and applies saved rules without crea
   expect(tx.stockLedger.findMany).toHaveBeenCalledTimes(2);
   expect(tx.annexDraft.findFirst).toHaveBeenCalledTimes(2);
   expect(saved.rentals[0].quantity).toBe('1');
+  // An exceptional base survives live queries only for its exact worksite/cut.
+  saved.rentals[0].pricing = {basePrice:'250',basePriceOverride:'250',discountPercent:'10',adjustmentSource:'MANUAL'};
+  const exceptional = await query();
+  expect(exceptional.input.rentals[0].pricing.basePrice).toBe('250.00');
+  expect(exceptional.result.summary.subtotal).toBe('1400.02');
+  const otherSite = await service.prepare('00000000-0000-4000-8000-000000000002', saved.period.from, saved.period.to, saved.period.through, true);
+  const nextCut = await service.prepare('00000000-0000-4000-8000-000000000001', '2026-10-16', '2026-10-17', '2026-10-17', true);
+  for (const other of [otherSite, nextCut]) {
+    expect(other.input.rentals[0].pricing.basePrice).toBe('200.00');
+    expect(other.input.rentals[0].pricing.basePriceOverride).toBeUndefined();
+    expect(other.revision).toBe(0);
+  }
+  expect(sku.price.toString()).toBe('200');
 });
 
 it('opens an invoiced snapshot without reading or recalculating current inventory', async () => {
