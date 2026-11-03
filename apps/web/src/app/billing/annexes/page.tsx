@@ -1,4 +1,5 @@
 "use client";
+import { openDatePicker } from "@/lib/date-picker";
 import { newAnnexPeriod } from "@/lib/annex-url";
 import glassStyles from "./annex-glass.module.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -644,6 +645,7 @@ export default function AnnexesPage() {
                     <TextInput
                       key={key}
                       type="date"
+                      onClick={(event) => openDatePicker(event.currentTarget)}
                       label={
                         {
                           from: "Inicio del corte",
