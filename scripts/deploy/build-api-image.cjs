@@ -12,7 +12,10 @@ const RAILPACK_VERSION = '0.43.0';
 // https://github.com/railwayapp/railpack/releases/tag/v0.43.0
 const RAILPACK_SHA256 = '248a8f60f36854aabed6124113631078a802de3461660855fc4de9c26065c1fb';
 const FRONTEND = 'ghcr.io/railwayapp/railpack-frontend@sha256:355ef61fae6f2551103cd8b10c710cb07167dd353d561f15c69b8d7ac1c676cc';
-const BUILD_DATABASE_URL = 'postgresql://build:build@127.0.0.1:1/build';
+const BUILD_VALUES = Object.freeze({
+  DATABASE_URL: 'postgresql://build:build@127.0.0.1:1/build',
+  RAILPACK_NODE_VERSION: '22.23.4',
+});
 
 function validateProof(proof, environment) {
   assert.equal(proof.repository, REPOSITORY);
@@ -49,12 +52,25 @@ async function ensurePrivatePackage({ github, run, workDirectory, repositoryId, 
 }
 
 function prepareArguments(directory, workDirectory) {
-  return ['prepare', directory, '--plan-out', path.join(workDirectory, 'railpack-plan.json'), '--info-out', path.join(workDirectory, 'railpack-info.json'), '--build-cmd', 'npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build', '--start-cmd', 'npm --workspace apps/api run start:prod', '--env', 'RAILPACK_NODE_VERSION=22.23.4', '--env', `DATABASE_URL=${BUILD_DATABASE_URL}`, '--error-missing-start'];
+  const values = Object.entries(BUILD_VALUES).flatMap(([name, value]) => ['--env', `${name}=${value}`]);
+  return ['prepare', directory, '--plan-out', path.join(workDirectory, 'railpack-plan.json'), '--info-out', path.join(workDirectory, 'railpack-info.json'), '--build-cmd', 'npm --workspace apps/api exec prisma generate && npm --workspace apps/api run build', '--start-cmd', 'npm --workspace apps/api run start:prod', ...values, '--error-missing-start'];
 }
 
 function buildArguments(directory, workDirectory, imageTag) {
-  const secretHash = crypto.createHash('sha256').update(`DATABASE_URL=${BUILD_DATABASE_URL}`).digest('hex');
-  return ['buildx', 'build', '--platform', 'linux/amd64', '--build-arg', `BUILDKIT_SYNTAX=${FRONTEND}`, '--build-arg', `secrets-hash=${secretHash}`, '--build-arg', 'cache-key=rev-logistica-api', '--secret', 'id=DATABASE_URL,env=DATABASE_URL', '--cache-from', `type=registry,ref=${IMAGE_REPOSITORY}:buildcache`, '--cache-to', 'type=inline', '--provenance=false', '--load', '--tag', imageTag, '--metadata-file', path.join(workDirectory, 'build-metadata.json'), '--file', path.join(workDirectory, 'railpack-plan.json'), directory];
+  const secretHash = crypto.createHash('sha256').update(Object.entries(BUILD_VALUES).map(([name, value]) => `${name}=${value}`).join('\n')).digest('hex');
+  const secrets = Object.keys(BUILD_VALUES).flatMap((name) => ['--secret', `id=${name},env=${name}`]);
+  return ['buildx', 'build', '--platform', 'linux/amd64', '--build-arg', `BUILDKIT_SYNTAX=${FRONTEND}`, '--build-arg', `secrets-hash=${secretHash}`, '--build-arg', 'cache-key=rev-logistica-api', ...secrets, '--cache-from', `type=registry,ref=${IMAGE_REPOSITORY}:buildcache`, '--cache-to', 'type=inline', '--provenance=false', '--load', '--tag', imageTag, '--metadata-file', path.join(workDirectory, 'build-metadata.json'), '--file', path.join(workDirectory, 'railpack-plan.json'), directory];
+}
+
+function createBuildEnvironment(environment) {
+  return { PATH: environment.PATH, HOME: environment.HOME, DOCKER_CONFIG: environment.DOCKER_CONFIG, ...BUILD_VALUES };
+}
+
+function validatePlanSecrets(plan) {
+  assert(Array.isArray(plan.secrets), 'Railpack plan must declare its build secrets');
+  for (const name of plan.secrets) {
+    assert(typeof name === 'string' && Object.hasOwn(BUILD_VALUES, name), `Railpack requested an unsupported build secret: ${name}`);
+  }
 }
 
 function verifyDigest(value) {
@@ -104,7 +120,7 @@ async function main() {
   const directory = exportReleaseContext(repositoryDirectory, workDirectory, proof.sourceSha);
   fs.mkdirSync(path.join(workDirectory, 'bin'));
   // Build children receive no GitHub/Railway tokens or deployment configuration.
-  const buildEnvironment = { PATH: environment.PATH, HOME: environment.HOME, DOCKER_CONFIG: environment.DOCKER_CONFIG, DATABASE_URL: BUILD_DATABASE_URL };
+  const buildEnvironment = createBuildEnvironment(environment);
   const run = (binary, args, options = {}) => execFileSync(binary, args, { stdio: 'inherit', env: buildEnvironment, ...options });
   const github = async (route) => {
     const response = await fetch(`https://api.github.com${route}`, {
@@ -125,6 +141,7 @@ async function main() {
   const railpack = path.join(workDirectory, 'bin/railpack');
   const buildStartedAt = new Date().toISOString();
   run(railpack, prepareArguments(directory, workDirectory));
+  validatePlanSecrets(JSON.parse(fs.readFileSync(path.join(workDirectory, 'railpack-plan.json'), 'utf8')));
   run('docker', buildArguments(directory, workDirectory, imageTag));
   const imageDetails = JSON.parse(execFileSync('docker', ['image', 'inspect', imageTag], { encoding: 'utf8', env: buildEnvironment }))[0];
   assert.equal(imageDetails.Os, 'linux');
@@ -148,5 +165,5 @@ async function main() {
   console.log(`Published private immutable image ${imageRef}`);
 }
 
-module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, verifyDigest, verifyPublishedImage, exportReleaseContext };
+module.exports = { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
