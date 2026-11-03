@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { configFromEnv, createClients, promote, deploymentPatch, validateStagingEvidence, RequestFailure } = require('./promote-api-image.cjs');
+const { configFromEnv, createClients, promote, deploymentPatch, validateStagingEvidence, RequestFailure, RUNTIME } = require('./promote-api-image.cjs');
 
 const NOW = Date.parse('2026-11-04T12:00:00Z');
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -49,7 +49,8 @@ function fixture(action = 'staging', extra = {}) {
   f.proof = stagingProof(c);
   f.previous = { id: uuid(10), status: 'SUCCESS', serviceId: c.serviceId, environmentId: c.environmentId,
     deploymentStopped: false, canRedeploy: true, canRollback: true,
-    meta: { imageDigest: OLD.split('@')[1], commitHash: 'e'.repeat(40), branch: 'production',
+    meta: { image: OLD, imageDigest: OLD.split('@')[1], commitHash: 'e'.repeat(40), branch: 'production',
+      serviceManifest: { deploy: structuredClone(RUNTIME) },
       irrelevantSecret: 'never-persist-this-secret' } };
   f.instance = { serviceId: c.serviceId, environmentId: c.environmentId,
     source: { image: OLD, repo: null }, latestDeployment: structuredClone(f.previous),
@@ -66,35 +67,51 @@ function fixture(action = 'staging', extra = {}) {
     },
     railway: async (query, variables) => {
       if (query.includes('query TokenScope')) return { projectToken: f.scope || { projectId: c.projectId, environmentId: c.environmentId } };
-      if (query.includes('query Instance')) return { serviceInstance: structuredClone(f.instance) };
+      if (query.includes('query Instance')) {
+        if (f.delayedInstanceReads > 0) {
+          f.delayedInstanceReads--;
+          return { serviceInstance: { ...structuredClone(f.instance), latestDeployment: structuredClone(f.previous) } };
+        }
+        return { serviceInstance: structuredClone(f.instance) };
+      }
       if (query.includes('query Deployment')) {
         if (variables.id === f.previous.id) return { deployment: structuredClone(f.previous) };
         const status = f.polls.length > 1 ? f.polls.shift() : f.polls[0];
-        const d = { ...structuredClone(f.instance.latestDeployment), status,
-          meta: { imageDigest: f.runningDigest || f.instance.source.image?.split('@')[1] || f.previous.meta.imageDigest } };
+        const stopped = f.stoppedOnSuccess && status === 'SUCCESS' || f.stoppedWhileBuilding && status !== 'SUCCESS';
+        const d = { ...structuredClone(f.instance.latestDeployment), status, deploymentStopped: Boolean(stopped) };
+        d.meta.imageDigest = f.runningDigest || d.meta.imageDigest;
+        if (f.runningImage) d.meta.image = f.runningImage;
         if (f.wrongDeployment) d.environmentId = uuid(99);
+        if (status === 'SUCCESS') {
+          f.instance.latestDeployment = structuredClone(d);
+          f.instance.activeDeployments = [structuredClone(d)];
+        }
         return { deployment: d };
       }
       f.mutations.push({ query, variables: structuredClone(variables) });
       if (query.includes('mutation Patch')) {
+        if (f.patchError && !f.appliedDespiteError) throw f.patchError;
         const patch = variables.patch.services[c.serviceId];
         f.instance.source = { image: patch.source.image, repo: patch.source.repo };
-        return { environmentPatchCommit: uuid(30) };
-      }
-      if (query.includes('mutation Deploy')) {
-        if (f.deployError) {
-          if (f.createdDespiteError) f.instance.latestDeployment = {
-            id: uuid(11), status: 'SUCCESS', serviceId: c.serviceId, environmentId: c.environmentId,
-            deploymentStopped: false, meta: { imageDigest: f.candidateDigest || c.digest },
+        if (!variables.skipDeploys && !f.noCandidate) {
+          f.nextDeployment = (f.nextDeployment || 10) + 1;
+          f.instance.latestDeployment = {
+            id: uuid(f.nextDeployment), status: 'BUILDING', serviceId: c.serviceId, environmentId: c.environmentId,
+            deploymentStopped: true, meta: {
+              image: f.candidateImage || patch.source.image,
+              imageDigest: f.candidateDigest || patch.source.image?.split('@')[1],
+              serviceManifest: { deploy: structuredClone(patch.deploy) },
+            },
           };
-          if (f.concurrentActiveDeployment) f.instance.activeDeployments.push({
-            id: uuid(99), status: 'BUILDING', deploymentStopped: false,
-          });
-          throw f.deployError;
+          if (f.gitCandidate) {
+            delete f.instance.latestDeployment.meta.image;
+            f.instance.latestDeployment.meta.repo = c.repository;
+            f.instance.latestDeployment.meta.commitHash = c.sourceSha;
+          }
+          if (f.wrongCandidateEnvironment) f.instance.latestDeployment.environmentId = uuid(99);
         }
-        f.instance.latestDeployment = { id: uuid(11), status: 'SUCCESS', serviceId: c.serviceId,
-          environmentId: c.environmentId, deploymentStopped: false, meta: { imageDigest: c.digest } };
-        return { serviceInstanceDeployV2: uuid(11) };
+        if (f.patchError) throw f.patchError;
+        return { environmentPatchCommit: uuid(30) };
       }
       if (query.includes('mutation Rollback')) {
         f.instance.latestDeployment = { ...structuredClone(f.previous), id: uuid(12), status: 'SUCCESS' };
@@ -119,8 +136,9 @@ test('staging configures only its service/environment and verifies exact deploye
   assert.equal(e.imageRef, NEW);
   assert.equal(e.previousImageRef, OLD);
   assert.equal(e.phase, 'healthy');
-  assert.equal(f.mutations.length, 2);
-  assert.match(f.mutations[0].query, /skipDeploys:true/);
+  assert.equal(f.mutations.length, 1);
+  assert.equal(f.mutations[0].variables.skipDeploys, false);
+  assert(!f.mutations.some((m) => m.query.includes('serviceInstanceDeployV2')));
   assert(!f.mutations[0].query.includes('environmentPatchCommitStaged'));
   assert.equal(f.mutations[0].variables.environmentId, f.c.stagingId);
   assert.deepEqual(Object.keys(f.mutations[0].variables.patch.services), [f.c.serviceId]);
@@ -240,7 +258,7 @@ for (const [name, change] of Object.entries({
     await assert.rejects(promote(f.c, f.clients, f.options));
     assert.equal(f.writes.at(-1).success, false);
     assert.equal(f.writes.at(-1).phase, 'failed');
-    assert.equal(f.mutations.length, 2); // no blind automatic rollback over concurrent work
+    assert.equal(f.mutations.length, 1); // no blind automatic rollback over concurrent work
   });
 }
 
@@ -295,7 +313,8 @@ test('first-transition rollback restores pinned Git configuration and the cached
   assert.equal(e.imageRef, null);
   assert.equal(e.imageDigest, OLD.split('@')[1]);
   assert(f.mutations.some((m) => m.query.includes('deploymentRollback')));
-  const restored = f.mutations[2].variables.patch.services[f.c.serviceId];
+  const restored = f.mutations[1].variables.patch.services[f.c.serviceId];
+  assert.equal(f.mutations[1].variables.skipDeploys, true);
   assert.equal(restored.source.repo, f.c.repository);
   assert.equal(restored.source.commitSha, 'e'.repeat(40));
   assert.equal(restored.configFile, '/railway.json');
@@ -319,70 +338,124 @@ test('HTTP clients do not leak provider errors or forward credentials to health 
   await assert.rejects(failed.railway('query{}'), (e) => !e.message.includes('railway-secret'));
 });
 
-test('a definite deploy rejection restores the previous digest configuration without creating another deployment', async () => {
-  const f = fixture('production'); f.deployError = new RequestFailure('Railway GraphQL', true);
-  await assert.rejects(promote(f.c, f.clients, f.options));
+test('a definite atomic patch rejection preserves the running baseline without another mutation', async () => {
+  const f = fixture('production'); f.patchError = new RequestFailure('Railway GraphQL', true);
+  await assert.rejects(promote(f.c, f.clients, f.options), /before execution/);
   const e = f.writes.at(-1);
-  assert.equal(e.phase, 'config-restored');
-  assert.equal(e.success, false);
-  assert.equal(e.configurationRestored, true);
-  assert.equal(e.previousDeploymentStillRunning, true);
+  assert.equal(e.failureCode, 'API_REQUEST_REJECTED');
+  assert.equal(e.failurePhase, 'patching');
   assert.equal(e.deploymentId, undefined);
   assert.equal(f.instance.source.image, OLD);
   assert.equal(f.instance.latestDeployment.id, f.previous.id);
-  assert.equal(f.mutations.filter((m) => m.query.includes('mutation Deploy')).length, 1);
-  assert.equal(f.mutations.filter((m) => m.query.includes('mutation Patch')).length, 2);
+  assert.equal(f.mutations.length, 1);
 });
 
-test('a rejected first image deployment restores the pinned Git source while the old API keeps running', async () => {
-  const f = fixture('production', { ALLOW_INITIAL_GIT_SOURCE: 'true' });
-  f.instance.source = { repo: f.c.repository, image: null };
-  f.deployError = new RequestFailure('Railway', true);
-  await assert.rejects(promote(f.c, f.clients, f.options));
-  const e = f.writes.at(-1);
-  assert.equal(e.phase, 'config-restored');
-  assert.equal(f.instance.source.repo, f.c.repository);
-  const restore = f.mutations.at(-1).variables.patch.services[f.c.serviceId];
-  assert.deepEqual(restore.source, { repo: f.c.repository, branch: 'production', commitSha: 'e'.repeat(40), image: null });
-  assert.equal(restore.configFile, '/railway.json');
-  assert.equal(f.mutations.filter((m) => m.query.includes('mutation Deploy')).length, 1);
-});
-
-test('a lost deploy response adopts the matching actual deployment ID and verifies that image', async () => {
-  const f = fixture(); f.deployError = new RequestFailure('Railway'); f.createdDespiteError = true;
+test('a lost patch response adopts only the actual Docker deployment and verifies its digest', async () => {
+  const f = fixture(); f.patchError = new RequestFailure('Railway'); f.appliedDespiteError = true;
   const e = await promote(f.c, f.clients, f.options);
   assert.equal(e.success, true);
   assert.equal(e.deploymentId, uuid(11));
-  assert.equal(e.deploymentIdAdopted, true);
   assert.equal(e.deployRequestOutcome, 'ambiguous');
-  assert.equal(f.mutations.length, 2);
+  assert.equal(f.mutations.length, 1);
 });
 
-test('an ambiguous timeout without a proven deployment never silently restores or redeploys', async () => {
-  const f = fixture(); f.deployError = new RequestFailure('Railway');
+test('an ambiguous patch response without a proven image deployment never restores or redeploys', async () => {
+  const f = fixture(); f.patchError = new RequestFailure('Railway');
   await assert.rejects(promote(f.c, f.clients, f.options));
   const e = f.writes.at(-1);
   assert.equal(e.phase, 'failed');
   assert.equal(e.failurePhase, 'configured');
+  assert.equal(e.failureCode, 'IMAGE_DEPLOYMENT_TIMEOUT');
   assert.equal(e.deployRequestOutcome, 'ambiguous');
-  assert.equal(e.configurationRestored, undefined);
-  assert.equal(f.mutations.length, 2);
+  assert.equal(e.deploymentId, undefined);
+  assert.equal(f.mutations.length, 1);
 });
 
-test('a concurrent active deployment blocks configuration restoration after a rejected request', async () => {
-  const f = fixture(); f.deployError = new RequestFailure('Railway', true); f.concurrentActiveDeployment = true;
-  await assert.rejects(promote(f.c, f.clients, f.options));
-  assert.equal(f.writes.at(-1).configurationRestored, undefined);
-  assert.equal(f.mutations.length, 2);
+for (const [name, change] of Object.entries({
+  'a Git candidate even with the desired digest': (f) => { f.gitCandidate = true; },
+  'another Docker image': (f) => { f.candidateImage = OLD; },
+})) {
+  test(`never binds ${name} as the requested Docker deployment`, async () => {
+    const f = fixture(); change(f);
+    await assert.rejects(promote(f.c, f.clients, f.options));
+    const e = f.writes.at(-1);
+    assert.equal(e.failureCode, 'IMAGE_SOURCE_MISMATCH');
+    assert.equal(e.deploymentId, undefined);
+    assert.equal(f.mutations.length, 1);
+  });
+}
+
+test('a transient stopped BUILDING deployment can become healthy', async () => {
+  const f = fixture(); f.stoppedWhileBuilding = true;
+  const e = await promote(f.c, f.clients, f.options);
+  assert.equal(e.success, true);
+  assert.equal(f.time - NOW, 5_000);
 });
 
-test('a newly observed deployment with another digest is never adopted or rolled back blindly', async () => {
-  const f = fixture(); f.deployError = new RequestFailure('Railway', true);
-  f.createdDespiteError = true; f.candidateDigest = OLD.split('@')[1];
-  await assert.rejects(promote(f.c, f.clients, f.options));
+test('a stopped SUCCESS deployment is refused with a safe diagnosis', async () => {
+  const f = fixture(); f.stoppedOnSuccess = true;
+  await assert.rejects(promote(f.c, f.clients, f.options), /stopped/);
+  assert.equal(f.writes.at(-1).failureCode, 'DEPLOYMENT_STOPPED');
+});
+
+test('an asynchronous patch waits for its new image deployment instead of using the old latest ID', async () => {
+  const f = fixture(); f.delayedInstanceReads = 0;
+  const original = f.clients.railway;
+  f.clients.railway = async (q, v) => {
+    const result = await original(q, v);
+    if (q.includes('mutation Patch')) f.delayedInstanceReads = 1;
+    return result;
+  };
+  const e = await promote(f.c, f.clients, f.options);
+  assert.equal(e.deploymentId, uuid(11));
+  assert.equal(f.time - NOW, 10_000);
+});
+
+test('a new latest deployment from another environment cannot become image evidence', async () => {
+  const f = fixture(); f.wrongCandidateEnvironment = true;
+  await assert.rejects(promote(f.c, f.clients, f.options), /another deployment/);
   assert.equal(f.writes.at(-1).deploymentId, undefined);
-  assert.equal(f.writes.at(-1).configurationRestored, undefined);
-  assert.equal(f.mutations.length, 2);
+  assert.equal(f.mutations.length, 1);
+});
+
+test('a confirmed patch without a new deployment times out without DeployV2 or another patch', async () => {
+  const f = fixture(); f.noCandidate = true;
+  await assert.rejects(promote(f.c, f.clients, f.options), /No new deployment/);
+  assert.equal(f.writes.at(-1).failureCode, 'IMAGE_DEPLOYMENT_TIMEOUT');
+  assert.equal(f.writes.at(-1).deploymentId, undefined);
+  assert.equal(f.mutations.length, 1);
+});
+
+test('an already healthy exact image and runtime are verified without another patch', async () => {
+  const f = fixture();
+  f.instance.source.image = NEW;
+  f.instance.latestDeployment.meta = { image: NEW, imageDigest: f.c.digest, serviceManifest: { deploy: structuredClone(RUNTIME) } };
+  f.previous = structuredClone(f.instance.latestDeployment);
+  f.polls = ['SUCCESS'];
+  const e = await promote(f.c, f.clients, f.options);
+  assert.equal(e.existingDeploymentVerified, true);
+  assert.equal(e.deploymentId, f.previous.id);
+  assert.equal(f.mutations.length, 0);
+  assert.equal(f.healthCalls.length, 1);
+});
+
+test('same digest with a different runtime still patches and waits for a new deployment', async () => {
+  const f = fixture();
+  f.instance.source.image = NEW;
+  f.instance.latestDeployment.meta = { image: NEW, imageDigest: f.c.digest,
+    serviceManifest: { deploy: { ...RUNTIME, healthcheckTimeout: 121 } } };
+  const e = await promote(f.c, f.clients, f.options);
+  assert.equal(e.existingDeploymentVerified, undefined);
+  assert.equal(e.deploymentId, uuid(11));
+  assert.equal(f.mutations.length, 1);
+});
+
+test('safe failure diagnostics never persist an upstream error body', async () => {
+  const f = fixture(); f.patchError = new Error('provider leaked registry-password-secret');
+  await assert.rejects(promote(f.c, f.clients, f.options), /unexpected failure/);
+  const e = f.writes.at(-1);
+  assert.equal(e.failureCode, 'UNEXPECTED_ERROR');
+  assert(!JSON.stringify(f.writes).includes('registry-password-secret'));
 });
 
 test('API errors classify only explicit validation/auth rejections as safe pre-execution failures', async () => {
