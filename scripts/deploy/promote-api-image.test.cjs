@@ -163,6 +163,24 @@ test('an explicitly dispatched full CI run is valid evidence too', async () => {
   assert.equal((await promote(f.c, f.clients, f.options)).success, true);
 });
 
+test('a production push delivery promotes only after its exact source CI succeeded', async () => {
+  for (const action of ['staging', 'production']) {
+    const f = fixture(action); f.delivery.event = 'push';
+    assert.equal((await promote(f.c, f.clients, f.options)).success, true);
+  }
+});
+
+test('parallel push builds cannot deploy while their selected CI is queued or running', async () => {
+  for (const status of ['queued', 'in_progress']) {
+    const f = fixture();
+    f.delivery.event = 'push';
+    f.ci.status = status;
+    f.ci.conclusion = null;
+    await assert.rejects(promote(f.c, f.clients, f.options), /CI evidence/);
+    assert.equal(f.mutations.length, 0);
+  }
+});
+
 for (const [name, change] of Object.entries({
   'project token from another environment': (f) => { f.scope = { projectId: f.c.projectId, environmentId: uuid(99) }; },
   'project token from another project': (f) => { f.scope = { projectId: uuid(99), environmentId: f.c.environmentId }; },
@@ -178,6 +196,7 @@ for (const [name, change] of Object.entries({
   'delivery did not target production': (f) => { f.delivery.head_branch = 'dev'; },
   'delivery uses another definition commit': (f) => { f.delivery.head_sha = 'f'.repeat(40); },
   'unprivileged listener passed as delivery': (f) => { f.delivery.event = 'workflow_run'; },
+  'pull request passed as delivery': (f) => { f.delivery.event = 'pull_request'; },
   'image build was skipped': (f) => { f.jobs.jobs[0].conclusion = 'skipped'; },
   'image build did not finish': (f) => { f.jobs.jobs[0].status = 'in_progress'; },
   'partial delivery job response': (f) => { f.jobs.total_count = 100; },

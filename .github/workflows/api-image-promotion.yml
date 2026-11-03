@@ -1,10 +1,12 @@
 name: API image promotion
 
 on:
+  push:
+    branches: [production]
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Full production commit already validated by CI
+        description: Full production commit to build and validate
         required: true
         type: string
       source_ci_run_id:
@@ -67,9 +69,9 @@ jobs:
           buildkitd-flags: --oci-worker-gc=true
       - name: Test image source and build guards
         run: node --test .github/scripts/api-image-source.test.cjs scripts/deploy/build-api-image.test.cjs scripts/deploy/promote-api-image.test.cjs scripts/deploy/recover-api-image.test.cjs
-      - name: Verify production and successful CI
+      - name: Verify production source and bind exact CI run
         id: source
-        run: node .github/scripts/api-image-source.cjs
+        run: node .github/scripts/api-image-source.cjs prepare
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_DEFINITION_SHA: ${{ github.workflow_sha }}
@@ -85,6 +87,14 @@ jobs:
         run: node scripts/deploy/build-api-image.cjs
         env:
           GH_TOKEN: ${{ github.token }}
+      # Build and CI run concurrently. This read-only gate must succeed before
+      # the build job can release outputs or either Railway environment starts.
+      - name: Require successful CI for the exact image source
+        run: node .github/scripts/api-image-source.cjs wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_DEFINITION_SHA: ${{ github.workflow_sha }}
+          SOURCE_CI_RUN_ID: ${{ steps.source.outputs.source-ci-run-id }}
       - name: Save build identity and timings
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

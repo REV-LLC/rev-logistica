@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { IMAGE_REPOSITORY, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
+const { IMAGE_REPOSITORY, CACHE_REF, RAILPACK_SHA256, FRONTEND, BUILD_VALUES, validateProof, privatePackage, readPackageMetadata, ensurePrivatePackage, prepareArguments, buildArguments, createBuildEnvironment, validatePlanSecrets, verifyDigest, verifyPublishedImage, exportReleaseContext } = require('./build-api-image.cjs');
 
 test('a reset metadata connection is retried with fresh connections before private-package validation', async () => {
   const requests = [];
@@ -146,6 +146,19 @@ test('builds exactly once for amd64, loads for smoke testing and does not push b
   assert(!args.some((arg) => /GH_TOKEN|RAILWAY_TOKEN|ghp_|github_pat_/.test(arg)));
 });
 
+test('exports intermediate build stages to a separate max-mode registry cache while retaining local image smoke', () => {
+  const tag = `${IMAGE_REPOSITORY}:test`;
+  const args = buildArguments('/repo', '/tmp/work', tag);
+  assert.equal(CACHE_REF, `${IMAGE_REPOSITORY}:buildcache-v2`);
+  assert(args.includes(`type=registry,ref=${CACHE_REF},mode=max`));
+  assert(args.includes(`type=registry,ref=${CACHE_REF}`));
+  assert(args.includes(`type=registry,ref=${IMAGE_REPOSITORY}:buildcache`));
+  assert(!args.includes('type=inline'));
+  assert(!args.includes('--push'));
+  assert(args.includes('--load'));
+  assert.notEqual(CACHE_REF, tag);
+});
+
 test('every plan binding is supplied consistently to prepare, Docker, its hash and the isolated child environment', () => {
   const prepare = prepareArguments('/repo', '/tmp/work');
   const build = buildArguments('/repo', '/tmp/work', `${IMAGE_REPOSITORY}:test`);
@@ -166,15 +179,19 @@ test('unknown or malformed required plan secrets fail closed before Docker', () 
   }
 });
 
-test('actual Railpack API plan declares only the two supplied build bindings', { skip: !process.env.RAILPACK_TEST_BINARY }, (t) => {
+test('actual Railpack prepares the scoped Git context with both supplied build bindings', { skip: !process.env.RAILPACK_TEST_BINARY }, (t) => {
   const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'api-railpack-plan-test-'));
   t.after(() => fs.rmSync(workDirectory, { recursive: true, force: true }));
   const repository = path.resolve(__dirname, '../..');
-  execFileSync(process.env.RAILPACK_TEST_BINARY, prepareArguments(repository, workDirectory), { env: createBuildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+  const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
+  const context = exportReleaseContext(repository, workDirectory, sourceSha);
+  assert(fs.existsSync(path.join(context, 'apps/web/package.json')));
+  assert(!fs.existsSync(path.join(context, 'apps/web/src')));
+  execFileSync(process.env.RAILPACK_TEST_BINARY, prepareArguments(context, workDirectory), { env: createBuildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
   const plan = JSON.parse(fs.readFileSync(path.join(workDirectory, 'railpack-plan.json'), 'utf8'));
   validatePlanSecrets(plan);
   assert.deepEqual([...plan.secrets].sort(), Object.keys(BUILD_VALUES).sort());
-  const args = buildArguments(repository, workDirectory, `${IMAGE_REPOSITORY}:test`);
+  const args = buildArguments(context, workDirectory, `${IMAGE_REPOSITORY}:test`);
   const environment = createBuildEnvironment(process.env);
   for (const name of plan.secrets) {
     assert(args.includes(`id=${name},env=${name}`));
@@ -195,7 +212,7 @@ test('registry digest must resolve to the exact local image that passed the runt
   assert.throws(() => verifyPublishedImage({ digest }, {}, localImage));
 });
 
-test('release context comes from the exact Git tree and excludes checkout metadata, untracked secrets and logs', (t) => {
+test('release context contains only reviewed API build inputs, excluding frontend, docs, CD and tracked or untracked env files', (t) => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'api-source-context-test-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const repository = path.join(temporary, 'repository');
@@ -205,10 +222,36 @@ test('release context comes from the exact Git tree and excludes checkout metada
   fs.mkdirSync(path.join(repository, 'scripts'));
   fs.writeFileSync(path.join(repository, 'package.json'), '{"name":"reviewed-source"}\n');
   fs.writeFileSync(path.join(repository, 'scripts/check-api-runtime.cjs'), 'console.log("reviewed checker")\n');
-  git(['add', 'package.json', 'scripts/check-api-runtime.cjs']);
+  const reviewed = {
+    'package-lock.json': '{"lockfileVersion":3}\n',
+    '.npmrc': 'fund=false\n',
+    'railpack.json': '{"steps":{}}\n',
+    'railway.json': '{"deploy":{}}\n',
+    'apps/api/package.json': '{"name":"api"}\n',
+    'apps/api/src/main.ts': 'console.log("reviewed API")\n',
+    'apps/api/tsconfig.build.json': '{"extends":"./tsconfig.json"}\n',
+    'apps/api/prisma/schema.prisma': '// reviewed schema\n',
+    'apps/api/prisma/migrations/1_init/migration.sql': '-- reviewed migration\n',
+    'apps/api/assets/rev-logo.png': 'reviewed asset',
+    'apps/web/package.json': '{"name":"web"}\n',
+  };
+  const excluded = {
+    'apps/web/src/main.tsx': 'frontend-only\n',
+    'docs/deployment.md': 'documentation-only\n',
+    '.github/workflows/ci.yml': 'workflow-only\n',
+    'scripts/deploy/runner.cjs': 'delivery-only\n',
+    'apps/api/.env': 'TRACKED_SECRET=must-not-enter-build\n',
+    'apps/api/.env.production': 'TRACKED_SECRET=must-not-enter-cache\n',
+  };
+  for (const [relative, contents] of Object.entries({ ...reviewed, ...excluded })) {
+    fs.mkdirSync(path.dirname(path.join(repository, relative)), { recursive: true });
+    fs.writeFileSync(path.join(repository, relative), contents);
+  }
+  git(['add', '.']);
   git(['-c', 'user.name=Runtime test', '-c', 'user.email=runtime@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'reviewed tree']);
   const sha = git(['rev-parse', 'HEAD']);
   fs.writeFileSync(path.join(repository, 'package.json'), '{"name":"modified-checkout"}\n');
+  fs.writeFileSync(path.join(repository, 'apps/api/src/main.ts'), 'console.log("modified checkout")\n');
   fs.writeFileSync(path.join(repository, '.env'), 'UNTRACKED_SECRET=must-not-enter-build\n');
   fs.writeFileSync(path.join(repository, 'runner.log'), 'not source\n');
   fs.mkdirSync(path.join(repository, 'node_modules'));
@@ -218,7 +261,8 @@ test('release context comes from the exact Git tree and excludes checkout metada
   const context = exportReleaseContext(repository, workDirectory, sha);
   assert.equal(fs.readFileSync(path.join(context, 'package.json'), 'utf8'), '{"name":"reviewed-source"}\n');
   assert.equal(fs.readFileSync(path.join(context, 'scripts/check-api-runtime.cjs'), 'utf8'), 'console.log("reviewed checker")\n');
-  for (const relative of ['.git', '.env', 'runner.log', 'node_modules']) assert(!fs.existsSync(path.join(context, relative)));
+  for (const [relative, contents] of Object.entries(reviewed)) assert.equal(fs.readFileSync(path.join(context, relative), 'utf8'), contents);
+  for (const relative of ['.git', '.env', 'runner.log', 'node_modules', ...Object.keys(excluded)]) assert(!fs.existsSync(path.join(context, relative)));
   assert(!fs.existsSync(path.join(workDirectory, 'source.tar')));
   assert.throws(() => exportReleaseContext(repository, path.join(temporary, 'bad'), 'production'));
 });
