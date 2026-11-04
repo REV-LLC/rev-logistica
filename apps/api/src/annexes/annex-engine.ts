@@ -31,7 +31,7 @@ function unique(values: string[], label: string) {
   if (new Set(values).size !== values.length)
     fail(`${label}: referencia duplicada`);
 }
-function price(input: AnnexInput['rentals'][number]['pricing']) {
+export function price(input: AnnexInput['rentals'][number]['pricing']) {
   const base = new D(input.basePrice);
   const discount = new D(input.discountPercent ?? 0);
   if (discount.gt(100)) fail('El descuento debe estar entre 0 y 100');
@@ -689,7 +689,8 @@ export function calculateAnnex(value: unknown) {
     },
     additionalChargesTotal: additionalTotal.toFixed(2),
     supportsWorksiteRates: true,
-    engineVersion: '8',
+    supportsAutomaticWorksiteRates: true,
+    engineVersion: '9',
     rounding: 'PER_DAY_HALF_UP_2' as const,
     status: 'DRAFT' as const,
     period: input.period,

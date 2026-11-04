@@ -224,7 +224,12 @@ export const annexInputSchema = z
       skuId: z.string().uuid(),
       quantityBasis: z.enum(['UNIT', 'AREA_M2']),
       unitPrice: money.nullable(),
-    }).strict()).max(500).refine(
+      tablePrice: pricing.optional(),
+      thisCutOnly: z.literal(true).optional(),
+    }).strict().refine(rate => Number(rate.tablePrice?.discountPercent ?? 0) <= 100, 'El descuento debe estar entre 0 y 100')
+      .refine(rate => !(rate.tablePrice && rate.thisCutOnly) &&
+      (rate.unitPrice === null || (!rate.tablePrice && !rate.thisCutOnly)),
+      'Selecciona una sola regla de precio por referencia')).max(500).refine(
       rates => new Set(rates.map(rate => rate.skuId + ':' + rate.quantityBasis)).size === rates.length,
       'Tarifa de obra duplicada para la misma referencia y unidad de cobro',
     ).optional(),

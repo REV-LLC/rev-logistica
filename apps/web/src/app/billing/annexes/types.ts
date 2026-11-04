@@ -148,7 +148,7 @@ export type AdditionalCharge = TransportCharge & {
   description: string;
 };
 export type AnnexInput = {
-  worksiteRates?: { skuId: string; quantityBasis: "UNIT" | "AREA_M2"; unitPrice: string | null }[];
+  worksiteRates?: { skuId: string; quantityBasis: "UNIT" | "AREA_M2"; unitPrice: string | null; tablePrice?: Pricing; thisCutOnly?: true }[];
   additionalCharges?: AdditionalCharge[];
   observations?: string;
   transport?: { outbound: TransportCharge; return: TransportCharge; rows?: TransportRow[] };
@@ -175,6 +175,7 @@ export type AnnexInput = {
 };
 export type Result = {
   supportsWorksiteRates?: boolean;
+  supportsAutomaticWorksiteRates?: boolean;
   additionalChargesTotal?: string;
   summary?: { base: string; discount: string; subtotal: string };
   transport?: { outbound: string; return: string; total: string };

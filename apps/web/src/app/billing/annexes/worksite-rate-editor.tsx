@@ -2,26 +2,24 @@ import { useState } from "react";
 import { Alert, Button, NumberInput, Select, Stack, Text } from "@mantine/core";
 import type { AnnexInput, Rental } from "./types";
 
-export function canSetWorksiteRate(rental: Rental) {
-  const unit = rental.commercial?.mode?.unit ?? rental.commercial?.catalog?.unit;
-  return (!unit || unit === "DAY") && !rental.metering && !rental.cutting &&
-    !rental.accessoryId && !rental.includedIn && !rental.commercial?.contextualZero &&
-    rental.commercial?.status !== "REVIEW" && rental.commercial?.mode?.pricing.source !== "FIXED";
-}
+type Choice = "inherit" | "set" | "clear" | "only";
 
-type Choice = "inherit" | "set" | "clear";
-
-export default function WorksiteRateEditor({ input, rental, finalPrice, worksiteName, onApply }: {
+export default function WorksiteRateEditor({ input, rental, finalPrice, worksiteName, automatic, onApply }: {
   input: AnnexInput;
   rental: Rental;
   finalPrice: string;
   worksiteName: string;
+  automatic: boolean;
   onApply: (input: AnnexInput) => void;
 }) {
   const basis = rental.billingAreaM2 === undefined ? "UNIT" : "AREA_M2";
   const decisions = input.worksiteRates ?? [];
   const existing = decisions.find(rate => rate.skuId === rental.skuId && rate.quantityBasis === basis);
-  const [choice, setChoice] = useState<Choice>(existing ? (existing.unitPrice === null ? "clear" : "set") : "inherit");
+  const [choice, setChoice] = useState<Choice>(() => {
+    if (!existing || existing.tablePrice) return "inherit";
+    if (existing.thisCutOnly) return "only";
+    return existing.unitPrice === null ? "clear" : "set";
+  });
   const [price, setPrice] = useState<string | number>(() => new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2, useGrouping: false,
   }).format(Number(existing?.unitPrice ?? finalPrice)));
@@ -33,7 +31,12 @@ export default function WorksiteRateEditor({ input, rental, finalPrice, worksite
       setError("Escribe un precio en COP con hasta dos decimales.");
       return;
     }
-    if (choice !== "inherit") {
+    if (choice === "only") {
+      other.push({skuId: rental.skuId, quantityBasis: basis, unitPrice: null, thisCutOnly: true});
+    } else if (choice === "inherit" && automatic && (existing?.tablePrice || rental.pricing.adjustmentSource === "MANUAL")) {
+      other.push({skuId: rental.skuId, quantityBasis: basis, unitPrice: null,
+        tablePrice: { ...(existing?.tablePrice ?? rental.pricing) }});
+    } else if (choice === "set" || choice === "clear") {
       other.push({ skuId: rental.skuId, quantityBasis: basis, unitPrice: choice === "clear" ? null : String(price) });
     }
     onApply({ ...input, worksiteRates: other.length ? other : undefined });
@@ -44,12 +47,13 @@ export default function WorksiteRateEditor({ input, rental, finalPrice, worksite
     {rental.pricing.adjustmentSource === "WORKSITE" && <Text size="sm">
       Tarifa de la obra aplicada en este corte: {new Intl.NumberFormat("es-CO", {
         style: "currency", currency: "COP", maximumFractionDigits: 2,
-      }).format(Number(rental.pricing.effectivePrice))}.
+      }).format(Number(finalPrice))}.
     </Text>}
     <Select label="Tarifa para los próximos cortes" allowDeselect={false} value={choice}
       onChange={value => { if (value) setChoice(value as Choice); setError(""); }}
       data={[
-        { value: "inherit", label: "Mantener la regla anterior" },
+        { value: "inherit", label: automatic ? "Recordar el último precio editado en la tabla" : "Mantener la regla anterior" },
+        ...(automatic ? [{ value: "only", label: "Solo este corte · conservar la tarifa anterior" }] : []),
         { value: "set", label: "Fijar precio para esta obra" },
         { value: "clear", label: "Volver a la tarifa habitual del cliente o catálogo" },
       ]} />

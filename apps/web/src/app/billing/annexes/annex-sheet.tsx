@@ -34,6 +34,7 @@ import {
 import {
   manualSheetRows,
   applySheetChanges,
+  canSetWorksiteRate,
   editableKeys,
   sheetRows,
   sheetDocuments,
@@ -44,7 +45,7 @@ import {
   type SheetRow,
 } from "@/lib/annex-sheet";
 import type { AdditionalCharge, AnnexInput, Result } from "./types";
-import WorksiteRateEditor, { canSetWorksiteRate } from "./worksite-rate-editor";
+import WorksiteRateEditor from "./worksite-rate-editor";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
 
@@ -228,7 +229,7 @@ export default function AnnexSheet({
   const apply = (changes: SheetChange[]) => {
     if (!editing || busy || changingMode || !changes.length) return;
     try {
-      onChange(applySheetChanges(input, changes));
+      onChange(applySheetChanges(input, changes, "", Boolean((result ?? lastResult)?.supportsAutomaticWorksiteRates)));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -732,7 +733,9 @@ export default function AnnexSheet({
         </Group>
         <Text size="xs" c="dimmed">
           {editing
-            ? "Editando · Celdas azules: doble clic para editar · Guarda los cambios o cancela para descartarlos."
+            ? ((result ?? lastResult)?.supportsAutomaticWorksiteRates
+              ? "Doble clic para editar. Al guardar, los próximos cortes de esta obra usarán el último precio que edites por referencia."
+              : "Editando · Celdas azules: doble clic para editar · Guarda los cambios o cancela para descartarlos.")
             : isDailyAnnex(input)
               ? "Consulta · Pulsa Editar para modificar valores o configuración."
               : "Consulta de anexo histórico."}
@@ -1126,6 +1129,7 @@ export default function AnnexSheet({
         </Tabs.Panel>
         {offerWorksiteRate && rateRental && finalRatePrice !== undefined && <Tabs.Panel value="worksite">
           <WorksiteRateEditor input={input} rental={rateRental} finalPrice={finalRatePrice}
+            automatic={Boolean(result?.supportsAutomaticWorksiteRates)}
             worksiteName={worksiteName} onApply={next => { onChange(next); setMachine(null); }} />
         </Tabs.Panel>}
         </Tabs>
