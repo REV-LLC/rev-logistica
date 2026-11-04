@@ -1,4 +1,5 @@
 import { assertDailyAnnex } from './annex-daily-scope';
+import { validateWorksiteRates } from './annex-customer-pricing';
 import {
   BadRequestException,
   ConflictException,
@@ -309,7 +310,7 @@ export class AnnexesService {
           revisions: {
             orderBy: { revision: 'desc' },
             take: 1,
-            select: { invoiceNumber: true },
+            select: { invoiceNumber: true, input: Boolean(input.worksiteRates?.length) },
           },
         },
       });
@@ -326,6 +327,10 @@ export class AnnexesService {
         throw new ConflictException(
           'El borrador cambió. Carga la última revisión antes de guardar',
         );
+      if (input.worksiteRates?.length) {
+        const previous = annexInputSchema.safeParse(current?.revisions?.[0]?.input);
+        validateWorksiteRates(input, previous.success ? previous.data.worksiteRates : undefined);
+      }
       const revision = expectedRevision + 1;
       const draft = current
         ? await tx.annexDraft.update({

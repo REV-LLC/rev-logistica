@@ -68,7 +68,7 @@ export type Pricing = {
   discountPercent?: string;
   effectivePrice?: string;
   adjustmentReason?: string;
-  adjustmentSource?: "MANUAL" | "CUSTOMER";
+  adjustmentSource?: "MANUAL" | "CUSTOMER" | "WORKSITE";
 };
 export type Source = {
   documentId?: string;
@@ -148,6 +148,7 @@ export type AdditionalCharge = TransportCharge & {
   description: string;
 };
 export type AnnexInput = {
+  worksiteRates?: { skuId: string; quantityBasis: "UNIT" | "AREA_M2"; unitPrice: string | null }[];
   additionalCharges?: AdditionalCharge[];
   observations?: string;
   transport?: { outbound: TransportCharge; return: TransportCharge; rows?: TransportRow[] };
@@ -173,6 +174,7 @@ export type AnnexInput = {
   machineDays: MachineDay[];
 };
 export type Result = {
+  supportsWorksiteRates?: boolean;
   additionalChargesTotal?: string;
   summary?: { base: string; discount: string; subtotal: string };
   transport?: { outbound: string; return: string; total: string };

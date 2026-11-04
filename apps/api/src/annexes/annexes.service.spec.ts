@@ -73,6 +73,18 @@ it('rejects VAT rates outside the supported choices', async () => {
   const { service } = setup();
   await expect(service.save({ ...payload, input: { ...input, policy: { ...input.policy, vatPercent: 5 } } }, 'author')).rejects.toThrow();
 });
+it('stores a future worksite price with the revision, without repricing the current rental', async () => {
+  const {service,tx}=setup();
+  const skuId='550b304a-e782-4dd8-bfc2-87c90f7f8f8c';
+  const rentals=[{id:'lot',skuId,label:'Equipo',quantity:'2',deliveredOn:'2026-09-16',source:{reference:'rem',origin:'INVENTORY'},returns:[],waivedDays:[],pricing:{basePrice:'100'}}];
+  const rate={skuId,quantityBasis:'UNIT',unitPrice:'350.50'};
+  const save = (rates: typeof rate[]) => service.save({...payload,input:{...input,rentals,worksiteRates:rates}},'author');
+  await expect(save([{...rate,quantityBasis:'AREA_M2'}])).rejects.toThrow('referencia');
+  expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
+  const draft=await save([rate]);
+  expect(draft.revisions[0].input.worksiteRates).toEqual([rate]);
+  expect(draft.revisions[0].result.summary.subtotal).toBe('2000.00');
+});
 it('stores observations, both transport rows and their server-calculated VAT in the saved revision', async () => {
   const { service } = setup();
   const observations = 'Entregar copia al residente.\nCoordinar regreso.';

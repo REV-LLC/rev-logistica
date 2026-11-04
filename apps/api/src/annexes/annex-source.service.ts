@@ -491,7 +491,7 @@ export class AnnexSourceService {
           source.rentals,
           rows.flatMap((row) => (row.sku ? [row.sku] : [])),
         );
-        applyCustomerPricing(source.rentals, customerPricing?.value);
+        applyCustomerPricing(source.rentals, customerPricing?.value, history.map(cut => cut.input));
         let input: AnnexInput = {
           period,
           policy,

@@ -24,7 +24,7 @@ it('reads the database on each consultation and applies saved rules without crea
     rentals: [
       {
         id: 'delivery',
-        skuId: 'sku',
+        skuId: '550b304a-e782-4dd8-bfc2-87c90f7f8f8c',
         label: 'Equipo',
         quantity: '1',
         deliveredOn: '2026-10-01',
@@ -67,7 +67,7 @@ it('reads the database on each consultation and applies saved rules without crea
     },
   ];
   const sku = {
-    id: 'sku',
+    id: saved.rentals[0].skuId,
     name: 'Equipo',
     price: new Prisma.Decimal(100),
     chargeType: 'DAY',
@@ -94,7 +94,11 @@ it('reads the database on each consultation and applies saved rules without crea
       findMany: jest.fn(async () => rows),
     },
     annexDraft: {
-      findMany: async () => [],
+      findMany: async ({where}: {where: {customerWorksiteId: string; periodTo: {lt: Date}}}) =>
+        where.customerWorksiteId === '00000000-0000-4000-8000-000000000001' &&
+        saved.period.to < where.periodTo.lt.toISOString().slice(0, 10)
+          ? [{revisions: [{input: saved, result: calculateAnnex(saved)}]}]
+          : [],
       findFirst: jest.fn(async ({where}: {where: {customerWorksiteId: string; periodFrom: Date; periodTo: Date}}) =>
         where.customerWorksiteId === '00000000-0000-4000-8000-000000000001' &&
         where.periodFrom.toISOString().slice(0, 10) === saved.period.from &&
@@ -138,6 +142,20 @@ it('reads the database on each consultation and applies saved rules without crea
     expect(other.input.rentals[0].pricing.basePriceOverride).toBeUndefined();
     expect(other.revision).toBe(0);
   }
+  expect(sku.price.toString()).toBe('200');
+  saved.worksiteRates = [{skuId: sku.id, quantityBasis: 'UNIT', unitPrice: '350.50'}];
+  const original = await query();
+  expect(original.input.worksiteRates).toEqual(saved.worksiteRates);
+  expect(original.result.summary.subtotal).toBe('1400.02');
+  // A new delivery of the same SKU also inherits the price; the same customer at a different site doesn't.
+  rows[0].id = 'new-delivery';
+  const later = (site: string) => service.prepare(site, '2026-11-01', '2026-11-03', '2026-11-03', true);
+  const remembered = await later('00000000-0000-4000-8000-000000000001');
+  expect(remembered.input.rentals[0].pricing).toMatchObject({effectivePrice:'350.50',basePrice:'350.50',adjustmentSource:'WORKSITE'});
+  expect(remembered.result.summary.subtotal).toBe('2103.00');
+  expect(remembered.input.worksiteRates).toBeUndefined();
+  const unrelated = await later('00000000-0000-4000-8000-000000000002');
+  expect(unrelated.result.summary.subtotal).toBe('1200.00');
   expect(sku.price.toString()).toBe('200');
 });
 

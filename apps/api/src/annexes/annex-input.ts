@@ -19,7 +19,7 @@ const pricing = z
     discountPercent: decimal.optional(),
     effectivePrice: money.optional(),
     adjustmentReason: reason.optional(),
-    adjustmentSource: z.enum(['MANUAL', 'CUSTOMER']).optional(),
+    adjustmentSource: z.enum(['MANUAL', 'CUSTOMER', 'WORKSITE']).optional(),
   })
   .strict()
   .refine(
@@ -219,6 +219,15 @@ const transportCharge = z
   .strict();
 export const annexInputSchema = z
   .object({
+    // Decisions for subsequent cuts, saved with the revision that authorized them.
+    worksiteRates: z.array(z.object({
+      skuId: z.string().uuid(),
+      quantityBasis: z.enum(['UNIT', 'AREA_M2']),
+      unitPrice: money.nullable(),
+    }).strict()).max(500).refine(
+      rates => new Set(rates.map(rate => rate.skuId + ':' + rate.quantityBasis)).size === rates.length,
+      'Tarifa de obra duplicada para la misma referencia y unidad de cobro',
+    ).optional(),
     additionalCharges: z
       .array(
         z
