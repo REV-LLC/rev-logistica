@@ -41,6 +41,7 @@ export function applySavedAnnexRules(fresh: AnnexInput, saved: AnnexInput) {
   input.observations = saved.observations;
   input.transport = structuredClone(saved.transport);
   input.additionalCharges = structuredClone(saved.additionalCharges);
+  if (saved.worksiteRates?.length) input.worksiteRates = structuredClone(saved.worksiteRates);
   input.policy = {
     ...input.policy,
     ...saved.policy,

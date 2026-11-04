@@ -30,4 +30,21 @@ describe('customer annex pricing',()=>{
   expect(customerPricingSchema.safeParse({version:1,rates:[...agreement.rates,...agreement.rates]}).success).toBe(false);
   expect(()=>applyCustomerPricing([rental()],{version:1,rates:[{...agreement.rates[0],unitPrice:'-1'}]})).toThrow();
  });
+ it('resolves the latest explicit decision per unit basis, including zero and returning to the customer rate',()=>{
+  const cut = (unitPrice: string | null) => ({worksiteRates:[{skuId, quantityBasis:'AREA_M2' as const, unitPrice}]});
+  const priceWith = (...cuts: ReturnType<typeof cut>[]) => {
+    const r = rental();
+    applyCustomerPricing([r], agreement, [{}, ...cuts]);
+    return r.pricing;
+  };
+  expect(priceWith(cut('3500.25'))).toMatchObject({basePrice:'3500.25',effectivePrice:'3500.25',adjustmentSource:'WORKSITE'});
+  expect(priceWith(cut('0'), cut('3500.25')).effectivePrice).toBe('0.00');
+  expect(priceWith(cut(null), cut('3500.25'))).toMatchObject({effectivePrice:'2750.00',adjustmentSource:'CUSTOMER'});
+  const unit = {...rental(), billingAreaM2: undefined};
+  applyCustomerPricing([unit], agreement, [cut('3500.25')]);
+  expect(unit.pricing).toEqual({basePrice:'3000'});
+  const included = {...rental(),includedIn:{assetId:'asset',label:'Equipo',documentItemId:'item'}};
+  applyCustomerPricing([included], agreement, [cut('3500.25')]);
+  expect(included.pricing).toEqual({basePrice:'3000'});
+ });
 });

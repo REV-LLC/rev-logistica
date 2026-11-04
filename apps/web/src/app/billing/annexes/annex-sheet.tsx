@@ -25,6 +25,7 @@ import {
   NumberInput,
   Select,
   Stack,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -43,6 +44,7 @@ import {
   type SheetRow,
 } from "@/lib/annex-sheet";
 import type { AdditionalCharge, AnnexInput, Result } from "./types";
+import WorksiteRateEditor, { canSetWorksiteRate } from "./worksite-rate-editor";
 import "react-data-grid/lib/styles.css";
 import styles from "./annex-sheet.module.css";
 
@@ -247,8 +249,13 @@ export default function AnnexSheet({
   const employeeNames = new Map(
     employees.map((e) => [e.id, `${e.name} ${e.lastName}`]),
   );
+  const rateRental = machine?.kind === "rentals" ? input.rentals[machine.index] : undefined;
+  const offerWorksiteRate = Boolean(result?.supportsWorksiteRates && rateRental && canSetWorksiteRate(rateRental));
+  const finalRatePrice = rateRental && (rateRental.pricing.effectivePrice ??
+    result?.lines.find(line => line.key.startsWith(rateRental.id + ":"))?.effectivePrice ??
+    rateRental.pricing.basePrice);
   const minimumControl = (row: SheetRow) => (
-    <Tooltip label="Configurar mínimo de cobro" withinPortal>
+    <Tooltip label="Configurar cobro del equipo" withinPortal>
       <ActionIcon
         size={22}
         p={1}
@@ -256,7 +263,7 @@ export default function AnnexSheet({
         disabled={
           busy || !editing || row.included || row.status === "Revisar modalidad"
         }
-        aria-label={`Configurar mínimo de cobro: ${row.label}`}
+        aria-label={`Configurar cobro del equipo: ${row.label}`}
         onClick={() => {
           setMachine({
             assetId: row.assetId ?? row.skuId!,
@@ -875,6 +882,12 @@ export default function AnnexSheet({
         onClose={() => setMachine(null)}
         title={`Configuración de cobro · ${machine?.label ?? ""}`}
       >
+        <Tabs key={machine?.index ?? "closed"} defaultValue="minimum">
+        {offerWorksiteRate && <Tabs.List mb="md">
+          <Tabs.Tab value="minimum">Mínimo de cobro</Tabs.Tab>
+          <Tabs.Tab value="worksite">Tarifa de la obra</Tabs.Tab>
+        </Tabs.List>}
+        <Tabs.Panel value="minimum">
         <Stack gap="sm">
           <Text size="sm">
             {machine?.kind === "rentals"
@@ -1110,6 +1123,12 @@ export default function AnnexSheet({
             Aplicar mínimo al equipo
           </Button>
         </Stack>
+        </Tabs.Panel>
+        {offerWorksiteRate && rateRental && finalRatePrice !== undefined && <Tabs.Panel value="worksite">
+          <WorksiteRateEditor input={input} rental={rateRental} finalPrice={finalRatePrice}
+            worksiteName={worksiteName} onApply={next => { onChange(next); setMachine(null); }} />
+        </Tabs.Panel>}
+        </Tabs>
       </Modal>
     </>
   );
