@@ -47,4 +47,37 @@ describe('customer annex pricing',()=>{
   applyCustomerPricing([included], agreement, [cut('3500.25')]);
   expect(included.pricing).toEqual({basePrice:'3000'});
  });
+ it('carries the last table edit, including zero, ahead of differing lot prices on older revisions',()=>{
+  const old = rental();
+  old.pricing = {basePrice:'3000',effectivePrice:'1800',adjustmentSource:'MANUAL'};
+  const earlier = {rentals:[old]};
+  const rule = {skuId,quantityBasis:'AREA_M2' as const,unitPrice:null};
+  const apply = (cut: Parameters<typeof applyCustomerPricing>[2], saved: ReturnType<typeof rental>[] = []) => {
+    const next = rental();
+    applyCustomerPricing([next], agreement, cut, saved);
+    return next.pricing;
+  };
+  expect(apply([{},earlier]).effectivePrice).toBe('1800.00');
+  const other = {...old, id:'second', pricing:{...old.pricing,effectivePrice:'2000'}};
+  expect(apply([{rentals:[old,other]}]).effectivePrice).toBe('2750.00');
+  const last = {worksiteRates:[{...rule,tablePrice:{basePrice:'3000',effectivePrice:'0'}}],rentals:[old,other]};
+  expect(apply([last, earlier]).effectivePrice).toBe('0.00');
+  expect(apply([{worksiteRates:[{...rule,thisCutOnly:true}],rentals:[other]},earlier]).effectivePrice).toBe('1800.00');
+  expect(apply([{worksiteRates:[rule],rentals:[other]},earlier]).effectivePrice).toBe('2750.00');
+  expect(apply([last], [rental()]).effectivePrice).toBe('2750.00');
+  const saved = rental();
+  saved.pricing = {basePrice:'3000',effectivePrice:'2200',adjustmentSource:'WORKSITE'};
+  expect(apply([last], [saved])).toEqual(saved.pricing);
+ });
+ it('retains sub-cent discounted unit rates without changing multi-day totals',()=>{
+  const old = rental();
+  old.pricing = {basePrice:'3.33',discountPercent:'12.5',adjustmentSource:'MANUAL'};
+  const next = rental();
+  applyCustomerPricing([next], null, [{rentals:[old]}]);
+  const period = {from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'};
+  const amounts = (row: typeof old) => calculateAnnex({period,policy:{version:'test',minimumHoursPerMachineDay:'6',
+    includeReturnDay:true,excludeHolidays:false,holidays:[],excludedWeekdays:[],holidayCalendarConfirmed:true},rentals:[row],machineDays:[]});
+  expect(amounts(next).lines[0].effectivePrice).toBe('2.913750000000');
+  expect(amounts(next).totals.rentalNet).toBe(amounts(old).totals.rentalNet);
+ });
 });

@@ -130,18 +130,16 @@ it('reads the database on each consultation and applies saved rules without crea
   expect(tx.stockLedger.findMany).toHaveBeenCalledTimes(2);
   expect(tx.annexDraft.findFirst).toHaveBeenCalledTimes(2);
   expect(saved.rentals[0].quantity).toBe('1');
-  // An exceptional base survives live queries only for its exact worksite/cut.
+  // The saved manual price remains in this cut and initializes the next one at this site.
   saved.rentals[0].pricing = {basePrice:'250',basePriceOverride:'250',discountPercent:'10',adjustmentSource:'MANUAL'};
   const exceptional = await query();
   expect(exceptional.input.rentals[0].pricing.basePrice).toBe('250.00');
   expect(exceptional.result.summary.subtotal).toBe('1400.02');
   const otherSite = await service.prepare('00000000-0000-4000-8000-000000000002', saved.period.from, saved.period.to, saved.period.through, true);
   const nextCut = await service.prepare('00000000-0000-4000-8000-000000000001', '2026-10-16', '2026-10-17', '2026-10-17', true);
-  for (const other of [otherSite, nextCut]) {
-    expect(other.input.rentals[0].pricing.basePrice).toBe('200.00');
-    expect(other.input.rentals[0].pricing.basePriceOverride).toBeUndefined();
-    expect(other.revision).toBe(0);
-  }
+  expect(otherSite.input.rentals[0].pricing.basePrice).toBe('200.00');
+  expect(nextCut.input.rentals[0].pricing).toMatchObject({basePrice:'225.00',effectivePrice:'225.00',adjustmentSource:'WORKSITE'});
+  expect(nextCut.input.rentals[0].pricing.basePriceOverride).toBeUndefined();
   expect(sku.price.toString()).toBe('200');
   saved.worksiteRates = [{skuId: sku.id, quantityBasis: 'UNIT', unitPrice: '350.50'}];
   const original = await query();

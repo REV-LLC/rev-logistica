@@ -1,4 +1,4 @@
-import type { AnnexInput, Result } from "../app/billing/annexes/types";
+import type { AnnexInput, Rental, Result } from "../app/billing/annexes/types";
 
 export type SheetRow = {
   manualType?: "REPAIR" | "REPLACEMENT";
@@ -247,11 +247,19 @@ export function sheetRows(
   );
 }
 
+export function canSetWorksiteRate(rental: Rental) {
+  const unit = rental.commercial?.mode?.unit ?? rental.commercial?.catalog?.unit;
+  return (!unit || unit === "DAY") && !rental.metering && !rental.cutting &&
+    !rental.accessoryId && !rental.includedIn && !rental.commercial?.contextualZero &&
+    rental.commercial?.status !== "REVIEW" && rental.commercial?.mode?.pricing.source !== "FIXED";
+}
+
 // Apply a paste atomically. Prices belong to the source lot, not just a visible segment.
 export function applySheetChanges(
   input: AnnexInput,
   changes: SheetChange[],
   reason = "",
+  rememberFinalPrices = false,
 ): AnnexInput {
   const next = structuredClone(input);
   const seen = new Map<string, string>();
@@ -341,7 +349,10 @@ export function applySheetChanges(
     const raised = key === "effectivePrice" &&
       Number(normalized) > Number(source.pricing.basePrice);
     const basePrice = raised ? normalized : source.pricing.basePrice;
-    const basePriceOverride = raised ? normalized : source.pricing.basePriceOverride;
+    // A later discount on an inherited price must keep the same base when
+    // this cut is reopened, including when that base exceeds the catalog.
+    const inheritedBase = source.pricing.adjustmentSource === "WORKSITE" ? source.pricing.basePrice : undefined;
+    const basePriceOverride = raised ? normalized : source.pricing.basePriceOverride ?? inheritedBase;
     source.pricing = {
       basePrice,
       ...(basePriceOverride !== undefined ? { basePriceOverride } : {}),
@@ -349,6 +360,16 @@ export function applySheetChanges(
       ...(adjustmentReason ? { adjustmentReason } : {}),
       [key]: normalized,
     };
+    if (rememberFinalPrices && row.kind === "rentals") {
+      const lot = next.rentals[row.index];
+      if (canSetWorksiteRate(lot)) {
+        const basis = lot.billingAreaM2 === undefined ? "UNIT" : "AREA_M2";
+        if (next.worksiteRates?.some(rate => rate.skuId === lot.skuId && rate.quantityBasis === basis && rate.thisCutOnly)) continue;
+        const rates = (next.worksiteRates ?? []).filter(rate => rate.skuId !== lot.skuId || rate.quantityBasis !== basis);
+        rates.push({skuId: lot.skuId, quantityBasis: basis, unitPrice: null, tablePrice: { ...lot.pricing }});
+        next.worksiteRates = rates;
+      }
+    }
   }
   return next;
 }

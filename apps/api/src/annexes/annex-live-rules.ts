@@ -7,7 +7,7 @@ import type { SourceIssue } from './annex-inventory';
 import { selectAnnexMode } from './annex-mode-selection';
 
 type Pricing = AnnexInput['rentals'][number]['pricing'];
-function manualPricing(pricing: Pricing) {
+export function manualPricing(pricing: Pricing) {
   if (pricing.basePriceOverride !== undefined) return true;
   if (pricing.adjustmentSource) return pricing.adjustmentSource === 'MANUAL';
   // Compatibility for saved configurations created before provenance was recorded.

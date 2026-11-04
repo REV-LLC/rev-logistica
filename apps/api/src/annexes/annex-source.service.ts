@@ -491,22 +491,20 @@ export class AnnexSourceService {
           source.rentals,
           rows.flatMap((row) => (row.sku ? [row.sku] : [])),
         );
-        applyCustomerPricing(source.rentals, customerPricing?.value, history.map(cut => cut.input));
+        const storedRevision = currentDraft?.revisions[0];
+        const savedInput = storedRevision ? annexInputSchema.safeParse(storedRevision.input) : null;
+        if (savedInput && !savedInput.success) {
+          throw new BadRequestException('No se pudieron leer las reglas guardadas de este anexo');
+        }
+        applyCustomerPricing(source.rentals, customerPricing?.value, history.map(cut => cut.input), savedInput?.data?.rentals);
         let input: AnnexInput = {
           period,
           policy,
           rentals: source.rentals,
           machineDays: source.machineDays,
         };
-        if (currentDraft?.revisions[0]) {
-          const parsed = annexInputSchema.safeParse(
-            currentDraft.revisions[0].input,
-          );
-          if (!parsed.success)
-            throw new BadRequestException(
-              'No se pudieron leer las reglas guardadas de este anexo',
-            );
-          const applied = applySavedAnnexRules(input, parsed.data);
+        if (savedInput?.data) {
+          const applied = applySavedAnnexRules(input, savedInput.data);
           input = applied.input;
           source.issues.push(...applied.issues);
         }

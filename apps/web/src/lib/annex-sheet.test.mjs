@@ -84,6 +84,31 @@ test('clearing a discount restores zero and removes a previous effective price',
  assert.deepEqual(applySheetChanges(input,[{row,key:'effectivePrice',value:''}]).rentals[0].pricing,{basePrice:'100',adjustmentSource:'MANUAL',effectivePrice:'0'});
 });
 
+test('the last edited lot of a reference sets its future rate across paste and discount edits',()=>{
+ const source=structuredClone(input);
+ source.rentals[0].skuId='sku';
+ source.rentals.push({...structuredClone(source.rentals[0]),id:'second'});
+ const rows=sheetRows(source,null).filter(row=>row.kind==='rentals');
+ const edit=(data,row,key,value)=>applySheetChanges(data,[{row,key,value}],'',true);
+ const next=applySheetChanges(source,[
+   {row:rows[1],key:'effectivePrice',value:'80'},
+   {row:rows[0],key:'effectivePrice',value:'75'},
+ ],'',true);
+ assert.equal(next.worksiteRates.length,1);
+ assert.equal(next.worksiteRates[0].tablePrice.effectivePrice,'75');
+ const discounted=edit(next,rows[1],'discountPercent','12.5');
+ assert.equal(discounted.worksiteRates[0].tablePrice.discountPercent,'12.5');
+ assert.equal(edit(discounted,rows[0],'effectivePrice','').worksiteRates[0].tablePrice.effectivePrice,'0');
+ discounted.worksiteRates=[{skuId:'sku',quantityBasis:'UNIT',unitPrice:null,thisCutOnly:true}];
+ assert.deepEqual(edit(discounted,rows[0],'effectivePrice','65').worksiteRates,discounted.worksiteRates);
+ assert.equal(source.worksiteRates,undefined);
+ const inherited=structuredClone(source);
+ inherited.rentals[0].pricing={basePrice:'150',effectivePrice:'150',adjustmentSource:'WORKSITE'};
+ const followup=edit(inherited,rows[0],'discountPercent','10');
+ assert.equal(followup.rentals[0].pricing.basePriceOverride,'150');
+ assert.equal(followup.worksiteRates[0].tablePrice.basePrice,'150');
+});
+
 test('all editable numeric columns normalize blanks in multirow paste',()=>{
  const rows=sheetRows(input,result);
  for (const key of ['discountPercent','effectivePrice']) {
