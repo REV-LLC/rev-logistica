@@ -57,6 +57,20 @@ test('current-period deliveries show document number instead of opening balance'
   const data=fixture();data.input.rentals[0].deliveredOn='2026-10-16';
   const pdf=await inspect(await createAnnexPdf(data));assert.ok(pdf.text.includes('RM-0'));assert.ok(!pdf.text.includes('Saldo inicial'));
 });
+test('download and print retain opening balance plus current return documents',async()=>{
+  const data=fixture();
+  const returned=(id,date,billingCutoffDate)=>({date,billingCutoffDate,quantity:'1',source:{documentId:id,documentNumber:id}});
+  data.input.rentals[0].returns=[
+    returned('DV-current','2026-10-17','2026-10-16'),
+    returned('DV-prior','2026-10-16','2026-10-15'),
+    returned('DV-future','2026-10-17'),
+  ];
+  for(const options of [{},{print:true}]) {
+    const pdf=await inspect(await createAnnexPdf(data,options));
+    for(const value of ['Saldo inicial','DV-current','$ 119,00']) assert.ok(pdf.text.includes(value),value);
+    for(const value of ['RM-0','DV-prior','DV-future']) assert.ok(!pdf.text.includes(value),value);
+  }
+});
 test('PDF prints manual observations, both transport charges and combined taxable total',async()=>{
   const data=fixture();
   data.input.observations='Coordinar el regreso con el residente.';
