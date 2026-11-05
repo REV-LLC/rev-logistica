@@ -217,8 +217,8 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
  test('document links retain every consolidated origin and deduplicate returns', () => {
    const source = {documentId:'doc-a', documentNumber:'RM001',reference:'ledger-a'};
    const linked = {...input, rentals:[
-     {...input.rentals[0],source,returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
-     {...input.rentals[0],source:{documentId:'doc-b',documentNumber:'RM002'},returns:[{source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+     {...input.rentals[0],source,returns:[{date:'2026-09-18',source:{documentId:'doc-r',documentNumber:'DV001'}}]},
+     {...input.rentals[0],source:{documentId:'doc-b',documentNumber:'RM002'},returns:[{date:'2026-09-18',source:{documentId:'doc-r',documentNumber:'DV001'}}]},
    ]};
    assert.deepEqual(sheetDocuments(linked,{members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]}),[
      {id:'doc-a',label:'RM001'},{id:'doc-r',label:'DV001'},{id:'doc-b',label:'RM002'}
@@ -240,7 +240,7 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
    assert.equal(rows.length,3);
    const opening = rows.find(r=>isOpeningBalance(source,r));
    assert.equal(opening.quantity,'8');assert.equal(opening.days,'12');assert.equal(opening.from,'2026-10-16');
-   assert.equal(opening.net,'9600.00');assert.equal(sheetDocuments(source,opening).length,3);
+   assert.equal(opening.net,'9600.00');assert.deepEqual(sheetDocuments(source,opening),[]);
    assert.equal(rows.filter(r=>!isOpeningBalance(source,r)).length,2);
    assert.equal(JSON.stringify(source),before);
    const firstCut={...source,period:{from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'},rentals:source.rentals.slice(0,3)};
@@ -252,6 +252,26 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
    assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['11','9','6']);
    assert.ok(firstRows.every(r=>!isOpeningBalance(firstCut,r)));
  });
+
+test('opening balances show only this cut returns, using billing cutoffs and deduplicating merged lots',()=>{
+ const source=structuredClone(input);
+ source.rentals[0].deliveredOn='2026-09-01';
+ const returned=(id,date,billingCutoffDate)=>({date,billingCutoffDate,quantity:'1',source:{documentId:id,documentNumber:id}});
+ source.rentals[0].returns=[
+   returned('DV-old','2026-09-16','2026-09-15'),
+   returned('DV-start','2026-09-16'),
+   returned('DV-cutoff','2026-09-21','2026-09-20'),
+   returned('DV-future','2026-09-21'),
+ ];
+ source.rentals.push({...structuredClone(source.rentals[0]),id:'second'});
+ const row={members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]};
+ const before=JSON.stringify(source);
+ assert.equal(isOpeningBalance(source,row),true);
+ assert.deepEqual(sheetDocuments(source,row),[
+   {id:'DV-start',label:'DV-start'},{id:'DV-cutoff',label:'DV-cutoff'},
+ ]);
+ assert.equal(JSON.stringify(source),before);
+});
 
 test('manual rows never allow a paste to mutate an inventory rental', async()=>{
  const {manualSheetRows}=await import('./annex-sheet.ts');

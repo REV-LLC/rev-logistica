@@ -42,14 +42,22 @@ export function isOpeningBalance(input: AnnexInput, row: SheetRow): boolean {
   });
 }
 
-/** Keep every source document when identical rental lots share a display row. */
+/** Show current-cut supports, keeping prior deliveries under the opening-balance label. */
 export function sheetDocuments(input: AnnexInput, row: SheetRow) {
   const documents = new Map<string, { id: string; label: string }>();
+  const openingBalance = isOpeningBalance(input, row);
+  const through = input.period.through < input.period.to ? input.period.through : input.period.to;
   for (const member of row.members ?? [row]) {
     const item = input[member.kind][member.index];
     if (!item) continue;
     const sources = member.kind === "rentals"
-      ? [input.rentals[member.index].source, ...input.rentals[member.index].returns.map((entry) => entry.source)]
+      ? [
+          ...(openingBalance ? [] : [input.rentals[member.index].source]),
+          ...input.rentals[member.index].returns.filter((entry) => {
+            const cutoff = entry.billingCutoffDate ?? entry.date;
+            return cutoff >= input.period.from && cutoff <= through;
+          }).map((entry) => entry.source),
+        ]
       : input.machineDays[member.index].reports.map((report) => report.source);
     for (const source of sources) {
       if (source.documentId) documents.set(source.documentId, {

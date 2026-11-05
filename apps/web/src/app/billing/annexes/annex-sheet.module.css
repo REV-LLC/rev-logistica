@@ -54,6 +54,17 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.documentsCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  line-height: 13px;
+}
+.openingBalance {
+  font-size: 10px;
+  color: var(--mantine-color-dimmed);
+}
 
 .machineGroup {
   --rdg-background-color: #314352;

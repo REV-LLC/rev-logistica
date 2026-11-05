@@ -101,8 +101,10 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   let rowIndex = 0;
   for (const row of [...groupMachineRows(data.input, sheetRows(data.input, data.result), false), ...manualSheetRows(data.input)]) {
     if (row.group) continue;
-    const documents = row.manualType ? row.reference : isOpeningBalance(data.input, row) ? "Saldo inicial" :
-      sheetDocuments(data.input, row).map((doc) => doc.label).join("\n") || "-";
+    const documents = row.manualType ? row.reference : [
+      ...(isOpeningBalance(data.input, row) ? ["Saldo inicial"] : []),
+      ...sheetDocuments(data.input, row).map((doc) => doc.label),
+    ].join("\n") || "-";
     const values = [
       row.supplement ? `${row.label} - Ajuste al mínimo` : row.label,
       documents, row.mode, row.from ? date(row.from) : "-", row.to ? date(row.to) : "-", row.quantity, row.areaM2 ?? "-", row.days,
