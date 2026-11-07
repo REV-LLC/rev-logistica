@@ -330,3 +330,16 @@ export function parseAnnexInput(value: unknown): AnnexInput {
     );
   return parsed.data;
 }
+
+export function defaultAnnexPolicy(): AnnexInput['policy'] {
+  return {
+    version: 'REV-INITIAL-1',
+    vatPercent: 19,
+    includeReturnDay: true,
+    excludedWeekdays: [],
+    excludeHolidays: false,
+    holidays: [],
+    holidayCalendarConfirmed: false,
+    minimumHoursPerMachineDay: '6',
+  };
+}

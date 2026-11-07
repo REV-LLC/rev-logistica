@@ -23,7 +23,7 @@ import { applyCommercialComposition } from './annex-commercial-source';
 import { inventoryToAnnex } from './annex-inventory';
 import type { AnnexInput } from './annex-input';
 import { calculateAnnex } from './annex-engine';
-import { annexInputSchema } from './annex-input';
+import { annexInputSchema, defaultAnnexPolicy } from './annex-input';
 import {
   worksiteMinimumKey,
   minimumSettings,
@@ -114,16 +114,7 @@ export class AnnexSourceService {
       throw new BadRequestException('Obra inválida');
     [from, to, through].forEach(civilDate);
     const period = { from, to, through };
-    const policy: AnnexInput['policy'] = {
-      version: 'REV-INITIAL-1',
-      vatPercent: 19,
-      includeReturnDay: true,
-      excludedWeekdays: [],
-      excludeHolidays: false,
-      holidays: [],
-      holidayCalendarConfirmed: false,
-      minimumHoursPerMachineDay: '6',
-    };
+    const policy = defaultAnnexPolicy();
     calculateAnnex({ period, policy, rentals: [], machineDays: [] });
     return this.prisma.$transaction(
       async (tx) => {

@@ -716,6 +716,16 @@ export class NotificationsService {
     return totals;
   }
 
+  async sendAnnexBillingReminder(input: {
+    topicId: string; occurrenceKey: string; userId: string; name: string; phone: string; message: string;
+  }) {
+    return this.dispatchOne({
+      topicId: input.topicId, occurrenceKey: input.occurrenceKey,
+      title: 'Anexos pendientes de facturar', message: input.message,
+      link: this.appLink('/billing/annexes/consolidado'),
+    }, { userId: input.userId, name: input.name, phone: input.phone }, NotificationChannel.WHATSAPP);
+  }
+
   async dispatchNotifications() {
     const reminders = (await this.listReminders()).filter(
       (reminder) => reminder.status !== 'UPCOMING',

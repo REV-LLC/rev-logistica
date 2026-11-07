@@ -100,6 +100,14 @@ export class AnnexesController {
   @Get('drafts/:id') get(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.annexes.get(id);
   }
+  @Post('drafts/:id/invoice')
+  assignStoredInvoice(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.annexes.assignStoredInvoice(id, body, req.user.sub);
+  }
   @Get('drafts/:id/history') history(
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {

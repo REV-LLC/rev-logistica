@@ -40,6 +40,8 @@ import { annexAmounts } from "@/lib/annex-totals";
 import AnnexSheet from "./annex-sheet";
 import AnnexTransport from "./annex-transport";
 import AnnexLibrary from "./annex-library";
+import Link from "next/link";
+import { InvoiceNumberFields } from "./invoice-number-fields";
 import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
 import type { AnnexExport } from "@/lib/annex-pdf";
@@ -115,6 +117,7 @@ export default function AnnexesPage() {
   const [invoiceNumber, setInvoiceNumber] = useState<string | null>(null);
   const [openedDraft, setOpenedDraft] = useState<string | null>(null);
   const [saveOpened, setSaveOpened] = useState(false);
+  const [assignOpened, setAssignOpened] = useState(false);
   const [markInvoiced, setMarkInvoiced] = useState(false);
   const [invoiceTag, setInvoiceTag] = useState("");
   function openSave() {
@@ -173,7 +176,8 @@ export default function AnnexesPage() {
     !busy &&
     !printing &&
     !sendData &&
-    !saveOpened;
+    !saveOpened &&
+    !assignOpened;
   useEffect(() => {
     if (!liveEnabled || !site) return;
     const stop = startAnnexLiveRefresh({
@@ -318,7 +322,19 @@ export default function AnnexesPage() {
             }
           : await loadLive(
               target.worksite!,
-              latest?.input.period ?? target.period,
+              latest &&
+                target.draft &&
+                new URLSearchParams(window.location.search).has("through")
+                ? {
+                    ...latest.input.period,
+                    through: [
+                      latest.input.period.to,
+                      target.period.through > latest.input.period.through
+                        ? target.period.through
+                        : latest.input.period.through,
+                    ].sort()[0],
+                  }
+                : (latest?.input.period ?? target.period),
               controller.signal,
             );
         if (controller.signal.aborted) return;
@@ -462,7 +478,11 @@ export default function AnnexesPage() {
       setBusy(false);
     }
   }
-  async function calculate(save: boolean, selectedInvoice?: string | null) {
+  async function calculate(
+    save: boolean,
+    selectedInvoice?: string | null,
+    saveReason?: string,
+  ) {
     if (!input || !site) return;
     stopRefresh.current?.();
     setBusy(true);
@@ -470,27 +490,38 @@ export default function AnnexesPage() {
     setMessage(null);
     try {
       if (save) {
-        const draft = await api<Draft>("/annexes/drafts", {
-          method: "POST",
-          json: {
-            customerWorksiteId: site,
-            expectedRevision: revision,
-            ...(selectedInvoice !== undefined
-              ? { invoiceNumber: selectedInvoice }
-              : {}),
-            reason:
-              reason.trim() ||
-              (revision
-                ? "Actualización del anexo"
-                : "Guardado inicial del anexo"),
-            input,
-            sourceIssues: issues,
-          },
-        });
+        const draft =
+          historicalOnly && openedDraft && selectedInvoice
+            ? await api<Draft>(`/annexes/drafts/${openedDraft}/invoice`, {
+                method: "POST",
+                json: {
+                  expectedRevision: revision,
+                  invoiceNumber: selectedInvoice,
+                },
+              })
+            : await api<Draft>("/annexes/drafts", {
+                method: "POST",
+                json: {
+                  customerWorksiteId: site,
+                  expectedRevision: revision,
+                  ...(selectedInvoice !== undefined
+                    ? { invoiceNumber: selectedInvoice }
+                    : {}),
+                  reason:
+                    saveReason ||
+                    reason.trim() ||
+                    (revision
+                      ? "Actualización del anexo"
+                      : "Guardado inicial del anexo"),
+                  input,
+                  sourceIssues: issues,
+                },
+              });
         setRevision(draft.revision);
         setInvoiceNumber(draft.revisions[0].invoiceNumber ?? null);
         setOpenedDraft(draft.id);
         setSaveOpened(false);
+        setAssignOpened(false);
         setInput(draft.revisions[0].input);
         setResult(draft.revisions[0].result);
         setDirty(false);
@@ -498,7 +529,7 @@ export default function AnnexesPage() {
         baseline.current = null;
         setMessage(`Anexo guardado · versión ${draft.revision}`);
         try {
-          await consult(input.period);
+          if (!historicalOnly) await consult(input.period);
         } catch {
           setLiveError(
             "Los cambios se guardaron, pero no se pudo actualizar el anexo con los últimos movimientos. Se reintentará automáticamente.",
@@ -589,18 +620,28 @@ export default function AnnexesPage() {
               Prepara y revisa el alquiler por cliente y obra.
             </Text>
           </div>
-          <Badge color={editing ? "orange" : "blue"}>
-            {editing
-              ? "Editando"
-              : invoiceNumber
-                ? "Facturado"
-                : historicalOnly || !input
-                  ? "Consulta"
-                  : liveError
-                    ? "Sin actualizar"
-                    : "En vivo"}
-            {revision ? ` · versión ${revision}` : ""}
-          </Badge>
+          <Group gap="xs">
+            <Button
+              component={Link}
+              href="/billing/annexes/consolidado"
+              variant="light"
+              size="xs"
+            >
+              Consolidado de facturación
+            </Button>
+            <Badge color={editing ? "orange" : "blue"}>
+              {editing
+                ? "Editando"
+                : invoiceNumber
+                  ? "Facturado"
+                  : historicalOnly || !input
+                    ? "Consulta"
+                    : liveError
+                      ? "Sin actualizar"
+                      : "En vivo"}
+              {revision ? ` · versión ${revision}` : ""}
+            </Badge>
+          </Group>
         </Group>
         {input && (
           <Group>
@@ -612,6 +653,20 @@ export default function AnnexesPage() {
             >
               Volver al explorador
             </Button>
+            {!editing && !invoiceNumber && (!historicalOnly || openedDraft) && (
+              <Button
+                size="xs"
+                disabled={busy || printing || !result || !!liveError}
+                onClick={() => {
+                  stopRefresh.current?.();
+                  setInvoiceTag("");
+                  setError(null);
+                  setAssignOpened(true);
+                }}
+              >
+                Asignar factura
+              </Button>
+            )}
             {invoiceNumber && (
               <Badge color="green" size="lg" maw="100%" title={invoiceNumber}>
                 Facturado · {invoiceNumber}
@@ -1235,6 +1290,49 @@ export default function AnnexesPage() {
           </>
         ) : null}
         <Modal
+          opened={assignOpened}
+          onClose={() => {
+            if (!busy) setAssignOpened(false);
+          }}
+          title="Asignar factura"
+          closeOnClickOutside={!busy}
+          closeOnEscape={!busy}
+          withCloseButton={!busy}
+        >
+          <Stack>
+            <Text size="sm">
+              Se guardará este corte tal como lo estás viendo, asociado al
+              número de factura.
+            </Text>
+            {assignOpened && (
+              <InvoiceNumberFields onChange={setInvoiceTag} disabled={busy} />
+            )}
+            {error && <Alert color="red">{error}</Alert>}
+            <Group justify="end">
+              <Button
+                variant="default"
+                disabled={busy}
+                onClick={() => setAssignOpened(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                loading={busy}
+                disabled={!invoiceTag}
+                onClick={() =>
+                  calculate(
+                    true,
+                    invoiceTag,
+                    "Asignación de factura " + invoiceTag,
+                  )
+                }
+              >
+                Asignar factura
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+        <Modal
           opened={saveOpened}
           onClose={() => {
             if (!busy) setSaveOpened(false);
@@ -1254,9 +1352,15 @@ export default function AnnexesPage() {
               label="Marcar como facturado"
               checked={markInvoiced}
               disabled={busy}
-              onChange={(event) => setMarkInvoiced(event.currentTarget.checked)}
+              onChange={(event) => {
+                setMarkInvoiced(event.currentTarget.checked);
+                setInvoiceTag(invoiceNumber ?? "");
+              }}
             />
-            {markInvoiced && (
+            {markInvoiced && !invoiceNumber && (
+              <InvoiceNumberFields onChange={setInvoiceTag} disabled={busy} />
+            )}
+            {markInvoiced && invoiceNumber && (
               <TextInput
                 label="Número de factura"
                 placeholder="Ej. FE-3862"

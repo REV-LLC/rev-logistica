@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Badge, Center, Container, Loader, Text } from '@mantine/core';
 import { IconArrowRight } from '@tabler/icons-react';
 import AuthGuard from '@/components/AuthGuard';
+import AnnexBillingCard from '@/components/dashboard/AnnexBillingCard';
 import ResponsiveShell from '@/components/ResponsiveShell';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import { api } from '@/lib/api';
@@ -168,6 +169,7 @@ export default function HomePage() {
   const entityNotification = notifications.find((item) => item.entity.type === (role === 'DRIVER' ? 'VEHICLE' : 'ASSET'));
 
   const adminView = <div className={styles.adminGrid}>
+    <AnnexBillingCard />
     <Section title="Requiere atención" count={attentionTotal}>{adminAttention.map((item) => <ActionRow key={item.label} href={item.href} title={item.label} meta={String(item.value)} tone={item.tone} />)}</Section>
     <Section title="Solicitudes pendientes">{requests.length ? requests.slice(0, 4).map((request) => <ActionRow key={request.id} href={`/inventory/ledger/document/${request.id}`} title={request.consecutive || 'Solicitud sin consecutivo'} detail={request.type || 'Documento en borrador'} meta={relativeDate(request.createdAt)} />) : <EmptyRow>No hay solicitudes pendientes.</EmptyRow>}</Section>
     <Section title="Próximos vencimientos">{pendingVehicles.length ? pendingVehicles.slice(0, 4).map((vehicle) => <ActionRow key={`${vehicle.id}-${vehicle.document}`} href="/transport/vehicles" title={vehicle.plate} detail={vehicle.document} meta={vehicle.days < 0 ? `${Math.abs(vehicle.days)} días vencido` : `${vehicle.days} días`} tone={vehicle.days < 0 ? 'danger' : 'warning'} />) : <EmptyRow>No hay vencimientos en los próximos 30 días.</EmptyRow>}</Section>
@@ -175,6 +177,7 @@ export default function HomePage() {
   </div>;
 
   const officeView = <div className={styles.officeGrid}>
+    <AnnexBillingCard office />
     <Section title="Pendiente de mi revisión" count={requests.length}><ActionRow href="/transport/requests" title="Solicitudes" meta={String(requests.length)} /><ActionRow href="/tasks" title="Tareas abiertas" meta={String(activeTasks.length)} /><ActionRow href="/transport/vehicles" title="Documentos por vencer" meta={String(pendingVehicles.length)} /></Section>
     <Section title="Requiere atención" count={overdue.length + due.length}>{notifications.length ? notifications.slice(0, 5).map((item) => <ActionRow key={item.topicId} href="/notifications/deliveries" title={item.title} detail={item.message} meta={reminderMeta(item)} tone={item.status === 'OVERDUE' ? 'danger' : 'warning'} />) : <EmptyRow>No hay alertas asignadas.</EmptyRow>}</Section>
     <Section title="Mis tareas">{myTasks.length ? myTasks.slice(0, 5).map((task) => <ActionRow key={task.id} href="/tasks" title={task.title} detail={task.description || undefined} meta={relativeDate(task.dueDate)} />) : <EmptyRow>No tienes tareas activas.</EmptyRow>}</Section>
