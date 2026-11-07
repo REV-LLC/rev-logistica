@@ -122,16 +122,15 @@ function verifyDigest(value) {
   return `${IMAGE_REPOSITORY}@${value}`;
 }
 
-function verifyPublishedImage(registry, manifest, localImage, buildMetadata) {
+function verifyPublishedImage(registry, manifest, localImage) {
   const imageRef = verifyDigest(registry.digest);
-  const configDigest = buildMetadata['containerimage.config.digest'];
-  assert.match(configDigest, /^sha256:[0-9a-f]{64}$/, 'Missing build config digest');
-  assert.equal(manifest.config?.digest, configDigest, 'Registry config differs from the tested build');
-  // Docker stores may identify the loaded image by its config or its manifest.
-  if (localImage.Id !== configDigest) {
-    assert.equal(localImage.Id, buildMetadata['containerimage.digest'], 'Local image differs from the build manifest');
-    assert.equal(registry.digest, localImage.Id, 'Registry manifest differs from the locally smoke-tested image');
-  }
+  const configDigest = manifest.config?.digest;
+  assert.match(configDigest, /^sha256:[0-9a-f]{64}$/, 'Published image has no valid config digest');
+  // The raw manifest was fetched by immutable digest. Both identities below
+  // therefore belong to that same registry image. Docker's classic store uses
+  // its config ID while containerd can expose the manifest ID.
+  assert.ok(localImage.Id === configDigest || localImage.Id === registry.digest,
+    'Registry image differs from the locally smoke-tested image');
   return imageRef;
 }
 
@@ -199,8 +198,7 @@ async function main() {
   const registry = JSON.parse(execFileSync('docker', ['buildx', 'imagetools', 'inspect', imageTag, '--format', '{{json .Manifest}}'], { encoding: 'utf8', env: buildEnvironment }));
   const imageRef = verifyDigest(registry.digest);
   const manifest = JSON.parse(execFileSync('docker', ['buildx', 'imagetools', 'inspect', imageRef, '--raw'], { encoding: 'utf8', env: buildEnvironment }));
-  const buildMetadata = JSON.parse(fs.readFileSync(path.join(workDirectory, 'build-metadata.json'), 'utf8'));
-  verifyPublishedImage(registry, manifest, imageDetails, buildMetadata);
+  verifyPublishedImage(registry, manifest, imageDetails);
   // BuildKit exported the separate max-mode cache; never replace it with the
   // final runtime image, which omits the intermediate install/build layers.
   const evidence = { ...proof, imageRef, imageRepository: IMAGE_REPOSITORY, imageTag, platform: 'linux/amd64', railpackVersion: RAILPACK_VERSION, frontend: FRONTEND, railpackArchiveSha256: RAILPACK_SHA256, buildStartedAt, publishedAt: new Date().toISOString(), runtimeSmoke: 'passed', packageVisibility: 'private', localImageBytes: imageDetails.Size };
