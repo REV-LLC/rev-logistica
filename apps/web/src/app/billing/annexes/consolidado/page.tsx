@@ -16,13 +16,14 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconBrandWhatsapp } from "@tabler/icons-react";
+import { IconBrandWhatsapp, IconFileText } from "@tabler/icons-react";
 import {
   overviewAnnexUrl,
   shortDate,
   useBillingOverview,
 } from "@/lib/annex-billing-overview";
 import ReminderSettings from "./reminder-settings";
+import AssignInvoicePopover from "./assign-invoice-popover";
 
 export default function BillingOverviewPage() {
   const { report, error, refresh, progress } = useBillingOverview();
@@ -30,6 +31,7 @@ export default function BillingOverviewPage() {
   const [filter, setFilter] = useState("pending");
   const [customer, setCustomer] = useState<string | null>(null);
   const [cutFrom, setCutFrom] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const selected =
     report?.rows.filter(
       (row) =>
@@ -121,6 +123,17 @@ export default function BillingOverviewPage() {
                 ]}
               />
             </Group>
+            {notice && (
+              <Alert
+                color="green"
+                role="status"
+                withCloseButton
+                closeButtonLabel="Cerrar aviso"
+                onClose={() => setNotice("")}
+              >
+                {notice}
+              </Alert>
+            )}
             {reviews.length > 0 && (
               <Alert color="yellow" title="Movimientos por revisar">
                 <details>
@@ -170,7 +183,7 @@ export default function BillingOverviewPage() {
                       </Text>
                     </Group>
                     {rows.length ? (
-                      <Table.ScrollContainer minWidth={650}>
+                      <Table.ScrollContainer minWidth={760}>
                         <Table highlightOnHover>
                           <Table.Thead>
                             <Table.Tr>
@@ -180,7 +193,7 @@ export default function BillingOverviewPage() {
                               <Table.Th>
                                 {filter === "pending" ? "Anexo" : "Factura"}
                               </Table.Th>
-                              <Table.Th></Table.Th>
+                              <Table.Th>Acciones</Table.Th>
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
@@ -200,9 +213,31 @@ export default function BillingOverviewPage() {
                                     (r.draftId ? "Guardado" : "Por generar")}
                                 </Table.Td>
                                 <Table.Td>
-                                  <Link href={overviewAnnexUrl(r)}>
-                                    Abrir anexo
-                                  </Link>
+                                  <Group gap="xs" wrap="nowrap">
+                                    <Button
+                                      component={Link}
+                                      href={overviewAnnexUrl(r)}
+                                      prefetch={false}
+                                      size="xs"
+                                      variant="default"
+                                      leftSection={<IconFileText size={15} />}
+                                    >
+                                      Abrir anexo
+                                    </Button>
+                                    {r.draftId && !r.invoiceNumber && (
+                                      <AssignInvoicePopover
+                                        draftId={r.draftId}
+                                        siteName={r.siteName}
+                                        onRefresh={refresh}
+                                        onAssigned={(invoice) => {
+                                          setNotice(
+                                            `Factura ${invoice} asignada al anexo de ${r.siteName}.`,
+                                          );
+                                          refresh();
+                                        }}
+                                      />
+                                    )}
+                                  </Group>
                                 </Table.Td>
                               </Table.Tr>
                             ))}

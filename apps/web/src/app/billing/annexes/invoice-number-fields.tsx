@@ -27,6 +27,7 @@ export function InvoiceNumberFields({
     <Group align="flex-end" grow>
       <Select
         label="Prefijo"
+        comboboxProps={{ withinPortal: false }}
         data={["FE", "FV", "NC", "ND", "Otro"]}
         value={prefix}
         allowDeselect={false}
