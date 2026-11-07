@@ -12,20 +12,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { annexInputSchema } from './annex-input';
 import { calculateAnnex } from './annex-engine';
 import { minimumSettings, worksiteMinimumKey } from './annex-minimums';
+const invoiceNumberSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[^\r\n\x00-\x1F]+$/)
+  .transform((value) => value.toLocaleUpperCase('es-CO'))
+  .pipe(z.string().max(80));
 const saveSchema = z
   .object({
     customerWorksiteId: z.string().uuid(),
     expectedRevision: z.number().int().nonnegative(),
-    invoiceNumber: z
-      .string()
-      .trim()
-      .min(1)
-      .max(80)
-      .regex(/^[^\r\n\x00-\x1F]+$/)
-      .transform((value) => value.toLocaleUpperCase('es-CO'))
-      .pipe(z.string().max(80))
-      .nullable()
-      .optional(),
+    invoiceNumber: invoiceNumberSchema.nullable().optional(),
     reason: z.string().trim().min(1).max(500),
     input: annexInputSchema,
     sourceIssues: z
@@ -195,6 +194,56 @@ export class AnnexesService {
       },
     });
   }
+  /** Tag a saved historical snapshot without recalculating unsupported rental modes. */
+  async assignStoredInvoice(id: string, value: unknown, userId: string) {
+    const parsed = z
+      .object({
+        expectedRevision: z.number().int().positive(),
+        invoiceNumber: invoiceNumberSchema,
+      })
+      .strict()
+      .safeParse(value);
+    if (!parsed.success)
+      throw new BadRequestException('Número de factura o versión inválidos.');
+    const { expectedRevision, invoiceNumber } = parsed.data;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT s.id FROM "CustomerWorksite" s JOIN "AnnexDraft" d ON d."customerWorksiteId"=s.id WHERE d.id=${id} FOR UPDATE OF s`,
+      );
+      const claimed = await tx.annexDraft.updateMany({
+        where: { id, revision: expectedRevision },
+        data: { revision: { increment: 1 } },
+      });
+      if (!claimed.count)
+        throw new ConflictException(
+          'El anexo cambió. Vuelve a abrirlo antes de asignar la factura.',
+        );
+      const previous = await tx.annexDraftRevision.findUniqueOrThrow({
+        where: {
+          draftId_revision: { draftId: id, revision: expectedRevision },
+        },
+      });
+      if (previous.invoiceNumber)
+        throw new ConflictException('El anexo ya tiene una factura asignada.');
+      await tx.annexDraftRevision.create({
+        data: {
+          draftId: id,
+          revision: expectedRevision + 1,
+          through: previous.through,
+          invoiceNumber,
+          input: previous.input as Prisma.InputJsonValue,
+          result: previous.result as Prisma.InputJsonValue,
+          sourceIssues: previous.sourceIssues as Prisma.InputJsonValue,
+          reason: 'Asignación de factura ' + invoiceNumber,
+          createdBy: userId,
+        },
+      });
+      return tx.annexDraft.findUniqueOrThrow({
+        where: { id },
+        include: { revisions: { orderBy: { revision: 'desc' }, take: 1 } },
+      });
+    });
+  }
   async save(value: unknown, userId: string) {
     const parsed = saveSchema.safeParse(value);
     if (!parsed.success)
@@ -310,7 +359,11 @@ export class AnnexesService {
           revisions: {
             orderBy: { revision: 'desc' },
             take: 1,
-            select: { invoiceNumber: true, input: Boolean(input.worksiteRates?.length) },
+            select: {
+              invoiceNumber: true,
+              through: true,
+              input: Boolean(input.worksiteRates?.length),
+            },
           },
         },
       });
@@ -319,7 +372,24 @@ export class AnnexesService {
           d.periodFrom.getTime() === periodFrom.getTime() &&
           d.periodTo.getTime() === periodTo.getTime(),
       );
-      if (overlaps.some((d) => d.id !== current?.id))
+      const invoice =
+        parsed.data.invoiceNumber === undefined
+          ? current?.revisions?.[0]?.invoiceNumber
+          : parsed.data.invoiceNumber;
+      const reservedUntil = invoice
+        ? new Date(input.period.through + 'T00:00:00Z')
+        : periodTo;
+      if (
+        overlaps.some((d) => {
+          if (d.id === current?.id) return false;
+          const latest = d.revisions?.[0];
+          const until =
+            latest?.invoiceNumber && latest.through
+              ? latest.through
+              : d.periodTo;
+          return until >= periodFrom && d.periodFrom <= reservedUntil;
+        })
+      )
         throw new ConflictException(
           'Ya existe un borrador con un período solapado',
         );
@@ -328,8 +398,13 @@ export class AnnexesService {
           'El borrador cambió. Carga la última revisión antes de guardar',
         );
       if (input.worksiteRates?.length) {
-        const previous = annexInputSchema.safeParse(current?.revisions?.[0]?.input);
-        validateWorksiteRates(input, previous.success ? previous.data.worksiteRates : undefined);
+        const previous = annexInputSchema.safeParse(
+          current?.revisions?.[0]?.input,
+        );
+        validateWorksiteRates(
+          input,
+          previous.success ? previous.data.worksiteRates : undefined,
+        );
       }
       const revision = expectedRevision + 1;
       const draft = current

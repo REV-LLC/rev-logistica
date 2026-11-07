@@ -132,3 +132,11 @@ it('preserves existing invoice metadata for older clients and allows explicit re
 it.each(['', '   ', 'a'.repeat(81), 'FE\n100'])('rejects invalid invoice tags before creating a revision',async invoiceNumber=>{
  const {service,tx}=setup();await expect(service.save({...payload,invoiceNumber},'author')).rejects.toThrow();expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
 });
+
+it('permits only the unused tail after a partial invoice, preserving overlap protection on billed days',async()=>{
+  const {service,tx}=setup();
+  tx.annexDraft.findMany.mockResolvedValue([{id:'partial',periodFrom:new Date('2026-09-16'),periodTo:new Date('2026-09-30'),revisions:[{invoiceNumber:'FE-001',through:new Date('2026-09-25')}]}]);
+  const part=(from:string)=>({...payload,input:{...input,period:{from,to:'2026-09-30',through:'2026-09-30'}}});
+  await expect(service.save(part('2026-09-25'),'author')).rejects.toThrow('solapado');
+  await expect(service.save(part('2026-09-26'),'author')).resolves.toBeDefined();
+});
