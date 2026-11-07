@@ -204,12 +204,20 @@ test('accepts only immutable digests in the fixed private package', () => {
   for (const ref of ['latest', `${IMAGE_REPOSITORY}:latest`, 'sha256:short', 'sha256:' + 'X'.repeat(64)]) assert.throws(() => verifyDigest(ref));
 });
 
-test('registry digest must resolve to the exact local image that passed the runtime smoke', () => {
-  const digest = `sha256:${'d'.repeat(64)}`;
-  const localImage = { Id: `sha256:${'e'.repeat(64)}` };
-  assert.equal(verifyPublishedImage({ digest }, { config: { digest: localImage.Id } }, localImage), `${IMAGE_REPOSITORY}@${digest}`);
-  assert.throws(() => verifyPublishedImage({ digest }, { config: { digest } }, localImage));
-  assert.throws(() => verifyPublishedImage({ digest }, {}, localImage));
+test('published config and smoke-tested identity agree for both Docker image stores', () => {
+  const digest = 'sha256:9bf38f97e3f75a0a6a7aae36c7768a65bb94f7e173f56daa204c5fa5cbd750ad';
+  const config = 'sha256:5ceaed789e42659aa32f4bc37caf2288b5ab6c4d5b39f92cd4794f19094d542b';
+  const other = `sha256:${'a'.repeat(64)}`;
+  const metadata = {'containerimage.digest': digest, 'containerimage.config.digest': config};
+  const manifest = {config:{digest:config}};
+  for (const Id of [config, digest]) {
+    assert.equal(verifyPublishedImage({digest}, manifest, {Id}, metadata), `${IMAGE_REPOSITORY}@${digest}`);
+    assert.throws(() => verifyPublishedImage({digest}, {config:{digest:other}}, {Id}, metadata));
+    assert.throws(() => verifyPublishedImage({digest}, {}, {Id}, metadata));
+    assert.throws(() => verifyPublishedImage({digest}, manifest, {Id}, {}));
+  }
+  assert.throws(() => verifyPublishedImage({digest:other}, manifest, {Id:digest}, metadata));
+  assert.throws(() => verifyPublishedImage({digest}, manifest, {Id:other}, metadata));
 });
 
 test('release context contains only reviewed API build inputs, excluding frontend, docs, CD and tracked or untracked env files', (t) => {
