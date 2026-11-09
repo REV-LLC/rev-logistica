@@ -23,8 +23,9 @@ test('initial vehicle loading uses a measurable marker without white loading car
 test('glass statistics are opt-in and preserve the default appearance in other modules', () => {
   assert.match(stat, /variant\?: 'default' \| 'glass'/);
   assert.match(stat, /variant = 'default'/);
-  assert.match(stat, /withBorder=\{variant !== 'glass'\}/);
-  assert.match(stat, /background: variant === 'glass' \? 'transparent' :/);
+  assert.match(stat, /if \(variant === 'glass'\) \{\s*return <Box data-stat-variant="glass">\{content\}<\/Box>/);
+  assert.match(stat, /<Paper\s+withBorder\s+radius="lg"\s+p="lg"/);
+  assert.doesNotMatch(stat, /p=\{variant === 'glass' \? 0/);
   assert.equal((page.match(/variant="glass"/g) ?? []).length, 4);
 });
 
