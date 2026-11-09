@@ -146,6 +146,8 @@ export async function ordinaryBulkActivity(
       const applicable = siteRows.filter((row) =>
         late ? row.effectiveAt <= late.effectiveAt : row.effectiveAt < through,
       );
+      // The annex generator also checks reversal evidence beyond this cut.
+      if (applicable.some((row) => row.reversedByDocumentId)) continue;
       const simple = applicable.filter(
         (row) =>
           !row.assetId &&

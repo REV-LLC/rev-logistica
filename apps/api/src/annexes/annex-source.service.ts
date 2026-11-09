@@ -21,6 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { civilDate } from '../common/civil-date';
 import { applyCommercialComposition } from './annex-commercial-source';
 import { inventoryToAnnex } from './annex-inventory';
+import { effectiveAnnexRows, reversalFields } from './annex-ledger-reversals';
 import type { AnnexInput } from './annex-input';
 import { calculateAnnex } from './annex-engine';
 import { annexInputSchema, defaultAnnexPolicy } from './annex-input';
@@ -181,7 +182,7 @@ export class AnnexSourceService {
         const physicalEnd = laterReturn._max.effectiveAt
           ? new Date(laterReturn._max.effectiveAt.getTime() + 1)
           : end;
-        const rows = await tx.stockLedger.findMany({
+        const physicalRows = await tx.stockLedger.findMany({
           where: { customerWorksiteId, effectiveAt: { lt: physicalEnd } },
           orderBy: [
             { effectiveAt: 'asc' },
@@ -192,6 +193,8 @@ export class AnnexSourceService {
           take: 50001,
           select: {
             id: true,
+            customerWorksiteId: true,
+            warehouseId: true,
             refDocumentId: true,
             skuId: true,
             movementType: true,
@@ -249,10 +252,35 @@ export class AnnexSourceService {
             },
           },
         });
-        if (rows.length > 50000)
+        if (physicalRows.length > 50000)
           throw new BadRequestException(
             'El historial excede el límite de preparación; requiere procesamiento por lotes',
           );
+        const reversalIds = [
+          ...new Set(
+            physicalRows.flatMap((row) =>
+              row.reversedByDocumentId ? [row.reversedByDocumentId] : [],
+            ),
+          ),
+        ];
+        // A correction posted after the cut can cancel an earlier posting.
+        // Read only its evidence; never add subsequent movements to this annex.
+        const rows = reversalIds.length
+          ? effectiveAnnexRows(
+              physicalRows,
+              await tx.stockLedger.findMany({
+                where: {
+                  customerWorksiteId,
+                  effectiveAt: { gte: physicalEnd },
+                  OR: [
+                    { refDocumentId: { in: reversalIds } },
+                    { reversedByDocumentId: { in: reversalIds } },
+                  ],
+                },
+                select: reversalFields,
+              }),
+            )
+          : physicalRows;
         const source = inventoryToAnnex(
           rows.map((row) => ({
             ...row,
