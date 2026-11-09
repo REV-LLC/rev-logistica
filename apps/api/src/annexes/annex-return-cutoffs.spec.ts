@@ -259,4 +259,83 @@ describe('documentary return billing cuts', () => {
     expect(result.result.totals.rentalNet).toBe('800.00');
     expect(result.input.rentals[0].returns[0].date).toBe('2026-10-16');
   });
+
+  it.each([
+    ['2026-09-04', '6000.00'],
+    ['2026-09-30', '6000.00'],
+  ])(
+    'bills the corrected return exactly once, through %s',
+    async (through, expected) => {
+      const rev = '00000000-0000-4000-8000-000000000003';
+      const dv = [item(15, '2026-09-04')];
+      const superseded = movement('old', 15, '2026-09-04', dv);
+      superseded.reversedByDocumentId = rev;
+      const active = movement('valid', 15, '2026-09-04', dv);
+      const inverse = movement('inverse', -15, '2026-09-14');
+      for (const row of [superseded, active])
+        row.document!.id = '00000000-0000-4000-8000-000000000002';
+      inverse.document!.id = rev;
+      const delivery = movement('delivery', -15, '2026-09-01');
+      delivery.document!.id = '00000000-0000-4000-8000-000000000001';
+      const rows = [
+        delivery,
+        superseded,
+        active,
+        inverse,
+      ].map((row) => ({
+        ...row,
+        customerWorksiteId: 'site',
+        skuId: 'sku',
+        warehouseId: 'owner',
+        refDocumentId: row.document!.id,
+        document: {
+          ...row.document!,
+          type:
+            row === inverse
+              ? 'ADJUSTMENT'
+              : row.movementType === 'IN'
+                ? 'RETURN'
+                : 'REMISSION',
+        },
+      }));
+      const tx = {
+        customerWorksite: {
+          findUnique: async () => ({ id: 'site', customerId: 'customer' }),
+        },
+        stockLedger: {
+          aggregate: async () => ({ _max: { effectiveAt: null } }),
+          findMany: async ({
+            where,
+          }: {
+            where: { effectiveAt: { lt?: Date; gte?: Date } };
+          }) =>
+            rows.filter((row) =>
+              where.effectiveAt.lt
+                ? row.effectiveAt < where.effectiveAt.lt
+                : row.refDocumentId === rev &&
+                  row.effectiveAt >= where.effectiveAt.gte!,
+            ),
+        },
+        annexDraft: { findMany: async () => [] },
+        appSetting: { findUnique: async () => null },
+      };
+      const service = new AnnexSourceService({
+        $transaction: (fn: (client: typeof tx) => unknown) => fn(tx),
+      } as never);
+      const result = await service.prepare(
+        '00000000-0000-4000-8000-000000000001',
+        '2026-09-01',
+        '2026-09-30',
+        through,
+      );
+      expect(result.result.totals.rentalNet).toBe(expected);
+      expect(result.input.rentals.flatMap((r) => r.returns)).toMatchObject([
+        {
+          quantity: '15',
+          billingCutoffDate: '2026-09-04',
+          source: { reference: active.id },
+        },
+      ]);
+    },
+  );
 });
