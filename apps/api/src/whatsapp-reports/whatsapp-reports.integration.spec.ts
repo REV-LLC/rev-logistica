@@ -4,6 +4,8 @@ import { WhatsappWebhookController } from '../notifications/whatsapp-webhook.con
 import { WhatsappWebhookService } from '../notifications/whatsapp-webhook.service';
 import { WhatsappInboxService } from './whatsapp-inbox.service';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
+import { Prisma } from '@prisma/client';
+import { equipmentPicker } from './whatsapp-equipment';
 import { emptyDraft, normalizePhone } from './whatsapp-report.types';
 import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
 
@@ -806,6 +808,289 @@ if (testUrl) {
           where: { description: 'Petición con botón QA' },
         }),
       ).toBe(1);
+    });
+
+    describe('equipment selection and durable phone memory', () => {
+      const phone = '573001234567';
+      const conversation = () =>
+        prisma.whatsappConversation.findUniqueOrThrow({ where: { phone } });
+      const rows = (message: any) =>
+        message.replyOptions.rows as {
+          id: string;
+          title: string;
+          description: string;
+        }[];
+      beforeEach(async () => {
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { active: true, phone, userId: null },
+        });
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: { active: true, deletedAt: null },
+        });
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: {
+            draft: emptyDraft() as any,
+            lastEquipment: Prisma.DbNull,
+            expiresAt: new Date(0),
+          },
+        });
+      });
+
+      it('selects the exact tapped machine, remembers only confirmed reports and survives draft expiry', async () => {
+        const menu = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
+        expect(ai.extract).not.toHaveBeenCalled();
+        const selection = rows(menu).find((r) =>
+          r.description.includes(asset.publicCode),
+        )!;
+        expect(selection).toBeDefined();
+        const picked = await send('Título sin códigos', {
+          selectionId: selection.id,
+        });
+        expect(picked?.replyText).toContain('foto');
+        expect((await conversation()).lastEquipment).toBeNull();
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'HOUR_METER', hours: 160, photoHours: 160 }),
+        );
+        const summary = await send('', { image: true });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect(summary?.replyText).toContain(asset.publicCode);
+        await send('Sí', { selectionId: `report_confirm:${summary!.id}` });
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { expiresAt: new Date(0) },
+        });
+        ai.extract.mockClear();
+        const recent = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        expect(recent?.replyText).toContain('última máquina');
+        expect(recent?.replyText).toContain(asset.publicCode);
+        expect(
+          (recent!.replyOptions as any).buttons.map((b: any) => b.title),
+        ).toEqual(['Usar esta máquina', 'Elegir otra']);
+        expect(ai.extract).not.toHaveBeenCalled();
+        await send('Cancelar');
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
+      });
+
+      it('retains a photo sent before choosing the machine and never records an unconfirmed selection', async () => {
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'HOUR_METER', hours: 170, photoHours: 170 }),
+        );
+        const menu = await send('Horómetro', { image: true });
+        expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
+        const picked = await send('Mi máquina', {
+          selectionId: rows(menu).find((r) =>
+            r.description.includes(asset.publicCode),
+          )!.id,
+        });
+        expect(picked?.replyKind).toBe('CONFIRMATION');
+        expect(picked?.replyText).toContain('Fotos: 1');
+        await send('Cancelar');
+        expect((await conversation()).lastEquipment).toBeNull();
+      });
+
+      it('rejects stale, expired and deactivated selections instead of trusting a supplied title or id', async () => {
+        const first = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        const second = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        const stale = await send('QA-RETRO-02', {
+          selectionId: rows(first)[0].id,
+        });
+        expect(stale?.replyKind).toBe('EQUIPMENT_MENU');
+        expect((await conversation()).draft).not.toHaveProperty(
+          'selectedEquipment',
+        );
+        const current = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        const choice = rows(current).find((r) =>
+          r.description.includes(asset.publicCode),
+        )!;
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: { active: false },
+        });
+        const unavailable = await send('Sí', { selectionId: choice.id });
+        expect(unavailable?.replyKind).toBe('EQUIPMENT_MENU');
+        expect((await conversation()).draft).not.toHaveProperty(
+          'selectedEquipment',
+        );
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { expiresAt: new Date(0) },
+        });
+        const expired = await send('Sí', { selectionId: rows(second)[0].id });
+        expect(expired?.replyKind).toBe('REPORT_MENU');
+        expect(ai.extract).not.toHaveBeenCalled();
+      });
+
+      it('requires fresh hours and evidence after switching machines and retries the identical menu', async () => {
+        const other = await prisma.asset.create({
+          data: {
+            skuId: asset.skuId,
+            warehouseOwnerId: asset.warehouseOwnerId,
+            publicCode: `QA-OTHER-${randomUUID()}`,
+            internalNumber: 99,
+          },
+        });
+        const menu = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        await send('Mi máquina', {
+          selectionId: rows(menu).find((r) =>
+            r.description.includes(asset.publicCode),
+          )!.id,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'HOUR_METER', hours: 180, photoHours: 180 }),
+        );
+        const oldSummary = await send('', { image: true });
+        cloud.reply.mockRejectedValueOnce(new Error('temporary'));
+        const nextMenu = await send('Otra máquina');
+        expect(nextMenu?.replySentAt).toBeNull();
+        await prisma.whatsappInboundMessage.update({
+          where: { id: nextMenu!.id },
+          data: { nextAttemptAt: new Date(0) },
+        });
+        await inbox.tick();
+        expect(cloud.reply).toHaveBeenLastCalledWith(
+          phone,
+          nextMenu!.replyText,
+          'EQUIPMENT_MENU',
+          undefined,
+          nextMenu!.replyOptions,
+        );
+        const picked = await send('Otra', {
+          selectionId: rows(nextMenu).find((r) =>
+            r.description.includes(other.publicCode),
+          )!.id,
+        });
+        expect(picked?.replyText).toContain('foto');
+        expect((await conversation()).draft).toMatchObject({
+          hours: null,
+          photoHours: null,
+          evidenceFileIds: [],
+        });
+        await send('Sí', { selectionId: `report_confirm:${oldSummary!.id}` });
+        expect((await conversation()).lastEquipment).toBeNull();
+        await prisma.asset.delete({ where: { id: other.id } });
+      });
+
+      it('isolates memory when a number is reassigned to another employee', async () => {
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { lastEquipment: { type: 'ASSET', id: asset.id } },
+        });
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { phone: '3008888888' },
+        });
+        const replacement = await prisma.employee.create({
+          data: { name: 'Otro operario', role: 'OTHER', phone },
+        });
+        const menu = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        expect(menu?.replyText).not.toContain('última máquina');
+        expect((await conversation()).lastEquipment).toBeNull();
+        await prisma.employee.update({
+          where: { id: replacement.id },
+          data: { phone: null },
+        });
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { phone },
+        });
+      });
+
+      it('pages through every eligible asset and vehicle without exposing inactive, deleted or nonhourly assets', async () => {
+        const created: string[] = [];
+        const sku = await prisma.sku.findUniqueOrThrow({
+          where: { id: asset.skuId },
+        });
+        const dailySku = await prisma.sku.create({
+          data: {
+            name: 'Equipo sin horómetro',
+            assetFamilyId: sku.assetFamilyId,
+            chargeType: 'DAY',
+          },
+        });
+        for (let n = 0; n < 19; n++) {
+          const item = await prisma.asset.create({
+            data: {
+              skuId: n === 18 ? dailySku.id : asset.skuId,
+              warehouseOwnerId: asset.warehouseOwnerId,
+              publicCode: `QA-PAGE-${n}-${randomUUID()}`,
+              internalNumber: 200 + n,
+              active: n !== 16,
+              deletedAt: n === 17 ? new Date() : null,
+            },
+          });
+          created.push(item.id);
+        }
+        const eligible = await prisma.asset.findMany({
+          where: { active: true, deletedAt: null, sku: { chargeType: 'HOUR' } },
+          select: { id: true },
+        });
+        const seen: string[] = [];
+        let page = 0;
+        for (;;) {
+          const picker = await equipmentPicker(
+            prisma,
+            'HOUR_METER',
+            undefined,
+            page,
+          );
+          expect(picker.options?.type).toBe('list');
+          const menuRows = (picker.options as any).rows;
+          expect(menuRows.length).toBeLessThanOrEqual(10);
+          expect(
+            menuRows.every(
+              (r: any) =>
+                r.title.length <= 24 && (r.description?.length ?? 0) <= 72,
+            ),
+          ).toBe(true);
+          seen.push(
+            ...picker.state.choices
+              .filter((c) => c.type === 'ASSET')
+              .map((c) => c.id),
+          );
+          if (!menuRows.some((r: any) => r.title === 'Más máquinas →')) break;
+          page++;
+          expect(page).toBeLessThan(10);
+        }
+        expect(seen.sort()).toEqual(eligible.map((a) => a.id).sort());
+        expect(new Set(seen).size).toBe(seen.length);
+        const damage = await equipmentPicker(prisma, 'DAMAGE', {
+          type: 'ASSET',
+          id: created[18],
+        });
+        expect(damage.state.recent).toBe(true);
+        const hours = await equipmentPicker(prisma, 'HOUR_METER', {
+          type: 'ASSET',
+          id: created[18],
+        });
+        expect(hours.state.recent).toBe(false);
+        await prisma.asset.deleteMany({ where: { id: { in: created } } });
+        await prisma.sku.delete({ where: { id: dailySku.id } });
+      });
     });
   },
 );

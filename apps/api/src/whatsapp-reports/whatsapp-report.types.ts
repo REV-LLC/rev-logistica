@@ -13,6 +13,21 @@ export const extractionSchema = z.object({
   photoHours: z.number().finite().min(0).max(9999999999.99).nullable(),
 });
 export type Extraction = z.infer<typeof extractionSchema>;
+export type EquipmentReference = { type: 'ASSET' | 'VEHICLE'; id: string };
+export type EquipmentMenu = {
+  token: string;
+  kind: 'DAMAGE' | 'HOUR_METER';
+  choices: EquipmentReference[];
+  page: number;
+  recent: boolean;
+};
+export type EquipmentReplyOptions =
+  | {
+      type: 'list';
+      button: string;
+      rows: { id: string; title: string; description?: string }[];
+    }
+  | { type: 'button'; buttons: { id: string; title: string }[] };
 export type Draft = Extraction & {
   occurredAt: string;
   evidenceFileIds: string[];
@@ -21,6 +36,8 @@ export type Draft = Extraction & {
   targetKey?: string;
   menuStage?: 'ATTENDANCE';
   confirmationMessageId?: string;
+  selectedEquipment?: EquipmentReference;
+  equipmentMenu?: EquipmentMenu;
 };
 export const emptyDraft = (): Draft => ({
   kind: null,
@@ -71,4 +88,4 @@ export const REPORT_LABELS = {
   CHECK_OUT: 'Salida de obra',
 };
 export const HELP =
-  'Puedes reportar:\n1. Daño de equipo o vehículo.\n2. Horómetro con foto.\n3. Petición para oficina y gerencia.\n4. Entrada o salida de obra con foto.\nEscribe lo que necesitas y el código del equipo, placa o nombre de la obra. Envía un reporte a la vez. Escribe CANCELAR para empezar de nuevo.';
+  'Puedes reportar:\n1. Daño de equipo o vehículo.\n2. Horómetro con foto.\n3. Petición para oficina y gerencia.\n4. Entrada o salida de obra con foto.\nElige la máquina en la lista o escribe su nombre. Para asistencia, indica el nombre de la obra. Envía un reporte a la vez. Escribe CANCELAR para empezar de nuevo.';
