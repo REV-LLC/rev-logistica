@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { NotificationDeliveryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappInboxService } from '../whatsapp-reports/whatsapp-inbox.service';
+import type { IncomingWhatsappMessage } from '../whatsapp-reports/whatsapp-report.types';
 
 interface MetaWebhookError {
   code?: number;
@@ -21,7 +23,11 @@ interface MetaWebhookPayload {
   entry?: Array<{
     changes?: Array<{
       field?: string;
-      value?: { statuses?: MetaMessageStatus[] };
+      value?: {
+        statuses?: MetaMessageStatus[];
+        messages?: IncomingWhatsappMessage[];
+        metadata?: { phone_number_id?: string };
+      };
     }>;
   }>;
 }
@@ -30,11 +36,25 @@ interface MetaWebhookPayload {
 export class WhatsappWebhookService {
   private readonly logger = new Logger(WhatsappWebhookService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly inbox?: WhatsappInboxService,
+  ) {}
 
   async process(payload: MetaWebhookPayload) {
     if (payload.object !== 'whatsapp_business_account') {
       return { received: true, processed: 0 };
+    }
+
+    for (const entry of payload.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        if (change.field === 'messages' && change.value?.messages?.length) {
+          await this.inbox?.enqueue(
+            change.value.messages,
+            change.value.metadata?.phone_number_id,
+          );
+        }
+      }
     }
 
     const statuses =
@@ -63,7 +83,32 @@ export class WhatsappWebhookService {
             data,
           });
 
-      if (documentResult.count || notificationResult.count) {
+      const alertStatus = (
+        {
+          sent: 'SENT',
+          delivered: 'DELIVERED',
+          read: 'READ',
+          failed: 'FAILED',
+        } as Record<string, string>
+      )[status.status?.toLowerCase() ?? ''];
+      const alertResult =
+        documentResult.count || notificationResult.count || !alertStatus
+          ? { count: 0 }
+          : await this.prisma.whatsappReportAlertRecipient.updateMany({
+              where: { providerMessageId: status.id },
+              data: {
+                status: alertStatus,
+                error:
+                  alertStatus === 'FAILED'
+                    ? this.failureDetail(status.errors)
+                    : null,
+              },
+            });
+      if (
+        documentResult.count ||
+        notificationResult.count ||
+        alertResult.count
+      ) {
         processed += 1;
       } else {
         this.logger.warn(

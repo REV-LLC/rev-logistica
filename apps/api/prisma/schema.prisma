@@ -598,6 +598,8 @@ model Worksite {
 }
 
 model CustomerWorksite {
+  whatsappReports WhatsappReport[]
+  worksiteAttendance WorksiteAttendance[]
   annexDrafts AnnexDraft[]
   activityNotes EmployeeActivityNote[]
   accessoryBalances AccessoryBalance[]
@@ -846,6 +848,7 @@ model RetiredMotorConfiguration {
 }
 
 model Asset {
+  whatsappReports WhatsappReport[]
   implementBridge    ImplementIdentityBridge?
   activityNotes EmployeeActivityNote[]
   id                 String                  @id @default(uuid())
@@ -1559,6 +1562,8 @@ model Owner {
 }
 
 model Employee {
+  whatsappReports WhatsappReport[]
+  worksiteAttendance WorksiteAttendance[]
   payrollEnabled Boolean @default(true)
   salaries EmployeeSalary[]
   payrollReceipts PayrollReceipt[]
@@ -1607,6 +1612,7 @@ model TabletDocumentAuthorization {
 }
 
 model Vehicle {
+  whatsappReports WhatsappReport[]
   id                    String    @id @default(uuid())
   plate                 String    @unique
   brand                 String?
@@ -1713,6 +1719,7 @@ model EmployeeVehicle {
 }
 
 model FileObject {
+  whatsappEvidence WhatsappReportEvidence[]
   id                  String    @id @default(uuid())
   documentId          String?
   entityType          String?
@@ -1910,4 +1917,120 @@ model PayrollReceipt {
 
   @@unique([employeeId, periodFrom, periodTo])
   @@index([employeeId, createdAt])
+}
+
+// Durable inbound queue; employee reports require explicit confirmation.
+model WhatsappInboundMessage {
+  id String @id @default(uuid())
+  providerMessageId String @unique
+  phone String
+  phoneNumberId String
+  employeeId String?
+  type String
+  text String
+  mediaId String?
+  evidenceFileObjectId String?
+  sentAt DateTime
+  status String @default("QUEUED")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  replyText String?
+  replySentAt DateTime?
+  replyAttempts Int @default(0)
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, nextAttemptAt])
+  @@index([phone, createdAt])
+}
+
+model WhatsappConversation {
+  phone String @id
+  employeeId String
+  draft Json
+  expiresAt DateTime
+  leaseUntil DateTime @default(now())
+  leaseToken String?
+  updatedAt DateTime @updatedAt
+}
+
+enum WhatsappReportKind {
+  DAMAGE
+  HOUR_METER
+  REQUEST
+  CHECK_IN
+  CHECK_OUT
+}
+
+model WhatsappReport {
+  id String @id @default(uuid())
+  kind WhatsappReportKind
+  employeeId String
+  assetId String?
+  vehicleId String?
+  customerWorksiteId String?
+  description String
+  hours Decimal? @db.Decimal(12, 2)
+  occurredAt DateTime
+  sourceMessageId String @unique
+  sourceMessageIds Json @default("[]")
+  status String @default("RECORDED")
+  resolvedAt DateTime?
+  resolvedByUserId String?
+  resolution String?
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  evidence WhatsappReportEvidence[]
+  alertRecipients WhatsappReportAlertRecipient[]
+  attendanceCheckIn WorksiteAttendance? @relation("WhatsappCheckIn")
+  attendanceCheckOut WorksiteAttendance? @relation("WhatsappCheckOut")
+  @@index([employeeId, occurredAt])
+  @@index([kind, createdAt])
+  @@index([assetId])
+  @@index([vehicleId])
+}
+
+model WhatsappReportEvidence {
+  reportId String
+  fileObjectId String
+  report WhatsappReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Restrict)
+  @@id([reportId, fileObjectId])
+}
+
+model WorksiteAttendance {
+  id String @id @default(uuid())
+  employeeId String
+  customerWorksiteId String
+  enteredAt DateTime
+  leftAt DateTime?
+  checkInReportId String @unique
+  checkOutReportId String? @unique
+  checkInReport WhatsappReport @relation("WhatsappCheckIn", fields: [checkInReportId], references: [id], onDelete: Restrict)
+  checkOutReport WhatsappReport? @relation("WhatsappCheckOut", fields: [checkOutReportId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  customerWorksite CustomerWorksite @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
+  @@index([employeeId, enteredAt])
+}
+
+model WhatsappReportAlertRecipient {
+  id String @id @default(uuid())
+  reportId String
+  recipientKey String
+  employeeId String?
+  userId String?
+  name String
+  phone String?
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  providerMessageId String? @unique
+  sentAt DateTime?
+  error String?
+  report WhatsappReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  @@unique([reportId, recipientKey])
+  @@index([status, nextAttemptAt])
 }

@@ -908,6 +908,7 @@ export class NotificationsService {
       entityType: topic.entityType,
       entityId: topic.entityId,
       eventType: topic.eventType,
+      link: topic.entityType === 'WHATSAPP_REPORT' ? this.appLink('/employees/whatsapp-reports') : undefined,
       title: this.renderTemplate(
         topic.titleTemplate ?? topic.eventType,
         variables,

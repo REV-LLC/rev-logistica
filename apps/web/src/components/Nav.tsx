@@ -140,6 +140,12 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
       },
       {
+        href: "/employees/whatsapp-reports",
+        label: "Reportes WhatsApp",
+        icon: IconMessageCircle,
+        roles: ["ADMIN", "OFFICE"],
+      },
+      {
         href: "/notifications/deliveries",
         label: "Notificaciones",
         icon: IconBell,

@@ -270,6 +270,23 @@ export class FilesService {
     const expiresAt = this.parseOptionalDate(payload.expiresAt, 'expiresAt');
     files.forEach((file) => this.validateFile(file));
 
+    return this.persistEntityFiles(entityType, entityId, files, category, payload, user.id, expiresAt, providerWarehouseId);
+  }
+
+  // Internal WhatsApp ingestion: attribution is the authenticated employee, not an invented admin user.
+  async storeWhatsappEvidence(employeeId: string, file: UploadedBusinessFile) {
+    const employee = await this.prisma.employee.findFirst({ where: { id: employeeId, active: true }, select: { id: true } });
+    if (!employee) throw new ForbiddenException('Employee is not active');
+    if (!file.mimetype.startsWith('image/')) throw new BadRequestException('Photo required');
+    this.validateFile(file);
+    return this.persistEntityFiles('EMPLOYEE', employeeId, [file], 'EVIDENCIA_WHATSAPP',
+      { displayName: 'Evidencia de reporte por WhatsApp' }, `whatsapp:${employeeId}`, null, null);
+  }
+
+  private async persistEntityFiles(
+    entityType: FileEntityType, entityId: string, files: UploadedBusinessFile[], category: string,
+    payload: { displayName?: string }, createdBy: string, expiresAt: Date | null, providerWarehouseId: string | null,
+  ) {
     const config = this.getR2Config();
     const s3 = this.createR2Client(config);
     const uploaded: Array<{
@@ -342,7 +359,7 @@ export class FilesService {
           mimeType: file.mimetype,
           sizeBytes: file.size,
           expiresAt,
-          createdBy: user.id,
+          createdBy,
           providerWarehouseId,
         },
         select: this.fileSelect,
@@ -431,6 +448,11 @@ export class FilesService {
   }
 
   async deleteFile(fileId: string, user: { id: string; role: Role }) {
+    if (await this.prisma.whatsappReportEvidence.count({ where: { fileObjectId: fileId } }) ||
+        await this.prisma.whatsappInboundMessage.count({ where: { evidenceFileObjectId: fileId } })) {
+      throw new ForbiddenException('La evidencia de WhatsApp debe conservarse con su reporte.');
+    }
+
     const file = await this.prisma.fileObject.findUnique({
       where: { id: fileId },
       select: {
@@ -473,6 +495,11 @@ export class FilesService {
   }
 
   async deleteFileForRetention(fileId: string) {
+    if (await this.prisma.whatsappReportEvidence.count({ where: { fileObjectId: fileId } }) ||
+        await this.prisma.whatsappInboundMessage.count({ where: { evidenceFileObjectId: fileId } })) {
+      throw new ForbiddenException('La evidencia de WhatsApp debe conservarse con su reporte.');
+    }
+
     const file = await this.prisma.fileObject.findUnique({
       where: { id: fileId },
       select: { id: true, objectKey: true },
