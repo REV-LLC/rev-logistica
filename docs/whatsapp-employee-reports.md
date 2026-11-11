@@ -9,6 +9,14 @@ El mismo número de WhatsApp Cloud API recibe mensajes individuales de empleados
 3. **Peticiones generales.** Descripción y confirmación. Crea un reporte y una alerta para usuarios ADMIN/OFFICE activos, empleados MANAGER/OPERATIONS_MANAGER/OFFICE activos, Héctor Ramírez y destinatarios adicionales configurados. Los empleados sin usuario también reciben alerta por WhatsApp si tienen teléfono; los usuarios vinculados disponen de la alerta dentro del software. El estado de cada envío se consulta en el reporte; un contacto sin teléfono figura como `NO_PHONE`.
 4. **Entrada/salida de obra.** Obra activa identificada sin ambigüedad y una foto por movimiento. Se guarda la hora del primer mensaje de ese flujo, suministrada por Meta, y la hora de recepción del mensaje por separado. No se aceptan horas arbitrarias generadas por IA o escritas por el empleado. La entrada crea una jornada abierta y una nota en la bitácora existente. La salida exige una entrada anterior abierta en la misma obra y cierra la jornada. Solo puede existir una jornada abierta por empleado. Las fotos adjuntas no verifican identidad, ubicación ni presencia real. El intervalo entrada/salida es tiempo reportado, sin deducir descansos ni calcular nómina.
 
+## Saludo y opciones táctiles
+
+Al escribir «Hola», «Buenos días», «MENÚ» o «Ayuda», el empleado recibe un saludo por el nombre registrado en su ficha y el botón nativo **Ver opciones**. Este abre una lista con cuatro filas: daño, horómetro, petición y entrada/salida. No se envían saludos a teléfonos desconocidos o ambiguos.
+
+La elección se procesa por el identificador de la fila, sin depender del título mostrado ni hacer una consulta de IA. Entrada/salida muestra dos botones. Cuando el resumen cabe en el límite de Meta, se ofrecen **Sí, registrar** y **Cancelar**; los resúmenes largos conservan el texto completo y la confirmación escrita. Los botones de confirmación están vinculados al resumen actual: un botón de un resumen antiguo no confirma otro reporte.
+
+Un saludo o MENÚ conserva el borrador pendiente. Elegir otro flujo inicia un nuevo borrador; CANCELAR lo descarta. También se mantiene la posibilidad de escribir el reporte directamente y adjuntar fotos.
+
 ## Consulta en el software
 
 **Operación → Reportes WhatsApp** (`/employees/whatsapp-reports`), accesible por ADMIN/OFFICE:
