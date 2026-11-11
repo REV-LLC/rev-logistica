@@ -1938,6 +1938,7 @@ model WhatsappInboundMessage {
   replyText String?
   replyKind String @default("TEXT")
   replySentAt DateTime?
+  replyOptions Json?
   replyAttempts Int @default(0)
   error String?
   createdAt DateTime @default(now())
@@ -1950,6 +1951,7 @@ model WhatsappConversation {
   phone String @id
   employeeId String
   draft Json
+  lastEquipment Json?
   expiresAt DateTime
   leaseUntil DateTime @default(now())
   leaseToken String?

@@ -1,11 +1,12 @@
 import type { Employee } from '@prisma/client';
-import type { Draft } from './whatsapp-report.types';
+import type { Draft, EquipmentReplyOptions } from './whatsapp-report.types';
 
 export type WhatsappReplyKind =
   | 'TEXT'
   | 'REPORT_MENU'
   | 'ATTENDANCE_MENU'
-  | 'CONFIRMATION';
+  | 'CONFIRMATION'
+  | 'EQUIPMENT_MENU';
 export const REPORT_MENU_ROWS = [
   {
     id: 'report_damage',
@@ -75,9 +76,9 @@ export function selectionPrompt(id: string) {
     (
       {
         report_damage:
-          'Indica el código del equipo o la placa del vehículo y cuéntame qué daño encontraste. Puedes adjuntar fotos.',
+          'Elige la máquina y cuéntame qué daño encontraste. Puedes adjuntar fotos.',
         report_hour_meter:
-          'Indica el código del equipo o la placa y envía una foto legible del horómetro. También puedes escribir cuántas horas marca.',
+          'Elige la máquina y envía una foto legible del horómetro. También puedes escribir cuántas horas marca.',
         report_request:
           'Cuéntame qué necesitas solicitar. Crearé la petición para oficina, gerencia y Héctor Ramírez cuando confirmes los datos.',
         attendance_check_in:
@@ -94,8 +95,33 @@ export function whatsappReplyPayload(
   text: string,
   kind: string = 'TEXT',
   confirmationMessageId?: string,
+  options?: EquipmentReplyOptions,
 ) {
   const base = { messaging_product: 'whatsapp', to: phone };
+  if (kind === 'EQUIPMENT_MENU' && options) {
+    return {
+      ...base,
+      type: 'interactive',
+      interactive: {
+        type: options.type,
+        body: { text: text.slice(0, 1024) },
+        action:
+          options.type === 'list'
+            ? {
+                button: options.button,
+                sections: [
+                  { title: 'Máquinas disponibles', rows: options.rows },
+                ],
+              }
+            : {
+                buttons: options.buttons.map((reply) => ({
+                  type: 'reply',
+                  reply,
+                })),
+              },
+      },
+    };
+  }
   if (kind === 'REPORT_MENU')
     return {
       ...base,

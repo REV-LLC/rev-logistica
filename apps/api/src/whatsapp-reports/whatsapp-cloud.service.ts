@@ -1,5 +1,6 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import sharp from 'sharp';
+import type { EquipmentReplyOptions } from './whatsapp-report.types';
 import { whatsappReplyPayload } from './whatsapp-menu';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -23,6 +24,7 @@ export class WhatsappCloudService {
     text: string,
     kind: string = 'TEXT',
     confirmationMessageId?: string,
+    options?: EquipmentReplyOptions,
   ) {
     const config = this.config();
     const response = await fetch(
@@ -34,7 +36,13 @@ export class WhatsappCloudService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(
-          whatsappReplyPayload(phone, text, kind, confirmationMessageId),
+          whatsappReplyPayload(
+            phone,
+            text,
+            kind,
+            confirmationMessageId,
+            options,
+          ),
         ),
         signal: AbortSignal.timeout(15000),
         redirect: 'error',

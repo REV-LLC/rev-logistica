@@ -45,6 +45,10 @@ La implementación queda desactivada por defecto. La clave de Office no se reuti
 
 ## Fiabilidad y límites
 
+- Al elegir daño u horómetro se ofrece una lista táctil de máquinas con nombre, número y marca/modelo o descripción. Horómetro filtra activos no eliminados cuyo SKU cobra por hora; también conserva el soporte existente de vehículos activos. Las listas tienen hasta ocho equipos por página y botones para avanzar/retroceder, sin exigir escribir códigos o placas.
+- Cada número conserva la última máquina de un reporte **confirmado**, fuera del borrador de 30 minutos. El siguiente reporte propone «Usar esta máquina» / «Elegir otra», sin asignar el equipo automáticamente. Cancelar o abrir otra lista no cambia la memoria. Al reasignar el número a otro empleado no se reutiliza la memoria anterior. Se verifica otra vez que el equipo siga activo y sea apto para el flujo.
+- Las opciones y sus identificadores se guardan con la respuesta para reintentar exactamente la misma lista. Cada lista está vinculada al borrador vigente con un identificador aleatorio; botones viejos o ajenos no seleccionan equipos. Cambiar de máquina descarta la lectura y las fotos del equipo anterior, y siempre se exige confirmar el resumen antes de registrar.
+
 - Webhook firmado; solo acepta mensajes del `phone_number_id` configurado. Primero guarda la cola durable y responde; el modelo y las descargas se ejecutan fuera de la petición del webhook.
 - La ID de Meta es única: los reintentos del webhook no duplican mensajes. Reporte, actualización del dominio, alerta, borrador y respuesta pendiente se confirman en una transacción.
 - Borradores persistidos de 30 minutos, una conversación por teléfono, lease de procesamiento, recuperación tras reinicio y hasta cinco intentos con espera progresiva. La cola conserva el texto original y las IDs de las fotos. El reporte enlaza las IDs de los mensajes que lo formaron.

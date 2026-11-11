@@ -12,6 +12,8 @@ import {
   REPORT_LABELS,
 } from './whatsapp-report.types';
 
+import { findEquipment } from './whatsapp-equipment';
+
 type Target = {
   assetId: string | null;
   vehicleId: string | null;
@@ -51,7 +53,9 @@ const reportInclude = {
 export class WhatsappReportRecordsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async resolve(draft: Draft): Promise<{ target?: Target; question?: string }> {
+  async resolve(
+    draft: Draft,
+  ): Promise<{ target?: Target; question?: string; needsEquipment?: boolean }> {
     if (!draft.kind)
       return {
         question:
@@ -64,128 +68,155 @@ export class WhatsappReportRecordsService {
       label: '',
     };
     if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER') {
-      const reference = draft.subjectReference?.trim();
-      if (!reference)
-        return {
-          question: 'Indica el código del equipo o la placa del vehículo.',
-        };
-      const ref = normalized(reference);
-      const namedNumber = reference.match(/^(.+?)\s*#?\s+(\d+)$/);
-      const plateParts = reference
-        .replace(/[^a-z0-9]/gi, '')
-        .match(/^([a-z]+)([0-9].*)$/i);
-      const number = /^#?0*\d+$/.test(reference)
-        ? Number(reference.replace('#', ''))
-        : undefined;
-      const [assets, vehicles] = await Promise.all([
-        this.prisma.asset.findMany({
-          where: {
-            ...(draft.subjectType === 'VEHICLE' ? { id: '__excluded__' } : {}),
-            active: true,
-            deletedAt: null,
-            OR: [
-              { publicCode: { equals: reference, mode: 'insensitive' } },
-              {
-                registrationNumber: { equals: reference, mode: 'insensitive' },
-              },
-              ...(number !== undefined ? [{ internalNumber: number }] : []),
-              ...(namedNumber
-                ? [
-                    {
-                      internalNumber: Number(namedNumber[2]),
-                      OR: [
-                        {
-                          sku: {
-                            name: {
+      if (draft.selectedEquipment) {
+        const selected = await findEquipment(
+          this.prisma,
+          draft.selectedEquipment,
+          draft.kind,
+        );
+        if (!selected)
+          return {
+            needsEquipment: true,
+            question:
+              'Esa máquina ya no está disponible para este reporte. Elige otra máquina.',
+          };
+        Object.assign(target, {
+          assetId: selected.assetId,
+          vehicleId: selected.vehicleId,
+          label: selected.label,
+        });
+      } else {
+        const reference = draft.subjectReference?.trim();
+        if (!reference)
+          return {
+            needsEquipment: true,
+            question: 'Elige la máquina en la lista o escribe su nombre.',
+          };
+        const ref = normalized(reference);
+        const namedNumber = reference.match(/^(.+?)\s*#?\s+(\d+)$/);
+        const plateParts = reference
+          .replace(/[^a-z0-9]/gi, '')
+          .match(/^([a-z]+)([0-9].*)$/i);
+        const number = /^#?0*\d+$/.test(reference)
+          ? Number(reference.replace('#', ''))
+          : undefined;
+        const [assets, vehicles] = await Promise.all([
+          this.prisma.asset.findMany({
+            where: {
+              ...(draft.subjectType === 'VEHICLE'
+                ? { id: '__excluded__' }
+                : {}),
+              active: true,
+              deletedAt: null,
+              OR: [
+                { publicCode: { equals: reference, mode: 'insensitive' } },
+                {
+                  registrationNumber: {
+                    equals: reference,
+                    mode: 'insensitive',
+                  },
+                },
+                ...(number !== undefined ? [{ internalNumber: number }] : []),
+                ...(namedNumber
+                  ? [
+                      {
+                        internalNumber: Number(namedNumber[2]),
+                        OR: [
+                          {
+                            sku: {
+                              name: {
+                                contains: namedNumber[1].trim(),
+                                mode: 'insensitive' as const,
+                              },
+                            },
+                          },
+                          {
+                            description: {
                               contains: namedNumber[1].trim(),
                               mode: 'insensitive' as const,
                             },
                           },
-                        },
-                        {
-                          description: {
-                            contains: namedNumber[1].trim(),
-                            mode: 'insensitive' as const,
-                          },
-                        },
-                      ],
-                    },
-                  ]
-                : []),
-              { sku: { name: { contains: reference, mode: 'insensitive' } } },
-              { description: { contains: reference, mode: 'insensitive' } },
-            ],
-          },
-          include: { sku: { select: { name: true, chargeType: true } } },
-          take: 21,
-        }),
-        this.prisma.vehicle.findMany({
-          where: {
-            ...(draft.subjectType === 'ASSET' ? { id: '__excluded__' } : {}),
-            active: true,
-            OR: [
-              { plate: { equals: reference, mode: 'insensitive' } },
-              {
-                plate: {
-                  equals: reference.replace(/[^a-z0-9]/gi, ''),
-                  mode: 'insensitive',
+                        ],
+                      },
+                    ]
+                  : []),
+                { sku: { name: { contains: reference, mode: 'insensitive' } } },
+                { description: { contains: reference, mode: 'insensitive' } },
+              ],
+            },
+            include: { sku: { select: { name: true, chargeType: true } } },
+            take: 21,
+          }),
+          this.prisma.vehicle.findMany({
+            where: {
+              ...(draft.subjectType === 'ASSET' ? { id: '__excluded__' } : {}),
+              active: true,
+              OR: [
+                { plate: { equals: reference, mode: 'insensitive' } },
+                {
+                  plate: {
+                    equals: reference.replace(/[^a-z0-9]/gi, ''),
+                    mode: 'insensitive',
+                  },
                 },
-              },
-              ...(plateParts
-                ? [
-                    {
-                      plate: {
-                        equals: `${plateParts[1]}-${plateParts[2]}`,
-                        mode: 'insensitive' as const,
+                ...(plateParts
+                  ? [
+                      {
+                        plate: {
+                          equals: `${plateParts[1]}-${plateParts[2]}`,
+                          mode: 'insensitive' as const,
+                        },
                       },
-                    },
-                    {
-                      plate: {
-                        equals: `${plateParts[1]} ${plateParts[2]}`,
-                        mode: 'insensitive' as const,
+                      {
+                        plate: {
+                          equals: `${plateParts[1]} ${plateParts[2]}`,
+                          mode: 'insensitive' as const,
+                        },
                       },
-                    },
-                  ]
-                : []),
-            ],
-          },
-          take: 21,
-        }),
-      ]);
-      const exactAssets = assets.filter((a) =>
-        [a.publicCode, a.registrationNumber].some(
-          (v) => v && normalized(v) === ref,
-        ),
-      );
-      const choices = [
-        ...(exactAssets.length ? exactAssets : assets).map((a) => ({
-          assetId: a.id,
-          vehicleId: null,
-          label: `${a.sku.name} #${a.internalNumber} (${a.publicCode})`,
-          hourly: a.sku.chargeType === 'HOUR',
-        })),
-        ...vehicles.map((v) => ({
-          assetId: null,
-          vehicleId: v.id,
-          label: `Vehículo ${v.plate}`,
-          hourly: true,
-        })),
-      ];
-      if (choices.length !== 1)
-        return {
-          question: choices.length
-            ? `Hay varios equipos posibles: ${choices
-                .slice(0, 6)
-                .map((c) => c.label)
-                .join('; ')}. Escribe el código completo o la placa.`
-            : 'No encontré ese equipo o vehículo activo. Revisa el código completo o la placa.',
-        };
-      if (draft.kind === 'HOUR_METER' && !choices[0].hourly)
-        return {
-          question:
-            'Ese equipo no maneja horómetro. Indica un equipo por horas o un vehículo.',
-        };
-      Object.assign(target, choices[0]);
+                    ]
+                  : []),
+              ],
+            },
+            take: 21,
+          }),
+        ]);
+        const exactAssets = assets.filter((a) =>
+          [a.publicCode, a.registrationNumber].some(
+            (v) => v && normalized(v) === ref,
+          ),
+        );
+        const choices = [
+          ...(exactAssets.length ? exactAssets : assets).map((a) => ({
+            assetId: a.id,
+            vehicleId: null,
+            label: `${a.sku.name} #${a.internalNumber} (${a.publicCode})`,
+            hourly: a.sku.chargeType === 'HOUR',
+          })),
+          ...vehicles.map((v) => ({
+            assetId: null,
+            vehicleId: v.id,
+            label: `Vehículo ${v.plate}`,
+            hourly: true,
+          })),
+        ];
+        if (choices.length !== 1)
+          return {
+            needsEquipment: true,
+            question: choices.length
+              ? `Hay varios equipos posibles: ${choices
+                  .slice(0, 6)
+                  .map((c) => c.label)
+                  .join('; ')}. Escribe el código completo o la placa.`
+              : 'No encontré ese equipo o vehículo activo. Revisa el código completo o la placa.',
+          };
+        if (draft.kind === 'HOUR_METER' && !choices[0].hourly)
+          return {
+            needsEquipment: true,
+            question:
+              'Ese equipo no maneja horómetro. Indica un equipo por horas o un vehículo.',
+          };
+        Object.assign(target, choices[0]);
+      }
     }
     if (draft.kind === 'CHECK_IN' || draft.kind === 'CHECK_OUT') {
       if (!draft.worksiteReference?.trim())

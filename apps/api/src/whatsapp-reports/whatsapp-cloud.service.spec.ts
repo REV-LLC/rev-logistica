@@ -109,4 +109,41 @@ describe('WhatsApp Cloud media boundaries', () => {
     expect(payload.interactive.action.sections[0].rows).toHaveLength(4);
     expect(options.redirect).toBe('error');
   });
+  it('sends persisted equipment rows and remembered-machine buttons as native interactions', async () => {
+    fetchMock.mockResolvedValue(new Response('{}'));
+    const rows = [
+      {
+        id: 'equipment:nonce:0',
+        title: 'Retroexcavadora #2',
+        description: 'Caterpillar · QA-02',
+      },
+    ];
+    await service.reply(
+      '573001234567',
+      'Elige la máquina',
+      'EQUIPMENT_MENU',
+      undefined,
+      { type: 'list', button: 'Ver máquinas', rows },
+    );
+    expect(
+      JSON.parse(fetchMock.mock.calls[0][1].body).interactive.action,
+    ).toEqual({
+      button: 'Ver máquinas',
+      sections: [{ title: 'Máquinas disponibles', rows }],
+    });
+    const buttons = [
+      { id: 'equipment:nonce:0', title: 'Usar esta máquina' },
+      { id: 'equipment_other:nonce', title: 'Elegir otra' },
+    ];
+    await service.reply(
+      '573001234567',
+      '¿La misma máquina?',
+      'EQUIPMENT_MENU',
+      undefined,
+      { type: 'button', buttons },
+    );
+    expect(
+      JSON.parse(fetchMock.mock.calls[1][1].body).interactive.action.buttons,
+    ).toEqual(buttons.map((reply) => ({ type: 'reply', reply })));
+  });
 });

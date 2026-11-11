@@ -14,6 +14,7 @@ import { WhatsappReportAiService } from './whatsapp-report-ai.service';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
 import {
   Draft,
+  EquipmentReplyOptions,
   emptyDraft,
   HELP,
   IncomingWhatsappMessage,
@@ -28,6 +29,11 @@ import {
   selectionKind,
   selectionPrompt,
 } from './whatsapp-menu';
+import {
+  equipmentPicker,
+  equipmentReference,
+  findEquipment,
+} from './whatsapp-equipment';
 import type { WhatsappReplyKind } from './whatsapp-menu';
 
 const LEASE_MS = 180000;
@@ -262,8 +268,45 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           : undefined);
       let reply = '';
       let replyKind: WhatsappReplyKind = 'TEXT';
+      let replyOptions: EquipmentReplyOptions | undefined;
       let confirmation = false;
       let offerConfirmation = false;
+      const showEquipment = async (useMemory = true, page = 0) => {
+        if (draft.kind !== 'DAMAGE' && draft.kind !== 'HOUR_METER') return;
+        const remembered =
+          useMemory && conversation.employeeId === employee.id
+            ? equipmentReference(conversation.lastEquipment)
+            : undefined;
+        const picker = await equipmentPicker(
+          this.prisma,
+          draft.kind,
+          remembered,
+          page,
+        );
+        draft.equipmentMenu = picker.state;
+        draft.ready = false;
+        delete draft.confirmationMessageId;
+        reply = picker.text;
+        replyOptions = picker.options;
+        replyKind = picker.options ? 'EQUIPMENT_MENU' : 'TEXT';
+      };
+      const resolveDraft = async () => {
+        const resolution = await this.records.resolve(draft);
+        if (resolution.needsEquipment) {
+          await showEquipment(
+            !draft.subjectReference && !draft.selectedEquipment,
+          );
+          return;
+        }
+        draft.ready = Boolean(resolution.target);
+        offerConfirmation = draft.ready;
+        draft.targetKey = resolution.target
+          ? JSON.stringify(resolution.target)
+          : undefined;
+        reply =
+          resolution.question ??
+          this.records.summary(draft, resolution.target!);
+      };
       if (
         choice === 'report_cancel' ||
         (!selected && ['cancelar', 'cancel'].includes(command))
@@ -296,7 +339,81 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           occurredAt: message.sentAt.toISOString(),
           sourceMessageIds: [message.providerMessageId],
         };
-        reply = selectionPrompt(choice);
+        if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+          await showEquipment();
+        else reply = selectionPrompt(choice);
+      } else if (selected?.startsWith('equipment')) {
+        const menu = draft.equipmentMenu;
+        const [action, nonce, value] = selected.split(':');
+        const sameMenu =
+          menu && menu.token === nonce && menu.kind === draft.kind;
+        const index =
+          value && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : -1;
+        if (!sameMenu || !['DAMAGE', 'HOUR_METER'].includes(draft.kind ?? '')) {
+          if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+            await showEquipment(false);
+          else {
+            reply = `Esa lista ya venció.\n${reportMenuText(employee)}`;
+            replyKind = 'REPORT_MENU';
+          }
+        } else if (
+          action === 'equipment_other' &&
+          menu.recent &&
+          value === undefined
+        ) {
+          await showEquipment(false);
+        } else if (
+          action === 'equipment_page' &&
+          !menu.recent &&
+          index >= 0 &&
+          Math.abs(index - menu.page) === 1
+        ) {
+          await showEquipment(false, index);
+        } else if (action === 'equipment' && menu.choices[index]) {
+          const equipment = await findEquipment(
+            this.prisma,
+            menu.choices[index],
+            menu.kind,
+          );
+          if (!equipment) await showEquipment(false);
+          else {
+            const changed = draft.selectedEquipment
+              ? draft.selectedEquipment.id !== equipment.reference.id ||
+                draft.selectedEquipment.type !== equipment.reference.type
+              : !!draft.subjectReference &&
+                normalized(draft.subjectReference) !==
+                  normalized(equipment.subjectReference);
+            if (changed) {
+              draft.evidenceFileIds = [];
+              draft.photoHours = null;
+              draft.hours = null;
+            }
+            draft.selectedEquipment = equipment.reference;
+            draft.subjectType = equipment.reference.type;
+            draft.subjectReference = equipment.subjectReference;
+            delete draft.equipmentMenu;
+            delete draft.confirmationMessageId;
+            draft.sourceMessageIds.push(message.providerMessageId);
+            await resolveDraft();
+            if (!draft.ready)
+              reply = `Máquina seleccionada: ${equipment.label}\n${reply}`;
+          }
+        } else {
+          await showEquipment(false);
+        }
+      } else if (
+        !selected &&
+        ['DAMAGE', 'HOUR_METER'].includes(draft.kind ?? '') &&
+        [
+          'otra maquina',
+          'cambiar maquina',
+          'ver maquinas',
+          'lista',
+          'maquinas',
+          'elegir otra',
+        ].includes(command)
+      ) {
+        await showEquipment(false);
       } else if (confirmationChoice && !validConfirmation) {
         reply = `Ese botón pertenece a un resumen anterior. Revisa el reporte actual antes de confirmarlo.\n${reportMenuText(employee, Boolean(draft.kind))}`;
         replyKind = 'REPORT_MENU';
@@ -377,6 +494,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               ? {
                   ...draft,
                   evidenceFileIds: [],
+                  selectedEquipment: undefined,
+                  equipmentMenu: undefined,
                   photoHours: null,
                   ready: false,
                 }
@@ -405,15 +524,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             ],
           };
           if (draft.kind) {
-            const resolution = await this.records.resolve(draft);
-            draft.ready = Boolean(resolution.target);
-            offerConfirmation = draft.ready;
-            draft.targetKey = resolution.target
-              ? JSON.stringify(resolution.target)
-              : undefined;
-            reply =
-              resolution.question ??
-              this.records.summary(draft, resolution.target!);
+            await resolveDraft();
           } else {
             reply = reportMenuText(employee);
             replyKind = 'REPORT_MENU';
@@ -425,7 +536,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         ? await this.records.resolve(draft)
         : null;
       if (confirmation && !resolution?.target) {
-        reply = resolution?.question ?? HELP;
+        if (resolution?.needsEquipment) await showEquipment(false);
+        else reply = resolution?.question ?? HELP;
         draft.ready = false;
         confirmation = false;
       }
@@ -489,6 +601,20 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             where: { phone: message.phone },
             data: {
               employeeId: employee.id,
+              ...(confirmation &&
+              resolution?.target &&
+              (resolution.target.assetId || resolution.target.vehicleId)
+                ? {
+                    lastEquipment: {
+                      type: resolution.target.assetId ? 'ASSET' : 'VEHICLE',
+                      id:
+                        resolution.target.assetId ??
+                        resolution.target.vehicleId!,
+                    },
+                  }
+                : conversation.employeeId !== employee.id
+                  ? { lastEquipment: Prisma.DbNull }
+                  : {}),
               draft: draft as unknown as Prisma.InputJsonValue,
               expiresAt: new Date(Date.now() + DRAFT_TTL_MS),
               leaseUntil: new Date(0),
@@ -501,6 +627,9 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               status: 'PROCESSED',
               replyText: reply,
               replyKind,
+              replyOptions: replyOptions
+                ? (replyOptions as unknown as Prisma.InputJsonValue)
+                : Prisma.DbNull,
               error: null,
             },
           });
@@ -583,7 +712,15 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       });
       if (!claim.count) continue;
       try {
-        if (message.replyKind === 'CONFIRMATION') {
+        if (message.replyKind === 'EQUIPMENT_MENU' && message.replyOptions) {
+          await this.cloud.reply(
+            message.phone,
+            message.replyText!,
+            message.replyKind,
+            undefined,
+            message.replyOptions as unknown as EquipmentReplyOptions,
+          );
+        } else if (message.replyKind === 'CONFIRMATION') {
           await this.cloud.reply(
             message.phone,
             message.replyText!,
