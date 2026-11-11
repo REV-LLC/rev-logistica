@@ -34,6 +34,7 @@ import UppercaseTextInput from '@/components/UppercaseTextInput';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
+import { buildFormaletaSkuName, type FormaletaLine } from '@/lib/formwork-reference';
 
 type Warehouse = {
   id: string;
@@ -119,7 +120,6 @@ type EntryMode = 'existing' | 'new';
 type FlowChoice = 'bulk';
 type WeightUnit = 'KG' | 'TON';
 type ChargeType = 'DAY' | 'HOUR';
-type FormaletaLine = 'FORMALETA' | 'FORMALETA_SARDINEL';
 
 type ExistingBulkItem = {
   skuId: string;
@@ -322,11 +322,6 @@ const bulkReferenceKey = (name: string, lengthMeters?: number) =>
     .name.normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-const buildFormaletaSkuName = (line: FormaletaLine, xMeasure: number, yMeasure: number) => {
-  const prefix = line === 'FORMALETA_SARDINEL' ? 'FORMALETA SARDINEL' : 'FORMALETA';
-  return `${prefix} (${formatMeasure(xMeasure)} M X ${formatMeasure(yMeasure)} M)`;
-};
-
 const normalizeWeightToKg = (value: number, unit: string) =>
   unit === 'TON' ? value * 1000 : value;
 
@@ -404,6 +399,7 @@ export default function AddBulkStockPage() {
 
   const [formaletaX, setFormaletaX] = useState<string>(DEFAULT_FORMALETA_X_OPTIONS[0]);
   const [formaletaY, setFormaletaY] = useState<string>(DEFAULT_FORMALETA_Y_OPTIONS[0]);
+  const [formaletaZ, setFormaletaZ] = useState<string>('0.30');
   const [formaletaLine, setFormaletaLine] = useState<FormaletaLine>('FORMALETA');
   const [formaletaIsAccessory, setFormaletaIsAccessory] = useState(false);
   const [formaletaAccessoryName, setFormaletaAccessoryName] = useState('');
@@ -706,10 +702,13 @@ export default function AddBulkStockPage() {
     label: subfamily.name,
   }));
   const weightUnitOptions = weightUnits.map((unit) => ({ value: unit, label: unit }));
-  const formaletaLineOptions = catalogGroupOptions('BULK_FORMWORK_LINES', [
+  const configuredFormaletaLines = catalogGroupOptions('BULK_FORMWORK_LINES', [
     'FORMALETA',
     'FORMALETA_SARDINEL',
   ]);
+  const formaletaLineOptions = configuredFormaletaLines.some((option) => option.value === 'RINCONERA')
+    ? configuredFormaletaLines
+    : [...configuredFormaletaLines, { value: 'RINCONERA', label: 'RINCONERA' }];
   const formaletaXOptions = catalogGroupOptions('BULK_FORMWORK_WIDTHS', DEFAULT_FORMALETA_X_OPTIONS);
   const formaletaYOptions = catalogGroupOptions('BULK_FORMWORK_HEIGHTS', DEFAULT_FORMALETA_Y_OPTIONS);
   const certifiedScaffoldPartOptions = catalogGroupOptions(
@@ -757,13 +756,13 @@ export default function AddBulkStockPage() {
     }
 
     const xValue = parseLocaleDecimal(formaletaX);
-    const yValue = Number(formaletaY);
+    const yValue = parseLocaleDecimal(formaletaY);
     if (!Number.isFinite(xValue) || !yValue || xValue <= 0 || yValue <= 0) {
       return null;
     }
 
-    return buildFormaletaSkuName(formaletaLine, xValue, yValue);
-  }, [formaletaAccessoryName, formaletaIsAccessory, formaletaLine, formaletaX, formaletaY]);
+    return buildFormaletaSkuName(formaletaLine, xValue, yValue, parseLocaleDecimal(formaletaZ));
+  }, [formaletaAccessoryName, formaletaIsAccessory, formaletaLine, formaletaX, formaletaY, formaletaZ]);
   const builtItem = useMemo(() => {
     if (!itemType || !isItemConfigured) {
       return null;
@@ -799,17 +798,19 @@ export default function AddBulkStockPage() {
         };
       }
       const xValue = parseLocaleDecimal(formaletaX);
-      const yValue = Number(formaletaY);
+      const yValue = parseLocaleDecimal(formaletaY);
       if (!Number.isFinite(xValue) || !yValue || xValue <= 0 || yValue <= 0) {
         return null;
       }
+      const skuName = buildFormaletaSkuName(formaletaLine, xValue, yValue, parseLocaleDecimal(formaletaZ));
+      if (!skuName) return null;
       return {
         familyId: selectedFamily?.id,
         familyName: 'FORMALETA',
         familyCode: 'FORMALETA',
         subfamilyId: selectedSubfamilyId ?? undefined,
         reusesExistingSku: false,
-        skuName: buildFormaletaSkuName(formaletaLine, xValue, yValue),
+        skuName,
         skuUnitWeight:
           formaletaSkuUnitWeight === ''
             ? undefined
@@ -887,6 +888,7 @@ export default function AddBulkStockPage() {
     formaletaAccessoryName,
     formaletaX,
     formaletaY,
+    formaletaZ,
     formaletaLine,
     formaletaSkuUnitWeight,
     formaletaSkuPrice,
@@ -992,6 +994,7 @@ export default function AddBulkStockPage() {
     if (type === 'FORMALETA') {
       setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
       setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
+      setFormaletaZ('0.30');
       setFormaletaLine('FORMALETA');
       setFormaletaIsAccessory(false);
       setFormaletaAccessoryName('');
@@ -1032,6 +1035,7 @@ export default function AddBulkStockPage() {
 
     setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
     setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
+    setFormaletaZ('0.30');
     setFormaletaLine('FORMALETA');
     setFormaletaIsAccessory(false);
     setFormaletaAccessoryName('');
@@ -1309,14 +1313,21 @@ export default function AddBulkStockPage() {
         return;
       }
       const xValue = parseLocaleDecimal(formaletaX);
-      const yValue = Number(formaletaY);
-      if (!formaletaXOptions.some((option) => Number(option.value) === xValue)) {
-        setError('The X formwork measurement is invalid');
-        return;
-      }
-      if (!formaletaYOptions.some((option) => Number(option.value) === yValue)) {
-        setError('The Y formwork measurement is invalid');
-        return;
+      const yValue = parseLocaleDecimal(formaletaY);
+      if (formaletaLine === 'RINCONERA') {
+        if (!buildFormaletaSkuName(formaletaLine, xValue, yValue, parseLocaleDecimal(formaletaZ))) {
+          setError('Ingresa los dos lados del ángulo y el largo de la rinconera en metros, mayores que cero.');
+          return;
+        }
+      } else {
+        if (!formaletaXOptions.some((option) => Number(option.value) === xValue)) {
+          setError('The X formwork measurement is invalid');
+          return;
+        }
+        if (!formaletaYOptions.some((option) => Number(option.value) === yValue)) {
+          setError('The Y formwork measurement is invalid');
+          return;
+        }
       }
       if (formaletaChargeType === 'HOUR' && (formaletaMinimumChargeHours === '' || Number(formaletaMinimumChargeHours) <= 0)) {
         setError('Enter the minimum hourly charge');
@@ -2024,7 +2035,7 @@ export default function AddBulkStockPage() {
                           <Stack gap={2}>
                             <Text fw={700}>Configuracion de formaleta</Text>
                             <Text size="sm" c="dimmed">
-                              Define si vas a registrar un panel principal o un accesorio y completa
+                              Define si vas a registrar un panel, una rinconera o un accesorio y completa
                               la ficha base antes de crear la plantilla.
                             </Text>
                           </Stack>
@@ -2033,7 +2044,7 @@ export default function AddBulkStockPage() {
                             variant="light"
                             radius="sm"
                           >
-                            {formaletaIsAccessory ? 'Accesorio' : 'Panel principal'}
+                            {formaletaIsAccessory ? 'Accesorio' : formaletaLine === 'RINCONERA' ? 'Rinconera' : 'Panel principal'}
                           </Badge>
                         </Group>
 
@@ -2093,40 +2104,75 @@ export default function AddBulkStockPage() {
                                   value={formaletaLine}
                                   onChange={(value) => {
                                     setFormaletaLine((value as FormaletaLine | null) ?? 'FORMALETA');
+                                    if (value === 'RINCONERA') {
+                                      setFormaletaX('0.10');
+                                      setFormaletaY('0.10');
+                                    } else {
+                                      setFormaletaX(formaletaXOptions[0]?.value ?? DEFAULT_FORMALETA_X_OPTIONS[0]);
+                                      setFormaletaY(formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
+                                    }
                                     setIsItemConfigured(false);
                                   }}
                                   required
                                 />
-                                <Select
-                                  label="Ancho X (m)"
-                                  data={formaletaXOptions.map((option) => ({
-                                    value: option.value,
-                                    label: formatMeasure(Number(option.value)),
-                                  }))}
-                                  value={formaletaX}
-                                  onChange={(value) => {
-                                    setFormaletaX(
-                                      value
-                                        ?? formaletaXOptions[0]?.value
-                                        ?? DEFAULT_FORMALETA_X_OPTIONS[0],
-                                    );
-                                    setIsItemConfigured(false);
-                                  }}
-                                  required
-                                />
-                                <Select
-                                  label="Alto Y (m)"
-                                  data={formaletaYOptions.map((option) => ({
-                                    value: option.value,
-                                    label: formatMeasure(Number(option.value)),
-                                  }))}
-                                  value={formaletaY}
-                                  onChange={(value) => {
-                                    setFormaletaY(value ?? formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
-                                    setIsItemConfigured(false);
-                                  }}
-                                  required
-                                />
+                                {formaletaLine === 'RINCONERA' ? (
+                                  <>
+                                    <NumberInput
+                                      label="Lado X (m)"
+                                      description="Primer lado del ángulo; 10 cm = 0,10 m."
+                                      value={formaletaX}
+                                      onChange={(value) => { setFormaletaX(String(value)); setIsItemConfigured(false); }}
+                                      min={0.01} step={0.01} decimalScale={2} required
+                                    />
+                                    <NumberInput
+                                      label="Lado Y (m)"
+                                      description="Segundo lado del ángulo."
+                                      value={formaletaY}
+                                      onChange={(value) => { setFormaletaY(String(value)); setIsItemConfigured(false); }}
+                                      min={0.01} step={0.01} decimalScale={2} required
+                                    />
+                                    <NumberInput
+                                      label="Largo Z (m)"
+                                      description="Largo de la rinconera; 30 cm = 0,30 m."
+                                      value={formaletaZ}
+                                      onChange={(value) => { setFormaletaZ(String(value)); setIsItemConfigured(false); }}
+                                      min={0.01} step={0.01} decimalScale={2} required
+                                    />
+                                  </>
+                                ) : (
+                                  <>
+                                    <Select
+                                      label="Ancho X (m)"
+                                      data={formaletaXOptions.map((option) => ({
+                                        value: option.value,
+                                        label: formatMeasure(Number(option.value)),
+                                      }))}
+                                      value={formaletaX}
+                                      onChange={(value) => {
+                                        setFormaletaX(
+                                          value
+                                            ?? formaletaXOptions[0]?.value
+                                            ?? DEFAULT_FORMALETA_X_OPTIONS[0],
+                                        );
+                                        setIsItemConfigured(false);
+                                      }}
+                                      required
+                                    />
+                                    <Select
+                                      label="Alto Y (m)"
+                                      data={formaletaYOptions.map((option) => ({
+                                        value: option.value,
+                                        label: formatMeasure(Number(option.value)),
+                                      }))}
+                                      value={formaletaY}
+                                      onChange={(value) => {
+                                        setFormaletaY(value ?? formaletaYOptions[0]?.value ?? DEFAULT_FORMALETA_Y_OPTIONS[0]);
+                                        setIsItemConfigured(false);
+                                      }}
+                                      required
+                                    />
+                                  </>
+                                )}
                               </SimpleGrid>
                             </Stack>
                           </Paper>
