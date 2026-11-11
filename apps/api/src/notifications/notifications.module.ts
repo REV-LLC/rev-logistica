@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { WhatsappReportsModule } from '../whatsapp-reports/whatsapp-reports.module';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -10,7 +11,7 @@ import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappWebhookService } from './whatsapp-webhook.service';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MailModule],
+  imports: [PrismaModule, AuthModule, MailModule, WhatsappReportsModule],
   controllers: [NotificationsController, WhatsappWebhookController],
   providers: [
     NotificationsService,

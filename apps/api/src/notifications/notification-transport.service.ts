@@ -244,6 +244,7 @@ export class NotificationTransportService {
     if (!config.url)
       return { sent: false as const, reason: 'missing-config' as const };
     const response = await fetch(config.url, {
+      signal: AbortSignal.timeout(20000),
       method: 'POST',
       headers: {
         'content-type': 'application/json',
