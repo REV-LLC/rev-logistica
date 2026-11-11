@@ -1,5 +1,6 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import sharp from 'sharp';
+import { whatsappReplyPayload } from './whatsapp-menu';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 @Injectable()
@@ -17,7 +18,12 @@ export class WhatsappCloudService {
       base: `https://graph.facebook.com/${version}`,
     };
   }
-  async reply(phone: string, text: string) {
+  async reply(
+    phone: string,
+    text: string,
+    kind: string = 'TEXT',
+    confirmationMessageId?: string,
+  ) {
     const config = this.config();
     const response = await fetch(
       `${config.base}/${config.phoneNumberId}/messages`,
@@ -27,12 +33,9 @@ export class WhatsappCloudService {
           Authorization: `Bearer ${config.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: phone,
-          type: 'text',
-          text: { body: text.slice(0, 4000) },
-        }),
+        body: JSON.stringify(
+          whatsappReplyPayload(phone, text, kind, confirmationMessageId),
+        ),
         signal: AbortSignal.timeout(15000),
         redirect: 'error',
       },

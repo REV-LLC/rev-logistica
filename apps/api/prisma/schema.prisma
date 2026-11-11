@@ -1927,6 +1927,7 @@ model WhatsappInboundMessage {
   phoneNumberId String
   employeeId String?
   type String
+  selectionId String?
   text String
   mediaId String?
   evidenceFileObjectId String?
@@ -1935,6 +1936,7 @@ model WhatsappInboundMessage {
   attempts Int @default(0)
   nextAttemptAt DateTime @default(now())
   replyText String?
+  replyKind String @default("TEXT")
   replySentAt DateTime?
   replyAttempts Int @default(0)
   error String?

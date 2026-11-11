@@ -21,6 +21,15 @@ import {
   normalizePhone,
 } from './whatsapp-report.types';
 
+import {
+  employeeGreeting,
+  isGreeting,
+  reportMenuText,
+  selectionKind,
+  selectionPrompt,
+} from './whatsapp-menu';
+import type { WhatsappReplyKind } from './whatsapp-menu';
+
 const LEASE_MS = 180000;
 const DRAFT_TTL_MS = 30 * 60000;
 const enabled = () => process.env.WHATSAPP_REPORTS_ENABLED === 'true';
@@ -86,6 +95,13 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             phoneNumberId,
             type: (message.type ?? 'unknown').slice(0, 40),
             text,
+            selectionId:
+              message.type === 'interactive'
+                ? (
+                    message.interactive?.button_reply?.id ??
+                    message.interactive?.list_reply?.id
+                  )?.slice(0, 120)
+                : null,
             mediaId:
               message.type === 'image'
                 ? message.image?.id?.slice(0, 100)
@@ -209,28 +225,99 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         await this.prisma.whatsappConversation.findUniqueOrThrow({
           where: { phone: message.phone },
         });
-      let draft =
+      const activeConversation =
         conversation.employeeId === employee.id &&
-        conversation.expiresAt > new Date()
-          ? (conversation.draft as unknown as Draft)
-          : emptyDraft();
+        conversation.expiresAt > new Date();
+      let draft = activeConversation
+        ? (conversation.draft as unknown as Draft)
+        : emptyDraft();
       const command = normalized(message.text);
+      const selected =
+        message.type === 'interactive' ? message.selectionId : null;
+      // Route stable IDs rather than localized titles; unknown selections can never confirm a report.
+      const confirmationChoice = selected?.startsWith('report_confirm:');
+      const validConfirmation =
+        confirmationChoice &&
+        selected!.slice('report_confirm:'.length) ===
+          draft.confirmationMessageId;
+      const choice =
+        selected ??
+        (!draft.kind
+          ? (
+              {
+                '1': 'report_damage',
+                '2': 'report_hour_meter',
+                '3': 'report_request',
+                '4': 'report_attendance',
+              } as Record<string, string>
+            )[command]
+          : undefined) ??
+        (draft.menuStage === 'ATTENDANCE'
+          ? (
+              {
+                entrada: 'attendance_check_in',
+                salida: 'attendance_check_out',
+              } as Record<string, string>
+            )[command]
+          : undefined);
       let reply = '';
+      let replyKind: WhatsappReplyKind = 'TEXT';
       let confirmation = false;
-      if (['cancelar', 'cancel', 'menu', 'ayuda', 'inicio'].includes(command)) {
+      let offerConfirmation = false;
+      if (
+        choice === 'report_cancel' ||
+        (!selected && ['cancelar', 'cancel'].includes(command))
+      ) {
         draft = emptyDraft();
-        reply = `Borrador cancelado. ${HELP}`;
+        reply = `Borrador cancelado.\n${reportMenuText(employee)}`;
+        replyKind = 'REPORT_MENU';
+      } else if (
+        choice === 'report_menu' ||
+        (!selected &&
+          (['menu', 'ayuda', 'inicio'].includes(command) ||
+            isGreeting(command)))
+      ) {
+        reply = reportMenuText(employee, Boolean(draft.kind));
+        replyKind = 'REPORT_MENU';
+      } else if (choice === 'report_attendance') {
+        draft = {
+          ...emptyDraft(),
+          menuStage: 'ATTENDANCE',
+          occurredAt: message.sentAt.toISOString(),
+          sourceMessageIds: [message.providerMessageId],
+        };
+        reply =
+          '¿Quieres registrar tu entrada o tu salida de la obra? Elige una opción.';
+        replyKind = 'ATTENDANCE_MENU';
+      } else if (choice && selectionKind(choice)) {
+        draft = {
+          ...emptyDraft(),
+          kind: selectionKind(choice),
+          occurredAt: message.sentAt.toISOString(),
+          sourceMessageIds: [message.providerMessageId],
+        };
+        reply = selectionPrompt(choice);
+      } else if (confirmationChoice && !validConfirmation) {
+        reply = `Ese botón pertenece a un resumen anterior. Revisa el reporte actual antes de confirmarlo.\n${reportMenuText(employee, Boolean(draft.kind))}`;
+        replyKind = 'REPORT_MENU';
+      } else if (selected && !validConfirmation) {
+        reply = `Esta opción ya no está disponible.\n${reportMenuText(employee, Boolean(draft.kind))}`;
+        replyKind = 'REPORT_MENU';
       } else if (!['text', 'image', 'interactive'].includes(message.type)) {
         reply =
           'Por ahora envía el reporte por escrito y las fotos como imagen. Los audios y documentos no se registran.\n' +
-          HELP;
+          reportMenuText(employee, Boolean(draft.kind));
+        replyKind = 'REPORT_MENU';
       } else if (
-        ['si', 'confirmar', 'confirmo', 'correcto'].includes(command) &&
-        message.type !== 'image'
+        validConfirmation ||
+        (!selected &&
+          ['si', 'confirmar', 'confirmo', 'correcto'].includes(command) &&
+          message.type !== 'image')
       ) {
-        if (!draft.ready)
+        if (!draft.ready) {
           reply = 'Todavía faltan datos para registrar. ' + HELP;
-        else confirmation = true;
+          replyKind = 'REPORT_MENU';
+        } else confirmation = true;
       } else {
         const recentCount = await this.prisma.whatsappInboundMessage.count({
           where: {
@@ -320,13 +407,17 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           if (draft.kind) {
             const resolution = await this.records.resolve(draft);
             draft.ready = Boolean(resolution.target);
+            offerConfirmation = draft.ready;
             draft.targetKey = resolution.target
               ? JSON.stringify(resolution.target)
               : undefined;
             reply =
               resolution.question ??
               this.records.summary(draft, resolution.target!);
-          } else reply = HELP;
+          } else {
+            reply = reportMenuText(employee);
+            replyKind = 'REPORT_MENU';
+          }
         }
       }
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
@@ -347,7 +438,26 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           'La identificación del equipo u obra cambió. Revisa nuevamente:\n' +
           this.records.summary(draft, resolution!.target!);
         confirmation = false;
+        offerConfirmation = true;
       }
+      if (
+        offerConfirmation &&
+        !confirmation &&
+        replyKind === 'TEXT' &&
+        reply.length <= 1024
+      )
+        replyKind = 'CONFIRMATION';
+      if (
+        !activeConversation &&
+        !reply.startsWith(employeeGreeting(employee)) &&
+        replyKind !== 'REPORT_MENU'
+      )
+        reply = `${employeeGreeting(employee)}\n${reply}`;
+      // Meta limits interactive message bodies to 1024 characters. Long confirmations remain complete text.
+      if (replyKind === 'CONFIRMATION' && reply.length > 1024)
+        replyKind = 'TEXT';
+      if (replyKind === 'CONFIRMATION')
+        draft.confirmationMessageId = message.id;
       await this.prisma.$transaction(
         async (tx) => {
           const ownership = await tx.whatsappConversation.updateMany({
@@ -373,6 +483,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             );
             reply = `Registrado en REV Logística. Reporte ${report.id}. ${draft.kind === 'REQUEST' || draft.kind === 'DAMAGE' ? 'La alerta quedó creada para oficina y gerencia.' : ''}`;
             draft = emptyDraft();
+            replyKind = 'REPORT_MENU';
           }
           await tx.whatsappConversation.update({
             where: { phone: message.phone },
@@ -386,7 +497,12 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           });
           await tx.whatsappInboundMessage.update({
             where: { id: message.id },
-            data: { status: 'PROCESSED', replyText: reply, error: null },
+            data: {
+              status: 'PROCESSED',
+              replyText: reply,
+              replyKind,
+              error: null,
+            },
           });
         },
         { timeout: 15000 },
@@ -467,7 +583,20 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       });
       if (!claim.count) continue;
       try {
-        await this.cloud.reply(message.phone, message.replyText!);
+        if (message.replyKind === 'CONFIRMATION') {
+          await this.cloud.reply(
+            message.phone,
+            message.replyText!,
+            message.replyKind,
+            message.id,
+          );
+        } else {
+          await this.cloud.reply(
+            message.phone,
+            message.replyText!,
+            message.replyKind,
+          );
+        }
         await this.prisma.whatsappInboundMessage.update({
           where: { id: message.id },
           data: { replySentAt: new Date() },

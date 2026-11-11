@@ -88,6 +88,8 @@ if (testUrl) {
         from?: string;
         id?: string;
         phoneId?: string;
+        selectionId?: string;
+        button?: boolean;
       } = {},
     ) {
       const id = options.id ?? `wamid.qa.${randomUUID()}`;
@@ -105,10 +107,21 @@ if (testUrl) {
                       id,
                       from: options.from ?? '573001234567',
                       timestamp: String(++timestamp),
-                      type: options.image ? 'image' : 'text',
-                      ...(options.image
-                        ? { image: { id: '12345', caption: text } }
-                        : { text: { body: text } }),
+                      type: options.selectionId
+                        ? 'interactive'
+                        : options.image
+                          ? 'image'
+                          : 'text',
+                      ...(options.selectionId
+                        ? {
+                            interactive: {
+                              [options.button ? 'button_reply' : 'list_reply']:
+                                { id: options.selectionId, title: text },
+                            },
+                          }
+                        : options.image
+                          ? { image: { id: '12345', caption: text } }
+                          : { text: { body: text } }),
                     },
                   ],
                 },
@@ -215,6 +228,114 @@ if (testUrl) {
       await prisma.whatsappInboundMessage.updateMany({
         data: { createdAt: new Date(Date.now() - 120000) },
       });
+    });
+
+    it('sends a named four-option menu for greetings without an AI request', async () => {
+      const greeting = await send('Hola');
+      expect(greeting?.replyText).toContain('Hola, Operario Qa');
+      expect(greeting?.replyKind).toBe('REPORT_MENU');
+      expect(greeting?.replySentAt).not.toBeNull();
+      expect(cloud.reply).toHaveBeenCalledWith(
+        '573001234567',
+        greeting!.replyText,
+        'REPORT_MENU',
+      );
+      expect(ai.extract).not.toHaveBeenCalled();
+      expect(await prisma.whatsappReport.count()).toBe(0);
+    });
+
+    it('routes tapped IDs independently of their displayed titles and rejects forged confirmations', async () => {
+      const request = await send('Cualquier título', {
+        selectionId: 'report_request',
+      });
+      expect(request?.selectionId).toBe('report_request');
+      expect(request?.replyText).toContain('qué necesitas solicitar');
+      expect(ai.extract).not.toHaveBeenCalled();
+      ai.extract.mockResolvedValue(
+        extracted({
+          kind: 'REQUEST',
+          description: 'Solicitud de menú sin confirmar',
+        }),
+      );
+      const summary = await send('Necesito guantes');
+      expect(summary?.replyKind).toBe('CONFIRMATION');
+      const forged = await send('Sí', {
+        selectionId: 'unknown_option',
+        button: true,
+      });
+      expect(forged?.replyKind).toBe('REPORT_MENU');
+      const stale = await send('Sí, registrar', {
+        selectionId: 'report_confirm:older-summary',
+        button: true,
+      });
+      expect(stale?.replyText).toContain('resumen anterior');
+      expect(await prisma.whatsappReport.count()).toBe(0);
+      await send('Cancelar', { selectionId: 'report_cancel', button: true });
+    });
+
+    it('shows two attendance buttons and starts entry by its stable ID without AI', async () => {
+      expect(
+        (await send('Entrada o salida', { selectionId: 'report_attendance' }))
+          ?.replyKind,
+      ).toBe('ATTENDANCE_MENU');
+      const entry = await send('Registrar entrada', {
+        selectionId: 'attendance_check_in',
+        button: true,
+      });
+      expect(entry?.replyText).toContain('Indica el nombre de la obra');
+      const conversation = await prisma.whatsappConversation.findUniqueOrThrow({
+        where: { phone: '573001234567' },
+      });
+      expect((conversation.draft as any).kind).toBe('CHECK_IN');
+      expect(ai.extract).not.toHaveBeenCalled();
+      expect(await prisma.worksiteAttendance.count()).toBe(0);
+      await send('cancelar');
+    });
+
+    it('keeps an unfinished report when the employee greets or opens the menu again', async () => {
+      await send('Petición general', { selectionId: 'report_request' });
+      ai.extract.mockResolvedValue(
+        extracted({ kind: 'REQUEST', description: 'Mi borrador pendiente' }),
+      );
+      await send('Mi borrador pendiente');
+      const greeting = await send('Hola');
+      expect(greeting?.replyText).toContain('reporte pendiente');
+      expect(greeting?.replyKind).toBe('REPORT_MENU');
+      const conversation = await prisma.whatsappConversation.findUniqueOrThrow({
+        where: { phone: '573001234567' },
+      });
+      expect((conversation.draft as any).description).toBe(
+        'Mi borrador pendiente',
+      );
+      expect((conversation.draft as any).ready).toBe(true);
+      await send('cancelar');
+    });
+
+    it('retries the same interactive menu after a delivery failure', async () => {
+      cloud.reply.mockRejectedValueOnce(
+        new Error('simulated menu send failure'),
+      );
+      const greeting = await send('Hola');
+      expect(greeting?.replyKind).toBe('REPORT_MENU');
+      expect(greeting?.replySentAt).toBeNull();
+      await prisma.whatsappInboundMessage.update({
+        where: { id: greeting!.id },
+        data: { nextAttemptAt: new Date(0) },
+      });
+      await inbox.tick();
+      expect(cloud.reply).toHaveBeenLastCalledWith(
+        '573001234567',
+        greeting!.replyText,
+        'REPORT_MENU',
+      );
+      expect(
+        (
+          await prisma.whatsappInboundMessage.findUniqueOrThrow({
+            where: { id: greeting!.id },
+          })
+        ).replySentAt,
+      ).not.toBeNull();
+      expect(ai.extract).not.toHaveBeenCalled();
     });
 
     it('authenticates a signed webhook, records equipment damage once and keeps the employee attribution', async () => {
@@ -656,6 +777,35 @@ if (testUrl) {
         where: { assetId: asset.id, previousHours: { gt: 140 }, hours: 140 },
       });
       expect(invalid).toBe(0);
+    });
+    it('records a tapped confirmation only for the exact current summary and does not repeat it', async () => {
+      await send('Petición', { selectionId: 'report_request' });
+      ai.extract.mockResolvedValue(
+        extracted({ kind: 'REQUEST', description: 'Petición con botón QA' }),
+      );
+      const summary = await send('Petición con botón QA');
+      expect(summary?.replyKind).toBe('CONFIRMATION');
+      expect(cloud.reply).toHaveBeenCalledWith(
+        '573001234567',
+        summary!.replyText,
+        'CONFIRMATION',
+        summary!.id,
+      );
+      const result = await send('Sí, registrar', {
+        selectionId: `report_confirm:${summary!.id}`,
+        button: true,
+      });
+      expect(result?.replyText).toContain('Registrado en REV');
+      expect(result?.replyKind).toBe('REPORT_MENU');
+      await send('Sí, registrar', {
+        selectionId: `report_confirm:${summary!.id}`,
+        button: true,
+      });
+      expect(
+        await prisma.whatsappReport.count({
+          where: { description: 'Petición con botón QA' },
+        }),
+      ).toBe(1);
     });
   },
 );

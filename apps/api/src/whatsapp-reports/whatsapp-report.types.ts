@@ -19,6 +19,8 @@ export type Draft = Extraction & {
   sourceMessageIds: string[];
   ready?: boolean;
   targetKey?: string;
+  menuStage?: 'ATTENDANCE';
+  confirmationMessageId?: string;
 };
 export const emptyDraft = (): Draft => ({
   kind: null,

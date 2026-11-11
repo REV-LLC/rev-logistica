@@ -98,4 +98,15 @@ describe('WhatsApp Cloud media boundaries', () => {
     fetchMock.mockResolvedValueOnce(new Response('not an image'));
     await expect(service.photo('456')).rejects.toThrow();
   });
+  it('sends the native list payload through the existing authenticated Meta endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}'));
+    await service.reply('573001234567', 'Hola, Samuel 👋', 'REPORT_MENU');
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://graph.facebook.com/v25.0/123/messages');
+    const payload = JSON.parse(options.body);
+    expect(payload.type).toBe('interactive');
+    expect(payload.interactive.type).toBe('list');
+    expect(payload.interactive.action.sections[0].rows).toHaveLength(4);
+    expect(options.redirect).toBe('error');
+  });
 });
