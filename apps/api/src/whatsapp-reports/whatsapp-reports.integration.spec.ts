@@ -396,7 +396,9 @@ if (testUrl) {
       expect(first?.replyText).toContain('Responde SÍ');
       expect(await prisma.whatsappReport.count()).toBe(0);
       const confirmed = await send('sí');
-      expect(confirmed?.replyText).toContain('Registrado en REV');
+      expect(confirmed?.replyText).toContain(
+        'Tu reporte de daño quedó registrado correctamente.',
+      );
       expect(
         (await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } }))
           .isDamaged,
@@ -554,7 +556,9 @@ if (testUrl) {
       await send('', { image: true });
       const entered = await send('sí');
       expect(entered?.status).toBe('PROCESSED');
-      expect(entered?.replyText).toContain('Registrado en REV');
+      expect(entered?.replyText).toContain(
+        'Tu entrada a obra quedó registrada correctamente.',
+      );
       expect(
         await prisma.worksiteAttendance.count({
           where: { employeeId: employee.id, leftAt: null },
@@ -844,7 +848,9 @@ if (testUrl) {
         selectionId: `report_confirm:${summary!.id}`,
         button: true,
       });
-      expect(result?.replyText).toContain('Registrado en REV');
+      expect(result?.replyText).toContain(
+        'Tu petición quedó registrada correctamente.',
+      );
       expect(result?.replyKind).toBe('REPORT_MENU');
       await send('Sí, registrar', {
         selectionId: `report_confirm:${summary!.id}`,
@@ -1188,7 +1194,9 @@ if (testUrl) {
         const entry = await send('Sí', {
           selectionId: `report_confirm:${summary!.id}`,
         });
-        expect(entry?.replyText).toContain('Registrado en REV');
+        expect(entry?.replyText).toContain(
+          'Tu entrada a obra quedó registrada correctamente.',
+        );
         const report = await prisma.whatsappReport.findUniqueOrThrow({
           where: { sourceMessageId: entry!.providerMessageId },
           include: { evidence: true },
@@ -1216,7 +1224,9 @@ if (testUrl) {
         const exit = await send('Sí', {
           selectionId: `report_confirm:${exitSummary!.id}`,
         });
-        expect(exit?.replyText).toContain('Registrado en REV');
+        expect(exit?.replyText).toContain(
+          'Tu salida de obra quedó registrada correctamente.',
+        );
         const attendance = await prisma.worksiteAttendance.findFirstOrThrow({
           where: { employeeId: employee.id },
         });
