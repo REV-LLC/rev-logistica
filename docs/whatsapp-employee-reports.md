@@ -2,12 +2,12 @@
 
 ## Alcance
 
-El mismo número de WhatsApp Cloud API recibe mensajes individuales de empleados. El empleado puede escribir de forma natural, adjuntar fotos, completar la información y responder **SÍ** al resumen. **CANCELAR** descarta el borrador. No necesita una cuenta de usuario del software: sí un registro de empleado activo con teléfono único y normalizable. Se admiten texto, imagen y respuestas interactivas. Audio, video y documentos reciben una explicación; no se registran como reportes.
+El mismo número de WhatsApp Cloud API recibe mensajes individuales de empleados. El empleado puede escribir de forma natural, adjuntar fotos, completar la información y responder **SÍ** al resumen. **CANCELAR** descarta el borrador. No necesita una cuenta de usuario del software: sí un registro de empleado activo con teléfono único y normalizable. Se admiten texto, imagen, ubicación nativa y respuestas interactivas. Audio, video y documentos reciben una explicación; no se registran como reportes.
 
 1. **Daños de equipos y vehículos.** Código de equipo o placa y descripción obligatorios; hasta seis fotos opcionales. Un daño de equipo actualiza su condición e historial. Los vehículos conservan el daño como reporte y alerta; su modelo actual no dispone de un estado de avería equivalente al de los equipos.
 2. **Horómetros.** Equipo por horas o vehículo, valor no negativo y foto obligatoria. La IA propone la lectura de la foto; la confirmación del empleado es obligatoria. Una discrepancia entre foto y valor escrito exige corregirla. Una foto sin lectura clara puede acompañar un valor escrito y confirmado. Nunca se permite disminuir el último horómetro. El registro queda en las lecturas existentes y en Reportes WhatsApp, con la evidencia vinculada.
 3. **Peticiones generales.** Descripción y confirmación. Crea un reporte y una alerta para usuarios ADMIN/OFFICE activos, empleados MANAGER/OPERATIONS_MANAGER/OFFICE activos, Héctor Ramírez y destinatarios adicionales configurados. Los empleados sin usuario también reciben alerta por WhatsApp si tienen teléfono; los usuarios vinculados disponen de la alerta dentro del software. El estado de cada envío se consulta en el reporte; un contacto sin teléfono figura como `NO_PHONE`.
-4. **Entrada/salida de obra.** Obra activa identificada sin ambigüedad y una foto por movimiento. Se guarda la hora del primer mensaje de ese flujo, suministrada por Meta, y la hora de recepción del mensaje por separado. No se aceptan horas arbitrarias generadas por IA o escritas por el empleado. La entrada crea una jornada abierta y una nota en la bitácora existente. La salida exige una entrada anterior abierta en la misma obra y cierra la jornada. Solo puede existir una jornada abierta por empleado. Las fotos adjuntas no verifican identidad, ubicación ni presencia real. El intervalo entrada/salida es tiempo reportado, sin deducir descansos ni calcular nómina.
+4. **Entrada/salida de obra.** Obra activa identificada sin ambigüedad y ubicación **o** foto por movimiento: una sola alternativa es suficiente. Si se envía la otra opción, reemplaza a la anterior y exige una nueva confirmación. Se guarda la hora del primer mensaje de ese flujo, suministrada por Meta, y la hora de recepción del mensaje por separado. No se aceptan horas arbitrarias generadas por IA o escritas por el empleado. La entrada crea una jornada abierta vinculada al reporte. La salida exige una entrada anterior abierta en la misma obra y cierra la jornada. Solo puede existir una jornada abierta por empleado. Las fotos adjuntas no verifican identidad, ubicación ni presencia real. El intervalo entrada/salida es tiempo reportado, sin deducir descansos ni calcular nómina.
 
 ## Saludo y opciones táctiles
 
@@ -21,7 +21,7 @@ Un saludo o MENÚ conserva el borrador pendiente. Elegir otro flujo inicia un nu
 
 **Operación → Reportes WhatsApp** (`/employees/whatsapp-reports`), accesible por ADMIN/OFFICE:
 
-- Reportes, filtro por tipo, paginación y detalle con fotos descargadas mediante la API autenticada.
+- Reportes, filtro por tipo, paginación y detalle con fotos descargadas mediante la API autenticada o ubicación compartida con coordenadas, hora de recepción y enlace al mapa.
 - Jornadas de asistencia: últimas 100, obra, entrada, salida y duración transcurrida.
 - Mensajes por revisar: últimos 50 fallidos, rechazados o sin respuesta después de cinco intentos.
 - Destinatarios y estado de las alertas de cada reporte.
@@ -68,3 +68,5 @@ La implementación queda desactivada por defecto. La clave de Office no se reuti
 Las pruebas PostgreSQL son opt-in: configurar `WHATSAPP_TEST_DATABASE_URL` a una base **desechable local** cuyo nombre empiece por `whatsapp_qa_`. El archivo `whatsapp-reports.integration.spec.ts` trunca únicamente esa base validada y usa Meta, almacenamiento remoto e IA simulados. Verifica los cuatro flujos completos desde webhook firmado hasta el dominio, evidencia y alertas, además de duplicados, autenticación por teléfono, lecturas decrecientes, salidas sin entrada, reintentos y concurrencia. Nunca apunta a `DATABASE_URL` por defecto.
 
 La asistencia de WhatsApp se guarda en `WorksiteAttendance`, vinculada al reporte y a sus evidencias. No crea una actividad operativa `WORKSITE`: esas actividades requieren una máquina y conservan su validación independiente.
+
+La ubicación se recibe únicamente desde el mensaje nativo firmado de WhatsApp y se conserva con latitud, longitud, ID del mensaje y horas de envío/recepción. Se valida su procedencia al confirmar; no se extrae de texto ni de IA. Cambiar de obra, cancelar o vencer el borrador exige nueva evidencia. La ubicación no sustituye la foto de horómetro.

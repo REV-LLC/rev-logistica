@@ -14,6 +14,8 @@ import { WhatsappReportAiService } from './whatsapp-report-ai.service';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
 import {
   Draft,
+  isAttendance,
+  locationCoordinatesSchema,
   EquipmentReplyOptions,
   emptyDraft,
   HELP,
@@ -112,6 +114,11 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               message.type === 'image'
                 ? message.image?.id?.slice(0, 100)
                 : null,
+            location:
+              message.type === 'location' &&
+              locationCoordinatesSchema.safeParse(message.location).success
+                ? locationCoordinatesSchema.parse(message.location)
+                : Prisma.DbNull,
             sentAt,
           },
         ],
@@ -333,11 +340,24 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           '¿Quieres registrar tu entrada o tu salida de la obra? Elige una opción.';
         replyKind = 'ATTENDANCE_MENU';
       } else if (choice && selectionKind(choice)) {
+        const pendingLocation =
+          !draft.kind && draft.menuStage === 'ATTENDANCE'
+            ? draft.location
+            : undefined;
         draft = {
           ...emptyDraft(),
           kind: selectionKind(choice),
-          occurredAt: message.sentAt.toISOString(),
-          sourceMessageIds: [message.providerMessageId],
+          ...(isAttendance(selectionKind(choice)) && pendingLocation
+            ? { location: pendingLocation }
+            : {}),
+          occurredAt:
+            pendingLocation && isAttendance(selectionKind(choice))
+              ? pendingLocation.sentAt
+              : message.sentAt.toISOString(),
+          sourceMessageIds:
+            pendingLocation && isAttendance(selectionKind(choice))
+              ? [pendingLocation.sourceMessageId, message.providerMessageId]
+              : [message.providerMessageId],
         };
         if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
           await showEquipment();
@@ -420,9 +440,39 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       } else if (selected && !validConfirmation) {
         reply = `Esta opción ya no está disponible.\n${reportMenuText(employee, Boolean(draft.kind))}`;
         replyKind = 'REPORT_MENU';
+      } else if (message.type === 'location') {
+        const coordinates = locationCoordinatesSchema.safeParse(
+          message.location,
+        );
+        if (!coordinates.success) {
+          reply =
+            'No pude leer esa ubicación. Compártela desde WhatsApp con el clip → Ubicación, o envía una foto.';
+        } else if (isAttendance(draft.kind) || !draft.kind) {
+          draft.location = {
+            ...coordinates.data,
+            receivedAt: message.createdAt.toISOString(),
+            sentAt: message.sentAt.toISOString(),
+            sourceMessageId: message.providerMessageId,
+          };
+          draft.evidenceFileIds = [];
+          draft.ready = false;
+          delete draft.confirmationMessageId;
+          draft.sourceMessageIds.push(message.providerMessageId);
+          if (draft.kind) await resolveDraft();
+          else {
+            draft.menuStage = 'ATTENDANCE';
+            reply = 'Recibí tu ubicación. ¿Quieres registrar entrada o salida?';
+            replyKind = 'ATTENDANCE_MENU';
+          }
+        } else {
+          reply =
+            draft.kind === 'HOUR_METER'
+              ? 'Para horómetro necesito una foto legible del medidor. La ubicación no reemplaza esa foto.'
+              : 'La ubicación se usa para entrada o salida de obra. Continúa este reporte o escribe MENÚ.';
+        }
       } else if (!['text', 'image', 'interactive'].includes(message.type)) {
         reply =
-          'Por ahora envía el reporte por escrito y las fotos como imagen. Los audios y documentos no se registran.\n' +
+          'Por ahora envía el reporte por escrito y las fotos como imagen. Para entrada o salida también puedes compartir ubicación. Los audios y documentos no se registran.\n' +
           reportMenuText(employee, Boolean(draft.kind));
         replyKind = 'REPORT_MENU';
       } else if (
@@ -494,6 +544,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               ? {
                   ...draft,
                   evidenceFileIds: [],
+                  location: undefined,
                   selectedEquipment: undefined,
                   equipmentMenu: undefined,
                   photoHours: null,
@@ -523,6 +574,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               ]),
             ],
           };
+          if (image || !isAttendance(draft.kind)) delete draft.location;
           if (draft.kind) {
             await resolveDraft();
           } else {

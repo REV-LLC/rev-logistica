@@ -89,6 +89,7 @@ if (testUrl) {
       text: string,
       options: {
         image?: boolean;
+        location?: { latitude: number; longitude: number };
         from?: string;
         id?: string;
         phoneId?: string;
@@ -113,9 +114,11 @@ if (testUrl) {
                       timestamp: String(++timestamp),
                       type: options.selectionId
                         ? 'interactive'
-                        : options.image
-                          ? 'image'
-                          : 'text',
+                        : options.location
+                          ? 'location'
+                          : options.image
+                            ? 'image'
+                            : 'text',
                       ...(options.selectionId
                         ? {
                             interactive: {
@@ -123,9 +126,11 @@ if (testUrl) {
                                 { id: options.selectionId, title: text },
                             },
                           }
-                        : options.image
-                          ? { image: { id: '12345', caption: text } }
-                          : { text: { body: text } }),
+                        : options.location
+                          ? { location: options.location }
+                          : options.image
+                            ? { image: { id: '12345', caption: text } }
+                            : { text: { body: text } }),
                     },
                   ],
                 },
@@ -1118,6 +1123,210 @@ if (testUrl) {
         expect(hours.state.recent).toBe(false);
         await prisma.asset.deleteMany({ where: { id: { in: created } } });
         await prisma.sku.delete({ where: { id: dailySku.id } });
+      });
+    });
+
+    describe('attendance with location OR photo', () => {
+      const phone = '573001234567';
+      const coords = { latitude: 3.4516, longitude: -76.532 };
+      const currentDraft = async () =>
+        (
+          await prisma.whatsappConversation.findUniqueOrThrow({
+            where: { phone },
+          })
+        ).draft as any;
+      beforeEach(async () => {
+        await prisma.worksiteAttendance.deleteMany({
+          where: { employeeId: employee.id },
+        });
+        await send('Cancelar');
+        cloud.photo.mockClear();
+        ai.extract.mockClear();
+      });
+      async function start(kind: 'CHECK_IN' | 'CHECK_OUT') {
+        await send('Asistencia', {
+          selectionId:
+            kind === 'CHECK_IN'
+              ? 'attendance_check_in'
+              : 'attendance_check_out',
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind, worksiteReference: 'Obra QA única' }),
+        );
+        const question = await send('Obra QA única');
+        expect(question?.replyText).toContain('ubicación o una foto');
+      }
+      it('registers entry and exit with location only, without downloading a photo or calling AI for coordinates', async () => {
+        await start('CHECK_IN');
+        ai.extract.mockClear();
+        const summary = await send('', { location: coords });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect(summary?.replyText).toContain('Ubicación: 3.451600, -76.532000');
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(cloud.photo).not.toHaveBeenCalled();
+        const entry = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(entry?.replyText).toContain('Registrado en REV');
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: entry!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.evidence).toHaveLength(0);
+        expect(report.location).toMatchObject({
+          ...coords,
+          sourceMessageId: summary!.providerMessageId,
+          receivedAt: summary!.createdAt.toISOString(),
+          sentAt: summary!.sentAt.toISOString(),
+        });
+        await send('Sí', {
+          id: entry!.providerMessageId,
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(
+          await prisma.whatsappReport.count({
+            where: { sourceMessageId: entry!.providerMessageId },
+          }),
+        ).toBe(1);
+        await start('CHECK_OUT');
+        const exitSummary = await send('', {
+          location: { latitude: 3.45, longitude: -76.53 },
+        });
+        const exit = await send('Sí', {
+          selectionId: `report_confirm:${exitSummary!.id}`,
+        });
+        expect(exit?.replyText).toContain('Registrado en REV');
+        const attendance = await prisma.worksiteAttendance.findFirstOrThrow({
+          where: { employeeId: employee.id },
+        });
+        expect(attendance.leftAt).not.toBeNull();
+        const out = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { id: attendance.checkOutReportId! },
+          include: { evidence: true },
+        });
+        expect(out.evidence).toHaveLength(0);
+        expect(out.location).toMatchObject({
+          latitude: 3.45,
+          longitude: -76.53,
+        });
+      });
+      it('uses the latest alternative, invalidates older confirmations, and never records both', async () => {
+        await start('CHECK_IN');
+        const photo = await send('', { image: true });
+        expect((await currentDraft()).evidenceFileIds).toHaveLength(1);
+        const location = await send('', { location: coords });
+        expect(location?.replyKind).toBe('CONFIRMATION');
+        expect((await currentDraft()).evidenceFileIds).toEqual([]);
+        const invalid = await send('Sí', {
+          selectionId: `report_confirm:${photo!.id}`,
+        });
+        expect(invalid?.replyText).toContain('resumen anterior');
+        const replacementPhoto = await send('', { image: true });
+        expect((await currentDraft()).location).toBeUndefined();
+        expect(replacementPhoto?.replyKind).toBe('CONFIRMATION');
+        const done = await send('Sí', {
+          selectionId: `report_confirm:${replacementPhoto!.id}`,
+        });
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: done!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.location).toBeNull();
+        expect(report.evidence).toHaveLength(1);
+      });
+      it('rejects invalid coordinate ranges and preserves zero as a valid coordinate', async () => {
+        await start('CHECK_IN');
+        for (const location of [
+          { latitude: 91, longitude: 0 },
+          { latitude: 0, longitude: -181 },
+        ]) {
+          const bad = await send('', { location });
+          expect(bad?.replyText).toContain('No pude leer esa ubicación');
+          expect((await currentDraft()).location).toBeUndefined();
+        }
+        const good = await send('', {
+          location: { latitude: 0, longitude: 0 },
+        });
+        expect(good?.replyKind).toBe('CONFIRMATION');
+        expect((await currentDraft()).location).toMatchObject({
+          latitude: 0,
+          longitude: 0,
+        });
+      });
+      it('does not let location replace the mandatory hour-meter photo', async () => {
+        await send('Horómetro', { selectionId: 'report_hour_meter' });
+        const reply = await send('', { location: coords });
+        expect(reply?.replyText).toContain('foto legible del medidor');
+        expect((await currentDraft()).location).toBeUndefined();
+        expect(ai.extract).not.toHaveBeenCalled();
+      });
+      it('retains a location sent first when selecting entry, but clears it on a different worksite', async () => {
+        const first = await send('', { location: coords });
+        expect(first?.replyKind).toBe('ATTENDANCE_MENU');
+        expect(ai.extract).not.toHaveBeenCalled();
+        await send('Entrada', { selectionId: 'attendance_check_in' });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
+        );
+        const summary = await send('Obra QA única');
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect((await currentDraft()).location).toMatchObject(coords);
+        expect((await currentDraft()).occurredAt).toBe(
+          first!.sentAt.toISOString(),
+        );
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_IN',
+            worksiteReference: 'Otra obra por corregir',
+          }),
+        );
+        await send('Otra obra');
+        expect((await currentDraft()).location).toBeUndefined();
+        expect((await currentDraft()).ready).toBe(false);
+      });
+      it('validates location provenance against the signed inbound message and rejects mixed evidence', async () => {
+        await start('CHECK_IN');
+        await send('', { location: coords });
+        const draft = await currentDraft();
+        const target = (await records.resolve(draft)).target!;
+        await expect(
+          prisma.$transaction((tx) =>
+            records.record(
+              tx,
+              employee,
+              { ...draft, location: { ...draft.location, latitude: 3.46 } },
+              target,
+              `qa-tampered-location-${randomUUID()}`,
+            ),
+          ),
+        ).rejects.toThrow('No pude validar la ubicación');
+        const file = await files.storeWhatsappEvidence(employee.id);
+        await expect(
+          prisma.$transaction((tx) =>
+            records.record(
+              tx,
+              employee,
+              { ...draft, evidenceFileIds: [file.files[0].id] },
+              target,
+              `qa-mixed-evidence-${randomUUID()}`,
+            ),
+          ),
+        ).rejects.toThrow('solo una');
+      });
+      it('requires a new evidence choice after cancellation or an expired draft', async () => {
+        await start('CHECK_IN');
+        await send('', { location: coords });
+        await send('Cancelar');
+        expect((await currentDraft()).location).toBeUndefined();
+        await start('CHECK_IN');
+        await send('', { location: coords });
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { expiresAt: new Date(0) },
+        });
+        await start('CHECK_OUT');
+        expect((await currentDraft()).location).toBeUndefined();
+        expect((await currentDraft()).ready).toBe(false);
       });
     });
   },

@@ -34,6 +34,7 @@ type Report = {
   kind: Kind;
   description: string;
   hours: string | null;
+  location?: { latitude: number; longitude: number; receivedAt: string; sentAt: string } | null;
   occurredAt: string;
   status: string;
   resolution: string | null;
@@ -323,7 +324,7 @@ export default function WhatsappReportsPage() {
                     ) : null}
                     <Group justify="space-between">
                       <Text size="xs" c="dimmed">
-                        {r.evidence.length} fotos · {r.id}
+                        {r.location ? "Ubicación compartida" : `${r.evidence.length} fotos`} · {r.id}
                       </Text>
                       <Button
                         variant="light"
@@ -353,7 +354,7 @@ export default function WhatsappReportsPage() {
           <Tabs.Panel value="attendance" pt="md">
             <Text size="sm" c="dimmed" mb="md">
               Últimas 100 jornadas. Horas reportadas por WhatsApp en zona de
-              Colombia; las fotos se consultan en los reportes de entrada y
+              Colombia; la ubicación o foto se consulta en los reportes de entrada y
               salida.
             </Text>
             <Table.ScrollContainer minWidth={640}>
@@ -435,6 +436,13 @@ export default function WhatsappReportsPage() {
             <Text style={{ whiteSpace: "pre-wrap" }}>
               {selected.description}
             </Text>
+            {selected.location ? (
+              <Stack gap="xs">
+                <Text size="sm">Ubicación compartida: {selected.location.latitude.toFixed(6)}, {selected.location.longitude.toFixed(6)}</Text>
+                <Text size="sm" c="dimmed">Recibida: {date(selected.location.receivedAt)} (Colombia)</Text>
+                <Button component="a" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.location.latitude},${selected.location.longitude}`)}`} target="_blank" rel="noopener noreferrer" variant="light">Ver ubicación en el mapa</Button>
+              </Stack>
+            ) : null}
             <Group>
               {selected.evidence.map((e, index) => (
                 <Button
