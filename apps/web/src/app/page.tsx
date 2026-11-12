@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Badge, Center, Container, Loader, Text } from '@mantine/core';
-import { IconArrowRight } from '@tabler/icons-react';
+import { IconArrowRight, IconTruckDelivery, IconTruckReturn } from '@tabler/icons-react';
 import AuthGuard from '@/components/AuthGuard';
 import ResponsiveShell from '@/components/ResponsiveShell';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
@@ -183,7 +183,7 @@ export default function HomePage() {
   const isDriver = role === 'DRIVER';
   const fieldModuleHref = isDriver ? '/transport/requests' : '/inventory/hour-meter';
   const fieldView = <div className={styles.fieldLayout}>
-    <Section title="Mi trabajo de hoy" count={myTasks.length}>{myTasks.length ? myTasks.slice(0, 5).map((task, index) => <ActionRow key={task.id} href={fieldModuleHref} title={task.title} detail={task.description || undefined} meta={index === 0 ? 'Próxima' : relativeDate(task.dueDate)} tone={task.priority === 'HIGH' ? 'warning' : 'default'} />) : <EmptyRow>No tienes tareas activas asignadas.</EmptyRow>}<Link href={isDriver ? '/transport/generate' : '/inventory/hour-meter'} className={styles.primaryAction}>{isDriver ? 'Abrir operación del día' : 'Registrar horómetro'}<IconArrowRight size={18} /></Link></Section>
+    <Section title="Mi trabajo de hoy" count={myTasks.length}>{myTasks.length ? myTasks.slice(0, 5).map((task, index) => <ActionRow key={task.id} href={fieldModuleHref} title={task.title} detail={task.description || undefined} meta={index === 0 ? 'Próxima' : relativeDate(task.dueDate)} tone={task.priority === 'HIGH' ? 'warning' : 'default'} />) : <EmptyRow>No tienes tareas activas asignadas.</EmptyRow>}{!isDriver ? <Link href="/inventory/hour-meter" className={styles.primaryAction}>Registrar horómetro<IconArrowRight size={18} /></Link> : null}</Section>
     <Section title={isDriver ? 'Mi vehículo' : 'Mi equipo'}>{entityNotification ? <ActionRow href={isDriver ? '/transport/vehicles' : '/inventory/hour-meter'} title={entityNotification.entity.label} detail={entityNotification.message} meta={reminderMeta(entityNotification)} tone={entityNotification.status === 'OVERDUE' ? 'danger' : 'warning'} /> : <EmptyRow>No hay {isDriver ? 'vehículo' : 'equipo'} asociado en tus alertas actuales.</EmptyRow>}</Section>
     <Section title="Alertas" count={notifications.length}>{notifications.length ? notifications.slice(0, 5).map((item) => <ActionRow key={item.topicId} href={fieldModuleHref} title={item.title} detail={item.message} meta={reminderMeta(item)} tone={item.status === 'OVERDUE' ? 'danger' : 'warning'} />) : <EmptyRow>No tienes alertas asignadas.</EmptyRow>}</Section>
   </div>;
@@ -204,6 +204,18 @@ export default function HomePage() {
                 <Text>{todayLabel()}</Text>
               </div>
             </header>
+            {isDriver ? <nav className={styles.driverActions} aria-label="Documentos de transporte">
+              <Link href="/transport/generate?type=REMISSION" className={styles.driverAction} data-kind="remission">
+                <IconTruckDelivery size={30} aria-hidden="true" />
+                <span>Generar remisión</span>
+                <IconArrowRight size={22} aria-hidden="true" />
+              </Link>
+              <Link href="/transport/generate?type=RETURN" className={styles.driverAction} data-kind="return">
+                <IconTruckReturn size={30} aria-hidden="true" />
+                <span>Generar devolución</span>
+                <IconArrowRight size={22} aria-hidden="true" />
+              </Link>
+            </nav> : null}
             {error ? <Alert color="red" variant="light" mb="lg">{error}</Alert> : null}
             <div className={glass.surface}>
               {loading ? <Center py={80}><Loader /></Center> : role === 'ADMIN' ? adminView : role === 'OFFICE' ? officeView : fieldView}
