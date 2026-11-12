@@ -66,3 +66,5 @@ La implementación queda desactivada por defecto. La clave de Office no se reuti
 `npm --workspace apps/api test -- --runInBand whatsapp-webhook whatsapp-reports files.service notifications`
 
 Las pruebas PostgreSQL son opt-in: configurar `WHATSAPP_TEST_DATABASE_URL` a una base **desechable local** cuyo nombre empiece por `whatsapp_qa_`. El archivo `whatsapp-reports.integration.spec.ts` trunca únicamente esa base validada y usa Meta, almacenamiento remoto e IA simulados. Verifica los cuatro flujos completos desde webhook firmado hasta el dominio, evidencia y alertas, además de duplicados, autenticación por teléfono, lecturas decrecientes, salidas sin entrada, reintentos y concurrencia. Nunca apunta a `DATABASE_URL` por defecto.
+
+La asistencia de WhatsApp se guarda en `WorksiteAttendance`, vinculada al reporte y a sus evidencias. No crea una actividad operativa `WORKSITE`: esas actividades requieren una máquina y conservan su validación independiente.

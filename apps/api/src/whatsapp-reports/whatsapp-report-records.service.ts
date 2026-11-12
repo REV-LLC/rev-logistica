@@ -372,7 +372,7 @@ export class WhatsappReportRecordsService {
       );
     }
     let actorId: string | undefined;
-    if (['DAMAGE', 'HOUR_METER', 'CHECK_IN'].includes(draft.kind)) {
+    if (['DAMAGE', 'HOUR_METER'].includes(draft.kind)) {
       const linkedUser = employee.userId
         ? await tx.user.findFirst({
             where: { id: employee.userId, active: true },
@@ -526,18 +526,9 @@ export class WhatsappReportRecordsService {
           checkInReportId: report.id,
         },
       });
-      const date = new Date(
-        `${new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(occurredAt)}T00:00:00Z`,
-      );
-      await tx.employeeActivityNote.create({
-        data: {
-          employeeId: employee.id,
-          customerWorksiteId: target.customerWorksiteId,
-          date,
-          description: `Entrada reportada por WhatsApp. Reporte ${report.id}. Foto adjunta en Reportes WhatsApp.`,
-          createdByUserId: actorId!,
-        },
-      });
+      // Attendance does not assign a machine. EmployeeActivityNote WORKSITE rows
+      // require an asset and describe operational work, so attendance stays in
+      // WorksiteAttendance with its linked WhatsApp report and photo evidence.
     }
     if (draft.kind === 'CHECK_OUT')
       await tx.worksiteAttendance.update({
