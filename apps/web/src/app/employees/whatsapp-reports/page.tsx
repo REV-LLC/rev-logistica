@@ -40,7 +40,6 @@ type Report = {
   resolution: string | null;
   employee: { name: string; lastName: string };
   asset: {
-    publicCode: string;
     internalNumber: number;
     sku: { name: string };
   } | null;
@@ -87,7 +86,7 @@ const date = (value: string) =>
   }).format(new Date(value));
 const subject = (r: Report) =>
   r.asset
-    ? `${r.asset.sku.name} #${r.asset.internalNumber} (${r.asset.publicCode})`
+    ? `${r.asset.sku.name} #${r.asset.internalNumber}`
     : (r.vehicle?.plate ??
       (r.customerWorksite
         ? `${r.customerWorksite.worksite.name} · ${r.customerWorksite.customer.name}`
@@ -100,6 +99,18 @@ const deliveryLabels: Record<string, string> = {
   READ: "Leída",
   FAILED: "Falló",
   NO_PHONE: "Sin teléfono",
+};
+
+const inboxStatusLabels: Record<string, string> = {
+  QUEUED: "Pendiente", PROCESSING: "En proceso", PROCESSED: "Procesado",
+  FAILED: "Falló el procesamiento", REJECTED: "Requiere revisión",
+};
+const inboxErrorLabels: Record<string, string> = {
+  UNKNOWN_OR_AMBIGUOUS_EMPLOYEE: "El número no corresponde a un único empleado activo. Revisa su registro.",
+  MESSAGE_EXPIRED: "El mensaje venció. El empleado debe enviarlo nuevamente.",
+  VALIDATION_REQUIRED: "Faltan datos por completar o corregir en el reporte.",
+  PROCESSING_FAILED: "No se pudo procesar el reporte. Revisa el mensaje o vuelve a intentarlo.",
+  ALERT_SEND_FAILED: "No se pudo enviar la alerta. Revisa el contacto e intenta nuevamente.",
 };
 
 export default function WhatsappReportsPage() {
@@ -181,7 +192,7 @@ export default function WhatsappReportsPage() {
     },
     [],
   );
-  async function openPhoto(file: Report["evidence"][number]["fileObject"]) {
+  async function openPhoto(file: Report["evidence"][number]["fileObject"], number: number) {
     const id = ++photoRequestId.current;
     setPhotoLoading(true);
     setError("");
@@ -190,7 +201,7 @@ export default function WhatsappReportsPage() {
       if (id === photoRequestId.current)
         setPhoto({
           url: URL.createObjectURL(blob),
-          title: file.originalName || "Foto de evidencia",
+          title: `Foto de evidencia ${number}`,
         });
     } catch {
       if (id === photoRequestId.current)
@@ -324,7 +335,7 @@ export default function WhatsappReportsPage() {
                     ) : null}
                     <Group justify="space-between">
                       <Text size="xs" c="dimmed">
-                        {r.location ? "Ubicación compartida" : `${r.evidence.length} fotos`} · {r.id}
+                        {r.location ? "Ubicación compartida" : r.evidence.length === 1 ? "1 foto" : `${r.evidence.length} fotos`}
                       </Text>
                       <Button
                         variant="light"
@@ -398,14 +409,14 @@ export default function WhatsappReportsPage() {
               {issues.map((i) => (
                 <Paper key={i.id} withBorder p="md">
                   <Group>
-                    <Badge color="red">{i.status}</Badge>
+                    <Badge color="red">{inboxStatusLabels[i.status] ?? "Por revisar"}</Badge>
                     <Text>
                       {i.phone} · {date(i.createdAt)}
                     </Text>
                   </Group>
                   <Text mt="xs">{i.text || "Mensaje sin texto"}</Text>
                   <Text size="sm" c="dimmed">
-                    {i.error || "No se pudo enviar la respuesta"}
+                    {(i.error && inboxErrorLabels[i.error]) || "No se pudo completar la respuesta. Revisa el mensaje."}
                   </Text>
                 </Paper>
               ))}
@@ -449,7 +460,7 @@ export default function WhatsappReportsPage() {
                   key={e.fileObject.id}
                   variant="light"
                   loading={photoLoading}
-                  onClick={() => void openPhoto(e.fileObject)}
+                  onClick={() => void openPhoto(e.fileObject, index + 1)}
                 >
                   Ver foto {index + 1}
                 </Button>
@@ -468,7 +479,7 @@ export default function WhatsappReportsPage() {
                           : "blue"
                       }
                     >
-                      {deliveryLabels[r.status] ?? r.status}
+                      {deliveryLabels[r.status] ?? "Por revisar"}
                     </Badge>
                   </Group>
                 ))}
