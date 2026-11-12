@@ -61,7 +61,11 @@ describe('WhatsApp personalized interactive menu', () => {
     ) as any;
     expect(
       confirmation.interactive.action.buttons.map((b) => b.reply.id),
-    ).toEqual(['report_confirm:summary-id', 'report_cancel']);
+    ).toEqual([
+      'report_confirm:summary-id',
+      'report_photo:summary-id',
+      'report_cancel',
+    ]);
     expect(
       confirmation.interactive.action.buttons.every(
         (b) => b.reply.title.length <= 20,

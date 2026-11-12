@@ -15,7 +15,11 @@ import {
   REPORT_LABELS,
 } from './whatsapp-report.types';
 
-import { findEquipment } from './whatsapp-equipment';
+import {
+  findEquipment,
+  assetLabel,
+  readableDescription,
+} from './whatsapp-equipment';
 
 type Target = {
   assetId: string | null;
@@ -199,7 +203,7 @@ export class WhatsappReportRecordsService {
           ...(exactAssets.length ? exactAssets : assets).map((a) => ({
             assetId: a.id,
             vehicleId: null,
-            label: `${a.sku.name} #${a.internalNumber} (${a.publicCode})`,
+            label: assetLabel(a),
             hourly: a.sku.chargeType === 'HOUR',
           })),
           ...vehicles.map((v) => ({
@@ -342,7 +346,7 @@ export class WhatsappReportRecordsService {
       return {
         question:
           draft.kind === 'DAMAGE'
-            ? 'Describe qué daño o falla encontraste.'
+            ? 'Cuéntame qué daño o falla encontraste. Puedes adjuntar fotos ahora usando el clip o el botón + de WhatsApp → Fotos/Galería; son opcionales.'
             : 'Cuéntame qué necesitas solicitar a oficina y gerencia.',
       };
     }
@@ -398,7 +402,7 @@ export class WhatsappReportRecordsService {
   }
 
   summary(draft: Draft, target: Target) {
-    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${draft.description ?? ''}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\n${isAttendance(draft.kind) && draft.location ? `Ubicación: ${draft.location.latitude.toFixed(6)}, ${draft.location.longitude.toFixed(6)}.` : `Fotos: ${draft.evidenceFileIds.length}.`}\nResponde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
+    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${readableDescription(draft.description, draft.subjectReference)}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\n${isAttendance(draft.kind) && draft.location ? `Ubicación: ${draft.location.latitude.toFixed(6)}, ${draft.location.longitude.toFixed(6)}.` : `Fotos: ${draft.evidenceFileIds.length}.`}\nPuedes agregar fotos antes de confirmar. Responde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
   }
 
   async record(
@@ -744,7 +748,7 @@ export class WhatsappReportRecordsService {
             .replace(/\{\{/g, '(')
             .replace(/\}\}/g, ')'),
         messageTemplate:
-          `${target.label ? `${target.label}: ` : ''}${draft.description}`
+          `${target.label ? `${target.label}: ` : ''}${readableDescription(draft.description, draft.subjectReference)}`
             .slice(0, 3500)
             .replace(/\{\{/g, '(')
             .replace(/\}\}/g, ')'),

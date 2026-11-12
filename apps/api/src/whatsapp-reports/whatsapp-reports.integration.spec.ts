@@ -46,6 +46,7 @@ if (testUrl) {
     };
     const ai = {
       extract: jest.fn(),
+      equipmentSearchTerms: jest.fn(async (reference: string) => [reference]),
       suggestWorksites: jest.fn(
         async (
           _reference: string,
@@ -267,6 +268,7 @@ if (testUrl) {
     });
     beforeEach(async () => {
       ai.extract.mockReset();
+      ai.equipmentSearchTerms.mockClear();
       ai.suggestWorksites.mockClear();
       cloud.reply.mockClear();
       await prisma.whatsappInboundMessage.updateMany({
@@ -867,6 +869,17 @@ if (testUrl) {
       const phone = '573001234567';
       const conversation = () =>
         prisma.whatsappConversation.findUniqueOrThrow({ where: { phone } });
+      const openCatalog = async () => {
+        const prompt = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        const buttons = (prompt!.replyOptions as any).buttons;
+        return send('Ver lista completa', {
+          selectionId: buttons.find((button: any) =>
+            button.id.startsWith('equipment_catalog:'),
+          ).id,
+        });
+      };
       const rows = (message: any) =>
         message.replyOptions.rows as {
           id: string;
@@ -893,26 +906,30 @@ if (testUrl) {
       });
 
       it('selects the exact tapped machine, remembers only confirmed reports and survives draft expiry', async () => {
-        const menu = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const menu = await openCatalog();
         expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
         expect(ai.extract).not.toHaveBeenCalled();
         const selection = rows(menu).find((r) =>
-          r.description.includes(asset.publicCode),
+          r.title.endsWith(`#${asset.internalNumber}`),
         )!;
         expect(selection).toBeDefined();
         const picked = await send('Título sin códigos', {
           selectionId: selection.id,
         });
         expect(picked?.replyText).toContain('foto');
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
         ai.extract.mockResolvedValue(
           extracted({ kind: 'HOUR_METER', hours: 160, photoHours: 160 }),
         );
         const summary = await send('', { image: true });
         expect(summary?.replyKind).toBe('CONFIRMATION');
-        expect(summary?.replyText).toContain(asset.publicCode);
+        expect(summary?.replyText).toContain(
+          `Retroexcavadora QA #${asset.internalNumber}`,
+        );
+        expect(summary?.replyText).not.toContain(asset.publicCode);
         await send('Sí', { selectionId: `report_confirm:${summary!.id}` });
         expect((await conversation()).lastEquipment).toEqual({
           type: 'ASSET',
@@ -927,10 +944,12 @@ if (testUrl) {
           selectionId: 'report_hour_meter',
         });
         expect(recent?.replyText).toContain('última máquina');
-        expect(recent?.replyText).toContain(asset.publicCode);
+        expect(recent?.replyText).toContain(
+          `Retroexcavadora QA #${asset.internalNumber}`,
+        );
         expect(
           (recent!.replyOptions as any).buttons.map((b: any) => b.title),
-        ).toEqual(['Usar esta máquina', 'Elegir otra']);
+        ).toEqual(['Usar esta máquina', 'Buscar otra', 'Ver lista completa']);
         expect(ai.extract).not.toHaveBeenCalled();
         await send('Cancelar');
         expect((await conversation()).lastEquipment).toEqual({
@@ -943,26 +962,28 @@ if (testUrl) {
         ai.extract.mockResolvedValue(
           extracted({ kind: 'HOUR_METER', hours: 170, photoHours: 170 }),
         );
-        const menu = await send('Horómetro', { image: true });
+        const prompt = await send('Horómetro', { image: true });
+        const menu = await send('Ver lista completa', {
+          selectionId: (prompt!.replyOptions as any).buttons[0].id,
+        });
         expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
         const picked = await send('Mi máquina', {
           selectionId: rows(menu).find((r) =>
-            r.description.includes(asset.publicCode),
+            r.title.endsWith(`#${asset.internalNumber}`),
           )!.id,
         });
         expect(picked?.replyKind).toBe('CONFIRMATION');
         expect(picked?.replyText).toContain('Fotos: 1');
         await send('Cancelar');
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
       });
 
       it('rejects stale, expired and deactivated selections instead of trusting a supplied title or id', async () => {
-        const first = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
-        const second = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const first = await openCatalog();
+        const second = await openCatalog();
         const stale = await send('QA-RETRO-02', {
           selectionId: rows(first)[0].id,
         });
@@ -970,11 +991,9 @@ if (testUrl) {
         expect((await conversation()).draft).not.toHaveProperty(
           'selectedEquipment',
         );
-        const current = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const current = await openCatalog();
         const choice = rows(current).find((r) =>
-          r.description.includes(asset.publicCode),
+          r.title.endsWith(`#${asset.internalNumber}`),
         )!;
         await prisma.asset.update({
           where: { id: asset.id },
@@ -1003,12 +1022,10 @@ if (testUrl) {
             internalNumber: 99,
           },
         });
-        const menu = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const menu = await openCatalog();
         await send('Mi máquina', {
           selectionId: rows(menu).find((r) =>
-            r.description.includes(asset.publicCode),
+            r.title.endsWith(`#${asset.internalNumber}`),
           )!.id,
         });
         ai.extract.mockResolvedValue(
@@ -1016,7 +1033,7 @@ if (testUrl) {
         );
         const oldSummary = await send('', { image: true });
         cloud.reply.mockRejectedValueOnce(new Error('temporary'));
-        const nextMenu = await send('Otra máquina');
+        const nextMenu = await send('Ver máquinas');
         expect(nextMenu?.replySentAt).toBeNull();
         await prisma.whatsappInboundMessage.update({
           where: { id: nextMenu!.id },
@@ -1032,7 +1049,7 @@ if (testUrl) {
         );
         const picked = await send('Otra', {
           selectionId: rows(nextMenu).find((r) =>
-            r.description.includes(other.publicCode),
+            r.title.endsWith(`#${other.internalNumber}`),
           )!.id,
         });
         expect(picked?.replyText).toContain('foto');
@@ -1042,7 +1059,10 @@ if (testUrl) {
           evidenceFileIds: [],
         });
         await send('Sí', { selectionId: `report_confirm:${oldSummary!.id}` });
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: other.id,
+        });
         await prisma.asset.delete({ where: { id: other.id } });
       });
 
@@ -1677,6 +1697,251 @@ if (testUrl) {
           where: { id: { in: links } },
         });
         await prisma.worksite.deleteMany({ where: { id: { in: sites } } });
+      });
+    });
+
+    describe('AI equipment search, readable names and optional photos', () => {
+      const phone = '573001234567';
+      const current = () =>
+        prisma.whatsappConversation.findUniqueOrThrow({ where: { phone } });
+      let machine: any;
+      const technicalCode =
+        'CUT-20260729-BODEGA_PRINCIPAL_D-CORTADORA_DE_CONCR-ESTANDAR-CORTADORA_DE_CONCR-001-58145BC8';
+      beforeAll(async () => {
+        machine = await prisma.asset.create({
+          data: {
+            skuId: asset.skuId,
+            warehouseOwnerId: asset.warehouseOwnerId,
+            publicCode: technicalCode,
+            internalNumber: 73,
+            brand: 'CASE',
+            model: 'SR240B',
+            description: 'Minicargador amarillo',
+          },
+        });
+      });
+      beforeEach(async () => {
+        await send('Cancelar');
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { lastEquipment: Prisma.DbNull },
+        });
+        cloud.photo.mockClear();
+        ai.extract.mockClear();
+        ai.equipmentSearchTerms.mockClear();
+      });
+      it('starts with a search prompt, finds matching machines with AI and remembers a tapped machine even after cancelling', async () => {
+        const prompt = await send('Daño', { selectionId: 'report_damage' });
+        expect(prompt?.replyText).toContain(
+          'Escribe su nombre, marca o modelo',
+        );
+        expect(prompt?.replyText).not.toContain('Página');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga de aceite',
+          }),
+        );
+        const matches = await send(
+          'El minicargador Case tiene una fuga de aceite',
+        );
+        expect(ai.equipmentSearchTerms).toHaveBeenCalled();
+        expect(matches?.replyText).toContain('Ver coincidencias');
+        const draft = (await current()).draft as any;
+        const index = draft.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        expect(index).toBeGreaterThanOrEqual(0);
+        const rows = (matches!.replyOptions as any).rows;
+        expect(rows.length).toBeLessThanOrEqual(10);
+        expect(
+          JSON.stringify(
+            rows.map((r: any) => ({
+              title: r.title,
+              description: r.description,
+            })),
+          ),
+        ).not.toContain(technicalCode);
+        const picked = await send('Esta máquina', {
+          selectionId: rows[index].id,
+        });
+        expect(picked?.replyText).not.toContain(technicalCode);
+        expect(picked?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: machine.id,
+        });
+        await send('Cancelar');
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { expiresAt: new Date(0) },
+        });
+        ai.extract.mockClear();
+        ai.equipmentSearchTerms.mockClear();
+        const recent = await send('Daño', { selectionId: 'report_damage' });
+        expect(recent?.replyText).toContain('#73');
+        expect(recent?.replyText).not.toContain(technicalCode);
+        expect(
+          (recent!.replyOptions as any).buttons.map((b: any) => b.title),
+        ).toEqual(['Usar esta máquina', 'Buscar otra', 'Ver lista completa']);
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(ai.equipmentSearchTerms).not.toHaveBeenCalled();
+      });
+      it('keeps a photo sent while searching and stores it on the explicitly selected machine', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Se apaga el motor',
+          }),
+        );
+        const matches = await send('El minicargador Case se apaga', {
+          image: true,
+        });
+        expect(matches?.replyText).toContain('Foto recibida');
+        const before = (await current()).draft as any;
+        expect(before.evidenceFileIds).toHaveLength(1);
+        const index = before.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        const summary = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: before.evidenceFileIds,
+        });
+        const done = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: done!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.assetId).toBe(machine.id);
+        expect(report.evidence.map((e) => e.fileObjectId)).toEqual(
+          before.evidenceFileIds,
+        );
+      });
+      it('offers Add photos, acknowledges the image and does not let image guesses change the selected machine', async () => {
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { lastEquipment: { type: 'ASSET', id: machine.id } },
+        });
+        const recent = await send('Daño', { selectionId: 'report_damage' });
+        await send('Usar esta máquina', {
+          selectionId: (recent!.replyOptions as any).buttons[0].id,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: `${asset.sku?.name ?? 'Retroexcavadora QA'} #73`,
+            description: 'Consumo de aceite',
+          }),
+        );
+        const summary = await send('Consumo de aceite');
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        const help = await send('Agregar fotos', {
+          selectionId: `report_photo:${summary!.id}`,
+        });
+        expect(help?.replyText).toContain('Fotos/Galería');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'HOUR_METER',
+            subjectReference: 'Otra máquina',
+            description: 'Consumo de aceite',
+          }),
+        );
+        const photo = await send('', { image: true });
+        expect(photo?.replyText).toContain('Foto recibida. Fotos adjuntas: 1');
+        expect(photo?.replyText).not.toContain(technicalCode);
+        expect((await current()).draft).toMatchObject({
+          kind: 'DAMAGE',
+          selectedEquipment: { type: 'ASSET', id: machine.id },
+        });
+        const old = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(old?.replyText).toContain('resumen anterior');
+        const done = await send('Sí', {
+          selectionId: `report_confirm:${photo!.id}`,
+        });
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: done!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.assetId).toBe(machine.id);
+        expect(report.evidence).toHaveLength(1);
+        const transport = {
+          sendWhatsapp: jest.fn(async () => ({
+            sent: true,
+            providerMessageId: `qa-alert-${randomUUID()}`,
+          })),
+        };
+        await new WhatsappReportAlertsService(prisma, transport as any).tick();
+        const calls = transport.sendWhatsapp.mock.calls as any[];
+        expect(calls.some((call) => call[1].body.includes('#73'))).toBe(true);
+        expect(
+          calls.every((call) => !call[1].body.includes(technicalCode)),
+        ).toBe(true);
+      });
+      it('falls back to nearby matches when AI is down and keeps the catalog optional', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargadr case',
+            description: 'Fuga',
+          }),
+        );
+        ai.equipmentSearchTerms.mockRejectedValueOnce(new Error('AI down'));
+        const fallback = await send('Minicargadr Case');
+        expect(fallback?.replyKind).toBe('EQUIPMENT_MENU');
+        const draft = (await current()).draft as any;
+        expect(
+          draft.equipmentMenu.choices.some((ref: any) => ref.id === machine.id),
+        ).toBe(true);
+        const catalog = (fallback!.replyOptions as any).rows.find(
+          (r: any) => r.title === 'Ver lista completa',
+        );
+        const list = await send('Catálogo', { selectionId: catalog.id });
+        expect(list?.replyText).toContain('Página');
+      });
+      it('rejects inactive or stale suggested machines and never turns an unchosen AI suggestion into memory', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga',
+          }),
+        );
+        const matches = await send('Minicargador Case');
+        const state = (await current()).draft as any;
+        const index = state.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        expect((await current()).lastEquipment).toBeNull();
+        await prisma.asset.update({
+          where: { id: machine.id },
+          data: { active: false },
+        });
+        await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect((await current()).lastEquipment).toBeNull();
+        expect((await current()).draft).not.toHaveProperty('selectedEquipment');
+        await prisma.asset.update({
+          where: { id: machine.id },
+          data: { active: true },
+        });
+        await send('Cancelar');
+        const stale = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(stale?.replyKind).toBe('REPORT_MENU');
       });
     });
   },

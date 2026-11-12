@@ -17,6 +17,7 @@ import {
   isAttendance,
   locationCoordinatesSchema,
   EquipmentReplyOptions,
+  EquipmentReference,
   emptyDraft,
   HELP,
   IncomingWhatsappMessage,
@@ -34,6 +35,8 @@ import {
 import {
   equipmentPicker,
   equipmentReference,
+  equipmentCandidates,
+  equipmentSearch,
   findEquipment,
 } from './whatsapp-equipment';
 import { worksiteCandidates, worksitePicker } from './whatsapp-worksites';
@@ -279,18 +282,67 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       let replyOptions: EquipmentReplyOptions | undefined;
       let confirmation = false;
       let offerConfirmation = false;
-      const showEquipment = async (useMemory = true, page = 0) => {
+      let selectedForMemory: EquipmentReference | undefined;
+      if (
+        conversation.employeeId === employee.id &&
+        draft.selectedEquipment &&
+        (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+      ) {
+        const last = equipmentReference(conversation.lastEquipment);
+        if (
+          last?.id !== draft.selectedEquipment.id ||
+          last?.type !== draft.selectedEquipment.type
+        )
+          selectedForMemory = (
+            await findEquipment(
+              this.prisma,
+              draft.selectedEquipment,
+              draft.kind,
+            )
+          )?.reference;
+      }
+      const showEquipment = async (
+        useMemory = true,
+        page = 0,
+        suggest = false,
+        catalog = false,
+      ) => {
         if (draft.kind !== 'DAMAGE' && draft.kind !== 'HOUR_METER') return;
         const remembered =
           useMemory && conversation.employeeId === employee.id
-            ? equipmentReference(conversation.lastEquipment)
+            ? (equipmentReference(
+                (conversation.draft as unknown as Draft).selectedEquipment,
+              ) ?? equipmentReference(conversation.lastEquipment))
             : undefined;
-        const picker = await equipmentPicker(
-          this.prisma,
-          draft.kind,
-          remembered,
-          page,
-        );
+        let suggestions: EquipmentReference[] | undefined;
+        if (suggest && draft.subjectReference) {
+          let terms: string[] = [];
+          try {
+            terms = await this.ai.equipmentSearchTerms(draft.subjectReference);
+          } catch {
+            this.logger.warn({
+              event: 'whatsapp_equipment_search_terms_unavailable',
+              messageId: message.id,
+            });
+          }
+          // Only the employee's search phrase goes to AI. The inventory stays here.
+          const candidates = await equipmentCandidates(
+            this.prisma,
+            draft.kind,
+            draft.subjectReference,
+            terms,
+          );
+          suggestions = candidates.slice(0, 5).map((item) => item.reference);
+        }
+
+        const picker = catalog
+          ? await equipmentPicker(this.prisma, draft.kind, undefined, page)
+          : await equipmentSearch(
+              this.prisma,
+              draft.kind,
+              remembered,
+              suggestions,
+            );
         draft.equipmentMenu = picker.state;
         draft.ready = false;
         delete draft.confirmationMessageId;
@@ -343,6 +395,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         if (resolution.needsEquipment) {
           await showEquipment(
             !draft.subjectReference && !draft.selectedEquipment,
+            0,
+            Boolean(draft.subjectReference),
           );
           return;
         }
@@ -466,9 +520,13 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         } else await showWorksites();
       } else if (selected?.startsWith('equipment')) {
         const menu = draft.equipmentMenu;
-        const [action, nonce, value] = selected.split(':');
+        const parts = selected.split(':');
+        const [action, nonce, value] = parts;
         const sameMenu =
-          menu && menu.token === nonce && menu.kind === draft.kind;
+          menu &&
+          menu.token === nonce &&
+          menu.kind === draft.kind &&
+          (parts.length === 2 || parts.length === 3);
         const index =
           value && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : -1;
         if (!sameMenu || !['DAMAGE', 'HOUR_METER'].includes(draft.kind ?? '')) {
@@ -480,17 +538,21 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           }
         } else if (
           action === 'equipment_other' &&
-          menu.recent &&
+          (menu.recent || menu.suggested) &&
           value === undefined
         ) {
           await showEquipment(false);
+        } else if (action === 'equipment_catalog' && parts.length === 2) {
+          await showEquipment(false, 0, false, true);
         } else if (
           action === 'equipment_page' &&
           !menu.recent &&
+          !menu.suggested &&
+          !menu.search &&
           index >= 0 &&
           Math.abs(index - menu.page) === 1
         ) {
-          await showEquipment(false, index);
+          await showEquipment(false, index, false, true);
         } else if (action === 'equipment' && menu.choices[index]) {
           const equipment = await findEquipment(
             this.prisma,
@@ -502,7 +564,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             const changed = draft.selectedEquipment
               ? draft.selectedEquipment.id !== equipment.reference.id ||
                 draft.selectedEquipment.type !== equipment.reference.type
-              : !!draft.subjectReference &&
+              : !!draft.targetKey &&
+                !!draft.subjectReference &&
                 normalized(draft.subjectReference) !==
                   normalized(equipment.subjectReference);
             if (changed) {
@@ -510,6 +573,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               draft.photoHours = null;
               draft.hours = null;
             }
+            selectedForMemory = equipment.reference;
             draft.selectedEquipment = equipment.reference;
             draft.subjectType = equipment.reference.type;
             draft.subjectReference = equipment.subjectReference;
@@ -535,7 +599,23 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           'elegir otra',
         ].includes(command)
       ) {
-        await showEquipment(false);
+        await showEquipment(
+          false,
+          0,
+          false,
+          ['ver maquinas', 'lista', 'maquinas'].includes(command),
+        );
+      } else if (selected?.startsWith('report_photo:')) {
+        if (
+          draft.ready &&
+          selected.slice('report_photo:'.length) === draft.confirmationMessageId
+        ) {
+          reply =
+            'Envía las fotos como imagen desde el clip o el botón + de WhatsApp → Fotos/Galería. Puedes enviar hasta seis. Te confirmaré cada foto recibida antes de registrar. Si prefieres seguir sin más fotos, responde SÍ.';
+        } else {
+          reply = `Ese botón pertenece a un reporte anterior. ${reportMenuText(employee, Boolean(draft.kind))}`;
+          replyKind = 'REPORT_MENU';
+        }
       } else if (confirmationChoice && !validConfirmation) {
         reply = `Ese botón pertenece a un resumen anterior. Revisa el reporte actual antes de confirmarlo.\n${reportMenuText(employee, Boolean(draft.kind))}`;
         replyKind = 'REPORT_MENU';
@@ -624,7 +704,20 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               });
             }
           }
-          const parsed = await this.ai.extract(message.text, draft, image);
+          const parsed = {
+            ...(await this.ai.extract(message.text, draft, image)),
+          };
+          if (
+            image &&
+            draft.selectedEquipment &&
+            (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+          ) {
+            // A photo supplements the machine explicitly selected by the employee.
+            // Model guesses from a photo must not move evidence to another target.
+            parsed.kind = draft.kind;
+            parsed.subjectReference = draft.subjectReference;
+            parsed.subjectType = draft.subjectType;
+          }
           const changedKind =
             parsed.kind && draft.kind && parsed.kind !== draft.kind;
           const changedWorksite =
@@ -666,6 +759,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
                   worksiteMenu: undefined,
                   selectedEquipment: undefined,
                   equipmentMenu: undefined,
+                  targetKey: undefined,
                   photoHours: null,
                   ready: false,
                 }
@@ -696,6 +790,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           if (image || !isAttendance(draft.kind)) delete draft.location;
           if (draft.kind) {
             await resolveDraft();
+            if (image)
+              reply = `Foto recibida. Fotos adjuntas: ${draft.evidenceFileIds.length}.\n${reply}`;
           } else {
             reply = reportMenuText(employee);
             replyKind = 'REPORT_MENU';
@@ -795,9 +891,14 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
                         resolution.target.vehicleId!,
                     },
                   }
-                : conversation.employeeId !== employee.id
-                  ? { lastEquipment: Prisma.DbNull }
-                  : {}),
+                : selectedForMemory
+                  ? {
+                      lastEquipment:
+                        selectedForMemory as unknown as Prisma.InputJsonValue,
+                    }
+                  : conversation.employeeId !== employee.id
+                    ? { lastEquipment: Prisma.DbNull }
+                    : {}),
               draft: draft as unknown as Prisma.InputJsonValue,
               expiresAt: new Date(Date.now() + DRAFT_TTL_MS),
               leaseUntil: new Date(0),

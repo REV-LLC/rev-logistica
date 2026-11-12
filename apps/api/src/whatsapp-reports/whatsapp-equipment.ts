@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Asset, Vehicle } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalized } from './whatsapp-report.types';
 import type {
   EquipmentMenu,
   EquipmentReference,
@@ -29,21 +30,55 @@ export function equipmentReference(
     return { type: ref.type, id: ref.id };
 }
 
+export function readableDescription(
+  text: string | null | undefined,
+  technicalCode?: string | null,
+) {
+  let result = text ?? '';
+  if (technicalCode && technicalCode.length > 24)
+    result = result.split(technicalCode).join(' ');
+  return result
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      '',
+    )
+    .replace(/\b[A-Z0-9]{2,12}-\d{8}-[A-Z0-9_\-]{20,}\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+export function assetLabel(
+  asset: Pick<Asset, 'internalNumber' | 'brand' | 'model'> & {
+    sku: { name: string };
+  },
+) {
+  const name = clean(asset.sku.name, 120);
+  const details = [asset.brand, asset.model]
+    .filter(Boolean)
+    .map((value) => clean(value!, 60))
+    .filter((value) => !name.toLowerCase().includes(value.toLowerCase()))
+    .join(' ');
+  return `${name} #${asset.internalNumber}${details ? ` · ${details}` : ''}`;
+}
+
 function assetChoice(asset: Asset & { sku: { name: string } }) {
   const suffix = ` #${asset.internalNumber}`;
   return {
     reference: { type: 'ASSET' as const, id: asset.id },
     assetId: asset.id,
     vehicleId: null,
-    label: `${asset.sku.name} #${asset.internalNumber} (${asset.publicCode})`,
+    label: assetLabel(asset),
     title: clean(asset.sku.name, Math.max(1, 24 - suffix.length)) + suffix,
     description: clean(
-      [asset.brand, asset.model, asset.description, asset.publicCode]
+      [
+        asset.brand,
+        asset.model,
+        readableDescription(asset.description, asset.publicCode),
+      ]
         .filter(Boolean)
-        .join(' · '),
+        .join(' · ') || `Equipo #${asset.internalNumber}`,
       72,
     ),
-    subjectReference: asset.publicCode,
+    subjectReference: `${asset.sku.name} #${asset.internalNumber}`,
   };
 }
 function vehicleChoice(vehicle: Vehicle) {
@@ -103,7 +138,7 @@ export async function equipmentPicker(
     : null;
   if (recent)
     return {
-      text: `La última máquina que registraste fue:\n${clean(recent.label, 200)}\n¿Vas a reportar esta misma máquina?`,
+      text: `La última máquina que usaste en este chat fue:\n${clean(recent.label, 200)}\n¿Vas a reportar esta misma máquina? También puedes escribir el nombre, marca o modelo de otra.`,
       state: {
         token,
         kind,
@@ -115,7 +150,8 @@ export async function equipmentPicker(
         type: 'button',
         buttons: [
           { id: `equipment:${token}:0`, title: 'Usar esta máquina' },
-          { id: `equipment_other:${token}`, title: 'Elegir otra' },
+          { id: `equipment_other:${token}`, title: 'Buscar otra' },
+          { id: `equipment_catalog:${token}`, title: 'Ver lista completa' },
         ],
       },
     };
@@ -188,5 +224,218 @@ export async function equipmentPicker(
     options: rows.length
       ? { type: 'list', button: 'Ver máquinas', rows }
       : undefined,
+  };
+}
+
+export type EquipmentCandidate = {
+  reference: EquipmentReference;
+  name: string;
+  brand: string | null;
+  model: string | null;
+  description: string | null;
+  number: number | null;
+};
+const synonyms: Record<string, string> = {
+  retro: 'retroexcavadora',
+  retros: 'retroexcavadora',
+  mini: 'minicargador',
+  bobcat: 'bobcat minicargador',
+  volco: 'volqueta',
+  cat: 'caterpillar',
+};
+function searchWords(text: string) {
+  return normalized(text)
+    .split(' ')
+    .flatMap((word) => (synonyms[word] ?? word).split(' '))
+    .filter(
+      (word) =>
+        word.length > 1 &&
+        ![
+          'la',
+          'el',
+          'los',
+          'las',
+          'de',
+          'del',
+          'un',
+          'una',
+          'equipo',
+          'maquina',
+          'vehiculo',
+          'se',
+          'reportar',
+        ].includes(word),
+    );
+}
+function similarity(a: string, b: string) {
+  if (a.includes(b) || b.includes(a)) return 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++)
+      row[j] = Math.min(
+        row[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    prev = row;
+  }
+  return 1 - prev[b.length] / Math.max(a.length, b.length, 1);
+}
+export function rankEquipment(
+  candidates: EquipmentCandidate[],
+  reference: string,
+  expanded: string[] = [],
+) {
+  const query = searchWords(reference.slice(0, 160));
+  if (!query.length) return [];
+  return candidates
+    .map((item) => {
+      const words = searchWords(
+        [item.name, item.brand, item.model, item.description, item.number]
+          .filter((value) => value !== null)
+          .join(' ')
+          .slice(0, 600),
+      );
+      let score =
+        query.reduce(
+          (sum, word) =>
+            sum +
+            Math.max(0, ...words.map((target) => similarity(word, target))),
+          0,
+        ) / query.length;
+      for (const term of expanded.slice(0, 6)) {
+        const terms = searchWords(term.slice(0, 160));
+        if (terms.length)
+          score = Math.max(
+            score,
+            terms.reduce(
+              (sum, word) =>
+                sum +
+                Math.max(0, ...words.map((target) => similarity(word, target))),
+              0,
+            ) / terms.length,
+          );
+      }
+      return { item, score };
+    })
+    .filter((item) => item.score >= 0.4)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.item.name.localeCompare(b.item.name) ||
+        a.item.reference.id.localeCompare(b.item.reference.id),
+    )
+    .slice(0, 12)
+    .map((item) => item.item);
+}
+export async function equipmentCandidates(
+  prisma: PrismaService,
+  kind: EquipmentKind,
+  reference: string,
+  expanded: string[] = [],
+) {
+  const [assets, vehicles] = await Promise.all([
+    prisma.asset.findMany({
+      where: {
+        active: true,
+        deletedAt: null,
+        ...(kind === 'HOUR_METER'
+          ? { sku: { chargeType: 'HOUR' as const } }
+          : {}),
+      },
+      include: { sku: { select: { name: true } } },
+      orderBy: { id: 'asc' },
+      take: 1000,
+    }),
+    prisma.vehicle.findMany({
+      where: { active: true },
+      orderBy: { id: 'asc' },
+      take: 1000,
+    }),
+  ]);
+  const candidates: EquipmentCandidate[] = [
+    ...assets.map((asset) => ({
+      reference: { type: 'ASSET' as const, id: asset.id },
+      name: asset.sku.name,
+      brand: asset.brand,
+      model: asset.model,
+      description: asset.description,
+      number: asset.internalNumber,
+    })),
+    ...vehicles.map((vehicle) => ({
+      reference: { type: 'VEHICLE' as const, id: vehicle.id },
+      name: `Vehículo ${vehicle.plate}`,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      description: vehicle.type,
+      number: null,
+    })),
+  ];
+  return rankEquipment(candidates, reference, expanded);
+}
+export async function equipmentSearch(
+  prisma: PrismaService,
+  kind: EquipmentKind,
+  remembered?: EquipmentReference,
+  suggestions?: EquipmentReference[],
+) {
+  if (suggestions?.length) {
+    const found = await Promise.all(
+      suggestions.slice(0, 5).map((ref) => findEquipment(prisma, ref, kind)),
+    );
+    const choices = found.filter((item): item is NonNullable<typeof item> =>
+      Boolean(item),
+    );
+    if (choices.length) {
+      const token = randomUUID();
+      const rows = choices.map((item, index) => ({
+        id: `equipment:${token}:${index}`,
+        title: clean(item.title, 24),
+        description: item.description,
+      }));
+      rows.push({
+        id: `equipment_other:${token}`,
+        title: 'Buscar otra máquina',
+        description: 'Escribir otro nombre, marca o modelo',
+      });
+      rows.push({
+        id: `equipment_catalog:${token}`,
+        title: 'Ver lista completa',
+        description: 'Abrir todo el catálogo de equipos',
+      });
+      return {
+        text: 'Encontré estas máquinas por lo que escribiste. Toca «Ver coincidencias» y elige la correcta.',
+        state: {
+          token,
+          kind,
+          choices: choices.map((item) => item.reference),
+          page: 0,
+          recent: false,
+          suggested: true,
+        },
+        options: { type: 'list' as const, button: 'Ver coincidencias', rows },
+      };
+    }
+  }
+  if (remembered && (await findEquipment(prisma, remembered, kind)))
+    return equipmentPicker(prisma, kind, remembered);
+  const token = randomUUID();
+  return {
+    text: '¿Qué máquina o vehículo necesitas reportar? Escribe su nombre, marca o modelo, por ejemplo «la retro amarilla» o «el minicargador Case». No necesitas buscar por páginas. Si prefieres, puedes abrir la lista completa.',
+    state: {
+      token,
+      kind,
+      choices: [] as EquipmentReference[],
+      page: 0,
+      recent: false,
+      search: true,
+    },
+    options: {
+      type: 'button' as const,
+      buttons: [
+        { id: `equipment_catalog:${token}`, title: 'Ver lista completa' },
+      ],
+    },
   };
 }

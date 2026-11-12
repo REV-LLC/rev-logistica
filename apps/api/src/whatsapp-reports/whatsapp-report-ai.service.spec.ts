@@ -111,4 +111,26 @@ describe('WhatsApp AI credential isolation and extraction', () => {
       ),
     ).rejects.toThrow('No worksite suggestions returned');
   });
+  it('interprets equipment names using only the employee query, without receiving inventory or IDs', async () => {
+    process.env.WHATSAPP_OPENAI_API_KEY = 'test-whatsapp-key';
+    parse.mockResolvedValue({
+      output_parsed: {
+        terms: ['cortadora de concreto', 'cortadora pavimento'],
+      },
+    });
+    await expect(
+      new WhatsappReportAiService().equipmentSearchTerms('cortadora pavimento'),
+    ).resolves.toEqual(['cortadora de concreto', 'cortadora pavimento']);
+    const request = parse.mock.calls[0][0];
+    expect(request.store).toBe(false);
+    expect(request.tools).toBeUndefined();
+    expect(request.input).toEqual([
+      { role: 'user', content: 'cortadora pavimento' },
+    ]);
+    expect(JSON.stringify(request.input)).not.toContain('catalog');
+    parse.mockResolvedValue({ output_parsed: null });
+    await expect(
+      new WhatsappReportAiService().equipmentSearchTerms('case'),
+    ).rejects.toThrow('No equipment search terms returned');
+  });
 });

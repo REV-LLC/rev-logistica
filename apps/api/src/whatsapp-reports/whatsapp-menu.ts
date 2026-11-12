@@ -158,6 +158,10 @@ export function whatsappReplyPayload(
               id: `report_confirm:${confirmationMessageId}`,
               title: 'Sí, registrar',
             },
+            {
+              id: `report_photo:${confirmationMessageId}`,
+              title: 'Agregar fotos',
+            },
             { id: 'report_cancel', title: 'Cancelar' },
           ]
         : null;
