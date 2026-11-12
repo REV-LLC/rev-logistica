@@ -26,7 +26,7 @@ export const REPORT_MENU_ROWS = [
   {
     id: 'report_attendance',
     title: 'Entrada o salida',
-    description: 'Horario en obra con foto de evidencia',
+    description: 'Horario en obra con ubicación o foto',
   },
 ] as const;
 
@@ -82,9 +82,9 @@ export function selectionPrompt(id: string) {
         report_request:
           'Cuéntame qué necesitas solicitar. Crearé la petición para oficina, gerencia y Héctor Ramírez cuando confirmes los datos.',
         attendance_check_in:
-          'Vamos a registrar tu entrada. Indica el nombre de la obra y envía una foto de evidencia.',
+          'Vamos a registrar tu entrada. Indica el nombre de la obra y envía tu ubicación o una foto; solo necesitas una.',
         attendance_check_out:
-          'Vamos a registrar tu salida. Indica el nombre de la obra y envía una foto de evidencia.',
+          'Vamos a registrar tu salida. Indica el nombre de la obra y envía tu ubicación o una foto; solo necesitas una.',
       } as const
     )[id] ?? ''
   );

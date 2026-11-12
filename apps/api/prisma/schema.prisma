@@ -1930,6 +1930,7 @@ model WhatsappInboundMessage {
   selectionId String?
   text String
   mediaId String?
+  location Json?
   evidenceFileObjectId String?
   sentAt DateTime
   status String @default("QUEUED")
@@ -1976,6 +1977,7 @@ model WhatsappReport {
   description String
   hours Decimal? @db.Decimal(12, 2)
   occurredAt DateTime
+  location Json?
   sourceMessageId String @unique
   sourceMessageIds Json @default("[]")
   status String @default("RECORDED")

@@ -7,6 +7,9 @@ import { Employee, Prisma, Role, WhatsappReportKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   Draft,
+  isAttendance,
+  locationEvidenceSchema,
+  locationCoordinatesSchema,
   normalized,
   normalizePhone,
   REPORT_LABELS,
@@ -280,14 +283,16 @@ export class WhatsappReportRecordsService {
       };
     }
     if (
-      ['HOUR_METER', 'CHECK_IN', 'CHECK_OUT'].includes(draft.kind) &&
+      (draft.kind === 'HOUR_METER' ||
+        (isAttendance(draft.kind) &&
+          !locationEvidenceSchema.safeParse(draft.location).success)) &&
       !draft.evidenceFileIds.length
     ) {
       return {
         question:
           draft.kind === 'HOUR_METER'
             ? 'Envía una foto legible del horómetro para adjuntarla como evidencia.'
-            : 'Envía una foto de evidencia de tu entrada o salida de la obra.',
+            : 'Envía tu ubicación o una foto de tu entrada o salida; solo necesitas una. Para ubicación: clip → Ubicación → Enviar mi ubicación actual.',
       };
     }
     if (draft.kind === 'HOUR_METER') {
@@ -329,7 +334,7 @@ export class WhatsappReportRecordsService {
   }
 
   summary(draft: Draft, target: Target) {
-    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${draft.description ?? ''}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\nFotos: ${draft.evidenceFileIds.length}.\nResponde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
+    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${draft.description ?? ''}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\n${isAttendance(draft.kind) && draft.location ? `Ubicación: ${draft.location.latitude.toFixed(6)}, ${draft.location.longitude.toFixed(6)}.` : `Fotos: ${draft.evidenceFileIds.length}.`}\nResponde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
   }
 
   async record(
@@ -364,12 +369,48 @@ export class WhatsappReportRecordsService {
     });
     if (
       evidence.length !== draft.evidenceFileIds.length ||
-      (['HOUR_METER', 'CHECK_IN', 'CHECK_OUT'].includes(draft.kind) &&
+      ((draft.kind === 'HOUR_METER' ||
+        (isAttendance(draft.kind) &&
+          !locationEvidenceSchema.safeParse(draft.location).success)) &&
         !evidence.length)
     ) {
       throw new BadRequestException(
-        'Falta una foto válida de evidencia. Vuelve a enviarla.',
+        draft.kind === 'HOUR_METER'
+          ? 'Falta una foto válida del horómetro. Vuelve a enviarla.'
+          : 'Falta tu ubicación o una foto válida. Envía solo una de las dos.',
       );
+    }
+    const location =
+      isAttendance(draft.kind) && draft.location
+        ? locationEvidenceSchema.safeParse(draft.location)
+        : null;
+    if (location) {
+      if (!location.success || evidence.length)
+        throw new BadRequestException(
+          'Envía ubicación o foto, solo una de las dos.',
+        );
+      const original = await tx.whatsappInboundMessage.findFirst({
+        where: {
+          providerMessageId: location.data.sourceMessageId,
+          phone: normalizePhone(employee.phone)!,
+          employeeId: employee.id,
+          type: 'location',
+        },
+      });
+      const coordinates = locationCoordinatesSchema.safeParse(
+        original?.location,
+      );
+      if (
+        !original ||
+        !coordinates.success ||
+        coordinates.data.latitude !== location.data.latitude ||
+        coordinates.data.longitude !== location.data.longitude ||
+        original.createdAt.toISOString() !== location.data.receivedAt ||
+        original.sentAt.toISOString() !== location.data.sentAt
+      )
+        throw new BadRequestException(
+          'No pude validar la ubicación. Compártela otra vez o envía una foto.',
+        );
     }
     let actorId: string | undefined;
     if (['DAMAGE', 'HOUR_METER'].includes(draft.kind)) {
@@ -510,6 +551,7 @@ export class WhatsappReportRecordsService {
         description: draft.description?.trim() || REPORT_LABELS[draft.kind],
         hours: draft.kind === 'HOUR_METER' ? draft.hours : null,
         occurredAt,
+        location: location?.success ? location.data : Prisma.DbNull,
         sourceMessageId,
         sourceMessageIds: draft.sourceMessageIds ?? [sourceMessageId],
         evidence: {
