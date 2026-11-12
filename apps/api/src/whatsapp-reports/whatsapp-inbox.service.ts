@@ -758,14 +758,25 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               ...(draft.sourceMessageIds ?? []),
               message.providerMessageId,
             ];
-            const report = await this.records.record(
+            await this.records.record(
               tx,
               employee,
               draft,
               resolution!.target!,
               message.providerMessageId,
             );
-            reply = `Registrado en REV Logística. Reporte ${report.id}. ${draft.kind === 'REQUEST' || draft.kind === 'DAMAGE' ? 'La alerta quedó creada para oficina y gerencia.' : ''}`;
+            const confirmationText = {
+              DAMAGE: 'Tu reporte de daño quedó registrado correctamente.',
+              HOUR_METER: 'El horómetro quedó registrado correctamente.',
+              REQUEST: 'Tu petición quedó registrada correctamente.',
+              CHECK_IN: 'Tu entrada a obra quedó registrada correctamente.',
+              CHECK_OUT: 'Tu salida de obra quedó registrada correctamente.',
+            };
+            reply =
+              confirmationText[draft.kind!] +
+              (draft.kind === 'REQUEST' || draft.kind === 'DAMAGE'
+                ? ' La alerta quedó creada para oficina y gerencia.'
+                : '');
             draft = emptyDraft();
             replyKind = 'REPORT_MENU';
           }
