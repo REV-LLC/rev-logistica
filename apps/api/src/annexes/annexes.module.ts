@@ -4,12 +4,13 @@ import { IdempotencyService } from '../common/idempotency.service';
 import { AnnexSharingService } from './annex-sharing.service';
 import { AnnexSourceService } from './annex-source.service';
 import { Module } from '@nestjs/common';
+import { InventoryModule } from '../inventory/inventory.module';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AnnexesController } from './annexes.controller';
 import { AnnexesService } from './annexes.service';
 @Module({
-  imports: [AuthModule, PrismaModule, MailModule, NotificationsModule],
+  imports: [AuthModule, PrismaModule, MailModule, NotificationsModule, InventoryModule],
   controllers: [AnnexesController],
   providers: [
     AnnexesService,

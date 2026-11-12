@@ -97,6 +97,7 @@ export type Rental = {
   returns: {
     date: string;
     billingCutoffDate?: string;
+    loss?: boolean;
     quantity: string;
     source: Source;
   }[];
@@ -145,6 +146,7 @@ export type AdditionalCharge = TransportCharge & {
   assetId?: string;
   type: "REPAIR" | "REPLACEMENT";
   description: string;
+  inventoryLoss?: { lossId?: string; ownerWarehouseId: string; date: string; reason: string; responsible: string };
 };
 export type AnnexInput = {
   additionalCharges?: AdditionalCharge[];
