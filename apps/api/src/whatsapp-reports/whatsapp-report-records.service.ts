@@ -21,6 +21,7 @@ type Target = {
   assetId: string | null;
   vehicleId: string | null;
   customerWorksiteId: string | null;
+  attendanceId?: string;
   label: string;
 };
 const reportInclude = {
@@ -58,7 +59,13 @@ export class WhatsappReportRecordsService {
 
   async resolve(
     draft: Draft,
-  ): Promise<{ target?: Target; question?: string; needsEquipment?: boolean }> {
+    employeeId?: string,
+  ): Promise<{
+    target?: Target;
+    question?: string;
+    needsEquipment?: boolean;
+    needsWorksite?: boolean;
+  }> {
     if (!draft.kind)
       return {
         question:
@@ -221,55 +228,112 @@ export class WhatsappReportRecordsService {
         Object.assign(target, choices[0]);
       }
     }
-    if (draft.kind === 'CHECK_IN' || draft.kind === 'CHECK_OUT') {
-      if (!draft.worksiteReference?.trim())
+    if (draft.kind === 'CHECK_OUT') {
+      const open = employeeId
+        ? await this.prisma.worksiteAttendance.findFirst({
+            where: { employeeId, leftAt: null },
+            include: {
+              customerWorksite: { include: { worksite: true, customer: true } },
+            },
+          })
+        : null;
+      if (!open)
         return {
           question:
-            '¿En qué obra? Indica el nombre y, si es necesario, el cliente.',
+            'No tienes una entrada abierta. Revisa con oficina antes de registrar la salida.',
         };
-      const reference = draft.worksiteReference.trim();
-      const sites = await this.prisma.customerWorksite.findMany({
-        where: {
-          active: true,
-          customer: {
-            active: true,
-            ...(draft.customerReference
-              ? {
-                  name: {
-                    contains: draft.customerReference,
-                    mode: 'insensitive',
-                  },
-                }
-              : {}),
-          },
-          worksite: { active: true },
-          OR: [
-            { alias: { contains: reference, mode: 'insensitive' } },
-            {
-              worksite: { name: { contains: reference, mode: 'insensitive' } },
-            },
-          ],
-        },
-        include: { worksite: true, customer: true },
-        take: 21,
-      });
-      const exact = sites.filter(
-        (s) =>
-          normalized(s.alias ?? '') === normalized(reference) ||
-          normalized(s.worksite.name) === normalized(reference),
-      );
-      const choices = exact.length ? exact : sites;
-      if (choices.length !== 1)
+      const site = open.customerWorksite;
+      if (!site.active || !site.worksite.active || !site.customer.active)
         return {
-          question: choices.length
-            ? `Hay varias obras: ${choices
-                .slice(0, 6)
-                .map((s) => `${s.worksite.name} (${s.customer.name})`)
-                .join('; ')}. Indica el nombre o alias específico.`
-            : 'No encontré esa obra activa. Indica su nombre o alias como aparece en el sistema.',
+          question:
+            'La obra de tu entrada abierta ya no está activa. Comunícate con oficina.',
         };
-      target.customerWorksiteId = choices[0].id;
-      target.label = `${choices[0].worksite.name} (${choices[0].customer.name})`;
+      target.customerWorksiteId = site.id;
+      target.attendanceId = open.id;
+      target.label = `${site.worksite.name} (${site.customer.name})`;
+    }
+    if (draft.kind === 'CHECK_IN') {
+      if (draft.selectedWorksiteId) {
+        const site = await this.prisma.customerWorksite.findFirst({
+          where: {
+            id: draft.selectedWorksiteId,
+            active: true,
+            customer: { active: true },
+            worksite: { active: true },
+          },
+          include: { worksite: true, customer: true },
+        });
+        if (!site)
+          return {
+            needsWorksite: true,
+            question: 'Esa obra ya no está disponible. Elige otra en la lista.',
+          };
+        target.customerWorksiteId = site.id;
+        target.label = `${site.worksite.name} (${site.customer.name})`;
+      } else {
+        if (!draft.worksiteReference?.trim())
+          return {
+            needsWorksite: true,
+            question: 'Elige la obra en la lista.',
+          };
+        const reference = draft.worksiteReference.trim();
+        const terms = normalized(reference)
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 12);
+        const sites = await this.prisma.customerWorksite.findMany({
+          where: {
+            active: true,
+            customer: {
+              active: true,
+              ...(draft.customerReference
+                ? {
+                    name: {
+                      contains: draft.customerReference,
+                      mode: 'insensitive' as const,
+                    },
+                  }
+                : {}),
+            },
+            worksite: { active: true },
+            OR: [
+              { alias: { contains: reference, mode: 'insensitive' as const } },
+              {
+                worksite: {
+                  name: { contains: reference, mode: 'insensitive' as const },
+                },
+              },
+              {
+                AND: terms.map((term) => ({
+                  OR: [
+                    { alias: { contains: term, mode: 'insensitive' as const } },
+                    {
+                      worksite: {
+                        name: { contains: term, mode: 'insensitive' as const },
+                      },
+                    },
+                  ],
+                })),
+              },
+            ],
+          },
+          include: { worksite: true, customer: true },
+          take: 21,
+        });
+        const exact = sites.filter(
+          (site) =>
+            normalized(site.alias ?? '') === normalized(reference) ||
+            normalized(site.worksite.name) === normalized(reference),
+        );
+        const choices = exact.length ? exact : sites;
+        if (choices.length !== 1)
+          return {
+            needsWorksite: true,
+            question: 'Elige la obra en la lista para evitar confusiones.',
+          };
+        target.customerWorksiteId = choices[0].id;
+        target.label = `${choices[0].worksite.name} (${choices[0].customer.name})`;
+      }
     }
     if (
       (draft.kind === 'DAMAGE' || draft.kind === 'REQUEST') &&
@@ -292,7 +356,7 @@ export class WhatsappReportRecordsService {
         question:
           draft.kind === 'HOUR_METER'
             ? 'Envía una foto legible del horómetro para adjuntarla como evidencia.'
-            : 'Envía tu ubicación o una foto de tu entrada o salida; solo necesitas una. Para ubicación: clip → Ubicación → Enviar mi ubicación actual.',
+            : `${draft.kind === 'CHECK_OUT' ? `Tu entrada abierta es en ${target.label}.\n` : ''}Envía tu ubicación o una foto de tu entrada o salida; solo necesitas una. Para ubicación: clip → Ubicación → Enviar mi ubicación actual.`,
       };
     }
     if (draft.kind === 'HOUR_METER') {
@@ -534,6 +598,7 @@ export class WhatsappReportRecordsService {
         draft.kind === 'CHECK_OUT' &&
         (!openAttendance ||
           openAttendance.customerWorksiteId !== target.customerWorksiteId ||
+          (target.attendanceId && openAttendance.id !== target.attendanceId) ||
           occurredAt <= openAttendance.enteredAt)
       ) {
         throw new BadRequestException(

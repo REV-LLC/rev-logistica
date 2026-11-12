@@ -7,6 +7,7 @@ import { WhatsappWebhookService } from '../notifications/whatsapp-webhook.servic
 import { WhatsappInboxService } from './whatsapp-inbox.service';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
 import { Prisma } from '@prisma/client';
+import { worksitePicker } from './whatsapp-worksites';
 import { equipmentPicker } from './whatsapp-equipment';
 import { emptyDraft, normalizePhone } from './whatsapp-report.types';
 import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
@@ -43,7 +44,16 @@ if (testUrl) {
         size: 10,
       }),
     };
-    const ai = { extract: jest.fn() };
+    const ai = {
+      extract: jest.fn(),
+      suggestWorksites: jest.fn(
+        async (
+          _reference: string,
+          _customer: string | null,
+          candidates: { id: string }[],
+        ) => candidates.slice(0, 5).map((site) => site.id),
+      ),
+    };
     let employee: any,
       asset: any,
       vehicle: any,
@@ -257,6 +267,7 @@ if (testUrl) {
     });
     beforeEach(async () => {
       ai.extract.mockReset();
+      ai.suggestWorksites.mockClear();
       cloud.reply.mockClear();
       await prisma.whatsappInboundMessage.updateMany({
         data: { createdAt: new Date(Date.now() - 120000) },
@@ -315,7 +326,8 @@ if (testUrl) {
         selectionId: 'attendance_check_in',
         button: true,
       });
-      expect(entry?.replyText).toContain('Indica el nombre de la obra');
+      expect(entry?.replyText).toContain('Ver obras');
+      expect(entry?.replyKind).toBe('WORKSITE_MENU');
       const conversation = await prisma.whatsappConversation.findUniqueOrThrow({
         where: { phone: '573001234567' },
       });
@@ -588,8 +600,10 @@ if (testUrl) {
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_OUT', worksiteReference: 'Obra QA única' }),
       );
-      await send('Salí', { image: true });
-      expect((await send('sí'))?.replyText).toContain('No tienes una entrada');
+      expect((await send('Salí', { image: true }))?.replyText).toContain(
+        'No tienes una entrada',
+      );
+      expect((await send('sí'))?.replyText).toContain('faltan datos');
       expect(
         await prisma.whatsappReport.count({ where: { kind: 'CHECK_OUT' } }),
       ).toBe(1);
@@ -1154,7 +1168,14 @@ if (testUrl) {
           extracted({ kind, worksiteReference: 'Obra QA única' }),
         );
         const question = await send('Obra QA única');
-        expect(question?.replyText).toContain('ubicación o una foto');
+        const open = await prisma.worksiteAttendance.count({
+          where: { employeeId: employee.id, leftAt: null },
+        });
+        expect(question?.replyText).toContain(
+          kind === 'CHECK_OUT' && !open
+            ? 'No tienes una entrada'
+            : 'ubicación o una foto',
+        );
       }
       it('registers entry and exit with location only, without downloading a photo or calling AI for coordinates', async () => {
         await start('CHECK_IN');
@@ -1280,7 +1301,7 @@ if (testUrl) {
             worksiteReference: 'Otra obra por corregir',
           }),
         );
-        await send('Otra obra');
+        await send('Obra distinta por corregir');
         expect((await currentDraft()).location).toBeUndefined();
         expect((await currentDraft()).ready).toBe(false);
       });
@@ -1327,6 +1348,325 @@ if (testUrl) {
         await start('CHECK_OUT');
         expect((await currentDraft()).location).toBeUndefined();
         expect((await currentDraft()).ready).toBe(false);
+      });
+    });
+
+    describe('worksite selection and exit from the open entry', () => {
+      const phone = '573001234567';
+      const draft = async () =>
+        (
+          await prisma.whatsappConversation.findUniqueOrThrow({
+            where: { phone },
+          })
+        ).draft as any;
+      async function openEntry() {
+        const report = await prisma.whatsappReport.create({
+          data: {
+            employeeId: employee.id,
+            kind: 'CHECK_IN',
+            customerWorksiteId: site.id,
+            description: 'QA open entry',
+            occurredAt: new Date(Date.now() - 7200000),
+            sourceMessageId: `qa-open-${randomUUID()}`,
+          },
+        });
+        return prisma.worksiteAttendance.create({
+          data: {
+            employeeId: employee.id,
+            customerWorksiteId: site.id,
+            enteredAt: report.occurredAt,
+            checkInReportId: report.id,
+          },
+        });
+      }
+      beforeEach(async () => {
+        await prisma.worksiteAttendance.deleteMany({
+          where: { employeeId: employee.id },
+        });
+        await send('Cancelar');
+        ai.extract.mockClear();
+      });
+      it('uses the open entry for exit despite alternative names, preserving the original photo until explicit confirmation', async () => {
+        const open = await openEntry();
+        ai.extract.mockResolvedValue(extracted({ kind: 'CHECK_OUT' }));
+        const prompt = await send('Salida de obra');
+        expect(prompt?.replyText).toContain(
+          'Tu entrada abierta es en Obra QA única',
+        );
+        const photo = await send('', { image: true });
+        expect(photo?.replyKind).toBe('CONFIRMATION');
+        const originalEvidence = (await draft()).evidenceFileIds;
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_OUT',
+            worksiteReference: 'universidad Camacho',
+            customerReference: 'prodecon',
+          }),
+        );
+        await send('Salida de universidad Camacho cliente prodecon');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_OUT',
+            worksiteReference: 'Colegio Camacho',
+            customerReference: 'prodecon',
+          }),
+        );
+        const corrected = await send('Colegio Camacho');
+        expect(corrected?.replyText).toContain('Obra QA única (Cliente QA)');
+        expect(corrected?.replyKind).toBe('CONFIRMATION');
+        expect((await draft()).evidenceFileIds).toEqual(originalEvidence);
+        expect(
+          (
+            await prisma.worksiteAttendance.findUniqueOrThrow({
+              where: { id: open.id },
+            })
+          ).leftAt,
+        ).toBeNull();
+        await send('Sí', { selectionId: `report_confirm:${corrected!.id}` });
+        const closed = await prisma.worksiteAttendance.findUniqueOrThrow({
+          where: { id: open.id },
+        });
+        expect(closed.leftAt).not.toBeNull();
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { id: closed.checkOutReportId! },
+          include: { evidence: true },
+        });
+        expect(report.customerWorksiteId).toBe(site.id);
+        expect(report.evidence.map((e) => e.fileObjectId)).toEqual(
+          originalEvidence,
+        );
+      });
+      it('does not offer another employee’s entry and revalidates an entry closed before confirmation', async () => {
+        const noEntry = await send('Salida', {
+          selectionId: 'attendance_check_out',
+        });
+        expect(noEntry?.replyText).toContain('No tienes una entrada abierta');
+        const open = await openEntry();
+        ai.extract.mockResolvedValue(extracted({ kind: 'CHECK_OUT' }));
+        const summary = await send('', { image: true });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        await prisma.worksiteAttendance.update({
+          where: { id: open.id },
+          data: { leftAt: new Date() },
+        });
+        const before = await prisma.whatsappReport.count({
+          where: { kind: 'CHECK_OUT' },
+        });
+        const result = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(result?.replyText).toContain('No tienes una entrada abierta');
+        expect(
+          await prisma.whatsappReport.count({ where: { kind: 'CHECK_OUT' } }),
+        ).toBe(before);
+      });
+      it('lets an operator select an entry worksite by a native ID without typing its name or using AI', async () => {
+        const menu = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        expect(menu?.replyKind).toBe('WORKSITE_MENU');
+        const state = (await draft()).worksiteMenu;
+        const row = (menu!.replyOptions as any).rows[
+          state.choices.indexOf(site.id)
+        ];
+        expect(row).toBeDefined();
+        const selected = await send('Título cualquiera', {
+          selectionId: row.id,
+        });
+        expect(selected?.replyText).toContain(
+          'Obra seleccionada: Obra QA única',
+        );
+        expect((await draft()).selectedWorksiteId).toBe(site.id);
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(cloud.reply).toHaveBeenCalledWith(
+          phone,
+          menu!.replyText,
+          'WORKSITE_MENU',
+          undefined,
+          menu!.replyOptions,
+        );
+      });
+      it('recognizes word fragments such as Colegio Camacho and offers choices for ambiguous worksites', async () => {
+        const worksite = await prisma.worksite.create({
+          data: { name: 'Colegio Unicamacho' },
+        });
+        const link = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'CHECK_IN', worksiteReference: 'Colegio Camacho' }),
+        );
+        const summary = await send('Colegio Camacho', { image: true });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect(summary?.replyText).toContain('Colegio Unicamacho');
+        await send('Cancelar');
+        const duplicateCustomer = await prisma.customer.create({
+          data: {
+            name: 'Otro cliente QA',
+            identityDocumentType: 'NIT',
+            nitOrId: randomUUID(),
+          },
+        });
+        const other = await prisma.customerWorksite.create({
+          data: { customerId: duplicateCustomer.id, worksiteId: worksite.id },
+        });
+        const ambiguous = await send('Colegio Camacho', { image: true });
+        expect(ambiguous?.replyKind).toBe('WORKSITE_MENU');
+        expect((await draft()).ready).toBe(false);
+        expect((await draft()).evidenceFileIds).toHaveLength(1);
+        const state = (await draft()).worksiteMenu;
+        const row = (ambiguous!.replyOptions as any).rows[
+          state.choices.indexOf(link.id)
+        ];
+        const picked = await send('La obra correcta', { selectionId: row.id });
+        expect(picked?.replyKind).toBe('CONFIRMATION');
+        expect(picked?.replyText).toContain('Cliente QA');
+        await send('Cancelar');
+        await prisma.customerWorksite.deleteMany({
+          where: { id: { in: [link.id, other.id] } },
+        });
+        await prisma.customer.delete({ where: { id: duplicateCustomer.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('rejects stale or inactive selections, and clears old evidence when switching a selected worksite', async () => {
+        const first = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        const second = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await send('Vieja', {
+          selectionId: (first!.replyOptions as any).rows[0].id,
+        });
+        expect((await draft()).selectedWorksiteId).toBeUndefined();
+        const current = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await prisma.customerWorksite.update({
+          where: { id: site.id },
+          data: { active: false },
+        });
+        await send('Inactiva', {
+          selectionId: (current!.replyOptions as any).rows[0].id,
+        });
+        expect((await draft()).selectedWorksiteId).toBeUndefined();
+        await prisma.customerWorksite.update({
+          where: { id: site.id },
+          data: { active: true },
+        });
+        const live = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await send('Mi obra', {
+          selectionId: (live!.replyOptions as any).rows[0].id,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
+        );
+        await send('', { image: true });
+        const worksite = await prisma.worksite.create({
+          data: { name: 'Otra obra QA' },
+        });
+        const other = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        const menu = await send('Cambiar obra');
+        const state = (await draft()).worksiteMenu;
+        const row = (menu!.replyOptions as any).rows[
+          state.choices.indexOf(other.id)
+        ];
+        await send('La otra', { selectionId: row.id });
+        expect((await draft()).evidenceFileIds).toEqual([]);
+        expect((await draft()).ready).toBe(false);
+        await send('Cancelar');
+        await prisma.customerWorksite.delete({ where: { id: other.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('offers AI-ranked typo suggestions without recording and keeps a full-catalog fallback if AI is unavailable', async () => {
+        const worksite = await prisma.worksite.create({
+          data: { name: 'COLEGIO UNICAMACHO' },
+        });
+        const link = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_IN',
+            worksiteReference: 'unicamaho',
+            customerReference: 'Cliente QA',
+          }),
+        );
+        const before = await prisma.whatsappReport.count();
+        const suggested = await send('Entrada universidad unicamaho', {
+          image: true,
+        });
+        expect(suggested?.replyKind).toBe('WORKSITE_MENU');
+        expect(suggested?.replyText).toContain('nombres parecidos');
+        expect(ai.suggestWorksites).toHaveBeenCalled();
+        expect((await draft()).worksiteMenu.choices).toContain(link.id);
+        expect(await prisma.whatsappReport.count()).toBe(before);
+        const all = (suggested!.replyOptions as any).rows.find(
+          (r: any) => r.title === 'Ver todas las obras',
+        );
+        const catalog = await send('Ver todas', { selectionId: all.id });
+        expect(catalog?.replyText).toContain('No necesitas escribir');
+        expect((await draft()).worksiteMenu.suggested).not.toBe(true);
+        await send('Cancelar');
+        ai.suggestWorksites.mockRejectedValueOnce(new Error('AI unavailable'));
+        const fallback = await send('Entrada universidad unicamaho', {
+          image: true,
+        });
+        expect(fallback?.replyKind).toBe('WORKSITE_MENU');
+        expect((await draft()).worksiteMenu.choices).toContain(link.id);
+        expect((await draft()).evidenceFileIds).toHaveLength(1);
+        await send('Cancelar');
+        await prisma.customerWorksite.delete({ where: { id: link.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('pages all active worksite/customer links within the native ten-row limit', async () => {
+        const sites: string[] = [];
+        const links: string[] = [];
+        for (let n = 0; n < 18; n++) {
+          const s = await prisma.worksite.create({
+            data: { name: `Obra paginada ${n}` },
+          });
+          sites.push(s.id);
+          const l = await prisma.customerWorksite.create({
+            data: {
+              customerId: site.customerId,
+              worksiteId: s.id,
+              active: n !== 17,
+            },
+          });
+          links.push(l.id);
+        }
+        const seen: string[] = [];
+        for (let page = 0; page < 10; page++) {
+          const picker = await worksitePicker(prisma, page);
+          seen.push(...picker.state.choices);
+          const rows = (picker.options as any).rows;
+          expect(rows.length).toBeLessThanOrEqual(10);
+          expect(
+            rows.every(
+              (r: any) => r.title.length <= 24 && r.description.length <= 72,
+            ),
+          ).toBe(true);
+          if (!rows.some((r: any) => r.title === 'Más obras →')) break;
+        }
+        const active = await prisma.customerWorksite.findMany({
+          where: {
+            active: true,
+            customer: { active: true },
+            worksite: { active: true },
+          },
+          select: { id: true },
+        });
+        expect(seen.sort()).toEqual(active.map((s) => s.id).sort());
+        expect(new Set(seen).size).toBe(seen.length);
+        await prisma.customerWorksite.deleteMany({
+          where: { id: { in: links } },
+        });
+        await prisma.worksite.deleteMany({ where: { id: { in: sites } } });
       });
     });
   },

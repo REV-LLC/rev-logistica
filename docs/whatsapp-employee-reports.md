@@ -70,3 +70,11 @@ Las pruebas PostgreSQL son opt-in: configurar `WHATSAPP_TEST_DATABASE_URL` a una
 La asistencia de WhatsApp se guarda en `WorksiteAttendance`, vinculada al reporte y a sus evidencias. No crea una actividad operativa `WORKSITE`: esas actividades requieren una máquina y conservan su validación independiente.
 
 La ubicación se recibe únicamente desde el mensaje nativo firmado de WhatsApp y se conserva con latitud, longitud, ID del mensaje y horas de envío/recepción. Se valida su procedencia al confirmar; no se extrae de texto ni de IA. Cambiar de obra, cancelar o vencer el borrador exige nueva evidencia. La ubicación no sustituye la foto de horómetro.
+
+## Selección de obra y salida simplificada
+
+Para entrada, el bot ofrece una lista táctil paginada de obras y clientes activos. Cada selección usa un identificador ligado al borrador y se valida de nuevo al confirmar; no se exige escribir el nombre exacto. Los nombres por palabras, como «Colegio Camacho», pueden resolver «Colegio Unicamacho» si hay una única coincidencia; la ambigüedad se resuelve eligiendo en la lista.
+
+Para salida, la única obra elegible es la de la entrada abierta del empleado identificado por su teléfono. El resumen muestra esa obra antes de la confirmación y no adivina una diferente por el texto. Una corrección del nombre no borra la foto o ubicación de salida. Sin entrada abierta, o si se cerró mientras se confirmaba, no se crea una salida. La confirmación vincula también la jornada exacta para evitar cerrar otra jornada después de un cambio concurrente.
+
+Cuando el nombre de entrada no coincide, se construye una lista corta tolerante a errores de letras y acentos y la IA ordena las obras candidatas según nombre informal y cliente. Solo recibe nombres/alias/clientes y referencias temporales: no recibe IDs internos, fotos, teléfonos ni coordenadas para esta tarea. Las propuestas son opciones táctiles para elegir, nunca un registro automático. Si la IA falla, se ofrece la búsqueda aproximada y siempre «Ver todas las obras».
