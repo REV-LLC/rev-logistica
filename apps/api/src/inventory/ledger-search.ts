@@ -1,6 +1,7 @@
 import { DocumentType, MovementType, Prisma } from '@prisma/client';
 
 const MOVEMENT_LABELS: Record<MovementType, string> = {
+  LOSS: 'Pérdida / baja en obra',
   OUT: 'salida',
   IN: 'entrada',
   TRANSIT: 'en tránsito',

@@ -60,7 +60,7 @@ export function prepareCommercialV2(
         itemId.startsWith('legacy-origin:') ||
         itemId.startsWith('implement-origin:')
           ? lot.returns
-          : documents
+          : [...lot.returns.filter(event => event.loss), ...documents
               .filter((d) => d.type === 'RETURN')
               .flatMap((d) =>
                 d.items
@@ -77,7 +77,7 @@ export function prepareCommercialV2(
                     quantity: String(i.assetId ? 1 : (i.quantity ?? 1)),
                     source: { reference: i.id, origin: 'INVENTORY' as const },
                   })),
-              ),
+              )],
     },
   }));
   const invalidMovement = new Set<string>();

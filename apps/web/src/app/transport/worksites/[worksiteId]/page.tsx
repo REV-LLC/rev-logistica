@@ -86,6 +86,7 @@ export default function ObraDetailPage() {
   const [worksite, setWorksite] = useState<WorksiteOption | null>(null);
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
   const [ledgerItems, setLedgerItems] = useState<LedgerItem[]>([]);
+  const [inventoryRevision, setInventoryRevision] = useState(0);
 
   useEffect(() => {
     if (!worksiteId) return;
@@ -123,7 +124,7 @@ export default function ObraDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [worksiteId]);
+  }, [worksiteId, inventoryRevision]);
 
   const pageTitle = useMemo(() => {
     if (!worksite) return 'Obra';
@@ -347,6 +348,7 @@ export default function ObraDetailPage() {
                   serial={inventory.serial}
                   bulkOwnerStackMode
                   isWorksiteView
+                  onInventoryChanged={() => setInventoryRevision(value => value + 1)}
                   serialSectionTitle={`MAQUINARIA EN ${worksite?.worksite.name ?? 'OBRA'}`}
                 />
               </Stack>

@@ -68,12 +68,14 @@ export class AnnexSourceService {
         ],
       },
       select: {
+        ownerWarehouseId: true,
+        ownerWarehouse: { select: { name: true } },
         sku: { select: skuSelect },
         asset: {
           select: { id: true, publicCode: true, sku: { select: skuSelect } },
         },
       },
-      distinct: ['assetId', 'skuId'],
+      distinct: ['assetId', 'skuId', 'ownerWarehouseId'],
     });
     const options = new Map<
       string,
@@ -84,12 +86,14 @@ export class AnnexSourceService {
         label: string;
         price: string | null;
         replacementValue: string | null;
+        owners?: Array<{ id: string; name: string }>;
       }
     >();
     for (const row of rows) {
       const sku = row.asset?.sku ?? row.sku;
       if (!sku) continue;
       const id = row.asset ? `asset:${row.asset.id}` : `sku:${sku.id}`;
+      const previous = options.get(id);
       options.set(id, {
         id,
         skuId: sku.id,
@@ -97,6 +101,7 @@ export class AnnexSourceService {
         label: row.asset ? `${row.asset.publicCode} · ${sku.name}` : sku.name,
         price: sku.price?.toString() ?? null,
         replacementValue: sku.replacementValue?.toString() ?? null,
+        ...(row.ownerWarehouseId ? { owners: [...(previous?.owners ?? []), { id: row.ownerWarehouseId, name: row.ownerWarehouse.name }] } : {}),
       });
     }
     return [...options.values()].sort((a, b) =>

@@ -402,7 +402,7 @@ export default function AnnexesPage() {
       setPreviewError(null);
       api<Result>("/annexes/preview", {
         method: "POST",
-        json: input,
+        json: { input, customerWorksiteId: site },
         signal: controller.signal,
       })
         .then((value) => {
@@ -508,7 +508,7 @@ export default function AnnexesPage() {
         setResult(
           await api<Result>("/annexes/preview", {
             method: "POST",
-            json: input,
+            json: { input, customerWorksiteId: site },
           }),
         );
     } catch (e) {

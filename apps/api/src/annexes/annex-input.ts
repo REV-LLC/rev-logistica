@@ -143,6 +143,7 @@ const baseRentalSchema = z
           .object({
             date,
             billingCutoffDate: date.optional(),
+            loss: z.boolean().optional(),
             quantity: decimal,
             source,
           })
@@ -213,6 +214,13 @@ export const annexInputSchema = z
             description: z.string().trim().min(1).max(300),
             quantity: z.string().regex(/^\d{1,4}$/),
             unitPrice: money,
+            inventoryLoss: z.object({
+              lossId: z.string().uuid().optional(),
+              ownerWarehouseId: z.string().uuid(),
+              date,
+              reason: z.string().trim().min(5).max(500),
+              responsible: z.string().trim().min(2).max(160),
+            }).strict().optional(),
           })
           .strict(),
       )

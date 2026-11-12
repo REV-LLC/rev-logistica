@@ -380,6 +380,7 @@ enum MovementType {
   IN
   ADJUST
   ON_SITE
+  LOSS
 }
 
 enum TaskStatus {
@@ -1348,6 +1349,7 @@ model DocumentItem {
 }
 
 model StockLedger {
+  inventoryLoss WorksiteInventoryLoss?
   implementBridge ImplementIdentityBridge?
   id String @id @default(uuid())
   legacyEquipmentOrigin LegacyEquipmentOrigin?
@@ -1397,6 +1399,27 @@ model StockLedger {
   @@index([skuId, ownerWarehouseId, effectiveAt(sort: Desc)])
   @@index([warehouseId])
   @@index([ownerWarehouseId])
+}
+
+model WorksiteInventoryLoss {
+  id String @id @default(uuid())
+  requestKey String @unique
+  customerWorksiteId String
+  ownerWarehouseId String
+  skuId String
+  assetId String?
+  quantity Decimal
+  effectiveAt DateTime
+  reason String
+  responsible String
+  createdBy String
+  createdAt DateTime @default(now())
+  allocations Json
+  annexChargeKey String? @unique
+  ledgerId String @unique
+  ledger StockLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+
+  @@index([customerWorksiteId, effectiveAt])
 }
 
 // An individually reviewed bridge. Original documents and stock movements remain unchanged.

@@ -97,6 +97,7 @@ export default function SerialAssetCard({
   actionLoading = false,
   onAction,
   onDelete,
+  onRegisterLoss,
   deleteLoading = false,
   onOpen,
   statusBadge,
@@ -119,6 +120,7 @@ export default function SerialAssetCard({
   actionLoading?: boolean;
   onAction?: () => void;
   onDelete?: () => void;
+  onRegisterLoss?: () => void;
   deleteLoading?: boolean;
   onOpen?: () => void;
   statusBadge?: { label: string; color: string };
@@ -151,7 +153,7 @@ export default function SerialAssetCard({
   const hasFooterContent = Boolean(onAction || footer);
   const isContentSized = isMobile || compact || !hasFooterContent;
   const ownerChipLabel = display?.ownerChipLabel ?? item.ownerWarehouseName;
-  const showMenu = Boolean(href || onDelete);
+  const showMenu = Boolean(href || onDelete || onRegisterLoss);
   const title = href ? (
     <Text
       component={Link}
@@ -341,6 +343,7 @@ export default function SerialAssetCard({
                         {item.isDamaged ? 'Marcar reparado' : 'Marcar averiado'}
                       </Menu.Item>
                     ) : null}
+                    {onRegisterLoss ? <Menu.Item color="red" onClick={onRegisterLoss}>Registrar pérdida</Menu.Item> : null}
                     {onDelete ? (
                       <Menu.Item
                         color="red"
