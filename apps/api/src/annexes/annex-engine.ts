@@ -356,6 +356,7 @@ export function calculateAnnex(value: unknown) {
       for (const event of rental.returns) {
         // Even an exclusive return-day policy bills a same-day rental once.
         const remove =
+          (event.loss && event.date <= date) ||
           event.date < date ||
           (!event.billingCutoffDate &&
             !input.policy.includeReturnDay &&
@@ -500,7 +501,7 @@ export function calculateAnnex(value: unknown) {
               (event.date >= interval.from && event.date <= interval.to))
           ) {
             const includeDay =
-              Boolean(event.billingCutoffDate) || input.policy.includeReturnDay;
+              !event.loss && (Boolean(event.billingCutoffDate) || input.policy.includeReturnDay);
             const key = `${event.date}:${includeDay}`;
             returnsByDate.set(key, {
               date: event.date,

@@ -11,12 +11,14 @@ import type { LedgerItem } from '@/components/LedgerTable';
 import { api } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
 import BulkImplementClassification from './inventory/BulkImplementClassification';
+import WorksiteLossModal from './WorksiteLossModal';
 
-const movementLabels: Record<string, string> = { IN: 'Entrada a bodega', OUT: 'Salida a obra', TRANSIT: 'En tránsito', ON_SITE: 'Entrega en obra', ADJUST: 'Ajuste de inventario' };
+const movementLabels: Record<string, string> = { IN: 'Entrada a bodega', OUT: 'Salida a obra', TRANSIT: 'En tránsito', ON_SITE: 'Entrega en obra', ADJUST: 'Ajuste de inventario', LOSS: 'Pérdida / baja en obra' };
 
-export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, customerWorksiteId, isWorksiteView, onClose, onImageSaved }: {
+export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, customerWorksiteId, isWorksiteView, onClose, onImageSaved, onInventoryChanged }: {
   rows: BulkItem[]; imageUrl: string | null; warehouseId?: string; customerWorksiteId?: string;
   isWorksiteView: boolean; onClose: () => void; onImageSaved: (skuId: string, url: string) => void;
+  onInventoryChanged?: () => void;
 }) {
   const item = rows[0];
   const skuId = item.skuId;
@@ -27,6 +29,7 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
   const [brokenImage, setBrokenImage] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lossOpened, setLossOpened] = useState(false);
   const [movementType, setMovementType] = useState<string | null>(null);
   const [movements, setMovements] = useState<LedgerItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -99,6 +102,10 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
   }
 
   return (
+    <>
+    {lossOpened && customerWorksiteId ? <WorksiteLossModal customerWorksiteId={customerWorksiteId} skuId={skuId} name={name}
+      owners={owners.filter(owner => owner.quantity > 0)} onClose={() => setLossOpened(false)}
+      onSaved={() => { setLossOpened(false); onClose(); onInventoryChanged?.(); }} /> : null}
     <Modal opened onClose={onClose} title={name} size="xl" fullScreen={mobile} radius={mobile ? 0 : 'lg'}>
       <Stack gap="lg">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
@@ -121,6 +128,7 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
             {!isWorksiteView ? <Text>En obras: <strong>{worksiteQuantity.toLocaleString('es-CO')}</strong></Text> : null}
             <Text size="sm" c="dimmed">Cobro: {item.chargeType === 'HOUR' ? `Por hora${Number(item.minimumChargeHours) > 0 ? ` · mínimo ${item.minimumChargeHours} h` : ''}` : item.chargeType === 'DAY' ? 'Por día' : 'Sin definir'}</Text>
             <Text size="sm" c="dimmed">Cada cantidad conserva su dueño al realizar movimientos.</Text>
+            {canEdit && isWorksiteView && customerWorksiteId && quantity > 0 ? <Button color="red" variant="light" onClick={() => setLossOpened(true)}>Registrar pérdida</Button> : null}
           </Stack>
         </SimpleGrid>
         <section>
@@ -140,6 +148,7 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
             <Group justify="space-between"><Text fw={600}>{movement.isOpeningBalance ? 'Saldo inicial' : movementLabels[movement.movementType] ?? 'Movimiento de inventario'}</Text><Text fw={700}>{Number(movement.quantity).toLocaleString('es-CO')}</Text></Group>
             <Text size="sm" c="dimmed">{new Date(movement.effectiveAt ?? movement.createdAt).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</Text>
             <Text size="sm">{[movement.warehouse?.name, movement.customerWorksite?.worksite?.name].filter(Boolean).join(' · ')}</Text>
+            {movement.inventoryLoss ? <><Text size="sm">Motivo: {movement.inventoryLoss.reason}</Text><Text size="sm">Responsable: {movement.inventoryLoss.responsible}</Text></> : null}
             {movement.document ? <Button component={Link} href={`/inventory/ledger/document/${movement.document.id}`} variant="subtle" size="compact-sm" mt="xs">Ver documento {movement.document.consecutive ?? ''}</Button> : null}
           </Paper>)}</Stack>
           {loading ? <Group justify="center" py="md"><Loader size="sm" /><Text size="sm">Cargando movimientos…</Text></Group> : !ledgerError && !movements.length ? <Text c="dimmed">No hay movimientos para esta selección.</Text> : null}
@@ -147,5 +156,6 @@ export default function BulkInventoryDetails({ rows, imageUrl, warehouseId, cust
         </section>
       </Stack>
     </Modal>
+    </>
   );
 }

@@ -12,6 +12,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { annexInputSchema } from './annex-input';
 import { calculateAnnex } from './annex-engine';
 import { minimumSettings, worksiteMinimumKey } from './annex-minimums';
+import { WorksiteLossService } from '../inventory/worksite-loss.service';
+import { applyInventoryLosses } from './annex-inventory-losses';
+import { inventoryBusinessDay } from '../inventory/business-date-ledger-order';
 const invoiceNumberSchema = z
   .string()
   .trim()
@@ -43,7 +46,7 @@ const saveSchema = z
   .strict();
 @Injectable()
 export class AnnexesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly losses: WorksiteLossService) {}
   async list(customerWorksiteId: string) {
     if (!z.string().uuid().safeParse(customerWorksiteId).success)
       throw new BadRequestException('Obra inválida');
@@ -260,10 +263,9 @@ export class AnnexesService {
       sourceIssues,
     } = parsed.data;
     assertDailyAnnex(input);
-    const result = calculateAnnex(input);
     const periodFrom = new Date(`${input.period.from}T00:00:00Z`);
     const periodTo = new Date(`${input.period.to}T00:00:00Z`);
-    return this.prisma.$transaction(async (tx) => {
+    const savedDraft = await this.prisma.$transaction(async (tx) => {
       const site = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT id FROM "CustomerWorksite" WHERE id = ${customerWorksiteId} FOR UPDATE
       `);
@@ -362,7 +364,7 @@ export class AnnexesService {
             select: {
               invoiceNumber: true,
               through: true,
-              input: Boolean(input.worksiteRates?.length),
+              input: true,
             },
           },
         },
@@ -406,6 +408,17 @@ export class AnnexesService {
           previous.success ? previous.data.worksiteRates : undefined,
         );
       }
+      const previousInput = annexInputSchema.safeParse(current?.revisions?.[0]?.input);
+      const previousCharges = previousInput.success ? previousInput.data.additionalCharges ?? [] : [];
+      const nextCharges = input.additionalCharges ?? [];
+      for (const old of previousCharges) {
+        if (!old.inventoryLoss) continue;
+        const next = nextCharges.find(charge => charge.id === old.id);
+        if (!next || next.type !== 'REPLACEMENT' || next.skuId !== old.skuId || next.assetId !== old.assetId
+          || next.quantity !== old.quantity || JSON.stringify(next.inventoryLoss) !== JSON.stringify(old.inventoryLoss)) {
+          throw new ConflictException('La reposición ya tiene una baja registrada. No se puede quitar ni modificar su pérdida desde el anexo');
+        }
+      }
       const revision = expectedRevision + 1;
       const draft = current
         ? await tx.annexDraft.update({
@@ -415,6 +428,36 @@ export class AnnexesService {
         : await tx.annexDraft.create({
             data: { customerWorksiteId, periodFrom, periodTo, revision },
           });
+      for (const charge of [...nextCharges].sort((a, b) => (a.skuId ?? '').localeCompare(b.skuId ?? ''))) {
+        if (charge.type !== 'REPLACEMENT') continue;
+        if (!charge.inventoryLoss) {
+          const legacy = previousCharges.find(old => old.id === charge.id && old.type === 'REPLACEMENT' && !old.inventoryLoss);
+          if (legacy && JSON.stringify(legacy) === JSON.stringify(charge)) continue;
+          throw new BadRequestException('La reposición debe indicar referencia, dueño, fecha, motivo y responsable de la pérdida');
+        }
+        if (!charge.skuId) throw new BadRequestException('Selecciona la referencia de la reposición');
+        const detail = charge.inventoryLoss;
+        if (detail.date > input.period.through) throw new BadRequestException('La pérdida no puede ser posterior al corte del anexo');
+        const annexChargeKey = `${draft.id}:${charge.id}`;
+        if (detail.lossId) {
+          const loss = await tx.worksiteInventoryLoss.findUnique({ where: { id: detail.lossId } });
+          if (!loss || loss.customerWorksiteId !== customerWorksiteId || loss.skuId !== charge.skuId || loss.assetId !== (charge.assetId ?? null)
+            || loss.ownerWarehouseId !== detail.ownerWarehouseId || !loss.quantity.eq(charge.quantity)
+            || inventoryBusinessDay(loss.effectiveAt) !== detail.date || loss.reason !== detail.reason || loss.responsible !== detail.responsible) throw new BadRequestException('La reposición no coincide con la pérdida seleccionada');
+          if (loss.annexChargeKey && loss.annexChargeKey !== annexChargeKey) throw new ConflictException('Esta pérdida ya está vinculada a otra reposición');
+          await tx.worksiteInventoryLoss.update({ where: { id: loss.id }, data: { annexChargeKey } });
+        } else {
+          const loss = await this.losses.record(tx, {
+            customerWorksiteId, skuId: charge.skuId, assetId: charge.assetId,
+            ownerWarehouseId: detail.ownerWarehouseId, quantity: charge.quantity,
+            date: detail.date, reason: detail.reason, responsible: detail.responsible,
+          }, userId, `annex:${draft.id}:${charge.id}`, annexChargeKey);
+          detail.lossId = loss.id;
+        }
+      }
+      const recorded = await tx.worksiteInventoryLoss.findMany({ where: { customerWorksiteId } });
+      applyInventoryLosses(input, recorded);
+      const result = calculateAnnex(input);
       const saved = await tx.annexDraftRevision.create({
         data: {
           draftId: draft.id,
@@ -448,6 +491,31 @@ export class AnnexesService {
         });
       }
       return { ...draft, revisions: [saved] };
-    });
+    }, { timeout: 30000 });
+    await this.losses.invalidate(customerWorksiteId, (input.additionalCharges ?? []).flatMap(charge => charge.inventoryLoss ? [charge.inventoryLoss.ownerWarehouseId] : []));
+    return savedDraft;
+  }
+
+  async preview(value: unknown, siteId: string, userId: string) {
+    if (!z.string().uuid().safeParse(siteId).success) throw new BadRequestException('Obra inválida');
+    const parsed = annexInputSchema.safeParse(value);
+    if (!parsed.success) throw new BadRequestException('El anexo no es válido');
+    const input = assertDailyAnnex(parsed.data);
+    return this.prisma.$transaction(async tx => {
+      const recorded = await tx.worksiteInventoryLoss.findMany({ where: { customerWorksiteId: siteId } });
+      const pending = [] as typeof recorded;
+      for (const charge of (input.additionalCharges ?? []).filter(row => row.type === 'REPLACEMENT' && row.inventoryLoss && !row.inventoryLoss.lossId)
+        .sort((a, b) => (a.skuId ?? '').localeCompare(b.skuId ?? ''))) {
+        const detail = charge.inventoryLoss!;
+        if (!charge.skuId || detail.date > input.period.through) throw new BadRequestException('La fecha de pérdida debe estar dentro del corte consultado');
+        pending.push(await this.losses.record(tx, {
+          customerWorksiteId: siteId, skuId: charge.skuId, assetId: charge.assetId,
+          ownerWarehouseId: detail.ownerWarehouseId, quantity: charge.quantity,
+          date: detail.date, reason: detail.reason, responsible: detail.responsible,
+        }, userId, `pending:${charge.id}`, undefined, true));
+      }
+      applyInventoryLosses(input, [...recorded, ...pending]);
+      return calculateAnnex(input);
+    }, { timeout: 30000 });
   }
 }

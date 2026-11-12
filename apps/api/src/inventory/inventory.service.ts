@@ -2758,6 +2758,7 @@ export class InventoryService {
         ? [{ effectiveAt: 'desc' }, { id: 'desc' }]
         : [{ effectiveAt: 'desc' }, { appendOrder: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       include: {
+        inventoryLoss: { select: { id: true, reason: true, responsible: true, createdBy: true, createdAt: true } },
         sku: {
           select: { id: true, name: true, imageUrl: true, imageFileObjectId: true },
         },

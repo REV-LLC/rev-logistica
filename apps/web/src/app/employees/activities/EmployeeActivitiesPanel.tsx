@@ -446,8 +446,8 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
             </Button>
           </Alert>
         ) : null}
-        <Paper withBorder radius="lg" p="md">
-          <Group justify="space-between" align="center">
+        <Paper withBorder className={styles.toolbar}>
+          <div className={styles.toolbarContent}>
             {!embedded ? <div className={styles.employeeSwitch}>
               <EmployeeCalendarPicker
                 employees={employees}
@@ -455,11 +455,11 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                 onChange={setEmployeeId}
                 disabled={loading || opened || Boolean(deleting)}
               />
-              <Group gap={6} wrap="nowrap">
+              <Group gap={8} wrap="nowrap">
                 <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="orange"
+                  size={44}
+                  variant="default"
+                  className={styles.toolbarIcon}
                   aria-label="Empleado anterior"
                   title="Empleado anterior"
                   disabled={
@@ -474,9 +474,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                   <IconChevronLeft size={20} />
                 </ActionIcon>
                 <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="orange"
+                  size={44}
+                  variant="default"
+                  className={styles.toolbarIcon}
                   aria-label="Empleado siguiente"
                   title="Empleado siguiente"
                   disabled={
@@ -512,17 +512,21 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               <div className={styles.navigationControls}>
               <Group gap={6} wrap="nowrap">
               <ActionIcon
-                variant="light"
-                size={40}
+                variant="default"
+                size={44}
+                className={styles.toolbarIcon}
                 aria-label="Mes anterior"
+                title="Mes anterior"
                 onClick={() => changeMonth(shiftMonth(month, -1))}
               >
                 <IconChevronLeft size={18} />
               </ActionIcon>
               <ActionIcon
-                variant="light"
-                size={40}
+                variant="default"
+                size={44}
+                className={styles.toolbarIcon}
                 aria-label="Mes siguiente"
+                title="Mes siguiente"
                 onClick={() => changeMonth(shiftMonth(month, 1))}
               >
                 <IconChevronRight size={18} />
@@ -532,7 +536,7 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               <Button
                 variant="default"
                 size="sm"
-                h={40}
+                className={styles.todayButton}
                 onClick={() => {
                   const today = todayKey();
                   setMonth(today.slice(0, 7));
@@ -542,14 +546,14 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                 Hoy
               </Button>
               {!selfService ? <AddActivityMenu onSelect={(type) => openNote(undefined, selectedDate, type)}>
-                <ActionIcon size={40} variant="filled" aria-label="Agregar actividad" title="Agregar actividad" disabled={!employeeId || loading || Boolean(error)}>
+                <ActionIcon size={44} variant="default" className={styles.toolbarIcon} aria-label="Agregar actividad" title="Agregar actividad" disabled={!employeeId || loading || Boolean(error)}>
                   <IconPlus size={20} aria-hidden />
                 </ActionIcon>
               </AddActivityMenu> : null}
               </Group>
               </div>
             </div>
-          </Group>
+          </div>
         </Paper>
         {loading ? (
           <Group justify="center" p="xl">

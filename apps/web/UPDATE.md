@@ -1,5 +1,7 @@
-# Indicadores de Vehículos corregidos
+# Saldos de obra y operación más ágil
 
-Corregimos los indicadores de total de vehículos, conductores y vencimientos para que se integren en la superficie cristal, sin los fondos grises extra que dejaban el contenido pegado a los bordes.
+El PDF de saldos de obra tiene una presentación renovada. Antes de descargarlo puedes elegir las columnas; dueño y procedencia quedan ocultos por defecto para compartirlo con el cliente.
 
-La corrección es visual y conserva los datos, permisos y acciones de la flota.
+Admin y Office pueden registrar pérdidas desde el inventario de la obra con fecha, motivo y responsable. Al guardar una reposición se registra la baja automáticamente y se cierra el alquiler de esas unidades desde la fecha indicada, sin ingresarlas a bodega ni descontarlas dos veces.
+
+El inicio del conductor muestra accesos directos para generar remisiones y devoluciones. El directorio de empleados aprovecha las pantallas amplias con cuatro columnas, la foto ampliada ya no tiene una tarjeta detrás y la bitácora reúne los controles de empleado y calendario en una barra más clara.

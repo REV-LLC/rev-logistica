@@ -763,7 +763,12 @@ export default function TransportRequestsWorkspace({
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
     const explicitDraftId = params.get('draft');
-    const storedDraftId = currentUserId && !isTabletRole
+    const requestedType = params.get('type');
+    const hasRequestedType = requestedType === 'REMISSION' || requestedType === 'RETURN';
+    if (hasRequestedType && !editId && !explicitDraftId && !autosaveDraftId && !editingRequestId) {
+      setDocType(requestedType);
+    }
+    const storedDraftId = currentUserId && !isTabletRole && !hasRequestedType
       ? window.localStorage.getItem(`rev:transport-draft:${currentUserId}`)
       : null;
     const draftId = explicitDraftId ?? (editId ? null : storedDraftId);

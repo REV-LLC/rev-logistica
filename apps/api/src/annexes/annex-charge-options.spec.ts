@@ -64,7 +64,7 @@ it('lists distinct historical worksite tags with their current replacement price
           },
         ],
       },
-      distinct: ['assetId', 'skuId'],
+      distinct: ['assetId', 'skuId', 'ownerWarehouseId'],
     }),
   );
 });
