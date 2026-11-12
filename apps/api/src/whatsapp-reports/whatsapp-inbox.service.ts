@@ -36,6 +36,7 @@ import {
   equipmentReference,
   findEquipment,
 } from './whatsapp-equipment';
+import { worksiteCandidates, worksitePicker } from './whatsapp-worksites';
 import type { WhatsappReplyKind } from './whatsapp-menu';
 
 const LEASE_MS = 180000;
@@ -297,8 +298,48 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         replyOptions = picker.options;
         replyKind = picker.options ? 'EQUIPMENT_MENU' : 'TEXT';
       };
+      const showWorksites = async (page = 0, suggest = false) => {
+        let suggestions: string[] | undefined;
+        if (suggest && draft.worksiteReference) {
+          const candidates = await worksiteCandidates(
+            this.prisma,
+            draft.worksiteReference,
+            draft.customerReference,
+          );
+          if (candidates.length) {
+            try {
+              suggestions = await this.ai.suggestWorksites(
+                draft.worksiteReference,
+                draft.customerReference,
+                candidates,
+              );
+            } catch {
+              this.logger.warn({
+                event: 'whatsapp_worksite_suggestions_unavailable',
+                messageId: message.id,
+              });
+            }
+            suggestions = suggestions?.filter((id) =>
+              candidates.some((site) => site.id === id),
+            );
+            if (!suggestions?.length)
+              suggestions = candidates.slice(0, 5).map((site) => site.id);
+          }
+        }
+        const picker = await worksitePicker(this.prisma, page, suggestions);
+        draft.worksiteMenu = picker.state;
+        draft.ready = false;
+        delete draft.confirmationMessageId;
+        reply = picker.text;
+        replyOptions = picker.options;
+        replyKind = picker.options ? 'WORKSITE_MENU' : 'TEXT';
+      };
       const resolveDraft = async () => {
-        const resolution = await this.records.resolve(draft);
+        const resolution = await this.records.resolve(draft, employee.id);
+        if (resolution.needsWorksite) {
+          await showWorksites(0, true);
+          return;
+        }
         if (resolution.needsEquipment) {
           await showEquipment(
             !draft.subjectReference && !draft.selectedEquipment,
@@ -361,7 +402,68 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         };
         if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
           await showEquipment();
+        else if (draft.kind === 'CHECK_IN') await showWorksites();
+        else if (draft.kind === 'CHECK_OUT') await resolveDraft();
         else reply = selectionPrompt(choice);
+      } else if (
+        !selected &&
+        draft.kind === 'CHECK_IN' &&
+        ['ver obras', 'otra obra', 'cambiar obra', 'lista de obras'].includes(
+          command,
+        )
+      ) {
+        await showWorksites();
+      } else if (selected?.startsWith('worksite')) {
+        const menu = draft.worksiteMenu;
+        const parts = selected.split(':');
+        const [action, nonce, value] = parts;
+        const index =
+          value && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : -1;
+        if (draft.kind !== 'CHECK_IN') {
+          reply = `Esa lista ya no está vigente.\n${reportMenuText(employee, Boolean(draft.kind))}`;
+          replyKind = 'REPORT_MENU';
+        } else if (!menu || parts.length !== 3 || menu.token !== nonce)
+          await showWorksites();
+        else if (action === 'worksite_all' && menu.suggested)
+          await showWorksites();
+        else if (
+          action === 'worksite_page' &&
+          !menu.suggested &&
+          index >= 0 &&
+          Math.abs(index - menu.page) === 1
+        )
+          await showWorksites(index);
+        else if (action === 'worksite' && menu.choices[index]) {
+          const site = await this.prisma.customerWorksite.findFirst({
+            where: {
+              id: menu.choices[index],
+              active: true,
+              customer: { active: true },
+              worksite: { active: true },
+            },
+            include: { worksite: true, customer: true },
+          });
+          if (!site) await showWorksites();
+          else {
+            if (
+              draft.selectedWorksiteId &&
+              draft.selectedWorksiteId !== site.id
+            ) {
+              draft.evidenceFileIds = [];
+              delete draft.location;
+            }
+            draft.selectedWorksiteId = site.id;
+            draft.worksiteReference = site.worksite.name;
+            draft.customerReference = site.customer.name;
+            draft.ready = false;
+            delete draft.worksiteMenu;
+            delete draft.confirmationMessageId;
+            draft.sourceMessageIds.push(message.providerMessageId);
+            await resolveDraft();
+            if (!draft.ready)
+              reply = `Obra seleccionada: ${site.worksite.name} (${site.customer.name}).\n${reply}`;
+          }
+        } else await showWorksites();
       } else if (selected?.startsWith('equipment')) {
         const menu = draft.equipmentMenu;
         const [action, nonce, value] = selected.split(':');
@@ -525,11 +627,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           const parsed = await this.ai.extract(message.text, draft, image);
           const changedKind =
             parsed.kind && draft.kind && parsed.kind !== draft.kind;
-          const changedTarget =
-            (parsed.subjectReference &&
-              draft.subjectReference &&
-              normalized(parsed.subjectReference) !==
-                normalized(draft.subjectReference)) ||
+          const changedWorksite =
             (parsed.worksiteReference &&
               draft.worksiteReference &&
               normalized(parsed.worksiteReference) !==
@@ -538,13 +636,34 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               draft.customerReference &&
               normalized(parsed.customerReference) !==
                 normalized(draft.customerReference));
+          // Exit is bound to the employee's open attendance; spelling changes
+          // cannot change its worksite or discard the photo/location already sent.
+          const changedTarget = isAttendance(draft.kind)
+            ? draft.kind === 'CHECK_IN' && changedWorksite
+            : parsed.subjectReference &&
+              draft.subjectReference &&
+              normalized(parsed.subjectReference) !==
+                normalized(draft.subjectReference);
+
           const base = changedKind
             ? emptyDraft()
             : changedTarget
               ? {
                   ...draft,
-                  evidenceFileIds: [],
-                  location: undefined,
+                  evidenceFileIds:
+                    isAttendance(draft.kind) &&
+                    !draft.selectedWorksiteId &&
+                    !draft.targetKey
+                      ? draft.evidenceFileIds
+                      : [],
+                  location:
+                    isAttendance(draft.kind) &&
+                    !draft.selectedWorksiteId &&
+                    !draft.targetKey
+                      ? draft.location
+                      : undefined,
+                  selectedWorksiteId: undefined,
+                  worksiteMenu: undefined,
                   selectedEquipment: undefined,
                   equipmentMenu: undefined,
                   photoHours: null,
@@ -585,10 +704,11 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       }
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
       const resolution = confirmation
-        ? await this.records.resolve(draft)
+        ? await this.records.resolve(draft, employee.id)
         : null;
       if (confirmation && !resolution?.target) {
         if (resolution?.needsEquipment) await showEquipment(false);
+        else if (resolution?.needsWorksite) await showWorksites();
         else reply = resolution?.question ?? HELP;
         draft.ready = false;
         confirmation = false;
@@ -764,7 +884,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       });
       if (!claim.count) continue;
       try {
-        if (message.replyKind === 'EQUIPMENT_MENU' && message.replyOptions) {
+        if (
+          ['EQUIPMENT_MENU', 'WORKSITE_MENU'].includes(message.replyKind) &&
+          message.replyOptions
+        ) {
           await this.cloud.reply(
             message.phone,
             message.replyText!,

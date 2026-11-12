@@ -49,6 +49,13 @@ export type Draft = Extraction & {
   targetKey?: string;
   menuStage?: 'ATTENDANCE';
   confirmationMessageId?: string;
+  selectedWorksiteId?: string;
+  worksiteMenu?: {
+    token: string;
+    page: number;
+    choices: string[];
+    suggested?: boolean;
+  };
   selectedEquipment?: EquipmentReference;
   equipmentMenu?: EquipmentMenu;
 };

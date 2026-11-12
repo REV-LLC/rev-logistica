@@ -6,7 +6,8 @@ export type WhatsappReplyKind =
   | 'REPORT_MENU'
   | 'ATTENDANCE_MENU'
   | 'CONFIRMATION'
-  | 'EQUIPMENT_MENU';
+  | 'EQUIPMENT_MENU'
+  | 'WORKSITE_MENU';
 export const REPORT_MENU_ROWS = [
   {
     id: 'report_damage',
@@ -98,7 +99,7 @@ export function whatsappReplyPayload(
   options?: EquipmentReplyOptions,
 ) {
   const base = { messaging_product: 'whatsapp', to: phone };
-  if (kind === 'EQUIPMENT_MENU' && options) {
+  if ((kind === 'EQUIPMENT_MENU' || kind === 'WORKSITE_MENU') && options) {
     return {
       ...base,
       type: 'interactive',
@@ -110,7 +111,13 @@ export function whatsappReplyPayload(
             ? {
                 button: options.button,
                 sections: [
-                  { title: 'Máquinas disponibles', rows: options.rows },
+                  {
+                    title:
+                      kind === 'WORKSITE_MENU'
+                        ? 'Obras disponibles'
+                        : 'Máquinas disponibles',
+                    rows: options.rows,
+                  },
                 ],
               }
             : {

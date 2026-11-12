@@ -5,11 +5,9 @@ import OpenAI from 'openai';
 const parse = jest.fn();
 jest.mock('openai', () => ({
   __esModule: true,
-  default: jest
-    .fn()
-    .mockImplementation(() => ({
-      responses: { parse: (...args: unknown[]) => parse(...args) },
-    })),
+  default: jest.fn().mockImplementation(() => ({
+    responses: { parse: (...args: unknown[]) => parse(...args) },
+  })),
 }));
 
 describe('WhatsApp AI credential isolation and extraction', () => {
@@ -66,5 +64,51 @@ describe('WhatsApp AI credential isolation and extraction', () => {
     expect(JSON.stringify(request.input)).not.toContain('private-message-id');
     expect(JSON.stringify(request.input)).not.toContain('server-target');
     expect(request.text.format.type).toBe('json_schema');
+  });
+  it('ranks typo candidates with structured surrogate options and never sends internal IDs', async () => {
+    process.env.WHATSAPP_OPENAI_API_KEY = 'test-whatsapp-key';
+    const candidates = [
+      {
+        id: 'private-worksite-1',
+        name: 'COLEGIO UNICAMACHO',
+        alias: null,
+        customer: 'PRODECON',
+      },
+      {
+        id: 'private-worksite-2',
+        name: 'Bodega norte',
+        alias: null,
+        customer: 'Otro cliente',
+      },
+    ];
+    parse.mockResolvedValue({ output_parsed: { options: ['option_0'] } });
+    await expect(
+      new WhatsappReportAiService().suggestWorksites(
+        'universidad unicamaho',
+        'prodecon',
+        candidates,
+      ),
+    ).resolves.toEqual(['private-worksite-1']);
+    const request = parse.mock.calls[0][0];
+    expect(request.store).toBe(false);
+    expect(request.tools).toBeUndefined();
+    expect(JSON.stringify(request.input)).not.toContain('private-worksite-1');
+    expect(JSON.stringify(request.input)).toContain('option_0');
+    parse.mockResolvedValue({ output_parsed: { options: ['option_999'] } });
+    await expect(
+      new WhatsappReportAiService().suggestWorksites(
+        'camacho',
+        null,
+        candidates,
+      ),
+    ).rejects.toThrow();
+    parse.mockResolvedValue({ output_parsed: null });
+    await expect(
+      new WhatsappReportAiService().suggestWorksites(
+        'camacho',
+        null,
+        candidates,
+      ),
+    ).rejects.toThrow('No worksite suggestions returned');
   });
 });
