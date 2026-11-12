@@ -91,7 +91,11 @@ export class AnnexesController {
   @Post('select-mode') selectMode(@Body() body: unknown) {
     return assertDailyAnnex(selectAnnexMode(body));
   }
-  @Post('preview') preview(@Body() body: unknown) {
+  @Post('preview') preview(@Body() body: unknown, @Req() req: { user: { sub: string } }) {
+    if (body && typeof body === 'object' && 'customerWorksiteId' in body && 'input' in body) {
+      const value = body as { customerWorksiteId: string; input: unknown };
+      return this.annexes.preview(value.input, value.customerWorksiteId, req.user.sub);
+    }
     return calculateAnnex(assertDailyAnnex(body));
   }
   @Get('drafts') list(@Query('customerWorksiteId') id: string) {

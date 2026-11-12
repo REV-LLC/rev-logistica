@@ -68,7 +68,7 @@ export function inventoryToAnnex(
         problem = 'Movimiento asociado a un documento no confirmado';
         break;
       }
-      if (!['OUT', 'ON_SITE', 'IN', 'TRANSIT'].includes(row.movementType)) {
+      if (!['OUT', 'ON_SITE', 'IN', 'TRANSIT', 'LOSS'].includes(row.movementType)) {
         problem = 'Movimiento de ajuste en obra pendiente de conciliación';
         break;
       }
@@ -125,6 +125,7 @@ export function inventoryToAnnex(
             remaining = remaining.minus(amount);
             lot.input.returns.push({
               date,
+              ...(row.movementType === 'LOSS' ? { loss: true } : {}),
               ...(slice.cutoff ? { billingCutoffDate: slice.cutoff } : {}),
               quantity: amount.toString(),
               source: {

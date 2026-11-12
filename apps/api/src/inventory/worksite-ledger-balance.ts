@@ -5,6 +5,7 @@ export const WORKSITE_BALANCE_MOVEMENT_TYPES = [
   MovementType.ON_SITE,
   MovementType.IN,
   MovementType.TRANSIT,
+  MovementType.LOSS,
 ] as const;
 
 /**
@@ -25,6 +26,7 @@ export function getWorksiteQuantityDelta(
       return quantity;
     case MovementType.IN:
     case MovementType.TRANSIT:
+    case MovementType.LOSS:
       return -quantity;
     default:
       return 0;

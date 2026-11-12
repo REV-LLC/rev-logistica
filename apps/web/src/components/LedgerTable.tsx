@@ -8,6 +8,7 @@ import { IconEye } from '@tabler/icons-react';
 import TableRowActions from '@/components/TableRowActions';
 
 export type LedgerItem = {
+  inventoryLoss?: { id: string; reason: string; responsible: string; createdBy: string; createdAt: string } | null;
   id: string;
   createdAt: string;
   effectiveAt: string;
@@ -58,6 +59,7 @@ function formatDate(value: string) {
 }
 
 function formatMovementType(item: LedgerItem, worksitePerspective: boolean) {
+  if (item.movementType === 'LOSS') return 'Pérdida / baja en obra';
   if (item.isOpeningBalance) return 'Alta de catálogo';
   if (worksitePerspective) {
     if (item.movementType === 'OUT' || item.movementType === 'ON_SITE') {
@@ -78,7 +80,7 @@ function formatMovementType(item: LedgerItem, worksitePerspective: boolean) {
 function getDisplayQuantity(item: LedgerItem, worksitePerspective: boolean) {
   if (!worksitePerspective) return item.quantity;
   if (item.movementType === 'OUT') return -item.quantity;
-  if (item.movementType === 'IN' || item.movementType === 'TRANSIT') {
+  if (item.movementType === 'IN' || item.movementType === 'TRANSIT' || item.movementType === 'LOSS') {
     return -item.quantity;
   }
   return item.quantity;
@@ -234,8 +236,9 @@ export default function LedgerTable({
               {formatDate(detailsItem.isOpeningBalance ? detailsItem.createdAt : detailsItem.effectiveAt)}
             </Text>
             <Text mt="xs">
-              <strong>Movement:</strong> {formatMovementType(detailsItem, worksitePerspective)}
+              <strong>Movimiento:</strong> {formatMovementType(detailsItem, worksitePerspective)}
             </Text>
+            {detailsItem.inventoryLoss ? <div><Text>Motivo: {detailsItem.inventoryLoss.reason}</Text><Text>Responsable: {detailsItem.inventoryLoss.responsible}</Text></div> : null}
             <Text mt="xs">
               <strong>Cantidad:</strong> {getDisplayQuantity(detailsItem, worksitePerspective)}
             </Text>

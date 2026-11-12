@@ -29,7 +29,7 @@ import { buildLedgerQuery, buildLedgerLocation, readLedgerLocation, createInitia
 import styles from './ledger.module.css';
 import glass from '../../employees/directory.module.css';
 
-const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE'];
+const MOVEMENT_TYPES = ['OUT', 'TRANSIT', 'IN', 'ADJUST', 'ON_SITE', 'LOSS'];
 const FILTER_OPTIONS_TAKE = 200;
 
 type LedgerResponse = { items: LedgerItem[]; nextCursor: string | null };
@@ -235,7 +235,7 @@ export default function LedgerPage() {
             aria-label="Filtrar por movimiento"
             value={filters.movementType || 'ALL'}
             onChange={(value) => updateAndFetch({ ...filters, movementType: value === 'ALL' ? '' : value ?? '' })}
-            data={[{ value: 'ALL', label: 'Todos los movimientos' }, ...MOVEMENT_TYPES.map((value) => ({ value, label: value === 'OUT' ? 'Salida' : value === 'IN' ? 'Entrada' : value === 'TRANSIT' ? 'En tránsito' : value === 'ON_SITE' ? 'En obra' : 'Ajuste' }))]}
+            data={[{ value: 'ALL', label: 'Todos los movimientos' }, ...MOVEMENT_TYPES.map((value) => ({ value, label: value === 'LOSS' ? 'Pérdida / baja en obra' : value === 'OUT' ? 'Salida' : value === 'IN' ? 'Entrada' : value === 'TRANSIT' ? 'En tránsito' : value === 'ON_SITE' ? 'En obra' : 'Ajuste' }))]}
             allowDeselect={false}
             style={{ flex: '1 1 150px' }}
           />

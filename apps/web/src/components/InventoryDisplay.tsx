@@ -24,6 +24,7 @@ import assetLayout from '@/components/WarehouseAssetsView.module.css';
 import { ownerColorById } from '@/lib/owner-color';
 import BulkInventoryDetails from '@/components/BulkInventoryDetails';
 import BulkInventoryCard from '@/components/BulkInventoryCard';
+import WorksiteLossModal from '@/components/WorksiteLossModal';
 
 export type BulkItem = {
   skuId: string;
@@ -81,6 +82,7 @@ function getBulkDisplayName(item: BulkDisplayRow) {
 
 type SerialItem = {
   assetId: string;
+  skuId?: string | null;
   ownerWarehouseId?: string | null;
   serialOrEngine: string | null;
   description: string | null;
@@ -129,6 +131,7 @@ export default function InventoryDisplay({
   serialAssetScope,
   showWorksiteQuantities = false,
   bulkCatalogLayout = false,
+  onInventoryChanged,
 }: {
   warehouseId?: string;
   customerWorksiteId?: string;
@@ -147,6 +150,7 @@ export default function InventoryDisplay({
   serialAssetScope?: 'own' | 'allied';
   showWorksiteQuantities?: boolean;
   bulkCatalogLayout?: boolean;
+  onInventoryChanged?: () => void;
 }) {
   const [kitFamilyId, setKitFamilyId] = useState<string | null>(null);
   const [enabledKitFamilies, setEnabledKitFamilies] = useState<Set<string>>(new Set());
@@ -166,6 +170,7 @@ export default function InventoryDisplay({
     return result;
   }, [bulk]);
   const [openedSkuId, setOpenedSkuId] = useState<string | null>(null);
+  const [lossAsset, setLossAsset] = useState<SerialItem | null>(null);
   const [savedImages, setSavedImages] = useState<Record<string, string>>({});
   const imageBySku = useMemo(() => new Map(bulk.map(item => [item.skuId, item.imageUrl])), [bulk]);
 
@@ -363,10 +368,13 @@ export default function InventoryDisplay({
 
   return (
     <Stack gap="lg">
+      {lossAsset?.skuId && customerWorksiteId ? <WorksiteLossModal customerWorksiteId={customerWorksiteId} skuId={lossAsset.skuId} assetId={lossAsset.assetId}
+        name={lossAsset.description ?? lossAsset.skuName ?? 'Equipo'} owners={[{ id: lossAsset.ownerWarehouseId!, name: lossAsset.ownerWarehouseName ?? 'Dueño del equipo', quantity: 1 }]}
+        onClose={() => setLossAsset(null)} onSaved={() => { setLossAsset(null); onInventoryChanged?.(); }} /> : null}
       {openedSkuId && rowsBySku.has(openedSkuId) ? <BulkInventoryDetails key={openedSkuId} rows={(rowsBySku.get(openedSkuId) ?? [])}
         warehouseId={warehouseId} customerWorksiteId={customerWorksiteId} isWorksiteView={isWorksiteView}
         imageUrl={savedImages[openedSkuId] ?? imageBySku.get(openedSkuId) ?? null}
-        onClose={() => setOpenedSkuId(null)} onImageSaved={(skuId, url) => setSavedImages(current => ({ ...current, [skuId]: url }))} /> : null}
+        onClose={() => setOpenedSkuId(null)} onImageSaved={(skuId, url) => setSavedImages(current => ({ ...current, [skuId]: url }))} onInventoryChanged={onInventoryChanged} /> : null}
       {(showBulkSection || bulkCatalogLayout) && (
         <section>
           <Group justify="space-between" align="center" mb="sm" className={bulkCatalogLayout ? assetLayout.sectionHeading : undefined}>
@@ -479,6 +487,7 @@ export default function InventoryDisplay({
                         + (serialAssetScope ? `?scope=${serialAssetScope}` : '')
                       }
                       compact={compactSerialCards}
+                      onRegisterLoss={isWorksiteView && customerWorksiteId && item.skuId && item.ownerWarehouseId && ['ADMIN', 'OFFICE'].includes(getCurrentUserRole() ?? '') ? () => setLossAsset(item) : undefined}
                       isWorksiteView={isWorksiteView}
                       statusBadge={item.status === 'UNKNOWN' || item.location?.type === 'UNKNOWN'
                         ? { label: 'SIN UBICACIÓN', color: 'gray' }

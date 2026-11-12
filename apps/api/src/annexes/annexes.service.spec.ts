@@ -10,9 +10,11 @@ function setup() {
     sku: { count: jest.fn().mockResolvedValue(1) },
     annexDraft: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockImplementation(async ({data}) => ({id: 'draft', ...data})), update: jest.fn().mockImplementation(async ({data}) => ({id: 'draft', ...data})) },
     annexDraftRevision: { create: jest.fn().mockImplementation(async ({data}) => data) },
+    worksiteInventoryLoss: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const prisma = { $transaction: jest.fn(async fn => fn(tx)) };
-  return { service: new AnnexesService(prisma as never), tx };
+  const losses = { record: jest.fn(), invalidate: jest.fn().mockResolvedValue(undefined) };
+  return { service: new AnnexesService(prisma as never, losses as never), tx, losses };
 }
 describe('annex draft persistence', () => {
   it('calculates server-side and stores data cutoff, input, reason and author', async () => {
@@ -95,22 +97,40 @@ it('stores observations, both transport rows and their server-calculated VAT in 
   expect(saved.revisions[0].result.tax).toEqual({vatPercent:19,vat:'31350.00',total:'196350.00'});
 });
 
-it('persists manual repairs and replacements with recalculated totals', async () => {
+it('persists manual repairs with recalculated totals', async () => {
   const {service} = setup();
-  const additionalCharges = [{id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},{id:'replacement-1',type:'REPLACEMENT',description:'Pieza',quantity:'1',unitPrice:'0.01'}];
+  const additionalCharges = [{id:'repair-1',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'},{id:'repair-2',type:'REPAIR',description:'Pieza',quantity:'1',unitPrice:'0.01'}];
   const saved = await service.save({...payload,input:{...input,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
   expect(saved.revisions[0].input.additionalCharges).toEqual(additionalCharges);
   expect(saved.revisions[0].result.tax.total).toBe('29.38');
 });
 
-it('saves detailed transport and a linked replacement without dropping their metadata', async () => {
+it('rejects new replacements without inventory loss details', async () => {
+  const { service, tx, losses } = setup();
+  const additionalCharges = [{ id: 'replacement', type: 'REPLACEMENT', description: 'Base perdida', quantity: '5', unitPrice: '100' }];
+  await expect(service.save({ ...payload, input: { ...input, additionalCharges } }, 'author')).rejects.toThrow('responsable de la pérdida');
+  expect(losses.record).not.toHaveBeenCalled();
+  expect(tx.annexDraftRevision.create).not.toHaveBeenCalled();
+});
+
+it('preserves unchanged legacy replacements without retroactive inventory deductions', async () => {
+  const { service, tx, losses } = setup();
+  const additionalCharges = [{ id: 'legacy', type: 'REPLACEMENT', description: 'Reposición anterior', quantity: '5', unitPrice: '100' }];
+  tx.annexDraft.findMany.mockResolvedValue([{ id: 'draft', periodFrom: new Date('2026-09-16'), periodTo: new Date('2026-09-30'), revision: 1, revisions: [{ input: { ...input, additionalCharges } }] }]);
+  const saved = await service.save({ ...payload, expectedRevision: 1, input: { ...input, additionalCharges } }, 'author');
+  expect(saved.revisions[0].input.additionalCharges).toEqual(additionalCharges);
+  expect(losses.record).not.toHaveBeenCalled();
+  await expect(service.save({ ...payload, expectedRevision: 1, input: { ...input, additionalCharges: [{ ...additionalCharges[0], quantity: '6' }] } }, 'author')).rejects.toThrow('responsable de la pérdida');
+});
+
+it('saves detailed transport and a linked repair without dropping their metadata', async () => {
   const {service} = setup();
   const transport = {outbound:{quantity:'0',unitPrice:'0'},return:{quantity:'0',unitPrice:'0'},rows:[
     {id:'trip-1',direction:'outbound',description:'Entrega inicial',quantity:'1',unitPrice:'12.34'},
     {id:'trip-2',direction:'outbound',description:'Segundo viaje',quantity:'1',unitPrice:'0.01'},
     {id:'trip-3',direction:'return',description:'Recogida',quantity:'1',unitPrice:'10'},
   ]};
-  const additionalCharges = [{id:'replacement',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',assetId:'00000000-0000-4000-8000-000000000003',type:'REPLACEMENT',description:'Pieza perdida',quantity:'2',unitPrice:'100'}];
+  const additionalCharges = [{id:'repair',skuId:'eb66aaf3-b010-4f9d-9825-857a2c3d4d43',assetId:'00000000-0000-4000-8000-000000000003',type:'REPAIR',description:'Pieza reparada',quantity:'2',unitPrice:'100'}];
   const saved = await service.save({...payload,input:{...input,transport,additionalCharges,policy:{...input.policy,vatPercent:19}}},'author');
   expect(saved.revisions[0].input).toMatchObject({transport,additionalCharges});
   expect(saved.revisions[0].result.summary.subtotal).toBe('222.35');
