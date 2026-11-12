@@ -1,4 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebhookController } from '../notifications/whatsapp-webhook.controller';
 import { WhatsappWebhookService } from '../notifications/whatsapp-webhook.service';
@@ -148,6 +150,30 @@ if (testUrl) {
       await prisma.$executeRawUnsafe(
         'TRUNCATE TABLE "User", "Employee", "Owner", "AssetFamily", "Customer", "Project", "Vehicle", "FileObject", "WhatsappInboundMessage", "WhatsappConversation" CASCADE',
       );
+      // Prisma-generated baselines omit SQL CHECK constraints. Load the actual
+      // production association guard so attendance is tested against that rule.
+      const activityMigration = readFileSync(
+        join(
+          __dirname,
+          '../../prisma/migrations/20261009120000_employee_activity_warehouse/migration.sql',
+        ),
+        'utf8',
+      );
+      const associationSql = activityMigration
+        .slice(
+          activityMigration.indexOf(
+            'ALTER TABLE "EmployeeActivityNote" DROP CONSTRAINT',
+          ),
+        )
+        .replace(
+          'DROP CONSTRAINT "EmployeeActivityNote_associations_check"',
+          'DROP CONSTRAINT IF EXISTS "EmployeeActivityNote_associations_check"',
+        );
+      for (const statement of associationSql
+        .split(';')
+        .map((s) => s.trim())
+        .filter(Boolean))
+        await prisma.$executeRawUnsafe(statement);
       const actor = await prisma.user.create({
         data: {
           email: `office-${randomUUID()}@example.invalid`,
@@ -501,7 +527,7 @@ if (testUrl) {
       ).toBe(false);
     });
 
-    it('records entry and exit with separate photos, links the worksite, and closes the attendance', async () => {
+    it('records entry and exit without an asset under the production activity constraint, with separate photos', async () => {
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
       );
@@ -509,7 +535,9 @@ if (testUrl) {
         'foto',
       );
       await send('', { image: true });
-      await send('sí');
+      const entered = await send('sí');
+      expect(entered?.status).toBe('PROCESSED');
+      expect(entered?.replyText).toContain('Registrado en REV');
       expect(
         await prisma.worksiteAttendance.count({
           where: { employeeId: employee.id, leftAt: null },
@@ -519,7 +547,7 @@ if (testUrl) {
         await prisma.employeeActivityNote.count({
           where: { employeeId: employee.id, customerWorksiteId: site.id },
         }),
-      ).toBe(1);
+      ).toBe(0);
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
       );
