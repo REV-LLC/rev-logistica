@@ -20,6 +20,8 @@ export type EquipmentMenu = {
   choices: EquipmentReference[];
   page: number;
   recent: boolean;
+  search?: boolean;
+  suggested?: boolean;
 };
 export type EquipmentReplyOptions =
   | {
