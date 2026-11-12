@@ -43,6 +43,7 @@ export default function EmployeeCalendarPicker({
   disabled?: boolean;
 }) {
   const largeScreen = useMediaQuery("(min-width: 1600px)");
+  const smallScreen = useMediaQuery("(max-width: 600px)");
   const [opened, setOpened] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -57,7 +58,7 @@ export default function EmployeeCalendarPicker({
 
   return (
     <div className={styles.employeePicker}>
-    {employee ? <EmployeePhotoControl employee={employee} size={largeScreen ? 96 : 48} onBeforePreview={beforePreview} /> : null}
+    {employee ? <EmployeePhotoControl employee={employee} size={smallScreen ? 48 : largeScreen ? 88 : 64} onBeforePreview={beforePreview} /> : null}
     <Popover
       opened={opened}
       onChange={setOpened}
