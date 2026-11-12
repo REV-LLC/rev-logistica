@@ -1788,6 +1788,35 @@ if (testUrl) {
         expect(ai.extract).not.toHaveBeenCalled();
         expect(ai.equipmentSearchTerms).not.toHaveBeenCalled();
       });
+      it('retains an unclassified photo through the report-type and machine choices', async () => {
+        ai.extract.mockResolvedValue(extracted({}));
+        const photo = await send('', { image: true });
+        expect(photo?.replyText).toContain('Foto recibida');
+        const original = ((await current()).draft as any).evidenceFileIds;
+        await send('Daño', { selectionId: 'report_damage' });
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: original,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga',
+          }),
+        );
+        const matches = await send('Fuga en el minicargador Case');
+        const state = (await current()).draft as any;
+        const index = state.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        const summary = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: original,
+        });
+      });
       it('keeps a photo sent while searching and stores it on the explicitly selected machine', async () => {
         await send('Daño', { selectionId: 'report_damage' });
         ai.extract.mockResolvedValue(

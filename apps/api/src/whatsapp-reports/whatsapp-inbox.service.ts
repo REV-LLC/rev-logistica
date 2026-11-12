@@ -425,16 +425,26 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         reply = reportMenuText(employee, Boolean(draft.kind));
         replyKind = 'REPORT_MENU';
       } else if (choice === 'report_attendance') {
+        const pending = !draft.kind ? draft : undefined;
         draft = {
           ...emptyDraft(),
           menuStage: 'ATTENDANCE',
-          occurredAt: message.sentAt.toISOString(),
-          sourceMessageIds: [message.providerMessageId],
+          ...(pending?.location ? { location: pending.location } : {}),
+          evidenceFileIds: pending?.evidenceFileIds ?? [],
+          occurredAt:
+            pending?.location || pending?.evidenceFileIds.length
+              ? pending.occurredAt
+              : message.sentAt.toISOString(),
+          sourceMessageIds: [
+            ...(pending?.sourceMessageIds ?? []),
+            message.providerMessageId,
+          ],
         };
         reply =
           '¿Quieres registrar tu entrada o tu salida de la obra? Elige una opción.';
         replyKind = 'ATTENDANCE_MENU';
       } else if (choice && selectionKind(choice)) {
+        const pending = !draft.kind ? draft : undefined;
         const pendingLocation =
           !draft.kind && draft.menuStage === 'ATTENDANCE'
             ? draft.location
@@ -442,17 +452,25 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         draft = {
           ...emptyDraft(),
           kind: selectionKind(choice),
+          evidenceFileIds: pending?.evidenceFileIds ?? [],
+          ...(selectionKind(choice) === 'HOUR_METER' && pending
+            ? { hours: pending.hours, photoHours: pending.photoHours }
+            : {}),
           ...(isAttendance(selectionKind(choice)) && pendingLocation
             ? { location: pendingLocation }
             : {}),
-          occurredAt:
-            pendingLocation && isAttendance(selectionKind(choice))
+          occurredAt: pending?.evidenceFileIds.length
+            ? pending.occurredAt
+            : pendingLocation && isAttendance(selectionKind(choice))
               ? pendingLocation.sentAt
               : message.sentAt.toISOString(),
           sourceMessageIds:
             pendingLocation && isAttendance(selectionKind(choice))
               ? [pendingLocation.sourceMessageId, message.providerMessageId]
-              : [message.providerMessageId],
+              : [
+                  ...(pending?.sourceMessageIds ?? []),
+                  message.providerMessageId,
+                ],
         };
         if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
           await showEquipment();
@@ -790,12 +808,12 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           if (image || !isAttendance(draft.kind)) delete draft.location;
           if (draft.kind) {
             await resolveDraft();
-            if (image)
-              reply = `Foto recibida. Fotos adjuntas: ${draft.evidenceFileIds.length}.\n${reply}`;
           } else {
             reply = reportMenuText(employee);
             replyKind = 'REPORT_MENU';
           }
+          if (image)
+            reply = `Foto recibida. Fotos adjuntas: ${draft.evidenceFileIds.length}.\n${reply}`;
         }
       }
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
