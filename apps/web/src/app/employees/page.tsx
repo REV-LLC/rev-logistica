@@ -10,7 +10,6 @@ import {
   Group,
   Modal,
   Paper,
-  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -297,7 +296,7 @@ export default function EmployeeCardsPage() {
   if (requestedEmployeeId || loading) return <EmployeeDirectoryLoading label={requestedEmployeeId ? 'Abriendo perfil del empleado' : 'Cargando empleados'} />;
 
   return (
-    <Container size="xl" py="xl" className={styles.page}>
+    <Container size="xl" py="xl" className={`${styles.page} ${styles.directoryContainer}`}>
       <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
         <Group justify="space-between" align="center" wrap="wrap">
@@ -344,7 +343,7 @@ export default function EmployeeCardsPage() {
         ) : null}
 
         {!loading && employees.length > 0 ? (
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+          <div className={styles.employeeGrid}>
             {sortedEmployees.map((employee) => (
               <EmployeeCard
                 key={employee.id}
@@ -356,7 +355,7 @@ export default function EmployeeCardsPage() {
                 appearance="glass"
               />
             ))}
-          </SimpleGrid>
+          </div>
         ) : null}
         {!loading && employees.length > 0 && sortedEmployees.length === 0 ? (
           <Paper withBorder radius="lg" p="xl" className={styles.emptyState}>
