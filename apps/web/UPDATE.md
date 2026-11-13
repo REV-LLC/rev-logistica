@@ -1,7 +1,7 @@
-# Nuevo fondo cristal ahumado
+# Fondo cristal ahumado en mayor resolución
 
-Las páginas que tenían fondo gris ahora muestran un fondo cristal ahumado con relieves suaves, manteniendo la lectura de tablas y controles.
+El fondo cristal ahumado ahora se sirve en una versión reescalada de 3840 x 2160 píxeles, en WebP sin compresión con pérdida, conservando el diseño aprobado para las pantallas grandes.
 
 Se conservan los fondos fotográficos de inicio, empleados y las páginas que ya tenían su propia imagen. Los documentos, PDF y hojas impresas mantienen el fondo blanco.
 
-Este cambio es visual y no modifica datos, permisos ni operaciones de inventario.
+Este cambio solo actualiza la imagen y no modifica datos, permisos ni operaciones de inventario.
