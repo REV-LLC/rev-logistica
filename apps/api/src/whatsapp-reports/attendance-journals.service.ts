@@ -120,7 +120,14 @@ export class AttendanceJournalsService {
         where: {
           OR: [{ active: true }, { worksiteAttendance: { some: where } }],
         },
-        select: { id: true, name: true, lastName: true, active: true },
+        select: {
+          id: true,
+          name: true,
+          lastName: true,
+          active: true,
+          role: true,
+          user: { select: { role: true } },
+        },
         orderBy: [{ name: 'asc' }, { lastName: 'asc' }],
       }),
       this.prisma.worksiteAttendance.findMany({
@@ -156,7 +163,7 @@ export class AttendanceJournalsService {
     return {
       from: period.from,
       to: period.to,
-      employees: employees.map((e) => {
+      employees: employees.map(({ user, ...e }) => {
         const items = groups.get(e.id) ?? [];
         const valid = items.filter(
           (a) =>
@@ -166,6 +173,7 @@ export class AttendanceJournalsService {
         );
         return {
           ...e,
+          accountRole: user?.role ?? null,
           journeys: items.length,
           open: valid.filter((a) => !a.leftAt).length,
           pendingReview: items.filter(
