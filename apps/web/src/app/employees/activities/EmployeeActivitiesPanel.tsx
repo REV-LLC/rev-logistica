@@ -251,8 +251,7 @@ export default function EmployeeActivitiesPanel({
               : `/employees/${encodeURIComponent(requestedEmployeeId)}`,
           ).then((employee) => [employee])
         : api<Employee[]>("/employees"),
-      selfService
-        ? Promise.resolve({
+      selfService ? Promise.resolve({
             customers: [],
             assets: [],
             warehouses: [],
@@ -292,8 +291,7 @@ export default function EmployeeActivitiesPanel({
     setNotes([]);
     setListError(null);
     api<Note[]>(
-      selfService
-        ? `/employee-portal/activities?month=${month}`
+      selfService ? `/employee-portal/activities?month=${month}`
         : `/employee-activities/${employeeId}?month=${month}`,
     )
       .then((result) => {
@@ -618,8 +616,7 @@ export default function EmployeeActivitiesPanel({
         ) : null}
         <Paper withBorder className={styles.toolbar}>
           <div className={styles.toolbarContent}>
-            {!embedded ? (
-              <div className={styles.employeeSwitch}>
+            {!embedded ? <div className={styles.employeeSwitch}>
                 <EmployeeCalendarPicker
                   employees={employees}
                   employee={employee}
@@ -662,8 +659,7 @@ export default function EmployeeActivitiesPanel({
                     <IconChevronRight size={20} />
                   </ActionIcon>
                 </Group>
-              </div>
-            ) : null}
+              </div> : null}
             <div
               className={styles.calendarControls}
               role="group"
@@ -725,8 +721,7 @@ export default function EmployeeActivitiesPanel({
                   >
                     Hoy
                   </Button>
-                  {!selfService ? (
-                    <AddActivityMenu
+                  {!selfService ? <AddActivityMenu
                       onSelect={(type) =>
                         openNote(undefined, selectedDate, type)
                       }
@@ -741,8 +736,7 @@ export default function EmployeeActivitiesPanel({
                       >
                         <IconPlus size={20} aria-hidden />
                       </ActionIcon>
-                    </AddActivityMenu>
-                  ) : null}
+                    </AddActivityMenu> : null}
                 </Group>
               </div>
             </div>
@@ -855,8 +849,7 @@ export default function EmployeeActivitiesPanel({
                             </span>
                           ) : null}
                         </button>
-                        {!selfService ? (
-                          <AddActivityMenu
+                        {!selfService ? <AddActivityMenu
                             onSelect={(type) => {
                               setSelectedDate(date);
                               if (date.slice(0, 7) !== month)
@@ -873,8 +866,7 @@ export default function EmployeeActivitiesPanel({
                             >
                               <IconPlus size={16} aria-hidden="true" />
                             </button>
-                          </AddActivityMenu>
-                        ) : null}
+                          </AddActivityMenu> : null}
                       </div>
                     );
                   })}
