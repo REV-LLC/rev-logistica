@@ -270,22 +270,49 @@ export class FilesService {
     const expiresAt = this.parseOptionalDate(payload.expiresAt, 'expiresAt');
     files.forEach((file) => this.validateFile(file));
 
-    return this.persistEntityFiles(entityType, entityId, files, category, payload, user.id, expiresAt, providerWarehouseId);
+    return this.persistEntityFiles(
+      entityType,
+      entityId,
+      files,
+      category,
+      payload,
+      user.id,
+      expiresAt,
+      providerWarehouseId,
+    );
   }
 
   // Internal WhatsApp ingestion: attribution is the authenticated employee, not an invented admin user.
   async storeWhatsappEvidence(employeeId: string, file: UploadedBusinessFile) {
-    const employee = await this.prisma.employee.findFirst({ where: { id: employeeId, active: true }, select: { id: true } });
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, active: true },
+      select: { id: true },
+    });
     if (!employee) throw new ForbiddenException('Employee is not active');
-    if (!file.mimetype.startsWith('image/')) throw new BadRequestException('Photo required');
+    if (!file.mimetype.startsWith('image/'))
+      throw new BadRequestException('Photo required');
     this.validateFile(file);
-    return this.persistEntityFiles('EMPLOYEE', employeeId, [file], 'EVIDENCIA_WHATSAPP',
-      { displayName: 'Evidencia de reporte por WhatsApp' }, `whatsapp:${employeeId}`, null, null);
+    return this.persistEntityFiles(
+      'EMPLOYEE',
+      employeeId,
+      [file],
+      'EVIDENCIA_WHATSAPP',
+      { displayName: 'Evidencia de reporte por WhatsApp' },
+      `whatsapp:${employeeId}`,
+      null,
+      null,
+    );
   }
 
   private async persistEntityFiles(
-    entityType: FileEntityType, entityId: string, files: UploadedBusinessFile[], category: string,
-    payload: { displayName?: string }, createdBy: string, expiresAt: Date | null, providerWarehouseId: string | null,
+    entityType: FileEntityType,
+    entityId: string,
+    files: UploadedBusinessFile[],
+    category: string,
+    payload: { displayName?: string },
+    createdBy: string,
+    expiresAt: Date | null,
+    providerWarehouseId: string | null,
   ) {
     const config = this.getR2Config();
     const s3 = this.createR2Client(config);
@@ -397,7 +424,11 @@ export class FilesService {
     return result;
   }
 
-  async getFileDownload(fileId: string, user: { id: string; role: Role }) {
+  async getFileDownload(
+    fileId: string,
+    user: { id: string; role: Role },
+    thumbnail = false,
+  ) {
     const file = await this.prisma.fileObject.findUnique({
       where: { id: fileId },
       select: {
@@ -423,11 +454,13 @@ export class FilesService {
       throw new BadRequestException('File does not have an R2 object key');
     }
 
+    if (thumbnail && !file.mimeType?.startsWith('image/'))
+      throw new BadRequestException('Este archivo no es una imagen.');
     const config = this.getR2Config();
     const response = await this.createR2Client(config).send(
       new GetObjectCommand({
         Bucket: config.bucket,
-        Key: file.objectKey,
+        Key: thumbnail ? `${file.objectKey}.thumbnail.webp` : file.objectKey,
       }),
     );
     if (!response.Body) {
@@ -436,8 +469,9 @@ export class FilesService {
 
     return {
       body: response.Body as Readable,
-      contentType:
-        response.ContentType ?? file.mimeType ?? 'application/octet-stream',
+      contentType: thumbnail
+        ? 'image/webp'
+        : (response.ContentType ?? file.mimeType ?? 'application/octet-stream'),
       contentLength: response.ContentLength,
       etag: response.ETag,
       fileName:
@@ -448,9 +482,17 @@ export class FilesService {
   }
 
   async deleteFile(fileId: string, user: { id: string; role: Role }) {
-    if (await this.prisma.whatsappReportEvidence.count({ where: { fileObjectId: fileId } }) ||
-        await this.prisma.whatsappInboundMessage.count({ where: { evidenceFileObjectId: fileId } })) {
-      throw new ForbiddenException('La evidencia de WhatsApp debe conservarse con su reporte.');
+    if (
+      (await this.prisma.whatsappReportEvidence.count({
+        where: { fileObjectId: fileId },
+      })) ||
+      (await this.prisma.whatsappInboundMessage.count({
+        where: { evidenceFileObjectId: fileId },
+      }))
+    ) {
+      throw new ForbiddenException(
+        'La evidencia de WhatsApp debe conservarse con su reporte.',
+      );
     }
 
     const file = await this.prisma.fileObject.findUnique({
@@ -495,9 +537,17 @@ export class FilesService {
   }
 
   async deleteFileForRetention(fileId: string) {
-    if (await this.prisma.whatsappReportEvidence.count({ where: { fileObjectId: fileId } }) ||
-        await this.prisma.whatsappInboundMessage.count({ where: { evidenceFileObjectId: fileId } })) {
-      throw new ForbiddenException('La evidencia de WhatsApp debe conservarse con su reporte.');
+    if (
+      (await this.prisma.whatsappReportEvidence.count({
+        where: { fileObjectId: fileId },
+      })) ||
+      (await this.prisma.whatsappInboundMessage.count({
+        where: { evidenceFileObjectId: fileId },
+      }))
+    ) {
+      throw new ForbiddenException(
+        'La evidencia de WhatsApp debe conservarse con su reporte.',
+      );
     }
 
     const file = await this.prisma.fileObject.findUnique({
@@ -614,7 +664,10 @@ export class FilesService {
       return;
     }
 
-    if (mode === 'write' && (user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET)) {
+    if (
+      mode === 'write' &&
+      (user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET)
+    ) {
       if (entityType !== 'DOCUMENT') {
         throw new ForbiddenException(
           'Este perfil solo puede subir evidencias de documentos.',
@@ -638,7 +691,10 @@ export class FilesService {
           'Files are not available for this document type',
         );
       }
-      if ((user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET) && document.createdBy !== user.id) {
+      if (
+        (user.role === Role.DRIVER || user.role === Role.WAREHOUSE_TABLET) &&
+        document.createdBy !== user.id
+      ) {
         throw new ForbiddenException(
           'Solo puedes acceder a archivos de documentos creados desde tu perfil.',
         );
@@ -697,7 +753,10 @@ export class FilesService {
     }
 
     if (entityType === 'SKU') {
-      const found = await this.prisma.sku.findUnique({ where: { id: entityId }, select: { id: true } });
+      const found = await this.prisma.sku.findUnique({
+        where: { id: entityId },
+        select: { id: true },
+      });
       if (!found) throw new NotFoundException('Referencia no encontrada');
       return;
     }

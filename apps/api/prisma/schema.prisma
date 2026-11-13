@@ -1891,9 +1891,20 @@ model EmployeeActivityNote {
   assetId            String?
   description        String   @db.VarChar(5000)
   createdByUserId     String
+  sourceAttendanceId String? @unique
+  reviewStatus       String?
+  systemSuggestion   String? @db.VarChar(5000)
+  sourceInvalidatedAt DateTime?
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
+  reviewedSourceExitId String?
+  verifiedEnteredAt DateTime?
+  verifiedLeftAt DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  sourceAttendance WorksiteAttendance? @relation(fields: [sourceAttendanceId], references: [id], onDelete: Restrict)
+  reviews EmployeeActivityReview[]
   employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
@@ -1903,6 +1914,18 @@ model EmployeeActivityNote {
   @@index([employeeId, date])
 }
 
+
+model EmployeeActivityReview {
+  id String @id @default(uuid())
+  noteId String
+  action String
+  previousData Json
+  nextData Json
+  userId String
+  createdAt DateTime @default(now())
+  note EmployeeActivityNote @relation(fields: [noteId], references: [id], onDelete: Restrict)
+  @@index([noteId, createdAt])
+}
 
 model EmployeeSalary {
   id String @id @default(uuid())
@@ -2033,6 +2056,7 @@ model WhatsappReportEvidence {
 }
 
 model WorksiteAttendance {
+  activityNote EmployeeActivityNote?
   id String @id @default(uuid())
   employeeId String
   customerWorksiteId String
@@ -2045,6 +2069,7 @@ model WorksiteAttendance {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   customerWorksite CustomerWorksite @relation(fields: [customerWorksiteId], references: [id], onDelete: Restrict)
   @@index([employeeId, enteredAt])
+  @@index([enteredAt])
 }
 
 model WhatsappReportAlertRecipient {

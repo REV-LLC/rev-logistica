@@ -17,6 +17,8 @@ import {
   REPORT_LABELS,
 } from './whatsapp-report.types';
 
+import { syncAttendanceActivity } from './attendance-journals.service';
+
 import {
   findEquipment,
   assetLabel,
@@ -483,7 +485,9 @@ export class WhatsappReportRecordsService {
         );
     }
     let actorId: string | undefined;
-    if (['DAMAGE', 'HOUR_METER'].includes(draft.kind)) {
+    if (
+      ['DAMAGE', 'HOUR_METER', 'CHECK_IN', 'CHECK_OUT'].includes(draft.kind)
+    ) {
       const linkedUser = employee.userId
         ? await tx.user.findFirst({
             where: { id: employee.userId, active: true },
@@ -631,7 +635,7 @@ export class WhatsappReportRecordsService {
       },
     });
     if (draft.kind === 'CHECK_IN') {
-      await tx.worksiteAttendance.create({
+      const attendance = await tx.worksiteAttendance.create({
         data: {
           employeeId: employee.id,
           customerWorksiteId: target.customerWorksiteId!,
@@ -639,15 +643,15 @@ export class WhatsappReportRecordsService {
           checkInReportId: report.id,
         },
       });
-      // Attendance does not assign a machine. EmployeeActivityNote WORKSITE rows
-      // require an asset and describe operational work, so attendance stays in
-      // WorksiteAttendance with its linked WhatsApp report and photo evidence.
+      await syncAttendanceActivity(tx, attendance.id, actorId!);
     }
-    if (draft.kind === 'CHECK_OUT')
+    if (draft.kind === 'CHECK_OUT') {
       await tx.worksiteAttendance.update({
         where: { id: openAttendance!.id },
         data: { leftAt: occurredAt, checkOutReportId: report.id },
       });
+      await syncAttendanceActivity(tx, openAttendance!.id, actorId!);
+    }
     if (draft.kind === 'REQUEST' || draft.kind === 'DAMAGE')
       await this.createAlert(tx, report.id, employee, draft, target);
     return report;
@@ -815,6 +819,14 @@ export class WhatsappReportRecordsService {
           deletedAt: new Date(),
           deletedByUserId: actor.id,
         },
+      });
+      await tx.employeeActivityNote.updateMany({
+        where: {
+          sourceAttendance: {
+            OR: [{ checkInReportId: id }, { checkOutReportId: id }],
+          },
+        },
+        data: { sourceInvalidatedAt: new Date() },
       });
       await tx.notificationTopic.updateMany({
         where: { entityType: 'WHATSAPP_REPORT', entityId: id },

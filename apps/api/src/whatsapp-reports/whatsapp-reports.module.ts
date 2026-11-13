@@ -1,3 +1,4 @@
+import { AttendanceJournalsService } from './attendance-journals.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { FilesModule } from '../files/files.module';
@@ -15,6 +16,7 @@ import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
   imports: [PrismaModule, AuthModule, FilesModule, MailModule],
   controllers: [WhatsappReportsController],
   providers: [
+    AttendanceJournalsService,
     WhatsappCloudService,
     WhatsappInboxService,
     WhatsappReportAiService,

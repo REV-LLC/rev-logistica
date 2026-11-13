@@ -4,6 +4,7 @@ import request from 'supertest';
 import { WhatsappReportsController } from './whatsapp-reports.controller';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AttendanceJournalsService } from './attendance-journals.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 describe('WhatsApp report deletion permissions', () => {
@@ -18,6 +19,15 @@ describe('WhatsApp report deletion permissions', () => {
       providers: [
         { provide: WhatsappReportRecordsService, useValue: records },
         { provide: PrismaService, useValue: {} },
+        {
+          provide: AttendanceJournalsService,
+          useValue: {
+            employees: jest.fn().mockResolvedValue({ employees: [] }),
+            journals: jest
+              .fn()
+              .mockResolvedValue({ journals: [], nextCursor: null }),
+          },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)

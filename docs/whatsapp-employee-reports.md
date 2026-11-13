@@ -102,3 +102,50 @@ activa y tenga uno de esos roles. La eliminación conserva `deletedAt` y
 y envíos pendientes. Es idempotente y un reporte eliminado no puede resolverse.
 No borra archivos, jornadas, lecturas de horómetro ni modifica el estado del equipo;
 las correcciones operativas se hacen desde sus módulos correspondientes.
+
+## Jornadas por empleado y sugerencias de bitácora
+
+Entradas y salidas se consultan por empleado y por período (Hoy, semana, mes o
+fechas de hasta 93 días). El resumen no carga fotos. Al abrir un empleado se
+consultan sus jornadas de 20 en 20, con entrada y salida emparejadas. Las horas
+reportadas del resumen se recortan al período consultado; las jornadas abiertas
+no suman horas ni se interpretan como ausencias. Las jornadas con marcaciones
+eliminadas se señalan y no suman horas válidas. Se conservan consultas históricas
+de empleados desactivados cuando tienen jornadas en el período.
+
+Cada jornada válida crea una sola EmployeeActivityNote ligada mediante
+sourceAttendanceId único. Una entrada crea la sugerencia; la salida actualiza la
+misma nota mientras siga en SUGGESTED. No se asigna un equipo por inferencia y las
+notas manuales continúan exigiendo equipo para WORKSITE. La excepción en el CHECK
+de asociaciones está restringida a notas enlazadas a una jornada.
+
+Office/ADMIN puede confirmar, corregir obra/fecha/equipo opcional/texto/horas
+revisadas o descartar. Se conserva la sugerencia original y un historial
+EmployeeActivityReview con el usuario, fecha, acción, valores anteriores y nuevos,
+además de las horas y reportes originales. CONFIRMED/CORRECTED/DISMISSED nunca se
+sobrescriben con automatización. Si una salida llega después de una corrección,
+reviewedSourceExitId permite identificar que hace falta una nueva revisión. La
+confirmación de un lote de hasta 100 notas de un empleado es transaccional; no
+admite jornadas abiertas ni evidencia eliminada. Descartar no borra la nota ni
+permite que se regenere. Eliminar una marcación invalida la fuente de su sugerencia
+sin borrar la jornada ni una corrección humana.
+
+Las fotos originales permanecen en R2. Las tarjetas usan el endpoint autenticado
+/files/:id/thumbnail, con permisos ADMIN/OFFICE y la misma autorización por entidad
+que la descarga. Utiliza la miniatura WebP existente de hasta 480px, cargada cerca
+del área visible. El original se descarga solo al ampliar la evidencia. No se
+crean duplicados ni se recomprimen las fotos históricas.
+
+Preparación de anexos/prefacturas: la fuente estructurada está en
+WorksiteAttendance + reportes/evidencias; la revisión humana se conserva en la
+nota (verifiedEnteredAt/verifiedLeftAt, obra y fecha revisadas) y su historial.
+Una futura integración debe consumir únicamente revisiones vigentes de jornadas
+cerradas, sin sourceInvalidatedAt, con reviewedSourceExitId igual a la salida
+actual y sin reportes eliminados. No debe tratar una sugerencia pendiente o
+presencia reportada como tiempo automáticamente facturable. Esta entrega no
+emite anexos ni prefacturas.
+
+Backfill de jornadas existentes, idempotente y sin modificar marcaciones ni notas
+manuales: `npx ts-node scripts/backfill-attendance-suggestions.ts` hace un conteo
+previo; `--apply` genera solo sugerencias faltantes de jornadas con evidencia
+vigente. Requiere WHATSAPP_REPORT_ACTOR_USER_ID activo con rol ADMIN/OFFICE.

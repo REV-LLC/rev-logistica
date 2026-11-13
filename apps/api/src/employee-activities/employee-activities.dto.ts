@@ -2,6 +2,11 @@ import { EmployeeActivityType } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   IsString,
+  IsIn,
+  IsArray,
+  IsISO8601,
+  ArrayMinSize,
+  ArrayMaxSize,
   IsEnum,
   IsOptional,
   ValidateIf,
@@ -12,6 +17,20 @@ import {
 } from 'class-validator';
 
 export class ActivityNoteDto {
+  @IsOptional()
+  @IsISO8601()
+  @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/i, {
+    message: 'Incluye fecha, hora y zona horaria.',
+  })
+  verifiedEnteredAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/i, {
+    message: 'Incluye fecha, hora y zona horaria.',
+  })
+  verifiedLeftAt?: string | null;
+
   @IsOptional()
   @IsEnum(EmployeeActivityType)
   type?: EmployeeActivityType;
@@ -35,12 +54,7 @@ export class ActivityNoteDto {
   @IsUUID()
   warehouseId?: string;
 
-  @ValidateIf(
-    (value) =>
-      !value.type ||
-      value.type === 'WORKSITE' ||
-      (value.type === 'WAREHOUSE' && value.assetId != null),
-  )
+  @IsOptional()
   @IsUUID()
   assetId?: string;
 
@@ -49,4 +63,17 @@ export class ActivityNoteDto {
   @MinLength(1, { message: 'Escribe una descripción.' })
   @MaxLength(5000)
   description: string;
+}
+
+export class ReviewActivityDto {
+  @IsIn(['CONFIRM', 'DISMISS'])
+  action: 'CONFIRM' | 'DISMISS';
+}
+
+export class ReviewActivityBatchDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID('all', { each: true })
+  ids: string[];
 }
