@@ -149,3 +149,9 @@ Backfill de jornadas existentes, idempotente y sin modificar marcaciones ni nota
 manuales: `npx ts-node scripts/backfill-attendance-suggestions.ts` hace un conteo
 previo; `--apply` genera solo sugerencias faltantes de jornadas con evidencia
 vigente. Requiere WHATSAPP_REPORT_ACTOR_USER_ID activo con rol ADMIN/OFFICE.
+
+El filtro Perfil de asistencia inicia en Operarios (operadores de maquinaria y
+maquinistas). No incluye cuentas ADMIN/OFFICE/DRIVER aunque el cargo del empleado
+sea de operario. Conductores, oficina/administración, otros perfiles y todos se
+pueden consultar seleccionándolos explícitamente. Los contadores corresponden
+a las tarjetas visibles; este filtro no altera reportes, jornadas ni bitácoras.
