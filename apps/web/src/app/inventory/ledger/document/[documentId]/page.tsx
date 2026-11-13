@@ -1,6 +1,9 @@
 'use client';
 
 import AppImage from '@/components/AppImage';
+import ApprovalResolutionDialog from '@/components/transport/ApprovalResolutionDialog';
+import { documentCompositionPayload } from '@/components/transport/request-items';
+import type { RequestDocumentDetail, InventoryBulk, InventorySerial, ResolveInventoryByOwner } from '@/components/transport/request-types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
@@ -25,7 +28,6 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
-import { getSerialDisplayName } from '@/lib/serial-assets';
 import { documentPrintRows, documentItemDescription, documentItemCode } from '@/lib/document-print-rows';
 import {
   buildInventoryStockShortageMessage,
@@ -46,6 +48,8 @@ import type { InventoryItemPickerSerialItem } from '@/components/InventoryItemPi
 import {
   getRequestInventorySourceMode,
   getRequestSourceWarehouseId,
+  getRequestItemInventoryKey,
+  getApprovalSkuOptions,
   loadRequestSourceInventories,
   type RequestInventorySourceMode,
 } from '@/components/transport/request-inventory-source';
@@ -86,7 +90,7 @@ type DocumentDetail = {
     mimeType?: string | null;
     createdAt: string;
   }>;
-  items: Array<{
+  items: Array<RequestDocumentDetail['items'][number] & {
     id: string;
     skuId?: string | null;
     assetId?: string | null;
@@ -174,18 +178,6 @@ type ProviderRemissionDraft = {
   previewUrl: string;
 };
 
-type InventorySerial = {
-  assetId: string;
-  skuId?: string | null;
-  skuName?: string | null;
-  description?: string | null;
-  serialOrEngine?: string | null;
-  internalNumber?: number | null;
-  brand?: string | null;
-  model?: string | null;
-  ownerWarehouseId?: string | null;
-};
-
 type SkuOption = {
   id: string;
   name: string;
@@ -193,7 +185,6 @@ type SkuOption = {
   controlType: 'BULK' | 'SERIAL';
 };
 
-type ResolveInventoryByOwner = Record<string, { serial: InventorySerial[] }>;
 
 
 
@@ -735,10 +726,12 @@ export default function DocumentDetailPage() {
     }
     return false;
   };
-  const getDocumentSourceName = (doc: DocumentDetail, ownerId?: string | null) =>
-    warehouses.find((warehouse) => warehouse.id === getRequestSourceWarehouseId(doc, ownerId))?.name
-      ?? (getRequestSourceWarehouseId(doc, ownerId) === doc.warehouse?.id ? doc.warehouse?.name : null)
+  const getDocumentSourceName = (doc: RequestDocumentDetail, ownerId?: string | null, sourceId?: string | null) =>
+    warehouses.find((warehouse) => warehouse.id === getRequestSourceWarehouseId(doc, ownerId, sourceId))?.name
+      ?? (getRequestSourceWarehouseId(doc, ownerId, sourceId) === doc.warehouse?.id ? doc.warehouse?.name : null)
       ?? 'Sin seleccionar';
+  const getResolveSkuOptions = (ownerWarehouseId?: string | null) =>
+    getApprovalSkuOptions(resolveDocument, ownerWarehouseId, skuOptions, resolveInventoryByOwner);
   const stockReviewAction = getStockShortageReviewAction({
     ownerWarehouseId: adjustWarningOwnerWarehouseId,
     warehouseId: adjustWarningWarehouseId,
@@ -904,8 +897,8 @@ export default function DocumentDetailPage() {
   };
 
   const loadResolveInventories = (doc: DocumentDetail, ownerIds: string[]) =>
-    loadRequestSourceInventories<{ ownerWarehouseId?: string | null }, InventorySerial>(doc, ownerIds, (id) =>
-      api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
+    loadRequestSourceInventories<InventoryBulk, InventorySerial>(doc, ownerIds, (id) =>
+      api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${id}`, { method: 'GET' }));
 
   const buildInitialResolveState = (
     doc: DocumentDetail,
@@ -924,13 +917,13 @@ export default function DocumentDetailPage() {
         : (normalizedTag ? skuByNormalizedName.get(normalizedTag) ?? null : null);
       if (!matchedSku) return;
 
-      initialSkuMap[index] = matchedSku.id;
-
-      if (matchedSku.controlType !== 'SERIAL') return;
       const ownerWarehouseId = item.condition?.trim();
       if (!ownerWarehouseId) return;
+      if (doc.type === 'RETURN' && !getApprovalSkuOptions(doc, ownerWarehouseId, skuOptions, inventoriesByOwner).some((option) => option.value === matchedSku.id)) return;
+      initialSkuMap[index] = matchedSku.id;
+      if (matchedSku.controlType !== 'SERIAL') return;
       const serialCandidates =
-        inventoriesByOwner[ownerWarehouseId]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
+        inventoriesByOwner[getRequestItemInventoryKey(doc, item)]?.serial.filter((serial) => serial.skuId === matchedSku.id) ?? [];
       const internalFromTag = parseInternalNumberFromTag(item.requestedTag);
       if (internalFromTag == null) return;
       const exactAsset = serialCandidates.find((serial) => serial.internalNumber === internalFromTag);
@@ -966,7 +959,7 @@ export default function DocumentDetailPage() {
       setCreateSerialError('Selecciona el propietario del equipo antes de crearlo.');
       return;
     }
-    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId);
+    const sourceWarehouseId = getRequestSourceWarehouseId(resolveDocument, ownerWarehouseId, row.sourceWarehouseId);
     if (!sourceWarehouseId) {
       setCreateSerialError('Selecciona la bodega de salida del documento antes de crear el equipo.');
       return;
@@ -1008,12 +1001,15 @@ export default function DocumentDetailPage() {
         },
       });
 
-      const refreshedInventory = await api<{ serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
+      const refreshedInventory = await api<{ bulk: InventoryBulk[]; serial: InventorySerial[] }>(`/inventory/warehouse/${sourceWarehouseId}`, {
         method: 'GET',
       });
       setResolveInventoryByOwner((prev) => ({
         ...prev,
-        [ownerWarehouseId]: { serial: (refreshedInventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerWarehouseId) },
+        [getRequestItemInventoryKey(resolveDocument, row)]: {
+          bulk: (refreshedInventory.bulk ?? []).filter((item) => item.ownerWarehouseId === ownerWarehouseId),
+          serial: (refreshedInventory.serial ?? []).filter((item) => item.ownerWarehouseId === ownerWarehouseId),
+        },
       }));
       setResolveAssetByIndex((prev) => ({
         ...prev,
@@ -1280,8 +1276,10 @@ export default function DocumentDetailPage() {
     setError(null);
     try {
       const itemsPayload = resolveDocument.items.map((item, index) => {
+        const composition = { ...documentCompositionPayload(item), sourceWarehouseId: item.sourceWarehouseId ?? undefined };
         const ownerWarehouseId = item.condition ?? undefined;
         if (item.accessoryId) return {
+          ...composition,
           accessoryId: item.accessoryId,
           accessorySourceBalanceId: item.accessorySourceBalanceId ?? undefined,
           componentParentAssetId: item.componentParentAssetId ?? undefined,
@@ -1290,6 +1288,7 @@ export default function DocumentDetailPage() {
         };
         if (item.assetId) {
           return {
+            ...composition,
             assetId: item.assetId,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
@@ -1300,6 +1299,7 @@ export default function DocumentDetailPage() {
           const existingSku = skuOptions.find((entry) => entry.id === item.skuId);
           if (existingSku?.controlType === 'SERIAL') {
             return {
+              ...composition,
               assetId: resolveAssetByIndex[index],
               componentParentAssetId: item.componentParentAssetId ?? undefined,
               ownerWarehouseId,
@@ -1310,6 +1310,7 @@ export default function DocumentDetailPage() {
         }
         if (item.skuId) {
           return {
+            ...composition,
             skuId: item.skuId,
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             quantity: Number(item.quantity ?? 1) || 1,
@@ -1322,6 +1323,7 @@ export default function DocumentDetailPage() {
         const resolvedSku = skuOptions.find((entry) => entry.id === resolvedSkuId);
         if (resolvedSku?.controlType === 'SERIAL') {
           return {
+            ...composition,
             assetId: resolveAssetByIndex[index],
             componentParentAssetId: item.componentParentAssetId ?? undefined,
             ownerWarehouseId,
@@ -1330,6 +1332,7 @@ export default function DocumentDetailPage() {
           };
         }
         return {
+          ...composition,
           skuId: resolvedSkuId,
           componentParentAssetId: item.componentParentAssetId ?? undefined,
           quantity: Number(item.quantity ?? 1) || 1,
@@ -2017,114 +2020,24 @@ export default function DocumentDetailPage() {
           </Group>
         </Stack>
       </Modal>
-      <Modal
-        opened={resolveModalOpen}
-        onClose={closeResolveModal}
-        title="Resolver tags antes de aprobar"
-        centered
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Masivo resuelve por SKU. Serializado resuelve por equipo especifico (interno #).
-          </Text>
-          {(resolveDocument?.items ?? [])
-            .map((item, index) => ({ item, index }))
-            .filter(({ item }) => isResolvePendingItem(item))
-            .map(({ item, index }) => (
-              <Paper key={`${item.requestedTag}-${index}`} withBorder p="sm" radius="md">
-                <Stack gap={6}>
-                  <Text fw={600}>{item.requestedTag ?? item.sku?.name ?? `Item ${index + 1}`}</Text>
-                  <Text size="xs" c="dimmed">
-                    Cantidad: {Number(item.quantity ?? 1) || 1}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Propietario: {warehouses.find((warehouse) => warehouse.id === item.condition)?.name ?? '-'}
-                  </Text>
-                  {resolveDocument?.type === 'REMISSION' ? <Text size="xs" c="dimmed">Salida física: {getDocumentSourceName(resolveDocument, item.condition)}</Text> : null}
-                  <Select
-                    label="Equipo"
-                    placeholder="Seleccionar SKU"
-                    searchable
-                    data={skuOptions.map((sku) => ({ value: sku.id, label: sku.name }))}
-                    value={resolveSkuByIndex[index] ?? null}
-                    onChange={(value) => {
-                      setResolveSkuByIndex((prev) => ({
-                        ...prev,
-                        [index]: value ?? '',
-                      }));
-                      setResolveAssetByIndex((prev) => ({
-                        ...prev,
-                        [index]: '',
-                      }));
-                    }}
-                  />
-                  {(() => {
-                    const selectedSkuId = resolveSkuByIndex[index];
-                    const selectedSku = skuOptions.find((entry) => entry.id === selectedSkuId);
-                    if (selectedSku?.controlType !== 'SERIAL') return null;
-                    const ownerWarehouseId = item.condition?.trim() ?? '';
-                    const inventory = resolveInventoryByOwner[ownerWarehouseId]?.serial ?? [];
-                    const expectedInternal = parseInternalNumberFromTag(item.requestedTag);
-                    const serialOptions = inventory
-                      .filter(
-                        (serial) =>
-                          serial.skuId === selectedSku.id &&
-                          (expectedInternal == null || serial.internalNumber === expectedInternal),
-                      )
-                      .map((serial) => ({
-                        value: serial.assetId,
-                        label: getSerialDisplayName(serial),
-                      }));
-                    const hasExpected = expectedInternal == null
-                      ? false
-                      : inventory.some(
-                          (serial) =>
-                            serial.skuId === selectedSku.id &&
-                            serial.internalNumber === expectedInternal,
-                        );
-                    return (
-                      <Stack gap={6}>
-                        <Select
-                          label="Equipo serial"
-                          placeholder="Seleccionar equipo"
-                          searchable
-                          data={serialOptions}
-                          value={resolveAssetByIndex[index] ?? null}
-                          nothingFoundMessage="No hay equipo para este SKU en esa bodega"
-                          onChange={(value) =>
-                            setResolveAssetByIndex((prev) => ({
-                              ...prev,
-                              [index]: value ?? '',
-                            }))
-                          }
-                        />
-                        {expectedInternal != null && !hasExpected ? (
-                          <Text size="xs" c="orange.7">
-                            El tag solicita #{expectedInternal}, pero no aparece disponible en la bodega de salida.
-                          </Text>
-                        ) : null}
-                        {!serialOptions.length || (expectedInternal != null && !hasExpected) ? (
-                          <Button size="xs" variant="light" onClick={() => openCreateSerialForRow(index)}>
-                            Crear equipo faltante
-                          </Button>
-                        ) : null}
-                      </Stack>
-                    );
-                  })()}
-                </Stack>
-              </Paper>
-            ))}
-
-          <Group justify="flex-end">
-            <Button variant="default" onClick={closeResolveModal} disabled={resolvingApprove}>
-              Cancelar
-            </Button>
-            <Button onClick={resolveAndApprove} loading={resolvingApprove}>
-              Resolver y aprobar
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <ApprovalResolutionDialog
+        getDocumentSourceName={getDocumentSourceName}
+        resolveModalOpen={resolveModalOpen}
+        closeResolveModal={closeResolveModal}
+        resolveDocument={resolveDocument}
+        isResolvePendingItem={isResolvePendingItem}
+        warehouses={warehouses}
+        getResolveSkuOptions={getResolveSkuOptions}
+        resolveSkuByIndex={resolveSkuByIndex}
+        setResolveSkuByIndex={setResolveSkuByIndex}
+        setResolveAssetByIndex={setResolveAssetByIndex}
+        skuOptions={skuOptions}
+        resolveInventoryByOwner={resolveInventoryByOwner}
+        resolveAssetByIndex={resolveAssetByIndex}
+        openCreateSerialForRow={openCreateSerialForRow}
+        resolvingApprove={resolvingApprove}
+        resolveAndApprove={resolveAndApprove}
+      />
       <Modal
         opened={createSerialOpen}
         onClose={() => {
@@ -2144,7 +2057,7 @@ export default function DocumentDetailPage() {
           {createSerialError ? <Text c="red">{createSerialError}</Text> : null}
           {resolveDocument && createSerialIndex != null ? <Alert color="blue" title="Registro inicial del equipo">
             Propietario: {warehouses.find((warehouse) => warehouse.id === resolveDocument.items[createSerialIndex]?.condition)?.name ?? 'Sin seleccionar'}.<br />
-            Ubicación inicial: {getDocumentSourceName(resolveDocument, resolveDocument.items[createSerialIndex]?.condition)}.
+            Ubicación inicial: {getDocumentSourceName(resolveDocument, resolveDocument.items[createSerialIndex]?.condition, resolveDocument.items[createSerialIndex]?.sourceWarehouseId)}.
             <Text size="sm" mt="xs">Registra únicamente un equipo nuevo. Si ya existe en otra ubicación, registra su recepción; no lo crees otra vez.</Text>
           </Alert> : null}
           <TextInput

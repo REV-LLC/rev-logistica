@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getRequestInventorySourceMode, getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source.ts';
+import { getApprovalSkuOptions, getRequestInventorySourceMode, getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source.ts';
+
+test('ambas entradas de aprobación comparten catálogo de remisión y disponibilidad de devolución', () => {
+  const skus = [{ id: 'serial', name: 'DEMOLEDOR' }, { id: 'bulk', name: 'BASE COLLAR' }, { id: 'empty', name: 'SIN STOCK' }];
+  const inventory = { owner: { bulk: [{ skuId: 'bulk', quantity: 2 }, { skuId: 'empty', quantity: 0 }], serial: [{ skuId: 'serial' }] } };
+  assert.deepEqual(getApprovalSkuOptions({ type: 'REMISSION' }, 'owner', skus, inventory).map(sku => sku.value), ['serial', 'bulk', 'empty']);
+  assert.deepEqual(getApprovalSkuOptions({ type: 'RETURN' }, 'owner', skus, inventory).map(sku => sku.value), ['serial', 'bulk']);
+  assert.deepEqual(getApprovalSkuOptions({ type: 'RETURN' }, 'other', skus, inventory), []);
+  assert.deepEqual(getApprovalSkuOptions({ type: 'REMISSION' }, null, skus, inventory), []);
+});
 
 test('un mismo propietario puede tener ítems de dos ubicaciones sin mezclar existencias', async () => {
   const doc = { type: 'REMISSION', inventorySourceMode: 'WAREHOUSE', warehouse: { id: 'own' }, items: [

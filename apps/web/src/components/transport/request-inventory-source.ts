@@ -1,4 +1,25 @@
+import type { ResolveInventoryByOwner, SkuOption } from './request-types';
+
 export type RequestInventorySourceMode = 'WAREHOUSE' | 'OWNER_WAREHOUSES';
+
+export function getApprovalSkuOptions(
+  document: RequestInventorySource | null,
+  ownerWarehouseId: string | null | undefined,
+  skus: SkuOption[],
+  inventories: ResolveInventoryByOwner,
+) {
+  if (!ownerWarehouseId) return [];
+  if (document?.type === 'RETURN') {
+    const inventory = inventories[ownerWarehouseId];
+    const available = new Set([
+      ...(inventory?.bulk.filter((item) => item.quantity > 0).map((item) => item.skuId) ?? []),
+      ...(inventory?.serial.map((item) => item.skuId) ?? []),
+    ]);
+    return skus.filter((sku) => available.has(sku.id)).map((sku) => ({ value: sku.id, label: sku.name }));
+  }
+  // New equipment may need registration before it is available at the source.
+  return skus.map((sku) => ({ value: sku.id, label: sku.name }));
+}
 
 export type RequestInventorySource = {
   type?: string;
