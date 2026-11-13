@@ -91,6 +91,9 @@ El resumen incluye «Agregar fotos» antes de confirmar. El bot explica cómo ad
 
 La pantalla separa Daños, Horómetros, Peticiones y Entradas y salidas. Esta última
 pestaña agrupa ambos tipos de reporte y permite consultar las jornadas por separado.
+Sus tarjetas muestran la foto directamente (con carga autenticada al acercarse a la
+pantalla), o un enlace al mapa si se compartió ubicación. No tienen botón Ver reporte;
+la foto permite ampliarse al tocarla.
 
 ADMIN y OFFICE pueden eliminar un reporte desde su tarjeta o detalle, previa
 confirmación. `DELETE /whatsapp-reports/:id` verifica también que la cuenta siga

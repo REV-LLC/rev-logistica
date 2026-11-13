@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Container,
   Group,
@@ -17,6 +18,7 @@ import {
   Text,
   Textarea,
   Title,
+  UnstyledButton,
 } from "@mantine/core";
 import { getCurrentUserRole } from "@/lib/auth";
 import { api, apiBlob } from "@/lib/api";
@@ -123,6 +125,94 @@ const inboxErrorLabels: Record<string, string> = {
   ALERT_SEND_FAILED:
     "No se pudo enviar la alerta. Revisa el contacto e intenta nuevamente.",
 };
+
+function AttendancePhoto({
+  file,
+  number,
+  onOpen,
+}: {
+  file: Report["evidence"][number]["fileObject"];
+  number: number;
+  onOpen: () => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    let objectUrl: string | undefined;
+    setFailed(false);
+    setUrl(null);
+    void apiBlob(`/files/${file.id}/download`)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [file.id, visible, retry]);
+  return (
+    <Box ref={container} mih={120}>
+      {url && !failed ? (
+        <UnstyledButton
+          onClick={onOpen}
+          w="100%"
+          aria-label={`Ampliar foto ${number}`}
+        >
+          <Image
+            src={url}
+            alt={`Foto de ${number === 1 ? "evidencia" : `evidencia ${number}`} de entrada o salida`}
+            fit="contain"
+            mah={300}
+            radius="sm"
+            onError={() => setFailed(true)}
+          />
+        </UnstyledButton>
+      ) : failed ? (
+        <Stack gap="xs" align="flex-start">
+          <Text size="sm" c="dimmed">
+            No se pudo cargar la foto.
+          </Text>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => setRetry((value) => value + 1)}
+          >
+            Reintentar foto
+          </Button>
+        </Stack>
+      ) : (
+        <Group justify="center" mih={120}>
+          <Loader size="sm" aria-label="Cargando foto de evidencia" />
+        </Group>
+      )}
+    </Box>
+  );
+}
 
 export default function WhatsappReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -314,6 +404,33 @@ export default function WhatsappReportsPage() {
             {r.hours !== null ? (
               <Text fw={600}>Horómetro: {r.hours} h</Text>
             ) : null}
+            {["CHECK_IN", "CHECK_OUT"].includes(r.kind) ? (
+              r.location ? (
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">
+                    Ubicación recibida: {date(r.location.receivedAt)} (Colombia)
+                  </Text>
+                  <Button
+                    component="a"
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.location.latitude},${r.location.longitude}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="light"
+                  >
+                    Ver ubicación en el mapa
+                  </Button>
+                </Stack>
+              ) : (
+                r.evidence.map((e, index) => (
+                  <AttendancePhoto
+                    key={e.fileObject.id}
+                    file={e.fileObject}
+                    number={index + 1}
+                    onOpen={() => void openPhoto(e.fileObject, index + 1)}
+                  />
+                ))
+              )
+            ) : null}
             <Group justify="space-between">
               <Text size="xs" c="dimmed">
                 {r.location
@@ -333,16 +450,18 @@ export default function WhatsappReportsPage() {
                     Eliminar
                   </Button>
                 ) : null}
-                <Button
-                  variant="light"
-                  size="xs"
-                  onClick={() => {
-                    setSelected(r);
-                    setResolution("");
-                  }}
-                >
-                  Ver reporte
-                </Button>
+                {!["CHECK_IN", "CHECK_OUT"].includes(r.kind) ? (
+                  <Button
+                    variant="light"
+                    size="xs"
+                    onClick={() => {
+                      setSelected(r);
+                      setResolution("");
+                    }}
+                  >
+                    Ver reporte
+                  </Button>
+                ) : null}
               </Group>
             </Group>
           </Stack>
