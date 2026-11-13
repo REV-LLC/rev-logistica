@@ -72,6 +72,21 @@ function EmployeeStatusBadge({ active }: { active: boolean }) {
   );
 }
 
+// Compact identity from the employee card, without its background or management actions.
+export function EmployeeCardIdentity({ employee, photoSize = 56, showRole = true }: {
+  employee: Pick<EmployeeCardRecord, 'id' | 'name' | 'lastName' | 'role' | 'active'>;
+  photoSize?: number;
+  showRole?: boolean;
+}) {
+  return <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+    <EmployeePhotoControl employee={employee} size={photoSize} grayscale={!employee.active} />
+    <Stack gap={2} style={{ minWidth: 0 }}>
+      <Text fw={700} size="lg" lh={1.2} style={{ overflowWrap: 'anywhere' }}>{getEmployeeCardFullName(employee)}</Text>
+      {showRole ? <Text size="sm" c="dimmed">{employeeCardRoleLabelByValue[employee.role]}</Text> : null}
+    </Stack>
+  </Group>;
+}
+
 export default function EmployeeCard({
   employee,
   onDocuments,

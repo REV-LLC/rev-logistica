@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import {
   attendanceEmployeeProfile,
@@ -23,6 +24,16 @@ import {
 } from "@/lib/attendance-employee-profile";
 import { api } from "@/lib/api";
 import { getCurrentUserRole } from "@/lib/auth";
+import { IconNotebook } from "@tabler/icons-react";
+import {
+  EmployeeCardIdentity,
+  type EmployeeCardRole,
+} from "@/components/EmployeeCard";
+import {
+  attendancePresetRange,
+  attendanceDayTitle,
+} from "@/lib/attendance-period";
+import styles from "./AttendanceEmployeeCards.module.css";
 import AttendanceEvidencePhoto from "./AttendanceEvidencePhoto";
 
 type Employee = {
@@ -30,7 +41,7 @@ type Employee = {
   name: string;
   lastName: string;
   active: boolean;
-  role: string;
+  role: EmployeeCardRole;
   accountRole: string | null;
   journeys: number;
   open: number;
@@ -83,12 +94,7 @@ function today() {
   }).format(new Date());
 }
 function presetRange(preset: string) {
-  const to = today();
-  const d = new Date(`${to}T12:00:00Z`);
-  if (preset === "week")
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  if (preset === "month") d.setUTCDate(1);
-  return { from: d.toISOString().slice(0, 10), to };
+  return attendancePresetRange(preset, today());
 }
 const reviewLabels: Record<string, string> = {
   SUGGESTED: "Sugerencia pendiente",
@@ -97,8 +103,8 @@ const reviewLabels: Record<string, string> = {
   DISMISSED: "Descartada por oficina",
 };
 export default function AttendanceEmployeeCards() {
-  const [range, setRange] = useState(() => presetRange("today"));
-  const [preset, setPreset] = useState<string | null>("today");
+  const [range, setRange] = useState(() => presetRange("month"));
+  const [preset, setPreset] = useState<string | null>("month");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -286,29 +292,39 @@ export default function AttendanceEmployeeCards() {
       ) : null}
       {employeeId ? (
         <>
-          <Group justify="space-between">
-            <Button
-              variant="subtle"
-              onClick={() => {
-                setEmployeeId(null);
-                setJournals([]);
-              }}
-            >
-              ← Volver a empleados
-            </Button>
-            <Title order={3}>
-              {selected ? fullName(selected) : "Jornadas del empleado"}
-            </Title>
-          </Group>
+          <Button
+            variant="subtle"
+            onClick={() => {
+              setEmployeeId(null);
+              setJournals([]);
+            }}
+            style={{ alignSelf: "flex-start" }}
+          >
+            ← Volver a empleados
+          </Button>
           {selected ? (
-            <Button
-              component={Link}
-              variant="light"
-              href={`/employees/activities?employeeId=${selected.id}&month=${range.from.slice(0, 7)}&date=${range.from}`}
-            >
-              Abrir bitácora de {selected.name}
-            </Button>
-          ) : null}
+            <div className={styles.employeeHeader}>
+              <EmployeeCardIdentity employee={selected} showRole={false} />
+              <Tooltip label={`Abrir bitácora de ${fullName(selected)}`}>
+                <Button
+                  component={Link}
+                  variant="light"
+                  radius="md"
+                  className={styles.journalButton}
+                  aria-label={`Abrir bitácora de ${fullName(selected)}`}
+                  href={`/employees/activities?employeeId=${selected.id}&month=${range.from.slice(0, 7)}&date=${range.from}`}
+                >
+                  <IconNotebook size={20} aria-hidden="true" />
+                  <span className={styles.journalButtonText}>
+                    <span className={styles.journalButtonVerb}>Abrir </span>
+                    bitácora
+                  </span>
+                </Button>
+              </Tooltip>
+            </div>
+          ) : (
+            <Title order={3}>Jornadas del empleado</Title>
+          )}
           {journalLoading && !journals.length ? (
             <Loader aria-label="Cargando jornadas" />
           ) : null}
@@ -332,15 +348,24 @@ export default function AttendanceEmployeeCards() {
               a.activityNote.reviewedSourceExitId !== a.checkOutReportId,
             );
             return (
-              <Paper key={a.id} withBorder p="md" radius="md">
+              <Paper
+                key={a.id}
+                component="article"
+                aria-label={`Jornada de ${date(a.enteredAt)}`}
+                withBorder
+                p="md"
+                radius="md"
+              >
                 <Stack>
                   <Group justify="space-between">
-                    <div>
-                      <Text fw={700}>{a.customerWorksite.worksite.name}</Text>
-                      <Text size="sm" c="dimmed">
-                        {a.customerWorksite.customer.name}
-                      </Text>
-                    </div>
+                    <Title order={3} className={styles.journeyDate}>
+                      <time
+                        dateTime={a.enteredAt}
+                        aria-label={date(a.enteredAt)}
+                      >
+                        {attendanceDayTitle(a.enteredAt)}
+                      </time>
+                    </Title>
                     <Badge
                       color={invalid ? "red" : a.leftAt ? "green" : "orange"}
                     >
@@ -351,6 +376,12 @@ export default function AttendanceEmployeeCards() {
                           : "Salida pendiente"}
                     </Badge>
                   </Group>
+                  <Stack gap={3}>
+                    <Text fw={600}>{a.customerWorksite.worksite.name}</Text>
+                    <Text size="sm" c="dimmed">
+                      {a.customerWorksite.customer.name}
+                    </Text>
+                  </Stack>
                   {a.leftAt ? (
                     <Text size="sm">
                       Presencia reportada:{" "}
@@ -530,7 +561,7 @@ export default function AttendanceEmployeeCards() {
                   <Paper key={e.id} withBorder p="md" radius="md">
                     <Stack gap="xs">
                       <Group justify="space-between">
-                        <Text fw={700}>{fullName(e)}</Text>
+                        <EmployeeCardIdentity employee={e} photoSize={48} />
                         {!e.active ? (
                           <Badge color="gray">Inactivo</Badge>
                         ) : null}
