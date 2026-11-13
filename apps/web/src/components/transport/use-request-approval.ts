@@ -1,6 +1,6 @@
 'use client';
 import { documentCompositionPayload } from './request-items';
-import { getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source';
+import { getApprovalSkuOptions, getRequestSourceWarehouseId, getRequestItemInventoryKey, loadRequestSourceInventories } from './request-inventory-source';
 import { api, ApiError } from '@/lib/api';
 import {
   buildInventoryStockShortageMessage,
@@ -146,20 +146,8 @@ export function useRequestApproval({
     return false;
   };
 
-  const getResolveSkuOptions = (ownerWarehouseId?: string | null) => {
-    if (!ownerWarehouseId) return [];
-    if (resolveDocument?.type === 'RETURN') {
-      const inventory = resolveInventoryByOwner[ownerWarehouseId];
-      const available = new Set([
-        ...(inventory?.bulk.filter((item) => item.quantity > 0).map((item) => item.skuId) ?? []),
-        ...(inventory?.serial.map((item) => item.skuId) ?? []),
-      ]);
-      return skuOptions.filter((sku) => available.has(sku.id)).map((sku) => ({ value: sku.id, label: sku.name }));
-    }
-    // Catalogue references remain selectable when the specific equipment must
-    // first be registered. Availability is checked on the physical-source picker.
-    return skuOptions.map((sku) => ({ value: sku.id, label: sku.name }));
-  };
+  const getResolveSkuOptions = (ownerWarehouseId?: string | null) =>
+    getApprovalSkuOptions(resolveDocument, ownerWarehouseId, skuOptions, resolveInventoryByOwner);
 
   const handleApprovalError = (err: unknown, documentId?: string) => {
     if (!(err instanceof ApiError)) {
