@@ -17,6 +17,10 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import {
+  attendanceEmployeeProfile,
+  type AttendanceProfile,
+} from "@/lib/attendance-employee-profile";
 import { api } from "@/lib/api";
 import { getCurrentUserRole } from "@/lib/auth";
 import AttendanceEvidencePhoto from "./AttendanceEvidencePhoto";
@@ -26,6 +30,8 @@ type Employee = {
   name: string;
   lastName: string;
   active: boolean;
+  role: string;
+  accountRole: string | null;
   journeys: number;
   open: number;
   pendingReview: number;
@@ -100,6 +106,7 @@ export default function AttendanceEmployeeCards() {
   const [loading, setLoading] = useState(true);
   const [journalLoading, setJournalLoading] = useState(false);
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState<AttendanceProfile>("operators");
   const [search, setSearch] = useState("");
   const [withReports, setWithReports] = useState(false);
   const [status, setStatus] = useState<string | null>("all");
@@ -200,6 +207,7 @@ export default function AttendanceEmployeeCards() {
   }
   const visible = employees.filter(
     (e) =>
+      (profile === "all" || attendanceEmployeeProfile(e) === profile) &&
       (!withReports || e.journeys > 0) &&
       (status !== "open" || e.open > 0) &&
       (status !== "pending" || e.pendingReview > 0) &&
@@ -471,6 +479,21 @@ export default function AttendanceEmployeeCards() {
       ) : (
         <>
           <Group align="flex-end">
+            <Select
+              label="Perfil"
+              value={profile}
+              allowDeselect={false}
+              onChange={(value) => {
+                if (value) setProfile(value as AttendanceProfile);
+              }}
+              data={[
+                { value: "operators", label: "Operarios" },
+                { value: "drivers", label: "Conductores" },
+                { value: "office", label: "Oficina y administración" },
+                { value: "others", label: "Otros perfiles" },
+                { value: "all", label: "Todos los perfiles" },
+              ]}
+            />
             <TextInput
               label="Buscar empleado"
               placeholder="Nombre del empleado"
@@ -499,7 +522,7 @@ export default function AttendanceEmployeeCards() {
             <>
               <Text size="sm" c="dimmed">
                 {visible.length} empleados ·{" "}
-                {employees.reduce((n, e) => n + e.journeys, 0)} jornadas en el
+                {visible.reduce((n, e) => n + e.journeys, 0)} jornadas en el
                 período
               </Text>
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
