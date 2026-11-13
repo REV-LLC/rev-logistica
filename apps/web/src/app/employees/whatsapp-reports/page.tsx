@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Container,
   Group,
@@ -13,14 +12,13 @@ import {
   Modal,
   Paper,
   Stack,
-  Table,
   Tabs,
   Text,
   Textarea,
   Title,
-  UnstyledButton,
 } from "@mantine/core";
 import { getCurrentUserRole } from "@/lib/auth";
+import AttendanceEmployeeCards from "./components/AttendanceEmployeeCards";
 import { api, apiBlob } from "@/lib/api";
 
 type Kind = "DAMAGE" | "HOUR_METER" | "REQUEST" | "CHECK_IN" | "CHECK_OUT";
@@ -69,13 +67,6 @@ type Health = {
   metaConfigured: boolean;
   actorConfigured: boolean;
   hectorFound: boolean;
-};
-type Attendance = {
-  id: string;
-  enteredAt: string;
-  leftAt: string | null;
-  employee: { name: string; lastName: string };
-  customerWorksite: { worksite: { name: string } };
 };
 type InboxIssue = {
   id: string;
@@ -126,94 +117,6 @@ const inboxErrorLabels: Record<string, string> = {
     "No se pudo enviar la alerta. Revisa el contacto e intenta nuevamente.",
 };
 
-function AttendancePhoto({
-  file,
-  number,
-  onOpen,
-}: {
-  file: Report["evidence"][number]["fileObject"];
-  number: number;
-  onOpen: () => void;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
-  useEffect(() => {
-    const element = container.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "240px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    let objectUrl: string | undefined;
-    setFailed(false);
-    setUrl(null);
-    void apiBlob(`/files/${file.id}/download`)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [file.id, visible, retry]);
-  return (
-    <Box ref={container} mih={120}>
-      {url && !failed ? (
-        <UnstyledButton
-          onClick={onOpen}
-          w="100%"
-          aria-label={`Ampliar foto ${number}`}
-        >
-          <Image
-            src={url}
-            alt={`Foto de ${number === 1 ? "evidencia" : `evidencia ${number}`} de entrada o salida`}
-            fit="contain"
-            mah={300}
-            radius="sm"
-            onError={() => setFailed(true)}
-          />
-        </UnstyledButton>
-      ) : failed ? (
-        <Stack gap="xs" align="flex-start">
-          <Text size="sm" c="dimmed">
-            No se pudo cargar la foto.
-          </Text>
-          <Button
-            size="xs"
-            variant="light"
-            onClick={() => setRetry((value) => value + 1)}
-          >
-            Reintentar foto
-          </Button>
-        </Stack>
-      ) : (
-        <Group justify="center" mih={120}>
-          <Loader size="sm" aria-label="Cargando foto de evidencia" />
-        </Group>
-      )}
-    </Box>
-  );
-}
-
 export default function WhatsappReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [kind, setKind] = useState<string>("DAMAGE");
@@ -226,7 +129,6 @@ export default function WhatsappReportsPage() {
     setCanDelete(["ADMIN", "OFFICE"].includes(getCurrentUserRole() ?? ""));
   }, []);
   const [health, setHealth] = useState<Health | null>(null);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [issues, setIssues] = useState<InboxIssue[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -247,7 +149,7 @@ export default function WhatsappReportsPage() {
       setError("");
       try {
         const query = new URLSearchParams();
-        if (kind === "issues") return;
+        if (kind === "issues" || kind === "ATTENDANCE") return;
         query.set("kind", kind);
         if (cursor) query.set("cursor", cursor);
         const result = await api<Report[]>(`/whatsapp-reports?${query}`);
@@ -270,12 +172,10 @@ export default function WhatsappReportsPage() {
   const loadStatus = useCallback(async () => {
     const results = await Promise.allSettled([
       api<Health>("/whatsapp-reports/health"),
-      api<Attendance[]>("/whatsapp-reports/attendance"),
       api<InboxIssue[]>("/whatsapp-reports/inbox"),
     ]);
     if (results[0].status === "fulfilled") setHealth(results[0].value);
-    if (results[1].status === "fulfilled") setAttendance(results[1].value);
-    if (results[2].status === "fulfilled") setIssues(results[2].value);
+    if (results[1].status === "fulfilled") setIssues(results[1].value);
     if (results.some((r) => r.status === "rejected"))
       setError(
         "No se pudo actualizar el estado del canal o la asistencia. Intenta actualizar.",
@@ -404,33 +304,6 @@ export default function WhatsappReportsPage() {
             {r.hours !== null ? (
               <Text fw={600}>Horómetro: {r.hours} h</Text>
             ) : null}
-            {["CHECK_IN", "CHECK_OUT"].includes(r.kind) ? (
-              r.location ? (
-                <Stack gap="xs">
-                  <Text size="sm" c="dimmed">
-                    Ubicación recibida: {date(r.location.receivedAt)} (Colombia)
-                  </Text>
-                  <Button
-                    component="a"
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.location.latitude},${r.location.longitude}`)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="light"
-                  >
-                    Ver ubicación en el mapa
-                  </Button>
-                </Stack>
-              ) : (
-                r.evidence.map((e, index) => (
-                  <AttendancePhoto
-                    key={e.fileObject.id}
-                    file={e.fileObject}
-                    number={index + 1}
-                    onOpen={() => void openPhoto(e.fileObject, index + 1)}
-                  />
-                ))
-              )
-            ) : null}
             <Group justify="space-between">
               <Text size="xs" c="dimmed">
                 {r.location
@@ -554,63 +427,7 @@ export default function WhatsappReportsPage() {
             </Tabs.Panel>
           ))}
           <Tabs.Panel value="ATTENDANCE" pt="md">
-            <Tabs defaultValue="reports">
-              <Tabs.List>
-                <Tabs.Tab value="reports">
-                  Reportes de entrada y salida
-                </Tabs.Tab>
-                <Tabs.Tab value="attendance">Jornadas</Tabs.Tab>
-              </Tabs.List>
-              <Tabs.Panel value="reports" pt="md">
-                {kind === "ATTENDANCE" ? reportList : null}
-              </Tabs.Panel>
-              <Tabs.Panel value="attendance" pt="md">
-                <Text size="sm" c="dimmed" mb="md">
-                  Últimas 100 jornadas. Horas reportadas por WhatsApp en zona de
-                  Colombia; la ubicación o foto se consulta en los reportes de
-                  entrada y salida.
-                </Text>
-                <Table.ScrollContainer minWidth={640}>
-                  <Table>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>Empleado</Table.Th>
-                        <Table.Th>Obra</Table.Th>
-                        <Table.Th>Entrada</Table.Th>
-                        <Table.Th>Salida</Table.Th>
-                        <Table.Th>Duración</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {attendance.map((a) => (
-                        <Table.Tr key={a.id}>
-                          <Table.Td>
-                            {a.employee.name} {a.employee.lastName}
-                          </Table.Td>
-                          <Table.Td>
-                            {a.customerWorksite.worksite.name}
-                          </Table.Td>
-                          <Table.Td>{date(a.enteredAt)}</Table.Td>
-                          <Table.Td>
-                            {a.leftAt ? date(a.leftAt) : "Entrada abierta"}
-                          </Table.Td>
-                          <Table.Td>
-                            {a.leftAt
-                              ? `${((new Date(a.leftAt).getTime() - new Date(a.enteredAt).getTime()) / 3600000).toFixed(2)} h`
-                              : "—"}
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Table.ScrollContainer>
-                {!attendance.length ? (
-                  <Text c="dimmed">
-                    Aún no hay entradas o salidas registradas.
-                  </Text>
-                ) : null}
-              </Tabs.Panel>
-            </Tabs>
+            {kind === "ATTENDANCE" ? <AttendanceEmployeeCards /> : null}
           </Tabs.Panel>
           <Tabs.Panel value="issues" pt="md">
             <Stack>

@@ -302,16 +302,98 @@ describe('FilesService document access', () => {
 describe('SKU image access', () => {
   const prisma = { sku: { findUnique: jest.fn() } };
   const service = new FilesService(prisma as never, {} as never, {} as never);
-  it.each([Role.ADMIN, Role.OFFICE])('allows %s to upload images for an existing reference', async role => {
-    prisma.sku.findUnique.mockResolvedValue({ id: 'sku-1' });
-    await expect(service['assertEntityAccess']('SKU', 'sku-1', { id: 'user', role }, 'write')).resolves.toBeUndefined();
-    expect(service.getCategories('SKU')).toContainEqual(expect.objectContaining({ value: 'PHOTO' }));
-  });
-  it.each([Role.DRIVER, Role.WAREHOUSE_TABLET, Role.OPERATOR])('blocks uploads by %s', async role => {
-    await expect(service['assertEntityAccess']('SKU', 'sku-1', { id: 'user', role }, 'write')).rejects.toBeInstanceOf(ForbiddenException);
-  });
+  it.each([Role.ADMIN, Role.OFFICE])(
+    'allows %s to upload images for an existing reference',
+    async (role) => {
+      prisma.sku.findUnique.mockResolvedValue({ id: 'sku-1' });
+      await expect(
+        service['assertEntityAccess'](
+          'SKU',
+          'sku-1',
+          { id: 'user', role },
+          'write',
+        ),
+      ).resolves.toBeUndefined();
+      expect(service.getCategories('SKU')).toContainEqual(
+        expect.objectContaining({ value: 'PHOTO' }),
+      );
+    },
+  );
+  it.each([Role.DRIVER, Role.WAREHOUSE_TABLET, Role.OPERATOR])(
+    'blocks uploads by %s',
+    async (role) => {
+      await expect(
+        service['assertEntityAccess'](
+          'SKU',
+          'sku-1',
+          { id: 'user', role },
+          'write',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
   it('rejects an unknown reference', async () => {
     prisma.sku.findUnique.mockResolvedValue(null);
-    await expect(service['assertEntityAccess']('SKU', 'missing', { id: 'user', role: Role.OFFICE }, 'write')).rejects.toThrow('Referencia no encontrada');
+    await expect(
+      service['assertEntityAccess'](
+        'SKU',
+        'missing',
+        { id: 'user', role: Role.OFFICE },
+        'write',
+      ),
+    ).rejects.toThrow('Referencia no encontrada');
+  });
+});
+
+describe('Authenticated attendance previews', () => {
+  it('loads the existing thumbnail object through the same entity access check, without downloading the original', async () => {
+    const send = jest
+      .fn()
+      .mockResolvedValue({
+        Body: {},
+        ContentType: 'image/webp',
+        ContentLength: 4200,
+      });
+    const service = new FilesService(
+      {
+        fileObject: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({
+              id: 'photo',
+              entityType: 'EMPLOYEE',
+              entityId: 'employee',
+              objectKey: 'private/evidence.jpg',
+              mimeType: 'image/jpeg',
+            }),
+        },
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const access = jest
+      .spyOn(service as any, 'assertEntityAccess')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, 'getR2Config')
+      .mockReturnValue({ bucket: 'private' });
+    jest.spyOn(service as any, 'createR2Client').mockReturnValue({ send });
+    const result = await service.getFileDownload(
+      'photo',
+      { id: 'office', role: Role.OFFICE },
+      true,
+    );
+    expect(access).toHaveBeenCalledWith(
+      'EMPLOYEE',
+      'employee',
+      { id: 'office', role: Role.OFFICE },
+      'read',
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].input.Key).toBe(
+      'private/evidence.jpg.thumbnail.webp',
+    );
+    expect(result.contentType).toBe('image/webp');
+    expect(result.contentLength).toBe(4200);
   });
 });

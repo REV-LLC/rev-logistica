@@ -36,7 +36,13 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Get('categories/:entityType')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(
+    Role.ADMIN,
+    Role.OFFICE,
+    Role.DRIVER,
+    Role.OPERATOR,
+    Role.WAREHOUSE_TABLET,
+  )
   getCategories(@Param('entityType') entityType: string) {
     return this.filesService.getCategories(entityType);
   }
@@ -44,13 +50,20 @@ export class FilesController {
   @Get('provider-warehouses/:providerWarehouseId/remissions')
   @Roles(Role.ADMIN, Role.OFFICE)
   listProviderRemissions(
-    @Param('providerWarehouseId', new ParseUUIDPipe()) providerWarehouseId: string,
+    @Param('providerWarehouseId', new ParseUUIDPipe())
+    providerWarehouseId: string,
   ) {
     return this.filesService.listProviderRemissions(providerWarehouseId);
   }
 
   @Get('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(
+    Role.ADMIN,
+    Role.OFFICE,
+    Role.DRIVER,
+    Role.OPERATOR,
+    Role.WAREHOUSE_TABLET,
+  )
   listEntityFiles(
     @Param('entityType') entityType: string,
     @Param('entityId', new ParseUUIDPipe()) entityId: string,
@@ -63,7 +76,13 @@ export class FilesController {
   }
 
   @Post('entities/:entityType/:entityId')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(
+    Role.ADMIN,
+    Role.OFFICE,
+    Role.DRIVER,
+    Role.OPERATOR,
+    Role.WAREHOUSE_TABLET,
+  )
   @UseInterceptors(
     FilesInterceptor('files', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),
@@ -73,7 +92,8 @@ export class FilesController {
   uploadEntityFiles(
     @Param('entityType') entityType: string,
     @Param('entityId', new ParseUUIDPipe()) entityId: string,
-    @Body() body: {
+    @Body()
+    body: {
       category?: string;
       displayName?: string;
       expiresAt?: string;
@@ -82,14 +102,26 @@ export class FilesController {
     @UploadedFiles() files: UploadedBusinessFile[] | undefined,
     @Req() request: Request & { user: JwtPayload },
   ) {
-    return this.filesService.uploadEntityFiles(entityType, entityId, files, body, {
-      id: request.user.sub,
-      role: request.user.role,
-    });
+    return this.filesService.uploadEntityFiles(
+      entityType,
+      entityId,
+      files,
+      body,
+      {
+        id: request.user.sub,
+        role: request.user.role,
+      },
+    );
   }
 
   @Post('documents/:documentId/evidence')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(
+    Role.ADMIN,
+    Role.OFFICE,
+    Role.DRIVER,
+    Role.OPERATOR,
+    Role.WAREHOUSE_TABLET,
+  )
   @UseInterceptors(
     FilesInterceptor('photos', MAX_FILES_PER_UPLOAD, {
       storage: memoryStorage(),
@@ -107,8 +139,33 @@ export class FilesController {
     });
   }
 
+  @Get(':fileId/thumbnail')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  async thumbnail(
+    @Param('fileId', new ParseUUIDPipe()) fileId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Res() response: Response,
+  ) {
+    const file = await this.filesService.getFileDownload(
+      fileId,
+      { id: request.user.sub, role: request.user.role },
+      true,
+    );
+    response.setHeader('Content-Type', file.contentType);
+    response.setHeader('Cache-Control', 'private, max-age=300');
+    if (file.contentLength !== undefined)
+      response.setHeader('Content-Length', String(file.contentLength));
+    file.body.pipe(response);
+  }
+
   @Get(':fileId/download')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(
+    Role.ADMIN,
+    Role.OFFICE,
+    Role.DRIVER,
+    Role.OPERATOR,
+    Role.WAREHOUSE_TABLET,
+  )
   async downloadFile(
     @Param('fileId', new ParseUUIDPipe()) fileId: string,
     @Req() request: Request & { user: JwtPayload },
@@ -119,7 +176,10 @@ export class FilesController {
       role: request.user.role,
     });
     response.setHeader('Content-Type', file.contentType);
-    response.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.fileName)}"`);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(file.fileName)}"`,
+    );
     response.setHeader('Cache-Control', 'private, max-age=300');
     if (file.contentLength !== undefined) {
       response.setHeader('Content-Length', String(file.contentLength));

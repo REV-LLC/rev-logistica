@@ -13,6 +13,7 @@ import {
   Modal,
   Paper,
   ScrollArea,
+  SimpleGrid,
   Select,
   Stack,
   Text,
@@ -74,6 +75,20 @@ type Options = {
 };
 type Note = {
   id: string;
+  sourceAttendanceId?: string | null;
+  verifiedEnteredAt?: string | null;
+  verifiedLeftAt?: string | null;
+  reviewStatus?: string | null;
+  systemSuggestion?: string | null;
+  sourceInvalidatedAt?: string | null;
+  reviewedSourceExitId?: string | null;
+  sourceAttendance?: {
+    enteredAt: string;
+    leftAt: string | null;
+    checkOutReportId: string | null;
+    checkInReport: { deletedAt: string | null };
+    checkOutReport: { deletedAt: string | null } | null;
+  } | null;
   date: string;
   endDate: string | null;
   type: ActivityType;
@@ -108,6 +123,25 @@ function todayKey() {
     parts.find((item) => item.type === type)?.value;
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
+function localDateTime(value?: string | null) {
+  if (!value) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+function reviewedIso(value: string, original?: string | null) {
+  return original && localDateTime(original) === value
+    ? original
+    : new Date(`${value}:00-05:00`).toISOString();
+}
 function dayLabel(date: string) {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "full",
@@ -121,10 +155,34 @@ function shiftMonth(month: string, offset: number) {
 }
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "No se pudo completar la operación.";
-const calendarMonths = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-  .map((label, index) => ({ value: String(index + 1).padStart(2, "0"), label }));
+const calendarMonths = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+].map((label, index) => ({ value: String(index + 1).padStart(2, "0"), label }));
 
-export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, embedded = false, selfService = false }: { requestedEmployeeId?: string | null; embedded?: boolean; selfService?: boolean }) {
+export default function EmployeeActivitiesPanel({
+  requestedEmployeeId = null,
+  embedded = false,
+  selfService = false,
+  requestedMonth = null,
+  requestedDate = null,
+}: {
+  requestedEmployeeId?: string | null;
+  embedded?: boolean;
+  selfService?: boolean;
+  requestedMonth?: string | null;
+  requestedDate?: string | null;
+}) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [options, setOptions] = useState<Options>({
     warehouses: [],
@@ -132,15 +190,29 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     assets: [],
   });
   const [employeeId, setEmployeeId] = useState<string | null>(null);
-  const [month, setMonth] = useState(() => todayKey().slice(0, 7));
+  const [month, setMonth] = useState(() =>
+    requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)
+      ? requestedMonth
+      : todayKey().slice(0, 7),
+  );
   const selectedYear = month.slice(0, 4);
   const calendarYears = useMemo(() => {
     const currentYear = Number(todayKey().slice(0, 4));
     const firstYear = Math.min(currentYear - 10, Number(selectedYear));
     const lastYear = Math.max(currentYear + 5, Number(selectedYear));
-    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(firstYear + index));
+    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) =>
+      String(firstYear + index),
+    );
   }, [selectedYear]);
-  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [selectedDate, setSelectedDate] = useState(() =>
+    requestedDate &&
+    /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) &&
+    requestedDate.slice(0, 7) === requestedMonth
+      ? requestedDate
+      : requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)
+        ? `${requestedMonth}-01`
+        : todayKey(),
+  );
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -162,6 +234,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
   const [search, setSearch] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [verifiedEntry, setVerifiedEntry] = useState("");
+  const [verifiedExit, setVerifiedExit] = useState("");
+  const [batchOpened, setBatchOpened] = useState(false);
   const [deleting, setDeleting] = useState<Note | null>(null);
 
   useEffect(() => {
@@ -170,9 +245,19 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     setError(null);
     Promise.all([
       embedded && requestedEmployeeId
-        ? api<Employee>(selfService ? '/employee-portal/profile' : `/employees/${encodeURIComponent(requestedEmployeeId)}`).then(employee => [employee])
+        ? api<Employee>(
+            selfService
+              ? "/employee-portal/profile"
+              : `/employees/${encodeURIComponent(requestedEmployeeId)}`,
+          ).then((employee) => [employee])
         : api<Employee[]>("/employees"),
-      selfService ? Promise.resolve({ customers: [], assets: [], warehouses: [] } as Options) : api<Options>("/employee-activities/options"),
+      selfService
+        ? Promise.resolve({
+            customers: [],
+            assets: [],
+            warehouses: [],
+          } as Options)
+        : api<Options>("/employee-activities/options"),
     ])
       .then(([people, choices]) => {
         if (!active) return;
@@ -206,7 +291,11 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     setNotesLoading(true);
     setNotes([]);
     setListError(null);
-    api<Note[]>(selfService ? `/employee-portal/activities?month=${month}` : `/employee-activities/${employeeId}?month=${month}`)
+    api<Note[]>(
+      selfService
+        ? `/employee-portal/activities?month=${month}`
+        : `/employee-activities/${employeeId}?month=${month}`,
+    )
       .then((result) => {
         if (active) setNotes(result);
       })
@@ -315,6 +404,14 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     type: ActivityType = "WORKSITE",
   ) {
     setEditing(note ?? null);
+    setVerifiedEntry(
+      localDateTime(
+        note?.verifiedEnteredAt ?? note?.sourceAttendance?.enteredAt,
+      ),
+    );
+    setVerifiedExit(
+      localDateTime(note?.verifiedLeftAt ?? note?.sourceAttendance?.leftAt),
+    );
     setFormError(null);
     setSearch("");
     setForm(
@@ -340,6 +437,51 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     );
     setOpened(true);
   }
+  const confirmableNotes = notes.filter(
+    (note) =>
+      note.sourceAttendanceId &&
+      note.reviewStatus !== "DISMISSED" &&
+      note.sourceAttendance?.leftAt &&
+      !note.sourceInvalidatedAt &&
+      !note.sourceAttendance.checkInReport.deletedAt &&
+      !note.sourceAttendance.checkOutReport?.deletedAt &&
+      (note.reviewStatus === "SUGGESTED" ||
+        note.reviewedSourceExitId !== note.sourceAttendance.checkOutReportId),
+  );
+  async function confirmBatch() {
+    if (!employeeId || saving || selfService) return;
+    setSaving(true);
+    setListError(null);
+    try {
+      await api(`/employee-activities/${employeeId}/review-batch`, {
+        method: "PATCH",
+        json: { ids: confirmableNotes.map((note) => note.id) },
+      });
+      setBatchOpened(false);
+      setRevision((value) => value + 1);
+    } catch (e) {
+      setListError(errorMessage(e));
+      setBatchOpened(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function reviewSuggestion(note: Note, action: "CONFIRM" | "DISMISS") {
+    if (!employeeId || saving || selfService) return;
+    setSaving(true);
+    setListError(null);
+    try {
+      await api(`/employee-activities/${employeeId}/${note.id}/review`, {
+        method: "PATCH",
+        json: { action },
+      });
+      setRevision((value) => value + 1);
+    } catch (e) {
+      setListError(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
   async function save() {
     if (selfService) return;
     if (!employeeId || saving) return;
@@ -347,7 +489,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
     const warehouse = form.type === "WAREHOUSE";
     if (
       !form.date ||
-      (worksite && (!form.customerWorksiteId || !form.assetId)) ||
+      (worksite &&
+        (!form.customerWorksiteId ||
+          (!form.assetId && !editing?.sourceAttendanceId))) ||
       (warehouse && !form.warehouseId) ||
       (form.type !== "VACATION" && !form.description.trim())
     ) {
@@ -377,11 +521,29 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
           method: editing ? "PATCH" : "POST",
           json: {
             type: form.type,
+            ...(editing?.sourceAttendanceId
+              ? {
+                  ...(verifiedEntry
+                    ? {
+                        verifiedEnteredAt: new Date(
+                          `${verifiedEntry}:00-05:00`,
+                        ).toISOString(),
+                      }
+                    : {}),
+                  verifiedLeftAt: verifiedExit
+                    ? reviewedIso(
+                        verifiedExit,
+                        editing.verifiedLeftAt ??
+                          editing.sourceAttendance?.leftAt,
+                      )
+                    : null,
+                }
+              : {}),
             date: form.date,
             ...(worksite
               ? {
                   customerWorksiteId: form.customerWorksiteId,
-                  assetId: form.assetId,
+                  ...(form.assetId ? { assetId: form.assetId } : {}),
                 }
               : warehouse
                 ? {
@@ -422,9 +584,16 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
   }
 
   return (
-    <Container size="xl" fluid={embedded} p={embedded ? 0 : undefined} py={embedded ? 0 : 'md'} className={embedded ? styles.embedded : styles.page}>
+    <Container
+      size="xl"
+      fluid={embedded}
+      p={embedded ? 0 : undefined}
+      py={embedded ? 0 : "md"}
+      className={embedded ? styles.embedded : styles.page}
+    >
       <Stack gap="lg">
-        {!embedded ? <Group>
+        {!embedded ? (
+          <Group>
             <ThemeIcon size={48} radius="md" variant="light" color="orange">
               <IconCalendar size={26} />
             </ThemeIcon>
@@ -434,7 +603,8 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                 Actividades, obras y notas del día a día de tu equipo.
               </Text>
             </div>
-          </Group> : null}
+          </Group>
+        ) : null}
         {error ? (
           <Alert color="red" title="No se pudo cargar la bitácora">
             {error}
@@ -448,109 +618,132 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         ) : null}
         <Paper withBorder className={styles.toolbar}>
           <div className={styles.toolbarContent}>
-            {!embedded ? <div className={styles.employeeSwitch}>
-              <EmployeeCalendarPicker
-                employees={employees}
-                employee={employee}
-                onChange={setEmployeeId}
-                disabled={loading || opened || Boolean(deleting)}
-              />
-              <Group gap={8} wrap="nowrap">
-                <ActionIcon
-                  size={44}
-                  variant="default"
-                  className={styles.toolbarIcon}
-                  aria-label="Empleado anterior"
-                  title="Empleado anterior"
-                  disabled={
-                    employees.length < 2 ||
-                    !employeeId ||
-                    loading ||
-                    opened ||
-                    Boolean(deleting)
-                  }
-                  onClick={() => navigateEmployee(-1)}
-                >
-                  <IconChevronLeft size={20} />
-                </ActionIcon>
-                <ActionIcon
-                  size={44}
-                  variant="default"
-                  className={styles.toolbarIcon}
-                  aria-label="Empleado siguiente"
-                  title="Empleado siguiente"
-                  disabled={
-                    employees.length < 2 ||
-                    !employeeId ||
-                    loading ||
-                    opened ||
-                    Boolean(deleting)
-                  }
-                  onClick={() => navigateEmployee(1)}
-                >
-                  <IconChevronRight size={20} />
-                </ActionIcon>
-              </Group>
-            </div> : null}
-            <div className={styles.calendarControls} role="group" aria-label="Controles del calendario">
+            {!embedded ? (
+              <div className={styles.employeeSwitch}>
+                <EmployeeCalendarPicker
+                  employees={employees}
+                  employee={employee}
+                  onChange={setEmployeeId}
+                  disabled={loading || opened || Boolean(deleting)}
+                />
+                <Group gap={8} wrap="nowrap">
+                  <ActionIcon
+                    size={44}
+                    variant="default"
+                    className={styles.toolbarIcon}
+                    aria-label="Empleado anterior"
+                    title="Empleado anterior"
+                    disabled={
+                      employees.length < 2 ||
+                      !employeeId ||
+                      loading ||
+                      opened ||
+                      Boolean(deleting)
+                    }
+                    onClick={() => navigateEmployee(-1)}
+                  >
+                    <IconChevronLeft size={20} />
+                  </ActionIcon>
+                  <ActionIcon
+                    size={44}
+                    variant="default"
+                    className={styles.toolbarIcon}
+                    aria-label="Empleado siguiente"
+                    title="Empleado siguiente"
+                    disabled={
+                      employees.length < 2 ||
+                      !employeeId ||
+                      loading ||
+                      opened ||
+                      Boolean(deleting)
+                    }
+                    onClick={() => navigateEmployee(1)}
+                  >
+                    <IconChevronRight size={20} />
+                  </ActionIcon>
+                </Group>
+              </div>
+            ) : null}
+            <div
+              className={styles.calendarControls}
+              role="group"
+              aria-label="Controles del calendario"
+            >
               <div className={styles.periodControls}>
                 <Select
                   aria-label="Mes del calendario"
                   data={calendarMonths}
                   value={month.slice(5, 7)}
                   allowDeselect={false}
-                  onChange={(value) => { if (value) changeMonth(`${selectedYear}-${value}`); }}
+                  onChange={(value) => {
+                    if (value) changeMonth(`${selectedYear}-${value}`);
+                  }}
                 />
                 <Select
                   aria-label="Año del calendario"
                   data={calendarYears}
                   value={selectedYear}
                   allowDeselect={false}
-                  onChange={(value) => { if (value) changeMonth(`${value}-${month.slice(5, 7)}`); }}
+                  onChange={(value) => {
+                    if (value) changeMonth(`${value}-${month.slice(5, 7)}`);
+                  }}
                 />
               </div>
               <div className={styles.navigationControls}>
-              <Group gap={6} wrap="nowrap">
-              <ActionIcon
-                variant="default"
-                size={44}
-                className={styles.toolbarIcon}
-                aria-label="Mes anterior"
-                title="Mes anterior"
-                onClick={() => changeMonth(shiftMonth(month, -1))}
-              >
-                <IconChevronLeft size={18} />
-              </ActionIcon>
-              <ActionIcon
-                variant="default"
-                size={44}
-                className={styles.toolbarIcon}
-                aria-label="Mes siguiente"
-                title="Mes siguiente"
-                onClick={() => changeMonth(shiftMonth(month, 1))}
-              >
-                <IconChevronRight size={18} />
-              </ActionIcon>
-              </Group>
-              <Group gap={6} wrap="nowrap">
-              <Button
-                variant="default"
-                size="sm"
-                className={styles.todayButton}
-                onClick={() => {
-                  const today = todayKey();
-                  setMonth(today.slice(0, 7));
-                  setSelectedDate(today);
-                }}
-              >
-                Hoy
-              </Button>
-              {!selfService ? <AddActivityMenu onSelect={(type) => openNote(undefined, selectedDate, type)}>
-                <ActionIcon size={44} variant="default" className={styles.toolbarIcon} aria-label="Agregar actividad" title="Agregar actividad" disabled={!employeeId || loading || Boolean(error)}>
-                  <IconPlus size={20} aria-hidden />
-                </ActionIcon>
-              </AddActivityMenu> : null}
-              </Group>
+                <Group gap={6} wrap="nowrap">
+                  <ActionIcon
+                    variant="default"
+                    size={44}
+                    className={styles.toolbarIcon}
+                    aria-label="Mes anterior"
+                    title="Mes anterior"
+                    onClick={() => changeMonth(shiftMonth(month, -1))}
+                  >
+                    <IconChevronLeft size={18} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="default"
+                    size={44}
+                    className={styles.toolbarIcon}
+                    aria-label="Mes siguiente"
+                    title="Mes siguiente"
+                    onClick={() => changeMonth(shiftMonth(month, 1))}
+                  >
+                    <IconChevronRight size={18} />
+                  </ActionIcon>
+                </Group>
+                <Group gap={6} wrap="nowrap">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className={styles.todayButton}
+                    onClick={() => {
+                      const today = todayKey();
+                      setMonth(today.slice(0, 7));
+                      setSelectedDate(today);
+                    }}
+                  >
+                    Hoy
+                  </Button>
+                  {!selfService ? (
+                    <AddActivityMenu
+                      onSelect={(type) =>
+                        openNote(undefined, selectedDate, type)
+                      }
+                    >
+                      <ActionIcon
+                        size={44}
+                        variant="default"
+                        className={styles.toolbarIcon}
+                        aria-label="Agregar actividad"
+                        title="Agregar actividad"
+                        disabled={!employeeId || loading || Boolean(error)}
+                      >
+                        <IconPlus size={20} aria-hidden />
+                      </ActionIcon>
+                    </AddActivityMenu>
+                  ) : null}
+                </Group>
               </div>
             </div>
           </div>
@@ -579,6 +772,18 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                   Reintentar
                 </Button>
               </Alert>
+            ) : null}
+            {!selfService && confirmableNotes.length ? (
+              <Group>
+                <Button variant="light" onClick={() => setBatchOpened(true)}>
+                  Confirmar {confirmableNotes.length}{" "}
+                  {confirmableNotes.length === 1 ? "sugerencia" : "sugerencias"}{" "}
+                  del mes
+                </Button>
+                <Text size="xs" c="dimmed">
+                  Solo jornadas cerradas y con evidencia vigente.
+                </Text>
+              </Group>
             ) : null}
             <div className={styles.layout}>
               <Paper
@@ -650,24 +855,26 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                             </span>
                           ) : null}
                         </button>
-                        {!selfService ? <AddActivityMenu
-                          onSelect={(type) => {
-                            setSelectedDate(date);
-                            if (date.slice(0, 7) !== month)
-                              setMonth(date.slice(0, 7));
-                            openNote(undefined, date, type);
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className={styles.addNote}
-                            aria-label={`Agregar registro para ${dayLabel(date)}`}
-                            title="Agregar registro"
-                            disabled={!employeeId}
+                        {!selfService ? (
+                          <AddActivityMenu
+                            onSelect={(type) => {
+                              setSelectedDate(date);
+                              if (date.slice(0, 7) !== month)
+                                setMonth(date.slice(0, 7));
+                              openNote(undefined, date, type);
+                            }}
                           >
-                            <IconPlus size={16} aria-hidden="true" />
-                          </button>
-                        </AddActivityMenu> : null}
+                            <button
+                              type="button"
+                              className={styles.addNote}
+                              aria-label={`Agregar registro para ${dayLabel(date)}`}
+                              title="Agregar registro"
+                              disabled={!employeeId}
+                            >
+                              <IconPlus size={16} aria-hidden="true" />
+                            </button>
+                          </AddActivityMenu>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -714,6 +921,57 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                           >
                             {activityLabels[note.type]}
                           </Badge>
+                          {note.sourceAttendanceId ? (
+                            <>
+                              <Badge
+                                color={
+                                  note.reviewStatus === "SUGGESTED"
+                                    ? "blue"
+                                    : note.reviewStatus === "DISMISSED"
+                                      ? "gray"
+                                      : "green"
+                                }
+                                variant="light"
+                                style={{ alignSelf: "start" }}
+                              >
+                                {(
+                                  {
+                                    SUGGESTED:
+                                      "Sugerencia del sistema · WhatsApp",
+                                    CONFIRMED: "Confirmada por oficina",
+                                    CORRECTED: "Corregida por oficina",
+                                    DISMISSED: "Descartada por oficina",
+                                  } as Record<string, string>
+                                )[note.reviewStatus ?? ""] ??
+                                  "Sugerencia del sistema"}
+                              </Badge>
+                              {note.sourceInvalidatedAt ||
+                              note.sourceAttendance?.checkInReport.deletedAt ||
+                              note.sourceAttendance?.checkOutReport
+                                ?.deletedAt ? (
+                                <Alert color="orange">
+                                  Una marcación de esta jornada fue eliminada.
+                                  Revisa la evidencia.
+                                </Alert>
+                              ) : note.sourceAttendance &&
+                                !note.sourceAttendance.leftAt ? (
+                                <Text size="xs" c="orange">
+                                  Salida pendiente. Aún no se puede confirmar la
+                                  jornada.
+                                </Text>
+                              ) : note.sourceAttendance &&
+                                note.reviewStatus !== "SUGGESTED" &&
+                                note.reviewStatus !== "DISMISSED" &&
+                                note.reviewedSourceExitId !==
+                                  note.sourceAttendance.checkOutReportId ? (
+                                <Alert color="orange">
+                                  Llegó una salida después de la revisión. La
+                                  corrección de Office se conservó; revisa la
+                                  jornada nuevamente.
+                                </Alert>
+                              ) : null}
+                            </>
+                          ) : null}
                           {note.customerWorksite ? (
                             <>
                               <Text size="xs" fw={700} c="orange">
@@ -738,6 +996,22 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                                 : ""}
                             </Text>
                           )}
+                          {note.sourceAttendanceId && note.verifiedEnteredAt ? (
+                            <Text size="sm" fw={600}>
+                              Entrada revisada:{" "}
+                              {new Date(note.verifiedEnteredAt).toLocaleString(
+                                "es-CO",
+                                {
+                                  timeZone: "America/Bogota",
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                },
+                              )}
+                              {note.verifiedLeftAt
+                                ? ` · Salida revisada: ${new Date(note.verifiedLeftAt).toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "short", timeStyle: "short" })} · ${((new Date(note.verifiedLeftAt).getTime() - new Date(note.verifiedEnteredAt).getTime()) / 3600000).toFixed(2)} h revisadas`
+                                : " · Sin salida revisada"}
+                            </Text>
+                          ) : null}
                           {note.asset ? (
                             <Text size="xs" c="dimmed">
                               {assetLabel(note.asset)}
@@ -753,7 +1027,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                             {note.description}
                           </Text>
                           <Text size="xs" c="dimmed">
-                            Registrada por{" "}
+                            {note.sourceAttendanceId
+                              ? "Generada por el sistema · responsable interno: "
+                              : "Registrada por "}{" "}
                             {note.createdBy.employee
                               ? fullName(note.createdBy.employee)
                               : "Usuario interno"}{" "}
@@ -764,26 +1040,90 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
                               timeStyle: "short",
                             })}
                           </Text>
-                          {!selfService ? <Group justify="end" gap="xs">
-                            <ActionIcon
-                              variant="subtle"
-                              aria-label="Editar nota"
-                              onClick={() => openNote(note)}
-                            >
-                              <IconPencil size={17} />
-                            </ActionIcon>
-                            <ActionIcon
-                              color="red"
-                              variant="subtle"
-                              aria-label="Eliminar nota"
-                              onClick={() => {
-                                setFormError(null);
-                                setDeleting(note);
-                              }}
-                            >
-                              <IconTrash size={17} />
-                            </ActionIcon>
-                          </Group> : null}
+                          {note.sourceAttendanceId &&
+                          note.systemSuggestion &&
+                          note.description !== note.systemSuggestion ? (
+                            <details>
+                              <summary>
+                                Ver sugerencia original del sistema
+                              </summary>
+                              <Text
+                                size="sm"
+                                style={{ whiteSpace: "pre-wrap" }}
+                              >
+                                {note.systemSuggestion}
+                              </Text>
+                            </details>
+                          ) : null}
+                          {!selfService && note.sourceAttendanceId ? (
+                            <Group gap="xs">
+                              <Button
+                                size="xs"
+                                variant="light"
+                                loading={saving}
+                                disabled={
+                                  !note.sourceAttendance?.leftAt ||
+                                  Boolean(
+                                    note.sourceInvalidatedAt ||
+                                    note.sourceAttendance?.checkInReport
+                                      .deletedAt ||
+                                    note.sourceAttendance?.checkOutReport
+                                      ?.deletedAt,
+                                  ) ||
+                                  note.reviewStatus === "DISMISSED"
+                                }
+                                onClick={() =>
+                                  void reviewSuggestion(note, "CONFIRM")
+                                }
+                              >
+                                Confirmar sugerencia
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                disabled={saving}
+                                onClick={() => openNote(note)}
+                              >
+                                Corregir sugerencia
+                              </Button>
+                              {note.reviewStatus !== "DISMISSED" ? (
+                                <Button
+                                  size="xs"
+                                  color="gray"
+                                  variant="subtle"
+                                  disabled={saving}
+                                  onClick={() => {
+                                    setFormError(null);
+                                    setDeleting(note);
+                                  }}
+                                >
+                                  Descartar sugerencia
+                                </Button>
+                              ) : null}
+                            </Group>
+                          ) : null}
+                          {!selfService && !note.sourceAttendanceId ? (
+                            <Group justify="end" gap="xs">
+                              <ActionIcon
+                                variant="subtle"
+                                aria-label="Editar nota"
+                                onClick={() => openNote(note)}
+                              >
+                                <IconPencil size={17} />
+                              </ActionIcon>
+                              <ActionIcon
+                                color="red"
+                                variant="subtle"
+                                aria-label="Eliminar nota"
+                                onClick={() => {
+                                  setFormError(null);
+                                  setDeleting(note);
+                                }}
+                              >
+                                <IconTrash size={17} />
+                              </ActionIcon>
+                            </Group>
+                          ) : null}
                         </Stack>
                       </Paper>
                     ))
@@ -795,8 +1135,44 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         ) : null}
       </Stack>
       <Modal
+        opened={batchOpened}
+        onClose={() => {
+          if (!saving) setBatchOpened(false);
+        }}
+        title="Confirmar sugerencias del mes"
+        centered
+        closeOnClickOutside={!saving}
+        closeOnEscape={!saving}
+        withCloseButton={!saving}
+      >
+        <Stack>
+          <Text>
+            ¿Confirmar {confirmableNotes.length} sugerencias de{" "}
+            {employee ? fullName(employee) : "este empleado"} para {month}?
+          </Text>
+          <Text size="sm" c="dimmed">
+            Las jornadas abiertas, descartadas o con marcaciones eliminadas no
+            se incluyen. Las correcciones de Office se conservan.
+          </Text>
+          <Group justify="end">
+            <Button
+              variant="default"
+              disabled={saving}
+              onClick={() => setBatchOpened(false)}
+            >
+              Cancelar
+            </Button>
+            <Button loading={saving} onClick={() => void confirmBatch()}>
+              Sí, confirmar sugerencias
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
         opened={
-          !selfService && opened && (form.type === "WORKSITE" || form.type === "WAREHOUSE")
+          !selfService &&
+          opened &&
+          (form.type === "WORKSITE" || form.type === "WAREHOUSE")
         }
         onClose={() => {
           if (!saving) setOpened(false);
@@ -838,6 +1214,32 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               </Text>
             </Paper>
             {formError ? <Alert color="red">{formError}</Alert> : null}
+            {editing?.sourceAttendanceId ? (
+              <Stack gap="xs">
+                <Text size="sm" c="dimmed">
+                  Puedes corregir las horas para la bitácora. Las marcaciones
+                  originales de WhatsApp se conservan.
+                </Text>
+                <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                  <TextInput
+                    type="datetime-local"
+                    label="Entrada revisada (Colombia)"
+                    value={verifiedEntry}
+                    disabled={saving}
+                    required
+                    onChange={(e) => setVerifiedEntry(e.currentTarget.value)}
+                  />
+                  <TextInput
+                    type="datetime-local"
+                    label="Salida revisada (Colombia)"
+                    required={Boolean(editing.sourceAttendance?.leftAt)}
+                    value={verifiedExit}
+                    disabled={saving}
+                    onChange={(e) => setVerifiedExit(e.currentTarget.value)}
+                  />
+                </SimpleGrid>
+              </Stack>
+            ) : null}
             <TextInput
               type="date"
               label="Fecha de la actividad"
@@ -963,10 +1365,14 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               label={
                 form.type === "WAREHOUSE"
                   ? "Activo / equipo (opcional)"
-                  : "Activo / equipo"
+                  : editing?.sourceAttendanceId
+                    ? "Activo / equipo (opcional en asistencia)"
+                    : "Activo / equipo"
               }
               placeholder="Busca por código, equipo o serie"
-              required={form.type === "WORKSITE"}
+              required={
+                form.type === "WORKSITE" && !editing?.sourceAttendanceId
+              }
               items={assetOptions}
               value={form.assetId || null}
               disabled={saving}
@@ -1003,7 +1409,12 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         </form>
       </Modal>
       <EmployeeReportModal
-        opened={!selfService && opened && form.type !== "WORKSITE" && form.type !== "WAREHOUSE"}
+        opened={
+          !selfService &&
+          opened &&
+          form.type !== "WORKSITE" &&
+          form.type !== "WAREHOUSE"
+        }
         editing={Boolean(editing)}
         employeeName={employee ? fullName(employee) : ""}
         form={form}
@@ -1020,7 +1431,11 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
         onClose={() => {
           if (!saving) setDeleting(null);
         }}
-        title="Eliminar nota"
+        title={
+          deleting?.sourceAttendanceId
+            ? "Descartar sugerencia"
+            : "Eliminar nota"
+        }
         centered
         radius="lg"
         closeOnClickOutside={!saving}
@@ -1034,7 +1449,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
             deleting.type !== "WORKSITE" &&
             deleting.type !== "WAREHOUSE"
               ? `¿Quieres eliminar el reporte de ${activityLabels[deleting.type].toLowerCase()} de todo el período?`
-              : "¿Quieres eliminar esta nota de la bitácora?"}
+              : deleting?.sourceAttendanceId
+                ? "¿Descartar esta sugerencia? Se conservará su historial y no se volverá a generar."
+                : "¿Quieres eliminar esta nota de la bitácora?"}
           </Text>
           {deleting?.endDate ? (
             <Text size="sm" c="dimmed">
@@ -1054,7 +1471,9 @@ export default function EmployeeActivitiesPanel({ requestedEmployeeId = null, em
               Cancelar
             </Button>
             <Button color="red" loading={saving} onClick={() => void remove()}>
-              Eliminar nota
+              {deleting?.sourceAttendanceId
+                ? "Descartar sugerencia"
+                : "Eliminar nota"}
             </Button>
           </Group>
         </Stack>

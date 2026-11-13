@@ -190,6 +190,23 @@ if (testUrl) {
         .map((s) => s.trim())
         .filter(Boolean))
         await prisma.$executeRawUnsafe(statement);
+      const suggestionSql = readFileSync(
+        join(
+          __dirname,
+          '../../prisma/migrations/20261113160000_attendance_activity_suggestions/migration.sql',
+        ),
+        'utf8',
+      );
+      const association = suggestionSql.slice(
+        suggestionSql.indexOf(
+          'ALTER TABLE "EmployeeActivityNote" DROP CONSTRAINT',
+        ),
+        suggestionSql.indexOf(
+          'ALTER TABLE "EmployeeActivityNote" ADD CONSTRAINT "EmployeeActivityNote_suggestion_check"',
+        ),
+      );
+      await prisma.$executeRawUnsafe(association.split(';').filter(Boolean)[0]);
+      await prisma.$executeRawUnsafe(association.split(';').filter(Boolean)[1]);
       const actor = await prisma.user.create({
         data: {
           email: `office-${randomUUID()}@example.invalid`,
@@ -740,9 +757,13 @@ if (testUrl) {
       ).toBe(1);
       expect(
         await prisma.employeeActivityNote.count({
-          where: { employeeId: employee.id, customerWorksiteId: site.id },
+          where: {
+            employeeId: employee.id,
+            customerWorksiteId: site.id,
+            sourceAttendanceId: { not: null },
+          },
         }),
-      ).toBe(0);
+      ).toBe(1);
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
       );
@@ -1348,6 +1369,17 @@ if (testUrl) {
           })
         ).draft as any;
       beforeEach(async () => {
+        await prisma.employeeActivityReview.deleteMany({
+          where: {
+            note: {
+              employeeId: employee.id,
+              sourceAttendanceId: { not: null },
+            },
+          },
+        });
+        await prisma.employeeActivityNote.deleteMany({
+          where: { employeeId: employee.id, sourceAttendanceId: { not: null } },
+        });
         await prisma.worksiteAttendance.deleteMany({
           where: { employeeId: employee.id },
         });
@@ -1582,6 +1614,17 @@ if (testUrl) {
         });
       }
       beforeEach(async () => {
+        await prisma.employeeActivityReview.deleteMany({
+          where: {
+            note: {
+              employeeId: employee.id,
+              sourceAttendanceId: { not: null },
+            },
+          },
+        });
+        await prisma.employeeActivityNote.deleteMany({
+          where: { employeeId: employee.id, sourceAttendanceId: { not: null } },
+        });
         await prisma.worksiteAttendance.deleteMany({
           where: { employeeId: employee.id },
         });
