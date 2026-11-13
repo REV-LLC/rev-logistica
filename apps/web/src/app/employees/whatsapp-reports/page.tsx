@@ -11,14 +11,14 @@ import {
   Loader,
   Modal,
   Paper,
-  Select,
   Stack,
-  Table,
   Tabs,
   Text,
   Textarea,
   Title,
 } from "@mantine/core";
+import { getCurrentUserRole } from "@/lib/auth";
+import AttendanceEmployeeCards from "./components/AttendanceEmployeeCards";
 import { api, apiBlob } from "@/lib/api";
 
 type Kind = "DAMAGE" | "HOUR_METER" | "REQUEST" | "CHECK_IN" | "CHECK_OUT";
@@ -34,13 +34,17 @@ type Report = {
   kind: Kind;
   description: string;
   hours: string | null;
-  location?: { latitude: number; longitude: number; receivedAt: string; sentAt: string } | null;
+  location?: {
+    latitude: number;
+    longitude: number;
+    receivedAt: string;
+    sentAt: string;
+  } | null;
   occurredAt: string;
   status: string;
   resolution: string | null;
   employee: { name: string; lastName: string };
   asset: {
-    publicCode: string;
     internalNumber: number;
     sku: { name: string };
   } | null;
@@ -64,13 +68,6 @@ type Health = {
   actorConfigured: boolean;
   hectorFound: boolean;
 };
-type Attendance = {
-  id: string;
-  enteredAt: string;
-  leftAt: string | null;
-  employee: { name: string; lastName: string };
-  customerWorksite: { worksite: { name: string } };
-};
 type InboxIssue = {
   id: string;
   phone: string;
@@ -87,7 +84,7 @@ const date = (value: string) =>
   }).format(new Date(value));
 const subject = (r: Report) =>
   r.asset
-    ? `${r.asset.sku.name} #${r.asset.internalNumber} (${r.asset.publicCode})`
+    ? `${r.asset.sku.name} #${r.asset.internalNumber}`
     : (r.vehicle?.plate ??
       (r.customerWorksite
         ? `${r.customerWorksite.worksite.name} · ${r.customerWorksite.customer.name}`
@@ -102,11 +99,36 @@ const deliveryLabels: Record<string, string> = {
   NO_PHONE: "Sin teléfono",
 };
 
+const inboxStatusLabels: Record<string, string> = {
+  QUEUED: "Pendiente",
+  PROCESSING: "En proceso",
+  PROCESSED: "Procesado",
+  FAILED: "Falló el procesamiento",
+  REJECTED: "Requiere revisión",
+};
+const inboxErrorLabels: Record<string, string> = {
+  UNKNOWN_OR_AMBIGUOUS_EMPLOYEE:
+    "El número no corresponde a un único empleado activo. Revisa su registro.",
+  MESSAGE_EXPIRED: "El mensaje venció. El empleado debe enviarlo nuevamente.",
+  VALIDATION_REQUIRED: "Faltan datos por completar o corregir en el reporte.",
+  PROCESSING_FAILED:
+    "No se pudo procesar el reporte. Revisa el mensaje o vuelve a intentarlo.",
+  ALERT_SEND_FAILED:
+    "No se pudo enviar la alerta. Revisa el contacto e intenta nuevamente.",
+};
+
 export default function WhatsappReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
-  const [kind, setKind] = useState<string | null>(null);
+  const [kind, setKind] = useState<string>("DAMAGE");
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Report | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    setCanDelete(["ADMIN", "OFFICE"].includes(getCurrentUserRole() ?? ""));
+  }, []);
   const [health, setHealth] = useState<Health | null>(null);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [issues, setIssues] = useState<InboxIssue[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -127,7 +149,8 @@ export default function WhatsappReportsPage() {
       setError("");
       try {
         const query = new URLSearchParams();
-        if (kind) query.set("kind", kind);
+        if (kind === "issues" || kind === "ATTENDANCE") return;
+        query.set("kind", kind);
         if (cursor) query.set("cursor", cursor);
         const result = await api<Report[]>(`/whatsapp-reports?${query}`);
         if (id !== requestId.current) return;
@@ -149,12 +172,10 @@ export default function WhatsappReportsPage() {
   const loadStatus = useCallback(async () => {
     const results = await Promise.allSettled([
       api<Health>("/whatsapp-reports/health"),
-      api<Attendance[]>("/whatsapp-reports/attendance"),
       api<InboxIssue[]>("/whatsapp-reports/inbox"),
     ]);
     if (results[0].status === "fulfilled") setHealth(results[0].value);
-    if (results[1].status === "fulfilled") setAttendance(results[1].value);
-    if (results[2].status === "fulfilled") setIssues(results[2].value);
+    if (results[1].status === "fulfilled") setIssues(results[1].value);
     if (results.some((r) => r.status === "rejected"))
       setError(
         "No se pudo actualizar el estado del canal o la asistencia. Intenta actualizar.",
@@ -181,7 +202,10 @@ export default function WhatsappReportsPage() {
     },
     [],
   );
-  async function openPhoto(file: Report["evidence"][number]["fileObject"]) {
+  async function openPhoto(
+    file: Report["evidence"][number]["fileObject"],
+    number: number,
+  ) {
     const id = ++photoRequestId.current;
     setPhotoLoading(true);
     setError("");
@@ -190,7 +214,7 @@ export default function WhatsappReportsPage() {
       if (id === photoRequestId.current)
         setPhoto({
           url: URL.createObjectURL(blob),
-          title: file.originalName || "Foto de evidencia",
+          title: `Foto de evidencia ${number}`,
         });
     } catch {
       if (id === photoRequestId.current)
@@ -219,6 +243,114 @@ export default function WhatsappReportsPage() {
       setSaving(false);
     }
   }
+  async function deleteReport() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api(`/whatsapp-reports/${deleteTarget.id}`, { method: "DELETE" });
+      requestId.current++;
+      setReports((previous) =>
+        previous.filter((r) => r.id !== deleteTarget.id),
+      );
+      if (selected?.id === deleteTarget.id) setSelected(null);
+      setDeleteTarget(null);
+      setNotice("Reporte eliminado.");
+      await load();
+    } catch (e) {
+      setDeleteError(
+        e instanceof Error
+          ? e.message
+          : "No se pudo eliminar el reporte. Intenta de nuevo.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+  function confirmDelete(report: Report) {
+    setDeleteError("");
+    setDeleteTarget(report);
+  }
+  const reportList = (
+    <Stack>
+      {loading && !reports.length ? (
+        <Loader aria-label="Cargando reportes" />
+      ) : null}
+      {!loading && !reports.length ? (
+        <Paper withBorder p="xl">
+          <Text c="dimmed">No hay reportes registrados para este filtro.</Text>
+        </Paper>
+      ) : null}
+      {reports.map((r) => (
+        <Paper key={r.id} withBorder p="md" radius="md">
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Group>
+                <Badge color={r.kind === "DAMAGE" ? "red" : "blue"}>
+                  {labels[r.kind]}
+                </Badge>
+                <Text fw={600}>
+                  {r.employee.name} {r.employee.lastName}
+                </Text>
+              </Group>
+              <Badge color={r.status === "RESOLVED" ? "green" : "gray"}>
+                {r.status === "RESOLVED" ? "Resuelto" : "Registrado"}
+              </Badge>
+            </Group>
+            <Text size="sm" c="dimmed">
+              {subject(r)} · {date(r.occurredAt)} (Colombia)
+            </Text>
+            <Text style={{ whiteSpace: "pre-wrap" }}>{r.description}</Text>
+            {r.hours !== null ? (
+              <Text fw={600}>Horómetro: {r.hours} h</Text>
+            ) : null}
+            <Group justify="space-between">
+              <Text size="xs" c="dimmed">
+                {r.location
+                  ? "Ubicación compartida"
+                  : r.evidence.length === 1
+                    ? "1 foto"
+                    : `${r.evidence.length} fotos`}
+              </Text>
+              <Group gap="xs">
+                {canDelete ? (
+                  <Button
+                    color="red"
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => confirmDelete(r)}
+                  >
+                    Eliminar
+                  </Button>
+                ) : null}
+                {!["CHECK_IN", "CHECK_OUT"].includes(r.kind) ? (
+                  <Button
+                    variant="light"
+                    size="xs"
+                    onClick={() => {
+                      setSelected(r);
+                      setResolution("");
+                    }}
+                  >
+                    Ver reporte
+                  </Button>
+                ) : null}
+              </Group>
+            </Group>
+          </Stack>
+        </Paper>
+      ))}
+      {hasMore ? (
+        <Button
+          variant="light"
+          loading={loading}
+          onClick={() => void load(reports.at(-1)?.id)}
+        >
+          Cargar más
+        </Button>
+      ) : null}
+    </Stack>
+  );
   return (
     <Container size="xl" py="lg">
       <Stack>
@@ -265,147 +397,54 @@ export default function WhatsappReportsPage() {
             </Text>
           </Alert>
         ) : null}
-        <Tabs defaultValue="reports">
+        {notice ? (
+          <Alert color="green" withCloseButton onClose={() => setNotice("")}>
+            {notice}
+          </Alert>
+        ) : null}
+        <Tabs
+          value={kind}
+          onChange={(value) => {
+            if (value && value !== kind) {
+              setReports([]);
+              setHasMore(false);
+              setKind(value);
+            }
+          }}
+        >
           <Tabs.List>
-            <Tabs.Tab value="reports">Reportes</Tabs.Tab>
-            <Tabs.Tab value="attendance">Asistencia</Tabs.Tab>
+            <Tabs.Tab value="ATTENDANCE">Entradas y salidas</Tabs.Tab>
+            <Tabs.Tab value="DAMAGE">Daños</Tabs.Tab>
+            <Tabs.Tab value="HOUR_METER">Horómetros</Tabs.Tab>
+            <Tabs.Tab value="REQUEST">Peticiones</Tabs.Tab>
             <Tabs.Tab value="issues">
               Mensajes por revisar ({issues.length})
             </Tabs.Tab>
           </Tabs.List>
-          <Tabs.Panel value="reports" pt="md">
-            <Stack>
-              <Select
-                label="Tipo de reporte"
-                placeholder="Todos los tipos"
-                clearable
-                value={kind}
-                onChange={setKind}
-                data={Object.entries(labels).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-                maw={320}
-              />
-              {loading && !reports.length ? (
-                <Loader aria-label="Cargando reportes" />
-              ) : null}
-              {!loading && !reports.length ? (
-                <Paper withBorder p="xl">
-                  <Text c="dimmed">
-                    No hay reportes registrados para este filtro.
-                  </Text>
-                </Paper>
-              ) : null}
-              {reports.map((r) => (
-                <Paper key={r.id} withBorder p="md" radius="md">
-                  <Stack gap="xs">
-                    <Group justify="space-between">
-                      <Group>
-                        <Badge color={r.kind === "DAMAGE" ? "red" : "blue"}>
-                          {labels[r.kind]}
-                        </Badge>
-                        <Text fw={600}>
-                          {r.employee.name} {r.employee.lastName}
-                        </Text>
-                      </Group>
-                      <Badge color={r.status === "RESOLVED" ? "green" : "gray"}>
-                        {r.status === "RESOLVED" ? "Resuelto" : "Registrado"}
-                      </Badge>
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      {subject(r)} · {date(r.occurredAt)} (Colombia)
-                    </Text>
-                    <Text style={{ whiteSpace: "pre-wrap" }}>
-                      {r.description}
-                    </Text>
-                    {r.hours !== null ? (
-                      <Text fw={600}>Horómetro: {r.hours} h</Text>
-                    ) : null}
-                    <Group justify="space-between">
-                      <Text size="xs" c="dimmed">
-                        {r.location ? "Ubicación compartida" : `${r.evidence.length} fotos`} · {r.id}
-                      </Text>
-                      <Button
-                        variant="light"
-                        size="xs"
-                        onClick={() => {
-                          setSelected(r);
-                          setResolution("");
-                        }}
-                      >
-                        Ver reporte
-                      </Button>
-                    </Group>
-                  </Stack>
-                </Paper>
-              ))}
-              {hasMore ? (
-                <Button
-                  variant="light"
-                  loading={loading}
-                  onClick={() => void load(reports.at(-1)?.id)}
-                >
-                  Cargar más
-                </Button>
-              ) : null}
-            </Stack>
-          </Tabs.Panel>
-          <Tabs.Panel value="attendance" pt="md">
-            <Text size="sm" c="dimmed" mb="md">
-              Últimas 100 jornadas. Horas reportadas por WhatsApp en zona de
-              Colombia; la ubicación o foto se consulta en los reportes de entrada y
-              salida.
-            </Text>
-            <Table.ScrollContainer minWidth={640}>
-              <Table>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Empleado</Table.Th>
-                    <Table.Th>Obra</Table.Th>
-                    <Table.Th>Entrada</Table.Th>
-                    <Table.Th>Salida</Table.Th>
-                    <Table.Th>Duración</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {attendance.map((a) => (
-                    <Table.Tr key={a.id}>
-                      <Table.Td>
-                        {a.employee.name} {a.employee.lastName}
-                      </Table.Td>
-                      <Table.Td>{a.customerWorksite.worksite.name}</Table.Td>
-                      <Table.Td>{date(a.enteredAt)}</Table.Td>
-                      <Table.Td>
-                        {a.leftAt ? date(a.leftAt) : "Entrada abierta"}
-                      </Table.Td>
-                      <Table.Td>
-                        {a.leftAt
-                          ? `${((new Date(a.leftAt).getTime() - new Date(a.enteredAt).getTime()) / 3600000).toFixed(2)} h`
-                          : "—"}
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
-            {!attendance.length ? (
-              <Text c="dimmed">Aún no hay entradas o salidas registradas.</Text>
-            ) : null}
+          {["DAMAGE", "HOUR_METER", "REQUEST"].map((tab) => (
+            <Tabs.Panel key={tab} value={tab} pt="md">
+              {kind === tab ? reportList : null}
+            </Tabs.Panel>
+          ))}
+          <Tabs.Panel value="ATTENDANCE" pt="md">
+            {kind === "ATTENDANCE" ? <AttendanceEmployeeCards /> : null}
           </Tabs.Panel>
           <Tabs.Panel value="issues" pt="md">
             <Stack>
               {issues.map((i) => (
                 <Paper key={i.id} withBorder p="md">
                   <Group>
-                    <Badge color="red">{i.status}</Badge>
+                    <Badge color="red">
+                      {inboxStatusLabels[i.status] ?? "Por revisar"}
+                    </Badge>
                     <Text>
                       {i.phone} · {date(i.createdAt)}
                     </Text>
                   </Group>
                   <Text mt="xs">{i.text || "Mensaje sin texto"}</Text>
                   <Text size="sm" c="dimmed">
-                    {i.error || "No se pudo enviar la respuesta"}
+                    {(i.error && inboxErrorLabels[i.error]) ||
+                      "No se pudo completar la respuesta. Revisa el mensaje."}
                   </Text>
                 </Paper>
               ))}
@@ -419,7 +458,7 @@ export default function WhatsappReportsPage() {
       <Modal
         opened={Boolean(selected)}
         onClose={() => {
-          if (!saving) setSelected(null);
+          if (!saving && !deleting) setSelected(null);
         }}
         title="Detalle del reporte"
         size="lg"
@@ -438,9 +477,22 @@ export default function WhatsappReportsPage() {
             </Text>
             {selected.location ? (
               <Stack gap="xs">
-                <Text size="sm">Ubicación compartida: {selected.location.latitude.toFixed(6)}, {selected.location.longitude.toFixed(6)}</Text>
-                <Text size="sm" c="dimmed">Recibida: {date(selected.location.receivedAt)} (Colombia)</Text>
-                <Button component="a" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.location.latitude},${selected.location.longitude}`)}`} target="_blank" rel="noopener noreferrer" variant="light">Ver ubicación en el mapa</Button>
+                <Text size="sm">
+                  Ubicación compartida: {selected.location.latitude.toFixed(6)},{" "}
+                  {selected.location.longitude.toFixed(6)}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Recibida: {date(selected.location.receivedAt)} (Colombia)
+                </Text>
+                <Button
+                  component="a"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.location.latitude},${selected.location.longitude}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="light"
+                >
+                  Ver ubicación en el mapa
+                </Button>
               </Stack>
             ) : null}
             <Group>
@@ -449,7 +501,7 @@ export default function WhatsappReportsPage() {
                   key={e.fileObject.id}
                   variant="light"
                   loading={photoLoading}
-                  onClick={() => void openPhoto(e.fileObject)}
+                  onClick={() => void openPhoto(e.fileObject, index + 1)}
                 >
                   Ver foto {index + 1}
                 </Button>
@@ -468,7 +520,7 @@ export default function WhatsappReportsPage() {
                           : "blue"
                       }
                     >
-                      {deliveryLabels[r.status] ?? r.status}
+                      {deliveryLabels[r.status] ?? "Por revisar"}
                     </Badge>
                   </Group>
                 ))}
@@ -502,6 +554,62 @@ export default function WhatsappReportsPage() {
                 </Button>
               </>
             ) : null}
+            {canDelete ? (
+              <Button
+                color="red"
+                variant="light"
+                disabled={saving || deleting}
+                onClick={() => confirmDelete(selected)}
+              >
+                Eliminar reporte
+              </Button>
+            ) : null}
+          </Stack>
+        ) : null}
+      </Modal>
+      <Modal
+        opened={Boolean(deleteTarget)}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        title="Eliminar reporte"
+        centered
+        closeOnClickOutside={!deleting}
+        closeOnEscape={!deleting}
+        withCloseButton={!deleting}
+      >
+        {deleteTarget ? (
+          <Stack>
+            <Text>
+              ¿Eliminar este reporte de {deleteTarget.employee.name}{" "}
+              {deleteTarget.employee.lastName}?
+            </Text>
+            <Text size="sm" c="dimmed">
+              {labels[deleteTarget.kind]} · {subject(deleteTarget)} ·{" "}
+              {date(deleteTarget.occurredAt)}
+            </Text>
+            <Text>{deleteTarget.description}</Text>
+            <Text size="sm">
+              Se quitará de la lista y se desactivarán sus alertas. Las lecturas
+              de horómetro, las jornadas y el estado del equipo se conservan.
+            </Text>
+            {deleteError ? <Alert color="red">{deleteError}</Alert> : null}
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                color="red"
+                loading={deleting}
+                onClick={() => void deleteReport()}
+              >
+                Sí, eliminar reporte
+              </Button>
+            </Group>
           </Stack>
         ) : null}
       </Modal>

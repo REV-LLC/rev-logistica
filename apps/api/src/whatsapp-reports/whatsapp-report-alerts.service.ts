@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationTransportService } from '../notifications/notification-transport.service';
+import { assetLabel, readableDescription } from './whatsapp-equipment';
 import { normalizePhone, REPORT_LABELS } from './whatsapp-report.types';
 
 @Injectable()
@@ -39,12 +40,18 @@ export class WhatsappReportAlertsService
           where: {
             status: 'PENDING',
             nextAttemptAt: { lte: new Date() },
-            report: { status: 'RECORDED' },
+            report: { status: 'RECORDED', deletedAt: null },
           },
           take: 20,
           orderBy: { nextAttemptAt: 'asc' },
           include: {
-            report: { include: { employee: true, asset: true, vehicle: true } },
+            report: {
+              include: {
+                employee: true,
+                asset: { include: { sku: { select: { name: true } } } },
+                vehicle: true,
+              },
+            },
           },
         });
       for (const r of recipients) {
@@ -52,6 +59,7 @@ export class WhatsappReportAlertsService
           {
             where: {
               id: r.id,
+              report: { status: 'RECORDED', deletedAt: null },
               status: 'PENDING',
               nextAttemptAt: { lte: new Date() },
             },
@@ -85,15 +93,26 @@ export class WhatsappReportAlertsService
             process.env.FRONTEND_URL ||
             ''
           ).replace(/\/+$/, '');
+          if (
+            !(await this.prisma.whatsappReportAlertRecipient.findFirst({
+              where: {
+                id: r.id,
+                status: 'SENDING',
+                report: { status: 'RECORDED', deletedAt: null },
+              },
+              select: { id: true },
+            }))
+          )
+            continue;
           const result = await this.transport.sendWhatsapp(r.phone!, {
             title: `${REPORT_LABELS[r.report.kind]}: ${r.report.employee.name} ${r.report.employee.lastName}`,
-            body: `${r.report.asset?.publicCode ?? r.report.vehicle?.plate ?? ''} ${r.report.description}`.trim(),
+            body: `${r.report.asset ? assetLabel(r.report.asset) : r.report.vehicle ? `Vehículo ${r.report.vehicle.plate}` : ''} ${readableDescription(r.report.description, r.report.asset?.publicCode)}`.trim(),
             recipientName: r.name,
             link: `${base}/employees/whatsapp-reports`,
           });
           if (!result.sent) throw new Error('Transport unavailable');
-          await this.prisma.whatsappReportAlertRecipient.update({
-            where: { id: r.id },
+          await this.prisma.whatsappReportAlertRecipient.updateMany({
+            where: { id: r.id, status: 'SENDING' },
             data: {
               status: 'SENT',
               sentAt: new Date(),
@@ -105,8 +124,8 @@ export class WhatsappReportAlertsService
             },
           });
         } catch {
-          await this.prisma.whatsappReportAlertRecipient.update({
-            where: { id: r.id },
+          await this.prisma.whatsappReportAlertRecipient.updateMany({
+            where: { id: r.id, status: 'SENDING' },
             data: {
               status: r.attempts >= 4 ? 'FAILED' : 'PENDING',
               error: 'ALERT_SEND_FAILED',

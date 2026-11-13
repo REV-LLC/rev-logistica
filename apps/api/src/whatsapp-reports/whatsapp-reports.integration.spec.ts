@@ -7,6 +7,7 @@ import { WhatsappWebhookService } from '../notifications/whatsapp-webhook.servic
 import { WhatsappInboxService } from './whatsapp-inbox.service';
 import { WhatsappReportRecordsService } from './whatsapp-report-records.service';
 import { Prisma } from '@prisma/client';
+import { worksitePicker } from './whatsapp-worksites';
 import { equipmentPicker } from './whatsapp-equipment';
 import { emptyDraft, normalizePhone } from './whatsapp-report.types';
 import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
@@ -43,7 +44,17 @@ if (testUrl) {
         size: 10,
       }),
     };
-    const ai = { extract: jest.fn() };
+    const ai = {
+      extract: jest.fn(),
+      equipmentSearchTerms: jest.fn(async (reference: string) => [reference]),
+      suggestWorksites: jest.fn(
+        async (
+          _reference: string,
+          _customer: string | null,
+          candidates: { id: string }[],
+        ) => candidates.slice(0, 5).map((site) => site.id),
+      ),
+    };
     let employee: any,
       asset: any,
       vehicle: any,
@@ -179,6 +190,23 @@ if (testUrl) {
         .map((s) => s.trim())
         .filter(Boolean))
         await prisma.$executeRawUnsafe(statement);
+      const suggestionSql = readFileSync(
+        join(
+          __dirname,
+          '../../prisma/migrations/20261113160000_attendance_activity_suggestions/migration.sql',
+        ),
+        'utf8',
+      );
+      const association = suggestionSql.slice(
+        suggestionSql.indexOf(
+          'ALTER TABLE "EmployeeActivityNote" DROP CONSTRAINT',
+        ),
+        suggestionSql.indexOf(
+          'ALTER TABLE "EmployeeActivityNote" ADD CONSTRAINT "EmployeeActivityNote_suggestion_check"',
+        ),
+      );
+      await prisma.$executeRawUnsafe(association.split(';').filter(Boolean)[0]);
+      await prisma.$executeRawUnsafe(association.split(';').filter(Boolean)[1]);
       const actor = await prisma.user.create({
         data: {
           email: `office-${randomUUID()}@example.invalid`,
@@ -257,9 +285,183 @@ if (testUrl) {
     });
     beforeEach(async () => {
       ai.extract.mockReset();
+      ai.equipmentSearchTerms.mockClear();
+      ai.suggestWorksites.mockClear();
       cloud.reply.mockClear();
       await prisma.whatsappInboundMessage.updateMany({
         data: { createdAt: new Date(Date.now() - 120000) },
+      });
+    });
+
+    it('deletes only the chosen report with an ADMIN/OFFICE audit trail and cancels its alerts', async () => {
+      const create = (
+        description: string,
+        kind: 'DAMAGE' | 'REQUEST' = 'DAMAGE',
+      ) =>
+        prisma.whatsappReport.create({
+          data: {
+            employeeId: employee.id,
+            assetId: asset.id,
+            kind,
+            description,
+            occurredAt: new Date(),
+            sourceMessageId: randomUUID(),
+          },
+        });
+      const [chosen, keep, request] = await Promise.all([
+        create('Eliminar QA'),
+        create('Conservar QA'),
+        create('Petición QA', 'REQUEST'),
+      ]);
+      const topic = await prisma.notificationTopic.create({
+        data: {
+          entityType: 'WHATSAPP_REPORT',
+          entityId: chosen.id,
+          eventType: 'EMPLOYEE_REPORT',
+          titleTemplate: 'QA',
+          messageTemplate: 'QA',
+          dueAt: new Date(),
+          warningDays: 0,
+        },
+      });
+      await prisma.whatsappReportAlertRecipient.create({
+        data: {
+          reportId: chosen.id,
+          recipientKey: 'qa-delete',
+          name: 'QA',
+          status: 'PENDING',
+        },
+      });
+      const driver = await prisma.user.create({
+        data: {
+          email: `${randomUUID()}@example.invalid`,
+          role: 'DRIVER',
+          passwordHash: 'disabled',
+        },
+      });
+      await expect(records.deleteReport(chosen.id, driver.id)).rejects.toThrow(
+        'Solo ADMIN y OFFICE',
+      );
+      const actorId = process.env.WHATSAPP_REPORT_ACTOR_USER_ID!;
+      await records.deleteReport(chosen.id, actorId);
+      const deleted = await prisma.whatsappReport.findUniqueOrThrow({
+        where: { id: chosen.id },
+      });
+      expect(deleted.deletedAt).toBeInstanceOf(Date);
+      expect(deleted.deletedByUserId).toBe(actorId);
+      expect(deleted.status).toBe('DELETED');
+      expect((await records.list('DAMAGE')).map((r) => r.id)).not.toContain(
+        chosen.id,
+      );
+      expect((await records.list('DAMAGE')).map((r) => r.id)).toContain(
+        keep.id,
+      );
+      expect((await records.list('REQUEST')).map((r) => r.id)).toContain(
+        request.id,
+      );
+      expect(
+        (
+          await prisma.notificationTopic.findUniqueOrThrow({
+            where: { id: topic.id },
+          })
+        ).active,
+      ).toBe(false);
+      expect(
+        (
+          await prisma.whatsappReportAlertRecipient.findFirstOrThrow({
+            where: { reportId: chosen.id },
+          })
+        ).status,
+      ).toBe('CANCELLED');
+      await expect(
+        records.resolveReport(chosen.id, actorId, 'No debe reabrirse'),
+      ).rejects.toThrow('eliminado');
+      await records.deleteReport(chosen.id, actorId);
+      expect(
+        (
+          await prisma.whatsappReport.findUniqueOrThrow({
+            where: { id: chosen.id },
+          })
+        ).deletedAt,
+      ).toEqual(deleted.deletedAt);
+      const admin = await prisma.user.create({
+        data: {
+          email: `${randomUUID()}@example.invalid`,
+          role: 'ADMIN',
+          passwordHash: 'disabled',
+        },
+      });
+      await records.deleteReport(request.id, admin.id);
+      await prisma.user.update({
+        where: { id: admin.id },
+        data: { active: false },
+      });
+      await expect(records.deleteReport(keep.id, admin.id)).rejects.toThrow(
+        'Solo ADMIN y OFFICE',
+      );
+      // Remove these isolated fixtures so prior flow assertions remain unchanged.
+      await prisma.whatsappReportAlertRecipient.deleteMany({
+        where: { reportId: chosen.id },
+      });
+      await prisma.notificationTopic.delete({ where: { id: topic.id } });
+      await prisma.whatsappReport.deleteMany({
+        where: { id: { in: [chosen.id, keep.id, request.id] } },
+      });
+    });
+
+    it('groups entry/exit reports and preserves the jornada when a report is deleted', async () => {
+      const now = new Date();
+      const entry = await prisma.whatsappReport.create({
+        data: {
+          kind: 'CHECK_IN',
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          occurredAt: now,
+          sourceMessageId: randomUUID(),
+          description: 'Entrada QA',
+        },
+      });
+      const exit = await prisma.whatsappReport.create({
+        data: {
+          kind: 'CHECK_OUT',
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          occurredAt: new Date(now.getTime() + 1000),
+          sourceMessageId: randomUUID(),
+          description: 'Salida QA',
+        },
+      });
+      const jornada = await prisma.worksiteAttendance.create({
+        data: {
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          enteredAt: now,
+          leftAt: exit.occurredAt,
+          checkInReportId: entry.id,
+          checkOutReportId: exit.id,
+        },
+      });
+      expect((await records.list('ATTENDANCE')).map((r) => r.id)).toEqual(
+        expect.arrayContaining([entry.id, exit.id]),
+      );
+      expect((await records.list('DAMAGE')).map((r) => r.id)).not.toContain(
+        entry.id,
+      );
+      await records.deleteReport(
+        entry.id,
+        process.env.WHATSAPP_REPORT_ACTOR_USER_ID!,
+      );
+      expect((await records.list('ATTENDANCE')).map((r) => r.id)).toEqual([
+        exit.id,
+      ]);
+      expect(
+        await prisma.worksiteAttendance.findUniqueOrThrow({
+          where: { id: jornada.id },
+        }),
+      ).toEqual(jornada);
+      await prisma.worksiteAttendance.delete({ where: { id: jornada.id } });
+      await prisma.whatsappReport.deleteMany({
+        where: { id: { in: [entry.id, exit.id] } },
       });
     });
 
@@ -315,7 +517,8 @@ if (testUrl) {
         selectionId: 'attendance_check_in',
         button: true,
       });
-      expect(entry?.replyText).toContain('Indica el nombre de la obra');
+      expect(entry?.replyText).toContain('Ver obras');
+      expect(entry?.replyKind).toBe('WORKSITE_MENU');
       const conversation = await prisma.whatsappConversation.findUniqueOrThrow({
         where: { phone: '573001234567' },
       });
@@ -384,7 +587,9 @@ if (testUrl) {
       expect(first?.replyText).toContain('Responde SÍ');
       expect(await prisma.whatsappReport.count()).toBe(0);
       const confirmed = await send('sí');
-      expect(confirmed?.replyText).toContain('Registrado en REV');
+      expect(confirmed?.replyText).toContain(
+        'Tu reporte de daño quedó registrado correctamente.',
+      );
       expect(
         (await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } }))
           .isDamaged,
@@ -542,7 +747,9 @@ if (testUrl) {
       await send('', { image: true });
       const entered = await send('sí');
       expect(entered?.status).toBe('PROCESSED');
-      expect(entered?.replyText).toContain('Registrado en REV');
+      expect(entered?.replyText).toContain(
+        'Tu entrada a obra quedó registrada correctamente.',
+      );
       expect(
         await prisma.worksiteAttendance.count({
           where: { employeeId: employee.id, leftAt: null },
@@ -550,9 +757,13 @@ if (testUrl) {
       ).toBe(1);
       expect(
         await prisma.employeeActivityNote.count({
-          where: { employeeId: employee.id, customerWorksiteId: site.id },
+          where: {
+            employeeId: employee.id,
+            customerWorksiteId: site.id,
+            sourceAttendanceId: { not: null },
+          },
         }),
-      ).toBe(0);
+      ).toBe(1);
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
       );
@@ -588,8 +799,10 @@ if (testUrl) {
       ai.extract.mockResolvedValue(
         extracted({ kind: 'CHECK_OUT', worksiteReference: 'Obra QA única' }),
       );
-      await send('Salí', { image: true });
-      expect((await send('sí'))?.replyText).toContain('No tienes una entrada');
+      expect((await send('Salí', { image: true }))?.replyText).toContain(
+        'No tienes una entrada',
+      );
+      expect((await send('sí'))?.replyText).toContain('faltan datos');
       expect(
         await prisma.whatsappReport.count({ where: { kind: 'CHECK_OUT' } }),
       ).toBe(1);
@@ -830,7 +1043,9 @@ if (testUrl) {
         selectionId: `report_confirm:${summary!.id}`,
         button: true,
       });
-      expect(result?.replyText).toContain('Registrado en REV');
+      expect(result?.replyText).toContain(
+        'Tu petición quedó registrada correctamente.',
+      );
       expect(result?.replyKind).toBe('REPORT_MENU');
       await send('Sí, registrar', {
         selectionId: `report_confirm:${summary!.id}`,
@@ -847,6 +1062,17 @@ if (testUrl) {
       const phone = '573001234567';
       const conversation = () =>
         prisma.whatsappConversation.findUniqueOrThrow({ where: { phone } });
+      const openCatalog = async () => {
+        const prompt = await send('Horómetro', {
+          selectionId: 'report_hour_meter',
+        });
+        const buttons = (prompt!.replyOptions as any).buttons;
+        return send('Ver lista completa', {
+          selectionId: buttons.find((button: any) =>
+            button.id.startsWith('equipment_catalog:'),
+          ).id,
+        });
+      };
       const rows = (message: any) =>
         message.replyOptions.rows as {
           id: string;
@@ -873,26 +1099,30 @@ if (testUrl) {
       });
 
       it('selects the exact tapped machine, remembers only confirmed reports and survives draft expiry', async () => {
-        const menu = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const menu = await openCatalog();
         expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
         expect(ai.extract).not.toHaveBeenCalled();
         const selection = rows(menu).find((r) =>
-          r.description.includes(asset.publicCode),
+          r.title.endsWith(`#${asset.internalNumber}`),
         )!;
         expect(selection).toBeDefined();
         const picked = await send('Título sin códigos', {
           selectionId: selection.id,
         });
         expect(picked?.replyText).toContain('foto');
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
         ai.extract.mockResolvedValue(
           extracted({ kind: 'HOUR_METER', hours: 160, photoHours: 160 }),
         );
         const summary = await send('', { image: true });
         expect(summary?.replyKind).toBe('CONFIRMATION');
-        expect(summary?.replyText).toContain(asset.publicCode);
+        expect(summary?.replyText).toContain(
+          `Retroexcavadora QA #${asset.internalNumber}`,
+        );
+        expect(summary?.replyText).not.toContain(asset.publicCode);
         await send('Sí', { selectionId: `report_confirm:${summary!.id}` });
         expect((await conversation()).lastEquipment).toEqual({
           type: 'ASSET',
@@ -907,10 +1137,12 @@ if (testUrl) {
           selectionId: 'report_hour_meter',
         });
         expect(recent?.replyText).toContain('última máquina');
-        expect(recent?.replyText).toContain(asset.publicCode);
+        expect(recent?.replyText).toContain(
+          `Retroexcavadora QA #${asset.internalNumber}`,
+        );
         expect(
           (recent!.replyOptions as any).buttons.map((b: any) => b.title),
-        ).toEqual(['Usar esta máquina', 'Elegir otra']);
+        ).toEqual(['Usar esta máquina', 'Buscar otra', 'Ver lista completa']);
         expect(ai.extract).not.toHaveBeenCalled();
         await send('Cancelar');
         expect((await conversation()).lastEquipment).toEqual({
@@ -923,26 +1155,28 @@ if (testUrl) {
         ai.extract.mockResolvedValue(
           extracted({ kind: 'HOUR_METER', hours: 170, photoHours: 170 }),
         );
-        const menu = await send('Horómetro', { image: true });
+        const prompt = await send('Horómetro', { image: true });
+        const menu = await send('Ver lista completa', {
+          selectionId: (prompt!.replyOptions as any).buttons[0].id,
+        });
         expect(menu?.replyKind).toBe('EQUIPMENT_MENU');
         const picked = await send('Mi máquina', {
           selectionId: rows(menu).find((r) =>
-            r.description.includes(asset.publicCode),
+            r.title.endsWith(`#${asset.internalNumber}`),
           )!.id,
         });
         expect(picked?.replyKind).toBe('CONFIRMATION');
         expect(picked?.replyText).toContain('Fotos: 1');
         await send('Cancelar');
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: asset.id,
+        });
       });
 
       it('rejects stale, expired and deactivated selections instead of trusting a supplied title or id', async () => {
-        const first = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
-        const second = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const first = await openCatalog();
+        const second = await openCatalog();
         const stale = await send('QA-RETRO-02', {
           selectionId: rows(first)[0].id,
         });
@@ -950,11 +1184,9 @@ if (testUrl) {
         expect((await conversation()).draft).not.toHaveProperty(
           'selectedEquipment',
         );
-        const current = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const current = await openCatalog();
         const choice = rows(current).find((r) =>
-          r.description.includes(asset.publicCode),
+          r.title.endsWith(`#${asset.internalNumber}`),
         )!;
         await prisma.asset.update({
           where: { id: asset.id },
@@ -983,12 +1215,10 @@ if (testUrl) {
             internalNumber: 99,
           },
         });
-        const menu = await send('Horómetro', {
-          selectionId: 'report_hour_meter',
-        });
+        const menu = await openCatalog();
         await send('Mi máquina', {
           selectionId: rows(menu).find((r) =>
-            r.description.includes(asset.publicCode),
+            r.title.endsWith(`#${asset.internalNumber}`),
           )!.id,
         });
         ai.extract.mockResolvedValue(
@@ -996,7 +1226,7 @@ if (testUrl) {
         );
         const oldSummary = await send('', { image: true });
         cloud.reply.mockRejectedValueOnce(new Error('temporary'));
-        const nextMenu = await send('Otra máquina');
+        const nextMenu = await send('Ver máquinas');
         expect(nextMenu?.replySentAt).toBeNull();
         await prisma.whatsappInboundMessage.update({
           where: { id: nextMenu!.id },
@@ -1012,7 +1242,7 @@ if (testUrl) {
         );
         const picked = await send('Otra', {
           selectionId: rows(nextMenu).find((r) =>
-            r.description.includes(other.publicCode),
+            r.title.endsWith(`#${other.internalNumber}`),
           )!.id,
         });
         expect(picked?.replyText).toContain('foto');
@@ -1022,7 +1252,10 @@ if (testUrl) {
           evidenceFileIds: [],
         });
         await send('Sí', { selectionId: `report_confirm:${oldSummary!.id}` });
-        expect((await conversation()).lastEquipment).toBeNull();
+        expect((await conversation()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: other.id,
+        });
         await prisma.asset.delete({ where: { id: other.id } });
       });
 
@@ -1136,6 +1369,17 @@ if (testUrl) {
           })
         ).draft as any;
       beforeEach(async () => {
+        await prisma.employeeActivityReview.deleteMany({
+          where: {
+            note: {
+              employeeId: employee.id,
+              sourceAttendanceId: { not: null },
+            },
+          },
+        });
+        await prisma.employeeActivityNote.deleteMany({
+          where: { employeeId: employee.id, sourceAttendanceId: { not: null } },
+        });
         await prisma.worksiteAttendance.deleteMany({
           where: { employeeId: employee.id },
         });
@@ -1154,7 +1398,14 @@ if (testUrl) {
           extracted({ kind, worksiteReference: 'Obra QA única' }),
         );
         const question = await send('Obra QA única');
-        expect(question?.replyText).toContain('ubicación o una foto');
+        const open = await prisma.worksiteAttendance.count({
+          where: { employeeId: employee.id, leftAt: null },
+        });
+        expect(question?.replyText).toContain(
+          kind === 'CHECK_OUT' && !open
+            ? 'No tienes una entrada'
+            : 'ubicación o una foto',
+        );
       }
       it('registers entry and exit with location only, without downloading a photo or calling AI for coordinates', async () => {
         await start('CHECK_IN');
@@ -1167,7 +1418,9 @@ if (testUrl) {
         const entry = await send('Sí', {
           selectionId: `report_confirm:${summary!.id}`,
         });
-        expect(entry?.replyText).toContain('Registrado en REV');
+        expect(entry?.replyText).toContain(
+          'Tu entrada a obra quedó registrada correctamente.',
+        );
         const report = await prisma.whatsappReport.findUniqueOrThrow({
           where: { sourceMessageId: entry!.providerMessageId },
           include: { evidence: true },
@@ -1195,7 +1448,9 @@ if (testUrl) {
         const exit = await send('Sí', {
           selectionId: `report_confirm:${exitSummary!.id}`,
         });
-        expect(exit?.replyText).toContain('Registrado en REV');
+        expect(exit?.replyText).toContain(
+          'Tu salida de obra quedó registrada correctamente.',
+        );
         const attendance = await prisma.worksiteAttendance.findFirstOrThrow({
           where: { employeeId: employee.id },
         });
@@ -1280,7 +1535,7 @@ if (testUrl) {
             worksiteReference: 'Otra obra por corregir',
           }),
         );
-        await send('Otra obra');
+        await send('Obra distinta por corregir');
         expect((await currentDraft()).location).toBeUndefined();
         expect((await currentDraft()).ready).toBe(false);
       });
@@ -1327,6 +1582,610 @@ if (testUrl) {
         await start('CHECK_OUT');
         expect((await currentDraft()).location).toBeUndefined();
         expect((await currentDraft()).ready).toBe(false);
+      });
+    });
+
+    describe('worksite selection and exit from the open entry', () => {
+      const phone = '573001234567';
+      const draft = async () =>
+        (
+          await prisma.whatsappConversation.findUniqueOrThrow({
+            where: { phone },
+          })
+        ).draft as any;
+      async function openEntry() {
+        const report = await prisma.whatsappReport.create({
+          data: {
+            employeeId: employee.id,
+            kind: 'CHECK_IN',
+            customerWorksiteId: site.id,
+            description: 'QA open entry',
+            occurredAt: new Date(Date.now() - 7200000),
+            sourceMessageId: `qa-open-${randomUUID()}`,
+          },
+        });
+        return prisma.worksiteAttendance.create({
+          data: {
+            employeeId: employee.id,
+            customerWorksiteId: site.id,
+            enteredAt: report.occurredAt,
+            checkInReportId: report.id,
+          },
+        });
+      }
+      beforeEach(async () => {
+        await prisma.employeeActivityReview.deleteMany({
+          where: {
+            note: {
+              employeeId: employee.id,
+              sourceAttendanceId: { not: null },
+            },
+          },
+        });
+        await prisma.employeeActivityNote.deleteMany({
+          where: { employeeId: employee.id, sourceAttendanceId: { not: null } },
+        });
+        await prisma.worksiteAttendance.deleteMany({
+          where: { employeeId: employee.id },
+        });
+        await send('Cancelar');
+        ai.extract.mockClear();
+      });
+      it('uses the open entry for exit despite alternative names, preserving the original photo until explicit confirmation', async () => {
+        const open = await openEntry();
+        ai.extract.mockResolvedValue(extracted({ kind: 'CHECK_OUT' }));
+        const prompt = await send('Salida de obra');
+        expect(prompt?.replyText).toContain(
+          'Tu entrada abierta es en Obra QA única',
+        );
+        const photo = await send('', { image: true });
+        expect(photo?.replyKind).toBe('CONFIRMATION');
+        const originalEvidence = (await draft()).evidenceFileIds;
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_OUT',
+            worksiteReference: 'universidad Camacho',
+            customerReference: 'prodecon',
+          }),
+        );
+        await send('Salida de universidad Camacho cliente prodecon');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_OUT',
+            worksiteReference: 'Colegio Camacho',
+            customerReference: 'prodecon',
+          }),
+        );
+        const corrected = await send('Colegio Camacho');
+        expect(corrected?.replyText).toContain('Obra QA única (Cliente QA)');
+        expect(corrected?.replyKind).toBe('CONFIRMATION');
+        expect((await draft()).evidenceFileIds).toEqual(originalEvidence);
+        expect(
+          (
+            await prisma.worksiteAttendance.findUniqueOrThrow({
+              where: { id: open.id },
+            })
+          ).leftAt,
+        ).toBeNull();
+        await send('Sí', { selectionId: `report_confirm:${corrected!.id}` });
+        const closed = await prisma.worksiteAttendance.findUniqueOrThrow({
+          where: { id: open.id },
+        });
+        expect(closed.leftAt).not.toBeNull();
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { id: closed.checkOutReportId! },
+          include: { evidence: true },
+        });
+        expect(report.customerWorksiteId).toBe(site.id);
+        expect(report.evidence.map((e) => e.fileObjectId)).toEqual(
+          originalEvidence,
+        );
+      });
+      it('does not offer another employee’s entry and revalidates an entry closed before confirmation', async () => {
+        const noEntry = await send('Salida', {
+          selectionId: 'attendance_check_out',
+        });
+        expect(noEntry?.replyText).toContain('No tienes una entrada abierta');
+        const open = await openEntry();
+        ai.extract.mockResolvedValue(extracted({ kind: 'CHECK_OUT' }));
+        const summary = await send('', { image: true });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        await prisma.worksiteAttendance.update({
+          where: { id: open.id },
+          data: { leftAt: new Date() },
+        });
+        const before = await prisma.whatsappReport.count({
+          where: { kind: 'CHECK_OUT' },
+        });
+        const result = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(result?.replyText).toContain('No tienes una entrada abierta');
+        expect(
+          await prisma.whatsappReport.count({ where: { kind: 'CHECK_OUT' } }),
+        ).toBe(before);
+      });
+      it('lets an operator select an entry worksite by a native ID without typing its name or using AI', async () => {
+        const menu = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        expect(menu?.replyKind).toBe('WORKSITE_MENU');
+        const state = (await draft()).worksiteMenu;
+        const row = (menu!.replyOptions as any).rows[
+          state.choices.indexOf(site.id)
+        ];
+        expect(row).toBeDefined();
+        const selected = await send('Título cualquiera', {
+          selectionId: row.id,
+        });
+        expect(selected?.replyText).toContain(
+          'Obra seleccionada: Obra QA única',
+        );
+        expect((await draft()).selectedWorksiteId).toBe(site.id);
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(cloud.reply).toHaveBeenCalledWith(
+          phone,
+          menu!.replyText,
+          'WORKSITE_MENU',
+          undefined,
+          menu!.replyOptions,
+        );
+      });
+      it('recognizes word fragments such as Colegio Camacho and offers choices for ambiguous worksites', async () => {
+        const worksite = await prisma.worksite.create({
+          data: { name: 'Colegio Unicamacho' },
+        });
+        const link = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'CHECK_IN', worksiteReference: 'Colegio Camacho' }),
+        );
+        const summary = await send('Colegio Camacho', { image: true });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect(summary?.replyText).toContain('Colegio Unicamacho');
+        await send('Cancelar');
+        const duplicateCustomer = await prisma.customer.create({
+          data: {
+            name: 'Otro cliente QA',
+            identityDocumentType: 'NIT',
+            nitOrId: randomUUID(),
+          },
+        });
+        const other = await prisma.customerWorksite.create({
+          data: { customerId: duplicateCustomer.id, worksiteId: worksite.id },
+        });
+        const ambiguous = await send('Colegio Camacho', { image: true });
+        expect(ambiguous?.replyKind).toBe('WORKSITE_MENU');
+        expect((await draft()).ready).toBe(false);
+        expect((await draft()).evidenceFileIds).toHaveLength(1);
+        const state = (await draft()).worksiteMenu;
+        const row = (ambiguous!.replyOptions as any).rows[
+          state.choices.indexOf(link.id)
+        ];
+        const picked = await send('La obra correcta', { selectionId: row.id });
+        expect(picked?.replyKind).toBe('CONFIRMATION');
+        expect(picked?.replyText).toContain('Cliente QA');
+        await send('Cancelar');
+        await prisma.customerWorksite.deleteMany({
+          where: { id: { in: [link.id, other.id] } },
+        });
+        await prisma.customer.delete({ where: { id: duplicateCustomer.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('rejects stale or inactive selections, and clears old evidence when switching a selected worksite', async () => {
+        const first = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        const second = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await send('Vieja', {
+          selectionId: (first!.replyOptions as any).rows[0].id,
+        });
+        expect((await draft()).selectedWorksiteId).toBeUndefined();
+        const current = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await prisma.customerWorksite.update({
+          where: { id: site.id },
+          data: { active: false },
+        });
+        await send('Inactiva', {
+          selectionId: (current!.replyOptions as any).rows[0].id,
+        });
+        expect((await draft()).selectedWorksiteId).toBeUndefined();
+        await prisma.customerWorksite.update({
+          where: { id: site.id },
+          data: { active: true },
+        });
+        const live = await send('Entrada', {
+          selectionId: 'attendance_check_in',
+        });
+        await send('Mi obra', {
+          selectionId: (live!.replyOptions as any).rows[0].id,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({ kind: 'CHECK_IN', worksiteReference: 'Obra QA única' }),
+        );
+        await send('', { image: true });
+        const worksite = await prisma.worksite.create({
+          data: { name: 'Otra obra QA' },
+        });
+        const other = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        const menu = await send('Cambiar obra');
+        const state = (await draft()).worksiteMenu;
+        const row = (menu!.replyOptions as any).rows[
+          state.choices.indexOf(other.id)
+        ];
+        await send('La otra', { selectionId: row.id });
+        expect((await draft()).evidenceFileIds).toEqual([]);
+        expect((await draft()).ready).toBe(false);
+        await send('Cancelar');
+        await prisma.customerWorksite.delete({ where: { id: other.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('offers AI-ranked typo suggestions without recording and keeps a full-catalog fallback if AI is unavailable', async () => {
+        const worksite = await prisma.worksite.create({
+          data: { name: 'COLEGIO UNICAMACHO' },
+        });
+        const link = await prisma.customerWorksite.create({
+          data: { customerId: site.customerId, worksiteId: worksite.id },
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'CHECK_IN',
+            worksiteReference: 'unicamaho',
+            customerReference: 'Cliente QA',
+          }),
+        );
+        const before = await prisma.whatsappReport.count();
+        const suggested = await send('Entrada universidad unicamaho', {
+          image: true,
+        });
+        expect(suggested?.replyKind).toBe('WORKSITE_MENU');
+        expect(suggested?.replyText).toContain('nombres parecidos');
+        expect(ai.suggestWorksites).toHaveBeenCalled();
+        expect((await draft()).worksiteMenu.choices).toContain(link.id);
+        expect(await prisma.whatsappReport.count()).toBe(before);
+        const all = (suggested!.replyOptions as any).rows.find(
+          (r: any) => r.title === 'Ver todas las obras',
+        );
+        const catalog = await send('Ver todas', { selectionId: all.id });
+        expect(catalog?.replyText).toContain('No necesitas escribir');
+        expect((await draft()).worksiteMenu.suggested).not.toBe(true);
+        await send('Cancelar');
+        ai.suggestWorksites.mockRejectedValueOnce(new Error('AI unavailable'));
+        const fallback = await send('Entrada universidad unicamaho', {
+          image: true,
+        });
+        expect(fallback?.replyKind).toBe('WORKSITE_MENU');
+        expect((await draft()).worksiteMenu.choices).toContain(link.id);
+        expect((await draft()).evidenceFileIds).toHaveLength(1);
+        await send('Cancelar');
+        await prisma.customerWorksite.delete({ where: { id: link.id } });
+        await prisma.worksite.delete({ where: { id: worksite.id } });
+      });
+      it('pages all active worksite/customer links within the native ten-row limit', async () => {
+        const sites: string[] = [];
+        const links: string[] = [];
+        for (let n = 0; n < 18; n++) {
+          const s = await prisma.worksite.create({
+            data: { name: `Obra paginada ${n}` },
+          });
+          sites.push(s.id);
+          const l = await prisma.customerWorksite.create({
+            data: {
+              customerId: site.customerId,
+              worksiteId: s.id,
+              active: n !== 17,
+            },
+          });
+          links.push(l.id);
+        }
+        const seen: string[] = [];
+        for (let page = 0; page < 10; page++) {
+          const picker = await worksitePicker(prisma, page);
+          seen.push(...picker.state.choices);
+          const rows = (picker.options as any).rows;
+          expect(rows.length).toBeLessThanOrEqual(10);
+          expect(
+            rows.every(
+              (r: any) => r.title.length <= 24 && r.description.length <= 72,
+            ),
+          ).toBe(true);
+          if (!rows.some((r: any) => r.title === 'Más obras →')) break;
+        }
+        const active = await prisma.customerWorksite.findMany({
+          where: {
+            active: true,
+            customer: { active: true },
+            worksite: { active: true },
+          },
+          select: { id: true },
+        });
+        expect(seen.sort()).toEqual(active.map((s) => s.id).sort());
+        expect(new Set(seen).size).toBe(seen.length);
+        await prisma.customerWorksite.deleteMany({
+          where: { id: { in: links } },
+        });
+        await prisma.worksite.deleteMany({ where: { id: { in: sites } } });
+      });
+    });
+
+    describe('AI equipment search, readable names and optional photos', () => {
+      const phone = '573001234567';
+      const current = () =>
+        prisma.whatsappConversation.findUniqueOrThrow({ where: { phone } });
+      let machine: any;
+      const technicalCode =
+        'CUT-20260729-BODEGA_PRINCIPAL_D-CORTADORA_DE_CONCR-ESTANDAR-CORTADORA_DE_CONCR-001-58145BC8';
+      beforeAll(async () => {
+        machine = await prisma.asset.create({
+          data: {
+            skuId: asset.skuId,
+            warehouseOwnerId: asset.warehouseOwnerId,
+            publicCode: technicalCode,
+            internalNumber: 73,
+            brand: 'CASE',
+            model: 'SR240B',
+            description: 'Minicargador amarillo',
+          },
+        });
+      });
+      beforeEach(async () => {
+        await send('Cancelar');
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { lastEquipment: Prisma.DbNull },
+        });
+        cloud.photo.mockClear();
+        ai.extract.mockClear();
+        ai.equipmentSearchTerms.mockClear();
+      });
+      it('starts with a search prompt, finds matching machines with AI and remembers a tapped machine even after cancelling', async () => {
+        const prompt = await send('Daño', { selectionId: 'report_damage' });
+        expect(prompt?.replyText).toContain(
+          'Escribe su nombre, marca o modelo',
+        );
+        expect(prompt?.replyText).not.toContain('Página');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga de aceite',
+          }),
+        );
+        const matches = await send(
+          'El minicargador Case tiene una fuga de aceite',
+        );
+        expect(ai.equipmentSearchTerms).toHaveBeenCalled();
+        expect(matches?.replyText).toContain('Ver coincidencias');
+        const draft = (await current()).draft as any;
+        const index = draft.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        expect(index).toBeGreaterThanOrEqual(0);
+        const rows = (matches!.replyOptions as any).rows;
+        expect(rows.length).toBeLessThanOrEqual(10);
+        expect(
+          JSON.stringify(
+            rows.map((r: any) => ({
+              title: r.title,
+              description: r.description,
+            })),
+          ),
+        ).not.toContain(technicalCode);
+        const picked = await send('Esta máquina', {
+          selectionId: rows[index].id,
+        });
+        expect(picked?.replyText).not.toContain(technicalCode);
+        expect(picked?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).lastEquipment).toEqual({
+          type: 'ASSET',
+          id: machine.id,
+        });
+        await send('Cancelar');
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { expiresAt: new Date(0) },
+        });
+        ai.extract.mockClear();
+        ai.equipmentSearchTerms.mockClear();
+        const recent = await send('Daño', { selectionId: 'report_damage' });
+        expect(recent?.replyText).toContain('#73');
+        expect(recent?.replyText).not.toContain(technicalCode);
+        expect(
+          (recent!.replyOptions as any).buttons.map((b: any) => b.title),
+        ).toEqual(['Usar esta máquina', 'Buscar otra', 'Ver lista completa']);
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(ai.equipmentSearchTerms).not.toHaveBeenCalled();
+      });
+      it('retains an unclassified photo through the report-type and machine choices', async () => {
+        ai.extract.mockResolvedValue(extracted({}));
+        const photo = await send('', { image: true });
+        expect(photo?.replyText).toContain('Foto recibida');
+        const original = ((await current()).draft as any).evidenceFileIds;
+        await send('Daño', { selectionId: 'report_damage' });
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: original,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga',
+          }),
+        );
+        const matches = await send('Fuga en el minicargador Case');
+        const state = (await current()).draft as any;
+        const index = state.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        const summary = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: original,
+        });
+      });
+      it('keeps a photo sent while searching and stores it on the explicitly selected machine', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Se apaga el motor',
+          }),
+        );
+        const matches = await send('El minicargador Case se apaga', {
+          image: true,
+        });
+        expect(matches?.replyText).toContain('Foto recibida');
+        const before = (await current()).draft as any;
+        expect(before.evidenceFileIds).toHaveLength(1);
+        const index = before.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        const summary = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        expect((await current()).draft).toMatchObject({
+          evidenceFileIds: before.evidenceFileIds,
+        });
+        const done = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: done!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.assetId).toBe(machine.id);
+        expect(report.evidence.map((e) => e.fileObjectId)).toEqual(
+          before.evidenceFileIds,
+        );
+      });
+      it('offers Add photos, acknowledges the image and does not let image guesses change the selected machine', async () => {
+        await prisma.whatsappConversation.update({
+          where: { phone },
+          data: { lastEquipment: { type: 'ASSET', id: machine.id } },
+        });
+        const recent = await send('Daño', { selectionId: 'report_damage' });
+        await send('Usar esta máquina', {
+          selectionId: (recent!.replyOptions as any).buttons[0].id,
+        });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: `${asset.sku?.name ?? 'Retroexcavadora QA'} #73`,
+            description: 'Consumo de aceite',
+          }),
+        );
+        const summary = await send('Consumo de aceite');
+        expect(summary?.replyKind).toBe('CONFIRMATION');
+        const help = await send('Agregar fotos', {
+          selectionId: `report_photo:${summary!.id}`,
+        });
+        expect(help?.replyText).toContain('Fotos/Galería');
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'HOUR_METER',
+            subjectReference: 'Otra máquina',
+            description: 'Consumo de aceite',
+          }),
+        );
+        const photo = await send('', { image: true });
+        expect(photo?.replyText).toContain('Foto recibida. Fotos adjuntas: 1');
+        expect(photo?.replyText).not.toContain(technicalCode);
+        expect((await current()).draft).toMatchObject({
+          kind: 'DAMAGE',
+          selectedEquipment: { type: 'ASSET', id: machine.id },
+        });
+        const old = await send('Sí', {
+          selectionId: `report_confirm:${summary!.id}`,
+        });
+        expect(old?.replyText).toContain('resumen anterior');
+        const done = await send('Sí', {
+          selectionId: `report_confirm:${photo!.id}`,
+        });
+        const report = await prisma.whatsappReport.findUniqueOrThrow({
+          where: { sourceMessageId: done!.providerMessageId },
+          include: { evidence: true },
+        });
+        expect(report.assetId).toBe(machine.id);
+        expect(report.evidence).toHaveLength(1);
+        const transport = {
+          sendWhatsapp: jest.fn(async () => ({
+            sent: true,
+            providerMessageId: `qa-alert-${randomUUID()}`,
+          })),
+        };
+        await new WhatsappReportAlertsService(prisma, transport as any).tick();
+        const calls = transport.sendWhatsapp.mock.calls as any[];
+        expect(calls.some((call) => call[1].body.includes('#73'))).toBe(true);
+        expect(
+          calls.every((call) => !call[1].body.includes(technicalCode)),
+        ).toBe(true);
+      });
+      it('falls back to nearby matches when AI is down and keeps the catalog optional', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargadr case',
+            description: 'Fuga',
+          }),
+        );
+        ai.equipmentSearchTerms.mockRejectedValueOnce(new Error('AI down'));
+        const fallback = await send('Minicargadr Case');
+        expect(fallback?.replyKind).toBe('EQUIPMENT_MENU');
+        const draft = (await current()).draft as any;
+        expect(
+          draft.equipmentMenu.choices.some((ref: any) => ref.id === machine.id),
+        ).toBe(true);
+        const catalog = (fallback!.replyOptions as any).rows.find(
+          (r: any) => r.title === 'Ver lista completa',
+        );
+        const list = await send('Catálogo', { selectionId: catalog.id });
+        expect(list?.replyText).toContain('Página');
+      });
+      it('rejects inactive or stale suggested machines and never turns an unchosen AI suggestion into memory', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: 'minicargador case',
+            description: 'Fuga',
+          }),
+        );
+        const matches = await send('Minicargador Case');
+        const state = (await current()).draft as any;
+        const index = state.equipmentMenu.choices.findIndex(
+          (ref: any) => ref.id === machine.id,
+        );
+        expect((await current()).lastEquipment).toBeNull();
+        await prisma.asset.update({
+          where: { id: machine.id },
+          data: { active: false },
+        });
+        await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect((await current()).lastEquipment).toBeNull();
+        expect((await current()).draft).not.toHaveProperty('selectedEquipment');
+        await prisma.asset.update({
+          where: { id: machine.id },
+          data: { active: true },
+        });
+        await send('Cancelar');
+        const stale = await send('Esta', {
+          selectionId: (matches!.replyOptions as any).rows[index].id,
+        });
+        expect(stale?.replyKind).toBe('REPORT_MENU');
       });
     });
   },

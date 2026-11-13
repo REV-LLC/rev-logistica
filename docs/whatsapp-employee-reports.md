@@ -46,7 +46,7 @@ La implementación queda desactivada por defecto. La clave de Office no se reuti
 ## Fiabilidad y límites
 
 - Al elegir daño u horómetro se ofrece una lista táctil de máquinas con nombre, número y marca/modelo o descripción. Horómetro filtra activos no eliminados cuyo SKU cobra por hora; también conserva el soporte existente de vehículos activos. Las listas tienen hasta ocho equipos por página y botones para avanzar/retroceder, sin exigir escribir códigos o placas.
-- Cada número conserva la última máquina de un reporte **confirmado**, fuera del borrador de 30 minutos. El siguiente reporte propone «Usar esta máquina» / «Elegir otra», sin asignar el equipo automáticamente. Cancelar o abrir otra lista no cambia la memoria. Al reasignar el número a otro empleado no se reutiliza la memoria anterior. Se verifica otra vez que el equipo siga activo y sea apto para el flujo.
+- Cada número conserva la última máquina **elegida explícitamente o registrada**, fuera del borrador de 30 minutos. El siguiente reporte propone «Usar esta máquina» / «Elegir otra», sin asignar el equipo automáticamente. Cancelar el reporte conserva la última máquina elegida; abrir una lista o recibir sugerencias sin elegir no cambia la memoria. Al reasignar el número a otro empleado no se reutiliza la memoria anterior. Se verifica otra vez que el equipo siga activo y sea apto para el flujo.
 - Las opciones y sus identificadores se guardan con la respuesta para reintentar exactamente la misma lista. Cada lista está vinculada al borrador vigente con un identificador aleatorio; botones viejos o ajenos no seleccionan equipos. Cambiar de máquina descarta la lectura y las fotos del equipo anterior, y siempre se exige confirmar el resumen antes de registrar.
 
 - Webhook firmado; solo acepta mensajes del `phone_number_id` configurado. Primero guarda la cola durable y responde; el modelo y las descargas se ejecutan fuera de la petición del webhook.
@@ -70,3 +70,82 @@ Las pruebas PostgreSQL son opt-in: configurar `WHATSAPP_TEST_DATABASE_URL` a una
 La asistencia de WhatsApp se guarda en `WorksiteAttendance`, vinculada al reporte y a sus evidencias. No crea una actividad operativa `WORKSITE`: esas actividades requieren una máquina y conservan su validación independiente.
 
 La ubicación se recibe únicamente desde el mensaje nativo firmado de WhatsApp y se conserva con latitud, longitud, ID del mensaje y horas de envío/recepción. Se valida su procedencia al confirmar; no se extrae de texto ni de IA. Cambiar de obra, cancelar o vencer el borrador exige nueva evidencia. La ubicación no sustituye la foto de horómetro.
+
+## Selección de obra y salida simplificada
+
+Para entrada, el bot ofrece una lista táctil paginada de obras y clientes activos. Cada selección usa un identificador ligado al borrador y se valida de nuevo al confirmar; no se exige escribir el nombre exacto. Los nombres por palabras, como «Colegio Camacho», pueden resolver «Colegio Unicamacho» si hay una única coincidencia; la ambigüedad se resuelve eligiendo en la lista.
+
+Para salida, la única obra elegible es la de la entrada abierta del empleado identificado por su teléfono. El resumen muestra esa obra antes de la confirmación y no adivina una diferente por el texto. Una corrección del nombre no borra la foto o ubicación de salida. Sin entrada abierta, o si se cerró mientras se confirmaba, no se crea una salida. La confirmación vincula también la jornada exacta para evitar cerrar otra jornada después de un cambio concurrente.
+
+Cuando el nombre de entrada no coincide, se construye una lista corta tolerante a errores de letras y acentos y la IA ordena las obras candidatas según nombre informal y cliente. Solo recibe nombres/alias/clientes y referencias temporales: no recibe IDs internos, fotos, teléfonos ni coordenadas para esta tarea. Las propuestas son opciones táctiles para elegir, nunca un registro automático. Si la IA falla, se ofrece la búsqueda aproximada y siempre «Ver todas las obras».
+
+## Búsqueda de equipos, nombres legibles y fotos
+
+Daños y horómetros empiezan ofreciendo la última máquina usada por ese número o pidiendo nombre, marca o modelo, no un catálogo paginado. Se puede escribir «cortadora pavimento», «la retro amarilla» o «minicargador Case». La IA interpreta y corrige únicamente la consulta escrita; la búsqueda aproximada se hace dentro del software y propone hasta cinco equipos elegibles para elegir. El catálogo de equipos no se envía a la IA y no se inventan colores ausentes del inventario. La lista completa sigue disponible bajo petición. Elegir una máquina guarda esa memoria aunque el reporte todavía esté pendiente; una sugerencia no elegida no se recuerda.
+
+Las listas, resúmenes, selección de máquina y alertas muestran nombre, número corto y marca/modelo, sin el código técnico de inventario. Los códigos y relaciones internas se conservan en la base de datos.
+
+El resumen incluye «Agregar fotos» antes de confirmar. El bot explica cómo adjuntar imágenes desde el clip o + de WhatsApp, confirma cada recepción y conserva la evidencia si primero se envía la foto y luego se elige el tipo de reporte o la máquina. Una imagen complementa la máquina elegida: la IA no puede cambiar el equipo por inferencia visual. Daños admiten fotos opcionales; horómetro mantiene foto obligatoria; entrada/salida conservan ubicación o foto como alternativas.
+
+## Gestión de reportes en oficina
+
+La pantalla separa Daños, Horómetros, Peticiones y Entradas y salidas. Esta última
+pestaña agrupa ambos tipos de reporte y permite consultar las jornadas por separado.
+Sus tarjetas muestran la foto directamente (con carga autenticada al acercarse a la
+pantalla), o un enlace al mapa si se compartió ubicación. No tienen botón Ver reporte;
+la foto permite ampliarse al tocarla.
+
+ADMIN y OFFICE pueden eliminar un reporte desde su tarjeta o detalle, previa
+confirmación. `DELETE /whatsapp-reports/:id` verifica también que la cuenta siga
+activa y tenga uno de esos roles. La eliminación conserva `deletedAt` y
+`deletedByUserId`, oculta el reporte en todas las categorías y desactiva sus alertas
+y envíos pendientes. Es idempotente y un reporte eliminado no puede resolverse.
+No borra archivos, jornadas, lecturas de horómetro ni modifica el estado del equipo;
+las correcciones operativas se hacen desde sus módulos correspondientes.
+
+## Jornadas por empleado y sugerencias de bitácora
+
+Entradas y salidas se consultan por empleado y por período (Hoy, semana, mes o
+fechas de hasta 93 días). El resumen no carga fotos. Al abrir un empleado se
+consultan sus jornadas de 20 en 20, con entrada y salida emparejadas. Las horas
+reportadas del resumen se recortan al período consultado; las jornadas abiertas
+no suman horas ni se interpretan como ausencias. Las jornadas con marcaciones
+eliminadas se señalan y no suman horas válidas. Se conservan consultas históricas
+de empleados desactivados cuando tienen jornadas en el período.
+
+Cada jornada válida crea una sola EmployeeActivityNote ligada mediante
+sourceAttendanceId único. Una entrada crea la sugerencia; la salida actualiza la
+misma nota mientras siga en SUGGESTED. No se asigna un equipo por inferencia y las
+notas manuales continúan exigiendo equipo para WORKSITE. La excepción en el CHECK
+de asociaciones está restringida a notas enlazadas a una jornada.
+
+Office/ADMIN puede confirmar, corregir obra/fecha/equipo opcional/texto/horas
+revisadas o descartar. Se conserva la sugerencia original y un historial
+EmployeeActivityReview con el usuario, fecha, acción, valores anteriores y nuevos,
+además de las horas y reportes originales. CONFIRMED/CORRECTED/DISMISSED nunca se
+sobrescriben con automatización. Si una salida llega después de una corrección,
+reviewedSourceExitId permite identificar que hace falta una nueva revisión. La
+confirmación de un lote de hasta 100 notas de un empleado es transaccional; no
+admite jornadas abiertas ni evidencia eliminada. Descartar no borra la nota ni
+permite que se regenere. Eliminar una marcación invalida la fuente de su sugerencia
+sin borrar la jornada ni una corrección humana.
+
+Las fotos originales permanecen en R2. Las tarjetas usan el endpoint autenticado
+/files/:id/thumbnail, con permisos ADMIN/OFFICE y la misma autorización por entidad
+que la descarga. Utiliza la miniatura WebP existente de hasta 480px, cargada cerca
+del área visible. El original se descarga solo al ampliar la evidencia. No se
+crean duplicados ni se recomprimen las fotos históricas.
+
+Preparación de anexos/prefacturas: la fuente estructurada está en
+WorksiteAttendance + reportes/evidencias; la revisión humana se conserva en la
+nota (verifiedEnteredAt/verifiedLeftAt, obra y fecha revisadas) y su historial.
+Una futura integración debe consumir únicamente revisiones vigentes de jornadas
+cerradas, sin sourceInvalidatedAt, con reviewedSourceExitId igual a la salida
+actual y sin reportes eliminados. No debe tratar una sugerencia pendiente o
+presencia reportada como tiempo automáticamente facturable. Esta entrega no
+emite anexos ni prefacturas.
+
+Backfill de jornadas existentes, idempotente y sin modificar marcaciones ni notas
+manuales: `npx ts-node scripts/backfill-attendance-suggestions.ts` hace un conteo
+previo; `--apply` genera solo sugerencias faltantes de jornadas con evidencia
+vigente. Requiere WHATSAPP_REPORT_ACTOR_USER_ID activo con rol ADMIN/OFFICE.

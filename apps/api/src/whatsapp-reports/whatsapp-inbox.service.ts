@@ -17,6 +17,7 @@ import {
   isAttendance,
   locationCoordinatesSchema,
   EquipmentReplyOptions,
+  EquipmentReference,
   emptyDraft,
   HELP,
   IncomingWhatsappMessage,
@@ -34,8 +35,11 @@ import {
 import {
   equipmentPicker,
   equipmentReference,
+  equipmentCandidates,
+  equipmentSearch,
   findEquipment,
 } from './whatsapp-equipment';
+import { worksiteCandidates, worksitePicker } from './whatsapp-worksites';
 import type { WhatsappReplyKind } from './whatsapp-menu';
 
 const LEASE_MS = 180000;
@@ -278,18 +282,67 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       let replyOptions: EquipmentReplyOptions | undefined;
       let confirmation = false;
       let offerConfirmation = false;
-      const showEquipment = async (useMemory = true, page = 0) => {
+      let selectedForMemory: EquipmentReference | undefined;
+      if (
+        conversation.employeeId === employee.id &&
+        draft.selectedEquipment &&
+        (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+      ) {
+        const last = equipmentReference(conversation.lastEquipment);
+        if (
+          last?.id !== draft.selectedEquipment.id ||
+          last?.type !== draft.selectedEquipment.type
+        )
+          selectedForMemory = (
+            await findEquipment(
+              this.prisma,
+              draft.selectedEquipment,
+              draft.kind,
+            )
+          )?.reference;
+      }
+      const showEquipment = async (
+        useMemory = true,
+        page = 0,
+        suggest = false,
+        catalog = false,
+      ) => {
         if (draft.kind !== 'DAMAGE' && draft.kind !== 'HOUR_METER') return;
         const remembered =
           useMemory && conversation.employeeId === employee.id
-            ? equipmentReference(conversation.lastEquipment)
+            ? (equipmentReference(
+                (conversation.draft as unknown as Draft).selectedEquipment,
+              ) ?? equipmentReference(conversation.lastEquipment))
             : undefined;
-        const picker = await equipmentPicker(
-          this.prisma,
-          draft.kind,
-          remembered,
-          page,
-        );
+        let suggestions: EquipmentReference[] | undefined;
+        if (suggest && draft.subjectReference) {
+          let terms: string[] = [];
+          try {
+            terms = await this.ai.equipmentSearchTerms(draft.subjectReference);
+          } catch {
+            this.logger.warn({
+              event: 'whatsapp_equipment_search_terms_unavailable',
+              messageId: message.id,
+            });
+          }
+          // Only the employee's search phrase goes to AI. The inventory stays here.
+          const candidates = await equipmentCandidates(
+            this.prisma,
+            draft.kind,
+            draft.subjectReference,
+            terms,
+          );
+          suggestions = candidates.slice(0, 5).map((item) => item.reference);
+        }
+
+        const picker = catalog
+          ? await equipmentPicker(this.prisma, draft.kind, undefined, page)
+          : await equipmentSearch(
+              this.prisma,
+              draft.kind,
+              remembered,
+              suggestions,
+            );
         draft.equipmentMenu = picker.state;
         draft.ready = false;
         delete draft.confirmationMessageId;
@@ -297,11 +350,53 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         replyOptions = picker.options;
         replyKind = picker.options ? 'EQUIPMENT_MENU' : 'TEXT';
       };
+      const showWorksites = async (page = 0, suggest = false) => {
+        let suggestions: string[] | undefined;
+        if (suggest && draft.worksiteReference) {
+          const candidates = await worksiteCandidates(
+            this.prisma,
+            draft.worksiteReference,
+            draft.customerReference,
+          );
+          if (candidates.length) {
+            try {
+              suggestions = await this.ai.suggestWorksites(
+                draft.worksiteReference,
+                draft.customerReference,
+                candidates,
+              );
+            } catch {
+              this.logger.warn({
+                event: 'whatsapp_worksite_suggestions_unavailable',
+                messageId: message.id,
+              });
+            }
+            suggestions = suggestions?.filter((id) =>
+              candidates.some((site) => site.id === id),
+            );
+            if (!suggestions?.length)
+              suggestions = candidates.slice(0, 5).map((site) => site.id);
+          }
+        }
+        const picker = await worksitePicker(this.prisma, page, suggestions);
+        draft.worksiteMenu = picker.state;
+        draft.ready = false;
+        delete draft.confirmationMessageId;
+        reply = picker.text;
+        replyOptions = picker.options;
+        replyKind = picker.options ? 'WORKSITE_MENU' : 'TEXT';
+      };
       const resolveDraft = async () => {
-        const resolution = await this.records.resolve(draft);
+        const resolution = await this.records.resolve(draft, employee.id);
+        if (resolution.needsWorksite) {
+          await showWorksites(0, true);
+          return;
+        }
         if (resolution.needsEquipment) {
           await showEquipment(
             !draft.subjectReference && !draft.selectedEquipment,
+            0,
+            Boolean(draft.subjectReference),
           );
           return;
         }
@@ -330,16 +425,26 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         reply = reportMenuText(employee, Boolean(draft.kind));
         replyKind = 'REPORT_MENU';
       } else if (choice === 'report_attendance') {
+        const pending = !draft.kind ? draft : undefined;
         draft = {
           ...emptyDraft(),
           menuStage: 'ATTENDANCE',
-          occurredAt: message.sentAt.toISOString(),
-          sourceMessageIds: [message.providerMessageId],
+          ...(pending?.location ? { location: pending.location } : {}),
+          evidenceFileIds: pending?.evidenceFileIds ?? [],
+          occurredAt:
+            pending?.location || pending?.evidenceFileIds.length
+              ? pending.occurredAt
+              : message.sentAt.toISOString(),
+          sourceMessageIds: [
+            ...(pending?.sourceMessageIds ?? []),
+            message.providerMessageId,
+          ],
         };
         reply =
           '¿Quieres registrar tu entrada o tu salida de la obra? Elige una opción.';
         replyKind = 'ATTENDANCE_MENU';
       } else if (choice && selectionKind(choice)) {
+        const pending = !draft.kind ? draft : undefined;
         const pendingLocation =
           !draft.kind && draft.menuStage === 'ATTENDANCE'
             ? draft.location
@@ -347,26 +452,99 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         draft = {
           ...emptyDraft(),
           kind: selectionKind(choice),
+          evidenceFileIds: pending?.evidenceFileIds ?? [],
+          ...(selectionKind(choice) === 'HOUR_METER' && pending
+            ? { hours: pending.hours, photoHours: pending.photoHours }
+            : {}),
           ...(isAttendance(selectionKind(choice)) && pendingLocation
             ? { location: pendingLocation }
             : {}),
-          occurredAt:
-            pendingLocation && isAttendance(selectionKind(choice))
+          occurredAt: pending?.evidenceFileIds.length
+            ? pending.occurredAt
+            : pendingLocation && isAttendance(selectionKind(choice))
               ? pendingLocation.sentAt
               : message.sentAt.toISOString(),
           sourceMessageIds:
             pendingLocation && isAttendance(selectionKind(choice))
               ? [pendingLocation.sourceMessageId, message.providerMessageId]
-              : [message.providerMessageId],
+              : [
+                  ...(pending?.sourceMessageIds ?? []),
+                  message.providerMessageId,
+                ],
         };
         if (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
           await showEquipment();
+        else if (draft.kind === 'CHECK_IN') await showWorksites();
+        else if (draft.kind === 'CHECK_OUT') await resolveDraft();
         else reply = selectionPrompt(choice);
+      } else if (
+        !selected &&
+        draft.kind === 'CHECK_IN' &&
+        ['ver obras', 'otra obra', 'cambiar obra', 'lista de obras'].includes(
+          command,
+        )
+      ) {
+        await showWorksites();
+      } else if (selected?.startsWith('worksite')) {
+        const menu = draft.worksiteMenu;
+        const parts = selected.split(':');
+        const [action, nonce, value] = parts;
+        const index =
+          value && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : -1;
+        if (draft.kind !== 'CHECK_IN') {
+          reply = `Esa lista ya no está vigente.\n${reportMenuText(employee, Boolean(draft.kind))}`;
+          replyKind = 'REPORT_MENU';
+        } else if (!menu || parts.length !== 3 || menu.token !== nonce)
+          await showWorksites();
+        else if (action === 'worksite_all' && menu.suggested)
+          await showWorksites();
+        else if (
+          action === 'worksite_page' &&
+          !menu.suggested &&
+          index >= 0 &&
+          Math.abs(index - menu.page) === 1
+        )
+          await showWorksites(index);
+        else if (action === 'worksite' && menu.choices[index]) {
+          const site = await this.prisma.customerWorksite.findFirst({
+            where: {
+              id: menu.choices[index],
+              active: true,
+              customer: { active: true },
+              worksite: { active: true },
+            },
+            include: { worksite: true, customer: true },
+          });
+          if (!site) await showWorksites();
+          else {
+            if (
+              draft.selectedWorksiteId &&
+              draft.selectedWorksiteId !== site.id
+            ) {
+              draft.evidenceFileIds = [];
+              delete draft.location;
+            }
+            draft.selectedWorksiteId = site.id;
+            draft.worksiteReference = site.worksite.name;
+            draft.customerReference = site.customer.name;
+            draft.ready = false;
+            delete draft.worksiteMenu;
+            delete draft.confirmationMessageId;
+            draft.sourceMessageIds.push(message.providerMessageId);
+            await resolveDraft();
+            if (!draft.ready)
+              reply = `Obra seleccionada: ${site.worksite.name} (${site.customer.name}).\n${reply}`;
+          }
+        } else await showWorksites();
       } else if (selected?.startsWith('equipment')) {
         const menu = draft.equipmentMenu;
-        const [action, nonce, value] = selected.split(':');
+        const parts = selected.split(':');
+        const [action, nonce, value] = parts;
         const sameMenu =
-          menu && menu.token === nonce && menu.kind === draft.kind;
+          menu &&
+          menu.token === nonce &&
+          menu.kind === draft.kind &&
+          (parts.length === 2 || parts.length === 3);
         const index =
           value && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : -1;
         if (!sameMenu || !['DAMAGE', 'HOUR_METER'].includes(draft.kind ?? '')) {
@@ -378,17 +556,21 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           }
         } else if (
           action === 'equipment_other' &&
-          menu.recent &&
+          (menu.recent || menu.suggested) &&
           value === undefined
         ) {
           await showEquipment(false);
+        } else if (action === 'equipment_catalog' && parts.length === 2) {
+          await showEquipment(false, 0, false, true);
         } else if (
           action === 'equipment_page' &&
           !menu.recent &&
+          !menu.suggested &&
+          !menu.search &&
           index >= 0 &&
           Math.abs(index - menu.page) === 1
         ) {
-          await showEquipment(false, index);
+          await showEquipment(false, index, false, true);
         } else if (action === 'equipment' && menu.choices[index]) {
           const equipment = await findEquipment(
             this.prisma,
@@ -400,7 +582,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             const changed = draft.selectedEquipment
               ? draft.selectedEquipment.id !== equipment.reference.id ||
                 draft.selectedEquipment.type !== equipment.reference.type
-              : !!draft.subjectReference &&
+              : !!draft.targetKey &&
+                !!draft.subjectReference &&
                 normalized(draft.subjectReference) !==
                   normalized(equipment.subjectReference);
             if (changed) {
@@ -408,6 +591,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               draft.photoHours = null;
               draft.hours = null;
             }
+            selectedForMemory = equipment.reference;
             draft.selectedEquipment = equipment.reference;
             draft.subjectType = equipment.reference.type;
             draft.subjectReference = equipment.subjectReference;
@@ -433,7 +617,23 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           'elegir otra',
         ].includes(command)
       ) {
-        await showEquipment(false);
+        await showEquipment(
+          false,
+          0,
+          false,
+          ['ver maquinas', 'lista', 'maquinas'].includes(command),
+        );
+      } else if (selected?.startsWith('report_photo:')) {
+        if (
+          draft.ready &&
+          selected.slice('report_photo:'.length) === draft.confirmationMessageId
+        ) {
+          reply =
+            'Envía las fotos como imagen desde el clip o el botón + de WhatsApp → Fotos/Galería. Puedes enviar hasta seis. Te confirmaré cada foto recibida antes de registrar. Si prefieres seguir sin más fotos, responde SÍ.';
+        } else {
+          reply = `Ese botón pertenece a un reporte anterior. ${reportMenuText(employee, Boolean(draft.kind))}`;
+          replyKind = 'REPORT_MENU';
+        }
       } else if (confirmationChoice && !validConfirmation) {
         reply = `Ese botón pertenece a un resumen anterior. Revisa el reporte actual antes de confirmarlo.\n${reportMenuText(employee, Boolean(draft.kind))}`;
         replyKind = 'REPORT_MENU';
@@ -522,14 +722,23 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               });
             }
           }
-          const parsed = await this.ai.extract(message.text, draft, image);
+          const parsed = {
+            ...(await this.ai.extract(message.text, draft, image)),
+          };
+          if (
+            image &&
+            draft.selectedEquipment &&
+            (draft.kind === 'DAMAGE' || draft.kind === 'HOUR_METER')
+          ) {
+            // A photo supplements the machine explicitly selected by the employee.
+            // Model guesses from a photo must not move evidence to another target.
+            parsed.kind = draft.kind;
+            parsed.subjectReference = draft.subjectReference;
+            parsed.subjectType = draft.subjectType;
+          }
           const changedKind =
             parsed.kind && draft.kind && parsed.kind !== draft.kind;
-          const changedTarget =
-            (parsed.subjectReference &&
-              draft.subjectReference &&
-              normalized(parsed.subjectReference) !==
-                normalized(draft.subjectReference)) ||
+          const changedWorksite =
             (parsed.worksiteReference &&
               draft.worksiteReference &&
               normalized(parsed.worksiteReference) !==
@@ -538,15 +747,37 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               draft.customerReference &&
               normalized(parsed.customerReference) !==
                 normalized(draft.customerReference));
+          // Exit is bound to the employee's open attendance; spelling changes
+          // cannot change its worksite or discard the photo/location already sent.
+          const changedTarget = isAttendance(draft.kind)
+            ? draft.kind === 'CHECK_IN' && changedWorksite
+            : parsed.subjectReference &&
+              draft.subjectReference &&
+              normalized(parsed.subjectReference) !==
+                normalized(draft.subjectReference);
+
           const base = changedKind
             ? emptyDraft()
             : changedTarget
               ? {
                   ...draft,
-                  evidenceFileIds: [],
-                  location: undefined,
+                  evidenceFileIds:
+                    isAttendance(draft.kind) &&
+                    !draft.selectedWorksiteId &&
+                    !draft.targetKey
+                      ? draft.evidenceFileIds
+                      : [],
+                  location:
+                    isAttendance(draft.kind) &&
+                    !draft.selectedWorksiteId &&
+                    !draft.targetKey
+                      ? draft.location
+                      : undefined,
+                  selectedWorksiteId: undefined,
+                  worksiteMenu: undefined,
                   selectedEquipment: undefined,
                   equipmentMenu: undefined,
+                  targetKey: undefined,
                   photoHours: null,
                   ready: false,
                 }
@@ -581,14 +812,17 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             reply = reportMenuText(employee);
             replyKind = 'REPORT_MENU';
           }
+          if (image)
+            reply = `Foto recibida. Fotos adjuntas: ${draft.evidenceFileIds.length}.\n${reply}`;
         }
       }
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
       const resolution = confirmation
-        ? await this.records.resolve(draft)
+        ? await this.records.resolve(draft, employee.id)
         : null;
       if (confirmation && !resolution?.target) {
         if (resolution?.needsEquipment) await showEquipment(false);
+        else if (resolution?.needsWorksite) await showWorksites();
         else reply = resolution?.question ?? HELP;
         draft.ready = false;
         confirmation = false;
@@ -638,14 +872,25 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               ...(draft.sourceMessageIds ?? []),
               message.providerMessageId,
             ];
-            const report = await this.records.record(
+            await this.records.record(
               tx,
               employee,
               draft,
               resolution!.target!,
               message.providerMessageId,
             );
-            reply = `Registrado en REV Logística. Reporte ${report.id}. ${draft.kind === 'REQUEST' || draft.kind === 'DAMAGE' ? 'La alerta quedó creada para oficina y gerencia.' : ''}`;
+            const confirmationText = {
+              DAMAGE: 'Tu reporte de daño quedó registrado correctamente.',
+              HOUR_METER: 'El horómetro quedó registrado correctamente.',
+              REQUEST: 'Tu petición quedó registrada correctamente.',
+              CHECK_IN: 'Tu entrada a obra quedó registrada correctamente.',
+              CHECK_OUT: 'Tu salida de obra quedó registrada correctamente.',
+            };
+            reply =
+              confirmationText[draft.kind!] +
+              (draft.kind === 'REQUEST' || draft.kind === 'DAMAGE'
+                ? ' La alerta quedó creada para oficina y gerencia.'
+                : '');
             draft = emptyDraft();
             replyKind = 'REPORT_MENU';
           }
@@ -664,9 +909,14 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
                         resolution.target.vehicleId!,
                     },
                   }
-                : conversation.employeeId !== employee.id
-                  ? { lastEquipment: Prisma.DbNull }
-                  : {}),
+                : selectedForMemory
+                  ? {
+                      lastEquipment:
+                        selectedForMemory as unknown as Prisma.InputJsonValue,
+                    }
+                  : conversation.employeeId !== employee.id
+                    ? { lastEquipment: Prisma.DbNull }
+                    : {}),
               draft: draft as unknown as Prisma.InputJsonValue,
               expiresAt: new Date(Date.now() + DRAFT_TTL_MS),
               leaseUntil: new Date(0),
@@ -764,7 +1014,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       });
       if (!claim.count) continue;
       try {
-        if (message.replyKind === 'EQUIPMENT_MENU' && message.replyOptions) {
+        if (
+          ['EQUIPMENT_MENU', 'WORKSITE_MENU'].includes(message.replyKind) &&
+          message.replyOptions
+        ) {
           await this.cloud.reply(
             message.phone,
             message.replyText!,

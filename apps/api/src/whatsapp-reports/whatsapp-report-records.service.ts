@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  ForbiddenException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Employee, Prisma, Role, WhatsappReportKind } from '@prisma/client';
@@ -15,12 +17,19 @@ import {
   REPORT_LABELS,
 } from './whatsapp-report.types';
 
-import { findEquipment } from './whatsapp-equipment';
+import { syncAttendanceActivity } from './attendance-journals.service';
+
+import {
+  findEquipment,
+  assetLabel,
+  readableDescription,
+} from './whatsapp-equipment';
 
 type Target = {
   assetId: string | null;
   vehicleId: string | null;
   customerWorksiteId: string | null;
+  attendanceId?: string;
   label: string;
 };
 const reportInclude = {
@@ -58,7 +67,13 @@ export class WhatsappReportRecordsService {
 
   async resolve(
     draft: Draft,
-  ): Promise<{ target?: Target; question?: string; needsEquipment?: boolean }> {
+    employeeId?: string,
+  ): Promise<{
+    target?: Target;
+    question?: string;
+    needsEquipment?: boolean;
+    needsWorksite?: boolean;
+  }> {
     if (!draft.kind)
       return {
         question:
@@ -192,7 +207,7 @@ export class WhatsappReportRecordsService {
           ...(exactAssets.length ? exactAssets : assets).map((a) => ({
             assetId: a.id,
             vehicleId: null,
-            label: `${a.sku.name} #${a.internalNumber} (${a.publicCode})`,
+            label: assetLabel(a),
             hourly: a.sku.chargeType === 'HOUR',
           })),
           ...vehicles.map((v) => ({
@@ -221,55 +236,112 @@ export class WhatsappReportRecordsService {
         Object.assign(target, choices[0]);
       }
     }
-    if (draft.kind === 'CHECK_IN' || draft.kind === 'CHECK_OUT') {
-      if (!draft.worksiteReference?.trim())
+    if (draft.kind === 'CHECK_OUT') {
+      const open = employeeId
+        ? await this.prisma.worksiteAttendance.findFirst({
+            where: { employeeId, leftAt: null },
+            include: {
+              customerWorksite: { include: { worksite: true, customer: true } },
+            },
+          })
+        : null;
+      if (!open)
         return {
           question:
-            '¿En qué obra? Indica el nombre y, si es necesario, el cliente.',
+            'No tienes una entrada abierta. Revisa con oficina antes de registrar la salida.',
         };
-      const reference = draft.worksiteReference.trim();
-      const sites = await this.prisma.customerWorksite.findMany({
-        where: {
-          active: true,
-          customer: {
-            active: true,
-            ...(draft.customerReference
-              ? {
-                  name: {
-                    contains: draft.customerReference,
-                    mode: 'insensitive',
-                  },
-                }
-              : {}),
-          },
-          worksite: { active: true },
-          OR: [
-            { alias: { contains: reference, mode: 'insensitive' } },
-            {
-              worksite: { name: { contains: reference, mode: 'insensitive' } },
-            },
-          ],
-        },
-        include: { worksite: true, customer: true },
-        take: 21,
-      });
-      const exact = sites.filter(
-        (s) =>
-          normalized(s.alias ?? '') === normalized(reference) ||
-          normalized(s.worksite.name) === normalized(reference),
-      );
-      const choices = exact.length ? exact : sites;
-      if (choices.length !== 1)
+      const site = open.customerWorksite;
+      if (!site.active || !site.worksite.active || !site.customer.active)
         return {
-          question: choices.length
-            ? `Hay varias obras: ${choices
-                .slice(0, 6)
-                .map((s) => `${s.worksite.name} (${s.customer.name})`)
-                .join('; ')}. Indica el nombre o alias específico.`
-            : 'No encontré esa obra activa. Indica su nombre o alias como aparece en el sistema.',
+          question:
+            'La obra de tu entrada abierta ya no está activa. Comunícate con oficina.',
         };
-      target.customerWorksiteId = choices[0].id;
-      target.label = `${choices[0].worksite.name} (${choices[0].customer.name})`;
+      target.customerWorksiteId = site.id;
+      target.attendanceId = open.id;
+      target.label = `${site.worksite.name} (${site.customer.name})`;
+    }
+    if (draft.kind === 'CHECK_IN') {
+      if (draft.selectedWorksiteId) {
+        const site = await this.prisma.customerWorksite.findFirst({
+          where: {
+            id: draft.selectedWorksiteId,
+            active: true,
+            customer: { active: true },
+            worksite: { active: true },
+          },
+          include: { worksite: true, customer: true },
+        });
+        if (!site)
+          return {
+            needsWorksite: true,
+            question: 'Esa obra ya no está disponible. Elige otra en la lista.',
+          };
+        target.customerWorksiteId = site.id;
+        target.label = `${site.worksite.name} (${site.customer.name})`;
+      } else {
+        if (!draft.worksiteReference?.trim())
+          return {
+            needsWorksite: true,
+            question: 'Elige la obra en la lista.',
+          };
+        const reference = draft.worksiteReference.trim();
+        const terms = normalized(reference)
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 12);
+        const sites = await this.prisma.customerWorksite.findMany({
+          where: {
+            active: true,
+            customer: {
+              active: true,
+              ...(draft.customerReference
+                ? {
+                    name: {
+                      contains: draft.customerReference,
+                      mode: 'insensitive' as const,
+                    },
+                  }
+                : {}),
+            },
+            worksite: { active: true },
+            OR: [
+              { alias: { contains: reference, mode: 'insensitive' as const } },
+              {
+                worksite: {
+                  name: { contains: reference, mode: 'insensitive' as const },
+                },
+              },
+              {
+                AND: terms.map((term) => ({
+                  OR: [
+                    { alias: { contains: term, mode: 'insensitive' as const } },
+                    {
+                      worksite: {
+                        name: { contains: term, mode: 'insensitive' as const },
+                      },
+                    },
+                  ],
+                })),
+              },
+            ],
+          },
+          include: { worksite: true, customer: true },
+          take: 21,
+        });
+        const exact = sites.filter(
+          (site) =>
+            normalized(site.alias ?? '') === normalized(reference) ||
+            normalized(site.worksite.name) === normalized(reference),
+        );
+        const choices = exact.length ? exact : sites;
+        if (choices.length !== 1)
+          return {
+            needsWorksite: true,
+            question: 'Elige la obra en la lista para evitar confusiones.',
+          };
+        target.customerWorksiteId = choices[0].id;
+        target.label = `${choices[0].worksite.name} (${choices[0].customer.name})`;
+      }
     }
     if (
       (draft.kind === 'DAMAGE' || draft.kind === 'REQUEST') &&
@@ -278,7 +350,7 @@ export class WhatsappReportRecordsService {
       return {
         question:
           draft.kind === 'DAMAGE'
-            ? 'Describe qué daño o falla encontraste.'
+            ? 'Cuéntame qué daño o falla encontraste. Puedes adjuntar fotos ahora usando el clip o el botón + de WhatsApp → Fotos/Galería; son opcionales.'
             : 'Cuéntame qué necesitas solicitar a oficina y gerencia.',
       };
     }
@@ -292,7 +364,7 @@ export class WhatsappReportRecordsService {
         question:
           draft.kind === 'HOUR_METER'
             ? 'Envía una foto legible del horómetro para adjuntarla como evidencia.'
-            : 'Envía tu ubicación o una foto de tu entrada o salida; solo necesitas una. Para ubicación: clip → Ubicación → Enviar mi ubicación actual.',
+            : `${draft.kind === 'CHECK_OUT' ? `Tu entrada abierta es en ${target.label}.\n` : ''}Envía tu ubicación o una foto de tu entrada o salida; solo necesitas una. Para ubicación: clip → Ubicación → Enviar mi ubicación actual.`,
       };
     }
     if (draft.kind === 'HOUR_METER') {
@@ -334,7 +406,7 @@ export class WhatsappReportRecordsService {
   }
 
   summary(draft: Draft, target: Target) {
-    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${draft.description ?? ''}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\n${isAttendance(draft.kind) && draft.location ? `Ubicación: ${draft.location.latitude.toFixed(6)}, ${draft.location.longitude.toFixed(6)}.` : `Fotos: ${draft.evidenceFileIds.length}.`}\nResponde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
+    return `${REPORT_LABELS[draft.kind!]}${target.label ? `: ${target.label}` : ''}\n${readableDescription(draft.description, draft.subjectReference)}${draft.kind === 'HOUR_METER' ? `\nHorómetro: ${draft.hours} h` : ''}\nFecha y hora del reporte: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }).format(new Date(draft.occurredAt))}\n${isAttendance(draft.kind) && draft.location ? `Ubicación: ${draft.location.latitude.toFixed(6)}, ${draft.location.longitude.toFixed(6)}.` : `Fotos: ${draft.evidenceFileIds.length}.`}\nPuedes agregar fotos antes de confirmar. Responde SÍ para registrar, corrige los datos o escribe CANCELAR.`;
   }
 
   async record(
@@ -413,7 +485,9 @@ export class WhatsappReportRecordsService {
         );
     }
     let actorId: string | undefined;
-    if (['DAMAGE', 'HOUR_METER'].includes(draft.kind)) {
+    if (
+      ['DAMAGE', 'HOUR_METER', 'CHECK_IN', 'CHECK_OUT'].includes(draft.kind)
+    ) {
       const linkedUser = employee.userId
         ? await tx.user.findFirst({
             where: { id: employee.userId, active: true },
@@ -534,6 +608,7 @@ export class WhatsappReportRecordsService {
         draft.kind === 'CHECK_OUT' &&
         (!openAttendance ||
           openAttendance.customerWorksiteId !== target.customerWorksiteId ||
+          (target.attendanceId && openAttendance.id !== target.attendanceId) ||
           occurredAt <= openAttendance.enteredAt)
       ) {
         throw new BadRequestException(
@@ -560,7 +635,7 @@ export class WhatsappReportRecordsService {
       },
     });
     if (draft.kind === 'CHECK_IN') {
-      await tx.worksiteAttendance.create({
+      const attendance = await tx.worksiteAttendance.create({
         data: {
           employeeId: employee.id,
           customerWorksiteId: target.customerWorksiteId!,
@@ -568,15 +643,15 @@ export class WhatsappReportRecordsService {
           checkInReportId: report.id,
         },
       });
-      // Attendance does not assign a machine. EmployeeActivityNote WORKSITE rows
-      // require an asset and describe operational work, so attendance stays in
-      // WorksiteAttendance with its linked WhatsApp report and photo evidence.
+      await syncAttendanceActivity(tx, attendance.id, actorId!);
     }
-    if (draft.kind === 'CHECK_OUT')
+    if (draft.kind === 'CHECK_OUT') {
       await tx.worksiteAttendance.update({
         where: { id: openAttendance!.id },
         data: { leftAt: occurredAt, checkOutReportId: report.id },
       });
+      await syncAttendanceActivity(tx, openAttendance!.id, actorId!);
+    }
     if (draft.kind === 'REQUEST' || draft.kind === 'DAMAGE')
       await this.createAlert(tx, report.id, employee, draft, target);
     return report;
@@ -679,7 +754,7 @@ export class WhatsappReportRecordsService {
             .replace(/\{\{/g, '(')
             .replace(/\}\}/g, ')'),
         messageTemplate:
-          `${target.label ? `${target.label}: ` : ''}${draft.description}`
+          `${target.label ? `${target.label}: ` : ''}${readableDescription(draft.description, draft.subjectReference)}`
             .slice(0, 3500)
             .replace(/\{\{/g, '(')
             .replace(/\}\}/g, ')'),
@@ -696,15 +771,72 @@ export class WhatsappReportRecordsService {
   async list(kind?: string, cursor?: string) {
     if (
       kind &&
+      kind !== 'ATTENDANCE' &&
       !Object.values(WhatsappReportKind).includes(kind as WhatsappReportKind)
     )
       throw new BadRequestException('Tipo de reporte inválido');
     return this.prisma.whatsappReport.findMany({
-      where: kind ? { kind: kind as WhatsappReportKind } : {},
+      where: {
+        deletedAt: null,
+        ...(kind === 'ATTENDANCE'
+          ? {
+              kind: {
+                in: [WhatsappReportKind.CHECK_IN, WhatsappReportKind.CHECK_OUT],
+              },
+            }
+          : kind
+            ? { kind: kind as WhatsappReportKind }
+            : {}),
+      },
       include: reportInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+  }
+  async deleteReport(id: string, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: {
+          id: userId,
+          active: true,
+          role: { in: [Role.ADMIN, Role.OFFICE] },
+        },
+        select: { id: true },
+      });
+      if (!actor)
+        throw new ForbiddenException(
+          'Solo ADMIN y OFFICE pueden eliminar reportes.',
+        );
+      await tx.$queryRaw`SELECT id FROM "WhatsappReport" WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.whatsappReport.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('No se encontró el reporte.');
+      if (current.deletedAt) return { deleted: true };
+      await tx.whatsappReport.update({
+        where: { id },
+        data: {
+          status: 'DELETED',
+          deletedAt: new Date(),
+          deletedByUserId: actor.id,
+        },
+      });
+      await tx.employeeActivityNote.updateMany({
+        where: {
+          sourceAttendance: {
+            OR: [{ checkInReportId: id }, { checkOutReportId: id }],
+          },
+        },
+        data: { sourceInvalidatedAt: new Date() },
+      });
+      await tx.notificationTopic.updateMany({
+        where: { entityType: 'WHATSAPP_REPORT', entityId: id },
+        data: { active: false },
+      });
+      await tx.whatsappReportAlertRecipient.updateMany({
+        where: { reportId: id, status: { in: ['PENDING', 'SENDING'] } },
+        data: { status: 'CANCELLED' },
+      });
+      return { deleted: true };
     });
   }
   async resolveReport(id: string, userId: string, resolution: string) {
@@ -717,6 +849,8 @@ export class WhatsappReportRecordsService {
       const current = await tx.whatsappReport.findUniqueOrThrow({
         where: { id },
       });
+      if (current.deletedAt)
+        throw new NotFoundException('El reporte fue eliminado.');
       if (!['DAMAGE', 'REQUEST'].includes(current.kind))
         throw new BadRequestException(
           'Solo se resuelven alertas de daños y peticiones.',

@@ -20,6 +20,8 @@ export type EquipmentMenu = {
   choices: EquipmentReference[];
   page: number;
   recent: boolean;
+  search?: boolean;
+  suggested?: boolean;
 };
 export type EquipmentReplyOptions =
   | {
@@ -49,6 +51,13 @@ export type Draft = Extraction & {
   targetKey?: string;
   menuStage?: 'ATTENDANCE';
   confirmationMessageId?: string;
+  selectedWorksiteId?: string;
+  worksiteMenu?: {
+    token: string;
+    page: number;
+    choices: string[];
+    suggested?: boolean;
+  };
   selectedEquipment?: EquipmentReference;
   equipmentMenu?: EquipmentMenu;
 };

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -10,6 +11,7 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import { AttendanceJournalsService } from './attendance-journals.service';
 import { Role } from '@prisma/client';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,6 +34,7 @@ export class WhatsappReportsController {
   constructor(
     private readonly records: WhatsappReportRecordsService,
     private readonly prisma: PrismaService,
+    private readonly journals: AttendanceJournalsService,
   ) {}
   @Get()
   list(
@@ -64,6 +67,19 @@ export class WhatsappReportsController {
         return names.includes('hector') && names.includes('ramirez');
       }),
     };
+  }
+  @Get('attendance/employees')
+  attendanceEmployees(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.journals.employees(from, to);
+  }
+  @Get('attendance/employees/:employeeId')
+  employeeJournals(
+    @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('cursor', new ParseUUIDPipe({ optional: true })) cursor?: string,
+  ) {
+    return this.journals.journals(employeeId, from, to, cursor);
   }
   @Get('attendance')
   attendance() {
@@ -99,6 +115,13 @@ export class WhatsappReportsController {
         replyAttempts: true,
       },
     });
+  }
+  @Delete(':id')
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.records.deleteReport(id, req.user.sub);
   }
   @Patch(':id/resolve')
   resolve(
