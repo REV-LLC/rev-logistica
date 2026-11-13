@@ -24,6 +24,7 @@ export default function PageHeaderCard({
 }: PageHeaderCardProps) {
   return (
     <Paper
+      data-page-heading-glass
       withBorder
       radius="xl"
       p={{ base: 'lg', md: 'xl' }}

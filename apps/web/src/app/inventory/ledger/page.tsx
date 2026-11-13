@@ -211,7 +211,7 @@ export default function LedgerPage() {
   return (
     <main className={`${glass.page} ${styles.page}`}>
       <Container size="xl" py={{ base: 'lg', md: 40 }}>
-        <header className={styles.header}>
+        <header data-page-heading-glass className={styles.header}>
           <Text component="h1">Historial de movimientos</Text>
           <Text>Revisa entradas, salidas, movimientos en tránsito y ajustes de inventario.</Text>
         </header>

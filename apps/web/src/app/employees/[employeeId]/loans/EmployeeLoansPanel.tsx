@@ -71,7 +71,7 @@ export default function EmployeeLoansPanel({ employeeId, embedded = false, selfS
   }
   return <Container size="md" fluid={embedded} p={embedded ? 0 : undefined} py={embedded ? 0 : 'xl'}><Stack gap="lg">
     {!embedded ? <Button component={Link} href="/employees" variant="subtle" leftSection={<IconArrowLeft size={16} />} w="fit-content">Empleados</Button> : null}
-    {!embedded ? <Title order={1}>Préstamos y deudas</Title> : null}
+    {!embedded ? <div data-page-heading-glass><Title order={1}>Préstamos y deudas</Title></div> : null}
     {loading ? <Loader aria-label="Cargando tarjeta" /> : null}
     {error ? <Alert color="red">{error}<Button variant="subtle" onClick={() => void load()}>Reintentar</Button></Alert> : null}
     {account ? <Paper radius="md" className={styles.card}>

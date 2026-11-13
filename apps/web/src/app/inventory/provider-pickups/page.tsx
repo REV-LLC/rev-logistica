@@ -256,7 +256,7 @@ export default function ProviderPickupsPage() {
 
   return (
     <Container size="lg" py="lg">
-      <Group justify="space-between" align="flex-start" mb="lg">
+      <Group data-page-heading-glass justify="space-between" align="flex-start" mb="lg">
         <div>
           <Title order={2}>Recogidas en proveedor</Title>
           <Text c="dimmed">

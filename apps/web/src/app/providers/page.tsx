@@ -321,7 +321,7 @@ export default function ProvidersPage() {
     <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && providers.length === 0 ? 'true' : undefined}>
       <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+        <Group data-page-heading-glass justify="space-between" align="flex-start" wrap="wrap" gap="md">
           <div>
             <Title order={1} className={glass.title}>Proveedores</Title>
             <Text size="sm" c="dimmed">Administra los datos de los dueños externos y consulta sus bodegas asociadas.</Text>

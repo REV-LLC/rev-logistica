@@ -100,7 +100,7 @@ export default function MobilityGuidesPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start">
+        <Group data-page-heading-glass justify="space-between" align="flex-start">
           <div>
             <Text component="h1" fw={800} fz={{ base: 26, sm: 32 }}>
               Guias de movilidad

@@ -197,7 +197,7 @@ export default function HomePage() {
         <main className={`${styles.canvas} ${glass.page}`}>
           <EmployeePageBackground src="/login/excavator.webp" />
           <Container size="xl" py={{ base: 'lg', md: 40 }}>
-            <header className={styles.pageHeader}>
+            <header data-page-heading-glass className={styles.pageHeader}>
               <div>
                 <Text component="h1">{greeting()}, {userName()}</Text>
                 <Text>{role ? roleDescription[role] : 'Tu operación de hoy.'}</Text>

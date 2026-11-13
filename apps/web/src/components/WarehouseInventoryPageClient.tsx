@@ -1251,7 +1251,7 @@ export default function WarehouseInventoryPageClient({
           ) : !isOwnInventory ? (
             <section className={classes.providerDirectory}>
               <Stack gap="xl">
-                <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+                <Group data-page-heading-glass justify="space-between" align="flex-start" wrap="wrap" gap="md">
                   <div>
                     <Text component="h1" className="ui-text-title" m={0}>
                       Bodegas de proveedores

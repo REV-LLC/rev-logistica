@@ -634,7 +634,7 @@ export default function RemisionDevolucionPage() {
   return (
     <main>
       <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Paper shadow="sm" p="xl" radius="xl" withBorder>
           <Title order={2}>Despacho / Devolucion</Title>
           <Text c="dimmed">Ingresa los datos reales del documento.</Text>
 

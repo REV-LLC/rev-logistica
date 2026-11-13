@@ -257,7 +257,7 @@ export default function FuelPage() {
   return (
     <Container size="xl" py={{ base: 'sm', sm: 'lg' }}>
       <Stack gap="lg">
-        <div>
+        <div data-page-heading-glass>
           <Title order={1} size="h2">
             Control de combustible
           </Title>

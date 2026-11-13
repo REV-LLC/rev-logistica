@@ -1387,7 +1387,7 @@ export default function DocumentDetailPage() {
         <Paper
           shadow="sm"
           p={{ base: 'md', sm: 'xl' }}
-          radius="md"
+          radius="xl"
           withBorder
           className={styles.noPrint}
         >

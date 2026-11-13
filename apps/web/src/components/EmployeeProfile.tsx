@@ -38,11 +38,11 @@ export default function EmployeeProfile({ employeeId, selfService = false }: { e
     <EmployeePageBackground src={backgroundSrc} variant={state.status === 'ready' && state.employee.role === 'DRIVER' ? 'transport' : undefined} />
     <Stack gap={20}>
       <Button component={Link} href={selfService ? '/' : '/employees'} className={styles.backLink} variant="subtle" leftSection={<IconArrowLeft size={18} />} w="fit-content">{selfService ? 'Inicio' : 'Empleados'}</Button>
-      {state.status === 'loading' ? <section className={styles.identity} aria-busy="true" aria-label="Cargando perfil del empleado">
+      {state.status === 'loading' ? <section data-page-heading-glass className={styles.identity} aria-busy="true" aria-label="Cargando perfil del empleado">
         <div className={styles.portrait}><Skeleton circle width={200} height={200} style={{ flexShrink: 0 }} /></div>
         <Skeleton height={38} width="min(420px, 100%)" />
       </section> : null}
-      {state.status === 'ready' ? <section className={styles.identity} aria-labelledby="employee-profile-name">
+      {state.status === 'ready' ? <section data-page-heading-glass className={styles.identity} aria-labelledby="employee-profile-name">
         <div className={styles.portrait}><EmployeePhotoControl employee={state.employee} size={200} fullSize editable={!selfService} /></div>
         <div className={styles.details}>
           <Title order={1} id="employee-profile-name" className={styles.name}>{employeeProfileName(state.employee)}</Title>

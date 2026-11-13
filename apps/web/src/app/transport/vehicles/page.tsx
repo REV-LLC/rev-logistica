@@ -535,7 +535,7 @@ export default function VehiclesPage() {
     <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && vehicles.length === 0 ? 'true' : undefined}>
       <EmployeePageBackground src="/employees/transport-v1.webp" variant="transport" />
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+        <Group data-page-heading-glass justify="space-between" align="flex-start" wrap="wrap" gap="md">
           <div>
             <Title order={1} className={glass.title}>Vehículos</Title>
             <Text size="sm" c="dimmed">Administra flota, documentación y disponibilidad operativa desde una sola vista.</Text>

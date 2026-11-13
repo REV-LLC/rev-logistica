@@ -123,7 +123,7 @@ export default function OfficeAssistantPage() {
 
   return (
     <Container size="lg" py="lg" className={styles.container}>
-      <Group justify="space-between" align="flex-start" mb="xl">
+      <Group data-page-heading-glass justify="space-between" align="flex-start" mb="xl">
         <Group gap="sm">
           <ThemeIcon size={46} radius="md" variant="light" color="blue"><IconMessageCircle size={26} /></ThemeIcon>
           <div><Title order={2}>Asistente Office</Title><Text size="sm" c="dimmed">Tus preguntas, con los datos de REV.</Text></div>

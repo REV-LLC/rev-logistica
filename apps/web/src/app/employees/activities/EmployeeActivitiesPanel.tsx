@@ -591,7 +591,7 @@ export default function EmployeeActivitiesPanel({
     >
       <Stack gap="lg">
         {!embedded ? (
-          <Group>
+          <Group data-page-heading-glass>
             <ThemeIcon size={48} radius="md" variant="light" color="orange">
               <IconCalendar size={26} />
             </ThemeIcon>

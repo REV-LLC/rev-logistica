@@ -458,7 +458,7 @@ export default function WorksitesPage() {
   return (
     <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`}>
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" className={styles.header}>
+        <Group data-page-heading-glass justify="space-between" align="flex-start" className={styles.header}>
           <div>
             <Title order={1} className={styles.title}>Obras</Title>
             <Text c="dimmed" mt="sm">Gestiona frentes de trabajo, clientes asociados y estado operativo desde una sola vista.</Text>
