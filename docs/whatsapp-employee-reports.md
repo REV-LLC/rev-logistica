@@ -155,3 +155,9 @@ maquinistas). No incluye cuentas ADMIN/OFFICE/DRIVER aunque el cargo del emplead
 sea de operario. Conductores, oficina/administración, otros perfiles y todos se
 pueden consultar seleccionándolos explícitamente. Los contadores corresponden
 a las tarjetas visibles; este filtro no altera reportes, jornadas ni bitácoras.
+
+La asistencia inicia en Este mes, del primer al último día del mes de Colombia.
+Cada jornada se titula con la fecha de entrada local (p. ej. NOV 13), seguida de
+obra, cliente y presencia reportada. Se reutiliza la identidad compacta de
+EmployeeCard (foto redonda y nombre), sin fondo propio; el acceso a bitácora se
+muestra junto al empleado y conserva su etiqueta accesible en móvil.
