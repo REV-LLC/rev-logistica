@@ -18,7 +18,7 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: #202326 url('/backgrounds/smoked-glass-v1.webp') center / cover no-repeat;
+    background: #202326 url('/backgrounds/smoked-glass-v2-4k.webp') center / cover no-repeat;
   }
 
   html[data-mantine-color-scheme='dark'] :is(.mantine-Paper-root, .mantine-Card-root):not(:where([data-document-paper])) {
