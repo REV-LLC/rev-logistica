@@ -276,6 +276,178 @@ if (testUrl) {
       });
     });
 
+    it('deletes only the chosen report with an ADMIN/OFFICE audit trail and cancels its alerts', async () => {
+      const create = (
+        description: string,
+        kind: 'DAMAGE' | 'REQUEST' = 'DAMAGE',
+      ) =>
+        prisma.whatsappReport.create({
+          data: {
+            employeeId: employee.id,
+            assetId: asset.id,
+            kind,
+            description,
+            occurredAt: new Date(),
+            sourceMessageId: randomUUID(),
+          },
+        });
+      const [chosen, keep, request] = await Promise.all([
+        create('Eliminar QA'),
+        create('Conservar QA'),
+        create('Petición QA', 'REQUEST'),
+      ]);
+      const topic = await prisma.notificationTopic.create({
+        data: {
+          entityType: 'WHATSAPP_REPORT',
+          entityId: chosen.id,
+          eventType: 'EMPLOYEE_REPORT',
+          titleTemplate: 'QA',
+          messageTemplate: 'QA',
+          dueAt: new Date(),
+          warningDays: 0,
+        },
+      });
+      await prisma.whatsappReportAlertRecipient.create({
+        data: {
+          reportId: chosen.id,
+          recipientKey: 'qa-delete',
+          name: 'QA',
+          status: 'PENDING',
+        },
+      });
+      const driver = await prisma.user.create({
+        data: {
+          email: `${randomUUID()}@example.invalid`,
+          role: 'DRIVER',
+          passwordHash: 'disabled',
+        },
+      });
+      await expect(records.deleteReport(chosen.id, driver.id)).rejects.toThrow(
+        'Solo ADMIN y OFFICE',
+      );
+      const actorId = process.env.WHATSAPP_REPORT_ACTOR_USER_ID!;
+      await records.deleteReport(chosen.id, actorId);
+      const deleted = await prisma.whatsappReport.findUniqueOrThrow({
+        where: { id: chosen.id },
+      });
+      expect(deleted.deletedAt).toBeInstanceOf(Date);
+      expect(deleted.deletedByUserId).toBe(actorId);
+      expect(deleted.status).toBe('DELETED');
+      expect((await records.list('DAMAGE')).map((r) => r.id)).not.toContain(
+        chosen.id,
+      );
+      expect((await records.list('DAMAGE')).map((r) => r.id)).toContain(
+        keep.id,
+      );
+      expect((await records.list('REQUEST')).map((r) => r.id)).toContain(
+        request.id,
+      );
+      expect(
+        (
+          await prisma.notificationTopic.findUniqueOrThrow({
+            where: { id: topic.id },
+          })
+        ).active,
+      ).toBe(false);
+      expect(
+        (
+          await prisma.whatsappReportAlertRecipient.findFirstOrThrow({
+            where: { reportId: chosen.id },
+          })
+        ).status,
+      ).toBe('CANCELLED');
+      await expect(
+        records.resolveReport(chosen.id, actorId, 'No debe reabrirse'),
+      ).rejects.toThrow('eliminado');
+      await records.deleteReport(chosen.id, actorId);
+      expect(
+        (
+          await prisma.whatsappReport.findUniqueOrThrow({
+            where: { id: chosen.id },
+          })
+        ).deletedAt,
+      ).toEqual(deleted.deletedAt);
+      const admin = await prisma.user.create({
+        data: {
+          email: `${randomUUID()}@example.invalid`,
+          role: 'ADMIN',
+          passwordHash: 'disabled',
+        },
+      });
+      await records.deleteReport(request.id, admin.id);
+      await prisma.user.update({
+        where: { id: admin.id },
+        data: { active: false },
+      });
+      await expect(records.deleteReport(keep.id, admin.id)).rejects.toThrow(
+        'Solo ADMIN y OFFICE',
+      );
+      // Remove these isolated fixtures so prior flow assertions remain unchanged.
+      await prisma.whatsappReportAlertRecipient.deleteMany({
+        where: { reportId: chosen.id },
+      });
+      await prisma.notificationTopic.delete({ where: { id: topic.id } });
+      await prisma.whatsappReport.deleteMany({
+        where: { id: { in: [chosen.id, keep.id, request.id] } },
+      });
+    });
+
+    it('groups entry/exit reports and preserves the jornada when a report is deleted', async () => {
+      const now = new Date();
+      const entry = await prisma.whatsappReport.create({
+        data: {
+          kind: 'CHECK_IN',
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          occurredAt: now,
+          sourceMessageId: randomUUID(),
+          description: 'Entrada QA',
+        },
+      });
+      const exit = await prisma.whatsappReport.create({
+        data: {
+          kind: 'CHECK_OUT',
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          occurredAt: new Date(now.getTime() + 1000),
+          sourceMessageId: randomUUID(),
+          description: 'Salida QA',
+        },
+      });
+      const jornada = await prisma.worksiteAttendance.create({
+        data: {
+          employeeId: employee.id,
+          customerWorksiteId: site.id,
+          enteredAt: now,
+          leftAt: exit.occurredAt,
+          checkInReportId: entry.id,
+          checkOutReportId: exit.id,
+        },
+      });
+      expect((await records.list('ATTENDANCE')).map((r) => r.id)).toEqual(
+        expect.arrayContaining([entry.id, exit.id]),
+      );
+      expect((await records.list('DAMAGE')).map((r) => r.id)).not.toContain(
+        entry.id,
+      );
+      await records.deleteReport(
+        entry.id,
+        process.env.WHATSAPP_REPORT_ACTOR_USER_ID!,
+      );
+      expect((await records.list('ATTENDANCE')).map((r) => r.id)).toEqual([
+        exit.id,
+      ]);
+      expect(
+        await prisma.worksiteAttendance.findUniqueOrThrow({
+          where: { id: jornada.id },
+        }),
+      ).toEqual(jornada);
+      await prisma.worksiteAttendance.delete({ where: { id: jornada.id } });
+      await prisma.whatsappReport.deleteMany({
+        where: { id: { in: [entry.id, exit.id] } },
+      });
+    });
+
     it('sends a named four-option menu for greetings without an AI request', async () => {
       const greeting = await send('Hola');
       expect(greeting?.replyText).toContain('Hola, Operario Qa');

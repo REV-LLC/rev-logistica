@@ -40,7 +40,7 @@ export class WhatsappReportAlertsService
           where: {
             status: 'PENDING',
             nextAttemptAt: { lte: new Date() },
-            report: { status: 'RECORDED' },
+            report: { status: 'RECORDED', deletedAt: null },
           },
           take: 20,
           orderBy: { nextAttemptAt: 'asc' },
@@ -59,6 +59,7 @@ export class WhatsappReportAlertsService
           {
             where: {
               id: r.id,
+              report: { status: 'RECORDED', deletedAt: null },
               status: 'PENDING',
               nextAttemptAt: { lte: new Date() },
             },
@@ -92,6 +93,17 @@ export class WhatsappReportAlertsService
             process.env.FRONTEND_URL ||
             ''
           ).replace(/\/+$/, '');
+          if (
+            !(await this.prisma.whatsappReportAlertRecipient.findFirst({
+              where: {
+                id: r.id,
+                status: 'SENDING',
+                report: { status: 'RECORDED', deletedAt: null },
+              },
+              select: { id: true },
+            }))
+          )
+            continue;
           const result = await this.transport.sendWhatsapp(r.phone!, {
             title: `${REPORT_LABELS[r.report.kind]}: ${r.report.employee.name} ${r.report.employee.lastName}`,
             body: `${r.report.asset ? assetLabel(r.report.asset) : r.report.vehicle ? `Vehículo ${r.report.vehicle.plate}` : ''} ${readableDescription(r.report.description, r.report.asset?.publicCode)}`.trim(),
@@ -99,8 +111,8 @@ export class WhatsappReportAlertsService
             link: `${base}/employees/whatsapp-reports`,
           });
           if (!result.sent) throw new Error('Transport unavailable');
-          await this.prisma.whatsappReportAlertRecipient.update({
-            where: { id: r.id },
+          await this.prisma.whatsappReportAlertRecipient.updateMany({
+            where: { id: r.id, status: 'SENDING' },
             data: {
               status: 'SENT',
               sentAt: new Date(),
@@ -112,8 +124,8 @@ export class WhatsappReportAlertsService
             },
           });
         } catch {
-          await this.prisma.whatsappReportAlertRecipient.update({
-            where: { id: r.id },
+          await this.prisma.whatsappReportAlertRecipient.updateMany({
+            where: { id: r.id, status: 'SENDING' },
             data: {
               status: r.attempts >= 4 ? 'FAILED' : 'PENDING',
               error: 'ALERT_SEND_FAILED',

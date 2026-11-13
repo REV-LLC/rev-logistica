@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  ForbiddenException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Employee, Prisma, Role, WhatsappReportKind } from '@prisma/client';
@@ -765,15 +767,64 @@ export class WhatsappReportRecordsService {
   async list(kind?: string, cursor?: string) {
     if (
       kind &&
+      kind !== 'ATTENDANCE' &&
       !Object.values(WhatsappReportKind).includes(kind as WhatsappReportKind)
     )
       throw new BadRequestException('Tipo de reporte inválido');
     return this.prisma.whatsappReport.findMany({
-      where: kind ? { kind: kind as WhatsappReportKind } : {},
+      where: {
+        deletedAt: null,
+        ...(kind === 'ATTENDANCE'
+          ? {
+              kind: {
+                in: [WhatsappReportKind.CHECK_IN, WhatsappReportKind.CHECK_OUT],
+              },
+            }
+          : kind
+            ? { kind: kind as WhatsappReportKind }
+            : {}),
+      },
       include: reportInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+  }
+  async deleteReport(id: string, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: {
+          id: userId,
+          active: true,
+          role: { in: [Role.ADMIN, Role.OFFICE] },
+        },
+        select: { id: true },
+      });
+      if (!actor)
+        throw new ForbiddenException(
+          'Solo ADMIN y OFFICE pueden eliminar reportes.',
+        );
+      await tx.$queryRaw`SELECT id FROM "WhatsappReport" WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.whatsappReport.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('No se encontró el reporte.');
+      if (current.deletedAt) return { deleted: true };
+      await tx.whatsappReport.update({
+        where: { id },
+        data: {
+          status: 'DELETED',
+          deletedAt: new Date(),
+          deletedByUserId: actor.id,
+        },
+      });
+      await tx.notificationTopic.updateMany({
+        where: { entityType: 'WHATSAPP_REPORT', entityId: id },
+        data: { active: false },
+      });
+      await tx.whatsappReportAlertRecipient.updateMany({
+        where: { reportId: id, status: { in: ['PENDING', 'SENDING'] } },
+        data: { status: 'CANCELLED' },
+      });
+      return { deleted: true };
     });
   }
   async resolveReport(id: string, userId: string, resolution: string) {
@@ -786,6 +837,8 @@ export class WhatsappReportRecordsService {
       const current = await tx.whatsappReport.findUniqueOrThrow({
         where: { id },
       });
+      if (current.deletedAt)
+        throw new NotFoundException('El reporte fue eliminado.');
       if (!['DAMAGE', 'REQUEST'].includes(current.kind))
         throw new BadRequestException(
           'Solo se resuelven alertas de daños y peticiones.',

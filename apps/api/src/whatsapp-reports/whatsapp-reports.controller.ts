@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -99,6 +100,13 @@ export class WhatsappReportsController {
         replyAttempts: true,
       },
     });
+  }
+  @Delete(':id')
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.records.deleteReport(id, req.user.sub);
   }
   @Patch(':id/resolve')
   resolve(

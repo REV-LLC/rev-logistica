@@ -2006,6 +2006,8 @@ model WhatsappReport {
   status String @default("RECORDED")
   resolvedAt DateTime?
   resolvedByUserId String?
+  deletedAt DateTime?
+  deletedByUserId String?
   resolution String?
   createdAt DateTime @default(now())
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)

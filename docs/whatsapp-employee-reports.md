@@ -86,3 +86,19 @@ Daños y horómetros empiezan ofreciendo la última máquina usada por ese núme
 Las listas, resúmenes, selección de máquina y alertas muestran nombre, número corto y marca/modelo, sin el código técnico de inventario. Los códigos y relaciones internas se conservan en la base de datos.
 
 El resumen incluye «Agregar fotos» antes de confirmar. El bot explica cómo adjuntar imágenes desde el clip o + de WhatsApp, confirma cada recepción y conserva la evidencia si primero se envía la foto y luego se elige el tipo de reporte o la máquina. Una imagen complementa la máquina elegida: la IA no puede cambiar el equipo por inferencia visual. Daños admiten fotos opcionales; horómetro mantiene foto obligatoria; entrada/salida conservan ubicación o foto como alternativas.
+
+## Gestión de reportes en oficina
+
+La pantalla separa Daños, Horómetros, Peticiones y Entradas y salidas. Esta última
+pestaña agrupa ambos tipos de reporte y permite consultar las jornadas por separado.
+Sus tarjetas muestran la foto directamente (con carga autenticada al acercarse a la
+pantalla), o un enlace al mapa si se compartió ubicación. No tienen botón Ver reporte;
+la foto permite ampliarse al tocarla.
+
+ADMIN y OFFICE pueden eliminar un reporte desde su tarjeta o detalle, previa
+confirmación. `DELETE /whatsapp-reports/:id` verifica también que la cuenta siga
+activa y tenga uno de esos roles. La eliminación conserva `deletedAt` y
+`deletedByUserId`, oculta el reporte en todas las categorías y desactiva sus alertas
+y envíos pendientes. Es idempotente y un reporte eliminado no puede resolverse.
+No borra archivos, jornadas, lecturas de horómetro ni modifica el estado del equipo;
+las correcciones operativas se hacen desde sus módulos correspondientes.
