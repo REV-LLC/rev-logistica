@@ -1,7 +1,7 @@
-# Saldos de obra y operación más ágil
+# Nuevo fondo cristal ahumado
 
-El PDF de saldos de obra tiene una presentación renovada. Antes de descargarlo puedes elegir las columnas; dueño y procedencia quedan ocultos por defecto para compartirlo con el cliente.
+Las páginas que tenían fondo gris ahora muestran un fondo cristal ahumado con relieves suaves, manteniendo la lectura de tablas y controles.
 
-Admin y Office pueden registrar pérdidas desde el inventario de la obra con fecha, motivo y responsable. Al guardar una reposición se registra la baja automáticamente y se cierra el alquiler de esas unidades desde la fecha indicada, sin ingresarlas a bodega ni descontarlas dos veces.
+Se conservan los fondos fotográficos de inicio, empleados y las páginas que ya tenían su propia imagen. Los documentos, PDF y hojas impresas mantienen el fondo blanco.
 
-El inicio del conductor muestra accesos directos para generar remisiones y devoluciones. El directorio de empleados aprovecha las pantallas amplias con cuatro columnas, la foto ampliada ya no tiene una tarjeta detrás y la bitácora reúne los controles de empleado y calendario en una barra más clara.
+Este cambio es visual y no modifica datos, permisos ni operaciones de inventario.
