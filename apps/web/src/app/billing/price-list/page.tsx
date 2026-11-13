@@ -268,7 +268,7 @@ export default function PriceListPage() {
     <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={initialLoading ? 'true' : undefined}>
       <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+        <Group data-page-heading-glass justify="space-between" align="flex-start" gap="md" wrap="wrap">
           <div>
             <Title order={1} className={glass.title}>Lista de precios</Title>
             <Text size="sm" c="dimmed">Precios de alquiler al cliente para equipos propios y de proveedores.</Text>

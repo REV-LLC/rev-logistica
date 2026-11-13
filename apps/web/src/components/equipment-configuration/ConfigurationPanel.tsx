@@ -132,7 +132,7 @@ function ConfigurationTabs({
   return (
     <Stack>
       {label ? (
-        <Text component="h1" fw={700} size="28px" m={0}>
+        <Text data-page-heading-glass component="h1" fw={700} size="28px" m={0}>
           {label}
         </Text>
       ) : null}

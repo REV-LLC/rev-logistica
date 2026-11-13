@@ -92,7 +92,7 @@ export default function LedgerSkuPage() {
   return (
     <main>
       <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Paper shadow="sm" p="xl" radius="xl" withBorder>
           <Title order={2}>Ledger SKU</Title>
           <Text c="dimmed">SKU ID: {skuId}</Text>
           <Select

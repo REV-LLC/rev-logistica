@@ -300,7 +300,7 @@ export default function NotificationDeliveriesPage() {
       <ResponsiveShell>
         <Container size="xl" py="md">
           <Stack gap="lg">
-            <Group justify="space-between" align="flex-start">
+            <Group data-page-heading-glass justify="space-between" align="flex-start">
               <div>
                 <Title order={2}>Centro de notificaciones</Title>
                 <Text c="dimmed" mt={4}>Trazabilidad de documentos enviados por correo y WhatsApp.</Text>

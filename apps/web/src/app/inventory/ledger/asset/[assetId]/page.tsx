@@ -92,7 +92,7 @@ export default function LedgerAssetPage() {
   return (
     <main>
       <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Paper shadow="sm" p="xl" radius="xl" withBorder>
           <Title order={2}>Ledger de activo</Title>
           <Text c="dimmed">Asset ID: {assetId}</Text>
           <Select

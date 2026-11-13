@@ -127,7 +127,7 @@ export default function WarehouseTabletsSettings() {
   return (
     <Container size="lg" py="xl">
       <Stack gap="lg">
-        <Group justify="space-between">
+        <Group data-page-heading-glass justify="space-between">
           <div>
             <Title order={2}>Tablets de bodega</Title>
             <Text c="dimmed">

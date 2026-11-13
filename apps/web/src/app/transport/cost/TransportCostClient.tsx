@@ -292,7 +292,7 @@ export default function TransportCostPage() {
   return (
     <main>
       <Container size="lg" py="xl">
-        <Paper shadow="sm" p="xl" radius="md" withBorder>
+        <Paper data-page-heading-glass shadow="sm" p="xl" radius="xl" withBorder>
           <Title order={2}>Transport Cost</Title>
           <Text c="dimmed" mt="xs">
             Calculate cost based on real street distance with Mapbox.

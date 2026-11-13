@@ -613,7 +613,7 @@ export default function AnnexesPage() {
       className={`${glassStyles.theme} ${glassStyles.page}`}
     >
       <Stack gap="xs">
-        <Group justify="space-between">
+        <Group data-page-heading-glass justify="space-between">
           <div>
             <Title order={1}>Anexos</Title>
             <Text c="dimmed">

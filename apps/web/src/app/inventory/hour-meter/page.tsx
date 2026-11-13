@@ -130,22 +130,24 @@ export default function HourMeterPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" gap="md">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
-            <ThemeIcon size={46} radius="xl" variant="light" color="orange">
-              <IconGauge size={24} />
-            </ThemeIcon>
-            <div>
-              <Text fw={900} size="xl">Actualizar horómetro</Text>
-              <Text c="dimmed" size="sm">
-                Registra lecturas con evidencia fotográfica en equipos de bodegas propias.
-              </Text>
-            </div>
+        <Paper data-page-heading-glass withBorder radius="xl" p="lg">
+          <Group justify="space-between" align="flex-start" gap="md">
+            <Group gap="sm" align="flex-start" wrap="nowrap">
+              <ThemeIcon size={46} radius="xl" variant="light" color="orange">
+                <IconGauge size={24} />
+              </ThemeIcon>
+              <div>
+                <Text fw={900} size="xl">Actualizar horómetro</Text>
+                <Text c="dimmed" size="sm">
+                  Registra lecturas con evidencia fotográfica en equipos de bodegas propias.
+                </Text>
+              </div>
+            </Group>
+            <Badge color="orange" variant="light" size="lg">
+              {assets.length} equipos
+            </Badge>
           </Group>
-          <Badge color="orange" variant="light" size="lg">
-            {assets.length} equipos
-          </Badge>
-        </Group>
+        </Paper>
 
         {error ? <Alert color="red">{error}</Alert> : null}
         {success ? (

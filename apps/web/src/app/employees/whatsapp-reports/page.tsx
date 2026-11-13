@@ -354,7 +354,7 @@ export default function WhatsappReportsPage() {
   return (
     <Container size="xl" py="lg">
       <Stack>
-        <Group justify="space-between">
+        <Group data-page-heading-glass justify="space-between">
           <div>
             <Title order={2}>Reportes WhatsApp</Title>
             <Text c="dimmed">

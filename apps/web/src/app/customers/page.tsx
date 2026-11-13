@@ -575,7 +575,7 @@ export default function CustomersPage() {
     <Container size="xl" py="xl" className={`${glass.page} ${styles.page}`} data-page-loading={loading && customers.length === 0 ? 'true' : undefined}>
       <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+          <Group data-page-heading-glass justify="space-between" align="flex-start" gap="md" wrap="wrap">
             <div>
               <Group gap="sm" mb={6}>
                 <Title order={1} className={glass.title}>Clientes</Title>

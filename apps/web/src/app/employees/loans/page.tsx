@@ -39,7 +39,7 @@ export default function EmployeeLoansPage() {
 
   return <Container size="xl" py="xl"><Stack gap="lg">
     <Group><Button component={Link} href="/employees" variant="subtle" leftSection={<IconArrowLeft size={16} />}>Empleados</Button></Group>
-    <div><Title order={1}>Préstamos de empleados</Title><Text c="dimmed">Consulta los saldos y abre la tarjeta de cada empleado para ver sus movimientos.</Text></div>
+    <div data-page-heading-glass><Title order={1}>Préstamos de empleados</Title><Text c="dimmed">Consulta los saldos y abre la tarjeta de cada empleado para ver sus movimientos.</Text></div>
     {loading ? <Loader aria-label="Cargando préstamos" /> : error ? <Alert color="red" title="No se pudo cargar la información">
       <Stack gap="sm"><Text>{error}</Text><Button variant="light" onClick={() => setAttempt(value => value + 1)}>Reintentar</Button></Stack>
     </Alert> : <Paper withBorder radius="md" style={{ overflow: 'hidden' }}>

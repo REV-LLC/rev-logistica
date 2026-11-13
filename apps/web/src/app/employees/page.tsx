@@ -299,7 +299,7 @@ export default function EmployeeCardsPage() {
     <Container size="xl" py="xl" className={`${styles.page} ${styles.directoryContainer}`}>
       <EmployeePageBackground src="/employees/rev-directory-v1.webp" mobileSrc="/employees/rev-directory-mobile-v1.webp" variant="brand" />
       <Stack gap="lg">
-        <Group justify="space-between" align="center" wrap="wrap">
+        <Group data-page-heading-glass justify="space-between" align="center" wrap="wrap">
           <Title order={1} className={styles.title}>Empleados</Title>
           <Group gap="xs" wrap="wrap" className={styles.headerActions}>
             <Button component={Link} href="/employees/payroll" variant="light">Nómina</Button>

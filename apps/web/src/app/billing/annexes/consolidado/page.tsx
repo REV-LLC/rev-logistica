@@ -53,7 +53,7 @@ export default function BillingOverviewPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <Group justify="space-between">
+        <Group data-page-heading-glass justify="space-between">
           <div>
             <Link href="/billing/annexes">Volver a anexos</Link>
             <Title order={1} mt="xs">

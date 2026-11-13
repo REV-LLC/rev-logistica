@@ -205,7 +205,7 @@ export default function ProviderReturnsPage() {
 
   return (
     <Container size="md" py="lg">
-      <Group justify="space-between" mb="lg">
+      <Group data-page-heading-glass justify="space-between" mb="lg">
         <div><Title order={2}>Entregas a proveedor</Title><Text c="dimmed">Confirma equipos y accesorios de una DV cuando el proveedor los recibe físicamente.</Text></div>
         <Button variant="light" leftSection={<IconRefresh size={16} />} loading={loading} onClick={() => void load()}>Actualizar</Button>
       </Group>

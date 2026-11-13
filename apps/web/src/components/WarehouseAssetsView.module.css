@@ -7,7 +7,7 @@
   border: 1px solid var(--assets-line);
   -webkit-backdrop-filter: blur(18px) saturate(115%);
   backdrop-filter: blur(18px) saturate(115%);
-  border-radius: 1.25rem;
+  border-radius: var(--mantine-radius-xl);
   min-height: calc(100dvh - 2rem);
   overflow: hidden;
 }
@@ -260,7 +260,7 @@
 }
 
 @media (max-width: 47.99em) {
-  .page { border-radius: 0.85rem; min-height: calc(100dvh - 4.5rem); }
+  .page { min-height: calc(100dvh - 4.5rem); }
   .header, .toolbar, .content { padding-inline: 1rem; }
   .header { padding-block: 1.25rem; flex-wrap: wrap; gap: 1rem; }
   .typeChip { font-size: 0.72rem; padding: 0.58rem 0.7rem; }

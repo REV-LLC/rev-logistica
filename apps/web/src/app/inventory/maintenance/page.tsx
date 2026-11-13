@@ -45,7 +45,7 @@ export default function MaintenancePage() {
   return (
     <Container size="xl" py="lg">
       <Stack gap="lg">
-        <Group justify="space-between">
+        <Group data-page-heading-glass justify="space-between">
           <div><Title order={2}>Mantenimientos</Title><Text c="dimmed" size="sm">Consulta el último trabajo, registra el siguiente y programa sus alertas.</Text></div>
           <Button component={Link} href="/inventory/hour-meter" variant="light" leftSection={<IconGauge size={18} />}>Horómetros</Button>
         </Group>

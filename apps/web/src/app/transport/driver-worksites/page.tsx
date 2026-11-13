@@ -56,7 +56,7 @@ function WorksiteDetails({ worksite }: { worksite: DriverWorksite }) {
   return (
     <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
       <Stack gap="lg">
-        <div>
+        <div data-page-heading-glass>
           <Title order={3}>{worksite.worksite.name}</Title>
           <Text c="dimmed" size="sm">
             {worksite.alias || worksite.customer.name}
