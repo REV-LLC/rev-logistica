@@ -6,6 +6,21 @@
     color: var(--mantine-color-text);
   }
 
+  html[data-mantine-color-scheme='dark'] .mantine-AppShell-main {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* Photo-backed pages keep their own art; this layer replaces only the plain shell backdrop. */
+  html[data-mantine-color-scheme='dark'] .mantine-AppShell-main:not(:has([data-page-background='dark']))::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: #202326 url('/backgrounds/smoked-glass-v1.webp') center / cover no-repeat;
+  }
+
   html[data-mantine-color-scheme='dark'] :is(.mantine-Paper-root, .mantine-Card-root):not(:where([data-document-paper])) {
     background: var(--rev-glass-surface) !important;
     border-color: var(--rev-glass-line);
