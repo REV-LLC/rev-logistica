@@ -36,6 +36,11 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token);
+      if (payload.role === 'EMPLOYEE') {
+        if (!request.path.startsWith('/attendance/') && request.path !== '/attendance') throw new UnauthorizedException();
+        const current = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { employee: true } });
+        if (!current?.active || current.role !== 'EMPLOYEE' || !current.employee?.active) throw new UnauthorizedException();
+      }
       if (payload.role === 'WAREHOUSE_TABLET') {
         const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { warehouse: true } });
         if (!user?.active || user.role !== 'WAREHOUSE_TABLET' || !user.warehouse?.active) {

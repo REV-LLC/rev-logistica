@@ -66,7 +66,7 @@ type Journal = {
   leftAt: string | null;
   checkOutReportId: string | null;
   customerWorksite: { worksite: { name: string }; customer: { name: string } };
-  checkInReport: Evidence;
+  checkInReport: Evidence | null;
   checkOutReport: Evidence | null;
   activityNote: {
     id: string;
@@ -338,7 +338,7 @@ export default function AttendanceEmployeeCards() {
           {journals.map((a) => {
             const invalid = Boolean(
               a.activityNote?.sourceInvalidatedAt ||
-              a.checkInReport.deletedAt ||
+              a.checkInReport?.deletedAt ||
               a.checkOutReport?.deletedAt,
             );
             const changed = Boolean(

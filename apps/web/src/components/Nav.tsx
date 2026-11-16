@@ -86,6 +86,8 @@ const sections: NavSection[] = [
   {
     title: "Operación",
     links: [
+      { href: "/attendance", label: "Mi asistencia", icon: IconCalendar, roles: ["ADMIN", "OFFICE", "DRIVER", "OPERATOR", "EMPLOYEE"] },
+      { href: "/employees/attendance", label: "Asistencia y rostros", icon: IconUsers, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
       {

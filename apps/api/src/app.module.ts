@@ -40,6 +40,7 @@ import { FuelModule } from './fuel/fuel.module';
 import { AccessoriesModule } from './accessories/accessories.module';
 import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { PdfEditorModule } from './pdf-editor/pdf-editor.controller';
 import { BulkKitsModule } from './bulk-kits/bulk-kits.module';
 import { EmployeePortalModule } from './employee-portal/employee-portal.module';
@@ -87,6 +88,7 @@ import { EmployeePortalModule } from './employee-portal/employee-portal.module';
     AccessoriesModule,
     OfficeAssistantModule,
     PdfEditorModule,
+    AttendanceModule,
     EmployeeActivitiesModule,
     EmployeePortalModule,
   ],
@@ -104,6 +106,7 @@ export class AppModule implements NestModule {
     consumer
       .apply(UppercaseBodyMiddleware)
       .exclude(
+        { path: 'attendance/{*path}', method: RequestMethod.ALL },
         { path: 'auth/login', method: RequestMethod.POST },
         { path: 'commercial-profiles', method: RequestMethod.PUT },
         { path: 'annexes/preview', method: RequestMethod.POST },

@@ -50,7 +50,7 @@ export type RoleValue =
   | 'WAREHOUSE_KEEPER'
   | 'OTHER';
 
-export type AppRoleValue = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
+export type AppRoleValue = 'EMPLOYEE' | 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR';
 
 export type EmployeeForm = {
   name: string;
@@ -120,6 +120,7 @@ export const roleLabelByValue: Record<RoleValue, string> = {
 };
 
 export const appRoleOptions = [
+  { value: 'EMPLOYEE', label: 'Empleado (solo asistencia)' },
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OFFICE', label: 'Oficina' },
   { value: 'DRIVER', label: 'Conductor' },
@@ -127,6 +128,7 @@ export const appRoleOptions = [
 ];
 
 export const appRoleLabelByValue: Record<AppRoleValue, string> = {
+  EMPLOYEE: 'Empleado (solo asistencia)',
   ADMIN: 'Admin',
   OFFICE: 'Oficina',
   DRIVER: 'Conductor',
