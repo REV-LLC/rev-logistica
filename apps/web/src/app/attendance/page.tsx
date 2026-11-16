@@ -211,7 +211,7 @@ function Attendance() {
   return (
     <Container size={620} py="lg">
       <Stack gap="lg">
-        <div>
+        <div data-page-heading-glass>
           <Text size="sm" c="dimmed">
             REV · Registro en obra
           </Text>

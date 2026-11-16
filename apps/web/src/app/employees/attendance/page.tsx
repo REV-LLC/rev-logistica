@@ -299,7 +299,7 @@ export default function AttendanceAdmin() {
   return (
     <Container size="lg" py="md">
       <Stack>
-        <div>
+        <div data-page-heading-glass>
           <Title order={1}>Asistencia y rostros</Title>
           <Text c="dimmed">
             Marcaciones de la PWA, jornadas y fotos de referencia.
