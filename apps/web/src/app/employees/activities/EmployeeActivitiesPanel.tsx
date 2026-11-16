@@ -86,7 +86,7 @@ type Note = {
     enteredAt: string;
     leftAt: string | null;
     checkOutReportId: string | null;
-    checkInReport: { deletedAt: string | null };
+    checkInReport: { deletedAt: string | null } | null;
     checkOutReport: { deletedAt: string | null } | null;
   } | null;
   date: string;
@@ -441,7 +441,7 @@ export default function EmployeeActivitiesPanel({
       note.reviewStatus !== "DISMISSED" &&
       note.sourceAttendance?.leftAt &&
       !note.sourceInvalidatedAt &&
-      !note.sourceAttendance.checkInReport.deletedAt &&
+      !note.sourceAttendance.checkInReport?.deletedAt &&
       !note.sourceAttendance.checkOutReport?.deletedAt &&
       (note.reviewStatus === "SUGGESTED" ||
         note.reviewedSourceExitId !== note.sourceAttendance.checkOutReportId),
@@ -929,7 +929,7 @@ export default function EmployeeActivitiesPanel({
                                 {(
                                   {
                                     SUGGESTED:
-                                      "Sugerencia del sistema · WhatsApp",
+                                      "Sugerencia del sistema · Asistencia",
                                     CONFIRMED: "Confirmada por oficina",
                                     CORRECTED: "Corregida por oficina",
                                     DISMISSED: "Descartada por oficina",
@@ -938,7 +938,7 @@ export default function EmployeeActivitiesPanel({
                                   "Sugerencia del sistema"}
                               </Badge>
                               {note.sourceInvalidatedAt ||
-                              note.sourceAttendance?.checkInReport.deletedAt ||
+                              note.sourceAttendance?.checkInReport?.deletedAt ||
                               note.sourceAttendance?.checkOutReport
                                 ?.deletedAt ? (
                                 <Alert color="orange">
@@ -1058,7 +1058,7 @@ export default function EmployeeActivitiesPanel({
                                   Boolean(
                                     note.sourceInvalidatedAt ||
                                     note.sourceAttendance?.checkInReport
-                                      .deletedAt ||
+                                      ?.deletedAt ||
                                     note.sourceAttendance?.checkOutReport
                                       ?.deletedAt,
                                   ) ||

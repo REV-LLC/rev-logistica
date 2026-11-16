@@ -363,7 +363,7 @@ export class EmployeeActivitiesService {
       action === 'CONFIRM' &&
       (!source.leftAt ||
         current.sourceInvalidatedAt ||
-        source.checkInReport.deletedAt ||
+        source.checkInReport?.deletedAt ||
         source.checkOutReport?.deletedAt)
     )
       throw new BadRequestException(

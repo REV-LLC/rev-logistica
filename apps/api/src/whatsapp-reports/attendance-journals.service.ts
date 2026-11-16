@@ -35,7 +35,7 @@ export async function syncAttendanceActivity(
     where: { sourceAttendanceId: attendanceId },
   });
   const invalid = Boolean(
-    a.checkInReport.deletedAt || a.checkOutReport?.deletedAt,
+    a.checkInReport?.deletedAt || a.checkOutReport?.deletedAt,
   );
   if (invalid) {
     if (previous && !previous.sourceInvalidatedAt)
@@ -167,7 +167,7 @@ export class AttendanceJournalsService {
         const items = groups.get(e.id) ?? [];
         const valid = items.filter(
           (a) =>
-            !a.checkInReport.deletedAt &&
+            !a.checkInReport?.deletedAt &&
             !a.checkOutReport?.deletedAt &&
             !a.activityNote?.sourceInvalidatedAt,
         );
@@ -183,7 +183,7 @@ export class AttendanceJournalsService {
                 a.activityNote.reviewStatus === 'SUGGESTED' ||
                 a.activityNote.reviewedSourceExitId !== a.checkOutReportId ||
                 a.activityNote.sourceInvalidatedAt ||
-                a.checkInReport.deletedAt ||
+                a.checkInReport?.deletedAt ||
                 a.checkOutReport?.deletedAt),
           ).length,
           reportedHours: valid.reduce(

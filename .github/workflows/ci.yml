@@ -127,3 +127,18 @@ jobs:
       - name: Test web regressions
         if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/web test
+
+  face-recognition:
+    name: Test facial service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/face-recognition/requirements*.txt
+      - run: pip install -r services/face-recognition/requirements-test.txt
+      - run: python services/face-recognition/download_models.py
+      - run: python -m unittest test_app.py
+        working-directory: services/face-recognition

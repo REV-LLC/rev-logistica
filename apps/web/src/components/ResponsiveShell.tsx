@@ -14,6 +14,8 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
     { prefix: '/profile', title: 'Mi perfil', subtitle: 'Préstamos y bitácora' },
     { prefix: "/inventory/maintenance", title: "Mantenimientos", subtitle: "Historial y próximos cambios" },
     { prefix: "/inventory/hour-meter", title: "Horómetros", subtitle: "Lecturas de equipos" },
+    { prefix: "/attendance", title: "Mi asistencia", subtitle: "Entrada y salida de obra" },
+    { prefix: "/employees/attendance", title: "Asistencia y rostros", subtitle: "Marcaciones y referencias" },
     { prefix: "/employees/whatsapp-reports", title: "Reportes WhatsApp", subtitle: "Reportes y asistencia" },
     { prefix: "/employees/activities", title: "Bitácora de empleados", subtitle: "Actividades del equipo" },
     { prefix: "/employees/payroll", title: "Nómina", subtitle: "Salarios y comprobantes" },

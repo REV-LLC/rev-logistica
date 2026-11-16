@@ -89,9 +89,10 @@ export function getTokenPayload() {
   return parseJwtPayload(token);
 }
 
-export type AppRole = 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR' | 'WAREHOUSE_TABLET';
+export type AppRole = 'EMPLOYEE' | 'ADMIN' | 'OFFICE' | 'DRIVER' | 'OPERATOR' | 'WAREHOUSE_TABLET';
 
 const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
+  EMPLOYEE: '/attendance',
   WAREHOUSE_TABLET: '/transport/generate',
   ADMIN: '/',
   OFFICE: '/',
@@ -100,6 +101,7 @@ const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
 };
 
 const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
+  EMPLOYEE: ['/attendance'],
   WAREHOUSE_TABLET: ['/transport/generate', '/transport/requests', '/inventory/ledger/document'],
   DRIVER: [
     '/',
@@ -107,11 +109,12 @@ const LIMITED_ROLE_ROUTE_PREFIXES: Partial<Record<AppRole, string[]>> = {
     '/transport/generate',
     '/transport/requests',
     '/transport/driver-worksites',
+    '/attendance',
     '/mobility-guides',
     '/inventory/provider-returns',
     '/inventory/ledger/document',
   ],
-  OPERATOR: ['/', '/inventory/hour-meter', '/fuel', '/profile'],
+  OPERATOR: ['/attendance', '/', '/inventory/hour-meter', '/fuel', '/profile'],
 };
 
 function isPathWithinPrefix(pathname: string, prefix: string) {
@@ -141,7 +144,7 @@ export function getCurrentUserRole(): AppRole | null {
   if (isAuthBypassEnabled()) return 'ADMIN';
   const payload = getTokenPayload();
   const role = payload?.role;
-  if (role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR' || role === 'WAREHOUSE_TABLET') return role;
+  if (role === 'EMPLOYEE' || role === 'ADMIN' || role === 'OFFICE' || role === 'DRIVER' || role === 'OPERATOR' || role === 'WAREHOUSE_TABLET') return role;
   return null;
 }
 
