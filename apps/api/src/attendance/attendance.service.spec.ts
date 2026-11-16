@@ -1,4 +1,6 @@
-jest.mock('../whatsapp-reports/attendance-journals.service', () => ({ syncAttendanceActivity: jest.fn() }));
+jest.mock('../whatsapp-reports/attendance-journals.service', () => ({
+  syncAttendanceActivity: jest.fn(),
+}));
 import { AttendanceService } from './attendance.service';
 import {
   BadRequestException,
@@ -59,6 +61,7 @@ describe('PWA attendance service', () => {
       user: { findUnique: jest.fn().mockResolvedValue(user) },
       attendancePunch: {
         findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest
           .fn()
           .mockImplementation(async ({ data }) => ({ ...data, id: 'punch' })),
@@ -195,6 +198,16 @@ describe('PWA attendance service', () => {
       ),
     ).rejects.toThrow('ubicación');
     expect(face.extract).not.toHaveBeenCalled();
+  });
+  it('preserves evidence if a COMMIT response is lost after the record was saved', async () => {
+    db.$transaction.mockRejectedValue(
+      new Error('connection lost during commit'),
+    );
+    db.attendancePunch.findFirst.mockResolvedValue({ id: 'committed-punch' });
+    await expect(service.punch(actor, dto(), image)).rejects.toThrow(
+      'connection lost',
+    );
+    expect(storage.remove).not.toHaveBeenCalled();
   });
   it('does not expose another employee’s evidence', async () => {
     db.attendancePunch.findUnique.mockResolvedValue({

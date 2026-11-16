@@ -1,10 +1,37 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
+  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 @Injectable()
-export class FaceClientService {
+export class FaceClientService implements OnModuleInit {
+  private readonly logger = new Logger(FaceClientService.name);
+  async onModuleInit() {
+    const url = process.env.FACE_SERVICE_URL;
+    if (!url || !process.env.FACE_SERVICE_TOKEN) return;
+    try {
+      const response = await fetch(`${url.replace(/\/$/, '')}/health`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const health = await response.json();
+      if (
+        !response.ok ||
+        health.ok !== true ||
+        !/^sface-[a-f0-9]{16}$/.test(health.modelVersion)
+      )
+        throw new Error();
+      this.logger.log(
+        `OpenCV conectado por red privada: ${health.modelVersion}`,
+      );
+    } catch {
+      this.logger.warn(
+        'Servicio facial no disponible al iniciar; las marcaciones conservarán estado pendiente.',
+      );
+    }
+  }
+
   async extract(
     image: Buffer,
   ): Promise<{ vector: number[]; modelVersion: string }> {

@@ -22,15 +22,17 @@ El umbral inicial de similitud coseno es 0,45, configurable con FACE_MATCH_THRES
 
 `services/face-recognition`: Python, FastAPI, OpenCV headless, YuNet y SFace. Docker instala los modelos desde una revisión fija de OpenCV Zoo, verifica su SHA256 Git LFS y conserva licencias. API `/extract` autenticada con token; `/health` informa el modelo. Un proceso, un hilo OpenCV y concurrencia limitada. No usa GPU, APIs de IA generativa ni cobro de reconocimiento por petición.
 
-En el proyecto Railway existente crear `face-recognition`, desplegando esa carpeta como raíz. Mantenerlo sin dominio público, con PORT=8000 y FACE_SERVICE_TOKEN aleatorio de al menos 32 caracteres. Configurar en API, para cada entorno:
+En el proyecto Railway existente se usan `face-recognition` en staging y `face-recognition-prod` en producción (instancias separadas por entorno), desplegando esa carpeta como raíz. Mantenerlo sin dominio público, con PORT=8000 y FACE_SERVICE_TOKEN aleatorio de al menos 32 caracteres. Configurar en API, para cada entorno:
 
 ```
 ATTENDANCE_ENABLED=true
-FACE_SERVICE_URL=http://face-recognition.railway.internal:8000
+FACE_SERVICE_URL=http://face-recognition-prod.railway.internal:8000
 FACE_SERVICE_TOKEN=<mismo token del servicio en ese entorno>
 FACE_MATCH_THRESHOLD=0.45
 ATTENDANCE_EVIDENCE_KEY=<32 bytes aleatorios en hexadecimal>
 ```
+
+En staging, FACE_SERVICE_URL apunta a face-recognition.railway.internal. Los servicios faciales tienen límite de 1 vCPU y 2 GB de RAM cada uno. Al iniciar, la API comprueba la salud del modelo mediante la red privada y registra el resultado sin credenciales.
 
 El servicio usa el mismo R2 configurado en la API. Como ese bucket también sirve recursos públicos, las selfies se cifran con AES-256-GCM, IV aleatorio y clave de objeto como AAD antes de almacenarse bajo `attendance-encrypted/`. No se generan URLs públicas de fotos; solo las devuelve descifradas la API a oficina o al propio empleado, con no-store. No rotar ni perder ATTENDANCE_EVIDENCE_KEY sin un procedimiento de recifrado. Los vectores se guardan en PostgreSQL y nunca se devuelven al navegador. Las nuevas pantallas no entran en la caché offline del service worker.
 

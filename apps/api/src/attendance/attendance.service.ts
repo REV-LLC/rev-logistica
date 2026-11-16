@@ -333,7 +333,19 @@ export class AttendanceService {
       used = inserted;
       return result;
     } finally {
-      if (!used) await this.storage.remove(key).catch(() => undefined);
+      if (!used) {
+        // A lost COMMIT response may still have saved the record. Never remove
+        // its evidence unless a successful read proves the object is unreferenced.
+        try {
+          const referenced = await this.prisma.attendancePunch.findFirst({
+            where: { evidenceKey: key },
+            select: { id: true },
+          });
+          if (!referenced) await this.storage.remove(key);
+        } catch {
+          /* Keep encrypted evidence when database outcome is uncertain. */
+        }
+      }
     }
   }
   async references(actor: Actor) {
