@@ -46,6 +46,9 @@ const punchSelect = {
   occurredAt: true,
   status: true,
   reasons: true,
+  detectionScore: true,
+  detectionThreshold: true,
+  detectionReprocessedAt: true,
   similarity: true,
   threshold: true,
   modelVersion: true,
@@ -161,6 +164,33 @@ export class AttendanceService {
     });
     // Only the reference vector is retained; the enrollment photo is discarded.
     return { ready: true, radiusMeters: 200 };
+  }
+  async backfillDetection(actor: Actor) {
+    if (!isAttendanceTestMode()) throw new NotFoundException();
+    this.enabled();
+    const user = await this.actor(actor);
+    if (user.employee!.id !== process.env.ATTENDANCE_TEST_EMPLOYEE_ID || user.role !== Role.EMPLOYEE)
+      throw new ForbiddenException();
+    const punches = await this.prisma.attendancePunch.findMany({
+      where: { employeeId: user.employee!.id, detectionScore: null },
+      orderBy: { occurredAt: 'asc' }, take: 20,
+      select: { id: true, evidenceKey: true, modelVersion: true },
+    });
+    const results: { id: string; updated: boolean; reason?: string }[] = [];
+    for (const punch of punches) {
+      try {
+        const extraction = await this.face.extract(await this.storage.get(punch.evidenceKey));
+        if (extraction.modelVersion !== punch.modelVersion || extraction.detectionScore === undefined || extraction.detectionThreshold === undefined) {
+          results.push({ id: punch.id, updated: false, reason: 'INCOMPATIBLE_MODEL' }); continue;
+        }
+        const update = await this.prisma.attendancePunch.updateMany({
+          where: { id: punch.id, employeeId: user.employee!.id, detectionScore: null },
+          data: { detectionScore: extraction.detectionScore, detectionThreshold: extraction.detectionThreshold, detectionReprocessedAt: new Date() },
+        });
+        results.push({ id: punch.id, updated: update.count === 1 });
+      } catch { results.push({ id: punch.id, updated: false, reason: 'EVIDENCE_NOT_PROCESSED' }); }
+    }
+    return { results };
   }
   private async normalize(image?: Buffer) {
     if (!image?.length || image.length > 5 * 1024 * 1024)
@@ -344,6 +374,8 @@ export class AttendanceService {
             distanceMeters: distance,
             similarity,
             threshold,
+            detectionScore: extraction?.detectionScore ?? null,
+            detectionThreshold: extraction?.detectionThreshold ?? null,
             modelVersion: extraction?.modelVersion,
             referencePhotoHash: ref?.photoHash,
             evidenceKey: key,

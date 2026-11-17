@@ -5,6 +5,7 @@ import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { reasonLabels, attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
+import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import StagingSetup from './StagingSetup';
 import InstallAttendance from './InstallAttendance';
 import styles from './mobile-attendance.module.css';
@@ -116,6 +117,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 function Attendance({ onExpired }: { onExpired: () => void }) {
+  const nativeCamera = useNativeSelfieCamera();
   const [me, setMe] = useState<Me | null>(null);
   const [siteId, setSiteId] = useState('');
   const [step, setStep] = useState<Step>('home');
@@ -153,7 +155,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     return () => { alive.current = false; stopCamera(); void audio.current?.close().catch(() => undefined); audio.current = null; };
   }, [load, stopCamera]);
   useEffect(() => {
-    if (step !== 'camera') return;
+    if (step !== 'camera' || nativeCamera) return;
     let cancelled = false;
     setCameraReady(false);
     navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 960 } } })
@@ -165,12 +167,12 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         if (!cancelled) { setError('No pudimos abrir la cámara. Pide ayuda al encargado para revisar el permiso.'); setStep('home'); }
       });
     return () => { cancelled = true; stopCamera(); };
-  }, [step, stopCamera]);
+  }, [step, stopCamera, nativeCamera]);
   useEffect(() => {
-    const hideCamera = () => { if (document.hidden && step === 'camera' && !lock.current) { stopCamera(); setStep('home'); } };
+    const hideCamera = () => { if (!nativeCamera && document.hidden && step === 'camera' && !lock.current) { stopCamera(); setStep('home'); } };
     document.addEventListener('visibilitychange', hideCamera);
     return () => document.removeEventListener('visibilitychange', hideCamera);
-  }, [step, stopCamera]);
+  }, [step, stopCamera, nativeCamera]);
 
   function prepareSound() {
     try { audio.current ??= new AudioContext(); void audio.current.resume().catch(() => undefined); } catch { /* Sound is optional. */ }
@@ -192,7 +194,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     if (lock.current) return;
     prepareSound(); setError('');
     if (!navigator.onLine) { setError('No hay internet. Tu marcación aún no se ha registrado. Vuelve a intentar cuando tengas conexión.'); return; }
-    if (!navigator.mediaDevices?.getUserMedia) { setError('No podemos usar la cámara. Abre la aplicación en un navegador compatible con conexión segura.'); return; }
+    if (!nativeCamera && !navigator.mediaDevices?.getUserMedia) { setError('No podemos usar la cámara. Abre la aplicación en un navegador compatible con conexión segura.'); return; }
     lock.current = true; setStep('locating');
     try {
       const fresh = await load();
@@ -233,19 +235,12 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
       }
     }
   }
-  async function capture() {
-    const v = video.current; const current = attempt.current;
-    if (lock.current || !v?.videoWidth || !current) return;
+  async function captureImage(source: () => Promise<Blob>) {
+    const current = attempt.current;
+    if (lock.current || !current) return;
     lock.current = true; setError('');
     try {
-      const canvas = document.createElement('canvas');
-      const ratio = Math.min(1, 1024 / Math.max(v.videoWidth, v.videoHeight));
-      canvas.width = Math.round(v.videoWidth * ratio); canvas.height = Math.round(v.videoHeight * ratio);
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('No se pudo tomar la foto. Vuelve a intentar.');
-      context.drawImage(v, 0, 0, canvas.width, canvas.height);
-      const photo = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .85));
-      if (!photo) throw new Error('No se pudo tomar la foto. Vuelve a intentar.');
+      const photo = await source();
       stopCamera(); setStep('sending');
       // Refresh GPS after a long pause at the camera; the API requires a recent location.
       const location = Date.now() - current.location.timestamp > 60000 ? await getLocation() : current.location;
@@ -264,6 +259,21 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     } catch (error) {
       if (alive.current) { setError(error instanceof Error ? error.message : 'No se pudo tomar la foto.'); setStep('home'); }
     } finally { lock.current = false; }
+  }
+  async function capture() {
+    const v = video.current;
+    if (!v?.videoWidth) return;
+    await captureImage(async () => {
+      const canvas = document.createElement('canvas');
+      const ratio = Math.min(1, 1024 / Math.max(v.videoWidth, v.videoHeight));
+      canvas.width = Math.round(v.videoWidth * ratio); canvas.height = Math.round(v.videoHeight * ratio);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('No se pudo tomar la foto.');
+      context.drawImage(v, 0, 0, canvas.width, canvas.height);
+      const photo = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .85));
+      if (!photo) throw new Error('No se pudo tomar la foto.');
+      return photo;
+    });
   }
   async function retry() {
     if (lock.current || !pending.current) return;
@@ -297,13 +307,14 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         {!me.worksites.length ? <p className={styles.notice}>No hay obras disponibles. Pide ayuda al encargado.</p> : null}
         <button className={styles.link} onClick={() => setStep('home')}>Volver</button>
       </section> : step === 'camera' ? <section>
-        <h1>Mira la cámara</h1><p>Aleja el celular hasta que tu cara quepa en el óvalo pequeño. Deja visibles la cabeza completa y los hombros.</p>
+        <h1>{nativeCamera ? 'Toma una selfie' : 'Mira la cámara'}</h1><p>{nativeCamera ? 'Usa la cámara frontal y evita acercar demasiado el celular.' : 'Aleja el celular hasta que tu cara quepa en el óvalo pequeño. Deja visibles la cabeza completa y los hombros.'}</p>
+        {nativeCamera ? <NativeSelfieCapture onPhoto={photo => captureImage(async () => photo)} /> : <>
         <div className={styles.camera}>
           <video ref={video} playsInline muted aria-label="Cámara frontal" onLoadedData={() => setCameraReady(true)} />
           <div className={styles.faceGuide} aria-hidden="true" />
           {!cameraReady ? <div className={styles.cameraLoading} role="status">Abriendo cámara…</div> : null}
         </div>
-        <button className={styles.primary} disabled={!cameraReady} onClick={capture}><IconCamera size={32} aria-hidden="true" />TOMAR FOTO</button>
+        <button className={styles.primary} disabled={!cameraReady} onClick={capture}><IconCamera size={32} aria-hidden="true" />TOMAR FOTO</button></>}
         <button className={`${styles.secondary} ${styles.footer}`} onClick={() => { attempt.current = null; setStep('home'); }}>Cancelar</button>
       </section> : step === 'retry' ? <section className={styles.stack}>
         <IconClock size={80} className={styles.stateIcon} aria-hidden="true" /><h1>Falta la confirmación</h1>
@@ -343,5 +354,27 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
           {last?.status === 'PENDING' ? <span>{last.reasons.includes('FACE_MISMATCH') ? 'Sin verificar: el rostro no coincidió. Revisión de oficina pendiente.' : 'Sin verificar. Oficina revisará tu registro.'}</span> : last?.status === 'REJECTED' ? <span>Rechazado. Habla con el encargado.</span> : null}
         </div></div>
       </>}
+    {me?.testMode && me.recent.length ? <details className={styles.testDiagnostics}>
+      <summary>Datos de mis pruebas ({me.recent.length})</summary>
+      <p>Detección e identidad son puntuaciones distintas, no porcentajes de certeza. Radio de la obra de prueba: 200 m.</p>
+      {me.recent.map(punch => <TestPunchDetails key={punch.id} punch={punch} />)}
+    </details> : null}
   </>;
+}
+
+function TestPunchDetails({ punch }: { punch: AttendancePunch }) {
+  const score = (value: number | null | undefined) => value == null ? 'Sin dato' : value.toFixed(4);
+  return <section className={styles.testDiagnostics}>
+    <strong>{punch.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · {attendanceDate(punch.occurredAt)}</strong>
+    <p>{punch.status === 'VERIFIED' ? 'Verificada' : punch.status === 'PENDING' ? 'Pendiente de revisión' : punch.status}</p>
+    <dl>
+      <dt>Detección de rostro</dt><dd>{score(punch.detectionScore)} / mín. {score(punch.detectionThreshold)}</dd>
+      <dt>Coincidencia de identidad</dt><dd>{score(punch.similarity)} / mín. {score(punch.threshold)}</dd>
+      <dt>Distancia a la obra</dt><dd>{punch.distanceMeters == null ? 'Sin dato' : `${punch.distanceMeters.toFixed(1)} m`}</dd>
+      <dt>Precisión GPS</dt><dd>±{punch.accuracyMeters.toFixed(1)} m</dd>
+    </dl>
+    <p>Coordenadas: {punch.latitude.toFixed(6)}, {punch.longitude.toFixed(6)}</p>
+    {punch.detectionReprocessedAt ? <p>Detección recalculada desde la evidencia guardada.</p> : null}
+    {punch.reasons.map(reason => <p key={reason}>{reasonLabels[reason] || reason}</p>)}
+  </section>;
 }

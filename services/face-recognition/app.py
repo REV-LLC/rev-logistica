@@ -12,7 +12,8 @@ TOKEN = os.environ.get('FACE_SERVICE_TOKEN', '')
 if len(TOKEN) < 32:
     raise RuntimeError('FACE_SERVICE_TOKEN must contain at least 32 characters')
 cv2.setNumThreads(int(os.environ.get('OPENCV_THREADS', '1')))
-detector = cv2.FaceDetectorYN.create(str(ROOT / 'yunet.onnx'), '', (320, 320), 0.9)
+DETECTION_THRESHOLD = 0.9
+detector = cv2.FaceDetectorYN.create(str(ROOT / 'yunet.onnx'), '', (320, 320), DETECTION_THRESHOLD)
 recognizer = cv2.FaceRecognizerSF.create(str(ROOT / 'sface.onnx'), '')
 VERSION = 'sface-' + hashlib.sha256((ROOT / 'sface.onnx').read_bytes()).hexdigest()[:16]
 lock = threading.Lock()
@@ -55,4 +56,4 @@ def extract(image: UploadFile = File(...), authorization: str = Header(default='
         if not np.isfinite(vector).all() or norm <= 0:
             raise HTTPException(422, 'No se pudo procesar el rostro')
         vector = vector / norm
-    return {'vector': vector.tolist(), 'modelVersion': VERSION}
+    return {'vector': vector.tolist(), 'modelVersion': VERSION, 'detectionScore': float(face[14]), 'detectionThreshold': DETECTION_THRESHOLD}

@@ -17,6 +17,10 @@ export type AttendancePunch = {
   reasons: string[];
   occurredAt: string;
   similarity: number | null;
+  threshold: number;
+  detectionScore: number | null;
+  detectionThreshold: number | null;
+  detectionReprocessedAt: string | null;
   latitude: number;
   longitude: number;
   accuracyMeters: number;

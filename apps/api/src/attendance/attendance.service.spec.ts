@@ -84,7 +84,7 @@ describe('PWA attendance service', () => {
     face = {
       extract: jest
         .fn()
-        .mockResolvedValue({ vector, modelVersion: 'sface-test' }),
+        .mockResolvedValue({ vector, modelVersion: 'sface-test', detectionScore: 0.98, detectionThreshold: 0.9 }),
     };
     service = new AttendanceService(db, {} as any, face, storage);
   });
@@ -94,10 +94,29 @@ describe('PWA attendance service', () => {
   it('creates a shared shift and a verified punch with the server timestamp', async () => {
     const result = await service.punch(actor, dto(), image);
     expect(result.status).toBe('VERIFIED');
+    expect(result.detectionScore).toBe(0.98);
+    expect(result.detectionThreshold).toBe(0.9);
     expect(result.occurredAt).toBeInstanceOf(Date);
     expect(db.$queryRaw).toHaveBeenCalled();
     expect(storage.put).toHaveBeenCalled();
     expect(storage.remove).not.toHaveBeenCalled();
+  });
+  it('backfills only detector metadata on the designated staging employee', async () => {
+    const previous = { ...process.env };
+    Object.assign(process.env, { ATTENDANCE_TEST_MODE: 'true', RAILWAY_ENVIRONMENT_ID: '53c93c9d-33e7-4137-a598-6648a6491886', RAILWAY_ENVIRONMENT_NAME: 'staging', AUTH_BYPASS_ENABLED: 'false', ATTENDANCE_TEST_EMPLOYEE_ID: employee.id });
+    db.attendancePunch.findMany = jest.fn().mockResolvedValue([{ id: 'old', evidenceKey: 'private', modelVersion: 'sface-test' }]);
+    db.attendancePunch.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    storage.get.mockResolvedValue(image);
+    try {
+      expect(await service.backfillDetection(actor)).toEqual({ results: [{ id: 'old', updated: true }] });
+      expect(db.attendancePunch.updateMany).toHaveBeenCalledWith({
+        where: { id: 'old', employeeId: employee.id, detectionScore: null },
+        data: { detectionScore: .98, detectionThreshold: .9, detectionReprocessedAt: expect.any(Date) },
+      });
+      expect(db.attendancePunch.create).not.toHaveBeenCalled();
+      expect(db.worksiteAttendance.create).not.toHaveBeenCalled();
+      expect(db.worksiteAttendance.update).not.toHaveBeenCalled();
+    } finally { process.env = previous; }
   });
   it('returns an existing request without uploading or advancing the shift', async () => {
     db.attendancePunch.findUnique.mockResolvedValue({

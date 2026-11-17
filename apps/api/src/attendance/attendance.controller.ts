@@ -50,6 +50,10 @@ export class AttendanceController {
   me(@Req() r: RequestActor) {
     return this.service.me(r.user);
   }
+  @Post('test-diagnostics/backfill')
+  backfillDetection(@Req() r: RequestActor) {
+    return this.service.backfillDetection(r.user);
+  }
   @Post('test-setup')
   @UseInterceptors(FileInterceptor('selfie', {
     storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 4 },

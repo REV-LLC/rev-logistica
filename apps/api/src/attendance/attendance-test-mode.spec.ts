@@ -19,6 +19,7 @@ describe('Attendance sandbox isolation', () => {
     process.env.RAILWAY_ENVIRONMENT_NAME = 'production';
     const service = new AttendanceService(null as any, null as any, null as any, null as any);
     await expect(service.testSetup({ sub: 'x', role: 'EMPLOYEE' }, {} as any)).rejects.toThrow('Not Found');
+    await expect(service.backfillDetection({ sub: 'x', role: 'EMPLOYEE' })).rejects.toThrow('Not Found');
   });
 });
 

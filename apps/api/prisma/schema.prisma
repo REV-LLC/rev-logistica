@@ -2126,6 +2126,9 @@ model AttendancePunch {
   accuracyMeters     Float
   locationCapturedAt DateTime
   distanceMeters     Float?
+  detectionScore     Float?
+  detectionThreshold Float?
+  detectionReprocessedAt DateTime?
   similarity         Float?
   threshold          Float
   modelVersion       String?

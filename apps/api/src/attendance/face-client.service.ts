@@ -34,7 +34,7 @@ export class FaceClientService implements OnModuleInit {
 
   async extract(
     image: Buffer,
-  ): Promise<{ vector: number[]; modelVersion: string }> {
+  ): Promise<{ vector: number[]; modelVersion: string; detectionScore?: number; detectionThreshold?: number }> {
     const url = process.env.FACE_SERVICE_URL;
     const token = process.env.FACE_SERVICE_TOKEN;
     if (!url || !token)
@@ -78,7 +78,8 @@ export class FaceClientService implements OnModuleInit {
       data.vector.length !== 128 ||
       !data.vector.every(Number.isFinite) ||
       Math.hypot(...data.vector) === 0 ||
-      typeof data.modelVersion !== 'string'
+      typeof data.modelVersion !== 'string' ||
+      [data.detectionScore, data.detectionThreshold].some(value => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1))
     )
       throw new ServiceUnavailableException('Respuesta facial inválida');
     return data;

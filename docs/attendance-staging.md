@@ -49,3 +49,19 @@ La guía mide 44 % del ancho y 48 % del alto del visor, frente al 64 % y 76 % an
 Por decisión expresa del usuario, una discrepancia facial sigue guardando la marcación PENDING para revisión de oficina. La pantalla muestra «Entrada/Salida sin verificar» y el motivo «Tu rostro no coincide con la referencia registrada». Las aprobaciones de oficina y las verificaciones automáticas tienen textos distintos. El último registro también explica si el rostro no coincidió.
 
 Validación visual local y en el frontend de staging con cámara y respuestas API simuladas: guía, inscripción y estados PENDING/FACE_MISMATCH, APPROVED y VERIFIED correctos, sin errores JavaScript. Despliegue web `267aa3ef-47d2-48f3-97b8-02f738cad1bf`. No se cambiaron ni borraron los datos de prueba del usuario ni se desplegó producción.
+
+### Puntuación del detector y cámara nativa en iPhone
+
+El worker devuelve `detectionScore` (columna 14 de la detección de YuNet) y `detectionThreshold` (0.90), distintos de la similitud de identidad de SFace (umbral 0.45). El API guarda ambos valores en cada nueva marcación procesada. La ampliación nullable de `AttendancePunch` se ejecutó solo en `attendance_test`, mediante `scripts/staging/attendance-detection-score.sql`, que verifica el identificador físico de PostgreSQL antes del ALTER. No se añadió una migración automática de producción.
+
+El endpoint `POST /attendance/test-diagnostics/backfill` requiere el entorno exacto de staging y el usuario ficticio designado. Reprocesa hasta 20 evidencias propias sin puntuación, actualiza únicamente detección, umbral y fecha del reprocesamiento; no modifica similitud, estado, horarios, GPS, referencia ni evidencia. Se completaron ocho registros anteriores y una segunda ejecución no realizó cambios. La interfaz etiqueta los valores históricos como recalculados. No se guardan aquí coordenadas, fotos, vectores ni puntuaciones individuales del usuario.
+
+El apartado **Datos de mis pruebas**, exclusivo del modo de staging, muestra puntuación de detección, similitud de identidad, umbrales, distancia, precisión reportada por GPS, coordenadas y motivo de revisión.
+
+En iPhone/iPad con la PWA instalada se usa `<input type="file" accept="image/*" capture="user">` para abrir la cámara del sistema. La imagen se normaliza a JPEG de hasta 1024 px, sin EXIF, antes de enviarse por el flujo existente. No se invoca getUserMedia en ese modo. La geolocalización sigue solicitándose al marcar y se renueva si la captura tarda. Abrir la PWA o consultar el historial no solicita cámara ni ubicación. El retorno de la cámara nativa no cancela la operación por visibilidad de la página; cancelar antes de terminar de decodificar no envía la foto ni cambia la referencia. En otros navegadores continúa la cámara web con la guía pequeña.
+
+Verificaciones: 31 pruebas API, cuatro pruebas del worker, TypeScript y compilaciones Railway correctas. Pruebas visuales locales y en la web publicada con API/cámara simuladas: historial, captura web, modo iPhone instalado, cero llamadas a cámara/GPS en apertura y recarga, y cancelación antes de inscripción. La cámara nativa y cualquier aviso de iOS deben comprobarse finalmente en el dispositivo real; no se promete persistir permisos del navegador con código o localStorage.
+
+Referencias: [salida de FaceDetectorYN](https://docs.opencv.org/4.12.0/df/d20/classcv_1_1FaceDetectorYN.html), [reporte de WebKit sobre permisos de cámara en PWA instalada](https://bugs.webkit.org/show_bug.cgi?id=327237).
+
+Despliegues de esta revisión: worker `63449cbe-b770-47cd-9ff3-3ea36bc3c1fb`, API exclusivo `e698e328-fc07-47b7-a7d7-a2b193bda85f`, web `d82fc385-8047-4aad-abf9-e69019962daf`. No se realizaron acciones de escritura ni despliegues en producción. Durante la revisión se observó una actualización concurrente del API habitual de producción (`3df4ab4a-6c9f-402d-8660-275b9eedc2bd`), independiente de este servicio exclusivo de pruebas.

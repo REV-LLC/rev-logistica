@@ -114,5 +114,52 @@
       "errores_javascript": 0
     },
     "alcance": "Solo interfaz de staging. Sin cambios en API, worker, umbrales, fotos, referencia facial ni marcaciones del usuario. Despliegues de producción conservados."
+  },
+  "deteccion_y_camara_iphone": {
+    "fecha": "2026-11-17",
+    "deployments_staging": {
+      "face_recognition": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb",
+      "attendance_test_api": "e698e328-fc07-47b7-a7d7-a2b193bda85f",
+      "web_staging": "d82fc385-8047-4aad-abf9-e69019962daf"
+    },
+    "schema_modificado": "attendance_test",
+    "columnas": [
+      "detectionScore",
+      "detectionThreshold",
+      "detectionReprocessedAt"
+    ],
+    "migracion_protegida_por_system_identifier": true,
+    "registros_reprocesados": 8,
+    "campos_originales_preservados": [
+      "similarity",
+      "threshold",
+      "status",
+      "reasons",
+      "occurredAt",
+      "latitude",
+      "longitude",
+      "accuracyMeters",
+      "distanceMeters"
+    ],
+    "reprocesamiento_idempotente": true,
+    "qa": {
+      "api_tests_passed": 31,
+      "worker_tests_passed": 4,
+      "typescript": true,
+      "interfaz_local_y_publicada": true,
+      "ios_instalado_simulado_sin_getUserMedia": true,
+      "solicitudes_camara_y_gps_al_abrir_y_recargar": 0,
+      "cancelar_no_inscribe_referencia": true,
+      "camara_web_otros_navegadores": true,
+      "errores_javascript": 0
+    },
+    "limitacion": "El comportamiento de la cámara nativa y los avisos del sistema requieren la prueba final en el iPhone real; la automatización comprueba que la PWA instalada de iPhone no invoca getUserMedia.",
+    "produccion": {
+      "acciones_de_esta_tarea": false,
+      "face_worker_deployment_sin_cambios": "b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2",
+      "postgres_deployment_sin_cambios": "05d0d945-ac51-4073-9e35-5fe23b76e321",
+      "api_deployment_concurrente_observado": "3df4ab4a-6c9f-402d-8660-275b9eedc2bd",
+      "nota": "El API habitual de producción y el API habitual de staging recibieron una imagen concurrente independiente. Esta tarea desplegó únicamente los tres servicios de pruebas indicados."
+    }
   }
 }
