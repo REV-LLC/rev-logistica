@@ -5,7 +5,7 @@
   "propiedad_verificada": true,
   "api_url": "https://mirev-api-production.up.railway.app",
   "deployments": {
-    "mirev_web": "8fe2ab01-1f8d-4c35-99d8-4dcc8cb53485",
+    "mirev_web": "1d8a4f6e-4e88-4bf4-b62e-b4369c8d832e",
     "mirev_api": "a43a0308-045f-4faa-8d69-281572d39754",
     "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
     "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconCamera, IconLoader2, IconRefresh } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import styles from './mobile-attendance.module.css';
 
@@ -11,11 +12,12 @@ type Enrollment = { required: boolean; enrolledAt: string | null };
 export default function FaceEnrollmentGate({ children, onExpired }: { children: ReactNode; onExpired: () => void }) {
   const [state, setState] = useState<'loading' | 'required' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
+  const sessionToken = useRef(getToken());
   useEffect(() => {
     const controller = new AbortController();
     setState('loading');
     api<Enrollment>('/attendance/face-enrollment', { signal: controller.signal, cache: 'no-store', redirectOnAuthError: false })
-      .then(result => { if (!controller.signal.aborted) setState(result.required ? 'required' : 'ready'); })
+      .then(result => { if (controller.signal.aborted) return; if (getToken() !== sessionToken.current) { onExpired(); return; } setState(result.required ? 'required' : 'ready'); })
       .catch(error => {
         if (controller.signal.aborted) return;
         if (error instanceof ApiError && error.status === 401) onExpired();
@@ -26,10 +28,10 @@ export default function FaceEnrollmentGate({ children, onExpired }: { children: 
   if (state === 'ready') return children;
   if (state === 'loading') return <p role="status" className={styles.profileLoading}><IconLoader2 className={styles.spinner} aria-hidden="true" />Comprobando tu registro…</p>;
   if (state === 'error') return <section className={styles.stack}><p role="alert">No pudimos comprobar tu registro facial. Revisa tu conexión e intenta de nuevo.</p><button className={styles.secondary} onClick={() => setAttempt(value => value + 1)}>VOLVER A INTENTAR</button></section>;
-  return <FaceEnrollment onDone={() => setState('ready')} onExpired={onExpired} />;
+  return <FaceEnrollment onDone={() => setState('ready')} onExpired={onExpired} sessionToken={sessionToken.current} />;
 }
 
-function FaceEnrollment({ onDone, onExpired }: { onDone: () => void; onExpired: () => void }) {
+function FaceEnrollment({ onDone, onExpired, sessionToken }: { onDone: () => void; onExpired: () => void; sessionToken: string | null }) {
   const nativeCamera = useNativeSelfieCamera();
   const [camera, setCamera] = useState(false), [ready, setReady] = useState(false);
   const [photo, setPhoto] = useState<Blob | null>(null), [preview, setPreview] = useState('');
@@ -80,6 +82,7 @@ function FaceEnrollment({ onDone, onExpired }: { onDone: () => void; onExpired: 
   }
   async function save() {
     if (!photo || lock.current) return;
+    if (getToken() !== sessionToken) { onExpired(); return; }
     lock.current = true; setBusy(true); setError('');
     try {
       const body = new FormData(); body.append('selfie', photo, 'registro-facial.jpg');
