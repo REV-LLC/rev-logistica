@@ -105,6 +105,12 @@ export class AttendanceController {
     return this.service.shifts(r.user);
   }
   @Header('Cache-Control', 'private, no-store')
+  @Get('dashboard')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  dashboard(@Req() r: RequestActor) {
+    return this.service.dashboard(r.user);
+  }
+  @Header('Cache-Control', 'private, no-store')
   @Get('punches/:id/selfie')
   async evidence(
     @Req() r: RequestActor,
