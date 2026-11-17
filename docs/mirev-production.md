@@ -20,7 +20,7 @@ GoDaddy conserva los nameservers existentes. Se añadieron únicamente `mirev CN
 
 Consulta agregada de solo lectura: 18 empleados activos, 18 cuentas activas vinculadas, 13 referencias faciales aprobadas con modelo `sface-0ba9fbfa01b5270c` y ninguna obra activa con geocerca configurada. El worker confirmó ese mismo modelo por red privada. Umbral configurado: 0,45, preservado del API existente.
 
-Quedan por preparar cinco referencias y las geocercas reales. Hasta entonces las marcaciones correspondientes permanecen pendientes de revisión; no se presentarán como verificadas. Una prueba con sesión real de empleado requiere el inicio de sesión normal del usuario; no se reutilizan sesiones ocultas del navegador ni se generan tokens para simular empleados.
+Quedan por preparar cinco referencias y las geocercas reales. Hasta entonces las marcaciones correspondientes permanecen pendientes de revisión; no se presentarán como verificadas. Se verificó una sesión real iniciada normalmente por el usuario: asistencia, foto/avatar, perfil, préstamos y calendario de bitácora cargaron correctamente. No se crearon marcaciones ni se alteraron datos durante esta revisión.
 
 ## Despliegues siguientes
 

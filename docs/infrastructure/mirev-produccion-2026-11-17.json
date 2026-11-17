@@ -32,8 +32,10 @@
     "datos_sin_sesion": 401,
     "endpoints_generales_empleados_usuarios": 404,
     "cors_solo_dominio_mirev": true,
-    "login_real_en_navegador": "pendiente de inicio de sesión normal del usuario",
-    "marcaciones_creadas_en_publicacion": 0
+    "login_real_en_navegador": "Verificado mediante inicio de sesión normal del usuario: pantalla de asistencia, avatar/foto, perfil personal, préstamos y calendario de bitácora cargan correctamente.",
+    "marcaciones_creadas_en_publicacion": 0,
+    "navegacion_perfil_asistencia": true,
+    "evidencia_captura_local": "/private/tmp/mirev-sesion-real-verificada.jpg"
   },
   "evidencia_rev": {
     "manifest_name": "REV Logística",
@@ -48,7 +50,6 @@
   },
   "pendientes": [
     "Cinco referencias faciales restantes",
-    "Geocercas de obras reales",
-    "Prueba manual con sesión de empleado sin insertar marcaciones ficticias"
+    "Geocercas de obras reales"
   ]
 }
