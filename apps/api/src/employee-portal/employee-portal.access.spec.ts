@@ -89,7 +89,7 @@ describe('personal employee access and payroll write boundary (real JWT + HTTP)'
     if (oldDeployedBypass === undefined) delete process.env.AUTH_BYPASS_ENABLED; else process.env.AUTH_BYPASS_ENABLED = oldDeployedBypass;
   });
 
-  it.each([Role.DRIVER, Role.OPERATOR, Role.OFFICE, Role.ADMIN])('%s reads only its linked profile, loans and activities, ignoring a forged ID', async role => {
+  it.each([Role.DRIVER, Role.OPERATOR, Role.OFFICE, Role.ADMIN, Role.EMPLOYEE])('%s reads only its linked profile, loans and activities, ignoring a forged ID', async role => {
     const server = app.getHttpServer();
     const profile = await request(server).get(`/employee-portal/profile?employeeId=${otherId}`).set('Authorization', auth(role)).expect(200);
     expect(profile.body).toEqual(identity); expect(profile.headers['cache-control']).toContain('no-store');
@@ -121,14 +121,14 @@ describe('personal employee access and payroll write boundary (real JWT + HTTP)'
     await request(app.getHttpServer()).get('/employee-portal/profile').set('Authorization', auth('DRIVER', Role.DRIVER)).expect(403);
     expect(employees.getEmployeeProfile).not.toHaveBeenCalled();
   });
-  it.each([Role.DRIVER, Role.OPERATOR])('%s cannot use management routes or write a loan or note', async role => {
+  it.each([Role.DRIVER, Role.OPERATOR, Role.EMPLOYEE])('%s cannot use management routes or write a loan or note', async role => {
     const server = app.getHttpServer(); const header = auth(role);
     for (const path of [`/employees/${otherId}`, `/employees/${otherId}/loans`, '/employees/loans', `/employee-activities/${otherId}?month=2026-10`, '/employee-activities/options']) {
-      await request(server).get(path).set('Authorization', header).expect(403);
+      await request(server).get(path).set('Authorization', header).expect(role === Role.EMPLOYEE ? 401 : 403);
     }
-    await request(server).post(`/employees/${employeeId}/loans`).set('Authorization', header).send({}).expect(403);
-    await request(server).patch(`/employees/${employeeId}/loans/${receiptId}/description`).set('Authorization', header).send({ detail: 'changed' }).expect(403);
-    await request(server).post(`/employee-activities/${employeeId}`).set('Authorization', header).send({}).expect(403);
+    await request(server).post(`/employees/${employeeId}/loans`).set('Authorization', header).send({}).expect(role === Role.EMPLOYEE ? 401 : 403);
+    await request(server).patch(`/employees/${employeeId}/loans/${receiptId}/description`).set('Authorization', header).send({ detail: 'changed' }).expect(role === Role.EMPLOYEE ? 401 : 403);
+    await request(server).post(`/employee-activities/${employeeId}`).set('Authorization', header).send({}).expect(role === Role.EMPLOYEE ? 401 : 403);
     expect(loans.add).not.toHaveBeenCalled(); expect(loans.updateDescription).not.toHaveBeenCalled(); expect(activities.create).not.toHaveBeenCalled();
   });
   it('has no personal write, payroll or arbitrary-employee endpoint', async () => {
@@ -138,15 +138,33 @@ describe('personal employee access and payroll write boundary (real JWT + HTTP)'
     await request(app.getHttpServer()).get(`/employee-portal/profile/${otherId}`).set('Authorization', auth('DRIVER')).expect(404);
     await request(app.getHttpServer()).get('/employee-portal/payroll').set('Authorization', auth('DRIVER')).expect(404);
   });
-  it('lets an operator read its own photo but rejects another employee photo', async () => {
-    await request(app.getHttpServer()).get(`/employees/${employeeId}/photo`).set('Authorization', auth('OPERATOR')).expect(200);
-    await request(app.getHttpServer()).get(`/employees/${otherId}/photo`).set('Authorization', auth('OPERATOR')).expect(403);
+  it.each([Role.OPERATOR, Role.EMPLOYEE])('lets %s read its own photo but rejects another employee photo', async role => {
+    await request(app.getHttpServer()).get(`/employees/${employeeId}/photo`).set('Authorization', auth(role)).expect(200);
+    await request(app.getHttpServer()).get(`/employees/${otherId}/photo`).set('Authorization', auth(role)).expect(403);
     expect(employees.getEmployeePhoto).toHaveBeenCalledTimes(1);
   });
-  it.each([Role.OFFICE, Role.DRIVER, Role.OPERATOR])('%s cannot save salaries or issue payroll, even with valid bodies', async role => {
-    await request(app.getHttpServer()).post(`/employee-payroll/${employeeId}/salaries`).set('Authorization', auth(role)).send(salary).expect(403);
-    await request(app.getHttpServer()).post(`/employee-payroll/${employeeId}/receipts`).set('Authorization', auth(role)).send(receipt).expect(403);
+  it('does not attempt R2 reads for the isolated staging profile', async () => {
+    const previous = { ...process.env };
+    Object.assign(process.env, { ATTENDANCE_TEST_MODE: 'true', RAILWAY_ENVIRONMENT_ID: '53c93c9d-33e7-4137-a598-6648a6491886', RAILWAY_ENVIRONMENT_NAME: 'staging', AUTH_BYPASS_ENABLED: 'false' });
+    try {
+      await request(app.getHttpServer()).get(`/employees/${employeeId}/photo`).set('Authorization', auth('EMPLOYEE')).expect(404);
+      expect(employees.getEmployeePhoto).not.toHaveBeenCalled();
+    } finally { process.env = previous; }
+  });
+  it.each([Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.EMPLOYEE])('%s cannot save salaries or issue payroll, even with valid bodies', async role => {
+    await request(app.getHttpServer()).post(`/employee-payroll/${employeeId}/salaries`).set('Authorization', auth(role)).send(salary).expect(role === Role.EMPLOYEE ? 401 : 403);
+    await request(app.getHttpServer()).post(`/employee-payroll/${employeeId}/receipts`).set('Authorization', auth(role)).send(receipt).expect(role === Role.EMPLOYEE ? 401 : 403);
     expect(payroll.save).not.toHaveBeenCalled(); expect(payroll.issue).not.toHaveBeenCalled();
+  });
+  it('keeps EMPLOYEE strictly on personal GET routes and revokes access immediately', async () => {
+    const server = app.getHttpServer();
+    for (const path of ['/employee-portal/profile', '/employee-portal/loans', '/employee-portal/activities']) {
+      await request(server).post(path).set('Authorization', auth('EMPLOYEE')).send({ employeeId: otherId }).expect(404);
+    }
+    await request(server).get(`/employee-portal/profile/${otherId}`).set('Authorization', auth('EMPLOYEE')).expect(404);
+    users.EMPLOYEE.active = false;
+    await request(server).get('/employee-portal/profile').set('Authorization', auth('EMPLOYEE')).expect(401);
+    expect(loans.add).not.toHaveBeenCalled(); expect(activities.create).not.toHaveBeenCalled();
   });
   it('allows an active Admin to save salaries and issue payroll', async () => {
     await request(app.getHttpServer()).post(`/employee-payroll/${employeeId}/salaries`).set('Authorization', auth('ADMIN')).send(salary).expect(201);

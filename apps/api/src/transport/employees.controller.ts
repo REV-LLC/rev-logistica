@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   ForbiddenException,
+  NotFoundException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -26,6 +27,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeesService } from './employees.service';
+import { isAttendanceTestMode } from '../attendance/attendance-test-mode';
 import type { EmployeePhotoFile } from './employees.service';
 
 const MAX_PROFILE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
@@ -48,16 +50,17 @@ export class EmployeesController {
   }
 
   @Get(':employeeId/photo')
-  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET)
+  @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.WAREHOUSE_TABLET, Role.EMPLOYEE)
   async getEmployeePhoto(
     @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
     @Query('variant') variant: string | undefined,
     @Res() response: Response,
     @Req() request: { user: { sub: string; role: Role } },
   ) {
-    if (request.user.role === Role.OPERATOR && await this.employeesService.ownEmployeeId(request.user.sub) !== employeeId) {
+    if ((request.user.role === Role.OPERATOR || request.user.role === Role.EMPLOYEE) && await this.employeesService.ownEmployeeId(request.user.sub) !== employeeId) {
       throw new ForbiddenException('Solo puedes consultar tu propia foto.');
     }
+    if (isAttendanceTestMode()) throw new NotFoundException('Este perfil de prueba no tiene foto registrada.');
     const photo = await this.employeesService.getEmployeePhoto(
       employeeId,
       variant === 'thumbnail',

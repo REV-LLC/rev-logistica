@@ -12,7 +12,7 @@ type PersonalRequest = { user: { sub: string } };
 // No employee ID input or write endpoint: each read resolves the active account's employee.
 @Controller('employee-portal')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
+@Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.EMPLOYEE)
 export class EmployeePortalController {
   constructor(private readonly employees: EmployeesService, private readonly loans: EmployeeLoansService, private readonly activities: EmployeeActivitiesService) {}
 

@@ -1,8 +1,11 @@
 const TOKEN_KEY = 'revlogistica.token';
 const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
+export function isMiRevPath(path: string) {
+  return path === '/attendance/mobile' || path.startsWith('/attendance/mobile/');
+}
 function storageKey(mainKey: string, mobileKey: string) {
   const path = typeof window === 'undefined' ? '' : window.location.pathname;
-  return path === '/attendance/mobile' || path.startsWith('/attendance/mobile/') ? mobileKey : mainKey;
+  return isMiRevPath(path) ? mobileKey : mainKey;
 }
 const LOCAL_BYPASS_PAYLOAD =
   'eyJzdWIiOiJsb2NhbC1hdXRoLWJ5cGFzcyIsImVtYWlsIjoidXNlcjFAZHVtbXkubG9jYWwiLCJyb2xlIjoiQURNSU4ifQ';
