@@ -187,11 +187,12 @@ export default function BillingOverviewPage() {
                         <Table highlightOnHover>
                           <Table.Thead>
                             <Table.Tr>
+                              <Table.Th>Código anexo</Table.Th>
                               <Table.Th>Cliente</Table.Th>
                               <Table.Th>Obra</Table.Th>
                               <Table.Th>Período</Table.Th>
                               <Table.Th>
-                                {filter === "pending" ? "Anexo" : "Factura"}
+                                {filter === "pending" ? "Estado" : "Factura"}
                               </Table.Th>
                               <Table.Th>Acciones</Table.Th>
                             </Table.Tr>
@@ -203,6 +204,9 @@ export default function BillingOverviewPage() {
                                   r.siteId + r.from + r.to + (r.draftId ?? "")
                                 }
                               >
+                                <Table.Td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                                  <Text size="sm" fw={600}>{r.annexCode ?? "—"}</Text>
+                                </Table.Td>
                                 <Table.Td>{r.customerName}</Table.Td>
                                 <Table.Td>{r.siteName}</Table.Td>
                                 <Table.Td>

@@ -3,6 +3,7 @@ import {
   classifyBillingCut,
   type SavedCut,
 } from './annex-billing-overview';
+import { AnnexBillingOverviewService } from './annex-billing-overview.service';
 const cuts = billingCuts('2026-11-07'),
   oct = cuts[2];
 const doc = (
@@ -95,4 +96,35 @@ describe('billing overview', () => {
       ['2026-10-26', '2026-10-31', null],
     ]);
   });
+});
+
+it('identifies a monthly saved annex in both halves and reserves the exact open range for an unsaved cut', async () => {
+  const siteId = 'site';
+  const saved = {
+    ...doc('2026-10-01', '2026-10-31', '2026-10-31', 'FE-20'),
+    siteId, annexCode: '024103',
+  };
+  const query = jest.fn().mockResolvedValueOnce([saved]).mockResolvedValueOnce([
+    { siteId, from: '2026-11-01', through: '2026-11-07', annexCode: '024114' },
+  ]);
+  const db = {
+    customerWorksite: {findMany: jest.fn().mockResolvedValue([
+      {id: siteId, alias: null, customer: {id: 'customer', name: 'Cliente'}, worksite: {name: 'Obra'}},
+    ])},
+    $queryRaw: query,
+  };
+  const service = new AnnexBillingOverviewService(db as never, {} as never);
+  jest.spyOn(service as any, 'activity').mockResolvedValue(new Map([
+    [siteId + '/2026-10-01', {days: ['2026-10-01'], review: false}],
+    [siteId + '/2026-10-16', {days: ['2026-10-16'], review: false}],
+    [siteId + '/2026-11-01', {days: ['2026-11-01'], review: false}],
+  ]));
+  const report = await service.overview(new Date('2026-11-07T12:00:00Z'));
+  expect(report.rows.map(row => [row.from, row.annexCode, row.draftId])).toEqual([
+    ['2026-10-01', '024103', 'saved'],
+    ['2026-10-16', '024103', 'saved'],
+    ['2026-11-01', '024114', null],
+  ]);
+  const reservation = query.mock.calls[1];
+  expect(reservation[1].values).toEqual([siteId, '2026-11-01', '2026-11-07']);
 });
