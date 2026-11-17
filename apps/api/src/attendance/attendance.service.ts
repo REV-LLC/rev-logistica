@@ -20,6 +20,7 @@ import {
 } from './attendance-rules';
 import { syncAttendanceActivity } from '../whatsapp-reports/attendance-journals.service';
 import { PunchDto, ReviewDto, SiteLocationDto } from './attendance.dto';
+import { colombiaDay, dailyEmployeeEvents } from './attendance-dashboard';
 
 type Actor = { sub: string; role: Role };
 const siteSelect = {
@@ -436,6 +437,21 @@ export class AttendanceService {
         customerWorksite: { select: siteSelect },
       },
     });
+  }
+  async dashboard(actor: Actor) {
+    await this.actor(actor, true);
+    const { date, start, end } = colombiaDay();
+    const employees = await this.prisma.employee.findMany({
+      where: { active: true },
+      select: { id: true, name: true, lastName: true },
+      orderBy: [{ name: 'asc' }, { lastName: 'asc' }, { id: 'asc' }],
+    });
+    const shifts = await this.prisma.worksiteAttendance.findMany({
+      where: { employee: { active: true }, OR: [{ enteredAt: { gte: start, lt: end } }, { leftAt: { gte: start, lt: end } }] },
+      select: { employeeId: true, enteredAt: true, leftAt: true, punches: { select: { kind: true, status: true, occurredAt: true } } },
+    });
+    const events = dailyEmployeeEvents(shifts, start, end);
+    return { date, employees: employees.map(employee => ({ ...employee, ...(events.get(employee.id) ?? { entry: null, exit: null }) })) };
   }
   async evidence(actor: Actor, id: string) {
     const user = await this.actor(
