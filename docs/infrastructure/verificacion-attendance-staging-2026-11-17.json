@@ -226,5 +226,28 @@
     ],
     "limites": "No se enviaron marcaciones en QA, no se ejercitó cámara física ni se cambiaron referencias. Lógica facial/GPS/cámara conservada.",
     "produccion_modificada": false
+  },
+  "asistencia_diaria": {
+    "fecha": "2026-11-17",
+    "web_deployment": "4b096a94-a5a2-4f41-8712-f68cdf8b94f1",
+    "estado": "SUCCESS",
+    "commit": "4bfb597",
+    "cambios": [
+      "Fecha visible America/Bogota actualizada al abrir/volver y cada 30 segundos",
+      "Entrada verde, salida roja; retirado último registro",
+      "Sugerencia al cargar y volver al inicio basada en GPS y coordenadas existentes; sin Google ni geocodificación",
+      "Sugerencia solo con precisión <=50m, GPS <=60s, círculo de precisión totalmente dentro del radio, sin otra obra compatible",
+      "Sin precisión o con ambigüedad: ninguna sugerencia ni selección automática; elección manual disponible",
+      "Jornada anterior conserva salida obligatoria y muestra aviso; no se cierra automáticamente"
+    ],
+    "seguridad_servidor": "Ya vigente: consulta de cualquier jornada abierta sin filtro de fecha, bloqueo por empleado en transacción e índice único parcial. Prueba verifica bloqueo con jornada de 36 horas, cierre de esa jornada y entrada posterior. Sin cambio de lógica API ni despliegue API.",
+    "pruebas": {
+      "reglas_frontend": 5,
+      "servicio_api": 16,
+      "typescript": "correcto",
+      "browser": "Ingreso local, jornada anterior con solo salida roja, entrada verde, fecha actual, elección manual, GPS no disponible sin sugerencia, sin último registro. Staging real sin errores ni desborde a390px."
+    },
+    "limites": "Sugerencia precisa y ambigua comprobadas con casos sintéticos; no se simuló GPS en el navegador ni se generaron marcaciones reales. Prueba en celular con GPS real pendiente de usuario.",
+    "produccion_modificada": false
   }
 }
