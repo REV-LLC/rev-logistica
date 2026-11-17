@@ -4,6 +4,7 @@ import { documentBranding, type DocumentBranding } from "./document-branding";
 import type { AnnexInput, Result, SourceIssue } from "../app/billing/annexes/types";
 import { manualSheetRows, groupMachineRows, sheetDocuments, sheetRows } from "./annex-sheet";
 export type AnnexExport = {
+  annexCode?: string;
   input: AnnexInput;
   result: Result;
   customer: string;
@@ -49,7 +50,7 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
     pdf.text(company, 45, 13);
     const headingY = 13 + company.length * 4;
     pdf.setFontSize(13);
-    pdf.text("ANEXO DE ALQUILER", 45, headingY + 3);
+    pdf.text(data.annexCode ? `ANEXO DE ALQUILER ${data.annexCode}` : "ANEXO DE ALQUILER", 45, headingY + 3);
     pdf.setFontSize(8);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(...muted);

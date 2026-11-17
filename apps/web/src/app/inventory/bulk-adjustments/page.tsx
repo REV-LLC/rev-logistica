@@ -34,7 +34,7 @@ import UppercaseTextInput from '@/components/UppercaseTextInput';
 import WarehouseSelect from '@/components/WarehouseSelect';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentUserRole } from '@/lib/auth';
-import { buildFormaletaSkuName, type FormaletaLine } from '@/lib/formwork-reference';
+import { buildFormaletaSkuName, cornerAreaM2, type FormaletaLine } from '@/lib/formwork-reference';
 
 type Warehouse = {
   id: string;
@@ -167,6 +167,7 @@ type BulkPayload = {
     chargeType?: ChargeType;
     minimumChargeHours?: number;
     areaM2?: number;
+    rentalQuantityBasis?: 'AREA_M2' | 'UNIT';
     lengthMeters?: number;
   };
   ownerWarehouseId: string;
@@ -408,7 +409,7 @@ export default function AddBulkStockPage() {
   const [formaletaSkuReplacementValue, setFormaletaSkuReplacementValue] = useState<number | ''>('');
   const [formaletaChargeType, setFormaletaChargeType] = useState<ChargeType>('DAY');
   const [formaletaMinimumChargeHours, setFormaletaMinimumChargeHours] = useState<number | ''>('');
-  const [formaletaAreaM2, setFormaletaAreaM2] = useState<number | string>('');
+  const [enteredAreaM2, setFormaletaAreaM2] = useState<number | string>('');
   const [formaletaWeightUnit, setFormaletaWeightUnit] = useState<WeightUnit | ''>('');
 
   const [genericSkuName, setGenericSkuName] = useState('');
@@ -448,6 +449,10 @@ export default function AddBulkStockPage() {
   const isOfficeRole = currentUserRole === 'OFFICE';
   const isAdminRole = currentUserRole === 'ADMIN';
 
+  const isCorner = itemType === 'FORMALETA' && !formaletaIsAccessory && formaletaLine === 'RINCONERA';
+  const formaletaAreaM2 = isCorner
+    ? cornerAreaM2(parseLocaleDecimal(formaletaX), parseLocaleDecimal(formaletaY), parseLocaleDecimal(formaletaZ)) ?? ''
+    : enteredAreaM2;
   const formaletaRequiredSkuData: RequiredSkuData = {
     unitWeight: formaletaSkuUnitWeight,
     weightUnit: formaletaWeightUnit,
@@ -806,8 +811,8 @@ export default function AddBulkStockPage() {
       if (!skuName) return null;
       return {
         familyId: selectedFamily?.id,
-        familyName: 'FORMALETA',
-        familyCode: 'FORMALETA',
+        familyName: selectedFamily?.name ?? 'FORMALETA',
+        familyCode: selectedFamily?.code ?? 'FORMALETA',
         subfamilyId: selectedSubfamilyId ?? undefined,
         reusesExistingSku: false,
         skuName,
@@ -823,6 +828,8 @@ export default function AddBulkStockPage() {
           formaletaChargeType === 'HOUR' && formaletaMinimumChargeHours !== ''
             ? Number(formaletaMinimumChargeHours)
             : undefined,
+        rentalQuantityBasis: formaletaChargeType === 'DAY' && (formaletaLine === 'RINCONERA' || formaletaLine === 'FORMALETA')
+          ? 'AREA_M2' as const : undefined,
         areaM2: formaletaAreaM2 === '' ? undefined : parseLocaleDecimal(formaletaAreaM2),
       };
     }
@@ -966,6 +973,7 @@ export default function AddBulkStockPage() {
         price: builtItem.skuPrice,
         replacementValue: builtItem.skuReplacementValue,
         areaM2: builtItem.areaM2,
+        rentalQuantityBasis: builtItem.rentalQuantityBasis,
         lengthMeters: builtItem.lengthMeters,
       },
       ownerWarehouseId,
@@ -1459,6 +1467,7 @@ export default function AddBulkStockPage() {
                 chargeType: builtItem?.chargeType,
                 minimumChargeHours: builtItem?.minimumChargeHours,
                 areaM2: builtItem?.areaM2,
+                rentalQuantityBasis: builtItem?.rentalQuantityBasis,
                 lengthMeters: builtItem?.lengthMeters,
               },
               ownerWarehouseId,
@@ -1995,6 +2004,16 @@ export default function AddBulkStockPage() {
                           data={subfamilyOptions}
                           value={selectedSubfamilyId}
                           onChange={(value) => {
+                            const corner = selectedFamily.subfamilies.find(sub => sub.id === value)?.code === 'RINCONERA';
+                            if (corner) {
+                              setItemType('FORMALETA');
+                              setFormaletaLine('RINCONERA');
+                              setFormaletaX('0.10');
+                              setFormaletaY('0.10');
+                              setFormaletaIsAccessory(false);
+                            } else if (selectedFamilyCode !== 'FORMALETA' && selectedFamilyKey !== 'FORMALETA') {
+                              setItemType('GENERIC');
+                            }
                             setSelectedSubfamilyId(value);
                             setGenericSkuName('');
                             setGenericLengthMeters('');
@@ -2058,6 +2077,7 @@ export default function AddBulkStockPage() {
                             <Switch
                               label="Registrar como accesorio"
                               description="Activalo cuando la referencia no depende de medidas X/Y sino de un nombre comercial."
+                              disabled={selectedSubfamily?.code === 'RINCONERA'}
                               checked={formaletaIsAccessory}
                               onChange={(event) => {
                                 setFormaletaIsAccessory(event.currentTarget.checked);
@@ -2101,6 +2121,7 @@ export default function AddBulkStockPage() {
                                 <Select
                                   label="Linea"
                                   data={formaletaLineOptions}
+                                  disabled={selectedSubfamily?.code === 'RINCONERA'}
                                   value={formaletaLine}
                                   onChange={(value) => {
                                     setFormaletaLine((value as FormaletaLine | null) ?? 'FORMALETA');
@@ -2219,7 +2240,9 @@ export default function AddBulkStockPage() {
                                 required
                               />
                               <TextInput
-                                label="Area m²"
+                                label="Área por pieza (m²)"
+                                readOnly={isCorner}
+                                description={isCorner ? 'Suma de los dos lados por el largo.' : undefined}
                                 value={formaletaAreaM2}
                                 onChange={(event) => {
                                   setFormaletaAreaM2(sanitizeDecimalInput(event.currentTarget.value));
@@ -2238,7 +2261,7 @@ export default function AddBulkStockPage() {
                                 required
                               />
                               <NumberInput
-                                label="Precio cliente"
+                                label={!formaletaIsAccessory && formaletaChargeType === 'DAY' && formaletaLine !== 'FORMALETA_SARDINEL' ? 'Precio cliente por m²/día' : 'Precio cliente'}
                                 value={formaletaSkuPrice}
                                 onChange={(value) =>
                                   setFormaletaSkuPrice(typeof value === 'number' ? value : '')

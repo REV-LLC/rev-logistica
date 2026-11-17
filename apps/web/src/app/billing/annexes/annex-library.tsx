@@ -29,6 +29,7 @@ type Folder = {
   annexCount?: number;
 };
 type File = {
+  annexCode?: string;
   id: string;
   revision: number;
   periodFrom: string;
@@ -291,6 +292,7 @@ export default function AnnexLibrary({
                           </Text>
                         </Group>
                         <Group gap="xs">
+                          {file.annexCode && <Text size="sm">Anexo {file.annexCode}</Text>}
                           <Badge
                             maw="100%"
                             title={latest?.invoiceNumber ?? "Sin facturar"}

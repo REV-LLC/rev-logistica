@@ -16,12 +16,14 @@ import {
   ChargeType,
   DocumentType,
   MovementType,
+  RentalQuantityBasis,
   Prisma,
   Role,
   SkuControlType,
   WarehouseType,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { validateRentalQuantityBasis } from '../skus/rental-quantity-basis';
 import { validateImplementClassification } from './implement-classification';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryAdjustDto } from './dto/create-inventory-adjust.dto';
@@ -3300,6 +3302,7 @@ export class InventoryService {
       closedLengthMeters?: number;
       extendedLengthMeters?: number;
       areaM2?: number;
+      rentalQuantityBasis?: RentalQuantityBasis;
     },
     assetFamilyId: string,
     tx: Prisma.TransactionClient,
@@ -3320,6 +3323,8 @@ export class InventoryService {
           assetSubfamilyId: true,
           active: true,
           chargeType: true,
+          areaM2: true,
+          rentalQuantityBasis: true,
         },
       });
       if (!existing) {
@@ -3338,6 +3343,13 @@ export class InventoryService {
         input.chargeType !== undefined
           ? this.resolveChargeConfig(input.chargeType, input.minimumChargeHours)
           : null;
+      if (input.rentalQuantityBasis && input.rentalQuantityBasis !== existing.rentalQuantityBasis) {
+        throw new BadRequestException('La referencia ya existe con otra base de cobro. Revisa su configuración en la lista de precios.');
+      }
+      if (input.rentalQuantityBasis || input.areaM2 !== undefined || chargeConfig) {
+        validateRentalQuantityBasis(existing.rentalQuantityBasis ?? 'UNIT', chargeConfig?.chargeType ?? existing.chargeType,
+          'BULK', input.areaM2 ?? existing.areaM2);
+      }
       return tx.sku.update({
         where: { id: existing.id },
         data: {
@@ -3366,6 +3378,7 @@ export class InventoryService {
 
     const chargeConfig = this.resolveChargeConfig(input.chargeType, input.minimumChargeHours);
 
+    validateRentalQuantityBasis(input.rentalQuantityBasis ?? 'UNIT', chargeConfig.chargeType, 'BULK', input.areaM2);
     return tx.sku.upsert({
       where: {
         assetFamilyId_name: {
@@ -3389,6 +3402,7 @@ export class InventoryService {
         closedLengthMeters: input.closedLengthMeters ?? null,
         extendedLengthMeters: input.extendedLengthMeters ?? null,
         areaM2: input.areaM2 ?? null,
+        rentalQuantityBasis: input.rentalQuantityBasis,
         unitWeight: input.unitWeight ?? null,
         active: true,
       },
@@ -3428,6 +3442,7 @@ export class InventoryService {
       size?: string;
       lengthMeters?: number;
       areaM2?: number;
+      rentalQuantityBasis?: RentalQuantityBasis;
     },
     assetFamilyId: string,
     tx: Prisma.TransactionClient,
