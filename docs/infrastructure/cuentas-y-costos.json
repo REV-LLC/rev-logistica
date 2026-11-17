@@ -91,7 +91,17 @@
               "customer_id": "4f729cdf-a007-4ce5-bf3d-15288bbc7269",
               "nombre": "BODEGA RENTA EQUIPOS DEL VALLE",
               "fecha": "2026-11-17",
-              "origen": "Primera opcion solicitada por usuario; sitio independiente del LOTE existente. Sin nuevo cliente ni coordenadas inventadas."
+              "origen": "Primera opcion solicitada por usuario; sitio independiente del LOTE existente. Sin nuevo cliente ni coordenadas inventadas.",
+              "ubicacion_configurada": true,
+              "radio_metros": 100,
+              "evidencia_ubicacion": "docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json"
+            },
+            "lote_asistencia": {
+              "customer_worksite_id": "a16197f8-cddd-4ad4-bea4-97febb6c63ca",
+              "worksite_id": "036ca6a0-41fa-4caf-a8f3-cd1de1e3de73",
+              "ubicacion_configurada": true,
+              "radio_metros": 100,
+              "evidencia_ubicacion": "docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json"
             }
           }
         },
@@ -672,6 +682,10 @@
     {
       "fecha": "2026-11-17",
       "hecho": "Hotfix MiREV: buscador en vivo por cliente, obra y alias; nueva Bodega Renta Equipos del Valle como primera opcion. Inicio y perfil usan tema oscuro; el perfil limita desbordes. Despliegue solo del frontend MiREV."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Configuradas ubicaciones de Bodega y Lote en public por solicitud del usuario. Direcciones confirmadas con Address Validation de Google existente; radios de 100 m y puntos separados 263 m. Corregida direccion historica de LOTE. Sin migraciones, despliegues ni cambios de estado de marcaciones anteriores. Staging intacto."
     }
   ],
   "ultima_auditoria_produccion": {

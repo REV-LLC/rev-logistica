@@ -50,7 +50,7 @@
   },
   "pendientes": [
     "Registro facial inicial por cada empleado usando su cámara",
-    "Geocercas de obras reales"
+    "Geocercas de las demas obras; Bodega y Lote ya configurados"
   ],
   "registro_facial_inicial": {
     "migration": "20261117220000_mirev_face_enrollment",
@@ -102,5 +102,15 @@
       "estado": "FAILED",
       "nota": "Carga desde raiz corregida con carpeta exclusiva de frontend; no sustituyo la version saludable."
     }
+  },
+  "ubicaciones_internas": {
+    "configuradas": [
+      "BODEGA RENTA EQUIPOS DEL VALLE",
+      "LOTE"
+    ],
+    "radio_metros": 100,
+    "fecha": "2026-11-17",
+    "evidencia": "docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json",
+    "marcaciones_anteriores_sin_cambios": true
   }
 }

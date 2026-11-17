@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-17",
+  "environment": "production",
+  "schema": "public",
+  "changes": [
+    {
+      "site": "BODEGA RENTA EQUIPOS DEL VALLE",
+      "customerWorksiteId": "3732ec8b-8fee-47a4-a8c6-906e541be8f2",
+      "worksiteId": "5c81f25f-f754-4c29-9912-7172d7c5375c",
+      "before": {
+        "address": null,
+        "attendanceLatitude": null,
+        "attendanceLongitude": null,
+        "attendanceRadiusMeters": 200
+      },
+      "after": {
+        "address": "Carrera 22 #5A-07, Cali, Valle del Cauca, Colombia",
+        "latitude": 3.4392968,
+        "longitude": -76.5361334,
+        "radiusMeters": 100
+      },
+      "source": {
+        "provider": "Google Address Validation",
+        "placeId": "ChIJNbA_t4imMI4R_tQIUgYWwXY",
+        "validationGranularity": "PREMISE",
+        "geocodeGranularity": "SUB_PREMISE",
+        "hasReplacedComponents": false,
+        "hasUnconfirmedComponents": false
+      }
+    },
+    {
+      "site": "LOTE",
+      "customerWorksiteId": "a16197f8-cddd-4ad4-bea4-97febb6c63ca",
+      "worksiteId": "036ca6a0-41fa-4caf-a8f3-cd1de1e3de73",
+      "before": {
+        "address": "CR 22 5A 07",
+        "attendanceLatitude": null,
+        "attendanceLongitude": null,
+        "attendanceRadiusMeters": 200
+      },
+      "after": {
+        "address": "Calle 8A #22-29, Cali, Valle del Cauca, Colombia",
+        "latitude": 3.437635,
+        "longitude": -76.534447,
+        "radiusMeters": 100
+      },
+      "source": {
+        "provider": "Google Address Validation",
+        "placeId": "ChIJLcdrII-mMI4RXEOsdfgE0Rg",
+        "validationGranularity": "PREMISE",
+        "geocodeGranularity": "SUB_PREMISE",
+        "hasReplacedComponents": false,
+        "hasUnconfirmedComponents": false
+      }
+    }
+  ],
+  "separationMeters": 263,
+  "existingPunchesModified": false,
+  "deploymentsPerformed": false,
+  "stagingModified": false,
+  "checks": [
+    {
+      "kind": "CHECK_OUT",
+      "storedStatus": "PENDING",
+      "storedReasons": [
+        "WORKSITE_LOCATION_MISSING"
+      ],
+      "distanceMeters": 6.6,
+      "accuracyMeters": 12.2,
+      "verificationWithCurrentSettings": "VERIFIED",
+      "reasonsWithCurrentSettings": []
+    },
+    {
+      "kind": "CHECK_IN",
+      "storedStatus": "PENDING",
+      "storedReasons": [
+        "WORKSITE_LOCATION_MISSING"
+      ],
+      "distanceMeters": 11.8,
+      "accuracyMeters": 7.1,
+      "verificationWithCurrentSettings": "VERIFIED",
+      "reasonsWithCurrentSettings": []
+    }
+  ],
+  "readbackVerified": true,
+  "automaticSuggestionsVerified": {
+    "BODEGA": true,
+    "LOTE": true
+  }
+}

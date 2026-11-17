@@ -49,3 +49,11 @@ La migración puntual puede aplicarse mediante `scripts/mirev/apply-face-enrollm
 El selector usa TextInput de Mantine como REV y filtra inmediatamente por cliente, obra y alias. Normaliza tildes y mayusculas y combina palabras, sin consultas por cada tecla. Muestra cantidad y ausencia de resultados y permite limpiar. Bodega Renta Equipos del Valle se ordena primero, sin autoseleccionarla. Se creo como sitio independiente bajo el cliente existente RENTA EQUIPOS DEL VALLE; LOTE permanece intacto y no se inventaron coordenadas. IDs en el registro maestro.
 
 La franja clara provenia del tema light del inicio. MiREV ahora usa dark tambien en inicio y html #101820 como el perfil. La foto real fue comprobada a 320 px dentro de la card, sin desborde horizontal; el encabezado tiene overflow hidden. La busqueda real se verifico a 390 px: 208 obras, 2 resultados para renta y alamos, cero para consulta inexistente, limpieza completa y seleccion correcta de Bodega. Sin marcaciones creadas ni errores de consola. Cuatro pruebas del filtro y build Next.js aprobados.
+
+## Ubicaciones de Bodega y Lote
+
+El 17 de noviembre de 2026 se configuraron las dos ubicaciones solicitadas en Cali: Bodega, Carrera 22 #5A-07, y Lote, Calle 8A #22-29. Google Address Validation confirmo ambas con validacion PREMISE y geocodigo SUB_PREMISE, sin componentes reemplazados ni no confirmados. Se uso la clave del proyecto REV existente en memoria; no se cambiaron APIs, claves o suscripciones.
+
+Los puntos estan separados 263 metros y tienen radios de 100 metros para no solaparse. Se corrigio la direccion anterior de LOTE, que repetia la de Bodega. Se comprobo lectura persistente de coordenadas, direcciones y radios, y que el algoritmo sugiere el sitio correcto para cada punto. Dos muestras existentes quedan a 11,8 y 6,6 metros de Bodega: evaluadas con la configuracion nueva y las reglas existentes cumplirian VERIFIED, pero sus estados historicos PENDING no se modificaron. No se crearon marcaciones de prueba ni se hicieron despliegues.
+
+Evidencia y valores anteriores/nuevos en docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json. Para repetir la configuracion de forma controlada existe scripts/mirev/configure-internal-locations.cjs, que valida proyecto/entorno y vinculos y evita sobrescribir coordenadas distintas cambiadas despues de la inspeccion.
