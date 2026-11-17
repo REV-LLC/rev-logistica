@@ -56,7 +56,11 @@ export default function StagingSetup({ onReady }: { onReady: () => Promise<unkno
     <p>Registraremos tu rostro solo en esta cuenta ficticia. Tu ubicación actual será el centro de la obra de prueba, con un radio de 200 metros.</p>
     <p>Esta selfie crea la referencia facial. No registra una entrada ni cambia tu foto en producción.</p>
     {camera ? <>
-      <video ref={video} autoPlay muted playsInline onLoadedData={() => setReady(true)} style={{ width: '100%', borderRadius: 24, transform: 'scaleX(-1)' }} />
+      <p>Aleja el celular: deja tu cara dentro del óvalo pequeño, con la cabeza completa y los hombros visibles.</p>
+      <div className={styles.camera}>
+        <video ref={video} autoPlay muted playsInline aria-label="Cámara de referencia" onLoadedData={() => setReady(true)} />
+        <div className={styles.faceGuide} aria-hidden="true" />
+      </div>
       <button className={styles.primary} onClick={capture} disabled={busy || !ready}>{busy ? 'PREPARANDO…' : 'USAR ESTA SELFIE'}</button>
       <button className={styles.secondary} disabled={busy} onClick={() => setCamera(false)}>Cancelar</button>
     </> : <button className={styles.primary} disabled={busy} onClick={begin}>{busy ? 'BUSCANDO UBICACIÓN…' : 'PREPARAR MI ROSTRO'}</button>}

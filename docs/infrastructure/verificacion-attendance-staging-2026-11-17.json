@@ -91,5 +91,28 @@
     ],
     "datos_usuario": "No se modificaron referencia facial, fotos, jornadas ni marcaciones del usuario. Solo se enviaron imágenes sintéticas que fueron rechazadas antes de persistir evidencia.",
     "alcance": "Solo worker facial de staging; modelos y umbrales sin cambios."
+  },
+  "guia_camara_y_resultados": {
+    "fecha": "2026-11-17",
+    "deployment_web_staging": "267aa3ef-47d2-48f3-97b8-02f738cad1bf",
+    "politica_confirmada_usuario": "Guardar la marcación pendiente y mostrar claramente que el rostro no coincidió, para revisión de oficina.",
+    "guia": {
+      "ancho_relativo": 0.44,
+      "alto_relativo": 0.48,
+      "preview_object_fit": "contain"
+    },
+    "mensajes": [
+      "Entrada sin verificar",
+      "Tu rostro no coincide con la referencia registrada.",
+      "Entrada aprobada por oficina",
+      "Entrada verificada"
+    ],
+    "qa": {
+      "local_y_staging": true,
+      "viewport": "390x844",
+      "api_y_camara_simuladas": true,
+      "errores_javascript": 0
+    },
+    "alcance": "Solo interfaz de staging. Sin cambios en API, worker, umbrales, fotos, referencia facial ni marcaciones del usuario. Despliegues de producción conservados."
   }
 }

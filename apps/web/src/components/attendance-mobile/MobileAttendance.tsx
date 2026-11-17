@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2, IconLogin, IconLogout, IconMapPin, IconVolume } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
-import { attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
+import { reasonLabels, attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
 import StagingSetup from './StagingSetup';
 import InstallAttendance from './InstallAttendance';
 import styles from './mobile-attendance.module.css';
@@ -297,7 +297,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         {!me.worksites.length ? <p className={styles.notice}>No hay obras disponibles. Pide ayuda al encargado.</p> : null}
         <button className={styles.link} onClick={() => setStep('home')}>Volver</button>
       </section> : step === 'camera' ? <section>
-        <h1>Mira la cámara</h1><p>Pon tu rostro dentro del óvalo.</p>
+        <h1>Mira la cámara</h1><p>Aleja el celular hasta que tu cara quepa en el óvalo pequeño. Deja visibles la cabeza completa y los hombros.</p>
         <div className={styles.camera}>
           <video ref={video} playsInline muted aria-label="Cámara frontal" onLoadedData={() => setCameraReady(true)} />
           <div className={styles.faceGuide} aria-hidden="true" />
@@ -313,8 +313,12 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         <div className={`${styles.successIcon} ${result.status === 'PENDING' || result.status === 'REJECTED' ? styles.pending : ''}`}>
           {result.status === 'PENDING' || result.status === 'REJECTED' ? <IconClock size={86} aria-hidden="true" /> : <IconCheck size={86} aria-hidden="true" />}
         </div>
-        <h1>{result.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} {result.status === 'PENDING' ? 'recibida' : result.status === 'REJECTED' ? 'rechazada' : 'registrada'}</h1>
-        {result.status === 'PENDING' ? <p className={styles.notice}>Oficina revisará tu registro.</p> : result.status === 'REJECTED' ? <p className={styles.notice}>Habla con el encargado.</p> : null}
+        <h1>{result.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} {result.status === 'PENDING' ? 'sin verificar' : result.status === 'REJECTED' ? 'rechazada' : result.status === 'APPROVED' ? 'aprobada por oficina' : 'verificada'}</h1>
+        {result.status === 'PENDING' ? <div className={styles.notice}>
+          <strong>{result.reasons.includes('FACE_MISMATCH') ? 'Tu rostro no coincide con la referencia registrada.' : 'Esta marcación necesita revisión.'}</strong>
+          <p>No quedó verificada. Oficina debe revisar el registro.</p>
+          {result.reasons.filter(reason => reason !== 'FACE_MISMATCH').map(reason => <p key={reason}>{reasonLabels[reason] || 'Validación pendiente'}</p>)}
+        </div> : result.status === 'REJECTED' ? <p className={styles.notice}>Habla con el encargado.</p> : result.status === 'APPROVED' ? <p>Marcación aprobada por oficina.</p> : <p>Identidad y ubicación verificadas.</p>}
         <div className={styles.receipt}>{result.customerWorksite.alias || result.customerWorksite.worksite.name}<time dateTime={result.occurredAt}>{shortTime(result.occurredAt)}</time></div>
         <button className={styles.primary} onClick={() => { setStep('home'); setResult(null); }}>LISTO</button>
       </section> : <>
@@ -336,7 +340,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         <div className={styles.recent}><IconClock size={34} aria-hidden="true" /><div>
           <span className={styles.muted}>Último registro</span>
           <strong>{last ? `${last.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · ${attendanceDate(last.occurredAt)}` : 'Aún no hay marcaciones'}</strong>
-          {last?.status === 'PENDING' ? <span>Oficina revisará tu registro.</span> : last?.status === 'REJECTED' ? <span>Rechazado. Habla con el encargado.</span> : null}
+          {last?.status === 'PENDING' ? <span>{last.reasons.includes('FACE_MISMATCH') ? 'Sin verificar: el rostro no coincidió. Revisión de oficina pendiente.' : 'Sin verificar. Oficina revisará tu registro.'}</span> : last?.status === 'REJECTED' ? <span>Rechazado. Habla con el encargado.</span> : null}
         </div></div>
       </>}
   </>;

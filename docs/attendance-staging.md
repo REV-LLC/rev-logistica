@@ -41,3 +41,11 @@ Cuatro suites de asistencia e aislamiento: 25 pruebas aprobadas. Prueba del fluj
 ### Mensajes de detección facial, 17 de noviembre
 
 El worker de staging distingue cero rostros («No pudimos detectar tu rostro…») de varios rostros («Detectamos N rostros…»). Cuatro pruebas del worker y ambos casos a través del API HTTPS de staging aprobados. Despliegue de staging `555cc838-55c5-41ee-ab53-16ce48de5f5e`; producción conserva `b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2`. Los modelos, umbrales y datos del usuario no se modificaron.
+
+### Guía de cámara y resultado visible
+
+La guía mide 44 % del ancho y 48 % del alto del visor, frente al 64 % y 76 % anteriores. El vídeo usa `object-fit: contain`, por lo que la vista previa incluye la imagen completa que se captura. La inscripción y la marcación comparten la guía.
+
+Por decisión expresa del usuario, una discrepancia facial sigue guardando la marcación PENDING para revisión de oficina. La pantalla muestra «Entrada/Salida sin verificar» y el motivo «Tu rostro no coincide con la referencia registrada». Las aprobaciones de oficina y las verificaciones automáticas tienen textos distintos. El último registro también explica si el rostro no coincidió.
+
+Validación visual local y en el frontend de staging con cámara y respuestas API simuladas: guía, inscripción y estados PENDING/FACE_MISMATCH, APPROVED y VERIFIED correctos, sin errores JavaScript. Despliegue web `267aa3ef-47d2-48f3-97b8-02f738cad1bf`. No se cambiaron ni borraron los datos de prueba del usuario ni se desplegó producción.
