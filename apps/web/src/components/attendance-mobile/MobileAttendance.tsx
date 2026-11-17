@@ -7,6 +7,7 @@ import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { reasonLabels, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import InstallAttendance from './InstallAttendance';
+import AttendanceWorksitePicker from './AttendanceWorksitePicker';
 import FaceEnrollmentGate from './FaceEnrollmentGate';
 import MiRevEmployeeProfile, { MiRevEmployeeProvider, MiRevProfileButton } from './MiRevEmployeeProfile';
 import { hasPriorDayShift, suggestAttendanceSite } from '@/lib/attendance-mobile-rules';
@@ -328,14 +329,9 @@ function Attendance({ onExpired, today }: { onExpired: () => void; today: Date |
       {error ? <button className={styles.primary} disabled={refreshing} onClick={refresh}>{refreshing ? 'Cargando…' : 'VOLVER A INTENTAR'}</button> : null}
     </section> : step === 'locating' || step === 'sending' ?
       <Loading label={step === 'locating' ? 'Buscando tu ubicación…' : 'Registrando…'} /> :
-      step === 'sites' ? <section>
-        <h1>¿En qué obra estás?</h1><p>El encargado puede ayudarte a elegir.</p>
-        <div className={styles.choices}>{me.worksites.map(site => <button key={site.id} className={`${styles.secondary} ${styles.choice}`} onClick={() => {
-          manualSite.current = true; suggestionVersion.current++; setSuggestion('idle'); setSiteId(site.id); setStep('home');
-        }}><IconMapPin size={28} aria-hidden="true" /><span>{site.alias || site.worksite.name}<small>{site.customer.name}</small></span></button>)}</div>
-        {!me.worksites.length ? <p className={styles.notice}>No hay obras disponibles. Pide ayuda al encargado.</p> : null}
-        <button className={styles.link} onClick={() => setStep('home')}>Volver</button>
-      </section> : step === 'camera' ? <section>
+      step === 'sites' ? <AttendanceWorksitePicker sites={me.worksites} onSelect={site => {
+        manualSite.current = true; suggestionVersion.current++; setSuggestion('idle'); setSiteId(site.id); setStep('home');
+      }} onBack={() => setStep('home')} /> : step === 'camera' ? <section>
         <div className={styles.greeting}><h1>{nativeCamera ? 'Toma una selfie' : 'Mira la cámara'}</h1><p>{nativeCamera ? 'Usa la cámara frontal y evita acercar demasiado el celular.' : 'Deja visibles la cabeza completa y los hombros.'}</p></div>
         {nativeCamera ? <NativeSelfieCapture onPhoto={photo => captureImage(async () => photo)} /> : <>
         <div className={styles.camera}>

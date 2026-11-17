@@ -5,7 +5,7 @@
   "propiedad_verificada": true,
   "api_url": "https://mirev-api-production.up.railway.app",
   "deployments": {
-    "mirev_web": "1d8a4f6e-4e88-4bf4-b62e-b4369c8d832e",
+    "mirev_web": "11d6d80d-9a39-4c48-9720-9793bae30df6",
     "mirev_api": "a43a0308-045f-4faa-8d69-281572d39754",
     "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
     "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
@@ -69,5 +69,38 @@
     },
     "api_rev_observado_despues": "2a867a7c-9181-4e0a-b739-b81ed0361b74",
     "api_rev_nota": "Se observó un despliegue posterior al inicial; esta tarea no desplegó el API principal."
+  },
+  "hotfix_obras_inicio": {
+    "fecha": "2026-11-17",
+    "busqueda": "En vivo y local por cliente, obra y alias. Ignora tildes y mayusculas; combina palabras. TextInput de Mantine como REV.",
+    "bodega_primera": "3732ec8b-8fee-47a4-a8c6-906e541be8f2",
+    "bodega_worksite": "5c81f25f-f754-4c29-9912-7172d7c5375c",
+    "lote_original_sin_cambio": true,
+    "coordenadas_bodega": null,
+    "barra_inicio": "Causa confirmada: home light y html transparente; perfil dark. Hotfix: home dark y html #101820, sin franja clara.",
+    "pruebas_filtro": 4,
+    "qa_real": {
+      "ancho": 390,
+      "obras": 208,
+      "consulta_renta": 2,
+      "consulta_alamos": 2,
+      "consulta_inexistente": 0,
+      "limpiar_restaura": 208,
+      "seleccion_bodega": true,
+      "marcaciones_creadas": 0,
+      "errores_consola": 0
+    },
+    "foto_perfil_real": {
+      "ancho": 320,
+      "foto_dentro_card": true,
+      "overflow_card": "hidden",
+      "desborde_horizontal": false
+    },
+    "captura": "/private/tmp/mirev-buscador-obras-hotfix.jpg",
+    "carga_raiz_erronea": {
+      "id": "f4a0d0a5-fbf3-46c6-954e-2c910172d1a6",
+      "estado": "FAILED",
+      "nota": "Carga desde raiz corregida con carpeta exclusiva de frontend; no sustituyo la version saludable."
+    }
   }
 }

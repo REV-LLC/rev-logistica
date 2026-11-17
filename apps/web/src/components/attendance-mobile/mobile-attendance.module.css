@@ -104,3 +104,8 @@
 .profileScreen { max-width: 1200px; }
 .enrollmentPreview { display: block; width: 100%; max-height: 440px; object-fit: contain; border-radius: 16px; background: #101820; }
 .enrollment { max-width: 430px; margin-inline: auto; }
+
+.searchCount { margin-top: 10px !important; color: #c0cbd3; font-size: 14px; }
+
+:global(html):has(.page), :global(body):has(.page) { background-color: #101820; color-scheme: dark; }
+.profileView :global(section[data-page-heading-glass]) { overflow: hidden; }
