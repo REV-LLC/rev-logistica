@@ -54,17 +54,32 @@ export class AnnexesService {
     return row.code;
   }
 
-  async findByCode(code: string) {
+  private currentYear() {
+    return Number(new Intl.DateTimeFormat('en', {timeZone: 'America/Bogota', year: 'numeric'}).format(new Date()));
+  }
+
+  async codeYears() {
+    const rows = await this.prisma.annexConsultationCode.findMany({
+      distinct: ['year'], select: {year: true}, orderBy: {year: 'desc'},
+    });
+    return [...new Set([this.currentYear(), ...rows.map(row => row.year)])].sort((a,b) => b-a);
+  }
+
+  async findByCode(code: string, requestedYear?: string) {
     if (!/^\d{6,16}$/.test(code)) throw new BadRequestException('Ingresa el código numérico completo del anexo.');
+    if (requestedYear !== undefined && !/^[1-9]\d{3}$/.test(requestedYear))
+      throw new BadRequestException('Selecciona un año válido para el anexo.');
+    // Keep already-open browser sessions working during the rolling deployment.
+    const year = requestedYear === undefined ? this.currentYear() : Number(requestedYear);
     const found = await this.prisma.annexConsultationCode.findUnique({
-      where: { code },
+      where: { year_code: {year, code} },
       select: {
         periodFrom: true, periodTo: true, through: true,
         customerWorksite: { select: {id: true, customerId: true} },
         draft: { select: {id: true, revisions: {orderBy: {revision: 'desc'}, take: 1, select: {through: true}}} },
       },
     });
-    if (!found?.customerWorksite) throw new NotFoundException('No se encontró un anexo con ese código.');
+    if (!found?.customerWorksite) throw new NotFoundException(`No se encontró el anexo ${code} en ${year}.`);
     const date = (value: Date) => value.toISOString().slice(0, 10);
     return {
       customer: found.customerWorksite.customerId, worksite: found.customerWorksite.id,

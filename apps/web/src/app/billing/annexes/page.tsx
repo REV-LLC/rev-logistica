@@ -118,6 +118,8 @@ export default function AnnexesPage() {
   const [invoiceNumber, setInvoiceNumber] = useState<string | null>(null);
   const [annexCode, setAnnexCode] = useState<string>();
   const [searchCode, setSearchCode] = useState("");
+  const [searchYear, setSearchYear] = useState(() => new Intl.DateTimeFormat("en", {timeZone: "America/Bogota", year: "numeric"}).format(new Date()));
+  const [codeYears, setCodeYears] = useState<number[]>([]);
   const [searchingCode, setSearchingCode] = useState(false);
   const [openedDraft, setOpenedDraft] = useState<string | null>(null);
   const [saveOpened, setSaveOpened] = useState(false);
@@ -268,6 +270,7 @@ export default function AnnexesPage() {
       return;
     }
     const target = location;
+    setSearchYear(target.period.from.slice(0, 4));
     setCustomer(target.customer);
     setSite(target.worksite);
     setPeriod(target.period);
@@ -381,6 +384,9 @@ export default function AnnexesPage() {
   }, [urlReady, editing, busy, customer, site, period, input, openedDraft]);
   useEffect(() => {
     const controller = new AbortController();
+    api<number[]>("/annexes/code-years", {signal: controller.signal, cache: "no-store"})
+      .then(setCodeYears)
+      .catch(() => { /* The current and selected years remain available during deployment. */ });
     Promise.all([
       api<typeof customers>("/customers", { signal: controller.signal }),
       api<typeof employees>("/employees", { signal: controller.signal }),
@@ -597,7 +603,7 @@ export default function AnnexesPage() {
     setSearchingCode(true);
     setError(null);
     try {
-      const target = await api<AnnexLocation>(`/annexes/codes/${encodeURIComponent(searchCode.trim())}`, {cache: "no-store"});
+      const target = await api<AnnexLocation>(`/annexes/codes/${encodeURIComponent(searchCode.trim())}?${new URLSearchParams({year: searchYear})}`, {cache: "no-store"});
       if (dirty && !window.confirm("Se descartarán los cambios sin guardar. ¿Continuar?")) return;
       window.location.assign(annexLocationUrl(window.location.href, target));
     } catch (error) {
@@ -649,6 +655,10 @@ export default function AnnexesPage() {
                 <TextInput size="xs" w={145} aria-label="Código del anexo" placeholder="Código del anexo"
                   inputMode="numeric" pattern="[0-9]{6,16}" maxLength={16} required
                   value={searchCode} onChange={event => setSearchCode(event.currentTarget.value)} />
+                <Select size="xs" w={95} aria-label="Año del anexo" placeholder="Año"
+                  searchable allowDeselect={false} value={searchYear}
+                  data={[...new Set([searchYear, period.from.slice(0, 4), ...codeYears.map(String)])].sort().reverse()}
+                  onChange={value => { if (value) setSearchYear(value); }} />
                 <Button size="xs" type="submit" variant="light" loading={searchingCode}
                   disabled={busy || printing}>Abrir</Button>
               </Group>

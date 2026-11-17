@@ -70,10 +70,15 @@ export class AnnexesController {
   chargeOptions(@Query('customerWorksiteId', new ParseUUIDPipe()) id: string) {
     return this.source.chargeOptions(id);
   }
+  @Get('code-years')
+  @Header('Cache-Control', 'no-store')
+  codeYears() {
+    return this.annexes.codeYears();
+  }
   @Get('codes/:code')
   @Header('Cache-Control', 'no-store')
-  findByCode(@Param('code') code: string) {
-    return this.annexes.findByCode(code);
+  findByCode(@Param('code') code: string, @Query('year') year?: string) {
+    return this.annexes.findByCode(code, year);
   }
 
   private async consultation(id: string, from: string, to: string, through: string, live: boolean) {

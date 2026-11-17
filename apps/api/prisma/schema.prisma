@@ -1834,7 +1834,8 @@ model AnnexCustomerPrefix {
 }
 
 model AnnexConsultationCode {
-  code String @id
+  year Int
+  code String
   customerWorksiteId String?
   customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: SetNull)
   periodFrom DateTime @db.Date
@@ -1843,13 +1844,15 @@ model AnnexConsultationCode {
   baseCode String
   ordinal Int
   draft AnnexDraft?
+  @@id([year, code])
   @@unique([customerWorksiteId, periodFrom, periodTo])
-  @@unique([baseCode, ordinal])
+  @@unique([year, baseCode, ordinal])
 }
 
 model AnnexDraft {
-  annexCode String @unique @default(dbgenerated())
-  consultationCode AnnexConsultationCode @relation(fields: [annexCode], references: [code], onDelete: Restrict)
+  annexYear Int @default(dbgenerated())
+  annexCode String @default(dbgenerated())
+  consultationCode AnnexConsultationCode @relation(fields: [annexYear, annexCode], references: [year, code], onDelete: Restrict)
   id                 String @id @default(uuid())
   customerWorksiteId String
   periodFrom         DateTime @db.Date
@@ -1860,6 +1863,7 @@ model AnnexDraft {
   revisions          AnnexDraftRevision[]
 
   @@unique([customerWorksiteId, periodFrom, periodTo])
+  @@unique([annexYear, annexCode])
 }
 
 model AnnexDraftRevision {
