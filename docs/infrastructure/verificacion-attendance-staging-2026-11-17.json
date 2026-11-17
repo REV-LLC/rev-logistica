@@ -164,18 +164,49 @@
   },
   "mapas_google": {
     "fecha": "2026-11-17",
-    "estado": "integracion_preparada_pendiente_activacion_y_clave",
-    "web_deployment": "b8430305-eaa0-4ca1-961b-08c29d72b216",
+    "estado": "activo_verificado_staging",
+    "web_deployment": "06f73dfe-8ce9-42f6-9dac-831804c17e22",
     "google_account": "samuelguerrero1127@gmail.com",
     "google_project": "rev-logistica",
     "api": "Maps Embed API",
     "variable_nueva": "GOOGLE_MAPS_EMBED_BROWSER_KEY",
-    "clave_de_navegador_id": null,
+    "clave_de_navegador_id": "rev-attendance-staging-embed-20261117",
     "referrer_previsto": "https://web-staging-staging-cf10.up.railway.app/*",
     "clave_address_validation_produccion_sin_cambios": true,
     "pruebas_configuracion": 4,
     "seleccion_registro_y_obra_validada_con_datos_ficticios": true,
-    "mapa_google_real_validado": false,
-    "api_google_activada_por_esta_tarea": false
+    "mapa_google_real_validado": true,
+    "api_google_activada_por_esta_tarea": true,
+    "confirmacion_usuario": "2026-11-17: Sí a activación de Maps Embed y clave restringida a staging",
+    "credencial_nueva_creada": true,
+    "bloqueo_actual": null,
+    "configuracion_google_2026_11_17": {
+      "estado": "activo_verificado_staging",
+      "cuenta": "samuelguerrero1127@gmail.com",
+      "proyecto": "rev-logistica",
+      "project_number": "583636128913",
+      "key_id": "rev-attendance-staging-embed-20261117",
+      "key_uid": "250671bb-46f6-43c9-97eb-4c146a4be3c7",
+      "api_targets": [
+        "maps-embed-backend.googleapis.com"
+      ],
+      "allowed_referrers": [
+        "https://web-staging-staging-cf10.up.railway.app",
+        "https://web-staging-staging-cf10.up.railway.app/*"
+      ],
+      "verificacion": "Restricciones verificadas en consola; clave ingresada por el usuario en Railway. web-staging desplegado SUCCESS y mapa real verificado por Computer Use.",
+      "secretos_guardados": false
+    },
+    "validacion_real": {
+      "login": "Usuario ficticio samuel.prueba mediante formulario normal",
+      "marcaciones_disponibles": 10,
+      "selecciones_verificadas": [
+        "Salida 17/11/2026 12:35",
+        "Entrada 17/11/2026 11:55",
+        "Punto de la obra"
+      ],
+      "resultado": "Google Maps mostró marcador y coordenadas correspondientes a cada selección; precisión GPS y distancia visibles. No se crearon marcaciones ni se solicitaron cámara/ubicación para consultar.",
+      "produccion": "Ninguna mutación o despliegue de esta tarea dirigido a producción."
+    }
   }
 }

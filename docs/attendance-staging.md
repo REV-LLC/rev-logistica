@@ -66,7 +66,7 @@ Referencias: [salida de FaceDetectorYN](https://docs.opencv.org/4.12.0/df/d20/cl
 
 Despliegues de esta revisión: worker `63449cbe-b770-47cd-9ff3-3ea36bc3c1fb`, API exclusivo `e698e328-fc07-47b7-a7d7-a2b193bda85f`, web `d82fc385-8047-4aad-abf9-e69019962daf`. No se realizaron acciones de escritura ni despliegues en producción. Durante la revisión se observó una actualización concurrente del API habitual de producción (`3df4ab4a-6c9f-402d-8660-275b9eedc2bd`), independiente de este servicio exclusivo de pruebas.
 
-### Google Maps: integración preparada, activación pendiente
+### Google Maps: activo y verificado en staging
 
 La PWA de staging incluye **VER UBICACIONES EN EL MAPA**, un selector de marcación, comparación entre el punto registrado y el punto de la obra, precisión GPS, distancia y acceso desde cada registro. Se usa Maps Embed API, con un único iframe interactivo activo a la vez y carga únicamente al abrir el mapa. Consultar un registro no solicita una ubicación nueva.
 
@@ -83,3 +83,5 @@ Configuración pendiente:
 Google documenta Maps Embed API sin cargo por uso y sin límite de solicitudes: https://developers.google.com/maps/documentation/embed/usage-and-billing. Esto describe la tarifa del producto; no atribuye una factura nueva ni implica que otros servicios de Google sean gratuitos.
 
 Validación preparada: TypeScript y compilación correctos; selección de entrada/salida y cambio entre obra/registro verificados en vista móvil local con datos y clave ficticios. Los parámetros del iframe se actualizaron correctamente y no hubo errores de JavaScript de la PWA. El rechazo de la clave ficticia por Google es esperado; la visualización real del mapa sigue pendiente de la clave válida. Cuatro comprobaciones de la configuración confirmaron 404 fuera de pruebas, ausencia de reutilización de la clave de producción, desactivación con clave ausente/inválida y configuración con clave de navegador separada. Despliegue de la interfaz preparada: `b8430305-eaa0-4ca1-961b-08c29d72b216`.
+
+Verificación final 2026-11-17: Maps Embed API activada y clave `rev-attendance-staging-embed-20261117` creada atómicamente con restricción exclusiva a Maps Embed y al dominio de staging (origen exacto y `/*`). El usuario ingresó la clave en Railway; despliegue `06f73dfe-8ce9-42f6-9dac-831804c17e22` SUCCESS. La validación real por Computer Use confirmó el mapa con las diez marcaciones disponibles y el cambio de marcador entre una entrada, una salida y el punto de la obra. Los pasos pendientes descritos arriba quedaron completados. No se desplegó ni modificó producción.
