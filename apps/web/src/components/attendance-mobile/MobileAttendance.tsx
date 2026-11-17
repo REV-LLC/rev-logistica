@@ -7,6 +7,7 @@ import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { reasonLabels, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import InstallAttendance from './InstallAttendance';
+import FaceEnrollmentGate from './FaceEnrollmentGate';
 import MiRevEmployeeProfile, { MiRevEmployeeProvider, MiRevProfileButton } from './MiRevEmployeeProfile';
 import { hasPriorDayShift, suggestAttendanceSite } from '@/lib/attendance-mobile-rules';
 import styles from './mobile-attendance.module.css';
@@ -49,7 +50,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
   const expired = useCallback(() => { clearToken(); setSignedIn(false); }, []);
 
   return <MiRevEmployeeProvider enabled={signedIn === true} onExpired={expired}><main className={styles.page}>
-    <div className={styles.screen}>
+    <div className={`${styles.screen} ${view === 'profile' ? styles.profileScreen : ''}`}>
       <header className={styles.header}>
         <div className={styles.brand}><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></div>
         <div className={styles.headerActions}><button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
@@ -59,7 +60,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
       </header>
       {today ? <p className={styles.today}><time dateTime={today.toISOString()}>{new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).format(today)}</time></p> : null}
       {signedIn === null ? <Loading label="Un momento…" /> : signedIn ?
-        view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} /> : <Login onLogin={() => setSignedIn(true)} />}
+        <FaceEnrollmentGate onExpired={expired}>{view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} />}</FaceEnrollmentGate> : <Login onLogin={() => setSignedIn(true)} />}
       {help ? <section id="attendance-help" className={styles.helpContent}>
         <h2>Estamos para ayudarte</h2>
         <ol><li>Toca el botón de entrada o salida.</li><li>Mira la cámara y toca «Tomar foto».</li><li>Espera la confirmación.</li></ol>

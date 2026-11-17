@@ -5,8 +5,8 @@
   "propiedad_verificada": true,
   "api_url": "https://mirev-api-production.up.railway.app",
   "deployments": {
-    "mirev_web": "8f822fdf-87ad-4115-bf3b-ea9a7c86b7dc",
-    "mirev_api": "ee844f7a-68f5-41c1-9260-e7998f294458",
+    "mirev_web": "8fe2ab01-1f8d-4c35-99d8-4dcc8cb53485",
+    "mirev_api": "a43a0308-045f-4faa-8d69-281572d39754",
     "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
     "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
     "staging_api_sin_cambio": "d25e73be-14af-4e91-bd0d-6e942126f62a"
@@ -49,7 +49,25 @@
     "sin_cambios": true
   },
   "pendientes": [
-    "Cinco referencias faciales restantes",
+    "Registro facial inicial por cada empleado usando su cámara",
     "Geocercas de obras reales"
-  ]
+  ],
+  "registro_facial_inicial": {
+    "migration": "20261117220000_mirev_face_enrollment",
+    "estado_migracion": "aplicada individualmente en public, sin ejecutar otras migraciones",
+    "pruebas_enrollment_y_asistencia": 27,
+    "pruebas_acceso_sesion_gps": 11,
+    "captura_real": "Pendiente de que cada empleado use la cámara; no se crearon datos biométricos ficticios en producción.",
+    "evidencia_ui": "/private/tmp/mirev-registro-facial-inicial-publicado.jpg",
+    "card_canonica": "Mismo EmployeeProfile y profile.module.css que origin/production d8b76ef, retrato contenido de 200x200",
+    "qa_layout": {
+      "escritorio": 2560,
+      "movil": 390,
+      "foto_dentro_card": true,
+      "sin_desbordamiento_horizontal": true,
+      "metodo": "Fixture visual local sin datos reales; no se publicó el fixture."
+    },
+    "api_rev_observado_despues": "2a867a7c-9181-4e0a-b739-b81ed0361b74",
+    "api_rev_nota": "Se observó un despliegue posterior al inicial; esta tarea no desplegó el API principal."
+  }
 }

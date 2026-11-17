@@ -8,6 +8,7 @@ import { FaceClientService } from './face-client.service';
 @Module({
   imports: [AuthModule],
   controllers: [AttendanceController],
+  exports: [AttendanceService],
   providers: [
     AttendanceService,
     AttendanceStorageService,

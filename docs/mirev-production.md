@@ -8,7 +8,7 @@ Dos servicios nuevos del proyecto Railway `rev-logistica`, entorno `production`:
 
 MiREV usa la base real existente (`public`), cuentas de empleados, fotos R2, referencias faciales y worker privados existentes. La configuración sensible se resuelve mediante referencias Railway a `api`, sin archivos de credenciales. No se creó ningún usuario de pruebas, referencia facial ni marcación en producción durante la publicación.
 
-El API arranca con `MIREV_API_ONLY=true`: módulos de autenticación, asistencia y lecturas personales, sin scheduler, consumidores WhatsApp ni otros módulos del negocio. No ejecuta migraciones o predeploy. CORS permite únicamente el frontend MiREV. Los GET personales de EMPLOYEE siguen comprobando cuenta y empleado activos; las fotos siempre exigen el empleado propio, también para sesiones administrativas. Los endpoints generales de empleados y usuarios no están publicados en este API.
+El API arranca con `MIREV_API_ONLY=true`: módulos de autenticación, asistencia y lecturas personales, sin scheduler, consumidores WhatsApp ni otros módulos del negocio. Los despliegues no ejecutan migraciones o predeploy. Para el registro facial inicial se aplicó individualmente la migración aditiva `20261117220000_mirev_face_enrollment`, que crea únicamente la tabla `MiRevFaceEnrollment`, y se registró con Prisma migrate resolve. No se aplicaron otras migraciones pendientes. CORS permite únicamente el frontend MiREV. Los GET personales de EMPLOYEE siguen comprobando cuenta y empleado activos; las fotos siempre exigen el empleado propio, también para sesiones administrativas. Los endpoints generales de empleados y usuarios no están publicados en este API.
 
 La PWA tiene nombre, iconos REV, manifiesto, worker, caché y sesión propios. `/`, `/login` y `/profile` redirigen al portal solo cuando `MIREV_STANDALONE=true`. El manifiesto raíz del servicio MiREV también redirige a su manifiesto independiente. Las marcaciones y datos personales requieren Internet; el worker no cachea esas respuestas. REV Logística mantiene su origen y manifiesto originales.
 
@@ -20,7 +20,7 @@ GoDaddy conserva los nameservers existentes. Se añadieron únicamente `mirev CN
 
 Consulta agregada de solo lectura: 18 empleados activos, 18 cuentas activas vinculadas, 13 referencias faciales aprobadas con modelo `sface-0ba9fbfa01b5270c` y ninguna obra activa con geocerca configurada. El worker confirmó ese mismo modelo por red privada. Umbral configurado: 0,45, preservado del API existente.
 
-Quedan por preparar cinco referencias y las geocercas reales. Hasta entonces las marcaciones correspondientes permanecen pendientes de revisión; no se presentarán como verificadas. Se verificó una sesión real iniciada normalmente por el usuario: asistencia, foto/avatar, perfil, préstamos y calendario de bitácora cargaron correctamente. No se crearon marcaciones ni se alteraron datos durante esta revisión.
+Con el nuevo requisito, cada empleado debe capturar su rostro una vez en MiREV, aunque ya tuviera una referencia antigua derivada de su foto de perfil. Quedan por completar esas capturas y las geocercas reales. Hasta entonces las marcaciones correspondientes permanecen pendientes de revisión; no se presentarán como verificadas. Se verificó una sesión real iniciada normalmente por el usuario: asistencia, foto/avatar, perfil, préstamos y calendario de bitácora cargaron correctamente. No se crearon marcaciones ni se alteraron datos durante esta revisión.
 
 ## Despliegues siguientes
 
@@ -33,3 +33,13 @@ El costo es consumo adicional de estos dos servicios dentro del plan Railway exi
 ## Validación
 
 Builds API y Next.js completos; 12 pruebas de PWA/sesión/GPS, tres pruebas de acceso personal y 20 pruebas de asistencia aprobadas. HTTPS, redirección inicial, metadatos de instalación, endpoints protegidos y CORS comprobados en el dominio público. Evidencia y despliegues en `docs/infrastructure/mirev-produccion-2026-11-17.json`.
+
+## Registro facial inicial y card de perfil (17 de noviembre)
+
+Tras iniciar sesión, antes de abrir asistencia o perfil, MiREV consulta `GET /attendance/face-enrollment`. Si falta el registro, muestra la cámara y una vista previa con «Guardar mi rostro y continuar». `POST /attendance/face-enrollment` solo acepta la selfie, sin ID de empleado: el servidor resuelve la cuenta activa. La imagen se normaliza, OpenCV exige un rostro válido y se guarda cifrada en R2; la referencia vectorial queda en EmployeeFaceReference. La tabla MiRevFaceEnrollment conserva empleado, cuenta, hash, modelo, clave de evidencia y fecha. No modifica la foto de perfil ni crea una marcación.
+
+La transacción bloquea el empleado, comprueba nuevamente su cuenta y evita reemplazar una captura inicial existente. Al repetir la solicitud retorna el registro existente; si falla la detección no se habilita el acceso ni se guarda una referencia incompleta. El API de MiREV bloquea también las marcaciones directas sin registro, aunque se intente omitir la pantalla. Cerrar sesión o cambiar de dispositivo conserva el estado porque reside en el servidor.
+
+El perfil reutiliza EmployeeProfile, EmployeePhotoControl y el CSS actual de producción (d8b76ef), con retrato 200x200 centrado. El contenedor de perfil admite 1200 px; asistencia y captura mantienen su ancho compacto. QA local a 2560 y 390 px confirmó foto contenida y ausencia de desbordamiento, con fixture descartado. El flujo inicial se comprobó con la sesión real ya abierta, sin capturar selfies ajenas ni crear marcaciones. Se aprobaron 27 pruebas de inscripción/asistencia y 11 de acceso/sesión/GPS. La prueba final con una selfie real corresponde al propio empleado al usar el flujo publicado.
+
+La migración puntual puede aplicarse mediante `scripts/mirev/apply-face-enrollment.cjs` usando Railway run con el servicio Postgres de producción del registro maestro. El script valida proyecto, entorno y esquema; no usar migrate deploy para aplicar indiscriminadamente otras migraciones.

@@ -1,4 +1,4 @@
-import { Module, Controller, Get, Param, ParseUUIDPipe, Query, Req, Res, UseGuards, ForbiddenException, Header } from '@nestjs/common';
+import { Module, Controller, Get, Param, ParseUUIDPipe, Query, Req, Res, UseGuards, ForbiddenException, Header, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -9,6 +9,9 @@ import { AuthModule } from '../auth/auth.module';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { AttendanceService } from '../attendance/attendance.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { EmployeePortalController } from '../employee-portal/employee-portal.controller';
 import { EmployeesService } from '../transport/employees.service';
@@ -25,7 +28,17 @@ class MiRevHealthController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.EMPLOYEE)
 class MiRevPersonalController {
-  constructor(private readonly employees: EmployeesService, private readonly settings: SettingsService) {}
+  constructor(private readonly employees: EmployeesService, private readonly settings: SettingsService, private readonly attendance: AttendanceService) {}
+
+  @Get('attendance/face-enrollment')
+  @Header('Cache-Control', 'private, no-store')
+  enrollment(@Req() request: { user: { sub: string; role: Role } }) { return this.attendance.enrollmentStatus(request.user); }
+
+  @Post('attendance/face-enrollment')
+  @UseInterceptors(FileInterceptor('selfie', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 } }))
+  enroll(@Req() request: { user: { sub: string; role: Role } }, @UploadedFile() selfie?: { buffer: Buffer }) {
+    return this.attendance.enrollFace(request.user, selfie?.buffer);
+  }
 
   @Get('settings/loan-display')
   @Header('Cache-Control', 'private, no-store')

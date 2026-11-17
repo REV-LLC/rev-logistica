@@ -1592,6 +1592,7 @@ model Owner {
 }
 
 model Employee {
+  mirevFaceEnrollment MiRevFaceEnrollment?
   faceReference EmployeeFaceReference?
   attendancePunches AttendancePunch[]
   whatsappReports WhatsappReport[]
@@ -2167,4 +2168,15 @@ model AttendancePunch {
 
   @@index([employeeId, occurredAt])
   @@index([status, occurredAt])
+}
+
+// Independent evidence of the employee's one-time, authenticated MiREV enrollment.
+model MiRevFaceEnrollment {
+  employeeId String @id
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  userId String
+  photoHash String
+  modelVersion String
+  evidenceKey String
+  createdAt DateTime @default(now())
 }

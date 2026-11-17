@@ -2,8 +2,8 @@
 .page::before { content: ''; position: fixed; z-index: -1; inset: 0; background: #202326 url('/backgrounds/smoked-glass-horizontal.png') center / cover no-repeat; pointer-events: none; }
 .screen { max-width: 430px; margin: 0 auto; }
 .page h1, .page h2, .page p { margin: 0; }
-.page h1 { font-size: 28px; line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
-.page h2 { font-size: 23px; line-height: 1.25; font-weight: 700; }
+.screen:not(.profileScreen) h1 { font-size: 28px; line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
+.screen:not(.profileScreen) h2 { font-size: 23px; line-height: 1.25; font-weight: 700; }
 .page button, .page input { font: inherit; }
 .page button { cursor: pointer; touch-action: manipulation; }
 .page button:disabled { cursor: wait; opacity: .6; }
@@ -84,7 +84,7 @@
 .helpContent details { margin-top: 16px; }
 .spinner { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 350px) { .page { padding-inline: 12px; } .page h1 { font-size: 25px; } .card { padding-inline: 16px; } .receipt { flex-wrap: wrap; } .receipt time { margin-left: 36px; } }
+@media (max-width: 350px) { .page { padding-inline: 12px; } .screen:not(.profileScreen) h1 { font-size: 25px; } .card { padding-inline: 16px; } .receipt { flex-wrap: wrap; } .receipt time { margin-left: 36px; } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .primary { transition: none; } }
 .nativeCapture { position: relative; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; cursor: pointer; }
 .nativeCapture input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
@@ -100,4 +100,7 @@
 .profileButton:focus-visible { outline: 3px solid #74c0fc; outline-offset: 3px; }
 .profileLoading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 32px 0; }
 .profileView { min-width: 0; }
-.profileView :global(.mantine-Container-root) { padding-inline: 0; }
+
+.profileScreen { max-width: 1200px; }
+.enrollmentPreview { display: block; width: 100%; max-height: 440px; object-fit: contain; border-radius: 16px; background: #101820; }
+.enrollment { max-width: 430px; margin-inline: auto; }

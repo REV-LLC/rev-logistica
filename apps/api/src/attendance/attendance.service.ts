@@ -137,6 +137,53 @@ export class AttendanceService {
       worksites,
     };
   }
+  async enrollmentStatus(actor: Actor) {
+    this.enabled();
+    const user = await this.actor(actor);
+    const enrollment = await this.prisma.miRevFaceEnrollment.findUnique({
+      where: { employeeId: user.employee!.id }, select: { createdAt: true },
+    });
+    return { required: !enrollment, enrolledAt: enrollment?.createdAt ?? null };
+  }
+
+  async enrollFace(actor: Actor, image?: Buffer) {
+    this.enabled();
+    const user = await this.actor(actor);
+    const employeeId = user.employee!.id;
+    const previous = await this.prisma.miRevFaceEnrollment.findUnique({ where: { employeeId } });
+    if (previous) return { enrolled: true, enrolledAt: previous.createdAt };
+    const jpeg = await this.normalize(image);
+    // Enrollment must fail closed: an unavailable detector cannot establish identity.
+    const extraction = await this.face.extract(jpeg);
+    const photoHash = createHash('sha256').update(jpeg).digest('hex');
+    const evidenceKey = `attendance-encrypted/enrollment/${employeeId}/${randomUUID()}.bin`;
+    await this.storage.put(evidenceKey, jpeg);
+    let saved = false;
+    try {
+      return await this.prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM "Employee" WHERE id = ${employeeId} FOR UPDATE`;
+        const current = await tx.user.findUnique({ where: { id: actor.sub }, include: { employee: true } });
+        if (!current?.active || current.role !== actor.role || !current.employee?.active || current.employee.id !== employeeId)
+          throw new ForbiddenException('La cuenta no está habilitada');
+        const existing = await tx.miRevFaceEnrollment.findUnique({ where: { employeeId } });
+        if (existing) return { enrolled: true, enrolledAt: existing.createdAt };
+        const createdAt = new Date();
+        await tx.employeeFaceReference.upsert({
+          where: { employeeId },
+          create: { employeeId, vector: extraction.vector, modelVersion: extraction.modelVersion, photoHash, approvedByUserId: actor.sub, approvedAt: createdAt },
+          update: { vector: extraction.vector, modelVersion: extraction.modelVersion, photoHash, approvedByUserId: actor.sub, approvedAt: createdAt },
+        });
+        await tx.miRevFaceEnrollment.create({ data: { employeeId, userId: actor.sub, photoHash, modelVersion: extraction.modelVersion, evidenceKey, createdAt } });
+        return { enrolled: true, enrolledAt: createdAt, saved: true };
+      }).then(result => {
+        saved = 'saved' in result && result.saved === true;
+        return { enrolled: true, enrolledAt: result.enrolledAt };
+      });
+    } finally {
+      if (!saved) await this.storage.remove(evidenceKey).catch(() => undefined);
+    }
+  }
+
   private async normalize(image?: Buffer) {
     if (!image?.length || image.length > 5 * 1024 * 1024)
       throw new BadRequestException(
@@ -168,6 +215,8 @@ export class AttendanceService {
     const occurredAt = new Date();
     const user = await this.actor(actor);
     const employeeId = user.employee!.id;
+    if (process.env.MIREV_API_ONLY === 'true' && !await this.prisma.miRevFaceEnrollment.findUnique({ where: { employeeId }, select: { employeeId: true } }))
+      throw new ForbiddenException('Primero registra tu rostro en MiREV para marcar asistencia.');
     const previous = await this.prisma.attendancePunch.findUnique({
       where: { requestId: dto.requestId },
       select: punchSelect,
