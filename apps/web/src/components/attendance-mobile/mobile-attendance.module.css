@@ -88,3 +88,6 @@
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .primary { transition: none; } }
 .nativeCapture { position: relative; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; cursor: pointer; }
 .nativeCapture input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand > span { color: #f1f5f9; font-size: 17px; font-weight: 600; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.2); }

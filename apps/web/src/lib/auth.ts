@@ -1,5 +1,9 @@
 const TOKEN_KEY = 'revlogistica.token';
 const SESSION_EXPIRED_NOTICE_KEY = 'revlogistica.sessionExpiredNotice';
+function storageKey(mainKey: string, mobileKey: string) {
+  const path = typeof window === 'undefined' ? '' : window.location.pathname;
+  return path === '/attendance/mobile' || path.startsWith('/attendance/mobile/') ? mobileKey : mainKey;
+}
 const LOCAL_BYPASS_PAYLOAD =
   'eyJzdWIiOiJsb2NhbC1hdXRoLWJ5cGFzcyIsImVtYWlsIjoidXNlcjFAZHVtbXkubG9jYWwiLCJyb2xlIjoiQURNSU4ifQ';
 const LOCAL_BYPASS_TOKEN = `local.${LOCAL_BYPASS_PAYLOAD}.bypass`;
@@ -50,7 +54,7 @@ function parseJwtPayload(token: string): JwtPayload | null {
 export function getToken() {
   if (isAuthBypassEnabled()) return LOCAL_BYPASS_TOKEN;
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  return window.localStorage.getItem(storageKey(TOKEN_KEY, 'mirev.token'));
 }
 
 export function isTokenExpired(token: string | null) {
@@ -63,23 +67,23 @@ export function isTokenExpired(token: string | null) {
 
 export function setToken(token: string) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(TOKEN_KEY, token);
+  window.localStorage.setItem(storageKey(TOKEN_KEY, 'mirev.token'), token);
 }
 
 export function clearToken() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(storageKey(TOKEN_KEY, 'mirev.token'));
 }
 
 export function markSessionExpiredNotice() {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, '1');
+  window.sessionStorage.setItem(storageKey(SESSION_EXPIRED_NOTICE_KEY, 'mirev.sessionExpiredNotice'), '1');
 }
 
 export function consumeSessionExpiredNotice() {
   if (typeof window === 'undefined') return false;
-  const shouldShowNotice = window.sessionStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === '1';
-  window.sessionStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+  const shouldShowNotice = window.sessionStorage.getItem(storageKey(SESSION_EXPIRED_NOTICE_KEY, 'mirev.sessionExpiredNotice')) === '1';
+  window.sessionStorage.removeItem(storageKey(SESSION_EXPIRED_NOTICE_KEY, 'mirev.sessionExpiredNotice'));
   return shouldShowNotice;
 }
 

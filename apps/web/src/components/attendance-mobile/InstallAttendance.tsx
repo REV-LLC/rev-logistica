@@ -23,7 +23,7 @@ export default function InstallAttendance() {
     window.addEventListener('beforeinstallprompt', beforeInstall);
     window.addEventListener('appinstalled', afterInstall);
     display.addEventListener('change', check);
-    if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/mirev-sw.js', { scope: '/attendance/mobile' }).catch(() => undefined);
     return () => {
       window.removeEventListener('beforeinstallprompt', beforeInstall);
       window.removeEventListener('appinstalled', afterInstall);
@@ -41,7 +41,7 @@ export default function InstallAttendance() {
   }
   if (installed) return null;
   return <footer className={styles.footer}>
-    <button className={styles.link} onClick={install} aria-expanded={instructions}>Instalar en mi celular</button>
+    <button className={styles.link} onClick={install} aria-expanded={instructions}>Instalar MiREV</button>
     {instructions ? <p role="status">{ios ? 'Pide al encargado que abra esta pantalla en Safari, toque Compartir y «Añadir a pantalla de inicio».' : 'Pide al encargado que abra el menú del navegador y toque «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p> : null}
   </footer>;
 }

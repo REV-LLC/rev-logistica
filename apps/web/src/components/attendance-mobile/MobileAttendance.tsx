@@ -50,7 +50,7 @@ export default function MobileAttendance() {
   return <main className={styles.page}>
     <div className={styles.screen}>
       <header className={styles.header}>
-        <img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV Logística" width="108" height="54" />
+        <div className={styles.brand}><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></div>
         <button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
           <IconHelpCircle size={25} aria-hidden="true" /><span>Ayuda</span>
         </button>
