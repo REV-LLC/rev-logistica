@@ -46,7 +46,7 @@ import selectorStyles from "./annex-selector.module.css";
 import AnnexSend from "./annex-send";
 import type { AnnexExport } from "@/lib/annex-pdf";
 import { api } from "@/lib/api";
-import { annexLocationUrl, readAnnexLocation } from "@/lib/annex-url";
+import { annexLocationUrl, readAnnexLocation, type AnnexLocation } from "@/lib/annex-url";
 import type {
   AnnexInput,
   Draft,
@@ -55,6 +55,7 @@ import type {
   SourceIssue,
 } from "./types";
 type Consultation = {
+  annexCode?: string;
   input: AnnexInput;
   result: Result;
   sourceIssues: SourceIssue[];
@@ -115,6 +116,9 @@ export default function AnnexesPage() {
     [result, setResult] = useState<Result | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(true);
   const [invoiceNumber, setInvoiceNumber] = useState<string | null>(null);
+  const [annexCode, setAnnexCode] = useState<string>();
+  const [searchCode, setSearchCode] = useState("");
+  const [searchingCode, setSearchingCode] = useState(false);
   const [openedDraft, setOpenedDraft] = useState<string | null>(null);
   const [saveOpened, setSaveOpened] = useState(false);
   const [assignOpened, setAssignOpened] = useState(false);
@@ -147,6 +151,7 @@ export default function AnnexesPage() {
   const foregroundRequest = useRef<AbortController | null>(null);
   useEffect(() => () => foregroundRequest.current?.abort(), []);
   const applyConsultation = useCallback((data: Consultation) => {
+    setAnnexCode(data.annexCode);
     setInput(data.input);
     setResult(data.result);
     setIssues(data.sourceIssues ?? []);
@@ -315,6 +320,7 @@ export default function AnnexesPage() {
         const data = historical
           ? {
               ...latest,
+              annexCode: saved!.annexCode,
               sourceIssues: latest.sourceIssues ?? [],
               revision: saved!.revision,
               invoiceNumber: latest.invoiceNumber ?? null,
@@ -518,6 +524,7 @@ export default function AnnexesPage() {
                 },
               });
         setRevision(draft.revision);
+        setAnnexCode(draft.annexCode);
         setInvoiceNumber(draft.revisions[0].invoiceNumber ?? null);
         setOpenedDraft(draft.id);
         setSaveOpened(false);
@@ -549,6 +556,7 @@ export default function AnnexesPage() {
     }
   }
   function reset() {
+    setAnnexCode(undefined);
     stopRefresh.current?.();
     foregroundRequest.current?.abort();
     setLiveError(null);
@@ -582,6 +590,21 @@ export default function AnnexesPage() {
       return false;
     reset();
     return true;
+  }
+  async function openByCode(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy || printing || searchingCode) return;
+    setSearchingCode(true);
+    setError(null);
+    try {
+      const target = await api<AnnexLocation>(`/annexes/codes/${encodeURIComponent(searchCode.trim())}`, {cache: "no-store"});
+      if (dirty && !window.confirm("Se descartarán los cambios sin guardar. ¿Continuar?")) return;
+      window.location.assign(annexLocationUrl(window.location.href, target));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo abrir el anexo.");
+    } finally {
+      setSearchingCode(false);
+    }
   }
   function changeDate(key: "from" | "through", value: string) {
     if (value === period[key]) return;
@@ -621,6 +644,15 @@ export default function AnnexesPage() {
             </Text>
           </div>
           <Group gap="xs">
+            <form onSubmit={openByCode}>
+              <Group gap={4} wrap="nowrap">
+                <TextInput size="xs" w={145} aria-label="Código del anexo" placeholder="Código del anexo"
+                  inputMode="numeric" pattern="[0-9]{6,16}" maxLength={16} required
+                  value={searchCode} onChange={event => setSearchCode(event.currentTarget.value)} />
+                <Button size="xs" type="submit" variant="light" loading={searchingCode}
+                  disabled={busy || printing}>Abrir</Button>
+              </Group>
+            </form>
             <Button
               component={Link}
               href="/billing/annexes/consolidado"
@@ -645,6 +677,7 @@ export default function AnnexesPage() {
         </Group>
         {input && (
           <Group>
+            {annexCode && <Text fw={600}>Anexo {annexCode}</Text>}
             <Button
               size="xs"
               variant="light"
@@ -903,6 +936,7 @@ export default function AnnexesPage() {
                               input: current.input,
                               result: current.result,
                               revision: current.revision,
+                            annexCode: current.annexCode,
                               issues: current.sourceIssues,
                               customer:
                                 customers.find((c) => c.id === customer)
@@ -958,6 +992,7 @@ export default function AnnexesPage() {
                             input: current.input,
                             result: current.result,
                             revision: current.revision,
+                            annexCode: current.annexCode,
                             issues: current.sourceIssues,
                             customer:
                               customers.find((c) => c.id === customer)?.name ??

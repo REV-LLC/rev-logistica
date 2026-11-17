@@ -556,6 +556,7 @@ model AppSettingAudit {
 }
 
 model Customer {
+  annexPrefix AnnexCustomerPrefix?
   id                    String                        @id @default(uuid())
   name                  String
   identityDocumentType  CustomerIdentityDocumentType?
@@ -603,6 +604,7 @@ model Worksite {
 }
 
 model CustomerWorksite {
+  annexCodes AnnexConsultationCode[]
   attendancePunches AttendancePunch[]
   whatsappReports WhatsappReport[]
   worksiteAttendance WorksiteAttendance[]
@@ -1825,7 +1827,29 @@ model ReleaseAcknowledgement {
   @@id([userId, releaseId])
 }
 
+model AnnexCustomerPrefix {
+  prefix Int @id
+  customerId String? @unique
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+}
+
+model AnnexConsultationCode {
+  code String @id
+  customerWorksiteId String?
+  customerWorksite CustomerWorksite? @relation(fields: [customerWorksiteId], references: [id], onDelete: SetNull)
+  periodFrom DateTime @db.Date
+  periodTo DateTime @db.Date
+  through DateTime @db.Date
+  baseCode String
+  ordinal Int
+  draft AnnexDraft?
+  @@unique([customerWorksiteId, periodFrom, periodTo])
+  @@unique([baseCode, ordinal])
+}
+
 model AnnexDraft {
+  annexCode String @unique @default(dbgenerated())
+  consultationCode AnnexConsultationCode @relation(fields: [annexCode], references: [code], onDelete: Restrict)
   id                 String @id @default(uuid())
   customerWorksiteId String
   periodFrom         DateTime @db.Date

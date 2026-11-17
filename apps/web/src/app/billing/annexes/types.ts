@@ -203,6 +203,7 @@ export type Result = {
 };
 export type SourceIssue = { code: string; reference: string; message: string };
 export type Draft = {
+  annexCode?: string;
   customerWorksiteId: string;
   id: string;
   revision: number;

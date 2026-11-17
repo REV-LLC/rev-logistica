@@ -86,7 +86,7 @@ export default function AnnexSend({
     const url = URL.createObjectURL(pdf),
       link = document.createElement("a");
     link.href = url;
-    link.download = `Anexo-${data.input.period.from}-${data.input.period.through}.pdf`;
+    link.download = `Anexo-${data.annexCode ? data.annexCode + "-" : ""}${data.input.period.from}-${data.input.period.through}.pdf`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
@@ -114,7 +114,7 @@ export default function AnnexSend({
     body.append(
       "pdf",
       pdf,
-      `Anexo-${data.input.period.from}-${data.input.period.through}.pdf`,
+      `Anexo-${data.annexCode ? data.annexCode + "-" : ""}${data.input.period.from}-${data.input.period.through}.pdf`,
     );
     try {
       const response = await api<{

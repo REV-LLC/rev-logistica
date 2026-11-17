@@ -47,6 +47,32 @@ const saveSchema = z
 @Injectable()
 export class AnnexesService {
   constructor(private readonly prisma: PrismaService, private readonly losses: WorksiteLossService) {}
+  async consultationCode(siteId: string, from: string, to: string, through: string) {
+    const [row] = await this.prisma.$queryRaw<{code: string}[]>`
+      SELECT reserve_annex_code(${siteId}, ${from}::date, ${to}::date, ${through}::date) AS code
+    `;
+    return row.code;
+  }
+
+  async findByCode(code: string) {
+    if (!/^\d{6,16}$/.test(code)) throw new BadRequestException('Ingresa el código numérico completo del anexo.');
+    const found = await this.prisma.annexConsultationCode.findUnique({
+      where: { code },
+      select: {
+        periodFrom: true, periodTo: true, through: true,
+        customerWorksite: { select: {id: true, customerId: true} },
+        draft: { select: {id: true, revisions: {orderBy: {revision: 'desc'}, take: 1, select: {through: true}}} },
+      },
+    });
+    if (!found?.customerWorksite) throw new NotFoundException('No se encontró un anexo con ese código.');
+    const date = (value: Date) => value.toISOString().slice(0, 10);
+    return {
+      customer: found.customerWorksite.customerId, worksite: found.customerWorksite.id,
+      period: {from: date(found.periodFrom), to: date(found.periodTo), through: date(found.draft?.revisions[0]?.through ?? found.through)},
+      ...(found.draft ? {draft: found.draft.id} : {}),
+    };
+  }
+
   async list(customerWorksiteId: string) {
     if (!z.string().uuid().safeParse(customerWorksiteId).success)
       throw new BadRequestException('Obra inválida');
@@ -104,6 +130,7 @@ export class AnnexesService {
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         select: {
           id: true,
+          annexCode: true,
           revision: true,
           periodFrom: true,
           periodTo: true,

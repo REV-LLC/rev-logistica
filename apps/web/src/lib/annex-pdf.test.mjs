@@ -114,3 +114,11 @@ test('area billing prints physical pieces and square metres in separate columns'
  const pdf=await inspect(await createAnnexPdf(data));
  for(const value of ['Cant.','m²','2.16','M²/D']) assert.ok(pdf.text.includes(value),value);
 });
+
+test('print and download identify the numeric consultation before saving', async () => {
+  const data = {...fixture(), revision: 0, annexCode: '001111'};
+  for (const options of [{}, {print:true}]) {
+    const pdf = await inspect(await createAnnexPdf(data, options));
+    assert.ok(pdf.text.includes('ANEXO DE ALQUILER 001111'));
+  }
+});

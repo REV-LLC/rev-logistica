@@ -10,7 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ChargeType } from '@prisma/client';
+import { ChargeType, RentalQuantityBasis } from '@prisma/client';
 import { BulkKitSettingsDto } from '../../bulk-kits/bulk-kits.dto';
 
 export class BulkAssetFamilyInput {
@@ -83,6 +83,10 @@ export class BulkSkuInput {
   @IsOptional()
   @IsString()
   size?: string;
+
+  @IsOptional()
+  @IsEnum(RentalQuantityBasis)
+  rentalQuantityBasis?: RentalQuantityBasis;
 
   @IsOptional()
   @IsNumber()

@@ -70,6 +70,17 @@ export class AnnexesController {
   chargeOptions(@Query('customerWorksiteId', new ParseUUIDPipe()) id: string) {
     return this.source.chargeOptions(id);
   }
+  @Get('codes/:code')
+  @Header('Cache-Control', 'no-store')
+  findByCode(@Param('code') code: string) {
+    return this.annexes.findByCode(code);
+  }
+
+  private async consultation(id: string, from: string, to: string, through: string, live: boolean) {
+    const data = await this.source.prepare(id, from, to, through, live);
+    const annexCode = await this.annexes.consultationCode(id, from, to, through);
+    return { ...data, annexCode };
+  }
   @Get('live')
   @Header('Cache-Control', 'no-store')
   live(
@@ -78,7 +89,7 @@ export class AnnexesController {
     @Query('to') to: string,
     @Query('through') through: string,
   ) {
-    return this.source.prepare(id, from, to, through, true);
+    return this.consultation(id, from, to, through, true);
   }
   @Get('prepare') prepare(
     @Query('customerWorksiteId') id: string,
@@ -86,7 +97,7 @@ export class AnnexesController {
     @Query('to') to: string,
     @Query('through') through: string,
   ) {
-    return this.source.prepare(id, from, to, through);
+    return this.consultation(id, from, to, through, false);
   }
   @Post('select-mode') selectMode(@Body() body: unknown) {
     return assertDailyAnnex(selectAnnexMode(body));
