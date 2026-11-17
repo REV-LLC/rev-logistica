@@ -249,5 +249,28 @@
     },
     "limites": "Sugerencia precisa y ambigua comprobadas con casos sintéticos; no se simuló GPS en el navegador ni se generaron marcaciones reales. Prueba en celular con GPS real pendiente de usuario.",
     "produccion_modificada": false
+  },
+  "mirev_pwa": {
+    "fecha": "2026-11-17",
+    "deployment": "d755e4f5-4536-43de-b024-1a28357b8ec6",
+    "estado": "SUCCESS",
+    "commit": "70e23a2",
+    "dominio_final": "mirev.revcontractorsllc.com",
+    "dominio_final_conectado": false,
+    "manifest_id": "/attendance/mobile",
+    "nombre": "MiREV",
+    "worker": "/mirev-sw.js",
+    "worker_scope": "/attendance/mobile",
+    "cache_prefix": "mirev-shell-",
+    "token_namespace": "mirev.token",
+    "rev_logistica": "Manifiesto, ID raíz, start_url, iconos y worker originales sin modificar; sesión raíz conserva revlogistica.token.",
+    "validacion": [
+      "7 pruebas: independencia de manifiestos, sesiones, avisos de sesión y cachés; fallback offline sin almacenar marcaciones",
+      "TypeScript correcto y compilación Railway SUCCESS",
+      "HTTP 200 manifiestos distintos; iconos, worker y offline coinciden por hash con fuente",
+      "Browser: título/application-name/Apple MiREV, ingreso normal con fixture, Instalar MiREV visible,390px sin desborde y sin errores de consola"
+    ],
+    "limites": "Instalación física en Android/iPhone pendiente del usuario. Permisos del navegador serán distintos por origen al conectar el subdominio final; en staging las PWA comparten origen. El dominio final necesita configuración y acceso raíz a la ruta móvil al publicar.",
+    "produccion_modificada": false
   }
 }
