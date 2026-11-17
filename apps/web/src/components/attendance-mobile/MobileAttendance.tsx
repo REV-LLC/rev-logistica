@@ -5,9 +5,7 @@ import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { reasonLabels, attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
-import AttendanceLocationMap from './AttendanceLocationMap';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
-import StagingSetup from './StagingSetup';
 import InstallAttendance from './InstallAttendance';
 import styles from './mobile-attendance.module.css';
 
@@ -53,11 +51,10 @@ export default function MobileAttendance() {
 
   return <main className={styles.page}>
     <div className={styles.screen}>
-      {process.env.NEXT_PUBLIC_ATTENDANCE_TEST === 'true' ? <div role="status" style={{ background: '#fff0bd', color: '#684900', padding: '12px 16px', borderRadius: 16, fontWeight: 700 }}>PRUEBAS · Sin efecto en producción</div> : null}
       <header className={styles.header}>
-        <img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV Logística" width="90" height="45" />
+        <img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV Logística" width="108" height="54" />
         <button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
-          <IconHelpCircle size={30} aria-hidden="true" />Ayuda
+          <IconHelpCircle size={25} aria-hidden="true" /><span>Ayuda</span>
         </button>
       </header>
       {signedIn === null ? <Loading label="Un momento…" /> : signedIn ?
@@ -107,7 +104,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     } finally { setBusy(false); }
   }
   return <section className={`${styles.stack} ${styles.login}`}>
-    <h1>Mi asistencia</h1><p>El encargado te ayudará a preparar este celular.</p>
+    <div className={styles.greeting}><h1>Mi asistencia</h1><p>Ingresa para registrar tu jornada.</p></div>
     <form className={styles.stack} onSubmit={login} aria-busy={busy}>
       <label>Usuario o cédula<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required /></label>
       <label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label>
@@ -121,9 +118,6 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
   const nativeCamera = useNativeSelfieCamera();
   const [me, setMe] = useState<Me | null>(null);
   const [siteId, setSiteId] = useState('');
-  const [mapOpen, setMapOpen] = useState(false);
-  const [mapPunchId, setMapPunchId] = useState('');
-  const [mapPoint, setMapPoint] = useState<'punch' | 'worksite'>('punch');
   const [step, setStep] = useState<Step>('home');
   const [error, setError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
@@ -150,9 +144,6 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     if (alive.current) { setMe(data); setSiteId(current => data.open ? data.open.customerWorksite.id : data.worksites.some(site => site.id === current) ? current : rememberedSite(data)); }
     return data;
   }, [request]);
-  useEffect(() => {
-    if (mapOpen) document.getElementById('attendance-location-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [mapOpen, mapPunchId]);
   const stopCamera = useCallback(() => {
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
   }, []);
@@ -296,9 +287,9 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
 
   const site = me?.open?.customerWorksite || me?.worksites.find(site => site.id === siteId);
   const isExit = Boolean(me?.open);
-  const last = me?.recent[0];
+
   const ActionIcon = isExit ? IconLogout : IconLogin;
-  if (me?.testMode && !me.referenceReady) return <StagingSetup onReady={load} />;
+  const last = me?.recent[0];
   return <>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {!me ? <section className={styles.stack}>
@@ -314,11 +305,11 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         {!me.worksites.length ? <p className={styles.notice}>No hay obras disponibles. Pide ayuda al encargado.</p> : null}
         <button className={styles.link} onClick={() => setStep('home')}>Volver</button>
       </section> : step === 'camera' ? <section>
-        <h1>{nativeCamera ? 'Toma una selfie' : 'Mira la cámara'}</h1><p>{nativeCamera ? 'Usa la cámara frontal y evita acercar demasiado el celular.' : 'Aleja el celular hasta que tu cara quepa en el óvalo pequeño. Deja visibles la cabeza completa y los hombros.'}</p>
+        <div className={styles.greeting}><h1>{nativeCamera ? 'Toma una selfie' : 'Mira la cámara'}</h1><p>{nativeCamera ? 'Usa la cámara frontal y evita acercar demasiado el celular.' : 'Deja visibles la cabeza completa y los hombros.'}</p></div>
         {nativeCamera ? <NativeSelfieCapture onPhoto={photo => captureImage(async () => photo)} /> : <>
         <div className={styles.camera}>
           <video ref={video} playsInline muted aria-label="Cámara frontal" onLoadedData={() => setCameraReady(true)} />
-          <div className={styles.faceGuide} aria-hidden="true" />
+          <div className={styles.faceGuide} aria-hidden="true" /><span className={styles.cameraHint}>Aleja el celular hasta encajar en el óvalo</span>
           {!cameraReady ? <div className={styles.cameraLoading} role="status">Abriendo cámara…</div> : null}
         </div>
         <button className={styles.primary} disabled={!cameraReady} onClick={capture}><IconCamera size={32} aria-hidden="true" />TOMAR FOTO</button></>}
@@ -328,65 +319,40 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         <p>Conservamos esta solicitud mientras mantengas la aplicación abierta.</p>
         <button className={styles.primary} onClick={retry}>VOLVER A INTENTAR</button>
       </section> : step === 'done' && result ? <section className={styles.center} role="status">
-        <div className={`${styles.successIcon} ${result.status === 'PENDING' || result.status === 'REJECTED' ? styles.pending : ''}`}>
+        <div className={`${styles.successIcon} ${result.status === 'REJECTED' ? styles.rejected : result.status === 'PENDING' ? styles.pending : ''}`}>
           {result.status === 'PENDING' || result.status === 'REJECTED' ? <IconClock size={86} aria-hidden="true" /> : <IconCheck size={86} aria-hidden="true" />}
         </div>
-        <h1>{result.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} {result.status === 'PENDING' ? 'sin verificar' : result.status === 'REJECTED' ? 'rechazada' : result.status === 'APPROVED' ? 'aprobada por oficina' : 'verificada'}</h1>
+        <h1>{result.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} {result.status === 'PENDING' ? 'pendiente de revisión' : result.status === 'REJECTED' ? 'rechazada' : 'registrada'}</h1>
         {result.status === 'PENDING' ? <div className={styles.notice}>
           <strong>{result.reasons.includes('FACE_MISMATCH') ? 'Tu rostro no coincide con la referencia registrada.' : 'Esta marcación necesita revisión.'}</strong>
           <p>No quedó verificada. Oficina debe revisar el registro.</p>
           {result.reasons.filter(reason => reason !== 'FACE_MISMATCH').map(reason => <p key={reason}>{reasonLabels[reason] || 'Validación pendiente'}</p>)}
         </div> : result.status === 'REJECTED' ? <p className={styles.notice}>Habla con el encargado.</p> : result.status === 'APPROVED' ? <p>Marcación aprobada por oficina.</p> : <p>Identidad y ubicación verificadas.</p>}
-        <div className={styles.receipt}>{result.customerWorksite.alias || result.customerWorksite.worksite.name}<time dateTime={result.occurredAt}>{shortTime(result.occurredAt)}</time></div>
+        <div className={styles.receipt}><IconMapPin size={24} aria-hidden="true" /><strong>{result.customerWorksite.alias || result.customerWorksite.worksite.name}</strong><time dateTime={result.occurredAt}>{shortTime(result.occurredAt)}</time></div>
         <button className={styles.primary} onClick={() => { setStep('home'); setResult(null); }}>LISTO</button>
       </section> : <>
-        <div className={styles.greeting}><h1>Hola, {me.employee.name.split(' ')[0]}</h1><p>Tu asistencia</p></div>
-        <section className={styles.card}>
+        <div className={styles.greeting} data-page-heading-glass><h1>Mi asistencia</h1><p>Hola, {me.employee.name.split(' ')[0]}</p></div>
+        <section className={styles.card} aria-label="Registrar asistencia">
           <div className={styles.idle}>
-            <IconDoor size={70} stroke={1.7} className={styles.stateIcon} aria-hidden="true" />
+            <IconDoor size={48} stroke={1.7} className={styles.stateIcon} aria-hidden="true" />
             <p className={styles.stateLabel}>{isExit ? 'Tu jornada está abierta' : 'Sin entrada registrada'}</p>
+            {me.open ? <p className={styles.shiftTime}>Entrada a las {shortTime(me.open.enteredAt)}</p> : null}
             <button className={`${styles.primary} ${styles.mark} ${isExit ? styles.exit : ''}`} onClick={() => void begin()}>
-              <ActionIcon size={68} stroke={1.8} aria-hidden="true" />MARCAR {isExit ? 'SALIDA' : 'ENTRADA'}
+              <ActionIcon size={40} stroke={1.8} aria-hidden="true" />MARCAR {isExit ? 'SALIDA' : 'ENTRADA'}
             </button>
             <p className={styles.instruction}>Toca el botón y mira la cámara</p>
           </div>
-          <div className={styles.site}><IconMapPin size={30} aria-hidden="true" />
-            <span className={styles.siteName}>{site ? site.alias || site.worksite.name : 'Elige tu obra'}</span>
+          <div className={styles.site}><IconMapPin size={26} aria-hidden="true" />
+            <div className={styles.siteName}><span>Obra</span><strong>{site ? site.alias || site.worksite.name : 'Elige tu obra'}</strong></div>
             {!isExit ? <button className={styles.link} onClick={() => { setError(''); setStep('sites'); }}>{site ? 'Cambiar' : 'Elegir'}</button> : null}
           </div>
         </section>
-        <div className={styles.recent}><IconClock size={34} aria-hidden="true" /><div>
+        <div className={styles.recent}><IconClock size={26} aria-hidden="true" /><div>
           <span className={styles.muted}>Último registro</span>
           <strong>{last ? `${last.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · ${attendanceDate(last.occurredAt)}` : 'Aún no hay marcaciones'}</strong>
-          {last?.status === 'PENDING' ? <span>{last.reasons.includes('FACE_MISMATCH') ? 'Sin verificar: el rostro no coincidió. Revisión de oficina pendiente.' : 'Sin verificar. Oficina revisará tu registro.'}</span> : last?.status === 'REJECTED' ? <span>Rechazado. Habla con el encargado.</span> : null}
+          {last?.status === 'PENDING' ? <span className={styles.reviewText}>{last.reasons.includes('FACE_MISMATCH') ? 'El rostro no coincidió. Oficina revisará tu registro.' : 'Pendiente de revisión por oficina.'}</span> : last?.status === 'REJECTED' ? <span className={styles.reviewText}>Rechazado. Habla con el encargado.</span> : null}
         </div></div>
       </>}
-    {me?.testMode && me.recent.length ? <>
-      <button className={styles.secondary} style={{ marginTop: 20 }} aria-expanded={mapOpen} onClick={() => { if (!mapOpen) setMapPoint('punch'); setMapOpen(value => !value); if (!mapPunchId) setMapPunchId(me.recent[0].id); }}>{mapOpen ? 'OCULTAR MAPA' : 'VER UBICACIONES EN EL MAPA'}</button>
-      {mapOpen ? <AttendanceLocationMap punches={me.recent} selectedId={mapPunchId} point={mapPoint} onPointChange={setMapPoint} onSelect={id => { setMapPunchId(id); setMapPoint('punch'); }} /> : null}
-    </> : null}
-    {me?.testMode && me.recent.length ? <details className={styles.testDiagnostics}>
-      <summary>Datos de mis pruebas ({me.recent.length})</summary>
-      <p>Detección e identidad son puntuaciones distintas, no porcentajes de certeza. Radio de la obra de prueba: 200 m.</p>
-      {me.recent.map(punch => <TestPunchDetails key={punch.id} punch={punch} onMap={() => { setMapPunchId(punch.id); setMapPoint('punch'); setMapOpen(true); document.getElementById('attendance-location-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />)}
-    </details> : null}
-  </>;
-}
 
-function TestPunchDetails({ punch, onMap }: { punch: AttendancePunch; onMap: () => void }) {
-  const score = (value: number | null | undefined) => value == null ? 'Sin dato' : value.toFixed(4);
-  return <section className={styles.testDiagnostics}>
-    <strong>{punch.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · {attendanceDate(punch.occurredAt)}</strong>
-    <p>{punch.status === 'VERIFIED' ? 'Verificada' : punch.status === 'PENDING' ? 'Pendiente de revisión' : punch.status}</p>
-    <dl>
-      <dt>Detección de rostro</dt><dd>{score(punch.detectionScore)} / mín. {score(punch.detectionThreshold)}</dd>
-      <dt>Coincidencia de identidad</dt><dd>{score(punch.similarity)} / mín. {score(punch.threshold)}</dd>
-      <dt>Distancia a la obra</dt><dd>{punch.distanceMeters == null ? 'Sin dato' : `${punch.distanceMeters.toFixed(1)} m`}</dd>
-      <dt>Precisión GPS</dt><dd>±{punch.accuracyMeters.toFixed(1)} m</dd>
-    </dl>
-    <p>Coordenadas: {punch.latitude.toFixed(6)}, {punch.longitude.toFixed(6)}</p>
-    <button className={styles.secondary} onClick={onMap}>Ver ubicación de este registro</button>
-    {punch.detectionReprocessedAt ? <p>Detección recalculada desde la evidencia guardada.</p> : null}
-    {punch.reasons.map(reason => <p key={reason}>{reasonLabels[reason] || reason}</p>)}
-  </section>;
+  </>;
 }

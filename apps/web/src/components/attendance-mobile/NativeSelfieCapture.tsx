@@ -47,7 +47,7 @@ export default function NativeSelfieCapture({ onPhoto }: { onPhoto: (photo: Blob
       {busy ? 'PREPARANDO FOTO…' : 'ABRIR CÁMARA DEL IPHONE'}
       <input type="file" accept="image/*" capture="user" aria-label="Tomar selfie con la cámara del iPhone" disabled={busy} onChange={selected} />
     </label>
-    <p className={styles.muted}>Esta opción usa la cámara del sistema en lugar del permiso de cámara de la página.</p>
+    
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
   </div>;
 }
