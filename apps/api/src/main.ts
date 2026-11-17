@@ -47,7 +47,7 @@ async function bootstrap() {
   loadEnvFileFromCandidates();
   // Explicitly provide Express adapter to avoid driver auto-detection issues.
   const app = await NestFactory.create<NestExpressApplication>(
-    AppModule,
+    process.env.MIREV_API_ONLY === 'true' ? (await import('./mirev/mirev.module.js')).MiRevModule : AppModule,
     new ExpressAdapter(),
     { bodyParser: false },
   );
@@ -69,7 +69,7 @@ async function bootstrap() {
         /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:\d+$/,
         /^https:\/\/.*\.vercel\.app$/,
       ];
-      const isAllowed = allowedPatterns.some((pattern) => pattern.test(origin));
+      const isAllowed = process.env.MIREV_API_ONLY !== 'true' && allowedPatterns.some((pattern) => pattern.test(origin));
       return callback(isAllowed ? null : new Error('CORS blocked'), isAllowed);
     },
     credentials: true,

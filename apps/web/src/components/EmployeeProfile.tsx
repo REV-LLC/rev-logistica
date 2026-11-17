@@ -18,12 +18,13 @@ type ProfileState =
   | { status: 'missing' }
   | { status: 'error' };
 
-export default function EmployeeProfile({ employeeId, selfService = false }: { employeeId?: string; selfService?: boolean }) {
-  const [state, setState] = useState<ProfileState>({ status: 'loading' });
+export default function EmployeeProfile({ employeeId, selfService = false, portalBasePath, initialEmployee }: { employeeId?: string; selfService?: boolean; portalBasePath?: string; initialEmployee?: EmployeeProfileIdentity }) {
+  const [state, setState] = useState<ProfileState>(() => initialEmployee ? { status: 'ready', employee: initialEmployee } : { status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const backgroundSrc = employeeProfileBackground(state.status === 'ready' ? state.employee.role : undefined);
 
   useEffect(() => {
+    if (initialEmployee) { setState({ status: 'ready', employee: initialEmployee }); return; }
     const controller = new AbortController();
     setState({ status: 'loading' });
     api<EmployeeProfileIdentity>(selfService ? '/employee-portal/profile' : `/employees/${encodeURIComponent(employeeId!)}`, { signal: controller.signal })
@@ -32,12 +33,12 @@ export default function EmployeeProfile({ employeeId, selfService = false }: { e
         if (!controller.signal.aborted) setState({ status: cause instanceof ApiError && [400, 404].includes(cause.status) ? 'missing' : 'error' });
       });
     return () => controller.abort();
-  }, [employeeId, attempt, selfService]);
+  }, [employeeId, attempt, selfService, initialEmployee]);
 
   return <Container className={styles.page} data-page-loading={state.status === 'loading' ? 'true' : 'false'} fluid px={{ base: 8, sm: 24 }} py={{ base: 16, sm: 40 }}>
-    <EmployeePageBackground src={backgroundSrc} variant={state.status === 'ready' && state.employee.role === 'DRIVER' ? 'transport' : undefined} />
+    {portalBasePath ? null : <EmployeePageBackground src={backgroundSrc} variant={state.status === 'ready' && state.employee.role === 'DRIVER' ? 'transport' : undefined} />}
     <Stack gap={20}>
-      <Button component={Link} href={selfService ? '/' : '/employees'} className={styles.backLink} variant="subtle" leftSection={<IconArrowLeft size={18} />} w="fit-content">{selfService ? 'Inicio' : 'Empleados'}</Button>
+      <Button component={Link} href={portalBasePath || (selfService ? '/' : '/employees')} className={styles.backLink} variant="subtle" leftSection={<IconArrowLeft size={18} />} w="fit-content">{portalBasePath ? 'Mi asistencia' : selfService ? 'Inicio' : 'Empleados'}</Button>
       {state.status === 'loading' ? <section data-page-heading-glass className={styles.identity} aria-busy="true" aria-label="Cargando perfil del empleado">
         <div className={styles.portrait}><Skeleton circle width={200} height={200} style={{ flexShrink: 0 }} /></div>
         <Skeleton height={38} width="min(420px, 100%)" />
@@ -58,7 +59,7 @@ export default function EmployeeProfile({ employeeId, selfService = false }: { e
           </div>
         </div>
       </section> : null}
-      {state.status === 'ready' ? <EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} /> : null}
+      {state.status === 'ready' ? <EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} personalProfileHref={portalBasePath ? `${portalBasePath}/profile` : undefined} /> : null}
       {state.status === 'missing' ? <Alert color="red" title="Empleado no disponible" role="alert">{selfService ? 'No tienes un empleado activo vinculado a tu cuenta. Contacta a administración.' : 'No se encontró el empleado de este enlace.'}</Alert> : null}
       {state.status === 'error' ? <Alert color="red" title="No se pudo cargar el perfil" role="alert">
         Comprueba la conexión e intenta de nuevo.

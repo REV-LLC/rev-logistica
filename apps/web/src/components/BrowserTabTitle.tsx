@@ -5,6 +5,8 @@ import { usePathname, useSearchParams } from 'next/navigation';
 
 // The most specific routes come first so detail pages keep their own label.
 const routeTitles: Array<[prefix: string, title: string]> = [
+  ['/attendance/mobile/profile', 'Mi perfil'],
+  ['/attendance/mobile', 'MiREV'],
   ['/profile', 'Mi perfil'],
   ['/inventory/ledger/document', 'Documento de movimiento'],
   ['/inventory/ledger/asset', 'Movimientos de equipo'],
@@ -81,7 +83,8 @@ export default function BrowserTabTitle() {
   );
 
   useEffect(() => {
-    document.title = pageTitle ? `${pageTitle} | REV Logística` : 'REV Logística';
+    const mirev = pathname === '/attendance/mobile' || pathname.startsWith('/attendance/mobile/');
+    document.title = mirev ? pageTitle === 'MiREV' ? 'MiREV' : `${pageTitle || 'MiREV'} | MiREV` : pageTitle ? `${pageTitle} | REV Logística` : 'REV Logística';
   }, [pathname, searchParams, pageTitle]);
 
   return null;

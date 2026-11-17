@@ -1,0 +1,54 @@
+{
+  "fecha": "2026-11-17",
+  "dominio": "https://mirev.revcontractorsllc.com",
+  "certificado": "VALID / COMPLETE",
+  "propiedad_verificada": true,
+  "api_url": "https://mirev-api-production.up.railway.app",
+  "deployments": {
+    "mirev_web": "8f822fdf-87ad-4115-bf3b-ea9a7c86b7dc",
+    "mirev_api": "ee844f7a-68f5-41c1-9260-e7998f294458",
+    "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
+    "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+    "staging_api_sin_cambio": "d25e73be-14af-4e91-bd0d-6e942126f62a"
+  },
+  "datos": {
+    "schema": "public",
+    "active_employees": 18,
+    "linked_active_accounts": 18,
+    "approved_face_references": 13,
+    "geofenced_active_worksites": 0,
+    "model_version": "sface-0ba9fbfa01b5270c",
+    "threshold": 0.45
+  },
+  "validacion": {
+    "build_api": true,
+    "build_web": true,
+    "pruebas_pwa_gps_sesion": 12,
+    "pruebas_perfil_propio": 3,
+    "pruebas_asistencia": 20,
+    "https_200": true,
+    "raiz_redirige_portal": true,
+    "nombre_pwa": "MiREV",
+    "datos_sin_sesion": 401,
+    "endpoints_generales_empleados_usuarios": 404,
+    "cors_solo_dominio_mirev": true,
+    "login_real_en_navegador": "pendiente de inicio de sesión normal del usuario",
+    "marcaciones_creadas_en_publicacion": 0
+  },
+  "evidencia_rev": {
+    "manifest_name": "REV Logística",
+    "manifest_sha256": "1d372e6cf4ebf16fd15d2420013ac2e3b19643bb03e993d641f60f188889e426",
+    "hosting": "Vercel, sin cambios de proyecto o dominio"
+  },
+  "staging": {
+    "manifest_sha256": "ca977dcbbb1c304afcbdcb3c7447680726c5c1a76f8a66fd170ad2a290047aa3",
+    "schema": "attendance_test",
+    "api": "https://attendance-test-api-staging.up.railway.app",
+    "sin_cambios": true
+  },
+  "pendientes": [
+    "Cinco referencias faciales restantes",
+    "Geocercas de obras reales",
+    "Prueba manual con sesión de empleado sin insertar marcaciones ficticias"
+  ]
+}

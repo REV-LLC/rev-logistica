@@ -1,4 +1,4 @@
-import { clearToken, getToken, markSessionExpiredNotice } from './auth';
+import { clearToken, getToken, markSessionExpiredNotice, isMiRevPath } from './auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
 
@@ -45,7 +45,9 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     clearToken();
     markSessionExpiredNotice();
     const next = window.location.pathname || '';
-    if (!window.location.pathname.startsWith('/login')) {
+    if (isMiRevPath(window.location.pathname)) {
+      window.location.replace('/attendance/mobile');
+    } else if (!window.location.pathname.startsWith('/login')) {
       const params = new URLSearchParams();
       if (next) params.set('next', next);
       params.set('reason', 'expired');
@@ -87,7 +89,9 @@ export async function apiBlob(path: string, options: ApiOptions = {}): Promise<B
     clearToken();
     markSessionExpiredNotice();
     const next = window.location.pathname || '';
-    if (!window.location.pathname.startsWith('/login')) {
+    if (isMiRevPath(window.location.pathname)) {
+      window.location.replace('/attendance/mobile');
+    } else if (!window.location.pathname.startsWith('/login')) {
       const params = new URLSearchParams();
       if (next) params.set('next', next);
       params.set('reason', 'expired');

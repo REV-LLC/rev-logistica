@@ -1,0 +1,666 @@
+{
+  "registro": "Cuentas y costos de REV Logística y MIA",
+  "actualizado": "2026-11-17",
+  "zona_horaria": "America/Bogota",
+  "alcance": [
+    "REV Logística",
+    "MIA",
+    "Traccar de REV"
+  ],
+  "criterio": "Mantener identidad de acceso, organización, recurso de producción, facturación y evidencia por separado. null significa pendiente, nunca gratuito. No guardar contraseñas, claves API, cookies, tokens ni enlaces de autenticación.",
+  "servicios": [
+    {
+      "servicio": "Railway",
+      "acceso": {
+        "correo": "samuel040902@hotmail.com",
+        "verificacion": "railway whoami --json, 2026-11-16"
+      },
+      "organizacion": {
+        "nombre": "samuel guerrero's Projects",
+        "id": "e08a50b3-50f5-4c2a-9a45-515dab70e817"
+      },
+      "recursos": [
+        {
+          "nombre": "rev-logistica",
+          "id": "bec9984e-3e3a-48c8-9d75-8c87d591b931",
+          "entornos": [
+            "production",
+            "staging"
+          ],
+          "servicios_inventariados": [
+            "api",
+            "Postgres",
+            "traccar",
+            "traccar-db",
+            "web-staging",
+            "face-recognition-prod",
+            "face-recognition",
+            "attendance-test-api",
+            "mirev-api",
+            "mirev-web"
+          ],
+          "nota_inventario": "face-recognition-prod fue observado Online en production durante esta auditoría; su consumo pertenece a Railway, no a un proveedor externo adicional.",
+          "pruebas_asistencia_aisladas": {
+            "fecha": "2026-11-17",
+            "entorno": "staging",
+            "environment_id": "53c93c9d-33e7-4137-a598-6648a6491886",
+            "api_service_id": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+            "api_url": "https://attendance-test-api-staging.up.railway.app",
+            "web_url": "https://web-staging-staging-cf10.up.railway.app/attendance/mobile",
+            "schema_postgres": "attendance_test",
+            "volume_id": "7c8bbf10-6466-4544-9a9a-b01b77582188",
+            "consumo_atribuible_usd": null,
+            "nota_costos": "Consumo de recursos en el plan Railway existente; sin nuevo plan. Importe específico aún no medido.",
+            "evidencia": "docs/infrastructure/verificacion-attendance-staging-2026-11-17.json",
+            "mirev": {
+              "nombre": "MiREV",
+              "dominio_final_elegido_por_usuario": "mirev.revcontractorsllc.com",
+              "dominio_final_conectado": false,
+              "estado": "pwa_independiente_verificada_en_staging",
+              "web_deployment": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+              "nota": "Nombre/iconos/manifiesto/service worker y sesión propios. Misma infraestructura de staging; no se creó servicio ni plan nuevo. El subdominio final aún no se conectó ni se publicó contra producción.",
+              "api_deployment": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+              "perfil_empleado": "Integrado desde avatar superior derecho: identidad, foto propia, préstamos y bitácora en consulta. Staging conserva el empleado ficticio y no consulta fotos R2."
+            }
+          },
+          "mirev_produccion": {
+            "fecha": "2026-11-17",
+            "entorno": "production",
+            "environment_id": "72a66cb9-3fc8-4c61-979a-56435cd20e8a",
+            "web_service_id": "2b16f18a-2011-48cf-9706-01552c77e5a8",
+            "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
+            "dominio": "https://mirev.revcontractorsllc.com",
+            "api_url": "https://mirev-api-production.up.railway.app",
+            "web_deployment_id": "8f822fdf-87ad-4115-bf3b-ea9a7c86b7dc",
+            "api_deployment_id": "ee844f7a-68f5-41c1-9260-e7998f294458",
+            "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
+            "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
+            "facturacion": "Consumo incremental de dos servicios en el plan Railway existente; importe aún no medido. Sin nuevo plan contratado.",
+            "evidencia": "docs/infrastructure/mirev-produccion-2026-11-17.json"
+          }
+        },
+        {
+          "nombre": "mia-production",
+          "id": "b4e9dbc3-87c3-4231-b1dd-53f6be98da00",
+          "servicios_inventariados": [
+            "mia-web",
+            "Postgres"
+          ]
+        }
+      ],
+      "facturacion": {
+        "plan": "Pro",
+        "moneda": "USD",
+        "base_mensual": 20,
+        "consumo_incluido": 20,
+        "ultimo_cargo": {
+          "fecha": "2026-11-13",
+          "importe": 20
+        },
+        "advertencia": "El consumo cubierto no se suma otra vez a la cuota. La proyección anterior de 9.33 USD era consumo, no mensualidad completa."
+      },
+      "panel": "https://railway.com/workspace/billing",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Workspace y recursos activos de REV y MIA comprobados. Consolas de ambos contenedores de producción consultadas con la sesión existente.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "Vercel",
+      "acceso": {
+        "correo": "sg@revcontractorsllc.com",
+        "usuario_visible": "revcontractors",
+        "verificacion": "Account Settings: correo Primary y Verified, 2026-11-16"
+      },
+      "organizacion": {
+        "nombre": "rev-llc",
+        "id": "team_mjJZVf30s7C8Ye7agJE7rTMx"
+      },
+      "recursos": [
+        {
+          "nombre": "web",
+          "id": "prj_XLDQ8i9AhsC31ck3wvWY3DkXHkey",
+          "dominio": "app.revcontractorsllc.com",
+          "repositorio": "REV-LLC/rev-logistica",
+          "rama": "production"
+        }
+      ],
+      "facturacion": {
+        "plan": "Hobby",
+        "moneda": "USD",
+        "base_mensual": 0,
+        "evidencia": "Panel Hobby y sin facturas, 2026-11-16"
+      },
+      "nota": "MIA de producción está en Railway. No atribuir a REV/MIA proyectos ajenos del equipo.",
+      "panel": "https://vercel.com/rev-llc/~/settings/billing",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "El equipo rev-llc contiene web, con alias app.revcontractorsllc.com en el despliegue READY de production. Su metadata vincula el repositorio REV-LLC/rev-logistica y la rama production.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "OpenAI API",
+      "acceso": {
+        "correo": "samuel040902@hotmail.com",
+        "verificacion": "People: You, Owner, correo visible, 2026-11-16"
+      },
+      "organizacion": {
+        "nombre": "Personal",
+        "id": "org-hpljjnfSNrZVuVidOpXJJhsC"
+      },
+      "proyecto": {
+        "nombre": "Default project",
+        "id": "proj_UYLxSgvOpyUHXgChG82nxCa1"
+      },
+      "recursos": [
+        "Asistente Office",
+        "Asistente WhatsApp",
+        "MIA texto y voz"
+      ],
+      "claves_por_nombre_sin_valores": {
+        "REV": "REV Railway rotation 2026-10-22",
+        "MIA": "MIA rotation 2026-10-21",
+        "pendiente_atribuir": "Codex"
+      },
+      "facturacion": {
+        "modalidad": "Prepago por consumo",
+        "moneda": "USD",
+        "saldo_observado": 9.26,
+        "recarga_automatica": "Cuando baja a 5 USD, recarga hasta 10 USD; sin límite mensual de recargas en el panel observado",
+        "consumo_2026_10_18_a_2026_11_16": {
+          "REV_aproximado": 0.45,
+          "MIA_aproximado": 0.03,
+          "Codex_sin_atribuir_aproximado": 0.03
+        },
+        "advertencia": "Saldo y recargas no equivalen a gasto mensual. El canal WhatsApp tiene credencial separada cuya atribución de gasto aún debe confirmarse."
+      },
+      "cuentas_confundidas": [
+        {
+          "correo": "samuelguerrero1127@gmail.com",
+          "evidencia_historica": "El 2026-10-22 mostró otro Default project; no usar el nombre Personal o Default project como único identificador."
+        }
+      ],
+      "panel": "https://platform.openai.com/settings/organization/people",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Las tres credenciales de Office, WhatsApp y MIA respondieron HTTP 200 a GET /v1/models con openai-project=proj_UYLxSgvOpyUHXgChG82nxCa1, comprobadas tanto desde configuración Railway como desde los contenedores activos de REV y MIA. El propietario de esa organización/proyecto fue confirmado como samuel040902@hotmail.com en consola.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "nota_identidad": "El encabezado openai-organization devuelve un identificador legado user-xvbgj12rx0ybzgcs0kqmrvla; el proyecto exacto coincide con la organización Personal observada en consola. No deducir identidad por nombre de clave ni por el nombre Default project."
+    },
+    {
+      "servicio": "GitHub",
+      "acceso": {
+        "usuario": "Samuelguerrero1184",
+        "correo_primario": "samuel040902@hotmail.com",
+        "verificacion": "Settings > Emails: Primary y Verified, 2026-11-16"
+      },
+      "organizacion": {
+        "nombre": "REV-LLC"
+      },
+      "recursos": [
+        "REV-LLC/rev-logistica"
+      ],
+      "facturacion": {
+        "plan": "Free",
+        "moneda": "USD",
+        "base_mensual": 0,
+        "noviembre_2026": {
+          "uso_bruto": 5.23,
+          "descuentos": 5.23,
+          "facturable": 0
+        },
+        "historial": "Sin pagos en la organización al 2026-11-16"
+      },
+      "panel": "https://github.com/organizations/REV-LLC/settings/billing",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Repositorio del checkout y metadata del despliegue Vercel activo coinciden en REV-LLC/rev-logistica. Usuario humano y correo primario verificados previamente en Settings. Esto no implica que todas las automatizaciones se autentiquen como ese usuario personal.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "Google Cloud - REV",
+      "acceso": {
+        "correo": "samuelguerrero1127@gmail.com",
+        "verificacion": "Cuenta visible en consola de facturación, 2026-11-16"
+      },
+      "proyecto": {
+        "nombre": "rev-logistica",
+        "id": "rev-logistica"
+      },
+      "cuenta_facturacion": "01048A-50B060-B8A288",
+      "recursos": [
+        "Address Validation API",
+        "Maps Embed API"
+      ],
+      "facturacion": {
+        "moneda": "USD",
+        "consumo_2026_11_01_a_2026_11_16": 0,
+        "advertencia": "Cero observado en el período, no tarifa fija garantizada."
+      },
+      "panel": "https://console.cloud.google.com/billing/01048A-50B060-B8A288",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "La huella SHA-256 de la clave completa visible bajo REV Maps rotation 2026-10-22, en proyecto rev-logistica de samuelguerrero1127@gmail.com, coincide exactamente con GOOGLE_MAPS_API_KEY tanto en configuración Railway como dentro del contenedor activo. Clave vuelta a ocultar después de comparar.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "clave_id": "e07755de-720b-4f7b-acae-4b1ed723a7e9",
+      "maps_staging": {
+        "fecha": "2026-11-17",
+        "estado": "activo_verificado_staging",
+        "api": "Maps Embed API",
+        "service_name": "maps-embed-backend.googleapis.com",
+        "clave_id": "rev-attendance-staging-embed-20261117",
+        "sitio_previsto": "https://web-staging-staging-cf10.up.railway.app/*",
+        "variable_railway": "GOOGLE_MAPS_EMBED_BROWSER_KEY",
+        "servicio_railway": "web-staging",
+        "entorno_railway": "staging",
+        "tarifa_publicada_por_uso_usd": 0,
+        "evidencia_tarifa": "https://developers.google.com/maps/documentation/embed/usage-and-billing",
+        "nota": "Usuario ingresó la clave en Railway. Cambio aplicado exclusivamente a web-staging en staging; despliegue SUCCESS. Verificado Google Maps real en la PWA con entrada, salida y punto configurado de la obra. Sin cambios a producción ni a su clave Address Validation.",
+        "evidencia": "docs/attendance-staging.md",
+        "api_activada": "2026-11-17",
+        "clave_uid": "250671bb-46f6-43c9-97eb-4c146a4be3c7",
+        "project_number": "583636128913",
+        "referrers": [
+          "https://web-staging-staging-cf10.up.railway.app",
+          "https://web-staging-staging-cf10.up.railway.app/*"
+        ],
+        "web_deployment": "06f73dfe-8ce9-42f6-9dac-831804c17e22"
+      }
+    },
+    {
+      "servicio": "Google - MIA",
+      "acceso_datos_y_login_MIA": {
+        "correo": "jag33172@gmail.com",
+        "titular": "Jesús Guerrero",
+        "verificacion": "Base de producción MIA y cliente OAuth contrastados en consola Google del propietario, 2026-11-16. Autorizaciones de datos requieren reconexión."
+      },
+      "proyecto_cloud": {
+        "nombre": "MIA REV",
+        "id": "hallowed-pipe-511713-r0",
+        "correo_administrador_cloud": "jag33172@gmail.com",
+        "rol_verificado": "Propietario (heredado)",
+        "oauth_client_id": "594654790107-igt6mtn7caqvd0lo8lv7doqvnm26rad5.apps.googleusercontent.com"
+      },
+      "recursos": [
+        "Google OAuth",
+        "Gmail API",
+        "Google Calendar API"
+      ],
+      "nota": "La cuenta que conecta sus correos y agenda no demuestra quién administra o factura el proyecto Cloud.",
+      "facturacion": null,
+      "panel": "https://console.cloud.google.com/apis/dashboard?project=hallowed-pipe-511713-r0",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Cliente OAuth completo de Railway y el contenedor MIA coincide con MIA Local — Gmail y Calendar en proyecto MIA REV hallowed-pipe-511713-r0. IAM muestra jag33172@gmail.com como Propietario (heredado). Base activa vincula Gmail/Calendar/recordatorios a ese correo. La autorización actual requiere reconexión: renovación devuelve invalid_grant.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "estado_operativo": {
+        "estado": "requiere_reconexion",
+        "proveedores": [
+          "gmail",
+          "calendar",
+          "reminders"
+        ],
+        "respuesta_oauth": "HTTP 400 invalid_grant",
+        "nota": "gmail y reminders figuran reconnect; calendar figura connected en base pero la renovación también falla. No se modificaron registros, permisos ni credenciales."
+      }
+    },
+    {
+      "servicio": "Zoho - administración y correo REV",
+      "acceso": {
+        "administrador": "sg@revcontractorsllc.com",
+        "verificacion": "Admin Console de REV y tienda autenticadas, 2026-11-16"
+      },
+      "organizacion": "REV",
+      "suscripcion": "RPCW2005187021258",
+      "correo_integracion_REV": {
+        "cuenta": "operaciones@rentaequipos.co",
+        "proveedor_activo": "zoho-api",
+        "account_id": "534347000000008002",
+        "verificacion": "OAuth y Accounts API con las credenciales de production, HTTP 200; mailProvider/mailFrom confirmados también en el contenedor activo."
+      },
+      "facturacion": {
+        "plan": "Mail Lite 10GB",
+        "usuarios": 9,
+        "adicional": "5 GB de almacenamiento",
+        "moneda": "USD",
+        "importe_anual": 135.5,
+        "equivalente_mensual": 11.2916666667,
+        "ultimo_pago": "2026-10-05",
+        "proximo_pago": "2027-10-05",
+        "atribucion": "Total de la suscripción de correo empresarial; no es una cuota adicional de la API ni de MIA."
+      },
+      "panel": "https://mailadmin.zoho.com/cpanel/home.do#subscription/dashboard",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "El API activo configura MAIL_PROVIDER=zoho-api y MAIL_FROM=operaciones@rentaequipos.co. OAuth de producción renovado HTTP 200 y GET /api/accounts HTTP 200 identificó exactamente ese buzón y ZOHO_ACCOUNT_ID. El administrador de la suscripción sigue siendo la identidad sg previamente verificada; es distinto del emisor.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "Zoho - MIA",
+      "acceso": {
+        "correo": "jag@revcontractorsllc.com",
+        "titular": "Jesús Guerrero",
+        "verificacion": "Identidad de Zoho validada desde el contenedor activo de MIA, HTTP 200, 2026-11-16"
+      },
+      "recursos": [
+        "Buzón empresarial de Jesús",
+        "Login de MIA",
+        "OAuth exclusivo de MIA"
+      ],
+      "facturacion": {
+        "nota": "No sumar otra suscripción por conectar este buzón a MIA; el correo empresarial se registra en Zoho REV."
+      },
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Consulta READ ONLY a la base del contenedor activo y GET /api/accounts con la autorización existente devuelven el mismo account ID 1271336000000008002 y jag@revcontractorsllc.com, HTTP 200.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "account_id": "1271336000000008002"
+    },
+    {
+      "servicio": "Mapbox",
+      "acceso": {
+        "usuario": "sgv1184",
+        "correo": null,
+        "nombre": "Samuel Guerrero",
+        "organizacion_visible": "Renta equipos del valle",
+        "verificacion": "Console > Settings, 2026-11-16; el correo no fue legible en la herramienta"
+      },
+      "recursos": [
+        "Integración de rutas y geocodificación presente en el código de REV"
+      ],
+      "pendiente": "No hay token en production para contrastar con una cuenta. No activar ni configurar Mapbox como parte de esta auditoría.",
+      "facturacion": {
+        "moneda": "USD",
+        "facturas_febrero_a_noviembre_2026": 0,
+        "proxima_factura_observada": {
+          "fecha": "2026-12-01",
+          "importe": 0
+        },
+        "atribucion_al_proyecto": "No atribuida: las facturas cero corresponden a sgv1184; no demuestran un vínculo con el API de producción."
+      },
+      "panel": "https://console.mapbox.com/account/invoices/",
+      "vinculo_con_proyecto": {
+        "estado": "no_configurado_en_produccion",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "MAPBOX_ACCESS_TOKEN ausente en la configuración Railway api/production y en el contenedor activo. La integración existe en el código, pero no se puede atribuir una cuenta Mapbox activa a este API. sgv1184 queda como cuenta observada, no cuenta probada de producción.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "CountryStateCity",
+      "acceso": {
+        "correo": "sg@revcontractorsllc.com",
+        "verificacion": "Settings de la consola, 2026-11-16; documentación de rotación confirma vínculo de clave con producción y staging"
+      },
+      "facturacion": {
+        "plan": "Free / Community",
+        "moneda": "USD",
+        "base_mensual": 0,
+        "limites_observados": "3000 solicitudes/mes y 100/día"
+      },
+      "cuentas_descartadas_historicamente": [
+        "samuelguerrero1127@gmail.com",
+        "samuel040902@hotmail.com"
+      ],
+      "panel": "https://app.countrystatecity.in/profile",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Cuenta sg@revcontractorsllc.com comprobada en Settings. La huella SHA-256 de la clave completa de esa cuenta coincide exactamente con CSC_API_KEY configurada y la del contenedor activo de production. Clave vuelta a ocultar; no se guardan huellas ni valores.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "Meta / WhatsApp de REV",
+      "acceso": {
+        "perfil_personal_de_acceso": "Samuel Guerrero",
+        "correo_o_usuario_personal": null,
+        "nota": "No confundir el perfil personal de Meta con el portfolio, la app o la cuenta pagadora."
+      },
+      "portfolio": {
+        "nombre": "rentaequiposdelvalle",
+        "id": "1501359940807323",
+        "autorizacion": "El usuario confirmó en este chat que pertenece a REV y autorizó revisar su facturación."
+      },
+      "cuenta_whatsapp": {
+        "nombre": "renta equipos del valle",
+        "id": "1579465167183348"
+      },
+      "cuenta_pagadora": "2036053050347352",
+      "facturacion": {
+        "moneda": "COP",
+        "pago_observado": {
+          "fecha": "2026-11-05",
+          "importe": 2889
+        },
+        "saldo_pendiente_al_2026_11_16": 533,
+        "advertencia": "Pago y saldo pendiente no constituyen una cuota mensual fija ni necesariamente consumo del mismo período."
+      },
+      "nota": "Existen otras cuentas llamadas REV, Pedidos y Test dentro del portfolio; no atribuirlas al software solo por su nombre. La documentación identifica 1579465167183348 como la cuenta usada por REV.",
+      "panel": "https://business.facebook.com/latest/billing_hub/accounts/details/?asset_id=1579465167183348&business_id=1501359940807323&payment_account_id=2036053050347352",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Token existente de api/production validado con Graph: /me identifica la identidad técnica; el número y la WABA configurados responden 200. La WABA coincide exactamente con la cuenta pagadora observada en el portfolio autorizado. No se enviaron mensajes.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "acceso_tecnico_produccion": {
+        "id": "122101516713517748",
+        "nombre": "REV Railway rotation 2026-10-22",
+        "verificacion": "GET /me con token de production, HTTP 200"
+      },
+      "numero_produccion": {
+        "id": "1151815434691447",
+        "numero": "+57 311 8388033",
+        "nombre_verificado": "renta equipos del valle"
+      }
+    },
+    {
+      "servicio": "Cloudflare R2",
+      "acceso": {
+        "correo_titular_cuenta": "samuel040902@hotmail.com",
+        "nombre_visible": "Samuel040902@hotmail.com's Account",
+        "verificacion": "Panel R2 con account ID idéntico a producción y bucket rev-logistica presente, 2026-11-16"
+      },
+      "cuenta_produccion": {
+        "id": "f05d3cf472901048e9fd440c3dbae1ae",
+        "bucket": "rev-logistica",
+        "verificacion": "Railway api/production: solo R2_ACCOUNT_ID y R2_BUCKET consultados, 2026-11-16"
+      },
+      "cuentas_descartadas_para_este_bucket": [
+        {
+          "correo": "sg@revcontractorsllc.com",
+          "id": "44869cb57e53e6a494255b4b3d5cc96e",
+          "evidencia": "Panel sin R2 activado y cuenta distinta a producción, 2026-11-16"
+        }
+      ],
+      "pendiente": null,
+      "facturacion": {
+        "moneda": "USD",
+        "costo_facturable_periodo_actual": 0,
+        "periodo": {
+          "inicio": "2026-10-20",
+          "fin": "2026-11-20",
+          "consultado": "2026-11-16"
+        },
+        "almacenamiento_actual_GB": 1.36,
+        "evidencia": "Billing > Billable usage: operaciones clase A, B y almacenamiento, total 0.00 USD. Panel R2: No billable usage incurred yet.",
+        "advertencia": "Cero observado en el período actual, no tarifa fija garantizada."
+      },
+      "panel": "https://dash.cloudflare.com/f05d3cf472901048e9fd440c3dbae1ae/r2/overview",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Account ID y bucket coinciden con Railway y el contenedor activo del API. Cuenta propietaria y cargos comprobados en el panel del bucket en este chat.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      }
+    },
+    {
+      "servicio": "Traccar",
+      "acceso": {
+        "cuenta_tecnica_produccion": "traccar-integration@rev.invalid",
+        "nombre": "Integración REV",
+        "id": 1,
+        "administrador": true,
+        "deshabilitada": false,
+        "verificacion": "Credencial de api/production validada contra Traccar, HTTP 200."
+      },
+      "alojamiento": "Railway, proyecto rev-logistica, servicios traccar y traccar-db",
+      "facturacion": {
+        "nota": "Consumo incluido en la cuenta Railway; no sumarlo como una segunda factura independiente."
+      },
+      "panel": "https://gps.revcontractorsllc.com",
+      "vinculo_con_proyecto": {
+        "estado": "verificado_actual",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "TRACCAR_INTEGRATION_EMAIL de production es traccar-integration@rev.invalid. Autenticación Basic con credencial existente y GET /api/users devuelve HTTP 200 y el usuario coincidente, administrador activo ID 1. No se consultaron posiciones.",
+        "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "accesos_historicos_no_actualizados": [
+        {
+          "correo": "sg@revcontractorsllc.com",
+          "nota": "Administrador documentado anteriormente. No usar como cuenta técnica actual; producción valida otro email."
+        }
+      ]
+    },
+    {
+      "servicio": "GoDaddy - dominio",
+      "acceso": {
+        "correo_o_usuario_titular": null
+      },
+      "recurso": "revcontractorsllc.com",
+      "vencimiento_publico": "2028-09-07",
+      "verificacion": "RDAP público de Verisign, 2026-11-16: registrador GoDaddy.com, LLC",
+      "facturacion": null,
+      "pendiente": null,
+      "panel": "https://account.godaddy.com/receipts",
+      "vinculo_con_proyecto": {
+        "estado": "confirmado_por_usuario_revision_omitida",
+        "fecha_revision": "2026-11-16",
+        "alcance_de_la_evidencia": "Dominio revcontractorsllc.com visto en el panel autenticado. El usuario confirmó que esa es la cuenta correcta y pidió omitir la revisión restante. No se verificaron independientemente el correo/usuario de acceso ni el recibo.",
+        "evidencia": "Confirmación expresa del usuario en este chat, 2026-11-16"
+      },
+      "panel_dominio_verificado": {
+        "nombre": "Contratistas Rev",
+        "dominio": "revcontractorsllc.com",
+        "ventureId": "c1596336-809b-4c53-8ccf-956f9bfb0d76",
+        "fecha": "2026-11-16"
+      },
+      "revision_omitida_por_usuario": true,
+      "nota_facturacion": "Costo no verificado; no asumir que es cero. El usuario pidió omitir GoDaddy.",
+      "dns_mirev": {
+        "fecha": "2026-11-17",
+        "nameservers": [
+          "ns27.domaincontrol.com",
+          "ns28.domaincontrol.com"
+        ],
+        "cname": {
+          "nombre": "mirev",
+          "valor": "ibiwbqik.up.railway.app",
+          "ttl_segundos": 1800
+        },
+        "verificacion_txt_host": "_railway-verify.mirev",
+        "evidencia": "GoDaddy DNS mediante Computer Use y Railway domain status; solo dos registros nuevos. Cuenta confirmada previamente por usuario, sin nueva auditoría de identidad ni costos."
+      }
+    }
+  ],
+  "historial": [
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Inventario inicial y facturación consultada en este chat. Alcance confirmado por el usuario: solo REV y MIA."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Corrección: Railway está en Pro; 9.33 USD era proyección de consumo, no mensualidad completa."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Se descartó la cuenta Cloudflare sg@revcontractorsllc.com para el bucket de producción por diferencia de account ID y R2 sin activar."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Verificados Railway y OpenAI con Hotmail, Vercel con sg@revcontractorsllc.com, GitHub Samuelguerrero1184 con Hotmail; se conservaron por separado los accesos de Jesús a MIA."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Cloudflare correcto confirmado: Samuel040902@hotmail.com's Account, ID f05d3cf472901048e9fd440c3dbae1ae, bucket rev-logistica. R2 total facturable del período actual: 0 USD. Se mantiene anotada la cuenta sg descartada para evitar repetir la confusión."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Auditoría de certeza solicitada por el usuario: diferenciados vínculos actuales, comprobaciones parciales, documentación histórica y titulares pendientes. Se corrige la presentación previa que agrupaba todos los accesos como confirmados para producción."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "Auditoría actual contra producción completada para servicios accesibles. Identidades corroboradas con APIs, cliente OAuth, recursos y comparaciones exactas de claves. Corregidos Mapbox sin configurar, cuenta técnica Traccar y estado de Google MIA. GoDaddy sigue pendiente de autenticación."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "GoDaddy: usuario abrió panel autenticado y se comprobó revcontractorsllc.com. Acceso a recibos requiere verificación SMS adicional; no se registró un titular ni costo sin confirmarlos."
+    },
+    {
+      "fecha": "2026-11-16",
+      "hecho": "El usuario pidió omitir GoDaddy y confirmó que la cuenta abierta es la correcta. Se detuvo la revisión sin cambiar métodos de acceso. El costo y el correo de acceso no fueron verificados independientemente."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Creado attendance-test-api exclusivamente en staging con esquema attendance_test, volumen privado, claves independientes y cuenta ficticia; sin credenciales de R2 ni integraciones de negocio. Se reutiliza web-staging y el worker facial de staging. No se modificó producción ni se contrató otro plan."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Preparada integración Maps Embed para ubicaciones de marcaciones en staging; cuenta/proyecto confirmados en consola. Pendientes activación de API y creación de clave de navegador restringida al sitio de pruebas. No se cambió la clave de producción ni se crearon credenciales."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Usuario autorizó activar Maps Embed API y crear clave restringida a staging. API activada por consola; creación de clave pendiente. Se descartó el flujo de credencial temporal sin restricciones tras rechazo automático; Cloud Shell solicita autorización adicional."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Cloud Shell autorizado por el usuario; creada clave REV Attendance staging Embed 2026-11-17 con restricciones desde su creación y verificadas en consola. Pendiente ingreso manual en Railway staging. Solo metadatos registrados."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Maps Embed operativo y verificado en PWA staging tras ingreso de clave por el usuario. Despliegue web-staging 06f73dfe-8ce9-42f6-9dac-831804c17e22 SUCCESS; verificadas ubicaciones de entrada, salida y obra sin crear nuevas marcaciones. No se modificó producción."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Usuario pidió separar REV Logística y MiREV y eligió mirev.revcontractorsllc.com como dominio final. MiREV preparado y verificado en web-staging con identidad, instalación, worker, caché y sesión propios. Dominio final no conectado, sin DNS ni cambios de producción."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "MiREV incorpora el perfil personal reutilizando los componentes y datos existentes por empleado vinculado. Desplegados solo web-staging y attendance-test-api en staging; acceso EMPLOYEE limitado a GET personales y foto propia. Sin datos copiados de producción, sin migraciones, sin nuevo servicio ni cambios de producción."
+    },
+    {
+      "fecha": "2026-11-17",
+      "hecho": "Publicación autorizada de MiREV en dominio propio con servicios mirev-web/mirev-api dentro del proyecto Railway existente. PostgreSQL y fotos reales reutilizados por referencias; staging y PWA REV Logística separados. DNS CNAME y TXT de propiedad añadidos únicamente bajo mirev."
+    }
+  ],
+  "ultima_auditoria_produccion": {
+    "fecha": "2026-11-16",
+    "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json",
+    "pendiente_titular": [],
+    "hallazgos_operativos": [
+      "Mapbox sin token en el API de production",
+      "MIA Google requiere reconexión: invalid_grant",
+      "Traccar usa cuenta técnica distinta al administrador antiguo documentado"
+    ],
+    "excepciones_confirmadas_por_usuario": [
+      "GoDaddy: cuenta confirmada por el usuario; revisión adicional omitida a su petición."
+    ]
+  }
+}

@@ -12,14 +12,15 @@ import PageLoadingOverlay from './PageLoadingOverlay';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const employeeMobile = pathname === "/attendance/mobile" || pathname.startsWith("/attendance/mobile/");
   return (
-    <MantineProvider theme={appTheme} cssVariablesResolver={appThemeVariables} forceColorScheme={usesDarkGlassTheme(pathname) ? 'dark' : 'light'}>
+    <MantineProvider theme={appTheme} cssVariablesResolver={appThemeVariables} forceColorScheme={pathname.startsWith('/attendance/mobile/profile') ? 'dark' : employeeMobile ? 'light' : usesDarkGlassTheme(pathname) ? 'dark' : 'light'}>
       <EmployeePhotoPreviewProvider><LoginTransition>
         <Suspense fallback={<PageLoadingOverlay />}>
           <PageLoadingBoundary>{children}</PageLoadingBoundary>
         </Suspense>
       </LoginTransition></EmployeePhotoPreviewProvider>
-      <OfflineManager />
+      {employeeMobile ? null : <OfflineManager />}
     </MantineProvider>
   );
 }

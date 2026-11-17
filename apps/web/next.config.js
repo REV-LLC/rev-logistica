@@ -36,6 +36,7 @@ const nextConfig = {
   },
   async redirects() {
     return [
+      ...(process.env.MIREV_STANDALONE === 'true' ? ['/', '/login', '/profile', '/manifest.webmanifest', '/sw.js'].map(source => ({ source, destination: source === '/profile' ? '/attendance/mobile/profile' : source === '/manifest.webmanifest' ? '/attendance/mobile/manifest.webmanifest' : source === '/sw.js' ? '/mirev-sw.js' : '/attendance/mobile', permanent: false })) : []),
       {
         source: '/inventory/accessories',
         destination: '/inventory/warehouse',

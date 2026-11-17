@@ -16,7 +16,7 @@ const PayrollPanel = dynamic(() => import('../payroll/EmployeePayrollPanel'), { 
 const LoansPanel = dynamic(() => import('./loans/EmployeeLoansPanel'), { loading: PanelLoading });
 const ActivitiesPanel = dynamic(() => import('../activities/EmployeeActivitiesPanel'), { loading: PanelLoading });
 
-export default function EmployeeProfileWorkspace({ employeeId, selfService = false }: { employeeId: string; selfService?: boolean }) {
+export default function EmployeeProfileWorkspace({ employeeId, selfService = false, personalProfileHref = '/profile' }: { employeeId: string; selfService?: boolean; personalProfileHref?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab');
@@ -31,7 +31,7 @@ export default function EmployeeProfileWorkspace({ employeeId, selfService = fal
   return <section className={styles.workspace} aria-label="Gestión del empleado">
     <Tabs value={tab} onChange={value => {
       if (!value || (selfService && value === 'payroll')) return;
-      if (selfService) router.replace(`/profile?tab=${value}`, { scroll: false });
+      if (selfService) router.replace(`${personalProfileHref}?tab=${value}`, { scroll: false });
       else setSelection({ requestedTab, tab: value });
     }} variant="unstyled" keepMounted={false} classNames={{ list: styles.list, tab: styles.tab, tabSection: styles.tabSection, tabLabel: styles.tabLabel, panel: styles.panel }}>
       <Tabs.List ref={setListElement} aria-label="Secciones del empleado">
