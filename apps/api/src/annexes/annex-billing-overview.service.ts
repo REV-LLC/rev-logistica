@@ -168,8 +168,8 @@ export class AnnexBillingOverviewService {
           worksite: { select: { name: true } },
         },
       }),
-      this.db.$queryRaw<Array<SavedCut & { siteId: string }>>`
-        SELECT d.id, d."customerWorksiteId" AS "siteId",
+      this.db.$queryRaw<Array<SavedCut & { siteId: string; annexCode: string }>>`
+        SELECT d.id, d."annexCode", d."customerWorksiteId" AS "siteId",
                to_char(d."periodFrom",'YYYY-MM-DD') AS "from", to_char(d."periodTo",'YYYY-MM-DD') AS "to",
                to_char(r.through,'YYYY-MM-DD') AS through, NULLIF(btrim(r."invoiceNumber"),'') AS "invoiceNumber",
                CASE WHEN r."invoiceNumber" IS NULL THEN ARRAY[]::text[] ELSE ARRAY(
@@ -222,6 +222,28 @@ export class AnnexBillingOverviewService {
         a.customerName.localeCompare(b.customerName, 'es') ||
         a.siteName.localeCompare(b.siteName, 'es'),
     );
-    return { today, cuts, rows, reviews };
+    // An unsaved row opens only through its current cutoff. Reserve that same
+    // consultation so searching its code opens exactly what the button opens.
+    const unsaved = rows.filter((row) => !row.draftId);
+    const codes = unsaved.length
+      ? await this.db.$queryRaw<Array<{ siteId: string; from: string; through: string; annexCode: string }>>`
+          SELECT "siteId", "from", through,
+            reserve_annex_code("siteId", "from"::date, through::date, through::date) AS "annexCode"
+          FROM (SELECT DISTINCT * FROM (VALUES ${Prisma.join(unsaved.map((row) =>
+            Prisma.sql`(${row.siteId}::text, ${row.from}::text, ${row.through}::text)`,
+          ))}) AS periods("siteId", "from", through)) AS consultations
+          ORDER BY "siteId", "from", through`
+      : [];
+    const byPeriod = new Map(codes.map((row) => [row.siteId + '/' + row.from + '/' + row.through, row.annexCode]));
+    const byDraft = new Map(documents.map((draft) => [draft.id, draft.annexCode]));
+    return {
+      today, cuts, reviews,
+      rows: rows.map((row) => ({
+        ...row,
+        annexCode: row.draftId
+          ? byDraft.get(row.draftId)!
+          : byPeriod.get(row.siteId + '/' + row.from + '/' + row.through)!,
+      })),
+    };
   }
 }

@@ -12,6 +12,7 @@ export type OverviewSite = {
   cutTo: string;
 };
 export type OverviewRow = OverviewSite & {
+  annexCode?: string;
   from: string;
   to: string;
   through: string;
