@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2, IconLogin, IconLogout, IconMapPin, IconVolume } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
-import { reasonLabels, attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
+import { reasonLabels, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import InstallAttendance from './InstallAttendance';
+import { hasPriorDayShift, suggestAttendanceSite } from '@/lib/attendance-mobile-rules';
 import styles from './mobile-attendance.module.css';
 
 type Me = {
@@ -19,17 +20,6 @@ type Me = {
 };
 type Step = 'home' | 'sites' | 'locating' | 'camera' | 'sending' | 'retry' | 'done';
 type Attempt = { me: Me; siteId: string; location: GeolocationPosition };
-const storageKey = (employeeId: string) => `rev.attendance.site.v1.${employeeId}`;
-function rememberedSite(me: Me) {
-  if (me.open) return me.open.customerWorksite.id;
-  let saved: string | null = null;
-  try { saved = localStorage.getItem(storageKey(me.employee.id)); } catch { /* Storage can be disabled. */ }
-  if (me.worksites.some(site => site.id === saved)) return saved!;
-  return me.worksites.length === 1 ? me.worksites[0].id : '';
-}
-function rememberSite(employeeId: string, siteId: string) {
-  try { localStorage.setItem(storageKey(employeeId), siteId); } catch { /* Optional convenience only. */ }
-}
 function getLocation() {
   return new Promise<GeolocationPosition>((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Este celular no permite obtener la ubicación. Pide ayuda al encargado.'));
@@ -46,6 +36,14 @@ function shortTime(date: string) {
 export default function MobileAttendance() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [help, setHelp] = useState(false);
+  const [today, setToday] = useState<Date | null>(null);
+  useEffect(() => {
+    const update = () => setToday(new Date());
+    update();
+    const timer = window.setInterval(update, 30000);
+    document.addEventListener('visibilitychange', update);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', update); };
+  }, []);
   useEffect(() => { setSignedIn(Boolean(getToken() && !isTokenExpired(getToken()))); }, []);
   const expired = useCallback(() => { clearToken(); setSignedIn(false); }, []);
 
@@ -57,8 +55,9 @@ export default function MobileAttendance() {
           <IconHelpCircle size={25} aria-hidden="true" /><span>Ayuda</span>
         </button>
       </header>
+      {today ? <p className={styles.today}><time dateTime={today.toISOString()}>{new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).format(today)}</time></p> : null}
       {signedIn === null ? <Loading label="Un momento…" /> : signedIn ?
-        <Attendance onExpired={expired} /> : <Login onLogin={() => setSignedIn(true)} />}
+        <Attendance onExpired={expired} today={today} /> : <Login onLogin={() => setSignedIn(true)} />}
       {help ? <section id="attendance-help" className={styles.helpContent}>
         <h2>Estamos para ayudarte</h2>
         <ol><li>Toca el botón de entrada o salida.</li><li>Mira la cámara y toca «Tomar foto».</li><li>Espera la confirmación.</li></ol>
@@ -114,11 +113,17 @@ function Login({ onLogin }: { onLogin: () => void }) {
   </section>;
 }
 
-function Attendance({ onExpired }: { onExpired: () => void }) {
+function Attendance({ onExpired, today }: { onExpired: () => void; today: Date | null }) {
   const nativeCamera = useNativeSelfieCamera();
   const [me, setMe] = useState<Me | null>(null);
   const [siteId, setSiteId] = useState('');
+  const [suggestion, setSuggestion] = useState<'idle' | 'checking' | 'found' | 'none'>('idle');
+  const manualSite = useRef(false);
+  const suggestionVersion = useRef(0);
+  const suggestionBusy = useRef(false);
+  const atHome = useRef(true);
   const [step, setStep] = useState<Step>('home');
+  useEffect(() => { atHome.current = step === 'home'; }, [step]);
   const [error, setError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
   const [result, setResult] = useState<AttendancePunch | null>(null);
@@ -141,17 +146,39 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
   }, [onExpired]);
   const load = useCallback(async () => {
     const data = await request<Me>('/attendance/me', { cache: 'no-store' });
-    if (alive.current) { setMe(data); setSiteId(current => data.open ? data.open.customerWorksite.id : data.worksites.some(site => site.id === current) ? current : rememberedSite(data)); }
+    if (alive.current) { setMe(data); setSiteId(current => data.open ? data.open.customerWorksite.id : data.worksites.some(site => site.id === current) ? current : ''); }
     return data;
   }, [request]);
+  const suggestSite = useCallback(async (data: Me) => {
+    if (data.open || manualSite.current || suggestionBusy.current) return;
+    const version = ++suggestionVersion.current;
+    suggestionBusy.current = true;
+    setSuggestion('checking');
+    try {
+      const position = await getLocation();
+      if (!alive.current || manualSite.current || version !== suggestionVersion.current || !atHome.current) return;
+      const suggested = suggestAttendanceSite(data.worksites, { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: position.timestamp });
+      setSiteId(suggested || '');
+      setSuggestion(suggested ? 'found' : 'none');
+    } catch {
+      if (alive.current && !manualSite.current && version === suggestionVersion.current) { setSiteId(''); setSuggestion('none'); }
+    } finally { suggestionBusy.current = false; }
+  }, []);
   const stopCamera = useCallback(() => {
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
   }, []);
   useEffect(() => {
     alive.current = true;
-    load().catch(error => { if (alive.current) setError(error instanceof Error ? error.message : 'No se pudo cargar tu asistencia.'); });
-    return () => { alive.current = false; stopCamera(); void audio.current?.close().catch(() => undefined); audio.current = null; };
-  }, [load, stopCamera]);
+    const refreshHome = (event?: Event) => {
+      if (document.hidden || !atHome.current || lock.current) return;
+      if (event) manualSite.current = false;
+      void load().then(suggestSite).catch(error => { if (alive.current) setError(error instanceof Error ? error.message : 'No se pudo cargar tu asistencia.'); });
+    };
+    refreshHome();
+    document.addEventListener('visibilitychange', refreshHome);
+    window.addEventListener('pageshow', refreshHome);
+    return () => { alive.current = false; document.removeEventListener('visibilitychange', refreshHome); window.removeEventListener('pageshow', refreshHome); stopCamera(); void audio.current?.close().catch(() => undefined); audio.current = null; };
+  }, [load, stopCamera, suggestSite]);
   useEffect(() => {
     if (step !== 'camera' || nativeCamera) return;
     let cancelled = false;
@@ -193,13 +220,14 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     prepareSound(); setError('');
     if (!navigator.onLine) { setError('No hay internet. Tu marcación aún no se ha registrado. Vuelve a intentar cuando tengas conexión.'); return; }
     if (!nativeCamera && !navigator.mediaDevices?.getUserMedia) { setError('No podemos usar la cámara. Abre la aplicación en un navegador compatible con conexión segura.'); return; }
+    suggestionVersion.current++; setSuggestion('idle');
     lock.current = true; setStep('locating');
     try {
       const fresh = await load();
-      const nextSite = fresh.open?.customerWorksite.id || (fresh.worksites.some(site => site.id === chosenSite) ? chosenSite : rememberedSite(fresh));
+      if ((me?.open?.id || null) !== (fresh.open?.id || null)) { setError('Tu jornada cambió. Revisa el botón y vuelve a marcar.'); setStep('home'); return; }
+      const nextSite = fresh.open?.customerWorksite.id || (fresh.worksites.some(site => site.id === chosenSite) ? chosenSite : '');
       if (!nextSite) { setStep('sites'); return; }
       setSiteId(nextSite);
-      rememberSite(fresh.employee.id, nextSite);
       const location = await getLocation();
       if (!alive.current) return;
       attempt.current = { me: fresh, siteId: nextSite, location };
@@ -289,7 +317,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
   const isExit = Boolean(me?.open);
 
   const ActionIcon = isExit ? IconLogout : IconLogin;
-  const last = me?.recent[0];
+  const overdue = Boolean(me?.open && today && hasPriorDayShift(me.open.enteredAt, today));
   return <>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {!me ? <section className={styles.stack}>
@@ -300,7 +328,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
       step === 'sites' ? <section>
         <h1>¿En qué obra estás?</h1><p>El encargado puede ayudarte a elegir.</p>
         <div className={styles.choices}>{me.worksites.map(site => <button key={site.id} className={`${styles.secondary} ${styles.choice}`} onClick={() => {
-          rememberSite(me.employee.id, site.id); setSiteId(site.id); setStep('home');
+          manualSite.current = true; suggestionVersion.current++; setSuggestion('idle'); setSiteId(site.id); setStep('home');
         }}><IconMapPin size={28} aria-hidden="true" /><span>{site.alias || site.worksite.name}<small>{site.customer.name}</small></span></button>)}</div>
         {!me.worksites.length ? <p className={styles.notice}>No hay obras disponibles. Pide ayuda al encargado.</p> : null}
         <button className={styles.link} onClick={() => setStep('home')}>Volver</button>
@@ -332,26 +360,24 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
         <button className={styles.primary} onClick={() => { setStep('home'); setResult(null); }}>LISTO</button>
       </section> : <>
         <div className={styles.greeting} data-page-heading-glass><h1>Mi asistencia</h1><p>Hola, {me.employee.name.split(' ')[0]}</p></div>
+        {overdue ? <p className={styles.notice} role="status">Tienes una jornada de un día anterior sin cerrar. Marca la salida para poder registrar una nueva entrada.</p> : null}
         <section className={styles.card} aria-label="Registrar asistencia">
           <div className={styles.idle}>
             <IconDoor size={48} stroke={1.7} className={styles.stateIcon} aria-hidden="true" />
-            <p className={styles.stateLabel}>{isExit ? 'Tu jornada está abierta' : 'Sin entrada registrada'}</p>
-            {me.open ? <p className={styles.shiftTime}>Entrada a las {shortTime(me.open.enteredAt)}</p> : null}
-            <button className={`${styles.primary} ${styles.mark} ${isExit ? styles.exit : ''}`} onClick={() => void begin()}>
+            <p className={styles.stateLabel}>{overdue ? 'Falta cerrar tu jornada anterior' : isExit ? 'Tu jornada está abierta' : 'Sin entrada registrada'}</p>
+            {me.open ? <p className={styles.shiftTime}>Entrada {overdue ? new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', timeZone: 'America/Bogota' }).format(new Date(me.open.enteredAt)) + ' · ' : 'a las '}{shortTime(me.open.enteredAt)}</p> : null}
+            <button className={`${styles.primary} ${styles.mark} ${isExit ? styles.exit : styles.entry}`} onClick={() => void begin()}>
               <ActionIcon size={40} stroke={1.8} aria-hidden="true" />MARCAR {isExit ? 'SALIDA' : 'ENTRADA'}
             </button>
             <p className={styles.instruction}>Toca el botón y mira la cámara</p>
           </div>
           <div className={styles.site}><IconMapPin size={26} aria-hidden="true" />
-            <div className={styles.siteName}><span>Obra</span><strong>{site ? site.alias || site.worksite.name : 'Elige tu obra'}</strong></div>
-            {!isExit ? <button className={styles.link} onClick={() => { setError(''); setStep('sites'); }}>{site ? 'Cambiar' : 'Elegir'}</button> : null}
+            <div className={styles.siteName}><span>{!isExit && suggestion === 'found' ? 'Obra sugerida' : 'Obra'}</span><strong>{site ? site.alias || site.worksite.name : 'Elige tu obra'}</strong></div>
+            {!isExit ? <button className={styles.link} onClick={() => { setError(''); setSuggestion('idle'); suggestionVersion.current++; setStep('sites'); }}>{site ? 'Cambiar' : 'Elegir'}</button> : null}
           </div>
+          {!isExit ? <p className={styles.siteHint} role="status">{suggestion === 'checking' ? 'Buscando una obra cercana…' : suggestion === 'found' ? 'Sugerida por tu ubicación. Confirma que estás en esta obra antes de marcar.' : !site ? 'Selecciona la obra donde estás.' : 'Verifica la obra antes de marcar.'}</p> : null}
         </section>
-        <div className={styles.recent}><IconClock size={26} aria-hidden="true" /><div>
-          <span className={styles.muted}>Último registro</span>
-          <strong>{last ? `${last.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · ${attendanceDate(last.occurredAt)}` : 'Aún no hay marcaciones'}</strong>
-          {last?.status === 'PENDING' ? <span className={styles.reviewText}>{last.reasons.includes('FACE_MISMATCH') ? 'El rostro no coincidió. Oficina revisará tu registro.' : 'Pendiente de revisión por oficina.'}</span> : last?.status === 'REJECTED' ? <span className={styles.reviewText}>Rechazado. Habla con el encargado.</span> : null}
-        </div></div>
+
       </>}
 
   </>;

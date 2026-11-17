@@ -142,6 +142,21 @@ describe('PWA attendance service', () => {
     expect(db.attendancePunch.create).not.toHaveBeenCalled();
     expect(storage.remove).toHaveBeenCalled();
   });
+  it('blocks a new entry until a prior-day shift is explicitly checked out', async () => {
+    const open = { id: 'yesterday-shift', enteredAt: new Date(Date.now() - 36 * 60 * 60 * 1000), customerWorksiteId: 'site' };
+    db.worksiteAttendance.findFirst.mockResolvedValue(open);
+    await expect(service.punch(actor, dto(), image)).rejects.toThrow('Registra la salida');
+    expect(db.worksiteAttendance.findFirst).toHaveBeenCalledWith({ where: { employeeId: employee.id, leftAt: null } });
+    expect(db.worksiteAttendance.create).not.toHaveBeenCalled();
+    expect(db.attendancePunch.create).not.toHaveBeenCalled();
+    const checkout = await service.punch(actor, { ...dto(), requestId: 'close-yesterday', kind: 'CHECK_OUT', attendanceId: open.id }, image);
+    expect(checkout.kind).toBe('CHECK_OUT');
+    expect(db.worksiteAttendance.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: open.id }, data: expect.objectContaining({ leftAt: expect.any(Date) }) }));
+    db.worksiteAttendance.findFirst.mockResolvedValue(null);
+    const next = await service.punch(actor, { ...dto(), requestId: 'today-entry' }, image);
+    expect(next.kind).toBe('CHECK_IN');
+    expect(db.worksiteAttendance.create).toHaveBeenCalledTimes(1);
+  });
   it('rejects a stale checkout targeting a different shift', async () => {
     db.worksiteAttendance.findFirst.mockResolvedValue({
       id: 'new-shift',
