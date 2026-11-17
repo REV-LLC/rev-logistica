@@ -57,18 +57,23 @@ test('current-period deliveries show document number instead of opening balance'
   const data=fixture();data.input.rentals[0].deliveredOn='2026-10-16';
   const pdf=await inspect(await createAnnexPdf(data));assert.ok(pdf.text.includes('RM-0'));assert.ok(!pdf.text.includes('Saldo inicial'));
 });
-test('download and print retain opening balance plus current return documents',async()=>{
+test('print and download show each movement only in the interval it starts',async()=>{
   const data=fixture();
-  const returned=(id,date,billingCutoffDate)=>({date,billingCutoffDate,quantity:'1',source:{documentId:id,documentNumber:id}});
-  data.input.rentals[0].returns=[
-    returned('DV-current','2026-10-17','2026-10-16'),
-    returned('DV-prior','2026-10-16','2026-10-15'),
-    returned('DV-future','2026-10-17'),
-  ];
+  const lot=data.input.rentals[0];
+  lot.quantity='2';
+  lot.returns=[{date:'2026-10-18',billingCutoffDate:'2026-10-16',quantity:'1',
+    source:{reference:'return',documentId:'return',documentNumber:'DV-current'}}];
+  data.input.period.through='2026-10-17';
+  const first={...data.result.lines[0],quantity:'2',net:'200.00'};
+  data.result.lines=[first,{...first,key:`${lot.id}:2026-10-17`,date:'2026-10-17',quantity:'1',net:'100.00'}];
+  data.result.totals={rentalGross:'300.00',rentalDiscount:'0.00',rentalNet:'300.00'};
   for(const options of [{},{print:true}]) {
     const pdf=await inspect(await createAnnexPdf(data,options));
-    for(const value of ['Saldo inicial','DV-current','$ 119,00']) assert.ok(pdf.text.includes(value),value);
-    for(const value of ['RM-0','DV-prior','DV-future']) assert.ok(!pdf.text.includes(value),value);
+    assert.equal((pdf.text.match(/Saldo inicial/g)||[]).length,1);
+    assert.equal((pdf.text.match(/DV-current/g)||[]).length,1);
+    assert.ok(pdf.text.indexOf('Saldo inicial') < pdf.text.indexOf('DV-current'));
+    assert.ok(!pdf.text.includes('RM-0'));
+    assert.ok(pdf.text.includes('$ 357,00'));
   }
 });
 test('PDF prints manual observations, both transport charges and combined taxable total',async()=>{

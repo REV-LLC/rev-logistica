@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments, isOpeningBalance } from './annex-sheet.ts';
+import { sheetRows, applySheetChanges, groupMachineRows, sheetDocuments } from './annex-sheet.ts';
 const input = {
  period:{from:'2026-09-16',to:'2026-09-30',through:'2026-09-20'},
  rentals:[{id:'lot',label:'Plataforma',quantity:'3',deliveredOn:'2026-09-16',source:{reference:'REM-1'},pricing:{basePrice:'100'},returns:[],waivedDays:[]}],
@@ -214,18 +214,6 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
  assert.equal(groupMachineRows(source,different,false).length,2);
 });
 
- test('document links retain every consolidated origin and deduplicate returns', () => {
-   const source = {documentId:'doc-a', documentNumber:'RM001',reference:'ledger-a'};
-   const linked = {...input, rentals:[
-     {...input.rentals[0],source,returns:[{date:'2026-09-18',source:{documentId:'doc-r',documentNumber:'DV001'}}]},
-     {...input.rentals[0],source:{documentId:'doc-b',documentNumber:'RM002'},returns:[{date:'2026-09-18',source:{documentId:'doc-r',documentNumber:'DV001'}}]},
-   ]};
-   assert.deepEqual(sheetDocuments(linked,{members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]}),[
-     {id:'doc-a',label:'RM001'},{id:'doc-r',label:'DV001'},{id:'doc-b',label:'RM002'}
-   ]);
-   assert.deepEqual(sheetDocuments(input,{kind:'rentals',index:0}),[]);
- });
-
  test('prior-cut deliveries become one opening balance; current deliveries keep their documents', () => {
    const source = {...input, machineDays:[],period:{from:'2026-10-16',to:'2026-10-31',through:'2026-10-27'},rentals:[]};
    source.rentals = [['05','5'],['07','2'],['10','1'],['16','4'],['16','3']].map(([day,quantity],index) => ({
@@ -238,10 +226,10 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
    const before = JSON.stringify(source);
    const rows = groupMachineRows(source,sheetRows(source,calculated),false);
    assert.equal(rows.length,3);
-   const opening = rows.find(r=>isOpeningBalance(source,r));
+   const opening = rows.find(r=>r.movementSources === null);
    assert.equal(opening.quantity,'8');assert.equal(opening.days,'12');assert.equal(opening.from,'2026-10-16');
    assert.equal(opening.net,'9600.00');assert.deepEqual(sheetDocuments(source,opening),[]);
-   assert.equal(rows.filter(r=>!isOpeningBalance(source,r)).length,2);
+   assert.equal(rows.filter(r=>r.movementSources !== null).length,2);
    assert.equal(JSON.stringify(source),before);
    const firstCut={...source,period:{from:'2026-10-01',to:'2026-10-15',through:'2026-10-15'},rentals:source.rentals.slice(0,3)};
    const firstLines={lines:firstCut.rentals.flatMap(r=>Array.from({length:16-Number(r.deliveredOn.slice(-2))},(_,i)=>{
@@ -249,30 +237,77 @@ test('daily bulk rows consolidate matching charges, retain sources and edit all 
      return {...line(date,r.quantity,`${Number(r.quantity)*100}.00`),key:`${r.id}:${date}`};
    }))};
    const firstRows=groupMachineRows(firstCut,sheetRows(firstCut,firstLines),false);
-   assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['11','9','6']);
-   assert.ok(firstRows.every(r=>!isOpeningBalance(firstCut,r)));
+   assert.equal(firstRows.length,3);assert.deepEqual(firstRows.map(r=>r.days),['2','3','6']);
+   assert.deepEqual(firstRows.map(r=>r.quantity),['5','7','8']);
+   assert.deepEqual(firstRows.map(r=>sheetDocuments(firstCut,r)[0].label),['RM-0','RM-1','RM-2']);
  });
 
-test('opening balances show only this cut returns, using billing cutoffs and deduplicating merged lots',()=>{
- const source=structuredClone(input);
- source.rentals[0].deliveredOn='2026-09-01';
- const returned=(id,date,billingCutoffDate)=>({date,billingCutoffDate,quantity:'1',source:{documentId:id,documentNumber:id}});
- source.rentals[0].returns=[
-   returned('DV-old','2026-09-16','2026-09-15'),
-   returned('DV-start','2026-09-16'),
-   returned('DV-cutoff','2026-09-21','2026-09-20'),
-   returned('DV-future','2026-09-21'),
- ];
- source.rentals.push({...structuredClone(source.rentals[0]),id:'second'});
- const row={members:[{kind:'rentals',index:0},{kind:'rentals',index:1}]};
- const before=JSON.stringify(source);
- assert.equal(isOpeningBalance(source,row),true);
- assert.deepEqual(sheetDocuments(source,row),[
-   {id:'DV-start',label:'DV-start'},{id:'DV-cutoff',label:'DV-cutoff'},
+function movementCase() {
+ const doc = label => ({reference:label, documentId:`id-${label}`, documentNumber:label});
+ const lot = {id:'old',skuId:'sku',label:'Nave',deliveredOn:'2026-08-25',quantity:'4',source:doc('RM-old'),
+   returns:[{date:'2026-10-28',billingCutoffDate:'2026-10-27',quantity:'4',source:doc('DV-8')}],pricing:{basePrice:'1500'},waivedDays:[]};
+ const source = {period:{from:'2026-10-01',to:'2026-10-31',through:'2026-10-31'},policy:{includeReturnDay:true},
+   machineDays:[],rentals:[lot,{...structuredClone(lot),id:'new',deliveredOn:'2026-10-22',billingStartsOn:'2026-10-23',source:doc('RM-8'),quantity:'8'}]};
+ const lines = [];
+ for (let d=1; d<=31; d++) {
+   const date = `2026-10-${String(d).padStart(2,'0')}`;
+   for (const [id,qty] of [['old',d<=27?4:0],['new',d<23?0:d<=27?8:4]]) {
+     if (qty) lines.push({...line(date,String(qty),(qty*1500).toFixed(2)),key:`${id}:${date}`,effectivePrice:'1500'});
+   }
+ }
+ return {source,lines};
+}
+test('balance intervals follow the effective delivery and return across FIFO lots, with exact money and editable member quantities',()=>{
+ const {source,lines} = movementCase();
+ const rows=groupMachineRows(source,sheetRows(source,{lines}),false);
+ assert.deepEqual(rows.map(r=>[r.from.slice(-2),r.to.slice(-2),r.quantity,r.days,r.net,
+   r.movementSources === null ? 'Saldo inicial' : sheetDocuments(source,r)]),[
+   ['01','22','4','22','132000.00','Saldo inicial'],
+   ['23','27','12','5','90000.00',[{id:'id-RM-8',label:'RM-8'}]],
+   ['28','31','4','4','24000.00',[{id:'id-DV-8',label:'DV-8'}]],
  ]);
- assert.equal(JSON.stringify(source),before);
+ const edited=applySheetChanges(source,[{row:rows[1],key:'days',value:'4'}]);
+ assert.deepEqual(edited.rentals.map(lot=>lot.dayAdjustments),['4','8'].map(quantity=>[
+   {from:'2026-10-23',to:'2026-10-27',days:4,quantity}
+ ]));
 });
-
+test('an exclusive return applies on its date and survives excluded days; a later return never labels earlier rows',()=>{
+ const {source,lines}=movementCase();
+ source.policy.includeReturnDay=false;
+ for(const r of source.rentals) delete r.returns[0].billingCutoffDate;
+ const rows=groupMachineRows(source,sheetRows(source,{lines:lines.filter(l=>l.date!=='2026-10-28')}),false);
+ assert.deepEqual(rows.map(r=>[r.from.slice(-2),sheetDocuments(source,r).map(d=>d.label)]),
+   [['01',[]],['23',['RM-8']],['29',['DV-8']]]);
+});
+test('distinct documents effective on the same date are linked once each, only on the resulting balance',()=>{
+ const {source,lines}=movementCase();
+ const extra={reference:'second return',documentId:'second-DV',documentNumber:'DV-2'};
+ source.rentals[1].returns[0]={...source.rentals[1].returns[0],source:extra};
+ const rows=groupMachineRows(source,sheetRows(source,{lines}),false);
+ assert.deepEqual(rows.map(r=>sheetDocuments(source,r).map(d=>d.label)),[[],['RM-8'],['DV-8','DV-2']]);
+});
+test('a later movement preserves an existing adjustment spanning that date and its original editable range',()=>{
+ const {source,lines}=movementCase();
+ source.rentals[0].dayAdjustments=[{from:'2026-10-01',to:'2026-10-27',days:26,quantity:'4'}];
+ const last=lines.find(l=>l.key==='old:2026-10-27');
+ Object.assign(last,{billableUnits:'0',net:'0.00'});
+ const [row]=groupMachineRows(source,sheetRows(source,{lines}),false);
+ assert.deepEqual([row.from,row.to,row.days,row.net],['2026-10-01','2026-10-27','26','156000.00']);
+ const edited=applySheetChanges(source,[{row,key:'days',value:'25'}]);
+ assert.equal(edited.rentals[0].dayAdjustments[0].days,25);
+});
+test('a first-day return with an earlier billing cutoff is already reflected in opening stock',()=>{
+ const {source,lines}=movementCase();
+ source.rentals[0].returns.push({date:'2026-10-01',billingCutoffDate:'2026-09-30',quantity:'1',source:{reference:'older',documentId:'prior'}});
+ const [row]=sheetRows(source,{lines});
+ assert.equal(row.movementSources,null);
+});
+test('a minimum supplement links the triggering return even when the ordinary balance goes to zero',()=>{
+ const {source,lines}=movementCase();
+ const minimum={...lines.find(l=>l.key==='old:2026-10-27'),key:'old:minimum:2026-10-27',reason:'Completa el mínimo',billableUnits:'2'};
+ const rows=groupMachineRows(source,sheetRows(source,{lines:[...lines,minimum]}),false);
+ assert.deepEqual(sheetDocuments(source,rows.find(r=>r.supplement)),[{id:'id-DV-8',label:'DV-8'}]);
+});
 test('manual rows never allow a paste to mutate an inventory rental', async()=>{
  const {manualSheetRows}=await import('./annex-sheet.ts');
  const source={rentals:[],machineDays:[],additionalCharges:[{id:'r',type:'REPAIR',description:'Soldadura',quantity:'2',unitPrice:'12.34'}]};
