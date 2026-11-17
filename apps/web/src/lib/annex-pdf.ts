@@ -2,7 +2,7 @@ import { annexAmounts, annexTransportRows, annexTransportTotals } from "./annex-
 import { isDailyAnnex } from "./annex-daily-scope";
 import { documentBranding, type DocumentBranding } from "./document-branding";
 import type { AnnexInput, Result, SourceIssue } from "../app/billing/annexes/types";
-import { manualSheetRows, groupMachineRows, isOpeningBalance, sheetDocuments, sheetRows } from "./annex-sheet";
+import { manualSheetRows, groupMachineRows, sheetDocuments, sheetRows } from "./annex-sheet";
 export type AnnexExport = {
   input: AnnexInput;
   result: Result;
@@ -101,10 +101,8 @@ export async function createAnnexPdf(data: AnnexExport, options: { print?: boole
   let rowIndex = 0;
   for (const row of [...groupMachineRows(data.input, sheetRows(data.input, data.result), false), ...manualSheetRows(data.input)]) {
     if (row.group) continue;
-    const documents = row.manualType ? row.reference : [
-      ...(isOpeningBalance(data.input, row) ? ["Saldo inicial"] : []),
-      ...sheetDocuments(data.input, row).map((doc) => doc.label),
-    ].join("\n") || "-";
+    const documents = row.manualType ? row.reference : row.movementSources === null ? "Saldo inicial"
+      : sheetDocuments(data.input, row).map((doc) => doc.label).join("\n") || "-";
     const values = [
       row.supplement ? `${row.label} - Ajuste al mínimo` : row.label,
       documents, row.mode, row.from ? date(row.from) : "-", row.to ? date(row.to) : "-", row.quantity, row.areaM2 ?? "-", row.days,

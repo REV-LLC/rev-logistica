@@ -1,6 +1,8 @@
-import type { AnnexInput, Rental, Result } from "../app/billing/annexes/types";
+import type { AnnexInput, Rental, Result, Source } from "../app/billing/annexes/types";
 
 export type SheetRow = {
+  // null denotes stock carried into the cut. Sources identify the change starting this balance.
+  movementSources?: Source[] | null;
   manualType?: "REPAIR" | "REPLACEMENT";
   id: string;
   members?: SheetRow[];
@@ -31,40 +33,65 @@ export type SheetRow = {
   net: string;
   status: string;
 };
-/** An opening balance is physical stock delivered before this cut, not proof of payment. */
-export function isOpeningBalance(input: AnnexInput, row: SheetRow): boolean {
-  return (row.members ?? [row]).every((member) => {
-    if (member.kind !== "rentals") return false;
-    const rental = input.rentals[member.index];
-    return Boolean(rental && rental.deliveredOn < input.period.from &&
-      (!rental.billingStartsOn || rental.billingStartsOn <= input.period.from) &&
-      (!rental.commercialInterval || rental.commercialInterval.from <= input.period.from));
-  });
+function bulkBalanceKey(input: AnnexInput, rental: Rental) {
+  if (!rental.skuId || rental.assetId || rental.accessoryId || rental.commercial ||
+      rental.includedIn || rental.metering || rental.cutting || rental.commercialInterval) return null;
+  const pricing = rental.pricing;
+  return JSON.stringify([rental.skuId, rental.label, rental.billingAreaM2, pricing.basePrice,
+    pricing.effectivePrice, pricing.discountPercent ?? "0", pricing.adjustmentReason,
+    input.policy?.minimumDaysByRental?.[rental.id] ?? input.policy?.minimumDaysBySku?.[rental.skuId] ?? 0]);
 }
 
-/** Show current-cut supports, keeping prior deliveries under the opening-balance label. */
-export function sheetDocuments(input: AnnexInput, row: SheetRow) {
-  const documents = new Map<string, { id: string; label: string }>();
-  const openingBalance = isOpeningBalance(input, row);
-  const through = input.period.through < input.period.to ? input.period.through : input.period.to;
-  for (const member of row.members ?? [row]) {
-    const item = input[member.kind][member.index];
-    if (!item) continue;
-    const sources = member.kind === "rentals"
-      ? [
-          ...(openingBalance ? [] : [input.rentals[member.index].source]),
-          ...input.rentals[member.index].returns.filter((entry) => {
-            const cutoff = entry.billingCutoffDate ?? entry.date;
-            return cutoff >= input.period.from && cutoff <= through;
-          }).map((entry) => entry.source),
-        ]
-      : input.machineDays[member.index].reports.map((report) => report.source);
-    for (const source of sources) {
-      if (source.documentId) documents.set(source.documentId, {
-        id: source.documentId,
-        label: source.documentNumber || "Ver documento",
-      });
+type BalanceChange = { date: string; sources: Source[]; hasReturn: boolean };
+
+// The engine already priced each lot-day. These dates only partition the display of those lines.
+function balanceChanges(input: AnnexInput) {
+  const groups = new Map<string, Map<string, BalanceChange>>();
+  const byLot = input.rentals.map((rental) => {
+    const key = bulkBalanceKey(input, rental) ?? rental.id;
+    const dates = groups.get(key) ?? new Map<string, BalanceChange>();
+    groups.set(key, dates);
+    const add = (date: string, source: Source, isReturn = false) => {
+      if (date < input.period.from || date > input.period.through || date > input.period.to) return;
+      const change = dates.get(date) ?? {date, sources: [], hasReturn: false};
+      change.sources.push(source);
+      change.hasReturn ||= isReturn;
+      dates.set(date, change);
+    };
+    const start = rental.billingStartsOn ?? rental.deliveredOn;
+    const sameDayReturns = start > rental.deliveredOn
+      ? rental.returns.filter(event => (event.billingCutoffDate ?? event.date) === rental.deliveredOn)
+      : [];
+    if (sameDayReturns.length) add(rental.deliveredOn, rental.source);
+    if ((rental.deliveredOn >= input.period.from || start > input.period.from) &&
+        (!sameDayReturns.length || sumQuantities(sameDayReturns.map(event => event.quantity)) !== sumQuantities([rental.quantity]))) {
+      add(start, rental.source);
     }
+    for (const event of rental.returns) {
+      const cutoff = event.billingCutoffDate ?? event.date;
+      if (cutoff < input.period.from) continue;
+      const includesReturnDay = !event.loss && (event.billingCutoffDate || input.policy?.includeReturnDay || cutoff === rental.deliveredOn);
+      const effective = includesReturnDay
+        ? new Date(Date.parse(cutoff) + 86400000).toISOString().slice(0, 10) : cutoff;
+      add(effective, event.source, true);
+    }
+    return key;
+  });
+  const timelines = new Map([...groups].map(([key, dates]) =>
+    [key, [...dates.values()].sort((a, b) => b.date.localeCompare(a.date))] as const));
+  return byLot.map((key) => timelines.get(key)!);
+}
+
+export function sheetDocuments(input: AnnexInput, row: SheetRow) {
+  const sources = row.kind === "machineDays"
+    ? input.machineDays[row.index].reports.map((report) => report.source)
+    : row.movementSources ?? [];
+  const documents = new Map<string, { id: string; label: string }>();
+  for (const source of sources) {
+    if (source.documentId) documents.set(source.documentId, {
+      id: source.documentId,
+      label: source.documentNumber || "Ver documento",
+    });
   }
   return [...documents.values()];
 }
@@ -110,6 +137,7 @@ export function sheetRows(
   input: AnnexInput,
   result: Result | null,
 ): SheetRow[] {
+  const timelines = balanceChanges(input);
   const linesBySource = new Map<string, Result["lines"]>();
   for (const line of result?.lines ?? []) {
     const id = line.key.slice(0, -11).replace(/:minimum$/, "");
@@ -132,6 +160,17 @@ export function sheetRows(
       const groups: Result["lines"][] = [];
       const adjustmentFor = (date: string) =>
         rental?.dayAdjustments?.find((a) => date >= a.from && date <= a.to);
+      const movementOn = (date: string) => timelines[index]?.find((change) => change.date <= date);
+      const sourcesOn = (date: string): Source[] | null => {
+        if (!rental) return null;
+        const change = movementOn(date);
+        // On the first day, prior stock and each new delivery retain their own origins.
+        if (change && (change.date > input.period.from || change.hasReturn)) return change.sources;
+        if (rental.deliveredOn < input.period.from &&
+            (rental.billingStartsOn ?? rental.deliveredOn) <= input.period.from &&
+            (!rental.commercialInterval || rental.commercialInterval.from <= input.period.from)) return null;
+        return [rental.source];
+      };
       for (const line of lines) {
         const group = groups[groups.length - 1],
           previous = group?.[group.length - 1];
@@ -139,7 +178,9 @@ export function sheetRows(
           rental &&
           !(rental.metering ?? rental.cutting) &&
           previous &&
+          !line.key.includes(":minimum:") && !previous.key.includes(":minimum:") &&
           Date.parse(line.date) - Date.parse(previous.date) === 86400000 &&
+          (adjustmentFor(line.date) || movementOn(line.date) === movementOn(previous.date)) &&
           line.quantity === previous.quantity &&
           adjustmentFor(line.date) === adjustmentFor(previous.date) &&
           (adjustmentFor(line.date) || line.net === previous.net) &&
@@ -152,6 +193,10 @@ export function sheetRows(
       if (!groups.length) groups.push([]);
       return groups.map((group) => {
         const first = group[0];
+        const supplement = first?.key.includes(":minimum:") ?? false;
+        const movementSources = supplement && rental
+          ? rental.returns.filter((event) => (event.billingCutoffDate ?? event.date) === first.date).map((event) => event.source)
+          : sourcesOn(first?.date ?? rental?.commercialInterval?.from ?? rental?.billingStartsOn ?? rental?.deliveredOn ?? input.period.from);
         return {
           id: `${kind}:${rental?.id ?? `${day!.assetId}:${day!.date}`}:${first?.key ?? "pending"}`,
           kind,
@@ -169,7 +214,8 @@ export function sheetRows(
                     `${p.quantity} × ${p.label} · ${p.treatment === "INCLUDED" ? "Tarifa $0 en este conjunto" : p.treatment === "INDEPENDENT" ? "Tarifa propia" : "Por revisar"}`,
                 )
                 .join("\n"),
-          supplement: first?.key.includes(":minimum:") ?? false,
+          supplement,
+          ...(rental ? { movementSources } : {}),
           label: commercialLabel(source),
           reference:
             rental?.source.reference ??
@@ -382,48 +428,43 @@ export function applySheetChanges(
   return next;
 }
 
+function sumQuantities(values: string[]) {
+  const precision = Math.max(...values.map(value => value.split(".")[1]?.length ?? 0));
+  const scale = 10n ** BigInt(precision);
+  const total = values.reduce((sum, value) => {
+    const [whole, fraction = ""] = value.split(".");
+    return sum + BigInt(whole) * scale + BigInt(fraction.padEnd(precision, "0") || "0");
+  }, 0n);
+  const fraction = String(total % scale).padStart(precision, "0").replace(/0+$/, "");
+  return fraction ? `${total / scale}.${fraction}` : String(total / scale);
+}
+
 // Asset identity keeps distinct machines separate even when they share a label.
 // Consolidate presentation only: keep every source row for atomic edits.
 function consolidateDailyRows(input: AnnexInput, rows: SheetRow[]): SheetRow[] {
-  const output: SheetRow[] = [];
-  const groups = new Map<string, SheetRow>();
+  const groups = new Map<string, SheetRow[]>();
   for (const row of rows) {
-    const lot = input.rentals[row.index];
-    if (!row.skuId || row.assetId || row.accessoryId || row.supplement ||
-      row.included || row.mode !== "D" || row.status !== "Calculado" ||
-      lot.commercial || lot.metering || lot.cutting) {
-      output.push(row);
-      continue;
-    }
-    const key = JSON.stringify([
-      isOpeningBalance(input, row) ? "OPENING_BALANCE" : ["DELIVERY", lot.source.documentId ?? lot.source.reference],
-      row.skuId, row.label, row.from, row.to, row.days, row.basePrice,
-      row.effectivePrice, row.discountPercent, row.adjustmentReason,
-      input.policy?.minimumDaysByRental?.[lot.id] ?? input.policy?.minimumDaysBySku?.[row.skuId] ?? 0,
-    ]);
-    const previous = groups.get(key);
-    if (!previous) {
-      const copy = { ...row };
-      output.push(copy);
-      groups.set(key, copy);
-      continue;
-    }
-    const members = [...(previous.members ?? [{ ...previous }]), row];
-    previous.members = members;
-    previous.id = `combined:${members.map((member) => member.id).join("|")}`;
-    const precision = Math.max(...members.map((member) => member.quantity.split(".")[1]?.length ?? 0));
-    const scale = 10n ** BigInt(precision);
-    const quantity = members.reduce((total, member) => {
-      const [whole, fraction = ""] = member.quantity.split(".");
-      return total + BigInt(whole) * scale + BigInt(fraction.padEnd(precision, "0") || "0");
-    }, 0n);
-    previous.quantity = precision
-      ? `${quantity / scale}.${String(quantity % scale).padStart(precision, "0")}`.replace(/\.?0+$/, "")
-      : String(quantity);
-    previous.net = amount(members.reduce((total, member) => total + cents(member.net), 0n));
-    previous.reference = [...new Set(members.map((member) => member.reference))].join(", ");
+    const balanceKey = bulkBalanceKey(input, input.rentals[row.index]);
+    const key = balanceKey && !row.supplement && row.status === "Calculado"
+      ? JSON.stringify([balanceKey, row.movementSources?.map(s => s.documentId ?? s.reference),
+          row.from, row.to, row.days, row.basePrice, row.effectivePrice, row.discountPercent, row.adjustmentReason])
+      : row.id;
+    const members = groups.get(key);
+    if (members) members.push(row);
+    else groups.set(key, [row]);
   }
-  return output;
+  return [...groups.values()].map((members) => {
+    const first = members[0];
+    if (members.length === 1) return first;
+    return {
+      ...first, members,
+      id: `combined:${members.map((member) => member.id).join("|")}`,
+      quantity: sumQuantities(members.map((member) => member.quantity)),
+      ...(first.areaM2 !== undefined ? {areaM2: sumQuantities(members.map((member) => member.areaM2!))} : {}),
+      net: amount(members.reduce((total, member) => total + cents(member.net), 0n)),
+      reference: [...new Set(members.map((member) => member.reference))].join(", "),
+    };
+  });
 }
 
 export function groupMachineRows(
@@ -435,7 +476,7 @@ export function groupMachineRows(
   const byName = new Intl.Collator("es", { sensitivity: "base", numeric: true });
   const rentalRows = rows.filter((row) => row.kind === "rentals");
   const daily = (groupDaily ? rentalRows : consolidateDailyRows(input, rentalRows))
-    .sort((a, b) => byName.compare(a.label, b.label));
+    .sort((a, b) => byName.compare(a.label, b.label) || a.from.localeCompare(b.from));
   for (const row of rows) {
     if (row.kind !== "machineDays") continue;
     const day = input.machineDays[row.index];

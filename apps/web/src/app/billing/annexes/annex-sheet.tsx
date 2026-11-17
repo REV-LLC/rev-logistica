@@ -38,7 +38,6 @@ import {
   editableKeys,
   sheetRows,
   sheetDocuments,
-  isOpeningBalance,
   sheetModeOptions,
   groupMachineRows,
   type SheetChange,
@@ -326,12 +325,10 @@ export default function AnnexSheet({
       name: "Documento",
       width: 145,
       renderCell: ({ row }: { row: SheetRow }) => {
-        const openingBalance = isOpeningBalance(input, row);
+        if (row.movementSources === null) return <CellText text="Saldo inicial" />;
         const documents = sheetDocuments(input, row);
-        if (!documents.length && openingBalance) return <CellText text="Saldo inicial" />;
         return documents.length ? (
           <div className={styles.documentsCell}>
-            {openingBalance ? <span className={styles.openingBalance}>Saldo inicial</span> : null}
             <div style={{ overflowX: "auto", display: "flex", gap: 8 }}>
               {documents.map((document) => (
                 <a key={document.id}
