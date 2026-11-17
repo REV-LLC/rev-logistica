@@ -39,8 +39,10 @@ def extract(image: UploadFile = File(...), authorization: str = Header(default='
     with lock:
         detector.setInputSize((frame.shape[1], frame.shape[0]))
         _, faces = detector.detect(frame)
-        if faces is None or len(faces) != 1:
-            raise HTTPException(422, 'La foto debe mostrar un solo rostro, de frente y sin cubrirlo')
+        if faces is None or len(faces) == 0:
+            raise HTTPException(422, 'No pudimos detectar tu rostro. Mira de frente a la cámara, con buena luz y sin cubrir tu cara.')
+        if len(faces) > 1:
+            raise HTTPException(422, f'Detectamos {len(faces)} rostros en la foto. Debe aparecer únicamente tu cara.')
         face = faces[0]
         if min(face[2], face[3]) < 60:
             raise HTTPException(422, 'Acerca el rostro a la cámara')

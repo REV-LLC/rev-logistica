@@ -37,3 +37,7 @@ No fusionar esta rama ni activar este modo en producción. La prueba no cambia f
 Cuatro suites de asistencia e aislamiento: 25 pruebas aprobadas. Prueba del flujo HTTPS con viewport de 390×844, cámara e imagen sintéticas y GPS simulado: login real, inscripción del rostro, entrada VERIFIED (similitud 0.978768), evidencia privada, salida fuera del radio PENDING e idempotencia correctas. Sin errores de JavaScript ni solicitudes del navegador a producción. El token de staging fue rechazado por producción. Se eliminaron las referencias, marcaciones y jornadas sintéticas; la obra vuelve a quedar sin coordenadas para registrar la ubicación real del celular en la primera prueba del usuario.
 
 `PORT=3000` está fijado en ambos servicios y `HOST=::` en el API. Las cuatro opciones de bypass del frontend quedan deshabilitadas tanto en sus variables como en la imagen de pruebas. Los despliegues de producción mantienen sus identificadores anteriores. Evidencia: `docs/infrastructure/verificacion-attendance-staging-2026-11-17.json`.
+
+### Mensajes de detección facial, 17 de noviembre
+
+El worker de staging distingue cero rostros («No pudimos detectar tu rostro…») de varios rostros («Detectamos N rostros…»). Cuatro pruebas del worker y ambos casos a través del API HTTPS de staging aprobados. Despliegue de staging `555cc838-55c5-41ee-ab53-16ce48de5f5e`; producción conserva `b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2`. Los modelos, umbrales y datos del usuario no se modificaron.

@@ -71,5 +71,25 @@
       "jornadas": 0,
       "coordenadas_obra": null
     }
+  },
+  "diagnostico_rostros": {
+    "fecha": "2026-11-17",
+    "deployment_staging": "555cc838-55c5-41ee-ab53-16ce48de5f5e",
+    "deployment_produccion_sin_cambios": "b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2",
+    "pruebas_worker": {
+      "passed": 4
+    },
+    "pruebas_api_staging": [
+      {
+        "status": 400,
+        "message": "No pudimos detectar tu rostro. Mira de frente a la cámara, con buena luz y sin cubrir tu cara."
+      },
+      {
+        "status": 400,
+        "message": "Detectamos 2 rostros en la foto. Debe aparecer únicamente tu cara."
+      }
+    ],
+    "datos_usuario": "No se modificaron referencia facial, fotos, jornadas ni marcaciones del usuario. Solo se enviaron imágenes sintéticas que fueron rechazadas antes de persistir evidencia.",
+    "alcance": "Solo worker facial de staging; modelos y umbrales sin cambios."
   }
 }
