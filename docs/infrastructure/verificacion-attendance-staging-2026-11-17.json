@@ -208,5 +208,23 @@
       "resultado": "Google Maps mostró marcador y coordenadas correspondientes a cada selección; precisión GPS y distancia visibles. No se crearon marcaciones ni se solicitaron cámara/ubicación para consultar.",
       "produccion": "Ninguna mutación o despliegue de esta tarea dirigido a producción."
     }
+  },
+  "interfaz_empleados": {
+    "fecha": "2026-11-17",
+    "deployment": "4773cc4e-120e-45fa-a4c6-ceb21e59667b",
+    "status": "SUCCESS",
+    "commit": "5054122",
+    "servicio": "web-staging",
+    "entorno": "staging",
+    "referencia_visual": "Aplicación REV existente, logo fiesta.svg, fondo smoked-glass-horizontal.png y superficies cristal",
+    "vista": "Ingreso, jornada, entrada/salida, obra, último registro, ayuda y confirmación. Sin banner de pruebas, mapas, coordenadas ni puntuaciones faciales.",
+    "validacion": [
+      "TypeScript correcto",
+      "Browser Computer Use: ingreso local ficticio, cambiar obra, ayuda, estados entrada/salida y último registro pendiente",
+      "320px y 390px sin desborde; escritorio centrado",
+      "Staging real: sin iframes ni diagnósticos visibles, sin errores de consola"
+    ],
+    "limites": "No se enviaron marcaciones en QA, no se ejercitó cámara física ni se cambiaron referencias. Lógica facial/GPS/cámara conservada.",
+    "produccion_modificada": false
   }
 }

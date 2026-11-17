@@ -47,7 +47,7 @@ export default function NativeSelfieCapture({ onPhoto }: { onPhoto: (photo: Blob
       {busy ? 'PREPARANDO FOTO…' : 'ABRIR CÁMARA DEL IPHONE'}
       <input type="file" accept="image/*" capture="user" aria-label="Tomar selfie con la cámara del iPhone" disabled={busy} onChange={selected} />
     </label>
-    
+
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
   </div>;
 }
