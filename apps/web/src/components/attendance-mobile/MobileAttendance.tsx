@@ -5,6 +5,7 @@ import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { reasonLabels, attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
+import AttendanceLocationMap from './AttendanceLocationMap';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import StagingSetup from './StagingSetup';
 import InstallAttendance from './InstallAttendance';
@@ -120,6 +121,9 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
   const nativeCamera = useNativeSelfieCamera();
   const [me, setMe] = useState<Me | null>(null);
   const [siteId, setSiteId] = useState('');
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapPunchId, setMapPunchId] = useState('');
+  const [mapPoint, setMapPoint] = useState<'punch' | 'worksite'>('punch');
   const [step, setStep] = useState<Step>('home');
   const [error, setError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
@@ -146,6 +150,9 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
     if (alive.current) { setMe(data); setSiteId(current => data.open ? data.open.customerWorksite.id : data.worksites.some(site => site.id === current) ? current : rememberedSite(data)); }
     return data;
   }, [request]);
+  useEffect(() => {
+    if (mapOpen) document.getElementById('attendance-location-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [mapOpen, mapPunchId]);
   const stopCamera = useCallback(() => {
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
   }, []);
@@ -354,15 +361,19 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
           {last?.status === 'PENDING' ? <span>{last.reasons.includes('FACE_MISMATCH') ? 'Sin verificar: el rostro no coincidió. Revisión de oficina pendiente.' : 'Sin verificar. Oficina revisará tu registro.'}</span> : last?.status === 'REJECTED' ? <span>Rechazado. Habla con el encargado.</span> : null}
         </div></div>
       </>}
+    {me?.testMode && me.recent.length ? <>
+      <button className={styles.secondary} style={{ marginTop: 20 }} aria-expanded={mapOpen} onClick={() => { if (!mapOpen) setMapPoint('punch'); setMapOpen(value => !value); if (!mapPunchId) setMapPunchId(me.recent[0].id); }}>{mapOpen ? 'OCULTAR MAPA' : 'VER UBICACIONES EN EL MAPA'}</button>
+      {mapOpen ? <AttendanceLocationMap punches={me.recent} selectedId={mapPunchId} point={mapPoint} onPointChange={setMapPoint} onSelect={id => { setMapPunchId(id); setMapPoint('punch'); }} /> : null}
+    </> : null}
     {me?.testMode && me.recent.length ? <details className={styles.testDiagnostics}>
       <summary>Datos de mis pruebas ({me.recent.length})</summary>
       <p>Detección e identidad son puntuaciones distintas, no porcentajes de certeza. Radio de la obra de prueba: 200 m.</p>
-      {me.recent.map(punch => <TestPunchDetails key={punch.id} punch={punch} />)}
+      {me.recent.map(punch => <TestPunchDetails key={punch.id} punch={punch} onMap={() => { setMapPunchId(punch.id); setMapPoint('punch'); setMapOpen(true); document.getElementById('attendance-location-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />)}
     </details> : null}
   </>;
 }
 
-function TestPunchDetails({ punch }: { punch: AttendancePunch }) {
+function TestPunchDetails({ punch, onMap }: { punch: AttendancePunch; onMap: () => void }) {
   const score = (value: number | null | undefined) => value == null ? 'Sin dato' : value.toFixed(4);
   return <section className={styles.testDiagnostics}>
     <strong>{punch.kind === 'CHECK_IN' ? 'Entrada' : 'Salida'} · {attendanceDate(punch.occurredAt)}</strong>
@@ -374,6 +385,7 @@ function TestPunchDetails({ punch }: { punch: AttendancePunch }) {
       <dt>Precisión GPS</dt><dd>±{punch.accuracyMeters.toFixed(1)} m</dd>
     </dl>
     <p>Coordenadas: {punch.latitude.toFixed(6)}, {punch.longitude.toFixed(6)}</p>
+    <button className={styles.secondary} onClick={onMap}>Ver ubicación de este registro</button>
     {punch.detectionReprocessedAt ? <p>Detección recalculada desde la evidencia guardada.</p> : null}
     {punch.reasons.map(reason => <p key={reason}>{reasonLabels[reason] || reason}</p>)}
   </section>;

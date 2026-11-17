@@ -161,5 +161,21 @@
       "api_deployment_concurrente_observado": "3df4ab4a-6c9f-402d-8660-275b9eedc2bd",
       "nota": "El API habitual de producción y el API habitual de staging recibieron una imagen concurrente independiente. Esta tarea desplegó únicamente los tres servicios de pruebas indicados."
     }
+  },
+  "mapas_google": {
+    "fecha": "2026-11-17",
+    "estado": "integracion_preparada_pendiente_activacion_y_clave",
+    "web_deployment": "b8430305-eaa0-4ca1-961b-08c29d72b216",
+    "google_account": "samuelguerrero1127@gmail.com",
+    "google_project": "rev-logistica",
+    "api": "Maps Embed API",
+    "variable_nueva": "GOOGLE_MAPS_EMBED_BROWSER_KEY",
+    "clave_de_navegador_id": null,
+    "referrer_previsto": "https://web-staging-staging-cf10.up.railway.app/*",
+    "clave_address_validation_produccion_sin_cambios": true,
+    "pruebas_configuracion": 4,
+    "seleccion_registro_y_obra_validada_con_datos_ficticios": true,
+    "mapa_google_real_validado": false,
+    "api_google_activada_por_esta_tarea": false
   }
 }

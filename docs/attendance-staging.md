@@ -65,3 +65,21 @@ Verificaciones: 31 pruebas API, cuatro pruebas del worker, TypeScript y compilac
 Referencias: [salida de FaceDetectorYN](https://docs.opencv.org/4.12.0/df/d20/classcv_1_1FaceDetectorYN.html), [reporte de WebKit sobre permisos de cámara en PWA instalada](https://bugs.webkit.org/show_bug.cgi?id=327237).
 
 Despliegues de esta revisión: worker `63449cbe-b770-47cd-9ff3-3ea36bc3c1fb`, API exclusivo `e698e328-fc07-47b7-a7d7-a2b193bda85f`, web `d82fc385-8047-4aad-abf9-e69019962daf`. No se realizaron acciones de escritura ni despliegues en producción. Durante la revisión se observó una actualización concurrente del API habitual de producción (`3df4ab4a-6c9f-402d-8660-275b9eedc2bd`), independiente de este servicio exclusivo de pruebas.
+
+### Google Maps: integración preparada, activación pendiente
+
+La PWA de staging incluye **VER UBICACIONES EN EL MAPA**, un selector de marcación, comparación entre el punto registrado y el punto de la obra, precisión GPS, distancia y acceso desde cada registro. Se usa Maps Embed API, con un único iframe interactivo activo a la vez y carga únicamente al abrir el mapa. Consultar un registro no solicita una ubicación nueva.
+
+La ruta exclusiva de pruebas `GET /api/attendance/maps-config` lee `GOOGLE_MAPS_EMBED_BROWSER_KEY` en tiempo de ejecución y devuelve configuración `no-store`. Nunca usa ni expone `GOOGLE_MAPS_API_KEY`, que pertenece a Address Validation y producción. Sin clave de navegador separada el mapa integrado se declara no disponible y queda el enlace al punto en Google Maps. Fuera del modo de pruebas la ruta devuelve 404.
+
+Cuenta Google Cloud verificada en consola: `samuelguerrero1127@gmail.com`; proyecto `rev-logistica`. La clave existente `e07755de-720b-4f7b-acae-4b1ed723a7e9` permanece restringida a Address Validation API y no se modificó. Maps Embed API aún debe activarse y debe crearse una nueva clave de navegador. La pantalla de Google indica la aceptación de las condiciones de Google Maps Platform al usar el producto; la creación e ingreso de la clave quedan para el usuario según las reglas del navegador.
+
+Configuración pendiente:
+
+1. Activar **Maps Embed API** (`maps-embed-backend.googleapis.com`) en el proyecto existente.
+2. Crear una clave separada, por ejemplo **REV Attendance staging Embed 2026-11-17**, con restricción de sitio web `https://web-staging-staging-cf10.up.railway.app/*` y restricción de API únicamente **Maps Embed API**. No incluir producción ni reutilizar la clave de Address Validation.
+3. En Railway, proyecto `rev-logistica`, entorno `staging`, servicio `web-staging`, guardar la clave como `GOOGLE_MAPS_EMBED_BROWSER_KEY` y desplegar el cambio de variables. No guardar la clave en este documento, el chat ni el registro de cuentas. La ruta se evalúa en runtime; no necesita incluir la clave en el código o la imagen de compilación.
+
+Google documenta Maps Embed API sin cargo por uso y sin límite de solicitudes: https://developers.google.com/maps/documentation/embed/usage-and-billing. Esto describe la tarifa del producto; no atribuye una factura nueva ni implica que otros servicios de Google sean gratuitos.
+
+Validación preparada: TypeScript y compilación correctos; selección de entrada/salida y cambio entre obra/registro verificados en vista móvil local con datos y clave ficticios. Los parámetros del iframe se actualizaron correctamente y no hubo errores de JavaScript de la PWA. El rechazo de la clave ficticia por Google es esperado; la visualización real del mapa sigue pendiente de la clave válida. Cuatro comprobaciones de la configuración confirmaron 404 fuera de pruebas, ausencia de reutilización de la clave de producción, desactivación con clave ausente/inválida y configuración con clave de navegador separada. Despliegue de la interfaz preparada: `b8430305-eaa0-4ca1-961b-08c29d72b216`.
