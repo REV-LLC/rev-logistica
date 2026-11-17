@@ -1,0 +1,75 @@
+{
+  "fecha": "2026-11-17T16:39:29.848Z",
+  "recursos": {
+    "projectId": "bec9984e-3e3a-48c8-9d75-8c87d591b931",
+    "environmentId": "53c93c9d-33e7-4137-a598-6648a6491886",
+    "apiServiceId": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+    "volume": {
+      "volumeCreate": {
+        "id": "7c8bbf10-6466-4544-9a9a-b01b77582188",
+        "name": "attendance-test-api-volume"
+      }
+    },
+    "domain": "attendance-test-api-staging.up.railway.app",
+    "employeeId": "e7b7ce20-39c6-4c4d-ae6e-25a04c66cf80",
+    "siteId": "62367a46-7d82-40ce-83a4-7da7e55f8a21",
+    "schema": "attendance_test",
+    "databaseSystemId": "7675788035559903287"
+  },
+  "aislamiento": {
+    "databaseSystemIdentifiersDistinct": true,
+    "stageDatabaseSystemId": "7675788035559903287",
+    "productionDatabaseSystemId": "7647542541843767340",
+    "databaseSchema": "attendance_test",
+    "apiDatabaseMatchesStage": true,
+    "jwtIndependent": true,
+    "evidenceEncryptionKeyIndependent": true,
+    "facialTokenMatchesStaging": true,
+    "facialTokenIndependent": true,
+    "facialService": "http://face-recognition.railway.internal:8000",
+    "productionCredentialKeysPresent": [],
+    "authBypassDisabled": true,
+    "notificationsDisabled": true,
+    "whatsappDisabled": true,
+    "webApi": "https://attendance-test-api-staging.up.railway.app",
+    "frontendAuthBypassDisabled": true,
+    "volumeMount": "/attendance-test-data"
+  },
+  "produccion": {
+    "apiDeploymentBeforeAndAfter": "08463d65-f453-4c59-8fd7-9b7f2a25db01",
+    "postgresDeploymentBeforeAndAfter": "05d0d945-ac51-4073-9e35-5fe23b76e321",
+    "facialDeploymentBeforeAndAfter": "b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2"
+  },
+  "pruebas": {
+    "unitarias_asistencia_y_aislamiento": {
+      "suites": 4,
+      "passed": 25
+    },
+    "flujo_movil_https": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "camara": "simulada con imagen pública de prueba, sin rostro del usuario",
+      "gps": "simulado para la verificación automática",
+      "login_real": true,
+      "inscripcion_referencia": true,
+      "entrada": "VERIFIED",
+      "similitud_prueba": 0.978768058302406,
+      "salida_fuera_del_radio": "PENDING",
+      "idempotencia": true,
+      "evidencia_autenticada": true,
+      "token_staging_rechazado_produccion": true,
+      "rutas_admin_rechazadas_empleado": true,
+      "solicitudes_navegador_produccion": 0,
+      "errores_javascript": 0,
+      "runtime": "Playwright headless; Browser plugin no disponible"
+    },
+    "limpieza_final": {
+      "referencias": 0,
+      "marcaciones": 0,
+      "jornadas": 0,
+      "coordenadas_obra": null
+    }
+  }
+}

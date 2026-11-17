@@ -5,12 +5,14 @@ import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2
 import { api, ApiError } from '@/lib/api';
 import { clearToken, getToken, isTokenExpired, setToken } from '@/lib/auth';
 import { attendanceDate, type AttendancePunch, type AttendanceShift, type AttendanceSite } from '@/lib/attendance';
+import StagingSetup from './StagingSetup';
 import InstallAttendance from './InstallAttendance';
 import styles from './mobile-attendance.module.css';
 
 type Me = {
   employee: { id: string; name: string };
   referenceReady: boolean;
+  testMode?: boolean;
   open: AttendanceShift | null;
   recent: AttendancePunch[];
   worksites: AttendanceSite[];
@@ -49,6 +51,7 @@ export default function MobileAttendance() {
 
   return <main className={styles.page}>
     <div className={styles.screen}>
+      {process.env.NEXT_PUBLIC_ATTENDANCE_TEST === 'true' ? <div role="status" style={{ background: '#fff0bd', color: '#684900', padding: '12px 16px', borderRadius: 16, fontWeight: 700 }}>PRUEBAS · Sin efecto en producción</div> : null}
       <header className={styles.header}>
         <img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV Logística" width="90" height="45" />
         <button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
@@ -278,6 +281,7 @@ function Attendance({ onExpired }: { onExpired: () => void }) {
   const isExit = Boolean(me?.open);
   const last = me?.recent[0];
   const ActionIcon = isExit ? IconLogout : IconLogin;
+  if (me?.testMode && !me.referenceReady) return <StagingSetup onReady={load} />;
   return <>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {!me ? <section className={styles.stack}>

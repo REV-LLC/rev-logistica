@@ -7,6 +7,7 @@ import { json, urlencoded } from 'express';
 import type { Request } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertAttendanceTestIsolation } from './attendance/attendance-test-mode';
 import { AppModule } from './app.module';
 
 function loadEnvFileFromCandidates() {
@@ -45,6 +46,7 @@ function loadEnvFileFromCandidates() {
 
 async function bootstrap() {
   loadEnvFileFromCandidates();
+  assertAttendanceTestIsolation();
   // Explicitly provide Express adapter to avoid driver auto-detection issues.
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule,

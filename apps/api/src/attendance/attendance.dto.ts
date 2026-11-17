@@ -34,3 +34,10 @@ export class SiteLocationDto {
   @IsNumber() @Min(-180) @Max(180) longitude: number;
   @IsNumber({ maxDecimalPlaces: 0 }) @Min(20) @Max(5000) radiusMeters: number;
 }
+
+export class TestSetupDto {
+  @Type(() => Number) @IsNumber() @Min(-90) @Max(90) latitude: number;
+  @Type(() => Number) @IsNumber() @Min(-180) @Max(180) longitude: number;
+  @Type(() => Number) @IsNumber() @Min(0) @Max(100) accuracyMeters: number;
+  @IsDateString() locationCapturedAt: string;
+}

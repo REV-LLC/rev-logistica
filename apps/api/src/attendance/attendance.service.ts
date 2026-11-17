@@ -19,7 +19,8 @@ import {
   verificationReasons,
 } from './attendance-rules';
 import { syncAttendanceActivity } from '../whatsapp-reports/attendance-journals.service';
-import { PunchDto, ReviewDto, SiteLocationDto } from './attendance.dto';
+import { isAttendanceTestMode } from './attendance-test-mode';
+import { TestSetupDto, PunchDto, ReviewDto, SiteLocationDto } from './attendance.dto';
 
 type Actor = { sub: string; role: Role };
 const siteSelect = {
@@ -133,8 +134,33 @@ export class AttendanceService {
       open,
       recent,
       referenceReady: Boolean(reference),
+      testMode: isAttendanceTestMode(),
       worksites,
     };
+  }
+  async testSetup(actor: Actor, dto: TestSetupDto, image?: Buffer) {
+    if (!isAttendanceTestMode()) throw new NotFoundException();
+    this.enabled();
+    const user = await this.actor(actor);
+    if (user.employee!.id !== process.env.ATTENDANCE_TEST_EMPLOYEE_ID || user.role !== Role.EMPLOYEE)
+      throw new ForbiddenException('Solo la cuenta ficticia puede configurar esta prueba');
+    if (Math.abs(Date.now() - new Date(dto.locationCapturedAt).getTime()) > 120000)
+      throw new BadRequestException('Actualiza la ubicación e intenta nuevamente');
+    const jpeg = await this.normalize(image);
+    const extraction = await this.face.extract(jpeg);
+    const photoHash = createHash('sha256').update(jpeg).digest('hex');
+    await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM "Employee" WHERE id = ${user.employee!.id} FOR UPDATE`;
+      if (await tx.worksiteAttendance.findFirst({ where: { employeeId: user.employee!.id, leftAt: null } }))
+        throw new ConflictException('Cierra la jornada antes de configurar otra prueba');
+      const site = await tx.customerWorksite.findUnique({ where: { id: process.env.ATTENDANCE_TEST_SITE_ID } });
+      if (!site) throw new ServiceUnavailableException('Obra de prueba sin configurar');
+      const data = { vector: extraction.vector, modelVersion: extraction.modelVersion, photoHash, approvedByUserId: actor.sub, approvedAt: new Date() };
+      await tx.employeeFaceReference.upsert({ where: { employeeId: user.employee!.id }, create: { employeeId: user.employee!.id, ...data }, update: data });
+      await tx.worksite.update({ where: { id: site.worksiteId }, data: { attendanceLatitude: dto.latitude, attendanceLongitude: dto.longitude, attendanceRadiusMeters: 200 } });
+    });
+    // Only the reference vector is retained; the enrollment photo is discarded.
+    return { ready: true, radiusMeters: 200 };
   }
   private async normalize(image?: Buffer) {
     if (!image?.length || image.length > 5 * 1024 * 1024)
