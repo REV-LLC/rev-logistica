@@ -272,5 +272,31 @@
     ],
     "limites": "Instalación física en Android/iPhone pendiente del usuario. Permisos del navegador serán distintos por origen al conectar el subdominio final; en staging las PWA comparten origen. El dominio final necesita configuración y acceso raíz a la ruta móvil al publicar.",
     "produccion_modificada": false
+  },
+  "mirev_perfil": {
+    "fecha": "2026-11-17",
+    "commit": "2def9f8",
+    "web_deployment": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+    "api_deployment": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+    "estado": "SUCCESS",
+    "ruta": "/attendance/mobile/profile",
+    "fuente": "EmployeeProfile y EmployeeProfileWorkspace compartidos con REV Logística; /employee-portal/profile resuelve al empleado activo vinculado al usuario, sin aceptar ID de otro empleado.",
+    "contenido": [
+      "Foto o iniciales, identidad, documento, teléfono y cargo",
+      "Préstamos y bitácora personales en modo consulta",
+      "Avatar arriba a la derecha y regreso a Mi asistencia, dentro de sesión/alcance MiREV"
+    ],
+    "acceso": "JWT EMPLOYEE solo admite GET de perfil/préstamos/bitácora propios, formato de préstamos y foto con comparación de empleado. Se mantienen bloqueadas rutas administrativas, escrituras y nómina.",
+    "aislamiento_foto": "En el sandbox exacto, foto devuelve404 antes de intentar R2. En otros entornos usa la foto existente con control de propietario. No se cambió foto ni referencia facial.",
+    "pruebas": {
+      "api_http_y_asistencia": 57,
+      "web_relacionadas": 17,
+      "typescript": "correcto",
+      "despliegues": "Ambos SUCCESS",
+      "browser": "Local320/390px, login/avatar/perfil/préstamos/bitácora/regreso sin desbordes; staging real confirma empleado ficticio, préstamos vacíos,10 notas propias, sin controles de escritura ni errores de consola."
+    },
+    "produccion_modificada": false,
+    "migraciones_ejecutadas": false,
+    "registros_generados_en_QA": false
   }
 }
