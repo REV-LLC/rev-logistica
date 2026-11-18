@@ -18,7 +18,6 @@ import {
   Title,
 } from "@mantine/core";
 import { getCurrentUserRole } from "@/lib/auth";
-import AttendanceEmployeeCards from "./components/AttendanceEmployeeCards";
 import { api, apiBlob } from "@/lib/api";
 
 type Kind = "DAMAGE" | "HOUR_METER" | "REQUEST" | "CHECK_IN" | "CHECK_OUT";
@@ -149,7 +148,7 @@ export default function WhatsappReportsPage() {
       setError("");
       try {
         const query = new URLSearchParams();
-        if (kind === "issues" || kind === "ATTENDANCE") return;
+        if (kind === "issues") return;
         query.set("kind", kind);
         if (cursor) query.set("cursor", cursor);
         const result = await api<Report[]>(`/whatsapp-reports?${query}`);
@@ -413,7 +412,6 @@ export default function WhatsappReportsPage() {
           }}
         >
           <Tabs.List>
-            <Tabs.Tab value="ATTENDANCE">Entradas y salidas</Tabs.Tab>
             <Tabs.Tab value="DAMAGE">Daños</Tabs.Tab>
             <Tabs.Tab value="HOUR_METER">Horómetros</Tabs.Tab>
             <Tabs.Tab value="REQUEST">Peticiones</Tabs.Tab>
@@ -426,9 +424,6 @@ export default function WhatsappReportsPage() {
               {kind === tab ? reportList : null}
             </Tabs.Panel>
           ))}
-          <Tabs.Panel value="ATTENDANCE" pt="md">
-            {kind === "ATTENDANCE" ? <AttendanceEmployeeCards /> : null}
-          </Tabs.Panel>
           <Tabs.Panel value="issues" pt="md">
             <Stack>
               {issues.map((i) => (

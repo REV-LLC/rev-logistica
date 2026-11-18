@@ -35,6 +35,7 @@ import {
 } from "@/lib/attendance-period";
 import styles from "./AttendanceEmployeeCards.module.css";
 import AttendanceEvidencePhoto from "./AttendanceEvidencePhoto";
+import AttendanceReportReviewModal from "./AttendanceReportReviewModal";
 
 type Employee = {
   id: string;
@@ -60,7 +61,7 @@ type Evidence = {
   location: { latitude: number; longitude: number } | null;
   evidence: { fileObject: { id: string } }[];
 };
-type Journal = {
+export type Journal = {
   id: string;
   enteredAt: string;
   leftAt: string | null;
@@ -102,11 +103,33 @@ const reviewLabels: Record<string, string> = {
   CORRECTED: "Corregida por oficina",
   DISMISSED: "Descartada por oficina",
 };
-export default function AttendanceEmployeeCards() {
-  const [range, setRange] = useState(() => presetRange("month"));
-  const [preset, setPreset] = useState<string | null>("month");
+export default function AttendanceEmployeeCards({
+  initialEmployeeId = null,
+  initialDate = null,
+}: {
+  initialEmployeeId?: string | null;
+  initialDate?: string | null;
+}) {
+  const requestedDate =
+    initialDate &&
+    /^\d{4}-\d{2}-\d{2}$/.test(initialDate) &&
+    Number.isFinite(Date.parse(initialDate)) &&
+    new Date(`${initialDate}T00:00:00Z`).toISOString().slice(0, 10) ===
+      initialDate
+      ? initialDate
+      : null;
+  const [range, setRange] = useState(() =>
+    requestedDate
+      ? { from: requestedDate, to: requestedDate }
+      : presetRange("month"),
+  );
+  const [preset, setPreset] = useState<string | null>(
+    requestedDate ? "custom" : "month",
+  );
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const [employeeId, setEmployeeId] = useState<string | null>(
+    initialEmployeeId,
+  );
   const [journals, setJournals] = useState<Journal[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +145,7 @@ export default function AttendanceEmployeeCards() {
     label: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState<Journal | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [notice, setNotice] = useState("");
   const [canManage, setCanManage] = useState(false);
@@ -458,7 +482,13 @@ export default function AttendanceEmployeeCards() {
                               </>
                             ) : (
                               <Text size="sm" c="dimmed">
-                                Pendiente de reportar.
+                                {title === "Entrada" || a.leftAt
+                                  ? date(
+                                      title === "Entrada"
+                                        ? a.enteredAt
+                                        : a.leftAt!,
+                                    )
+                                  : "Pendiente de reportar."}
                               </Text>
                             )}
                           </Stack>
@@ -485,14 +515,15 @@ export default function AttendanceEmployeeCards() {
                           : (reviewLabels[a.activityNote?.reviewStatus ?? ""] ??
                             "Sugerencia por generar")}
                     </Badge>
-                    <Button
-                      component={Link}
-                      variant="light"
-                      size="xs"
-                      href={`/employees/activities?employeeId=${employeeId}&month=${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit" }).format(new Date(a.enteredAt))}&date=${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(a.enteredAt))}`}
-                    >
-                      Revisar en bitácora
-                    </Button>
+                    {canManage ? (
+                      <Button
+                        variant="light"
+                        size="xs"
+                        onClick={() => setReviewing(a)}
+                      >
+                        Revisar entrada y salida
+                      </Button>
+                    ) : null}
                   </Group>
                 </Stack>
               </Paper>
@@ -612,6 +643,20 @@ export default function AttendanceEmployeeCards() {
           ) : null}
         </>
       )}
+      {reviewing && employeeId ? (
+        <AttendanceReportReviewModal
+          key={reviewing.id}
+          journal={reviewing}
+          employeeId={employeeId}
+          employeeName={selected ? fullName(selected) : "Empleado"}
+          onClose={() => setReviewing(null)}
+          onReviewed={() => {
+            setReviewing(null);
+            setNotice("Revisión guardada correctamente.");
+            setRevision((value) => value + 1);
+          }}
+        />
+      ) : null}
       <Modal
         opened={Boolean(deleting)}
         onClose={() => {
