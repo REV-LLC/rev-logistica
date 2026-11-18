@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import AttendanceEmployeeCards from "./components/AttendanceEmployeeCards";
 import {
   Alert,
   Badge,
@@ -20,7 +22,6 @@ import {
 import { api, apiBlob } from "@/lib/api";
 import {
   AttendancePunch,
-  AttendanceShift,
   AttendanceSite,
   attendanceDate,
   siteLabel,
@@ -158,14 +159,17 @@ function SiteLocation({
   );
 }
 export default function AttendanceAdmin() {
+  const params = useSearchParams();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [punches, setPunches] = useState<AttendancePunch[]>([]);
   const [sites, setSites] = useState<AttendanceSite[]>([]);
-  const [shifts, setShifts] = useState<AttendanceShift[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [tab, setTab] = useState<string | null>("punches");
+  const [tab, setTab] = useState<string | null>("shifts");
+  useEffect(() => {
+    if (params.get("employeeId")) setTab("shifts");
+  }, [params]);
   const [selected, setSelected] = useState<Employee | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [scan, setScan] = useState<Record<string, string>>({});
@@ -192,10 +196,6 @@ export default function AttendanceAdmin() {
     async () => setSites(await api<AttendanceSite[]>("/attendance/sites")),
     [],
   );
-  const loadShifts = useCallback(
-    async () => setShifts(await api<AttendanceShift[]>("/attendance/shifts")),
-    [],
-  );
   useEffect(() => {
     const fn =
       tab === "punches"
@@ -204,9 +204,9 @@ export default function AttendanceAdmin() {
           ? loadRefs
           : tab === "sites"
             ? loadSites
-            : loadShifts;
-    fn().catch((e) => setError(e.message));
-  }, [tab, loadPunches, loadRefs, loadSites, loadShifts]);
+            : null;
+    fn?.().catch((e) => setError(e.message));
+  }, [tab, loadPunches, loadRefs, loadSites]);
   async function analyze(employee: Employee) {
     setError("");
     setCandidate(null);
@@ -299,10 +299,11 @@ export default function AttendanceAdmin() {
   return (
     <Container size="lg" py="md">
       <Stack>
-        <div>
+        <div data-page-heading-glass>
           <Title order={1}>Asistencia y rostros</Title>
           <Text c="dimmed">
-            Marcaciones de la PWA, jornadas y fotos de referencia.
+            Entradas y salidas de WhatsApp y PWA, revisión y fotos de
+            referencia.
           </Text>
         </div>
         {error ? (
@@ -318,8 +319,8 @@ export default function AttendanceAdmin() {
           }}
         >
           <Tabs.List>
-            <Tabs.Tab value="punches">Marcaciones</Tabs.Tab>
-            <Tabs.Tab value="shifts">Jornadas</Tabs.Tab>
+            <Tabs.Tab value="shifts">Entradas y salidas</Tabs.Tab>
+            <Tabs.Tab value="punches">Revisión de marcaciones</Tabs.Tab>
             <Tabs.Tab value="references">Fotos de referencia</Tabs.Tab>
             <Tabs.Tab value="sites">Ubicación de obras</Tabs.Tab>
           </Tabs.List>
@@ -434,41 +435,13 @@ export default function AttendanceAdmin() {
             </Stack>
           </Tabs.Panel>
           <Tabs.Panel value="shifts" pt="md">
-            <Stack>
-              <Alert>
-                Incluye jornadas de PWA y WhatsApp. Las horas reportadas no
-                descuentan descansos ni calculan nómina.
-              </Alert>
-              <Button
-                variant="light"
-                onClick={() => loadShifts().catch((e) => setError(e.message))}
-              >
-                Actualizar jornadas
-              </Button>
-              {!shifts.length ? (
-                <Text c="dimmed">No hay jornadas registradas.</Text>
-              ) : (
-                shifts.map((s) => (
-                  <Paper key={s.id} p="md" withBorder>
-                    <Group justify="space-between">
-                      <Text fw={600}>
-                        {s.employee.name} {s.employee.lastName}
-                      </Text>
-                      <Badge color={s.leftAt ? "gray" : "green"}>
-                        {s.leftAt ? "Cerrada" : "En obra"}
-                      </Badge>
-                    </Group>
-                    <Text>{siteLabel(s.customerWorksite)}</Text>
-                    <Text size="sm">
-                      Entrada: {attendanceDate(s.enteredAt)}
-                      <br />
-                      Salida:{" "}
-                      {s.leftAt ? attendanceDate(s.leftAt) : "Pendiente"}
-                    </Text>
-                  </Paper>
-                ))
-              )}
-            </Stack>
+            {tab === "shifts" ? (
+              <AttendanceEmployeeCards
+                key={`${params.get("employeeId") ?? ""}:${params.get("date") ?? ""}`}
+                initialEmployeeId={params.get("employeeId")}
+                initialDate={params.get("date")}
+              />
+            ) : null}
           </Tabs.Panel>
           <Tabs.Panel value="references" pt="md">
             <Stack>
