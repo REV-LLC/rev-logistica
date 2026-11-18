@@ -1,4 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { telemetry, routeHistory } from './tracking-telemetry';
+import type { NativePosition } from './tracking-telemetry';
+import { TrackingRoutingService } from './tracking-routing.service';
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -35,8 +38,9 @@ export type TrackingIdentity = { sub: string; exp?: number };
 
 @Injectable()
 export class TrackingService {
+  private fleetCache: { key: string; at: number; value: ReturnType<TrackingService['loadFleet']> } | undefined;
   private readonly pending = new Map<string, Promise<unknown>>();
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly routing: TrackingRoutingService) {}
 
   async createSession(identity: TrackingIdentity) {
     const previous = this.pending.get(identity.sub) || Promise.resolve();
@@ -139,6 +143,89 @@ export class TrackingService {
         }),
       };
     } catch { throw new ServiceUnavailableException('No fue posible consultar los puntos conocidos. Intenta nuevamente.'); }
+  }
+
+  async getFleet(identity: TrackingIdentity) {
+    await this.authorize(identity);
+    const { server, admin } = this.connection();
+    const key = server.origin;
+    if (this.fleetCache?.key === key && Date.now() - this.fleetCache.at < 3000) return this.fleetCache.value;
+    const value = this.loadFleet(server, admin);
+    this.fleetCache = { key, at: Date.now(), value };
+    try { return await value; }
+    catch (error) { if (this.fleetCache?.value === value) this.fleetCache = undefined; throw error; }
+  }
+
+  private async loadFleet(server: URL, admin: string) {
+    try {
+      const [devices, nativePlaces] = await Promise.all([
+        this.request<(TrackingDevice & { status?: string; lastUpdate?: string })[]>(server, '/api/devices?all=true', admin),
+        this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
+      ]);
+      const places = nativePlaces.filter(p => p.attributes?.revKnownPlace === true && circle(p))
+        .map(p => ({ id: p.id, name: p.name, ...circle(p)!, siteType: ['primary', 'secondary'].includes(String(p.attributes?.revSiteType)) ? String(p.attributes.revSiteType) : null }));
+      const query = new URLSearchParams();
+      for (const d of devices) if (d.positionId) query.append('id', String(d.positionId));
+      const positions = query.size ? await this.request<NativePosition[]>(server, `/api/positions?${query}`, admin) : [];
+      const now = Date.now();
+      return { fetchedAt: new Date(now).toISOString(), refreshSeconds: 5, places,
+        devices: devices.map(d => {
+          const p = positions.find(p => p.deviceId === d.id && p.id === d.positionId);
+          const position = telemetry(p, now);
+          return { id: d.id, name: d.name, connection: d.status || 'unknown', lastConnectionAt: d.lastUpdate || null, position,
+            knownPlaces: position ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
+        }),
+      };
+    } catch { throw new ServiceUnavailableException('No fue posible actualizar la flota. Se conserva el último reporte disponible.'); }
+  }
+
+  async getHistory(identity: TrackingIdentity, deviceId: string, from: string, to: string) {
+    await this.authorize(identity);
+    const id = Number(deviceId);
+    const start = Date.parse(from), end = Date.parse(to);
+    if (!/^\d+$/.test(deviceId || '') || !Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(start) || !Number.isFinite(end)
+      || start >= end || end - start > 24 * 60 * 60_000 || end > Date.now() + 60_000) {
+      throw new BadRequestException('Selecciona un camión y un período de hasta 24 horas.');
+    }
+    const { server, admin } = this.connection();
+    try {
+      const devices = await this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin);
+      const device = devices.find(d => d.id === id);
+      if (!device) throw new BadRequestException('El camión no está disponible.');
+      const query = new URLSearchParams({ deviceId: String(id), from: new Date(start).toISOString(), to: new Date(end).toISOString() });
+      const positions = await this.request<NativePosition[]>(server, `/api/reports/route?${query}`, admin, { headers: { Accept: 'application/json' } });
+      if (!Array.isArray(positions) || positions.length > 12_000) throw new BadRequestException('El recorrido es muy extenso. Selecciona un período más corto.');
+      return { deviceId: id, deviceName: device.name, from: new Date(start).toISOString(), to: new Date(end).toISOString(),
+        ...routeHistory(positions, id, start, end) };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException('No fue posible consultar el recorrido. Intenta nuevamente.');
+    }
+  }
+
+  async mapConfiguration(identity: TrackingIdentity) {
+    await this.authorize(identity);
+    return this.routing.mapConfiguration();
+  }
+
+  async planRoute(identity: TrackingIdentity, input: { deviceId?: number; placeId?: number; address?: string }) {
+    const fleet = await this.getFleet(identity);
+    if (!Number.isSafeInteger(input?.deviceId) || !input.deviceId || input.deviceId <= 0) throw new BadRequestException('Selecciona un camión.');
+    const device = fleet.devices.find(d => d.id === input.deviceId);
+    if (!device?.position) throw new BadRequestException('El camión no tiene una ubicación GPS válida.');
+    let destination: Parameters<TrackingRoutingService['calculate']>[1];
+    let label: string;
+    if (input.placeId !== undefined) {
+      const place = fleet.places.find(p => p.id === input.placeId);
+      if (!place) throw new BadRequestException('Selecciona un punto conocido válido.');
+      destination = { location: { latLng: { latitude: place.latitude, longitude: place.longitude } } };
+      label = place.name;
+    } else {
+      if (typeof input.address !== 'string' || input.address.trim().length < 5 || input.address.trim().length > 240) throw new BadRequestException('Escribe la dirección completa y la ciudad del destino.');
+      label = input.address.trim();
+      destination = { address: label };
+    }
+    return { deviceId: device.id, deviceName: device.name, ...await this.routing.calculate(device.position, destination, label) };
   }
 
   async createPlace(identity: TrackingIdentity, input: CreateTrackingPlace) {

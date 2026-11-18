@@ -11,7 +11,7 @@ describe('TrackingService', () => {
     process.env.TRACCAR_INTEGRATION_EMAIL = 'integration@rev.invalid';
     process.env.TRACCAR_INTEGRATION_PASSWORD = 'test-server-secret';
     prisma.user.findUnique.mockResolvedValue({ id: identity.sub, email: 'office@rev.invalid', active: true, role: 'OFFICE' });
-    service = new TrackingService(prisma as never);
+    service = new TrackingService(prisma as never, {} as never);
     fetchMock = jest.spyOn(global, 'fetch');
   });
   afterEach(() => { fetchMock.mockRestore(); jest.clearAllMocks(); delete process.env.TRACCAR_WEB_URL; delete process.env.TRACCAR_INTEGRATION_EMAIL; delete process.env.TRACCAR_INTEGRATION_PASSWORD; });
@@ -35,6 +35,7 @@ describe('TrackingService', () => {
     expect(profile).toMatchObject({ administrator: false, readonly: true, deviceReadonly: true, limitCommands: true, attributes: { revUserId: identity.sub } });
     expect(JSON.parse(calls[4][1].body)).toEqual({ userId: 7, deviceId: 2 });
     expect(calls[6][1].headers.Authorization).not.toEqual(calls[0][1].headers.Authorization);
+    expect(calls[6][1].headers.Accept).not.toBe('application/json');
     expect(result.panelUrl).toEqual('https://gps.revcontractorsllc.com/');
     expect(new URL(result.sessionUrl).searchParams.get('token')).toBe('native-token');
     expect(Date.parse(result.expiresAt)).toBeLessThanOrEqual(Date.now() + 300000);
