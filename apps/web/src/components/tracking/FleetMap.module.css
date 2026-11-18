@@ -1,0 +1,14 @@
+.map { width:100%; height: min(72dvh, 740px); min-height: 440px; border-radius: 14px; overflow:hidden; border:1px solid var(--mantine-color-default-border); background:var(--mantine-color-gray-1); }
+.anchor { position:absolute; width:0; height:0; pointer-events:none; }
+.marker { position:absolute; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:3px solid white; border-radius:50%; transform:translate(-50%,-50%); background:#0f766e; color:white; box-shadow:0 2px 7px #0004; cursor:pointer; pointer-events:auto; }
+.marker:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+.selected { outline:3px solid #2563eb; outline-offset:3px; }
+.stale { background:#6b7280; }
+.truckLabel { position:absolute; bottom:24px; left:0; transform:translateX(-50%); white-space:nowrap; background:white; color:#17212f; padding:2px 6px; border-radius:5px; font-size:12px; font-weight:700; box-shadow:0 1px 4px #0003; pointer-events:none; }
+.siteDot { position:absolute; width:6px; height:6px; border-radius:50%; background:var(--site-color); transform:translate(-50%,-50%); }
+.siteStem { position:absolute; width:2px; height:34px; bottom:0; left:0; background:var(--site-color); transform-origin:bottom; transform:rotate(var(--site-angle)); }
+.siteBadge { width:30px; height:30px; left:var(--site-x); top:-32px; background:var(--site-color); font-weight:800; font-size:15px; }
+.siteName { position:absolute; top:-42px; white-space:nowrap; background:white; color:var(--site-color); padding:3px 6px; border-radius:5px; font-size:12px; font-weight:700; box-shadow:0 1px 4px #0002; pointer-events:none; }
+.primaryName { right:38px; }
+.secondaryName { left:38px; }
+@media(max-width:600px) { .map{height:55dvh; min-height:360px;} .siteName{font-size:11px; max-width:118px; white-space:normal; width:max-content;} .primaryName{right:auto;left:-68px;top:-94px;text-align:center;} }

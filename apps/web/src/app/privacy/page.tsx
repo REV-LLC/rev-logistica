@@ -30,7 +30,7 @@ export default function PrivacyPage() {
           <article className={styles.article}>
             <div className={styles.intro}>
               <h1 className={styles.title}>Política de privacidad</h1>
-              <p className={styles.updated}>Última actualización: 3 de agosto de 2026</p>
+              <p className={styles.updated}>Última actualización: 18 de noviembre de 2026</p>
               <p className={styles.summary}>
                 Esta política explica cómo REV Logística, operada por REV Contractors LLC,
                 recopila, utiliza y protege la información necesaria para prestar sus servicios
@@ -45,6 +45,7 @@ export default function PrivacyPage() {
                 <li>Nombre, correo electrónico, número de teléfono y datos de la organización.</li>
                 <li>Información de obras, solicitudes, remisiones, entregas y devoluciones.</li>
                 <li>Datos relacionados con vehículos, equipos, activos, horómetros y mantenimientos.</li>
+                <li>Ubicación GPS de las tablets de los camiones, hora de sus reportes y datos operativos como batería y velocidad.</li>
                 <li>Documentos, fotografías y evidencias cargadas durante la operación.</li>
                 <li>Registros técnicos y de seguridad necesarios para operar y proteger la plataforma.</li>
               </ul>
@@ -60,6 +61,18 @@ export default function PrivacyPage() {
                 <li>Dar soporte, resolver incidentes y mejorar la seguridad y funcionamiento del servicio.</li>
                 <li>Cumplir obligaciones contractuales, contables y legales aplicables.</li>
               </ul>
+            </section>
+
+            <section className={styles.section}>
+              <h2>Ubicación de la flota y mapas</h2>
+              <p>El seguimiento utiliza Traccar para recibir y consultar los reportes de las tablets
+                asignadas a los camiones. Los usuarios autorizados pueden consultar el último punto
+                registrado, su hora y el recorrido disponible.</p>
+              <p>La vista de mapas y el cálculo de rutas con tráfico utilizan Google Maps Platform.
+                Al solicitar una ruta se envían a Google las coordenadas de origen y el destino
+                seleccionado o la dirección ingresada. Su tratamiento se describe en la{' '}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de privacidad de Google</a>.
+                Consulta también las <Link href="/map-terms">condiciones de la función de mapas</Link>.</p>
             </section>
 
             <section className={styles.section}>

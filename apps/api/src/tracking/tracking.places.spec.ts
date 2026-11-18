@@ -21,7 +21,7 @@ describe('Tracking known places', () => {
     places = [];
     devices = [{ id: 1, name: 'ZNN938', positionId: 10 }, { id: 2, name: 'GVU047', positionId: 20 }];
     positions = [position];
-    service = new TrackingService(prisma as never);
+    service = new TrackingService(prisma as never, {} as never);
     mock = jest.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
       const u = new URL(String(url));
       if (u.pathname === '/api/devices') return reply(devices);

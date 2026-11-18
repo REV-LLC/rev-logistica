@@ -1,0 +1,97 @@
+{
+  "fecha": "2026-11-18",
+  "estado": "google_activado_probado_pendiente_publicacion",
+  "produccion_modificada": true,
+  "apis_google_activadas": true,
+  "credenciales_creadas": true,
+  "unidad": {
+    "suites": 5,
+    "pruebas": 45,
+    "resultado": "correcto"
+  },
+  "compilacion": {
+    "api": "correcta",
+    "web": "correcta"
+  },
+  "cuota_postgres_local": {
+    "version": 16,
+    "instancias": 2,
+    "solicitudes_simultaneas": 40,
+    "limite_prueba": 3,
+    "permitidas": 3,
+    "bloqueadas_429": 37,
+    "persiste_reinicio_clientes": true,
+    "contenedor_eliminado": true
+  },
+  "qa_web": {
+    "navegador": "Chrome con perfil temporal via Playwright",
+    "browser_plugin": "no disponible",
+    "escritorio": "1440x1100",
+    "movil": "390x844",
+    "datos": "ficticios",
+    "sdk_google": "simulado",
+    "seleccion_y_url": true,
+    "historial": true,
+    "ruta_y_eta": true,
+    "limite_agotado": true,
+    "gps_antiguo_bloquea_ruta": true,
+    "reconexion_conserva_mapa": true,
+    "revocacion_limpia_ubicaciones": true,
+    "errores_javascript": 0,
+    "desbordamiento_horizontal": false
+  },
+  "lectura_traccar_real": {
+    "modo": "solo_lectura",
+    "identidad": "traccar-integration@rev.invalid",
+    "flota": 2,
+    "puntos_conocidos": 2,
+    "historial_gvu047_ultima_hora": {
+      "reportes": 22,
+      "segmentos": 1,
+      "huecos": 0
+    },
+    "envios_google": 0
+  },
+  "consola_google": {
+    "cuenta_observada": "samuelguerrero1127@gmail.com",
+    "proyecto_observado": "rev-logistica",
+    "apis_existentes": [
+      "Address Validation API",
+      "Maps Embed API"
+    ],
+    "pendientes": [],
+    "apis_activadas": [
+      "Maps JavaScript API",
+      "Routes API"
+    ],
+    "claves_ids": [
+      "rev-fleet-maps-browser-20261118",
+      "rev-fleet-routes-server-20261118"
+    ]
+  },
+  "limites_previstos": {
+    "rutas_dia": 100,
+    "mapas_dia": 200,
+    "compartidos_flota": true,
+    "zona_horaria": "America/Bogota"
+  },
+  "pendientes": [
+    "Publicar API/Web y verificar mapa Google real dentro de REV",
+    "Aplicar intervalo 30 s en tablets y verificar reportes con pantalla apagada"
+  ],
+  "fuentes": [
+    "https://developers.google.com/maps/documentation/routes/policies",
+    "https://developers.google.com/maps/billing-and-pricing/pricing",
+    "https://www.traccar.org/client-configuration/"
+  ],
+  "google_routes_real": {
+    "http": 200,
+    "origen": "Sede principal REV",
+    "destino": "Sede secundaria REV",
+    "distanceMeters": 313,
+    "durationSeconds": 75,
+    "polyline": true,
+    "trafico": "TRAFFIC_AWARE",
+    "nota": "Prueba directa previa a publicacion; no usa contador de la nueva aplicacion."
+  }
+}
