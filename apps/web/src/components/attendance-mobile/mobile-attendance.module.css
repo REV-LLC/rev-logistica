@@ -12,8 +12,8 @@
 .logo { display: block; width: 108px; height: 54px; object-fit: contain; }
 .link { min-height: 48px; border: 0; padding: 8px 4px; background: transparent; color: #a6d5ff; font-size: 16px !important; font-weight: 600 !important; text-decoration: underline; text-underline-offset: 4px; }
 .help { display: flex; align-items: center; gap: 7px; color: #e2e8f0; text-decoration: none; }
-.greeting, .card, .recent, .helpContent, .receipt { background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; box-shadow: 0 16px 48px rgba(0, 0, 0, .1); backdrop-filter: blur(18px) saturate(1.15); -webkit-backdrop-filter: blur(18px) saturate(1.15); }
-.greeting { padding: 20px; margin-bottom: 20px; }
+.greeting, .card, .recent, .helpContent, .receipt { background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; box-shadow: 0 16px 48px rgba(0, 0, 0, .1); -webkit-backdrop-filter: blur(18px) saturate(115%); backdrop-filter: blur(18px) saturate(115%); }
+.greeting { padding: 20px; margin-bottom: 20px; background: rgba(46, 52, 59, .68); -webkit-backdrop-filter: blur(28px) saturate(115%); backdrop-filter: blur(28px) saturate(115%); box-shadow: 0 16px 48px rgba(0, 0, 0, .18), inset 0 1px 0 rgba(255, 255, 255, .08); }
 .greeting p { font-size: 17px; margin-top: 6px; color: #c0cbd3; }
 .card { padding: 24px 20px 4px; }
 .idle { text-align: center; }

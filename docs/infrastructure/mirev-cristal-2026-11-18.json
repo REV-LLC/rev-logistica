@@ -1,0 +1,26 @@
+{
+  "fecha": "2026-11-18",
+  "dominio": "https://mirev.revcontractorsllc.com",
+  "web_deployment_id": "e496c1b9-8d46-4276-a40e-2d7c74ce036c",
+  "estado": "SUCCESS",
+  "alcance": "Solo frontend MiREV; sin datos, API, staging o PWA REV Logistica modificados.",
+  "causa": "El CSS compilado anterior conservaba solo -webkit-backdrop-filter; Chrome computaba backdrop-filter none.",
+  "cambio": {
+    "fondo": "rgba(46, 52, 59, 0.68)",
+    "blur_px": 28,
+    "saturacion": 1.15,
+    "webkit_y_estandar_presentes_en_build": true
+  },
+  "validacion": {
+    "build_next": true,
+    "dom_identidad": "MiREV / Mi asistencia",
+    "overlay_error": false,
+    "consola_errores": 0,
+    "blur_computado": "blur(28px) saturate(1.15)",
+    "movil_ancho": 390,
+    "desborde_horizontal": false,
+    "interaccion_ayuda": true,
+    "captura_escritorio": "/private/tmp/mirev-cristal-despues-20261118.jpg",
+    "captura_movil": "/private/tmp/mirev-cristal-movil-20261118.jpg"
+  }
+}

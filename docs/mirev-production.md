@@ -57,3 +57,9 @@ El 17 de noviembre de 2026 se configuraron las dos ubicaciones solicitadas en Ca
 Los puntos estan separados 263 metros y tienen radios de 100 metros para no solaparse. Se corrigio la direccion anterior de LOTE, que repetia la de Bodega. Se comprobo lectura persistente de coordenadas, direcciones y radios, y que el algoritmo sugiere el sitio correcto para cada punto. Dos muestras existentes quedan a 11,8 y 6,6 metros de Bodega: evaluadas con la configuracion nueva y las reglas existentes cumplirian VERIFIED, pero sus estados historicos PENDING no se modificaron. No se crearon marcaciones de prueba ni se hicieron despliegues.
 
 Evidencia y valores anteriores/nuevos en docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json. Para repetir la configuracion de forma controlada existe scripts/mirev/configure-internal-locations.cjs, que valida proyecto/entorno y vinculos y evita sobrescribir coordenadas distintas cambiadas despues de la inspeccion.
+
+## Cristal del encabezado (18 de noviembre)
+
+La compilacion anterior del modulo movil conservaba solo -webkit-backdrop-filter cuando la declaracion prefijada se encontraba al final. En Chrome, getComputedStyle confirmaba backdrop-filter none, por lo que la card quedaba transparente sin difuminado efectivo. Se ordenaron las declaraciones como en el resto de REV (WebKit primero y estandar al final), usando saturate(115%). El build confirma ambas propiedades.
+
+El saludo/titulo Mi asistencia conserva su composicion y tipografia, con fondo oscuro rgba(46,52,59,.68), blur 28 px, borde existente y reflejo interior suave. El resto de superficies moviles recupera el blur 18 px previsto. Solo se publica el frontend independiente MiREV.

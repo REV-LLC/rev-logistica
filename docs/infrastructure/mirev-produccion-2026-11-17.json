@@ -5,7 +5,7 @@
   "propiedad_verificada": true,
   "api_url": "https://mirev-api-production.up.railway.app",
   "deployments": {
-    "mirev_web": "11d6d80d-9a39-4c48-9720-9793bae30df6",
+    "mirev_web": "e496c1b9-8d46-4276-a40e-2d7c74ce036c",
     "mirev_api": "a43a0308-045f-4faa-8d69-281572d39754",
     "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
     "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
@@ -112,5 +112,9 @@
     "fecha": "2026-11-17",
     "evidencia": "docs/infrastructure/mirev-ubicaciones-internas-2026-11-17.json",
     "marcaciones_anteriores_sin_cambios": true
+  },
+  "ajuste_cristal_2026_11_18": {
+    "evidencia": "docs/infrastructure/mirev-cristal-2026-11-18.json",
+    "validado": true
   }
 }
