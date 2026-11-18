@@ -1,6 +1,6 @@
 {
   "fecha": "2026-11-18",
-  "estado": "google_activado_probado_pendiente_publicacion",
+  "estado": "publicado_y_verificado_en_produccion",
   "produccion_modificada": true,
   "apis_google_activadas": true,
   "credenciales_creadas": true,
@@ -76,7 +76,6 @@
     "zona_horaria": "America/Bogota"
   },
   "pendientes": [
-    "Publicar API/Web y verificar mapa Google real dentro de REV",
     "Aplicar intervalo 30 s en tablets y verificar reportes con pantalla apagada"
   ],
   "fuentes": [
@@ -93,5 +92,43 @@
     "polyline": true,
     "trafico": "TRAFFIC_AWARE",
     "nota": "Prueba directa previa a publicacion; no usa contador de la nueva aplicacion."
+  },
+  "publicacion": {
+    "pr": "https://github.com/REV-LLC/rev-logistica/pull/380",
+    "commit": "5589690443416170530950cb898eeeafec83f557",
+    "ci": "44343603568",
+    "ci_resultado": "success",
+    "api_entrega": "44343603334",
+    "api_resultado": "success",
+    "api_deployment": "ba58bcef-b9dd-4919-a621-bd7717682d88",
+    "vercel_deployment": "dpl_CGMGzpJRRpq246yLki8U2Ycs81ip",
+    "vercel_estado": "READY",
+    "migracion": "20261118150000_tracking_usage aplicada; map-config y route usan contador real",
+    "incidencias_resueltas": [
+      "Descarga facial GitHub 403 por rate limit; reintento paso",
+      "Promocion API leyo estado transitorio de CI; reintento con CI completo paso"
+    ]
+  },
+  "qa_produccion": {
+    "sesion": "ADMIN Samuel Guerrero en REV",
+    "google_maps_real": true,
+    "camiones": 2,
+    "puntos_conocidos": 3,
+    "historial_gvu047": {
+      "periodo": "ultima hora",
+      "reportes": 19,
+      "distancia_km": 2.4
+    },
+    "ruta_gvu047_sede_principal": {
+      "trafico": true,
+      "minutos": 44,
+      "distancia_km": 12.9,
+      "contador_dia": "1/100",
+      "calculada_hora_bogota": "11:18"
+    },
+    "gps_znn938": "antiguo, aproximadamente 17 min al verificar; no se cambio configuracion del dispositivo",
+    "errores_js_nueva_vista": 0,
+    "captura": "/private/tmp/rev-tracking-production.jpg",
+    "panel_nativo_sin_segundo_login": true
   }
 }
