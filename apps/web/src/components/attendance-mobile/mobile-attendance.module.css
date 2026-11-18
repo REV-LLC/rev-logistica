@@ -1,4 +1,4 @@
-.page { min-height: 100dvh; position: relative; isolation: isolate; background: #343b40; color: #f1f5f9; font: 17px/1.5 var(--ui-font-sans); padding: max(12px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
+.page { --mirev-glass-background: rgba(46, 52, 59, .36); --mirev-glass-filter: blur(16px) saturate(115%); --mirev-glass-shadow: 0 16px 48px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .06); min-height: 100dvh; position: relative; isolation: isolate; background: #343b40; color: #f1f5f9; font: 17px/1.5 var(--ui-font-sans); padding: max(12px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
 .page::before { content: ''; position: fixed; z-index: -1; inset: 0; background: #202326 url('/backgrounds/smoked-glass-horizontal.png') center / cover no-repeat; pointer-events: none; }
 .screen { max-width: 430px; margin: 0 auto; }
 .page h1, .page h2, .page p { margin: 0; }
@@ -12,8 +12,8 @@
 .logo { display: block; width: 108px; height: 54px; object-fit: contain; }
 .link { min-height: 48px; border: 0; padding: 8px 4px; background: transparent; color: #a6d5ff; font-size: 16px !important; font-weight: 600 !important; text-decoration: underline; text-underline-offset: 4px; }
 .help { display: flex; align-items: center; gap: 7px; color: #e2e8f0; text-decoration: none; }
-.greeting, .card, .recent, .helpContent, .receipt { background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; box-shadow: 0 16px 48px rgba(0, 0, 0, .1); -webkit-backdrop-filter: blur(18px) saturate(115%); backdrop-filter: blur(18px) saturate(115%); }
-.greeting { padding: 20px; margin-bottom: 20px; background: rgba(46, 52, 59, .36); -webkit-backdrop-filter: blur(16px) saturate(115%); backdrop-filter: blur(16px) saturate(115%); box-shadow: 0 16px 48px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .06); }
+.greeting, .card, .recent, .helpContent, .receipt { border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; }
+.greeting { padding: 20px; margin-bottom: 20px; }
 .greeting p { font-size: 17px; margin-top: 6px; color: #c0cbd3; }
 .card { padding: 24px 20px 4px; }
 .idle { text-align: center; }
@@ -109,3 +109,26 @@
 
 :global(html):has(.page), :global(body):has(.page) { background-color: #101820; color-scheme: dark; }
 .profileView :global(section[data-page-heading-glass]) { overflow: hidden; }
+
+/* Glass tokens belong only to MiREV. Shared REV profile components are not edited. */
+:global(html[data-mantine-color-scheme='dark']) .page :is(
+  .greeting, .card, .recent, .helpContent, .receipt, .choice, .notice, .error,
+  .login form,
+  :global([data-page-heading-glass]),
+  :global(.mantine-Paper-root),
+  :global(.mantine-Card-root),
+  :global(section[aria-label='Gestión del empleado'])
+) {
+  background: var(--mirev-glass-background) !important;
+  box-shadow: var(--mirev-glass-shadow);
+  -webkit-backdrop-filter: var(--mirev-glass-filter);
+  backdrop-filter: var(--mirev-glass-filter);
+}
+
+/* Nested profile panels share their parent's glass instead of darkening it twice. */
+:global(html[data-mantine-color-scheme='dark']) .page .profileView :global(section[aria-label='Gestión del empleado']) :is(:global(.mantine-Paper-root), :global(.mantine-Card-root)) {
+  background: transparent !important;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

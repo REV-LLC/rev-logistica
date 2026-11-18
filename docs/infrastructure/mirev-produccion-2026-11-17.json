@@ -5,7 +5,7 @@
   "propiedad_verificada": true,
   "api_url": "https://mirev-api-production.up.railway.app",
   "deployments": {
-    "mirev_web": "aee7a980-fa25-4926-92f6-7a78665466ac",
+    "mirev_web": "c9dfd890-2da6-49cc-af1c-c2bffa3993da",
     "mirev_api": "a43a0308-045f-4faa-8d69-281572d39754",
     "api_rev_sin_cambio": "f6cbc0f3-6ed4-44df-b013-9fd2978143bf",
     "staging_web_sin_cambio": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
@@ -116,5 +116,9 @@
   "ajuste_cristal_2026_11_18": {
     "evidencia": "docs/infrastructure/mirev-cristal-2026-11-18.json",
     "validado": true
+  },
+  "cristal_unificado": {
+    "fecha": "2026-11-18",
+    "evidencia": "docs/infrastructure/mirev-cristal-unificado-2026-11-18.json"
   }
 }

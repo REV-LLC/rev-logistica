@@ -1,0 +1,44 @@
+{
+  "fecha": "2026-11-18",
+  "deployment": "c9dfd890-2da6-49cc-af1c-c2bffa3993da",
+  "estado": "SUCCESS",
+  "aplicacion": "MiREV",
+  "cristal_aprobado": {
+    "fondo": "rgba(46, 52, 59, 0.36)",
+    "blur": "blur(16px) saturate(1.15)"
+  },
+  "superficies": [
+    "Saludo",
+    "Asistencia",
+    "Ingreso",
+    "Ayuda",
+    "Recibos",
+    "Obras",
+    "Avisos",
+    "Errores",
+    "Encabezado de perfil",
+    "Workspace de perfil"
+  ],
+  "perfil_anidado": "Paneles internos transparentes para compartir el cristal del padre sin sumar opacidad.",
+  "aislamiento": {
+    "unico_archivo_aplicacion_modificado": "apps/web/src/components/attendance-mobile/mobile-attendance.module.css",
+    "selectores_bajo_page_mirev": true,
+    "componentes_compartidos_editados": false,
+    "rev_logistica_desplegado": false,
+    "api_o_datos_modificados": false,
+    "staging_modificado": false
+  },
+  "qa": {
+    "build_next": true,
+    "local_perfil_prestamos_bitacora": true,
+    "local_color_fuera_mirev": "rgba(255, 255, 255, 0.06)",
+    "local_blur_fuera_mirev": "blur(18px) saturate(1.15)",
+    "perfil_sin_acumulacion": true,
+    "bordes_error_aviso_conservados": true,
+    "movil_390_sin_desbordes": true,
+    "produccion_titulo_formulario_ayuda_mismo_estilo": true,
+    "consola_errores": 0,
+    "fixtures_publicados": false,
+    "captura": "/private/tmp/mirev-cristal-todas-cards-20261118.jpg"
+  }
+}

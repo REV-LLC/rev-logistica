@@ -67,3 +67,9 @@ El saludo/titulo Mi asistencia conserva su composicion y tipografia, con fondo o
 ### Punto medio solicitado
 
 El usuario considero demasiado densa la primera correccion. El saludo vigente usa rgba(46,52,59,.36) y blur 16 px, entre la transparencia original y la variante de 68% / 28 px. Se suavizo tambien la sombra y el reflejo interior. Se conserva el filtro estandar y WebKit corregidos; no cambian componentes, textos o funciones.
+
+### Cristal uniforme, exclusivo de MiREV
+
+El cristal aprobado se centraliza en variables de la clase page del modulo mobile-attendance: fondo rgba(46,52,59,.36), blur 16 px, saturacion 115% y sombra/reflejo suaves. Se aplica a saludo, asistencia, formulario de ingreso, ayuda, recibos, opciones de obra, avisos y errores, encabezado personal y panel del perfil. Se conservan colores semanticos de bordes/textos de avisos y de los botones de entrada/salida.
+
+Los selectores de Paper/Card y encabezados compartidos requieren un ancestro page de MiREV. No se edita EmployeeProfile, los estilos generales ni componentes de REV Logistica. Los paneles dentro del workspace del perfil heredan la transparencia del cristal exterior, evitando una segunda capa mas opaca. Una fixture local comprobo los valores en todas las superficies, incluidos perfil y bitacora a 390 px: sin desborde ni errores; una superficie fuera del portal mantuvo su fondo 6% y blur 18 px original. Fixture y API ficticia descartadas antes de guardar el cambio y ausentes de la carpeta publicada.
