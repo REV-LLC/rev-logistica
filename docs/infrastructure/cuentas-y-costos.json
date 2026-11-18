@@ -71,7 +71,7 @@
             "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
             "dominio": "https://mirev.revcontractorsllc.com",
             "api_url": "https://mirev-api-production.up.railway.app",
-            "web_deployment_id": "e496c1b9-8d46-4276-a40e-2d7c74ce036c",
+            "web_deployment_id": "aee7a980-fa25-4926-92f6-7a78665466ac",
             "api_deployment_id": "a43a0308-045f-4faa-8d69-281572d39754",
             "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
             "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
@@ -690,6 +690,10 @@
     {
       "fecha": "2026-11-18",
       "hecho": "Ajuste visual MiREV: card de titulo con fondo oscuro al 68% y blur 28 px; corregida salida CSS para conservar backdrop-filter estandar y variante WebKit. Solo frontend MiREV, sin cambios de datos, API ni staging."
+    },
+    {
+      "fecha": "2026-11-18",
+      "hecho": "Por ajuste visual solicitado por usuario, MiREV pasa de cristal denso 68% / 28 px a punto medio 36% / 16 px en el saludo. Solo frontend MiREV."
     }
   ],
   "ultima_auditoria_produccion": {

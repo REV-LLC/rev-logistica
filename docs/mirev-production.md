@@ -63,3 +63,7 @@ Evidencia y valores anteriores/nuevos en docs/infrastructure/mirev-ubicaciones-i
 La compilacion anterior del modulo movil conservaba solo -webkit-backdrop-filter cuando la declaracion prefijada se encontraba al final. En Chrome, getComputedStyle confirmaba backdrop-filter none, por lo que la card quedaba transparente sin difuminado efectivo. Se ordenaron las declaraciones como en el resto de REV (WebKit primero y estandar al final), usando saturate(115%). El build confirma ambas propiedades.
 
 El saludo/titulo Mi asistencia conserva su composicion y tipografia, con fondo oscuro rgba(46,52,59,.68), blur 28 px, borde existente y reflejo interior suave. El resto de superficies moviles recupera el blur 18 px previsto. Solo se publica el frontend independiente MiREV.
+
+### Punto medio solicitado
+
+El usuario considero demasiado densa la primera correccion. El saludo vigente usa rgba(46,52,59,.36) y blur 16 px, entre la transparencia original y la variante de 68% / 28 px. Se suavizo tambien la sombra y el reflejo interior. Se conserva el filtro estandar y WebKit corregidos; no cambian componentes, textos o funciones.
