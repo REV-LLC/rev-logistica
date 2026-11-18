@@ -2168,3 +2168,10 @@ model AttendancePunch {
   @@index([employeeId, occurredAt])
   @@index([status, occurredAt])
 }
+
+// Shared daily ceilings survive API restarts and multiple replicas.
+model TrackingUsage {
+  key       String   @id @db.VarChar(64)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}

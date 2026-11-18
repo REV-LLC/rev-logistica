@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -11,6 +11,26 @@ import type { CreateTrackingPlace, TrackingIdentity } from './tracking.service';
 @Roles(Role.ADMIN, Role.OFFICE)
 export class TrackingController {
   constructor(private readonly tracking: TrackingService) {}
+  @Get('fleet')
+  @Header('Cache-Control', 'no-store')
+  getFleet(@Req() request: { user: TrackingIdentity }) {
+    return this.tracking.getFleet(request.user);
+  }
+  @Get('history')
+  @Header('Cache-Control', 'no-store')
+  getHistory(@Req() request: { user: TrackingIdentity }, @Query('deviceId') id: string, @Query('from') from: string, @Query('to') to: string) {
+    return this.tracking.getHistory(request.user, id, from, to);
+  }
+  @Get('map-config')
+  @Header('Cache-Control', 'no-store')
+  mapConfiguration(@Req() request: { user: TrackingIdentity }) {
+    return this.tracking.mapConfiguration(request.user);
+  }
+  @Post('route')
+  @Header('Cache-Control', 'no-store')
+  planRoute(@Req() request: { user: TrackingIdentity }, @Body() input: { deviceId?: number; placeId?: number; address?: string }) {
+    return this.tracking.planRoute(request.user, input);
+  }
   @Get('places')
   @Header('Cache-Control', 'no-store')
   getPlaces(@Req() request: { user: TrackingIdentity }) {
