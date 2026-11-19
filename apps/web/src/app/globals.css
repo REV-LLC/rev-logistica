@@ -1210,7 +1210,8 @@ a {
   .mantine-NumberInput-input,
   .mantine-Textarea-input {
     min-height: 40px;
-    font-size: 14px;
+    /* iOS retains input focus zoom when the item picker opens. */
+    font-size: 16px;
   }
 
   .mantine-Group-root {
