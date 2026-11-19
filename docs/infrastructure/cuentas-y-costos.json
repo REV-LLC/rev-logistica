@@ -71,8 +71,8 @@
             "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
             "dominio": "https://mirev.revcontractorsllc.com",
             "api_url": "https://mirev-api-production.up.railway.app",
-            "web_deployment_id": "c20a9688-2402-43d0-84bf-953fea92ca11",
-            "api_deployment_id": "b9ca1f59-0cc7-455d-8ce5-e3ea000e7b7d",
+            "web_deployment_id": "e17a4f3d-82ae-4a33-b1f0-2da62c644402",
+            "api_deployment_id": "a429a4c1-a68d-4bc9-aebc-a319b885ecf7",
             "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
             "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
             "facturacion": "Consumo incremental de dos servicios en el plan Railway existente; importe aún no medido. Sin nuevo plan contratado.",
@@ -124,15 +124,28 @@
                   "ARL": 10
                 },
                 "evidencia_publicacion_actual": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
+              },
+              "documentos_personales": {
+                "tabla": "EmployeeDocument",
+                "migration": "20261119230000_employee_document_separation",
+                "evidencia": "docs/infrastructure/separacion-documentos-empleados-2026-11-19.json",
+                "consulta": "Solo relacion documental y empleado activo propio; evidencias operativas excluidas."
               }
             },
-            "ultima_publicacion_evidencia": "docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json"
+            "ultima_publicacion_evidencia": "docs/infrastructure/separacion-documentos-empleados-2026-11-19.json"
           },
           "afiliaciones_documentos_publicacion_2026_11_19": {
             "evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json",
             "api_deployment_id": "0f884dd8-167d-4b0a-afe0-9c18b238361f",
             "github_merge_sha": "2109fd7f03a41278286e87f4a9fac52d469696be",
             "vercel_deployment_id": "dpl_5unEWrchzvbhswCiXTbkj7nLcPWu"
+          },
+          "documentos_empleado_separacion": {
+            "fecha": "2026-11-19",
+            "evidencia": "docs/infrastructure/separacion-documentos-empleados-2026-11-19.json",
+            "api_deployment_id": "6115e032-4aaa-41a1-98b2-33b96a6826a8",
+            "source_sha": "90d9764eb91f15e7476b8173c0cf4644d470bd9c",
+            "production_only": true
           }
         },
         {
@@ -840,6 +853,11 @@
       "fecha": "2026-11-19",
       "hecho": "Pestanas compactas del perfil publicadas solo en web MiREV. Auditoria de documentos encontro 13 evidencias WhatsApp y cero certificados EPS/ARL identificados; ninguna asignacion modificada.",
       "evidencia": "docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json"
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Separacion de documentos personales publicada en produccion: EmployeeDocument y filtros de lista/descarga en REV/MiREV. Hashes de 2366 archivos y referencias WhatsApp conservados, 13 evidencias fuera de Mis documentos; nuevas cargas personales crean relacion atomica. MiREV usa selector compacto centrado. Ejecucion propia omitio staging; se documento por separado el cambio concurrente del menu PR383 en API habitual de staging.",
+      "evidencia": "docs/infrastructure/separacion-documentos-empleados-2026-11-19.json"
     }
   ],
   "ultima_auditoria_produccion": {

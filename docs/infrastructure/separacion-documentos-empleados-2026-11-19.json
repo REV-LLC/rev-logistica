@@ -1,0 +1,129 @@
+{
+  "fecha": "2026-11-19",
+  "objetivo": "Separacion explicita de documentos personales y evidencias, sin mover ni borrar archivos",
+  "tabla": "EmployeeDocument",
+  "migration": "20261119230000_employee_document_separation",
+  "migration_checksum": "4f43696b95f66405172d1a4b6e34eb2cbe6afef73660c77ea50481191f0620d1",
+  "produccion": {
+    "pr": 384,
+    "merge_sha": "90d9764eb91f15e7476b8173c0cf4644d470bd9c",
+    "ci_run": 44603539089,
+    "promotion_run": 44603598901,
+    "production_only": true,
+    "staging_job": "skipped",
+    "rev_api_deployment": "6115e032-4aaa-41a1-98b2-33b96a6826a8",
+    "image_ref": "ghcr.io/rev-llc/rev-logistica-api@sha256:71d21c1bc9c6b19ca93e29c33f223926309f12b5ee2bf9a9fde55b347b362e2b",
+    "health_verified_at": "2026-11-19T20:01:48.817Z",
+    "mirev_api_deployment": "a429a4c1-a68d-4bc9-aebc-a319b885ecf7",
+    "mirev_web_deployment": "e17a4f3d-82ae-4a33-b1f0-2da62c644402",
+    "mirev_source_sha": "cf0d2e472bffa110764395a46d1adb500d9e072f",
+    "estado": "SUCCESS"
+  },
+  "preservacion": {
+    "registros_antes_despues_identicos": true,
+    "hashes_y_cantidades": {
+      "FileObject": {
+        "count": 2366,
+        "sha256": "11936faf65d9ccd1c1a2a9c9bbee3ccf770a79843b8e0be9bb054be0faf8412d"
+      },
+      "WhatsappReportEvidence": {
+        "count": 9,
+        "sha256": "31b441b99fad40bcf265341d5446dcadc90b45f7ec020ff1ae63b76c56f2c96e"
+      },
+      "WhatsappInboundMessage": {
+        "count": 124,
+        "sha256": "a619b604d738f0f5f2dbbe64a64dc424ccb842b032f825b7a8b2dfdb0cc8cd97"
+      }
+    },
+    "documentos_personales_identificados": 0,
+    "archivos_evidencia_empleado_conservados": 13,
+    "r2_operaciones_de_migracion": 0,
+    "nota": "Relacion adicional por FK; documentos historicos validos se enlazan sin modificar FileObject, claves, nombres ni referencias operativas. No se crearon datos ficticios en produccion."
+  },
+  "validacion": {
+    "api_tests_aprobados": 1613,
+    "postgres_local_tests_aprobados": 3,
+    "nueva_ingesta_whatsapp_local": "Confirmada con Prisma/Postgres reales y almacenamiento simulado: evidencia nueva sin EmployeeDocument, lista personal sin cambios.",
+    "delivery_tests_aprobados": 153,
+    "mirev_tests_aprobados": 22,
+    "builds": "API y Web aprobados, CI final production success, imagen y runtime verificados",
+    "sesion_real": "Mis documentos de MiREV y REV muestran el estado vacio correcto, sin evidencias WhatsApp; consola de MiREV sin errores.",
+    "selector_mirev": "Grupo centrado de ancho segun contenido, 40 px de alto, iconos de 14 px, separacion de 2 px; 320 px sin desborde y con todas las pestañas dentro de la card."
+  },
+  "staging": {
+    "esta_publicacion_no_desplego_staging": true,
+    "baseline": [
+      {
+        "serviceId": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+        "name": "attendance-test-api",
+        "deploymentId": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "6cee295e-b8b0-458e-afbe-7093c6e17572",
+        "name": "api",
+        "deploymentId": "7ff75c72-b5e1-42f6-b2f2-e29f9335f2da",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "ad18242d-981c-4675-9408-81bd9ad56033",
+        "name": "web-staging",
+        "deploymentId": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "3b47c0b8-6be3-41bf-b68d-374c24f84802",
+        "name": "face-recognition",
+        "deploymentId": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "8ae3aa5c-80f8-4572-ae8c-7080bb6637d5",
+        "name": "Postgres",
+        "deploymentId": "a6fc1a6f-89e3-4efd-80b0-b9a706ea6dab",
+        "status": "SUCCESS"
+      }
+    ],
+    "final": [
+      {
+        "serviceId": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+        "name": "attendance-test-api",
+        "deploymentId": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "6cee295e-b8b0-458e-afbe-7093c6e17572",
+        "name": "api",
+        "deploymentId": "e883c40b-6804-4a47-be00-3a49fbae829b",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "ad18242d-981c-4675-9408-81bd9ad56033",
+        "name": "web-staging",
+        "deploymentId": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "3b47c0b8-6be3-41bf-b68d-374c24f84802",
+        "name": "face-recognition",
+        "deploymentId": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "8ae3aa5c-80f8-4572-ae8c-7080bb6637d5",
+        "name": "Postgres",
+        "deploymentId": "a6fc1a6f-89e3-4efd-80b0-b9a706ea6dab",
+        "status": "SUCCESS"
+      }
+    ],
+    "cambio_concurrente_ajeno": {
+      "pr": 383,
+      "source_sha": "c0b550ceead3d4752ece3ad8028bd447edf16712",
+      "promotion_run": 44602039146,
+      "api_deployment": "e883c40b-6804-4a47-be00-3a49fbae829b",
+      "verified_at": "2026-11-19T19:52:25.478Z",
+      "nota": "Publicacion simultanea del menu actualizo el API habitual de staging. Detectada y comunicada al usuario; no se revirtio ni se atribuyo a esta separacion."
+    },
+    "pruebas_asistencia_aisladas": "attendance-test-api, web-staging, face-recognition y Postgres conservan sus despliegues iniciales."
+  }
+}
