@@ -4,6 +4,7 @@ import AppImage from '@/components/AppImage';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Divider,
@@ -230,6 +231,7 @@ export default function FileAttachmentsPanel({
           <Text size="sm" c="dimmed">
             {description}
           </Text>
+          {entityType === 'EMPLOYEE' ? <Anchor size="sm" href="/employees/affiliations?tab=certificates">Ver revisión de certificados EPS y ARL</Anchor> : null}
         </div>
         <Group gap="xs" wrap="wrap">
           <Badge color="blue" variant="light" leftSection={<IconPaperclip size={14} />}>
