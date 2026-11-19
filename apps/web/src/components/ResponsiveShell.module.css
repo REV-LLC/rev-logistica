@@ -25,6 +25,7 @@
 
 @media (max-width: 47.99em) {
   .navbar {
+    --sidebar-glass-opacity: .96;
     inset-inline-start: max(6px, env(safe-area-inset-left));
     width: calc(100% - max(6px, env(safe-area-inset-left)) - max(6px, env(safe-area-inset-right)));
     z-index: 200;
