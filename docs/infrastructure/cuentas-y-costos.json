@@ -146,6 +146,16 @@
             "api_deployment_id": "6115e032-4aaa-41a1-98b2-33b96a6826a8",
             "source_sha": "90d9764eb91f15e7476b8173c0cf4644d470bd9c",
             "production_only": true
+          },
+          "reconocimiento_certificados_empleados": {
+            "fecha": "2026-11-19",
+            "tabla": "EmployeeAffiliationRecognition",
+            "evidencia": "docs/infrastructure/reconocimiento-certificados-empleados-2026-11-19.json",
+            "api_deployment_id": "5b48ea8e-15af-4383-b7e9-0940a9d3226c",
+            "url_oficina": "https://app.revcontractorsllc.com/employees/affiliations?tab=certificates",
+            "lectura_local": "Poppler/Tesseract spa en API existente; sin proveedor externo OCR ni servicio Railway nuevo.",
+            "mirev": "Consulta EPS/ARL existentes desde Employee; sin redeploy de sus servicios.",
+            "staging": "Sin despliegues ni migraciones por esta publicacion."
           }
         },
         {
@@ -858,6 +868,11 @@
       "fecha": "2026-11-19",
       "hecho": "Separacion de documentos personales publicada en produccion: EmployeeDocument y filtros de lista/descarga en REV/MiREV. Hashes de 2366 archivos y referencias WhatsApp conservados, 13 evidencias fuera de Mis documentos; nuevas cargas personales crean relacion atomica. MiREV usa selector compacto centrado. Ejecucion propia omitio staging; se documento por separado el cambio concurrente del menu PR383 en API habitual de staging.",
       "evidencia": "docs/infrastructure/separacion-documentos-empleados-2026-11-19.json"
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Reconocimiento local de certificados de empleados publicado: cola persistente EPS/ARL, asignacion segura y revision de oficina en REV Logistica. Archivos previos conservados; API y web verificados, staging y servicios MiREV sin cambios.",
+      "evidencia": "docs/infrastructure/reconocimiento-certificados-empleados-2026-11-19.json"
     }
   ],
   "ultima_auditoria_produccion": {

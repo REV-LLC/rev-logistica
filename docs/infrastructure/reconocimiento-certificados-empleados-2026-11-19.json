@@ -1,0 +1,160 @@
+{
+  "fecha": "2026-11-19",
+  "funcion": "Reconocimiento local de certificados EPS/ARL al cargar documentos personales",
+  "api": {
+    "pull_request": 388,
+    "merge_sha": "806d095718c041f07945601013cd1a2ec0f7812c",
+    "ci_run": 44618645458,
+    "promotion_run": 44618758284,
+    "deployment_id": "5b48ea8e-15af-4383-b7e9-0940a9d3226c",
+    "image_ref": "ghcr.io/rev-llc/rev-logistica-api@sha256:497a1475c40fcb53244e9249ec9d07a8ac2c7ddf3d5da3e8e8de5a3ff611a697",
+    "verified_at": "2026-11-19T21:30:57.542Z",
+    "production_only": true,
+    "staging_job": "skipped",
+    "estado": "SUCCESS"
+  },
+  "web": {
+    "pull_request": 389,
+    "merge_sha": "0e2257de3afd94fe28e31461fff32c3798485ce5",
+    "production_ci_run": 44619771769,
+    "deployment_id": "dpl_BpV4kMyZDAxtTPV7kYvwpiosY9Tt",
+    "estado": "READY",
+    "url": "https://app.revcontractorsllc.com/employees/affiliations?tab=certificates"
+  },
+  "migration": {
+    "name": "20261119233000_employee_certificate_recognition",
+    "sha256": "f40295be7adfb4d50e4bbc4fe53b2ab147e2ebd75292d361055535d46e6ae310",
+    "tabla": "EmployeeAffiliationRecognition",
+    "schema": "public",
+    "solo_produccion": true,
+    "archivos_anteriores_verificados": {
+      "count": 2369,
+      "sha256": "cff295d32f5841b214f19913377ddb33a0fb8788dabb1d8e60b87810ee9a502f"
+    },
+    "documentos_personales_y_evidencias_preservados_durante_migracion": {
+      "FileObject": {
+        "count": 2369,
+        "sha256": "cff295d32f5841b214f19913377ddb33a0fb8788dabb1d8e60b87810ee9a502f"
+      },
+      "EmployeeDocument": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "WhatsappReportEvidence": {
+        "count": 9,
+        "sha256": "31b441b99fad40bcf265341d5446dcadc90b45f7ec020ff1ae63b76c56f2c96e"
+      }
+    }
+  },
+  "politica": {
+    "categorias": [
+      "EPS",
+      "ARL"
+    ],
+    "lector": [
+      "Poppler PDF text",
+      "Tesseract Spanish OCR"
+    ],
+    "proveedor_ocr_externo": false,
+    "texto_ocr_guardado": false,
+    "automatico": "Identidad exacta y nombre, entidad unica del catalogo, certificado/afiliacion activa, expedicion inequivoca reciente (hasta 90 dias), sin vencimiento ni conflicto de asignacion. Uploader Office/Admin activo.",
+    "revision": "Ambiguos, ilegibles, incompatibles, antiguos, distintos empleados o entidades actuales/concurrentes quedan para oficina; no se limpia la afiliacion existente.",
+    "limites": {
+      "mb": 10,
+      "paginas_pdf": 4,
+      "lease_segundos": 240,
+      "intentos_recuperacion": 2
+    },
+    "cola": "Persistente, exclusiva por documento, reconciliacion periodica y SKIP LOCKED. Cambio parcial solo de EPS o ARL, preservando la otra."
+  },
+  "verificacion": {
+    "api_tests_aprobados": 1651,
+    "postgres_ocr_http_tests_aprobados": 6,
+    "delivery_tests_aprobados": 153,
+    "native_image_smoke": "Herramientas Poppler y modelo spa presentes; prueba ejecutada dentro de la imagen sin red antes de promocion.",
+    "chrome_local": "Datos ficticios con API/Postgres/OCR reales: asignacion automatica, PDF preview, confirmacion manual obligatoria, EPS actualizada y ARL conservada. 320/390/1280 px sin desborde de pagina ni errores de consola.",
+    "chrome_produccion": "Sesion ADMIN real: pestana Certificados visible, respuesta vacia correcta y boton Actualizar funcional, sin errores de consola. No se cargaron archivos ficticios ni se crearon empleados de prueba en produccion.",
+    "preservacion": {
+      "preexistingFilesUnchanged": true,
+      "preexistingFiles": {
+        "count": 2369,
+        "sha256": "cff295d32f5841b214f19913377ddb33a0fb8788dabb1d8e60b87810ee9a502f"
+      },
+      "jobs": []
+    },
+    "staging_sin_cambios": true,
+    "mirev_sin_redeploy": true
+  },
+  "infraestructura": {
+    "mismos_servicios": true,
+    "servicio_nuevo": false,
+    "api_tercero_nueva": false,
+    "facturacion": "Uso de CPU/almacenamiento de los servicios existentes de Railway/R2; incremento no medido, sin nuevo plan contratado."
+  },
+  "staging_before_after": {
+    "before": [
+      {
+        "serviceId": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+        "name": "attendance-test-api",
+        "deploymentId": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "6cee295e-b8b0-458e-afbe-7093c6e17572",
+        "name": "api",
+        "deploymentId": "e909f158-1c94-46cc-ae33-5019a7c050e0",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "ad18242d-981c-4675-9408-81bd9ad56033",
+        "name": "web-staging",
+        "deploymentId": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "3b47c0b8-6be3-41bf-b68d-374c24f84802",
+        "name": "face-recognition",
+        "deploymentId": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "8ae3aa5c-80f8-4572-ae8c-7080bb6637d5",
+        "name": "Postgres",
+        "deploymentId": "a6fc1a6f-89e3-4efd-80b0-b9a706ea6dab",
+        "status": "SUCCESS"
+      }
+    ],
+    "after": [
+      {
+        "serviceId": "338d9153-c51d-4e8f-8608-aabc17a0f98f",
+        "name": "attendance-test-api",
+        "deploymentId": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "6cee295e-b8b0-458e-afbe-7093c6e17572",
+        "name": "api",
+        "deploymentId": "e909f158-1c94-46cc-ae33-5019a7c050e0",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "ad18242d-981c-4675-9408-81bd9ad56033",
+        "name": "web-staging",
+        "deploymentId": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "3b47c0b8-6be3-41bf-b68d-374c24f84802",
+        "name": "face-recognition",
+        "deploymentId": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb",
+        "status": "SUCCESS"
+      },
+      {
+        "serviceId": "8ae3aa5c-80f8-4572-ae8c-7080bb6637d5",
+        "name": "Postgres",
+        "deploymentId": "a6fc1a6f-89e3-4efd-80b0-b9a706ea6dab",
+        "status": "SUCCESS"
+      }
+    ]
+  }
+}
