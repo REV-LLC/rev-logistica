@@ -123,3 +123,5 @@ MiREV usa pestañas propias de 44 px en una fila, iconos de 15 px y etiqueta vis
 Build Next aprobado. Chrome con datos ficticios aislados verificó Documentos → Bitácora → Documentos, panel y URL correctos, sin errores de consola ni desborde a 320, 390 y 1280 px. No se crearon datos de prueba en producción.
 
 Revisión de solo lectura en el Postgres public de producción confirmado: 19 empleados y 13 archivos EMPLOYEE, todos EVIDENCIA_WHATSAPP (JPEG), vinculados a reportes de daños/entrada/salida. Cero archivos EPS/ARL por categoría o fileType en todas las entidades y cero archivos de esas categorías sin entidad. No hay certificados identificados para extraer afiliaciones, por lo que no se modificó ninguna asignación ni se envió contenido a OCR externo. La extracción requiere los certificados correspondientes; no se deduce afiliación de fotografías de asistencia.
+
+Publicación: mirev-web c20a9688-2402-43d0-84bf-953fea92ca11 SUCCESS, fuente 3f3aae7. Sesión real comprobó altura de 44 px, distribución en fila, navegación con teclado y consola sin errores. Evidencia en docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json.

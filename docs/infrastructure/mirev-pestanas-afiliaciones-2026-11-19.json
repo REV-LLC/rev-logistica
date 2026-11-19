@@ -1,0 +1,36 @@
+{
+  "fecha": "2026-11-19",
+  "cambio": "Pestanas compactas de perfil MiREV",
+  "source_sha": "3f3aae7a894450aba63fb4d62dcbc7981985437f",
+  "railway": {
+    "project_id": "bec9984e-3e3a-48c8-9d75-8c87d591b931",
+    "environment_id": "72a66cb9-3fc8-4c61-979a-56435cd20e8a",
+    "service_id": "2b16f18a-2011-48cf-9706-01552c77e5a8",
+    "deployment_id": "c20a9688-2402-43d0-84bf-953fea92ca11",
+    "status": "SUCCESS"
+  },
+  "verificacion": {
+    "url": "https://mirev.revcontractorsllc.com/attendance/mobile/profile",
+    "build": "Next.js aprobado",
+    "local": "Datos ficticios, 320/390/1280 px, sin desborde; Documentos a Bitacora y regreso con panel y URL correctos.",
+    "publicado": "390 px, pestanas 44 px en fila, sin desborde ni errores de consola. Cambio de seccion con teclado verificado.",
+    "alcance": "Solo web MiREV; no se desplegaron API, REV Logistica ni staging."
+  },
+  "auditoria_afiliaciones": {
+    "modo": "Solo lectura, Postgres produccion public",
+    "empleados": 19,
+    "archivos_employee": 13,
+    "categoria": "EVIDENCIA_WHATSAPP",
+    "mime": "image/jpeg",
+    "tipos_reporte_vinculados": [
+      "DAMAGE",
+      "CHECK_IN",
+      "CHECK_OUT"
+    ],
+    "archivos_eps_arl_todas_entidades": 0,
+    "archivos_eps_arl_sin_entidad": 0,
+    "asignaciones_modificadas": 0,
+    "contenido_enviado_ocr_externo": false,
+    "conclusion": "No hay certificados identificados para extraer afiliaciones; no se infiere EPS/ARL de evidencias de asistencia."
+  }
+}

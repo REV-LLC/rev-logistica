@@ -71,7 +71,7 @@
             "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
             "dominio": "https://mirev.revcontractorsllc.com",
             "api_url": "https://mirev-api-production.up.railway.app",
-            "web_deployment_id": "9d940e0d-8b36-4fa6-8f7e-32e2cee46af4",
+            "web_deployment_id": "c20a9688-2402-43d0-84bf-953fea92ca11",
             "api_deployment_id": "b9ca1f59-0cc7-455d-8ce5-e3ea000e7b7d",
             "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
             "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
@@ -126,7 +126,7 @@
                 "evidencia_publicacion_actual": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
               }
             },
-            "ultima_publicacion_evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
+            "ultima_publicacion_evidencia": "docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json"
           },
           "afiliaciones_documentos_publicacion_2026_11_19": {
             "evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json",
@@ -835,6 +835,11 @@
       "fecha": "2026-11-19",
       "hecho": "Catalogo EPS/ARL trasladado a REV Logistica y poblado con 26 EPS y 10 ARL; documentos propios en perfil y nombres automaticos de nuevas cargas. Publicacion verificada sin datos ficticios en produccion; staging aislado conservado. Identidad tecnica GitHub REVContractors verificada separadamente del usuario humano.",
       "evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Pestanas compactas del perfil publicadas solo en web MiREV. Auditoria de documentos encontro 13 evidencias WhatsApp y cero certificados EPS/ARL identificados; ninguna asignacion modificada.",
+      "evidencia": "docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json"
     }
   ],
   "ultima_auditoria_produccion": {
