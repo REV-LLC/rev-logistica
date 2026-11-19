@@ -77,6 +77,18 @@ test('hour meters and maintenance share one sidebar group while retaining indivi
   assert.match(nav, /href: "\/inventory\/maintenance",\s+label: "Mantenimientos",\s+icon: IconTools,\s+roles: \["ADMIN", "OFFICE"\]/);
 });
 
+test('employee navigation excludes reports and attendance owned by other sections', () => {
+  const nav = readFileSync(new URL('../components/Nav.tsx', import.meta.url), 'utf8');
+  const employeeGroup = nav.slice(nav.indexOf('label: "Empleados"'), nav.indexOf('title: "Configuración"'));
+  const exclusions = [...employeeGroup.matchAll(/excludedPrefixes: \[([^\]]+)\]/g)];
+  assert.equal(exclusions.length, 2);
+  for (const [, values] of exclusions) {
+    assert.ok(values.includes('"/employees/whatsapp-reports"'));
+    assert.ok(values.includes('"/employees/attendance"'));
+  }
+  assert.match(nav, /label: "Empleados", icon: IconUsers,[^\n]+excludedPrefixes: \[[^\n]+"\/employees\/whatsapp-reports"/);
+});
+
 test('chat is a permanent, searchable Admin and Office sidebar link instead of a floating launcher', () => {
   const nav = readFileSync(new URL('../components/Nav.tsx', import.meta.url), 'utf8');
   const shell = readFileSync(new URL('../components/ResponsiveShell.tsx', import.meta.url), 'utf8');

@@ -280,8 +280,9 @@ const sections: NavSection[] = [
         icon: IconUser,
         roles: ["ADMIN", "OFFICE"],
         activePrefixes: ["/employees"],
+        excludedPrefixes: ["/employees/whatsapp-reports", "/employees/attendance"],
         children: [
-          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities", "/employees/affiliations"] },
+          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities", "/employees/affiliations", "/employees/whatsapp-reports", "/employees/attendance"] },
           { href: "/employees/affiliations", label: "EPS y ARL", icon: IconTag, roles: ["ADMIN", "OFFICE"] },
           { href: "/employees/payroll", label: "Nómina", icon: IconFileDollar, roles: ["ADMIN", "OFFICE"] },
           { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
@@ -368,7 +369,7 @@ const homeLink: NavLinkItem = {
 };
 const quickLinks: NavLinkItem[] = [
   { href: "/transport/vehicles", label: "Vehículos", icon: IconTruck, roles: ["ADMIN", "OFFICE"] },
-  { href: "/employees", label: "Empleados", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/activities"] },
+  { href: "/employees", label: "Empleados", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/activities", "/employees/whatsapp-reports", "/employees/attendance"] },
   {
     href: "/inventory/warehouse?scope=own",
     label: "Inventario propio",
