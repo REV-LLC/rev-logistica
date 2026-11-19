@@ -1,3 +1,4 @@
+import { employeeDocumentFilename } from './employee-document-name';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -335,11 +336,16 @@ export class FilesService {
       createdBy: string;
       providerWarehouseId: string | null;
     }> = [];
+    const employee = entityType === 'EMPLOYEE' ? await this.prisma.employee.findUnique({ where: { id: entityId }, select: { name: true, lastName: true } }) : null;
+    if (entityType === 'EMPLOYEE' && !employee) throw new NotFoundException('Empleado no encontrado');
     for (const file of files) {
       const extension =
         EXTENSION_BY_MIME_TYPE[file.mimetype] ??
         this.inferExtension(file.originalname);
-      const objectKey = `${entityType.toLowerCase()}/${entityId}/${category.toLowerCase()}/${randomUUID()}.${extension}`;
+      const generatedName = employee ? employeeDocumentFilename(employee, category, file) : null;
+      const objectKey = generatedName
+        ? `employee/${entityId}/${category.toLowerCase()}/${randomUUID()}/${generatedName}`
+        : `${entityType.toLowerCase()}/${entityId}/${category.toLowerCase()}/${randomUUID()}.${extension}`;
       await s3.send(
         new PutObjectCommand({
           Bucket: config.bucket,
@@ -378,7 +384,7 @@ export class FilesService {
           entityId,
           fileType: category,
           category,
-          displayName: payload.displayName?.trim() || null,
+          displayName: generatedName || payload.displayName?.trim() || null,
           originalName: file.originalname,
           storageKey: publicUrl,
           objectKey,
@@ -642,6 +648,11 @@ export class FilesService {
     user: { id: string; role: Role },
     mode: 'read' | 'write',
   ) {
+    if (entityType === 'EMPLOYEE' && user.role !== Role.ADMIN && user.role !== Role.OFFICE) {
+      const actor = await this.prisma.user.findUnique({ where: { id: user.id }, select: { active: true, employee: { select: { id: true, active: true } } } });
+      if (mode !== 'read' || !actor?.active || !actor.employee?.active || actor.employee.id !== entityId) throw new ForbiddenException('Solo puedes consultar tus propios documentos.');
+      return;
+    }
     if (user.role === Role.OPERATOR) {
       if (entityType !== 'ASSET') {
         throw new ForbiddenException(

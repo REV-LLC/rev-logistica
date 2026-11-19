@@ -300,7 +300,8 @@ const sections: NavSection[] = [
         activePrefixes: ["/employees"],
         excludedPrefixes: ["/employees/activities"],
         children: [
-          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities"] },
+          { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities", "/employees/affiliations"] },
+          { href: "/employees/affiliations", label: "EPS y ARL", icon: IconTag, roles: ["ADMIN", "OFFICE"] },
           { href: "/employees/payroll", label: "Nómina", icon: IconFileDollar, roles: ["ADMIN", "OFFICE"] },
         ],
       },

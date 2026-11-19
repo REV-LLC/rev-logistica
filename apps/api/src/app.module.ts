@@ -39,6 +39,7 @@ import { ProviderPickupsModule } from './provider-pickups/provider-pickups.modul
 import { FuelModule } from './fuel/fuel.module';
 import { AccessoriesModule } from './accessories/accessories.module';
 import { EmployeeActivitiesModule } from './employee-activities/employee-activities.module';
+import { EmployeeAffiliationsModule } from './employee-affiliations/employee-affiliations.module';
 import { OfficeAssistantModule } from './office-assistant/office-assistant.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { PdfEditorModule } from './pdf-editor/pdf-editor.controller';
@@ -91,6 +92,7 @@ import { EmployeePortalModule } from './employee-portal/employee-portal.module';
     AttendanceModule,
     EmployeeActivitiesModule,
     EmployeePortalModule,
+    EmployeeAffiliationsModule,
   ],
   controllers: [AppController],
   providers: [

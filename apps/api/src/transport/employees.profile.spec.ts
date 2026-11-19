@@ -41,7 +41,7 @@ describe('Employee profile identity', () => {
     expect(await service.getEmployeeProfile(id)).toEqual(identity);
     expect(findUnique).toHaveBeenCalledTimes(1);
     expect(findUnique).toHaveBeenCalledWith({ where: { id }, select: {
-      id: true, name: true, lastName: true, role: true, documentId: true, phone: true, active: true,
+      id: true, name: true, lastName: true, role: true, documentId: true, phone: true, active: true, eps: true, arl: true,
       vehicles: { select: { vehicle: { select: { id: true, plate: true, brand: true, model: true } } } },
     } });
   });
