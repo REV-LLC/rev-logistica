@@ -71,8 +71,8 @@
             "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
             "dominio": "https://mirev.revcontractorsllc.com",
             "api_url": "https://mirev-api-production.up.railway.app",
-            "web_deployment_id": "fecb661f-181d-4b37-8686-3637c1def826",
-            "api_deployment_id": "644f93f0-f38b-42f3-927e-7aecfdff9bc2",
+            "web_deployment_id": "4aa2ff4c-e637-46fe-b657-582c8aaf95c1",
+            "api_deployment_id": "69506dba-3ebc-48dd-844c-80ebdb2851f2",
             "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
             "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
             "facturacion": "Consumo incremental de dos servicios en el plan Railway existente; importe aún no medido. Sin nuevo plan contratado.",
@@ -108,7 +108,18 @@
               "migration": "20261119170000_mirev_employee_portal",
               "oficina_url": "https://mirev.revcontractorsllc.com/attendance/mobile/office",
               "eps_arl": "Columnas opcionales en Employee; solo Admin/Office configuran",
-              "evidencia": "docs/infrastructure/mirev-portal-empleados-2026-11-19.json"
+              "evidencia": "docs/infrastructure/mirev-portal-empleados-2026-11-19.json",
+              "catalogo_eps_arl": {
+                "fecha": "2026-11-19",
+                "tabla": "EmployeeAffiliationProvider",
+                "referencias_employee": [
+                  "epsId",
+                  "arlId"
+                ],
+                "migration": "20261119190000_employee_affiliation_catalog",
+                "url": "https://mirev.revcontractorsllc.com/attendance/mobile/office?tab=catalog",
+                "evidencia": "docs/infrastructure/mirev-catalogo-afiliaciones-2026-11-19.json"
+              }
             }
           }
         },
@@ -709,6 +720,10 @@
     {
       "fecha": "2026-11-19",
       "hecho": "MiREV portal de empleados publicado: documentos propios, EPS/ARL en Employee con editor Office, incapacidad diaria con GPS y selfie solo sin entrada de hoy, diagnostico cifrado posterior, boton de peticion pendiente de flujo y scroll de camara. Migracion puntual aplicada, 64 pruebas API y 21 frontend aprobadas; sesion real verificada sin crear registros. Solo despliegues API y web MiREV, REV y staging preservados. Evidencia docs/infrastructure/mirev-portal-empleados-2026-11-19.json."
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "MiREV normaliza EPS/ARL en catalogo EmployeeAffiliationProvider con asignaciones Employee.epsId/arlId y espejos compatibles. Migracion puntual aplicada; catalogo y selectores publicados y verificados con sesion real sin crear datos. 71 pruebas API, QA local y backfill de duplicados aprobados. Solo despliegues MiREV. Evidencia docs/infrastructure/mirev-catalogo-afiliaciones-2026-11-19.json."
     }
   ],
   "ultima_auditoria_produccion": {

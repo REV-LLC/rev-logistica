@@ -1,0 +1,69 @@
+{
+  "fecha": "2026-11-19",
+  "proyecto_id": "bec9984e-3e3a-48c8-9d75-8c87d591b931",
+  "environment_id": "72a66cb9-3fc8-4c61-979a-56435cd20e8a",
+  "source_commit": "6c9e2fb",
+  "url": "https://mirev.revcontractorsllc.com/attendance/mobile/office?tab=catalog",
+  "migracion": {
+    "nombre": "20261119190000_employee_affiliation_catalog",
+    "schema": "public",
+    "estado": "aplicada_y_registrada",
+    "tabla": "EmployeeAffiliationProvider",
+    "referencias_employee": [
+      "epsId",
+      "arlId"
+    ],
+    "unico": [
+      "kind",
+      "normalizedName"
+    ],
+    "compatibilidad": "eps/arl conservadas como espejos sincronizados; nombres de incapacidades historicas sin modificar",
+    "backfill": "Importa nombres existentes agrupados por tipo, espacios y minusculas; conserva relaciones. Produccion inicialmente sin nombres: cero entidades importadas."
+  },
+  "despliegues": {
+    "api": "69506dba-3ebc-48dd-844c-80ebdb2851f2",
+    "web": "4aa2ff4c-e637-46fe-b657-582c8aaf95c1"
+  },
+  "comportamiento": [
+    "Admin/Office activos crean, renombran e inactivan entidades",
+    "Empleado se asigna por ID desde selectores con buscador",
+    "No se admite ARL como EPS ni IDs inexistentes",
+    "Entidades inactivas conservan asignaciones anteriores y bloquean nuevas",
+    "Claves foraneas restringen borrado de entidades utilizadas",
+    "Duplicados por tipo/nombre normalizado bloqueados incluso en concurrencia"
+  ],
+  "qa": {
+    "pruebas_api": 71,
+    "builds": [
+      "Nest",
+      "Next.js",
+      "Docker Railway API",
+      "Docker Railway web"
+    ],
+    "local": "PostgreSQL 16 desechable, migracion de dos variantes Sanitas/sanitas a una sola EPS compartida, API/JWT real y Chrome computer use con datos ficticios; contenedor eliminado",
+    "http_local": [
+      "Duplicados 409",
+      "Tipo incorrecto 400",
+      "Cuenta empleado sin acceso al catalogo",
+      "Renombrado reflejado en perfil",
+      "Inactivos conservados para asignaciones anteriores y rechazados para nuevas",
+      "Creacion concurrente 201/409"
+    ],
+    "navegador_local": [
+      "Crear EPS y ARL",
+      "Buscar y asignar entidades",
+      "Renombrar con confirmacion",
+      "390x844 y 1280x800 sin desborde ni errores de consola"
+    ],
+    "produccion": "Sesion real: catalogo vacio, formulario y selectores propios de EPS/ARL comprobados sin crear entidades ni guardar asignaciones. Consola sin errores. Catalogo dejado abierto.",
+    "consulta_solo_lectura": {
+      "migration_applied": 1,
+      "providers": 0,
+      "eps_assigned": 0,
+      "arl_assigned": 0,
+      "inconsistent_assignments": 0
+    }
+  },
+  "aislamiento": "Solo se enviaron despliegues a mirev-api y mirev-web en production. API REV, PWA Vercel, worker facial y servicios de asistencia de staging sin despliegues por esta tarea.",
+  "costos": "Mismos servicios y plan Railway; sin nueva suscripcion, cuenta, clave ni servicio. Consumo incremental no medido."
+}
