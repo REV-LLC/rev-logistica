@@ -59,7 +59,7 @@ function configFromEnv(env, action) {
   const role = action === 'rollback' ? env.ROLLBACK_ENVIRONMENT : action;
   if (!['staging', 'production'].includes(role)) fail('Rollback environment is required');
   const c = {
-    action, role, projectId: env.RAILWAY_PROJECT_ID, serviceId: env.RAILWAY_SERVICE_ID,
+    action, role, productionOnly: env.PRODUCTION_ONLY === 'true', eventName: env.GITHUB_EVENT_NAME, projectId: env.RAILWAY_PROJECT_ID, serviceId: env.RAILWAY_SERVICE_ID,
     environmentId: env.RAILWAY_ENVIRONMENT_ID,
     stagingId: env.STAGING_ENVIRONMENT_ID, productionId: env.PRODUCTION_ENVIRONMENT_ID,
     repository: env.GITHUB_REPOSITORY, repositoryId: Number(env.GITHUB_REPOSITORY_ID),
@@ -89,7 +89,8 @@ function configFromEnv(env, action) {
   if (!c.outputPath) fail('EVIDENCE_PATH is required');
   if (Boolean(c.pullUser) !== Boolean(c.pullToken)) fail('Registry credentials must be supplied as a pair');
   if (c.pullToken && !c.imageRepository.startsWith('ghcr.io/')) fail('GHCR credentials cannot be sent to another registry');
-  if (action === 'production' && !c.stagingEvidencePath) fail('Staging evidence is required');
+  if (c.productionOnly && (action !== 'production' || c.eventName !== 'workflow_dispatch')) fail('Production-only release requires an explicit manual production dispatch');
+  if (action === 'production' && !c.productionOnly && !c.stagingEvidencePath) fail('Staging evidence is required');
   if (action === 'rollback' && !c.rollbackEvidencePath) fail('Rollback evidence is required');
   return c;
 }
@@ -155,7 +156,11 @@ async function validateRelease(c, github) {
       !['in_progress', 'completed'].includes(delivery.status)) fail('Untrusted delivery run');
   if (delivery.head_sha !== c.sourceSha || delivery.head_branch !== 'production') fail('Delivery must target production HEAD');
   if (!Array.isArray(jobs?.jobs) || jobs.total_count !== jobs.jobs.length) fail('Incomplete delivery jobs evidence');
-  for (const name of ['Build immutable API image', ...(c.action === 'production' ? ['Deploy and verify staging'] : [])]) {
+  if (c.productionOnly) {
+    const staging = jobs.jobs.filter(job => job.name === 'Deploy and verify staging');
+    if (delivery.event !== 'workflow_dispatch' || staging.length !== 1 || staging[0].run_id !== c.buildRunId || staging[0].conclusion !== 'skipped' || staging[0].status !== 'completed') fail('Production-only dispatch must leave staging skipped');
+  }
+  for (const name of ['Build immutable API image', ...(c.action === 'production' && !c.productionOnly ? ['Deploy and verify staging'] : [])]) {
     const matches = jobs.jobs.filter((job) => job.name === name);
     if (matches.length !== 1 || matches[0].run_id !== c.buildRunId ||
         matches[0].status !== 'completed' || matches[0].conclusion !== 'success') fail('Required delivery job has not succeeded');
@@ -267,7 +272,7 @@ async function promote(c, clients, { readEvidence, writeEvidence,
   const identity = await clients.railway('query TokenScope { projectToken { projectId environmentId } }');
   if (identity.projectToken?.projectId !== c.projectId || identity.projectToken?.environmentId !== c.environmentId) fail('Railway token does not match the intended project and environment');
   if (c.action !== 'rollback') await validateRelease(c, clients.github);
-  if (c.action === 'production') validateStagingEvidence(c, await readEvidence(c.stagingEvidencePath), clock());
+  if (c.action === 'production' && !c.productionOnly) validateStagingEvidence(c, await readEvidence(c.stagingEvidencePath), clock());
   const { serviceInstance: before } = await clients.railway(INSTANCE_QUERY, { serviceId: c.serviceId, environmentId: c.environmentId });
   assertInstance(c, before);
   assertHealthDomain(c, before);
@@ -318,7 +323,7 @@ async function promote(c, clients, { readEvidence, writeEvidence,
   } else {
     await checkHead(c, clients.github);
   }
-  const evidence = { schemaVersion: 1, action: c.action, success: false, startedAt: start,
+  const evidence = { schemaVersion: 1, action: c.action, productionOnly: c.productionOnly, success: false, startedAt: start,
     projectId: c.projectId, serviceId: c.serviceId, environmentId: c.environmentId,
     sourceSha: c.sourceSha, sourceTree: c.sourceTree, ciRunId: c.ciRunId, buildRunId: c.buildRunId,
     imageRef: target, imageDigest: nativeRollback ? nativeRollback.digest : imageDigest(target, c.imageRepository),

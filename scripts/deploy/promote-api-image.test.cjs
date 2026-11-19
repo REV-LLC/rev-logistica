@@ -493,3 +493,30 @@ test('staging evidence rejects invalid versions and malformed dates', () => {
     assert.throws(() => validateStagingEvidence(f.c, { ...f.proof, ...extra }, NOW));
   }
 });
+
+test('manual production-only dispatch requires skipped staging and writes only production', async () => {
+  const f=fixture('production',{PRODUCTION_ONLY:'true',GITHUB_EVENT_NAME:'workflow_dispatch',STAGING_EVIDENCE_PATH:''});
+  f.jobs.jobs[1]={...f.jobs.jobs[1],conclusion:'skipped'};
+  f.options.readEvidence=async()=>{throw Error('Must not read staging evidence')};
+  const e=await promote(f.c,f.clients,f.options);
+  assert.equal(e.success,true);assert.equal(e.productionOnly,true);
+  assert(f.mutations.length>0);
+  assert(f.mutations.every(m=>m.variables.environmentId===f.c.productionId));
+});
+test('production-only cannot run on push, target staging, or hide an executed staging job',async()=>{
+  assert.throws(()=>fixture('production',{PRODUCTION_ONLY:'true',GITHUB_EVENT_NAME:'push'}));
+  assert.throws(()=>fixture('staging',{PRODUCTION_ONLY:'true',GITHUB_EVENT_NAME:'workflow_dispatch'}));
+  const f=fixture('production',{PRODUCTION_ONLY:'true',GITHUB_EVENT_NAME:'workflow_dispatch'});
+  await assert.rejects(promote(f.c,f.clients,f.options),/leave staging skipped/);
+  assert.equal(f.mutations.length,0);
+});
+test('production-only keeps exact-source CI and successful image build requirements',async()=>{
+  for(const fail of ['ci','build','delivery']){
+    const f=fixture('production',{PRODUCTION_ONLY:'true',GITHUB_EVENT_NAME:'workflow_dispatch'});
+    f.jobs.jobs[1]={...f.jobs.jobs[1],conclusion:'skipped'};
+    if(fail==='ci')f.ci.head_sha='f'.repeat(40);
+    if(fail==='build')f.jobs.jobs[0].conclusion='failure';
+    if(fail==='delivery')f.delivery.event='push';
+    await assert.rejects(promote(f.c,f.clients,f.options));assert.equal(f.mutations.length,0);
+  }
+});

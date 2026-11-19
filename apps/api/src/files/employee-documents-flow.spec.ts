@@ -19,7 +19,7 @@ import { DocumentPdfSnapshotService } from '../documents/document-pdf-snapshot.s
 describe('employee documents: real JWT, upload, ownership and filename',()=>{
   let app:any,jwt:JwtService,rows:any[],objects:Map<string,Buffer>,s3:any;
   const own=randomUUID(),other=randomUUID(),users:any={office:{active:true,role:'OFFICE',employee:{id:own,active:true}},driver:{active:true,role:'DRIVER',employee:{id:own,active:true}},employee:{active:true,role:'EMPLOYEE',employee:{id:own,active:true}}};
-  const db:any={user:{findUnique:jest.fn(({where})=>users[where.id])},employee:{findUnique:jest.fn(({where})=>({id:where.id,name:'SAMUEL',lastName:'GUERRERO',active:true}))},customer:{findUnique:jest.fn(()=>({id:'customer'}))},fileObject:{create:jest.fn(({data})=>{const row={id:randomUUID(),...data};rows.push(row);return row}),findMany:jest.fn(({where})=>rows.filter(r=>r.entityType===where.entityType&&r.entityId===where.entityId)),findFirst:jest.fn(({where})=>rows.find(r=>r.id===where.id&&r.entityType===where.entityType&&r.entityId===where.entityId)),findUnique:jest.fn(({where})=>rows.find(r=>r.id===where.id))}};
+  const db:any={user:{findUnique:jest.fn(({where})=>users[where.id])},employee:{findUnique:jest.fn(({where})=>({id:where.id,name:'SAMUEL',lastName:'GUERRERO',active:true}))},customer:{findUnique:jest.fn(()=>({id:'customer'}))},fileObject:{create:jest.fn(({data})=>{const row={id:randomUUID(),...data};rows.push(row);return row}),findMany:jest.fn(({where})=>rows.filter(r=>r.entityType===where.entityType&&r.entityId===where.entityId&&(!where.employeeDocument||r.employeeDocument?.create?.employeeId===where.employeeDocument.is.employeeId))),findFirst:jest.fn(({where})=>rows.find(r=>r.id===where.id&&r.entityType===where.entityType&&r.entityId===where.entityId&&(!where.employeeDocument||r.employeeDocument?.create?.employeeId===where.employeeDocument.is.employeeId))),findUnique:jest.fn(({where})=>rows.find(r=>r.id===where.id))}};
   const token=(who:string)=>jwt.sign({sub:who,role:users[who].role},{expiresIn:'5m'});
   const beforeEnv={...process.env};
   beforeAll(async()=>{
@@ -40,6 +40,8 @@ describe('employee documents: real JWT, upload, ownership and filename',()=>{
     expect(a.body.files[0].objectKey).toMatch(/\/samuel_guerrero_cedula\.pdf$/);
     expect(a.body.files[0].objectKey).not.toEqual(b.body.files[0].objectKey);
     expect(objects.size).toBe(2);
+    expect(a.body.files[0].objectKey).toMatch(/^employee-documents\//);
+    expect(rows[0].employeeDocument).toEqual({create:{employeeId:own}});
   });
   it('lets an employee list and download only its own documents, ignoring forged employee IDs',async()=>{
     const uploadResult=await upload();const id=uploadResult.body.files[0].id;
@@ -50,6 +52,17 @@ describe('employee documents: real JWT, upload, ownership and filename',()=>{
     expect(download.headers['content-disposition']).toContain('samuel_guerrero_cedula.pdf');
     expect(download.headers['cache-control']).toContain('no-store');
     await request(app.getHttpServer()).get(`/employee-portal/documents/${rows[1].id}/download`).set('Authorization','Bearer '+token('employee')).expect(404);
+  });
+  it('keeps operational evidence out of personnel lists and rejects its direct document download',async()=>{
+    const uploaded=await upload();
+    const evidence={id:randomUUID(),entityType:'EMPLOYEE',entityId:own,category:'EVIDENCIA_WHATSAPP',displayName:'operational.jpg'};
+    rows.push(evidence);
+    for(const path of ['/employee-portal/documents',`/files/entities/EMPLOYEE/${own}`]){
+      const result=await request(app.getHttpServer()).get(path).set('Authorization','Bearer '+token(path.startsWith('/files')?'office':'employee')).expect(200);
+      expect(result.body.map((item:any)=>item.id)).toEqual([uploaded.body.files[0].id]);
+    }
+    await request(app.getHttpServer()).get(`/employee-portal/documents/${evidence.id}/download`).set('Authorization','Bearer '+token('employee')).expect(404);
+    expect(rows).toContainEqual(evidence);
   });
   it('blocks access to another employee via generic file endpoints and blocks employee uploads',async()=>{
     await request(app.getHttpServer()).get(`/files/entities/EMPLOYEE/${other}`).set('Authorization','Bearer '+token('driver')).expect(403);
