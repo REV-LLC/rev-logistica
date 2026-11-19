@@ -3,8 +3,10 @@ export function attendanceEmployeeHref(
   period: { from?: string; to?: string; date?: string } = {},
 ) {
   const query = new URLSearchParams();
-  for (const key of ["from", "to", "date"] as const)
-    if (period[key]) query.set(key, period[key]);
+  for (const key of ["from", "to", "date"] as const) {
+    const value = period[key];
+    if (value) query.set(key, value);
+  }
   return `/employees/attendance/${encodeURIComponent(employeeId)}${query.size ? `?${query}` : ""}`;
 }
 
