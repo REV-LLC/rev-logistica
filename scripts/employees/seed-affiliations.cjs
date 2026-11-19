@@ -8,13 +8,13 @@ const normalize = name => name.trim().replace(/\s+/g,' ').toLowerCase();
   try{
     const result=await db.$transaction(async tx=>{
       const schema=await tx.$queryRaw`SELECT current_schema() AS schema`;if(schema[0].schema!=='public')throw Error('Wrong schema');
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('rev_affiliations_seed'))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('rev_affiliations_seed'))`;
       const before=await tx.employeeAffiliationProvider.count();
       for(const item of reference.entities){
         const normalizedName=normalize(item.name);
         await tx.employeeAffiliationProvider.upsert({where:{kind_normalizedName:{kind:item.kind,normalizedName}},create:{kind:item.kind,name:item.name,normalizedName},update:{}});
       }
       return {created:await tx.employeeAffiliationProvider.count()-before,totals:await tx.employeeAffiliationProvider.groupBy({by:['kind'],_count:{_all:true}}),employeeAssignmentsChanged:false};
-    });console.log(JSON.stringify(result));
+    },{timeout:30000,maxWait:10000});console.log(JSON.stringify(result));
   }finally{await db.$disconnect()}
 })().catch(error=>{console.error(error.message.replace(/postgres(?:ql)?:\/\/\S+/g,'[redacted]'));process.exitCode=1});
