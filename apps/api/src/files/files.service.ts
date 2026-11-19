@@ -338,7 +338,7 @@ export class FilesService {
       providerWarehouseId: string | null;
     }> = [];
     const personnelDocument = entityType === 'EMPLOYEE' && CATEGORIES_BY_ENTITY.EMPLOYEE.has(category);
-    const employee = personnelDocument ? await this.prisma.employee.findUnique({ where: { id: entityId }, select: { name: true, lastName: true } }) : null;
+    const employee = personnelDocument ? await this.prisma.employee.findUnique({ where: { id: entityId }, select: { name: true, lastName: true, epsId: true, arlId: true } }) : null;
     if (personnelDocument && !employee) throw new NotFoundException('Empleado no encontrado');
     for (const file of files) {
       const extension =
@@ -380,9 +380,12 @@ export class FilesService {
         );
       }
 
+      const fileId = randomUUID();
+      const certificateKind = personnelDocument && (category === 'EPS' || category === 'ARL') ? category : null;
       const publicUrl = `${config.publicBaseUrl}/${objectKey}`;
       const created = await this.prisma.fileObject.create({
         data: {
+          id: fileId,
           documentId: entityType === 'DOCUMENT' ? entityId : null,
           entityType,
           entityId,
@@ -398,7 +401,7 @@ export class FilesService {
           expiresAt,
           createdBy,
           providerWarehouseId,
-          ...(personnelDocument ? { employeeDocument: { create: { employeeId: entityId } } } : {}),
+          ...(personnelDocument ? { employeeDocument: { create: { employeeId: entityId, ...(certificateKind ? { affiliationRecognition: { create: { employeeId: entityId, sourceFileObjectId: fileId, kind: certificateKind, expectedProviderId: (certificateKind === 'EPS' ? employee?.epsId : employee?.arlId) || null } } } : {}) } } } : {}),
         },
         select: this.fileSelect,
       });

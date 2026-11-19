@@ -64,6 +64,12 @@
           "/app/apps/api/assets"
         ]
       }
+    ],
+    "aptPackages": [
+      "...",
+      "poppler-utils",
+      "tesseract-ocr",
+      "tesseract-ocr-spa"
     ]
   }
 }

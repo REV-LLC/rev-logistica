@@ -1592,6 +1592,7 @@ model Owner {
 }
 
 model Employee {
+  affiliationRecognitions EmployeeAffiliationRecognition[]
   personalDocuments EmployeeDocument[]
   epsId String?
   arlId String?
@@ -2240,6 +2241,7 @@ model MiRevMedicalDiagnosis {
 
 
 model EmployeeAffiliationProvider {
+  recognitions EmployeeAffiliationRecognition[]
   id String @id @default(uuid())
   kind String
   name String @db.VarChar(160)
@@ -2254,6 +2256,7 @@ model EmployeeAffiliationProvider {
 
 // Personnel records only. Operational evidence keeps its existing report relations.
 model EmployeeDocument {
+  affiliationRecognition EmployeeAffiliationRecognition?
   id String @id @default(uuid())
   employeeId String
   fileObjectId String @unique
@@ -2261,4 +2264,34 @@ model EmployeeDocument {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
   @@index([employeeId, createdAt])
+}
+
+model EmployeeAffiliationRecognition {
+  id String @id @default(uuid())
+  employeeDocumentId String? @unique
+  employeeId String
+  sourceFileObjectId String
+  kind String
+  status String @default("PENDING")
+  reason String?
+  candidateProviderId String?
+  expectedProviderId String?
+  previousProviderId String?
+  identityVerified Boolean @default(false)
+  issuedAt DateTime? @db.Date
+  readerMethod String?
+  recognizerVersion String @default("local-v1")
+  attempts Int @default(0)
+  leaseToken String?
+  leaseUntil DateTime?
+  reviewedBy String?
+  reviewedAt DateTime?
+  appliedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employeeDocument EmployeeDocument? @relation(fields:[employeeDocumentId],references:[id],onDelete:SetNull)
+  employee Employee @relation(fields:[employeeId],references:[id],onDelete:Restrict)
+  candidateProvider EmployeeAffiliationProvider? @relation(fields:[candidateProviderId],references:[id],onDelete:Restrict)
+  @@index([status,leaseUntil,createdAt])
+  @@index([employeeId,createdAt])
 }
