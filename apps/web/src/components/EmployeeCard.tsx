@@ -73,16 +73,17 @@ function EmployeeStatusBadge({ active }: { active: boolean }) {
 }
 
 // Compact identity from the employee card, without its background or management actions.
-export function EmployeeCardIdentity({ employee, photoSize = 56, showRole = true }: {
+export function EmployeeCardIdentity({ employee, photoSize = 56, showRole = true, nameLines }: {
   employee: Pick<EmployeeCardRecord, 'id' | 'name' | 'lastName' | 'role' | 'active'>;
   photoSize?: number;
   showRole?: boolean;
+  nameLines?: number;
 }) {
   return <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
     <EmployeePhotoControl employee={employee} size={photoSize} grayscale={!employee.active} />
     <Stack gap={2} style={{ minWidth: 0 }}>
-      <Text fw={700} size="lg" lh={1.2} style={{ overflowWrap: 'anywhere' }}>{getEmployeeCardFullName(employee)}</Text>
-      {showRole ? <Text size="sm" c="dimmed">{employeeCardRoleLabelByValue[employee.role]}</Text> : null}
+      <Text fw={700} size="lg" lh={1.2} lineClamp={nameLines} title={getEmployeeCardFullName(employee)} style={{ overflowWrap: 'anywhere', minHeight: nameLines ? `${nameLines * 1.2}em` : undefined }}>{getEmployeeCardFullName(employee)}</Text>
+      {showRole ? <Text size="sm" c="dimmed" lh={nameLines ? 1.4 : undefined} lineClamp={nameLines ? 1 : undefined} title={employeeCardRoleLabelByValue[employee.role]}>{employeeCardRoleLabelByValue[employee.role]}</Text> : null}
     </Stack>
   </Group>;
 }

@@ -290,11 +290,45 @@ export class EmployeeActivitiesService {
   async review(
     employeeId: string,
     id: string,
-    action: 'CONFIRM' | 'DISMISS',
+    action: 'CONFIRM' | 'DISMISS' | 'CORRECT',
     userId: string,
+    correction?: { verifiedEnteredAt?: string; verifiedLeftAt?: string | null },
   ) {
-    if (!['CONFIRM', 'DISMISS'].includes(action))
+    if (!['CONFIRM', 'DISMISS', 'CORRECT'].includes(action))
       throw new BadRequestException('Acción inválida.');
+    if (action === 'CORRECT') {
+      const parse = (value?: string) => {
+        if (
+          !value ||
+          !/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ||
+          !Number.isFinite(Date.parse(value))
+        )
+          throw new BadRequestException(
+            'Selecciona una fecha y hora válidas con zona horaria.',
+          );
+        parseCalendarDate(value.slice(0, 10));
+        return new Date(value);
+      };
+      const entered = parse(correction?.verifiedEnteredAt);
+      const left = correction?.verifiedLeftAt
+        ? parse(correction.verifiedLeftAt)
+        : null;
+      if (left && left <= entered)
+        throw new BadRequestException(
+          'La salida corregida debe ser posterior a la entrada.',
+        );
+      return this.reviewTransaction(employeeId, id, action, userId, {
+        verifiedEnteredAt: entered,
+        verifiedLeftAt: left,
+      });
+    }
+    if (
+      correction?.verifiedEnteredAt !== undefined ||
+      correction?.verifiedLeftAt !== undefined
+    )
+      throw new BadRequestException(
+        'Usa Corregir horas para modificar las horas revisadas.',
+      );
     return this.reviewTransaction(employeeId, id, action, userId);
   }
   private async reviewTransaction(

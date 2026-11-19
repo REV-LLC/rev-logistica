@@ -16,11 +16,13 @@ import { apiBlob } from "@/lib/api";
 
 export default function AttendanceEvidencePhoto({
   fileId,
+  punchId,
   label,
-}: {
-  fileId: string;
-  label: string;
-}) {
+  compact = false,
+}: { label: string; compact?: boolean } & (
+  | { fileId: string; punchId?: never }
+  | { punchId: string; fileId?: never }
+)) {
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -49,7 +51,11 @@ export default function AttendanceEvidencePhoto({
       url: string | undefined;
     setFailed(false);
     setThumbnail(null);
-    void apiBlob(`/files/${fileId}/thumbnail`)
+    void apiBlob(
+      punchId
+        ? `/attendance/punches/${punchId}/selfie`
+        : `/files/${fileId}/thumbnail`,
+    )
       .then((blob) => {
         if (!cancelled) {
           url = URL.createObjectURL(blob);
@@ -63,14 +69,18 @@ export default function AttendanceEvidencePhoto({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [visible, fileId, retry]);
+  }, [visible, fileId, punchId, retry]);
   useEffect(() => {
     if (!opened) return;
     let cancelled = false,
       url: string | undefined;
     setOriginalFailed(false);
     setOriginal(null);
-    void apiBlob(`/files/${fileId}/download`)
+    void apiBlob(
+      punchId
+        ? `/attendance/punches/${punchId}/selfie`
+        : `/files/${fileId}/download`,
+    )
       .then((blob) => {
         if (!cancelled) {
           url = URL.createObjectURL(blob);
@@ -84,9 +94,9 @@ export default function AttendanceEvidencePhoto({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [opened, fileId]);
+  }, [opened, fileId, punchId]);
   return (
-    <Box ref={container} mih={100}>
+    <Box ref={container} mih={compact ? 132 : 100}>
       {thumbnail && !failed ? (
         <UnstyledButton
           w="100%"
@@ -96,7 +106,8 @@ export default function AttendanceEvidencePhoto({
           <Image
             src={thumbnail}
             alt={label}
-            mah={230}
+            h={compact ? 132 : undefined}
+            mah={compact ? 132 : 230}
             fit="contain"
             radius="sm"
             onError={() => setFailed(true)}

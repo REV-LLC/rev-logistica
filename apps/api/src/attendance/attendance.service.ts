@@ -417,10 +417,12 @@ export class AttendanceService {
     });
     return { revoked: true };
   }
-  async list(actor: Actor, cursor?: string, status?: string) {
+  async list(actor: Actor, cursor?: string, status?: string, kind?: string) {
     await this.actor(actor, true);
+    if (kind && !['CHECK_IN', 'CHECK_OUT'].includes(kind))
+      throw new BadRequestException('Selecciona entradas o salidas.');
     return this.prisma.attendancePunch.findMany({
-      where: status ? { status } : {},
+      where: { ...(status ? { status } : {}), ...(kind ? { kind } : {}) },
       orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       take: 50,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -447,11 +449,28 @@ export class AttendanceService {
       orderBy: [{ name: 'asc' }, { lastName: 'asc' }, { id: 'asc' }],
     });
     const shifts = await this.prisma.worksiteAttendance.findMany({
-      where: { employee: { active: true }, OR: [{ enteredAt: { gte: start, lt: end } }, { leftAt: { gte: start, lt: end } }] },
-      select: { employeeId: true, enteredAt: true, leftAt: true, punches: { select: { kind: true, status: true, occurredAt: true } } },
+      where: {
+        employee: { active: true },
+        OR: [
+          { enteredAt: { gte: start, lt: end } },
+          { leftAt: { gte: start, lt: end } },
+        ],
+      },
+      select: {
+        employeeId: true,
+        enteredAt: true,
+        leftAt: true,
+        punches: { select: { kind: true, status: true, occurredAt: true } },
+      },
     });
     const events = dailyEmployeeEvents(shifts, start, end);
-    return { date, employees: employees.map(employee => ({ ...employee, ...(events.get(employee.id) ?? { entry: null, exit: null }) })) };
+    return {
+      date,
+      employees: employees.map((employee) => ({
+        ...employee,
+        ...(events.get(employee.id) ?? { entry: null, exit: null }),
+      })),
+    };
   }
   async evidence(actor: Actor, id: string) {
     const user = await this.actor(

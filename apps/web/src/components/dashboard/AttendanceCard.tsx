@@ -7,6 +7,7 @@ import { IconRefresh } from '@tabler/icons-react';
 import EmployeeAvatar from '@/components/EmployeeAvatar';
 import { api } from '@/lib/api';
 import styles from './AttendanceCard.module.css';
+import { attendanceEmployeeHref } from '@/lib/attendance-navigation';
 
 type Event = { at: string; status: string } | null;
 type Summary = { date: string; employees: { id: string; name: string; lastName: string | null; entry: Event; exit: Event }[] };
@@ -49,7 +50,7 @@ export default function AttendanceCard() {
         const time = event ? new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(event.at)) : null;
         const description = `${name}: ${mode === 'entry' ? 'Entrada' : 'Salida'} ${labels[status]}`;
         return <Tooltip key={employee.id} label={`${description}${time ? ` · ${time}` : ''}`} withArrow events={{ hover: true, focus: true, touch: true }}>
-          <Link href={`/employees/attendance?${new URLSearchParams({ employeeId: employee.id, date: report.date })}`} className={styles.employee} aria-label={description}>
+          <Link href={attendanceEmployeeHref(employee.id, { date: report.date })} className={styles.employee} aria-label={description}>
           <span className={styles.ring} data-state={status}><EmployeeAvatar employee={employee} size={52} /></span>
           </Link>
         </Tooltip>;
