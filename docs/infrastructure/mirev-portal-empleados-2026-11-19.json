@@ -1,0 +1,93 @@
+{
+  "fecha": "2026-11-19",
+  "proyecto_id": "bec9984e-3e3a-48c8-9d75-8c87d591b931",
+  "entorno": "production",
+  "environment_id": "72a66cb9-3fc8-4c61-979a-56435cd20e8a",
+  "dominio": "https://mirev.revcontractorsllc.com",
+  "configuracion_oficina": "https://mirev.revcontractorsllc.com/attendance/mobile/office",
+  "fuentes": {
+    "api_commit": "5305dc8",
+    "web_commit": "a040a0351e2d8aabf255e27d52f72e39f9c71c61",
+    "rama": "codex/mirev-production"
+  },
+  "despliegues": {
+    "api": {
+      "service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
+      "anterior": "a43a0308-045f-4faa-8d69-281572d39754",
+      "actual": "644f93f0-f38b-42f3-927e-7aecfdff9bc2",
+      "estado": "SUCCESS"
+    },
+    "web": {
+      "service_id": "2b16f18a-2011-48cf-9706-01552c77e5a8",
+      "anterior": "c9dfd890-2da6-49cc-af1c-c2bffa3993da",
+      "actual": "fecb661f-181d-4b37-8686-3637c1def826",
+      "estado": "SUCCESS"
+    }
+  },
+  "migracion": {
+    "nombre": "20261119170000_mirev_employee_portal",
+    "schema": "public",
+    "estado": "aplicada_y_registrada",
+    "columnas_employee": [
+      "eps",
+      "arl"
+    ],
+    "tablas": [
+      "MiRevMedicalLeave",
+      "MiRevMedicalDiagnosis"
+    ],
+    "datos_existentes_modificados": false,
+    "afiliaciones_iniciales": "null; configurar por Admin/Office, sin inventar entidades"
+  },
+  "alcance": [
+    "Logo al home, incluyendo reinicio del paso de captura",
+    "Perfil con EPS/ARL y tabs Mis documentos, Prestamos y Bitacora",
+    "Documentos propios con descarga autenticada",
+    "Oficina configura EPS/ARL sobre Employee compartido",
+    "Incapacidad diaria con GPS, motivo corto y selector EPS/ARL",
+    "Selfie exigida por servidor si falta entrada CHECK_IN no rechazada de hoy en Colombia",
+    "Card diaria y diagnostico adjuntable despues; evidencia cifrada en R2",
+    "Peticion solo boton y aviso de proximamente",
+    "Camara y boton centrados en pantalla movil"
+  ],
+  "limites": {
+    "incapacidad": "Una por empleado/dia, motivo hasta 500 caracteres; GPS de hasta 120 segundos",
+    "diagnostico": "PDF/JPEG/PNG/WEBP, 10 MB, hasta 5 soportes",
+    "selfie": "Evidencia de captura; no se declara coincidencia facial ni se modifica referencia",
+    "nomina_y_jornada": "No crea marcaciones, no cierra jornada y no modifica nomina"
+  },
+  "qa": {
+    "pruebas_api": 64,
+    "pruebas_frontend": 21,
+    "builds": [
+      "Nest API",
+      "Next.js completo",
+      "Docker Railway API",
+      "Docker Railway web"
+    ],
+    "migracion_local": "PostgreSQL 16 desechable con esquema anterior y datos ficticios; contenedor eliminado",
+    "http_local": "API Nest y login JWT normal, con/sin entrada, aislamiento entre empleados, diagnostico persistido y falta de selfie bloqueada",
+    "navegador": "Chrome mediante computer use; 390x844, 360x640 y 1280x800",
+    "boton_foto_360x640": {
+      "asistencia_borde_inferior_px": 579,
+      "incapacidad_borde_inferior_px": 584,
+      "visible": true
+    },
+    "produccion": "Sesion real aportada por usuario: home, logo, perfil, EPS/ARL, documentos y editor de oficina sin guardar cambios; consola sin errores",
+    "rutas_sin_sesion": "health 200; documentos, incapacidad y oficina 401",
+    "datos_prueba_en_produccion": false,
+    "fixtures_en_upload": false,
+    "limitaciones": [
+      "Camara/GPS sinteticos solo en QA local; pendiente prueba fisica Android",
+      "Extension Chrome sin permiso file URLs: diagnostico probado por HTTP local y visualizado al recargar"
+    ]
+  },
+  "servicios_preservados": {
+    "api_rev": "994b402e-8d94-4dcc-a464-06fbee3ef49f",
+    "worker_facial_produccion": "b69b54e9-1f7f-4f2d-af3a-4a4cad4766d2",
+    "attendance_test_api": "d25e73be-14af-4e91-bd0d-6e942126f62a",
+    "web_staging": "a4063db3-23c7-4843-a99a-7ab4ca320c93",
+    "worker_staging": "63449cbe-b770-47cd-9ff3-3ea36bc3c1fb"
+  },
+  "costos": "Mismos servicios y plan Railway y R2; sin nueva clave, servicio o suscripcion. Consumo incremental no medido."
+}
