@@ -1,5 +1,6 @@
 'use client';
 
+import EmployeeCertificateReviews from './EmployeeCertificateReviews';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Alert, Badge, Button, Checkbox, Group, Paper, Select, Stack, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -12,7 +13,7 @@ const endpoint = '/employee-affiliations';
 
 export default function EmployeeAffiliationsWorkspace() {
   const router = useRouter(), params = useSearchParams();
-  const tab = params.get('tab') === 'catalog' ? 'catalog' : 'employees';
+  const tab = params.get('tab') === 'catalog' ? 'catalog' : params.get('tab') === 'certificates' ? 'certificates' : 'employees';
   const [employees, setEmployees] = useState<Employee[] | null>(null), [catalog, setCatalog] = useState<Provider[]>([]);
   const [selected, setSelected] = useState<string | null>(null), [epsId, setEpsId] = useState<string | null>(null), [arlId, setArlId] = useState<string | null>(null);
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [attempt, setAttempt] = useState(0);
@@ -59,11 +60,13 @@ export default function EmployeeAffiliationsWorkspace() {
     {error ? <Alert color="red" title="No se pudo completar" role="alert">{error}</Alert> : null}
     {notice ? <Alert color="teal" role="status">{notice}</Alert> : null}
     {!employees ? error ? <Button variant="light" onClick={() => setAttempt(value => value + 1)}>Reintentar</Button> : <Text role="status">Cargando afiliaciones…</Text> : <section className={workspace.workspace} aria-label="Gestión de afiliaciones">
-      <Tabs value={tab} onChange={value => { if (value && !busy) { setError(''); setNotice(''); router.replace(`/employees/affiliations?tab=${value}`, { scroll: false }); } }} keepMounted={false} variant="unstyled" classNames={{ list: workspace.list, tab: workspace.tab, panel: workspace.panel }}>
+      <Tabs value={tab} onChange={value => { if (value && !busy) { setError(''); setNotice(''); if (value === 'employees') setAttempt(current => current + 1); router.replace(`/employees/affiliations?tab=${value}`, { scroll: false }); } }} keepMounted={false} variant="unstyled" classNames={{ list: workspace.list, tab: workspace.tab, panel: workspace.panel }}>
         <Tabs.List aria-label="Administración de EPS y ARL">
           <Tabs.Tab value="employees" disabled={busy}>Empleados</Tabs.Tab>
           <Tabs.Tab value="catalog" disabled={busy}>Catálogo EPS/ARL</Tabs.Tab>
+          <Tabs.Tab value="certificates" disabled={busy}>Certificados</Tabs.Tab>
         </Tabs.List>
+        <Tabs.Panel value="certificates"><div className={workspace.panel}><EmployeeCertificateReviews providers={catalog} onChanged={()=>setAttempt(value=>value+1)}/></div></Tabs.Panel>
         <Tabs.Panel value="employees"><form onSubmit={event => void assign(event)}><Stack gap="md">
           <Select label="Empleado" placeholder="Buscar empleado" searchable clearable nothingFoundMessage="No hay coincidencias" data={employees.map(item => ({ value: item.id, label: `${item.name} ${item.lastName}`.trim() }))} value={selected} onChange={select} disabled={busy} />
           {selected ? <>

@@ -148,6 +148,7 @@ export default function FileUploadModal({
             : 'Elige los archivos y completa la información con la que aparecerán en el registro.'}
         </Text>
 
+        {entityType === 'EMPLOYEE' && (category === 'EPS' || category === 'ARL') ? <Alert color="blue">Revisaremos la entidad y la afiliación al guardar el certificado. Los casos que necesiten confirmación aparecerán en Empleados → EPS y ARL → Certificados.</Alert> : null}
         {error ? <Alert color="red">{error}</Alert> : null}
 
         <FileInput
@@ -156,7 +157,9 @@ export default function FileUploadModal({
           description={
             mode === 'document-evidence'
               ? 'PNG, JPG o WEBP. Máximo 10 MB por fotografía.'
-              : 'PDF, imágenes, Word, Excel, TXT o CSV. Máximo 100 MB por archivo.'
+              : entityType === 'EMPLOYEE' && (category === 'EPS' || category === 'ARL')
+                ? 'Para lectura automática: PDF, PNG, JPG o WEBP de hasta 10 MB. Los demás archivos se guardan para revisión de oficina.'
+                : 'PDF, imágenes, Word, Excel, TXT o CSV. Máximo 100 MB por archivo.'
           }
           accept={mode === 'document-evidence' ? EVIDENCE_FILE_TYPES : ACCEPTED_FILE_TYPES}
           multiple
