@@ -75,6 +75,7 @@ body {
 
 .inventory-picker-mobile-modal {
   background: #ffffff;
+  overflow: hidden;
 }
 
 .inventory-picker-mobile-modal.mantine-Paper-root {
@@ -84,7 +85,12 @@ body {
 .inventory-picker-mobile-modal-body {
   background: #ffffff;
   height: 100dvh;
+  overflow: hidden;
   padding: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .inventory-picker-mobile-shell {
@@ -95,6 +101,7 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   position: relative;
 }
@@ -148,24 +155,25 @@ body {
   padding: 0.625rem clamp(1rem, 5vw, 1.5rem);
 }
 
-.inventory-picker-mobile-search-input input {
+.inventory-picker-mobile-search-input .mantine-TextInput-input {
   background: #f3f5f7;
   border-color: transparent;
   border-radius: 0.625rem;
-  font-size: 0.95rem;
+  font-size: 16px;
   padding-inline: 0.875rem;
 }
 
 .inventory-picker-mobile-list {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overscroll-behavior: contain;
 }
 
 .inventory-picker-mobile-list .mantine-ScrollArea-viewport {
   -ms-overflow-style: none;
   scrollbar-width: none;
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }
 
 .inventory-picker-mobile-list .mantine-ScrollArea-viewport::-webkit-scrollbar {
@@ -207,6 +215,7 @@ body {
   font-weight: 700;
   line-height: 1.2;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .inventory-picker-mobile-family-heading span {
@@ -265,6 +274,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .inventory-picker-mobile-row-name {
@@ -320,9 +330,10 @@ body {
   font-weight: 600;
 }
 
-.inventory-picker-mobile-confirm {
+.inventory-picker-mobile-footer .mantine-Button-root.inventory-picker-mobile-confirm {
   flex: 0 0 auto;
   min-width: clamp(6.5rem, 30vw, 8rem);
+  width: auto;
 }
 
 .inventory-picker-mobile-list .mantine-ScrollArea-scrollbar {
