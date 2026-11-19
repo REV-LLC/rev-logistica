@@ -280,6 +280,8 @@ export default function InventoryItemPickerModal({
         opened={opened}
         onClose={onClose}
         fullScreen
+        zIndex={3100}
+        removeScrollProps={{ allowPinchZoom: true }}
         withCloseButton={false}
         padding={0}
         radius={0}
@@ -435,6 +437,7 @@ export default function InventoryItemPickerModal({
       opened={opened}
       onClose={onClose}
       title={title}
+      removeScrollProps={{ allowPinchZoom: true }}
       centered={!isMobile}
       fullScreen={isMobile}
       radius={isMobile ? 0 : 'lg'}
