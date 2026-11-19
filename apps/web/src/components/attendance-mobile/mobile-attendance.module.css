@@ -132,3 +132,26 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+
+.brand { color: inherit; text-decoration: none; border-radius: 8px; }
+.brand:focus-visible { outline: 3px solid #74c0fc; outline-offset: 4px; }
+.cameraViewport { scroll-margin-block: 12px; }
+.cameraViewport .camera { width: min(100%, 390px); height: min(440px, calc(100dvh - 180px)); min-height: 170px; aspect-ratio: auto; margin: 12px auto; }
+.portalActions { display: grid; gap: 12px; margin-top: 20px; }
+.portalPanel { padding: 18px; min-width: 0; }
+.documentList { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.documentRow { padding-block: 14px; border-bottom: 1px solid rgba(255,255,255,.15); overflow-wrap: anywhere; }
+.documentRow p { margin-block: 6px; font-size: 14px; color: #c0cbd3; }
+.portalTabs { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 6px; gap: 4px; }
+.portalTabs button { min-height: 48px; }
+@media (max-width: 48em) { .portalTabs button { flex: 1 1 0; min-width: 0; padding: 10px 4px; font-size: 13px; } }
+.affiliations { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: 14px; font-size: 15px; }
+.affiliations span { overflow-wrap: anywhere; }
+.affiliations strong { margin-right: 6px; }
+.portalForm label { display: flex; flex-direction: column; gap: 7px; font-size: 16px; }
+.portalForm textarea, .portalForm select, .portalForm input:not([type='file']) { width: 100%; padding: 12px; border: 1px solid #65727e; background: #303c45; color: #f1f5f9; border-radius: 10px; font: inherit; }
+.portalForm textarea { resize: vertical; min-height: 100px; }
+.medicalCard { margin-top: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.medicalCard h2 { font-size: 24px; }
+.medicalCard p { overflow-wrap: anywhere; }
+.portalForm { margin-top: 20px; }

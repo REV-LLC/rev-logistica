@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from '@/components/PageTransitionLink';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import { Alert, Button, Container, Skeleton, Stack, Title } from '@mantine/core';
@@ -18,7 +18,7 @@ type ProfileState =
   | { status: 'missing' }
   | { status: 'error' };
 
-export default function EmployeeProfile({ employeeId, selfService = false, portalBasePath, initialEmployee }: { employeeId?: string; selfService?: boolean; portalBasePath?: string; initialEmployee?: EmployeeProfileIdentity }) {
+export default function EmployeeProfile({ employeeId, selfService = false, portalBasePath, initialEmployee, portalDetails, portalWorkspace }: { employeeId?: string; selfService?: boolean; portalBasePath?: string; initialEmployee?: EmployeeProfileIdentity; portalDetails?: ReactNode; portalWorkspace?: ReactNode }) {
   const [state, setState] = useState<ProfileState>(() => initialEmployee ? { status: 'ready', employee: initialEmployee } : { status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const backgroundSrc = employeeProfileBackground(state.status === 'ready' ? state.employee.role : undefined);
@@ -51,6 +51,7 @@ export default function EmployeeProfile({ employeeId, selfService = false, porta
             <div className={styles.contactLine}><IconId size={18} stroke={1.5} aria-hidden /><span>{state.employee.documentId?.trim() ? `Documento · ${state.employee.documentId.trim()}` : 'Documento sin registrar'}</span></div>
             <div className={styles.contactLine}><IconPhone size={18} stroke={1.5} aria-hidden /><span>{state.employee.phone?.trim() || 'Teléfono sin registrar'}</span></div>
           </div>
+          {portalDetails}
           <div className={styles.subtitle}>
             <span>{employeeRoleLabels[state.employee.role] ?? 'Empleado'}</span>
             {state.employee.role === 'DRIVER' ? state.employee.vehicles.length ? state.employee.vehicles.map(vehicle =>
@@ -59,7 +60,7 @@ export default function EmployeeProfile({ employeeId, selfService = false, porta
           </div>
         </div>
       </section> : null}
-      {state.status === 'ready' ? <EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} personalProfileHref={portalBasePath ? `${portalBasePath}/profile` : undefined} /> : null}
+      {state.status === 'ready' ? portalWorkspace ?? <EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} personalProfileHref={portalBasePath ? `${portalBasePath}/profile` : undefined} /> : null}
       {state.status === 'missing' ? <Alert color="red" title="Empleado no disponible" role="alert">{selfService ? 'No tienes un empleado activo vinculado a tu cuenta. Contacta a administración.' : 'No se encontró el empleado de este enlace.'}</Alert> : null}
       {state.status === 'error' ? <Alert color="red" title="No se pudo cargar el perfil" role="alert">
         Comprueba la conexión e intenta de nuevo.

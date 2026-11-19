@@ -1,5 +1,10 @@
 'use client';
 
+import { getAttendanceLocation as getLocation } from '@/lib/attendance-geolocation';
+import MiRevMedicalLeave from './MiRevMedicalLeave';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { useCameraViewport } from './useCameraViewport';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2, IconLogin, IconLogout, IconMapPin, IconVolume } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
@@ -13,6 +18,8 @@ import MiRevEmployeeProfile, { MiRevEmployeeProvider, MiRevProfileButton } from 
 import { hasPriorDayShift, suggestAttendanceSite } from '@/lib/attendance-mobile-rules';
 import styles from './mobile-attendance.module.css';
 
+const MiRevOffice = dynamic(() => import('./MiRevOffice'), { loading: () => <p role="status">Cargando empleados…</p> });
+
 type Me = {
   employee: { id: string; name: string };
   referenceReady: boolean;
@@ -23,20 +30,11 @@ type Me = {
 };
 type Step = 'home' | 'sites' | 'locating' | 'camera' | 'sending' | 'retry' | 'done';
 type Attempt = { me: Me; siteId: string; location: GeolocationPosition };
-function getLocation() {
-  return new Promise<GeolocationPosition>((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('Este celular no permite obtener la ubicación. Pide ayuda al encargado.'));
-    navigator.geolocation.getCurrentPosition(resolve, error => reject(new Error(
-      error.code === 1 ? 'No tenemos permiso de ubicación. Pide ayuda al encargado.' :
-        'No encontramos tu ubicación. Acércate a un lugar despejado y vuelve a intentar.',
-    )), { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-  });
-}
 function shortTime(date: string) {
   return new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' }).format(new Date(date));
 }
 
-export default function MobileAttendance({ view = 'attendance' }: { view?: 'attendance' | 'profile' }) {
+export default function MobileAttendance({ view = 'attendance' }: { view?: 'attendance' | 'profile' | 'office' }) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [help, setHelp] = useState(false);
   const [today, setToday] = useState<Date | null>(null);
@@ -51,9 +49,9 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
   const expired = useCallback(() => { clearToken(); setSignedIn(false); }, []);
 
   return <MiRevEmployeeProvider enabled={signedIn === true} onExpired={expired}><main className={styles.page}>
-    <div className={`${styles.screen} ${view === 'profile' ? styles.profileScreen : ''}`}>
+    <div className={`${styles.screen} ${view !== 'attendance' ? styles.profileScreen : ''}`}>
       <header className={styles.header}>
-        <div className={styles.brand}><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></div>
+        <Link href="/attendance/mobile" className={styles.brand} aria-label="Inicio de MiREV"><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></Link>
         <div className={styles.headerActions}><button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
           <IconHelpCircle size={25} aria-hidden="true" /><span>Ayuda</span>
         </button>
@@ -61,7 +59,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
       </header>
       {today ? <p className={styles.today}><time dateTime={today.toISOString()}>{new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).format(today)}</time></p> : null}
       {signedIn === null ? <Loading label="Un momento…" /> : signedIn ?
-        <FaceEnrollmentGate onExpired={expired}>{view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} />}</FaceEnrollmentGate> : <Login onLogin={() => setSignedIn(true)} />}
+        <FaceEnrollmentGate onExpired={expired}>{view === 'office' ? <MiRevOffice /> : view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} />}</FaceEnrollmentGate> : <Login onLogin={() => setSignedIn(true)} />}
       {help ? <section id="attendance-help" className={styles.helpContent}>
         <h2>Estamos para ayudarte</h2>
         <ol><li>Toca el botón de entrada o salida.</li><li>Mira la cámara y toca «Tomar foto».</li><li>Espera la confirmación.</li></ol>
@@ -130,6 +128,7 @@ function Attendance({ onExpired, today }: { onExpired: () => void; today: Date |
   useEffect(() => { atHome.current = step === 'home'; }, [step]);
   const [error, setError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
+  const cameraRegion = useCameraViewport(step === 'camera' && !nativeCamera, cameraReady);
   const [result, setResult] = useState<AttendancePunch | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
@@ -333,13 +332,13 @@ function Attendance({ onExpired, today }: { onExpired: () => void; today: Date |
         manualSite.current = true; suggestionVersion.current++; setSuggestion('idle'); setSiteId(site.id); setStep('home');
       }} onBack={() => setStep('home')} /> : step === 'camera' ? <section>
         <div className={styles.greeting}><h1>{nativeCamera ? 'Toma una selfie' : 'Mira la cámara'}</h1><p>{nativeCamera ? 'Usa la cámara frontal y evita acercar demasiado el celular.' : 'Deja visibles la cabeza completa y los hombros.'}</p></div>
-        {nativeCamera ? <NativeSelfieCapture onPhoto={photo => captureImage(async () => photo)} /> : <>
+        {nativeCamera ? <NativeSelfieCapture onPhoto={photo => captureImage(async () => photo)} /> : <div ref={cameraRegion} className={styles.cameraViewport}>
         <div className={styles.camera}>
           <video ref={video} playsInline muted aria-label="Cámara frontal" onLoadedData={() => setCameraReady(true)} />
           <div className={styles.faceGuide} aria-hidden="true" /><span className={styles.cameraHint}>Aleja el celular hasta encajar en el óvalo</span>
           {!cameraReady ? <div className={styles.cameraLoading} role="status">Abriendo cámara…</div> : null}
         </div>
-        <button className={styles.primary} disabled={!cameraReady} onClick={capture}><IconCamera size={32} aria-hidden="true" />TOMAR FOTO</button></>}
+        <button className={styles.primary} disabled={!cameraReady} onClick={capture}><IconCamera size={32} aria-hidden="true" />TOMAR FOTO</button></div>}
         <button className={`${styles.secondary} ${styles.footer}`} onClick={() => { attempt.current = null; setStep('home'); }}>Cancelar</button>
       </section> : step === 'retry' ? <section className={styles.stack}>
         <IconClock size={80} className={styles.stateIcon} aria-hidden="true" /><h1>Falta la confirmación</h1>
@@ -376,7 +375,7 @@ function Attendance({ onExpired, today }: { onExpired: () => void; today: Date |
           </div>
           {!isExit ? <p className={styles.siteHint} role="status">{suggestion === 'checking' ? 'Buscando una obra cercana…' : suggestion === 'found' ? 'Sugerida por tu ubicación. Confirma que estás en esta obra antes de marcar.' : !site ? 'Selecciona la obra donde estás.' : 'Verifica la obra antes de marcar.'}</p> : null}
         </section>
-
+        <MiRevMedicalLeave today={today} />
       </>}
 
   </>;

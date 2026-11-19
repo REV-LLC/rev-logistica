@@ -9,6 +9,8 @@ export type EmployeeProfileIdentity = {
   active: boolean;
   documentId: string | null;
   phone: string | null;
+  eps?: string | null;
+  arl?: string | null;
   vehicles: EmployeeProfileVehicle[];
 };
 

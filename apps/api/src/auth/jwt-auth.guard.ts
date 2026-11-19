@@ -37,8 +37,10 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync(token);
       if (payload.role === 'EMPLOYEE') {
+        const portalRoute = (request.method === 'GET' && (['/employee-portal/documents', '/employee-portal/medical-leave/today'].includes(request.path) || /^\/employee-portal\/documents\/[0-9a-f-]{36}\/download$/i.test(request.path)))
+          || (request.method === 'POST' && (request.path === '/employee-portal/medical-leave' || /^\/employee-portal\/medical-leave\/[0-9a-f-]{36}\/diagnosis$/i.test(request.path)));
         const personalRead = request.method === 'GET' && (['/employee-portal/profile', '/employee-portal/loans', '/employee-portal/activities', '/settings/loan-display'].includes(request.path) || /^\/employees\/[0-9a-f-]{36}\/photo$/i.test(request.path));
-        if (!request.path.startsWith('/attendance/') && request.path !== '/attendance' && !(process.env.MIREV_API_ONLY === 'true' && personalRead)) throw new UnauthorizedException();
+        if (!request.path.startsWith('/attendance/') && request.path !== '/attendance' && !(process.env.MIREV_API_ONLY === 'true' && (personalRead || portalRoute))) throw new UnauthorizedException();
         const current = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { employee: true } });
         if (!current?.active || current.role !== 'EMPLOYEE' || !current.employee?.active) throw new UnauthorizedException();
       }

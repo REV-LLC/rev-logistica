@@ -1,3 +1,7 @@
+import { MiRevMedicalService } from './mirev-medical.service';
+import { AttendanceStorageService } from '../attendance/attendance-storage.service';
+import { MiRevPortalService } from './mirev-portal.service';
+import { MiRevPortalController } from './mirev-portal.controller';
 import { Module, Controller, Get, Param, ParseUUIDPipe, Query, Req, Res, UseGuards, ForbiddenException, Header, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -57,7 +61,7 @@ class MiRevPersonalController {
 // Intentionally no scheduler, WhatsApp consumer, migrations or business modules.
 @Module({
   imports: [CacheModule.register({ isGlobal: true }), ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 120 }]), PrismaModule, AuthModule, AttendanceModule],
-  controllers: [MiRevHealthController, MiRevPersonalController, EmployeePortalController],
-  providers: [EmployeesService, EmployeeLoansService, EmployeeActivitiesService, SettingsService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  controllers: [MiRevHealthController, MiRevPersonalController, EmployeePortalController, MiRevPortalController],
+  providers: [MiRevMedicalService, AttendanceStorageService, MiRevPortalService, EmployeesService, EmployeeLoansService, EmployeeActivitiesService, SettingsService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class MiRevModule {}

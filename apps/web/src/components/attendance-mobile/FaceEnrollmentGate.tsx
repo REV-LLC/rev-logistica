@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconCamera, IconLoader2, IconRefresh } from '@tabler/icons-react';
 import { api, ApiError } from '@/lib/api';
+import { useCameraViewport } from './useCameraViewport';
 import { getToken } from '@/lib/auth';
 import NativeSelfieCapture, { useNativeSelfieCamera } from './NativeSelfieCapture';
 import styles from './mobile-attendance.module.css';
@@ -34,6 +35,7 @@ export default function FaceEnrollmentGate({ children, onExpired }: { children: 
 function FaceEnrollment({ onDone, onExpired, sessionToken }: { onDone: () => void; onExpired: () => void; sessionToken: string | null }) {
   const nativeCamera = useNativeSelfieCamera();
   const [camera, setCamera] = useState(false), [ready, setReady] = useState(false);
+  const cameraRegion = useCameraViewport(camera && !nativeCamera, ready);
   const [photo, setPhoto] = useState<Blob | null>(null), [preview, setPreview] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const video = useRef<HTMLVideoElement>(null), stream = useRef<MediaStream | null>(null);
@@ -105,10 +107,10 @@ function FaceEnrollment({ onDone, onExpired, sessionToken }: { onDone: () => voi
       <button className={styles.primary} disabled={busy} onClick={() => void save()}>{busy ? <><IconLoader2 className={styles.spinner} aria-hidden="true" />GUARDANDO…</> : 'GUARDAR MI ROSTRO Y CONTINUAR'}</button>
       <button className={styles.secondary} disabled={busy} onClick={() => { setPhoto(null); setError(''); setCamera(true); }}><IconRefresh aria-hidden="true" />VOLVER A TOMAR FOTO</button>
     </> : camera ? <>
-      {nativeCamera ? <NativeSelfieCapture onPhoto={selected} /> : <>
+      {nativeCamera ? <NativeSelfieCapture onPhoto={selected} /> : <div ref={cameraRegion} className={styles.cameraViewport}>
         <div className={styles.camera}><video ref={video} autoPlay muted playsInline onLoadedData={() => setReady(true)} /><div className={styles.faceGuide} aria-hidden="true" />{!ready ? <div role="status" className={styles.cameraLoading}>Abriendo cámara…</div> : null}</div>
         <button className={styles.primary} disabled={!ready} onClick={() => void capture()}><IconCamera aria-hidden="true" />TOMAR FOTO</button>
-      </>}
+      </div>}
       <button className={styles.secondary} onClick={() => { stop(); setCamera(false); }}>VOLVER</button>
     </> : <button className={styles.primary} onClick={() => { setError(''); setCamera(true); }}><IconCamera aria-hidden="true" />REGISTRAR MI ROSTRO</button>}
   </section>;

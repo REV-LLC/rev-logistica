@@ -7,6 +7,7 @@ import { IconLoader2, IconUserCircle } from '@tabler/icons-react';
 import EmployeeAvatar from '@/components/EmployeeAvatar';
 import { api, ApiError } from '@/lib/api';
 import { employeeProfileName, type EmployeeProfileIdentity } from '@/lib/employee-profile';
+import MiRevPortalWorkspace from './MiRevPortalWorkspace';
 import styles from './mobile-attendance.module.css';
 
 type ProfileState = { status: 'loading' } | { status: 'ready'; employee: EmployeeProfileIdentity } | { status: 'error'; missing: boolean };
@@ -51,5 +52,5 @@ export default function MiRevEmployeeProfile() {
     <p className={styles.error} role="alert">{context.state.missing ? 'No tienes un empleado activo vinculado a esta cuenta. Contacta a oficina.' : 'No pudimos cargar tu perfil. Revisa la conexión y vuelve a intentar.'}</p>
     <button className={styles.secondary} onClick={context.retry}>Reintentar</button>
   </section>;
-  return <div className={styles.profileView}><EmployeeProfile selfService portalBasePath="/attendance/mobile" initialEmployee={context.state.employee} /></div>;
+  return <div className={styles.profileView}><EmployeeProfile selfService portalBasePath="/attendance/mobile" initialEmployee={context.state.employee} portalDetails={<div className={styles.affiliations}><span><strong>EPS</strong> {context.state.employee.eps || 'Sin registrar'}</span><span><strong>ARL</strong> {context.state.employee.arl || 'Sin registrar'}</span></div>} portalWorkspace={<MiRevPortalWorkspace employeeId={context.state.employee.id} />} /></div>;
 }

@@ -1592,6 +1592,9 @@ model Owner {
 }
 
 model Employee {
+  eps String? @db.VarChar(160)
+  arl String? @db.VarChar(160)
+  mirevMedicalLeaves MiRevMedicalLeave[]
   mirevFaceEnrollment MiRevFaceEnrollment?
   faceReference EmployeeFaceReference?
   attendancePunches AttendancePunch[]
@@ -2179,4 +2182,40 @@ model MiRevFaceEnrollment {
   modelVersion String
   evidenceKey String
   createdAt DateTime @default(now())
+}
+
+
+model MiRevMedicalLeave {
+  id String @id @default(uuid())
+  employeeId String
+  userId String
+  clientRequestId String
+  requestHash String
+  day DateTime @db.Date
+  description String @db.VarChar(500)
+  providerType String
+  providerName String? @db.VarChar(160)
+  latitude Float
+  longitude Float
+  accuracyMeters Float
+  locationCapturedAt DateTime
+  sourceEntryId String?
+  selfieKey String?
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  diagnoses MiRevMedicalDiagnosis[]
+  @@unique([employeeId, clientRequestId])
+  @@unique([employeeId, day])
+}
+
+model MiRevMedicalDiagnosis {
+  id String @id @default(uuid())
+  medicalLeaveId String
+  name String @db.VarChar(180)
+  mimeType String
+  sizeBytes Int
+  evidenceKey String
+  createdAt DateTime @default(now())
+  medicalLeave MiRevMedicalLeave @relation(fields: [medicalLeaveId], references: [id], onDelete: Restrict)
+  @@index([medicalLeaveId])
 }
