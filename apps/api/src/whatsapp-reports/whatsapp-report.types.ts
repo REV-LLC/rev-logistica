@@ -111,4 +111,4 @@ export const REPORT_LABELS = {
   CHECK_OUT: 'Salida de obra',
 };
 export const HELP =
-  'Puedes reportar:\n1. Daño de equipo o vehículo.\n2. Horómetro con foto.\n3. Petición para oficina y gerencia.\n4. Entrada o salida de obra con ubicación o foto (solo una).\nElige la máquina en la lista o escribe su nombre. Para asistencia, indica el nombre de la obra. Envía un reporte a la vez. Escribe CANCELAR para empezar de nuevo.';
+  'Puedes reportar:\n1. Daño de equipo o vehículo.\n2. Horómetro con foto.\n3. Petición para oficina y gerencia.\nElige la máquina en la lista o escribe su nombre. Envía un reporte a la vez. Escribe CANCELAR para empezar de nuevo.';

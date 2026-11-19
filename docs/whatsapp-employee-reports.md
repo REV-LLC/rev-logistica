@@ -1,5 +1,20 @@
 # Reportes de empleados por WhatsApp
 
+## Estado actual — 19 de noviembre de 2026
+
+El menú de WhatsApp tiene tres opciones: daños, horómetros y peticiones.
+Entrada/salida se registra en MiREV (`https://mirev.revcontractorsllc.com`).
+Los botones antiguos, la opción numérica 4, los comandos de marcación, una
+ubicación sin otro reporte y las confirmaciones de borradores de asistencia
+retirados se redirigen a MiREV. La escritura final también rechaza asistencia.
+La IA puede identificar esa intención para redirigirla, sin crear una jornada.
+Las consultas y jornadas históricas permanecen disponibles en el software.
+
+`WHATSAPP_ATTENDANCE_ENABLED` queda desactivado si está ausente o es `false`.
+Una reactivación del canal legado exige configurar explícitamente `true`; las
+pruebas antiguas optan por ello para conservar cobertura de compatibilidad.
+Las secciones de asistencia siguientes documentan el histórico y esa compatibilidad.
+
 ## Alcance
 
 El mismo número de WhatsApp Cloud API recibe mensajes individuales de empleados. El empleado puede escribir de forma natural, adjuntar fotos, completar la información y responder **SÍ** al resumen. **CANCELAR** descarta el borrador. No necesita una cuenta de usuario del software: sí un registro de empleado activo con teléfono único y normalizable. Se admiten texto, imagen, ubicación nativa y respuestas interactivas. Audio, video y documentos reciben una explicación; no se registran como reportes.
@@ -7,13 +22,13 @@ El mismo número de WhatsApp Cloud API recibe mensajes individuales de empleados
 1. **Daños de equipos y vehículos.** Código de equipo o placa y descripción obligatorios; hasta seis fotos opcionales. Un daño de equipo actualiza su condición e historial. Los vehículos conservan el daño como reporte y alerta; su modelo actual no dispone de un estado de avería equivalente al de los equipos.
 2. **Horómetros.** Equipo por horas o vehículo, valor no negativo y foto obligatoria. La IA propone la lectura de la foto; la confirmación del empleado es obligatoria. Una discrepancia entre foto y valor escrito exige corregirla. Una foto sin lectura clara puede acompañar un valor escrito y confirmado. Nunca se permite disminuir el último horómetro. El registro queda en las lecturas existentes y en Reportes WhatsApp, con la evidencia vinculada.
 3. **Peticiones generales.** Descripción y confirmación. Crea un reporte y una alerta para usuarios ADMIN/OFFICE activos, empleados MANAGER/OPERATIONS_MANAGER/OFFICE activos, Héctor Ramírez y destinatarios adicionales configurados. Los empleados sin usuario también reciben alerta por WhatsApp si tienen teléfono; los usuarios vinculados disponen de la alerta dentro del software. El estado de cada envío se consulta en el reporte; un contacto sin teléfono figura como `NO_PHONE`.
-4. **Entrada/salida de obra.** Obra activa identificada sin ambigüedad y ubicación **o** foto por movimiento: una sola alternativa es suficiente. Si se envía la otra opción, reemplaza a la anterior y exige una nueva confirmación. Se guarda la hora del primer mensaje de ese flujo, suministrada por Meta, y la hora de recepción del mensaje por separado. No se aceptan horas arbitrarias generadas por IA o escritas por el empleado. La entrada crea una jornada abierta vinculada al reporte. La salida exige una entrada anterior abierta en la misma obra y cierra la jornada. Solo puede existir una jornada abierta por empleado. Las fotos adjuntas no verifican identidad, ubicación ni presencia real. El intervalo entrada/salida es tiempo reportado, sin deducir descansos ni calcular nómina.
+**Compatibilidad histórica de entrada/salida (desactivada).** Obra activa identificada sin ambigüedad y ubicación **o** foto por movimiento: una sola alternativa es suficiente. Si se envía la otra opción, reemplaza a la anterior y exige una nueva confirmación. Se guarda la hora del primer mensaje de ese flujo, suministrada por Meta, y la hora de recepción del mensaje por separado. No se aceptan horas arbitrarias generadas por IA o escritas por el empleado. La entrada crea una jornada abierta vinculada al reporte. La salida exige una entrada anterior abierta en la misma obra y cierra la jornada. Solo puede existir una jornada abierta por empleado. Las fotos adjuntas no verifican identidad, ubicación ni presencia real. El intervalo entrada/salida es tiempo reportado, sin deducir descansos ni calcular nómina.
 
 ## Saludo y opciones táctiles
 
-Al escribir «Hola», «Buenos días», «MENÚ» o «Ayuda», el empleado recibe un saludo por el nombre registrado en su ficha y el botón nativo **Ver opciones**. Este abre una lista con cuatro filas: daño, horómetro, petición y entrada/salida. No se envían saludos a teléfonos desconocidos o ambiguos.
+Al escribir «Hola», «Buenos días», «MENÚ» o «Ayuda», el empleado recibe un saludo por el nombre registrado en su ficha y el botón nativo **Ver opciones**. Este abre una lista con tres filas: daño, horómetro y petición. No se envían saludos a teléfonos desconocidos o ambiguos.
 
-La elección se procesa por el identificador de la fila, sin depender del título mostrado ni hacer una consulta de IA. Entrada/salida muestra dos botones. Cuando el resumen cabe en el límite de Meta, se ofrecen **Sí, registrar** y **Cancelar**; los resúmenes largos conservan el texto completo y la confirmación escrita. Los botones de confirmación están vinculados al resumen actual: un botón de un resumen antiguo no confirma otro reporte.
+La elección se procesa por el identificador de la fila, sin depender del título mostrado ni hacer una consulta de IA. Los botones antiguos de entrada/salida muestran el aviso de retiro y el menú vigente. Cuando el resumen cabe en el límite de Meta, se ofrecen **Sí, registrar** y **Cancelar**; los resúmenes largos conservan el texto completo y la confirmación escrita. Los botones de confirmación están vinculados al resumen actual: un botón de un resumen antiguo no confirma otro reporte.
 
 Un saludo o MENÚ conserva el borrador pendiente. Elegir otro flujo inicia un nuevo borrador; CANCELAR lo descarta. También se mantiene la posibilidad de escribir el reporte directamente y adjuntar fotos.
 

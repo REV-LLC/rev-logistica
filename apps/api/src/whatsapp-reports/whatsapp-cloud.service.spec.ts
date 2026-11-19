@@ -13,6 +13,7 @@ describe('WhatsApp Cloud media boundaries', () => {
       WHATSAPP_PHONE_NUMBER_ID: '123',
       WHATSAPP_API_VERSION: 'v25.0',
     };
+    delete process.env.WHATSAPP_ATTENDANCE_ENABLED;
     global.fetch = fetchMock;
     fetchMock.mockReset();
   });
@@ -106,7 +107,7 @@ describe('WhatsApp Cloud media boundaries', () => {
     const payload = JSON.parse(options.body);
     expect(payload.type).toBe('interactive');
     expect(payload.interactive.type).toBe('list');
-    expect(payload.interactive.action.sections[0].rows).toHaveLength(4);
+    expect(payload.interactive.action.sections[0].rows).toHaveLength(3);
     expect(options.redirect).toBe('error');
   });
   it('sends persisted equipment rows and remembered-machine buttons as native interactions', async () => {

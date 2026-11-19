@@ -160,6 +160,7 @@ if (testUrl) {
     }
     beforeAll(async () => {
       process.env.WHATSAPP_REPORTS_ENABLED = 'true';
+      process.env.WHATSAPP_ATTENDANCE_ENABLED = 'true'; // Legacy flow regression coverage; production defaults off.
       process.env.WHATSAPP_PHONE_NUMBER_ID = 'qa-phone';
       process.env.META_APP_SECRET = 'test-secret';
       await prisma.$connect();
@@ -2186,6 +2187,165 @@ if (testUrl) {
           selectionId: (matches!.replyOptions as any).rows[index].id,
         });
         expect(stale?.replyKind).toBe('REPORT_MENU');
+      });
+    });
+    describe('retired WhatsApp attendance with the production default', () => {
+      let originalFlag: string | undefined;
+      let historical: string;
+      const snapshot = async () =>
+        JSON.stringify({
+          reports: await prisma.whatsappReport.findMany({
+            where: { kind: { in: ['CHECK_IN', 'CHECK_OUT'] } },
+            orderBy: { id: 'asc' },
+          }),
+          journeys: await prisma.worksiteAttendance.findMany({
+            orderBy: { id: 'asc' },
+          }),
+        });
+      beforeAll(() => {
+        originalFlag = process.env.WHATSAPP_ATTENDANCE_ENABLED;
+      });
+      beforeEach(async () => {
+        delete process.env.WHATSAPP_ATTENDANCE_ENABLED;
+        await send('Cancelar');
+        cloud.photo.mockClear();
+        files.storeWhatsappEvidence.mockClear();
+        historical = await snapshot();
+      });
+      afterEach(async () => {
+        expect(await snapshot()).toBe(historical);
+      });
+      afterAll(() => {
+        if (originalFlag === undefined)
+          delete process.env.WHATSAPP_ATTENDANCE_ENABLED;
+        else process.env.WHATSAPP_ATTENDANCE_ENABLED = originalFlag;
+      });
+      it.each([
+        'entrada',
+        'salida de la obra',
+        '4',
+        'registrar entrada',
+        'reportar salida',
+      ])(
+        'redirects typed %s without asking AI or downloading evidence',
+        async (text) => {
+          const result = await send(text);
+          expect(result?.status).toBe('PROCESSED');
+          expect(result?.replyText).toContain('MiREV');
+          expect(result?.replyKind).toBe('REPORT_MENU');
+          expect(ai.extract).not.toHaveBeenCalled();
+          expect(cloud.photo).not.toHaveBeenCalled();
+        },
+      );
+      it.each([
+        'report_attendance',
+        'attendance_check_in',
+        'attendance_check_out',
+      ])('rejects an old native button %s', async (selectionId) => {
+        const result = await send('Opción antigua', { selectionId });
+        expect(result?.replyText).toContain('MiREV');
+        expect(ai.extract).not.toHaveBeenCalled();
+      });
+      it.each(['CHECK_IN', 'CHECK_OUT'] as const)(
+        'clears and refuses an old ready %s confirmation',
+        async (kind) => {
+          await prisma.whatsappConversation.update({
+            where: { phone: normalizePhone(employee.phone)! },
+            data: {
+              draft: {
+                ...emptyDraft(),
+                kind,
+                ready: true,
+                confirmationMessageId: 'old-attendance-summary',
+                selectedWorksiteId: site.id,
+              } as any,
+              expiresAt: new Date(Date.now() + 60000),
+            },
+          });
+          const result = await send('Sí, registrar', {
+            selectionId: 'report_confirm:old-attendance-summary',
+            button: true,
+          });
+          expect(result?.replyText).toContain('MiREV');
+          const saved = await prisma.whatsappConversation.findUniqueOrThrow({
+            where: { phone: normalizePhone(employee.phone)! },
+          });
+          expect(saved.draft).toMatchObject({ kind: null, ready: false });
+        },
+      );
+      it('does not resurrect attendance from an initial location', async () => {
+        const result = await send('', {
+          location: { latitude: 3.45, longitude: -76.53 },
+        });
+        expect(result?.replyText).toContain('MiREV');
+        expect(ai.extract).not.toHaveBeenCalled();
+        expect(files.storeWhatsappEvidence).not.toHaveBeenCalled();
+      });
+      it.each(['CHECK_IN', 'CHECK_OUT'] as const)(
+        'redirects AI-inferred %s before resolving a worksite',
+        async (kind) => {
+          ai.extract.mockResolvedValueOnce(
+            extracted({ kind, worksiteReference: 'Obra QA única' }),
+          );
+          const result = await send(
+            kind === 'CHECK_IN'
+              ? 'Ya llegué al colegio'
+              : 'Terminé mi jornada en el colegio',
+          );
+          expect(result?.replyText).toContain('MiREV');
+          expect(ai.suggestWorksites).not.toHaveBeenCalled();
+        },
+      );
+      it.each(['CHECK_IN', 'CHECK_OUT'] as const)(
+        'blocks %s again at the final record boundary',
+        async (kind) => {
+          await expect(
+            records.record(
+              {} as any,
+              employee,
+              { ...emptyDraft(), kind },
+              {
+                assetId: null,
+                vehicleId: null,
+                customerWorksiteId: site.id,
+                label: 'QA',
+              },
+              'retired',
+            ),
+          ).rejects.toThrow('MiREV');
+        },
+      );
+      it('still creates a confirmed general request with attendance disabled', async () => {
+        await send('Petición', { selectionId: 'report_request' });
+        ai.extract.mockResolvedValueOnce(
+          extracted({ kind: 'REQUEST', description: 'Necesito guantes QA' }),
+        );
+        await send('Necesito guantes QA');
+        const confirmed = await send('Sí');
+        expect(
+          await prisma.whatsappReport.findUnique({
+            where: { sourceMessageId: confirmed!.providerMessageId },
+          }),
+        ).toMatchObject({
+          kind: 'REQUEST',
+          description: 'Necesito guantes QA',
+        });
+      });
+      it('does not mistake damage described as salida de humo for a new attendance flow', async () => {
+        await send('Daño', { selectionId: 'report_damage' });
+        ai.extract.mockResolvedValueOnce(
+          extracted({
+            kind: 'DAMAGE',
+            description: 'Salida de humo por el motor',
+            subjectReference: asset.publicCode,
+          }),
+        );
+        const result = await send('Salida de humo por el motor');
+        expect(result?.replyText).not.toContain('ya no se registran');
+        const saved = await prisma.whatsappConversation.findUniqueOrThrow({
+          where: { phone: normalizePhone(employee.phone)! },
+        });
+        expect(saved.draft).toMatchObject({ kind: 'DAMAGE' });
       });
     });
   },
