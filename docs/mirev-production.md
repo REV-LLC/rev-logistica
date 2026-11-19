@@ -115,3 +115,11 @@ La segunda card del perfil (workspace de pestañas) pierde el contorno claro y l
 ### Publicación verificada
 
 REV PR #382 fusionada en production (2109fd7f); CI y promoción inmutable aprobadas. API REV 0f884dd8-167d-4b0a-afe0-9c18b238361f y Vercel dpl_5unEWrchzvbhswCiXTbkj7nLcPWu publicados. MiREV f8966e0: API b9ca1f59-0cc7-455d-8ce5-e3ea000e7b7d y web 9d940e0d-8b36-4fa6-8f7e-32e2cee46af4, ambos SUCCESS. Semilla creó 36 entidades (26 EPS y 10 ARL), sin asignaciones. Sesión real confirmó catálogo, búsqueda y documentos propios en REV y MiREV, además del ajuste de la segunda card. Health 200, rutas de oficina de MiREV 404. Asistencia de pruebas aislada conserva los mismos tres despliegues. Evidencia: docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json.
+
+## Pestañas compactas y revisión de afiliaciones (19 de noviembre)
+
+MiREV usa pestañas propias de 44 px en una fila, iconos de 15 px y etiqueta visual Documentos (nombre accesible Mis documentos). En móvil las tres columnas se adaptan al ancho; bajo 360 px se ocultan los iconos para conservar texto legible. Mantiene foco visible, teclado y reducción de movimiento; REV Logística conserva su selector existente.
+
+Build Next aprobado. Chrome con datos ficticios aislados verificó Documentos → Bitácora → Documentos, panel y URL correctos, sin errores de consola ni desborde a 320, 390 y 1280 px. No se crearon datos de prueba en producción.
+
+Revisión de solo lectura en el Postgres public de producción confirmado: 19 empleados y 13 archivos EMPLOYEE, todos EVIDENCIA_WHATSAPP (JPEG), vinculados a reportes de daños/entrada/salida. Cero archivos EPS/ARL por categoría o fileType en todas las entidades y cero archivos de esas categorías sin entidad. No hay certificados identificados para extraer afiliaciones, por lo que no se modificó ninguna asignación ni se envió contenido a OCR externo. La extracción requiere los certificados correspondientes; no se deduce afiliación de fotografías de asistencia.
