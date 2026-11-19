@@ -1,4 +1,10 @@
 import {
+  whatsappAttendanceEnabled,
+  ATTENDANCE_RETIRED_MESSAGE,
+  isAttendanceSelection,
+  isAttendanceStart,
+} from './whatsapp-report-capabilities';
+import {
   BadRequestException,
   Injectable,
   Logger,
@@ -248,6 +254,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       let draft = activeConversation
         ? (conversation.draft as unknown as Draft)
         : emptyDraft();
+      const retiredAttendanceDraft =
+        !whatsappAttendanceEnabled() &&
+        (isAttendance(draft.kind) || draft.menuStage === 'ATTENDANCE');
+      if (retiredAttendanceDraft) draft = emptyDraft();
       const command = normalized(message.text);
       const selected =
         message.type === 'interactive' ? message.selectionId : null;
@@ -301,6 +311,14 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             )
           )?.reference;
       }
+      const retireAttendance = () => {
+        draft = { ...emptyDraft(), ready: false };
+        confirmation = false;
+        offerConfirmation = false;
+        replyOptions = undefined;
+        reply = `${ATTENDANCE_RETIRED_MESSAGE}\n${reportMenuText(employee)}`;
+        replyKind = 'REPORT_MENU';
+      };
       const showEquipment = async (
         useMemory = true,
         page = 0,
@@ -387,6 +405,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         replyKind = picker.options ? 'WORKSITE_MENU' : 'TEXT';
       };
       const resolveDraft = async () => {
+        if (!whatsappAttendanceEnabled() && isAttendance(draft.kind)) {
+          retireAttendance();
+          return;
+        }
         const resolution = await this.records.resolve(draft, employee.id);
         if (resolution.needsWorksite) {
           await showWorksites(0, true);
@@ -410,6 +432,23 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           this.records.summary(draft, resolution.target!);
       };
       if (
+        !whatsappAttendanceEnabled() &&
+        (isAttendanceSelection(choice) ||
+          (!draft.kind &&
+            !selected &&
+            (command === '4' ||
+              isAttendanceStart(command) ||
+              message.type === 'location')) ||
+          (retiredAttendanceDraft &&
+            !selectionKind(choice ?? '') &&
+            !['report_menu', 'report_cancel'].includes(choice ?? '') &&
+            !['cancelar', 'cancel', 'menu', 'ayuda', 'inicio'].includes(
+              command,
+            ) &&
+            !isGreeting(command)))
+      ) {
+        retireAttendance();
+      } else if (
         choice === 'report_cancel' ||
         (!selected && ['cancelar', 'cancel'].includes(command))
       ) {
@@ -668,11 +707,13 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           reply =
             draft.kind === 'HOUR_METER'
               ? 'Para horómetro necesito una foto legible del medidor. La ubicación no reemplaza esa foto.'
-              : 'La ubicación se usa para entrada o salida de obra. Continúa este reporte o escribe MENÚ.';
+              : whatsappAttendanceEnabled()
+                ? 'La ubicación se usa para entrada o salida de obra. Continúa este reporte o escribe MENÚ.'
+                : 'Continúa este reporte con texto y fotos. Para registrar asistencia utiliza MiREV.';
         }
       } else if (!['text', 'image', 'interactive'].includes(message.type)) {
         reply =
-          'Por ahora envía el reporte por escrito y las fotos como imagen. Para entrada o salida también puedes compartir ubicación. Los audios y documentos no se registran.\n' +
+          'Por ahora envía el reporte por escrito y las fotos como imagen. Los audios y documentos no se registran.\n' +
           reportMenuText(employee, Boolean(draft.kind));
         replyKind = 'REPORT_MENU';
       } else if (
@@ -816,6 +857,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             reply = `Foto recibida. Fotos adjuntas: ${draft.evidenceFileIds.length}.\n${reply}`;
         }
       }
+      if (!whatsappAttendanceEnabled() && isAttendance(draft.kind))
+        retireAttendance();
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
       const resolution = confirmation
         ? await this.records.resolve(draft, employee.id)

@@ -1,3 +1,8 @@
+import {
+  whatsappAttendanceEnabled,
+  ATTENDANCE_RETIRED_MESSAGE,
+  isRetiredAttendanceReply,
+} from './whatsapp-report-capabilities';
 import type { Employee } from '@prisma/client';
 import type { Draft, EquipmentReplyOptions } from './whatsapp-report.types';
 
@@ -24,12 +29,20 @@ export const REPORT_MENU_ROWS = [
     title: 'Petición general',
     description: 'Solicitud para oficina y gerencia',
   },
-  {
-    id: 'report_attendance',
-    title: 'Entrada o salida',
-    description: 'Horario en obra con ubicación o foto',
-  },
 ] as const;
+
+export function reportMenuRows() {
+  return whatsappAttendanceEnabled()
+    ? [
+        ...REPORT_MENU_ROWS,
+        {
+          id: 'report_attendance',
+          title: 'Entrada o salida',
+          description: 'Horario en obra con ubicación o foto',
+        },
+      ]
+    : REPORT_MENU_ROWS;
+}
 
 export function employeeGreeting(employee: Pick<Employee, 'name'>) {
   const name = employee.name
@@ -60,6 +73,11 @@ export function isGreeting(command: string) {
   );
 }
 export function selectionKind(id: string): Draft['kind'] {
+  if (
+    !whatsappAttendanceEnabled() &&
+    ['attendance_check_in', 'attendance_check_out'].includes(id)
+  )
+    return null;
   return (
     (
       {
@@ -98,6 +116,12 @@ export function whatsappReplyPayload(
   confirmationMessageId?: string,
   options?: EquipmentReplyOptions,
 ) {
+  if (!whatsappAttendanceEnabled() && isRetiredAttendanceReply(kind, text))
+    return whatsappReplyPayload(
+      phone,
+      ATTENDANCE_RETIRED_MESSAGE,
+      'REPORT_MENU',
+    );
   const base = { messaging_product: 'whatsapp', to: phone };
   if ((kind === 'EQUIPMENT_MENU' || kind === 'WORKSITE_MENU') && options) {
     return {
@@ -141,7 +165,7 @@ export function whatsappReplyPayload(
         action: {
           button: 'Ver opciones',
           sections: [
-            { title: '¿Qué deseas reportar?', rows: REPORT_MENU_ROWS },
+            { title: '¿Qué deseas reportar?', rows: reportMenuRows() },
           ],
         },
       },

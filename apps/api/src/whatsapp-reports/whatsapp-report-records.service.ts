@@ -1,4 +1,8 @@
 import {
+  whatsappAttendanceEnabled,
+  ATTENDANCE_RETIRED_MESSAGE,
+} from './whatsapp-report-capabilities';
+import {
   BadRequestException,
   Injectable,
   ForbiddenException,
@@ -76,8 +80,9 @@ export class WhatsappReportRecordsService {
   }> {
     if (!draft.kind)
       return {
-        question:
-          '¿Quieres reportar un daño, horómetro, petición, entrada o salida de obra?',
+        question: whatsappAttendanceEnabled()
+          ? '¿Quieres reportar un daño, horómetro, petición, entrada o salida de obra?'
+          : '¿Quieres reportar un daño, horómetro o petición?',
       };
     const target: Target = {
       assetId: null,
@@ -417,6 +422,8 @@ export class WhatsappReportRecordsService {
     sourceMessageId: string,
   ) {
     if (!draft.kind) throw new BadRequestException('Falta el tipo de reporte');
+    if (!whatsappAttendanceEnabled() && isAttendance(draft.kind))
+      throw new BadRequestException(ATTENDANCE_RETIRED_MESSAGE);
     // The phone lease serializes conversations; row locks also protect against UI updates and other phones.
     await tx.$queryRaw`SELECT id FROM "Employee" WHERE id = ${employee.id} FOR UPDATE`;
     const active = await tx.employee.findFirst({
