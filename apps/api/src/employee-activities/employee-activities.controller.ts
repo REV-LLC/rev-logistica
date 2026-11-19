@@ -81,6 +81,7 @@ export class EmployeeActivitiesController {
       id,
       payload.action,
       request.user.sub,
+      payload,
     );
   }
 

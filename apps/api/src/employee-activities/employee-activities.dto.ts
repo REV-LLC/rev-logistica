@@ -66,8 +66,25 @@ export class ActivityNoteDto {
 }
 
 export class ReviewActivityDto {
-  @IsIn(['CONFIRM', 'DISMISS'])
-  action: 'CONFIRM' | 'DISMISS';
+  @IsIn(['CONFIRM', 'DISMISS', 'CORRECT'])
+  action: 'CONFIRM' | 'DISMISS' | 'CORRECT';
+
+  @ValidateIf(
+    (value) =>
+      value.action === 'CORRECT' || value.verifiedEnteredAt !== undefined,
+  )
+  @IsISO8601()
+  @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/i, {
+    message: 'Incluye fecha, hora y zona horaria.',
+  })
+  verifiedEnteredAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/i, {
+    message: 'Incluye fecha, hora y zona horaria.',
+  })
+  verifiedLeftAt?: string | null;
 }
 
 export class ReviewActivityBatchDto {

@@ -230,6 +230,18 @@ export class AttendanceJournalsService {
         },
         checkInReport: evidenceReport,
         checkOutReport: evidenceReport,
+        punches: {
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            kind: true,
+            status: true,
+            occurredAt: true,
+            latitude: true,
+            longitude: true,
+            accuracyMeters: true,
+          },
+        },
         activityNote: {
           select: {
             id: true,
@@ -238,12 +250,63 @@ export class AttendanceJournalsService {
             sourceInvalidatedAt: true,
             reviewedAt: true,
             reviewedSourceExitId: true,
+            verifiedEnteredAt: true,
+            verifiedLeftAt: true,
+            reviews: {
+              where: { action: 'CORRECT' },
+              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+              take: 1,
+              select: { userId: true, createdAt: true },
+            },
           },
         },
       },
     });
+    const page = rows.slice(0, 20);
+    const actorIds = [
+      ...new Set(
+        page.flatMap(
+          (row) =>
+            row.activityNote?.reviews?.map((review) => review.userId) ?? [],
+        ),
+      ),
+    ];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: {
+            id: true,
+            employee: { select: { name: true, lastName: true } },
+          },
+        })
+      : [];
+    const actorNames = new Map(
+      actors.map((actor) => [
+        actor.id,
+        actor.employee
+          ? `${actor.employee.name} ${actor.employee.lastName ?? ''}`.trim()
+          : `Usuario ${actor.id}`,
+      ]),
+    );
     return {
-      journals: rows.slice(0, 20),
+      journals: page.map((row) => {
+        if (!row.activityNote) return row;
+        const { reviews, ...note } = row.activityNote;
+        const last = reviews?.[0];
+        return {
+          ...row,
+          activityNote: {
+            ...note,
+            lastCorrection: last
+              ? {
+                  userId: last.userId,
+                  name: actorNames.get(last.userId) ?? `Usuario ${last.userId}`,
+                  at: last.createdAt,
+                }
+              : null,
+          },
+        };
+      }),
       nextCursor: rows.length > 20 ? rows[19].id : null,
     };
   }

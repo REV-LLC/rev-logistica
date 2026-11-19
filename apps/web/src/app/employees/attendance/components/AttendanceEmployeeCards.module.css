@@ -5,6 +5,9 @@
   gap: 16px;
   padding-block: 8px;
 }
+.employeeGrid.employeeGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
 .employeeHeader > :first-child {
   flex: 0 1 auto;
   min-width: 0;

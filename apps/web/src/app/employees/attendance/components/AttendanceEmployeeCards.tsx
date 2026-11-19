@@ -1,6 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  attendanceEmployeeHref,
+  attendanceOverviewHref,
+} from "@/lib/attendance-navigation";
 import {
   Alert,
   Badge,
@@ -27,7 +32,7 @@ import { getCurrentUserRole } from "@/lib/auth";
 import { IconNotebook } from "@tabler/icons-react";
 import {
   EmployeeCardIdentity,
-  type EmployeeCardRole,
+  getEmployeeCardFullName as fullName,
 } from "@/components/EmployeeCard";
 import {
   attendancePresetRange,
@@ -36,56 +41,23 @@ import {
 import styles from "./AttendanceEmployeeCards.module.css";
 import AttendanceEvidencePhoto from "./AttendanceEvidencePhoto";
 import AttendanceReportReviewModal from "./AttendanceReportReviewModal";
+import AttendanceEmployeeCard from "./AttendanceEmployeeCard";
+import { attendanceShortDate as date } from "@/lib/attendance";
+import type {
+  AttendanceEmployee as Employee,
+  AttendanceEvidence as Evidence,
+  AttendanceJournal as Journal,
+} from "./attendance-types";
 
-type Employee = {
-  id: string;
-  name: string;
-  lastName: string;
-  active: boolean;
-  role: EmployeeCardRole;
-  accountRole: string | null;
-  journeys: number;
-  open: number;
-  pendingReview: number;
-  reportedHours: number;
-  latestWorksite: string | null;
-  lastEntry: string | null;
-  lastExit: string | null;
-};
-type Evidence = {
-  id: string;
-  kind: string;
-  description: string;
-  occurredAt: string;
-  deletedAt: string | null;
-  location: { latitude: number; longitude: number } | null;
-  evidence: { fileObject: { id: string } }[];
-};
-export type Journal = {
-  id: string;
-  enteredAt: string;
-  leftAt: string | null;
-  checkOutReportId: string | null;
-  customerWorksite: { worksite: { name: string }; customer: { name: string } };
-  checkInReport: Evidence | null;
-  checkOutReport: Evidence | null;
-  activityNote: {
-    id: string;
-    reviewStatus: string | null;
-    description: string;
-    sourceInvalidatedAt: string | null;
-    reviewedSourceExitId: string | null;
-  } | null;
-};
-const date = (value: string) =>
-  new Intl.DateTimeFormat("es-CO", {
-    timeZone: "America/Bogota",
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-const fullName = (e: Employee) => `${e.name} ${e.lastName}`.trim();
 const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "No se pudo completar la acción.";
+const validDay = (value: string | null) =>
+  Boolean(
+    value &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value,
+  );
 function today() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",
@@ -106,30 +78,34 @@ const reviewLabels: Record<string, string> = {
 export default function AttendanceEmployeeCards({
   initialEmployeeId = null,
   initialDate = null,
+  initialFrom = null,
+  initialTo = null,
 }: {
   initialEmployeeId?: string | null;
   initialDate?: string | null;
+  initialFrom?: string | null;
+  initialTo?: string | null;
 }) {
-  const requestedDate =
-    initialDate &&
-    /^\d{4}-\d{2}-\d{2}$/.test(initialDate) &&
-    Number.isFinite(Date.parse(initialDate)) &&
-    new Date(`${initialDate}T00:00:00Z`).toISOString().slice(0, 10) ===
-      initialDate
-      ? initialDate
+  const router = useRouter();
+  const requestedDate = validDay(initialDate) ? initialDate : null;
+  const requestedRange =
+    initialFrom &&
+    initialTo &&
+    validDay(initialFrom) &&
+    validDay(initialTo) &&
+    initialFrom <= initialTo
+      ? { from: initialFrom, to: initialTo }
       : null;
   const [range, setRange] = useState(() =>
     requestedDate
       ? { from: requestedDate, to: requestedDate }
-      : presetRange("month"),
+      : (requestedRange ?? presetRange("month")),
   );
   const [preset, setPreset] = useState<string | null>(
-    requestedDate ? "custom" : "month",
+    requestedDate || requestedRange ? "custom" : "month",
   );
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employeeId, setEmployeeId] = useState<string | null>(
-    initialEmployeeId,
-  );
+  const employeeId = initialEmployeeId;
   const [journals, setJournals] = useState<Journal[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -317,11 +293,9 @@ export default function AttendanceEmployeeCards({
       {employeeId ? (
         <>
           <Button
+            component={Link}
+            href={attendanceOverviewHref(range)}
             variant="subtle"
-            onClick={() => {
-              setEmployeeId(null);
-              setJournals([]);
-            }}
             style={{ alignSelf: "flex-start" }}
           >
             ← Volver a empleados
@@ -525,6 +499,27 @@ export default function AttendanceEmployeeCards({
                       </Button>
                     ) : null}
                   </Group>
+                  {a.activityNote?.reviewStatus === "CORRECTED" &&
+                  a.activityNote.verifiedEnteredAt ? (
+                    <Stack gap={3}>
+                      <Text size="sm">
+                        Entrada corregida:{" "}
+                        {date(a.activityNote.verifiedEnteredAt)}
+                      </Text>
+                      <Text size="sm">
+                        Salida corregida:{" "}
+                        {a.activityNote.verifiedLeftAt
+                          ? date(a.activityNote.verifiedLeftAt)
+                          : "Pendiente"}
+                      </Text>
+                      {a.activityNote.lastCorrection ? (
+                        <Text size="xs" c="dimmed">
+                          Corregido por {a.activityNote.lastCorrection.name} ·{" "}
+                          {date(a.activityNote.lastCorrection.at)}
+                        </Text>
+                      ) : null}
+                    </Stack>
+                  ) : null}
                 </Stack>
               </Paper>
             );
@@ -587,51 +582,15 @@ export default function AttendanceEmployeeCards({
                 {visible.reduce((n, e) => n + e.journeys, 0)} jornadas en el
                 período
               </Text>
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+              <SimpleGrid className={styles.employeeGrid}>
                 {visible.map((e) => (
-                  <Paper key={e.id} withBorder p="md" radius="md">
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <EmployeeCardIdentity employee={e} photoSize={48} />
-                        {!e.active ? (
-                          <Badge color="gray">Inactivo</Badge>
-                        ) : null}
-                      </Group>
-                      <Text size="sm" c="dimmed">
-                        {e.latestWorksite ?? "Sin obra reportada en el período"}
-                      </Text>
-                      <Group>
-                        <Badge variant="light">{e.journeys} jornadas</Badge>
-                        {e.open ? (
-                          <Badge color="orange">{e.open} sin salida</Badge>
-                        ) : null}
-                        {e.pendingReview ? (
-                          <Badge color="yellow">
-                            {e.pendingReview} por revisar
-                          </Badge>
-                        ) : null}
-                      </Group>
-                      <Text size="sm">
-                        {e.reportedHours.toFixed(2)} h de presencia reportada
-                      </Text>
-                      {e.lastEntry ? (
-                        <Text size="xs" c="dimmed">
-                          Última entrada: {date(e.lastEntry)}
-                          {e.lastExit ? ` · Salida: ${date(e.lastExit)}` : ""}
-                        </Text>
-                      ) : (
-                        <Text size="xs" c="dimmed">
-                          Sin reportes. No se interpreta como ausencia.
-                        </Text>
-                      )}
-                      <Button
-                        variant="light"
-                        onClick={() => setEmployeeId(e.id)}
-                      >
-                        Ver jornadas de {e.name}
-                      </Button>
-                    </Stack>
-                  </Paper>
+                  <AttendanceEmployeeCard
+                    key={e.id}
+                    employee={e}
+                    onSelect={(id) =>
+                      router.push(attendanceEmployeeHref(id, range))
+                    }
+                  />
                 ))}
               </SimpleGrid>
               {!visible.length ? (

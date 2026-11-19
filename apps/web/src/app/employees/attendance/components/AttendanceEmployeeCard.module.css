@@ -1,0 +1,26 @@
+.card {
+  min-width: 0;
+}
+.content {
+  height: 100%;
+}
+.identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 66px;
+}
+.worksite,
+.hours,
+.dates {
+  min-height: 2.8em;
+  line-height: 1.4;
+}
+.badges {
+  min-height: 46px;
+  align-content: start;
+}
+.content > :last-child {
+  margin-top: auto;
+}

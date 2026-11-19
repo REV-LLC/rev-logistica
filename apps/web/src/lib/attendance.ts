@@ -53,6 +53,13 @@ export function attendanceDate(value: string) {
     timeZone: "America/Bogota",
   }).format(new Date(value));
 }
+export function attendanceShortDate(value: string) {
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Bogota",
+  }).format(new Date(value));
+}
 export function siteLabel(site: AttendanceSite) {
   return `${site.alias || site.worksite.name} · ${site.customer.name}`;
 }

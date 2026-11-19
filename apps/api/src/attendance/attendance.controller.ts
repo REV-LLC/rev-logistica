@@ -95,8 +95,9 @@ export class AttendanceController {
     @Req() r: RequestActor,
     @Query('cursor', new ParseUUIDPipe({ optional: true })) cursor?: string,
     @Query('status') status?: string,
+    @Query('kind') kind?: string,
   ) {
-    return this.service.list(r.user, cursor, status);
+    return this.service.list(r.user, cursor, status, kind);
   }
   @Header('Cache-Control', 'private, no-store')
   @Get('shifts')
