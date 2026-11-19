@@ -69,8 +69,8 @@ describe('MiREV ownership and office access', () => {
     db.fileObject = { findMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) };
     const portal = new MiRevPortalService(db, employees as any);
     await portal.documents('user');
-    expect(db.fileObject.findMany.mock.calls[0][0].where).toEqual({ entityType: 'EMPLOYEE', entityId: 'own-employee' });
+    expect(db.fileObject.findMany.mock.calls[0][0].where).toEqual({ entityType: 'EMPLOYEE', entityId: 'own-employee', employeeDocument: { is: { employeeId: 'own-employee' } } });
     await expect(portal.document('user', 'another-file')).rejects.toThrow(NotFoundException);
-    expect(db.fileObject.findFirst.mock.calls[0][0].where).toEqual({ id: 'another-file', entityType: 'EMPLOYEE', entityId: 'own-employee' });
+    expect(db.fileObject.findFirst.mock.calls[0][0].where).toEqual({ id: 'another-file', entityType: 'EMPLOYEE', entityId: 'own-employee', employeeDocument: { is: { employeeId: 'own-employee' } } });
   });
 });

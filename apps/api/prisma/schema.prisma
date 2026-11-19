@@ -1592,6 +1592,7 @@ model Owner {
 }
 
 model Employee {
+  personalDocuments EmployeeDocument[]
   epsId String?
   arlId String?
   epsProvider EmployeeAffiliationProvider? @relation("EmployeeEpsProvider", fields: [epsId], references: [id], onDelete: Restrict)
@@ -1762,6 +1763,7 @@ model EmployeeVehicle {
 }
 
 model FileObject {
+  employeeDocument EmployeeDocument?
   whatsappEvidence WhatsappReportEvidence[]
   id                  String    @id @default(uuid())
   documentId          String?
@@ -2239,4 +2241,15 @@ model EmployeeAffiliationProvider {
   epsEmployees Employee[] @relation("EmployeeEpsProvider")
   arlEmployees Employee[] @relation("EmployeeArlProvider")
   @@unique([kind, normalizedName])
+}
+
+// Personnel records only. Operational evidence keeps its existing report relations.
+model EmployeeDocument {
+  id String @id @default(uuid())
+  employeeId String
+  fileObjectId String @unique
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  fileObject FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  @@index([employeeId, createdAt])
 }

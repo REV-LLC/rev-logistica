@@ -10,7 +10,7 @@ export class MiRevPortalService {
   async documents(userId: string) {
     const employeeId = await this.employees.ownEmployeeId(userId);
     return this.prisma.fileObject.findMany({
-      where: { entityType: 'EMPLOYEE', entityId: employeeId },
+      where: { entityType: 'EMPLOYEE', entityId: employeeId, employeeDocument: { is: { employeeId } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: { id: true, category: true, displayName: true, originalName: true, mimeType: true, sizeBytes: true, expiresAt: true, createdAt: true },
     });
@@ -19,7 +19,7 @@ export class MiRevPortalService {
   async document(userId: string, id: string) {
     const employeeId = await this.employees.ownEmployeeId(userId);
     const file = await this.prisma.fileObject.findFirst({
-      where: { id, entityType: 'EMPLOYEE', entityId: employeeId },
+      where: { id, entityType: 'EMPLOYEE', entityId: employeeId, employeeDocument: { is: { employeeId } } },
       select: { objectKey: true, originalName: true, displayName: true, mimeType: true },
     });
     if (!file) throw new NotFoundException('Documento no encontrado.');

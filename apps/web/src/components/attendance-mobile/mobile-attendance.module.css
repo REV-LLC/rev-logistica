@@ -142,7 +142,7 @@
 .documentList { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 .documentRow { padding-block: 14px; border-bottom: 1px solid rgba(255,255,255,.15); overflow-wrap: anywhere; }
 .documentRow p { margin-block: 6px; font-size: 14px; color: #c0cbd3; }
-.portalTabs { display: flex; flex-wrap: nowrap; padding: 6px; gap: 4px; }
+.portalTabs { display: flex; flex-wrap: nowrap; justify-content: center; width: fit-content; max-width: calc(100% - 12px); margin-inline: auto; padding: 5px 0; gap: 2px; }
 .portalTabs .portalTab {
   position: relative;
   z-index: 1;
@@ -150,15 +150,16 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  flex: 0 0 auto;
+  gap: 2px;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 40px;
+  padding: 6px 5px;
   border: 0;
   border-radius: 12px;
   background: transparent;
   color: #c0ccd8;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -171,13 +172,7 @@
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
   pointer-events: none;
 }
-@media (max-width: 48em) {
-  .portalTabs { display: grid; grid-template-columns: 1.25fr 1fr 1fr; }
-  .portalTabs .portalTab { padding-inline: 5px; font-size: 12px; }
-}
-@media (max-width: 22.5em) {
-  .portalTabs .portalTab :global(.mantine-Tabs-tabSection) { display: none; }
-}
+.portalTabs .portalTab :global(.mantine-Tabs-tabSection) { margin: 0; flex: 0 0 14px; width: 14px; }
 @media (prefers-reduced-motion: reduce) {
   .portalIndicator { transition-duration: 0ms !important; }
 }

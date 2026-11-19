@@ -125,3 +125,9 @@ Build Next aprobado. Chrome con datos ficticios aislados verificó Documentos �
 Revisión de solo lectura en el Postgres public de producción confirmado: 19 empleados y 13 archivos EMPLOYEE, todos EVIDENCIA_WHATSAPP (JPEG), vinculados a reportes de daños/entrada/salida. Cero archivos EPS/ARL por categoría o fileType en todas las entidades y cero archivos de esas categorías sin entidad. No hay certificados identificados para extraer afiliaciones, por lo que no se modificó ninguna asignación ni se envió contenido a OCR externo. La extracción requiere los certificados correspondientes; no se deduce afiliación de fotografías de asistencia.
 
 Publicación: mirev-web c20a9688-2402-43d0-84bf-953fea92ca11 SUCCESS, fuente 3f3aae7. Sesión real comprobó altura de 44 px, distribución en fila, navegación con teclado y consola sin errores. Evidencia en docs/infrastructure/mirev-pestanas-afiliaciones-2026-11-19.json.
+
+## Documentos personales separados de evidencias
+
+EmployeeDocument es la relación exclusiva entre empleado y FileObject para documentos personales. El listado y la descarga de MiREV requieren esa relación y la identidad activa propia. Evidencias WhatsApp, marcaciones, registro facial y diagnósticos conservan sus relaciones existentes; no se trasladan archivos ni se cambian claves históricas de R2. La migración aditiva 20261119230000_employee_document_separation se aplica únicamente en public de producción desde el checkout canónico de REV.
+
+El selector del perfil se ajusta por nueva indicación: grupo de ancho según contenido, centrado en la card, iconos de 14 px, separación icono/texto de 2 px y botones de 40 px. No usa columnas estiradas ni oculta los iconos en teléfonos pequeños. Chrome local comprobó centrado exacto, hijos dentro de la card y ausencia de scroll horizontal a 320 px; navegación Documentos/Bitácora y regreso, consola sin errores. REV Logística conserva su selector.

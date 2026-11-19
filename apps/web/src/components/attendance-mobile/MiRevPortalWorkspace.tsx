@@ -24,9 +24,9 @@ export default function MiRevPortalWorkspace({ employeeId }: { employeeId: strin
     <Tabs value={tab} onChange={value => { if (value) router.replace(`/attendance/mobile/profile?tab=${value}`, { scroll: false }); }} keepMounted={false} variant="unstyled" classNames={{ list: workspace.list, tab: styles.portalTab, tabSection: workspace.tabSection, tabLabel: workspace.tabLabel }}>
       <Tabs.List ref={setList} className={styles.portalTabs} aria-label="Secciones de mi perfil">
         <FloatingIndicator target={tab === 'documents' ? documentsTab : tab === 'loans' ? loansTab : activitiesTab} parent={list} transitionDuration={260} className={styles.portalIndicator} aria-hidden="true" />
-        <Tabs.Tab ref={setDocumentsTab} value="documents" aria-label="Mis documentos" leftSection={<IconFiles size={15} />}>Documentos</Tabs.Tab>
-        <Tabs.Tab ref={setLoansTab} value="loans" leftSection={<IconCurrencyDollar size={15} />}>Préstamos</Tabs.Tab>
-        <Tabs.Tab ref={setActivitiesTab} value="activities" leftSection={<IconCalendarEvent size={15} />}>Bitácora</Tabs.Tab>
+        <Tabs.Tab ref={setDocumentsTab} value="documents" aria-label="Mis documentos" leftSection={<IconFiles size={14} />}>Documentos</Tabs.Tab>
+        <Tabs.Tab ref={setLoansTab} value="loans" leftSection={<IconCurrencyDollar size={14} />}>Préstamos</Tabs.Tab>
+        <Tabs.Tab ref={setActivitiesTab} value="activities" leftSection={<IconCalendarEvent size={14} />}>Bitácora</Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="documents" className={styles.portalPanel}><DocumentsPanel /></Tabs.Panel>
       <Tabs.Panel value="loans" className={styles.portalPanel}><LoansPanel employeeId={employeeId} embedded selfService /></Tabs.Panel>
