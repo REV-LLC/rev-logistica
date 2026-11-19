@@ -50,6 +50,7 @@ export default function EmployeeProfile({ employeeId, selfService = false }: { e
             <div className={styles.contactLine}><IconId size={18} stroke={1.5} aria-hidden /><span>{state.employee.documentId?.trim() ? `Documento · ${state.employee.documentId.trim()}` : 'Documento sin registrar'}</span></div>
             <div className={styles.contactLine}><IconPhone size={18} stroke={1.5} aria-hidden /><span>{state.employee.phone?.trim() || 'Teléfono sin registrar'}</span></div>
           </div>
+          <div className={styles.contact}><div className={styles.contactLine}><span>EPS · {state.employee.eps || 'Sin registrar'}</span></div><div className={styles.contactLine}><span>ARL · {state.employee.arl || 'Sin registrar'}</span></div></div>
           <div className={styles.subtitle}>
             <span>{employeeRoleLabels[state.employee.role] ?? 'Empleado'}</span>
             {state.employee.role === 'DRIVER' ? state.employee.vehicles.length ? state.employee.vehicles.map(vehicle =>

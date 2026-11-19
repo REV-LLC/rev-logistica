@@ -302,6 +302,7 @@ export default function EmployeeCardsPage() {
         <Group data-page-heading-glass justify="space-between" align="center" wrap="wrap">
           <Title order={1} className={styles.title}>Empleados</Title>
           <Group gap="xs" wrap="wrap" className={styles.headerActions}>
+            <Button component={Link} href="/employees/affiliations" variant="light">EPS y ARL</Button>
             <Button component={Link} href="/employees/payroll" variant="light">Nómina</Button>
             <Button component={Link} href="/employees/loans" variant="light" leftSection={<IconCurrencyDollar size={16} />}>
               Préstamos

@@ -170,3 +170,7 @@
     animation: none;
   }
 }
+@media (max-width: 48em) {
+  .list { flex-wrap: nowrap; overflow-x: auto; }
+  .tab { flex: 0 0 auto; min-width: 92px; }
+}

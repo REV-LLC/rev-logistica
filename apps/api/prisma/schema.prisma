@@ -1592,6 +1592,15 @@ model Owner {
 }
 
 model Employee {
+  epsId String?
+  arlId String?
+  epsProvider EmployeeAffiliationProvider? @relation("EmployeeEpsProvider", fields: [epsId], references: [id], onDelete: Restrict)
+  arlProvider EmployeeAffiliationProvider? @relation("EmployeeArlProvider", fields: [arlId], references: [id], onDelete: Restrict)
+  eps String? @db.VarChar(160)
+  arl String? @db.VarChar(160)
+  mirevMedicalLeaves MiRevMedicalLeave[]
+  mirevFaceEnrollment MiRevFaceEnrollment?
+
   faceReference EmployeeFaceReference?
   attendancePunches AttendancePunch[]
   whatsappReports WhatsappReport[]
@@ -1614,6 +1623,9 @@ model Employee {
   documentsPerformed Document[]
   tabletAuthorizations TabletDocumentAuthorization[]
   createdAt  DateTime     @default(now())
+
+  @@index([epsId])
+  @@index([arlId])
 
   vehicles        EmployeeVehicle[]
   user            User?             @relation(fields: [userId], references: [id])
@@ -2174,4 +2186,66 @@ model TrackingUsage {
   key       String   @id @db.VarChar(64)
   count     Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+
+model MiRevFaceEnrollment {
+  employeeId String @id
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  userId String
+  photoHash String
+  modelVersion String
+  evidenceKey String
+  createdAt DateTime @default(now())
+}
+
+
+model MiRevMedicalLeave {
+  id String @id @default(uuid())
+  employeeId String
+  userId String
+  clientRequestId String
+  requestHash String
+  day DateTime @db.Date
+  description String @db.VarChar(500)
+  providerType String
+  providerName String? @db.VarChar(160)
+  latitude Float
+  longitude Float
+  accuracyMeters Float
+  locationCapturedAt DateTime
+  sourceEntryId String?
+  selfieKey String?
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  diagnoses MiRevMedicalDiagnosis[]
+  @@unique([employeeId, clientRequestId])
+  @@unique([employeeId, day])
+}
+
+
+model MiRevMedicalDiagnosis {
+  id String @id @default(uuid())
+  medicalLeaveId String
+  name String @db.VarChar(180)
+  mimeType String
+  sizeBytes Int
+  evidenceKey String
+  createdAt DateTime @default(now())
+  medicalLeave MiRevMedicalLeave @relation(fields: [medicalLeaveId], references: [id], onDelete: Restrict)
+  @@index([medicalLeaveId])
+}
+
+
+model EmployeeAffiliationProvider {
+  id String @id @default(uuid())
+  kind String
+  name String @db.VarChar(160)
+  normalizedName String @db.VarChar(160)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  epsEmployees Employee[] @relation("EmployeeEpsProvider")
+  arlEmployees Employee[] @relation("EmployeeArlProvider")
+  @@unique([kind, normalizedName])
 }

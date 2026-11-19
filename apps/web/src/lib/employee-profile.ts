@@ -9,6 +9,8 @@ export type EmployeeProfileIdentity = {
   active: boolean;
   documentId: string | null;
   phone: string | null;
+  eps?: string | null;
+  arl?: string | null;
   vehicles: EmployeeProfileVehicle[];
 };
 
@@ -17,7 +19,7 @@ export function employeeProfileHref(employeeId: string) {
 }
 
 export function employeeWorkspaceTab(requested: string | null, selfService: boolean) {
-  if (requested === 'loans' || requested === 'activities') return requested;
+  if (requested === 'loans' || requested === 'activities' || requested === 'documents') return requested;
   return selfService ? 'loans' : 'payroll';
 }
 

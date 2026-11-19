@@ -37,7 +37,8 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync(token);
       if (payload.role === 'EMPLOYEE') {
-        if (!request.path.startsWith('/attendance/') && request.path !== '/attendance') throw new UnauthorizedException();
+        const ownDocumentsRead = request.method === 'GET' && (request.path === '/employee-portal/documents' || /^\/employee-portal\/documents\/[0-9a-f-]{36}\/download$/i.test(request.path));
+        if (!ownDocumentsRead && !request.path.startsWith('/attendance/') && request.path !== '/attendance') throw new UnauthorizedException();
         const current = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { employee: true } });
         if (!current?.active || current.role !== 'EMPLOYEE' || !current.employee?.active) throw new UnauthorizedException();
       }

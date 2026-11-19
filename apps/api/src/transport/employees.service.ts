@@ -68,7 +68,7 @@ export class EmployeesService {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: {
-        id: true, name: true, lastName: true, role: true, documentId: true, phone: true, active: true,
+        id: true, name: true, lastName: true, role: true, documentId: true, phone: true, active: true, eps: true, arl: true,
         vehicles: { select: { vehicle: { select: { id: true, plate: true, brand: true, model: true } } } },
       },
     });

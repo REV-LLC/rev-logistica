@@ -1,0 +1,59 @@
+import 'reflect-metadata';
+import { Test } from '@nestjs/testing';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import request from 'supertest';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { FilesController } from './files.controller';
+import { FilesService } from './files.service';
+import { EmployeeDocumentsController } from '../employee-portal/employee-documents.controller';
+import { EmployeeDocumentsService } from '../employee-portal/employee-documents.service';
+import { EmployeesService } from '../transport/employees.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { DocumentCustomerEmailsService } from '../document-emails/document-customer-emails.service';
+import { DocumentPdfSnapshotService } from '../documents/document-pdf-snapshot.service';
+
+describe('employee documents: real JWT, upload, ownership and filename',()=>{
+  let app:any,jwt:JwtService,rows:any[],objects:Map<string,Buffer>,s3:any;
+  const own=randomUUID(),other=randomUUID(),users:any={office:{active:true,role:'OFFICE',employee:{id:own,active:true}},driver:{active:true,role:'DRIVER',employee:{id:own,active:true}},employee:{active:true,role:'EMPLOYEE',employee:{id:own,active:true}}};
+  const db:any={user:{findUnique:jest.fn(({where})=>users[where.id])},employee:{findUnique:jest.fn(({where})=>({id:where.id,name:'SAMUEL',lastName:'GUERRERO',active:true}))},customer:{findUnique:jest.fn(()=>({id:'customer'}))},fileObject:{create:jest.fn(({data})=>{const row={id:randomUUID(),...data};rows.push(row);return row}),findMany:jest.fn(({where})=>rows.filter(r=>r.entityType===where.entityType&&r.entityId===where.entityId)),findFirst:jest.fn(({where})=>rows.find(r=>r.id===where.id&&r.entityType===where.entityType&&r.entityId===where.entityId)),findUnique:jest.fn(({where})=>rows.find(r=>r.id===where.id))}};
+  const token=(who:string)=>jwt.sign({sub:who,role:users[who].role},{expiresIn:'5m'});
+  const beforeEnv={...process.env};
+  beforeAll(async()=>{
+    Object.assign(process.env,{R2_ACCOUNT_ID:'fixture',R2_ACCESS_KEY_ID:'fixture',R2_SECRET_ACCESS_KEY:'fixture',R2_BUCKET:'fixture',R2_PUBLIC_BASE_URL:'https://files.fixture.invalid',AUTH_BYPASS_LOCAL:'false',AUTH_BYPASS_ENABLED:'false'});
+    s3=jest.spyOn(S3Client.prototype,'send').mockImplementation(async(command:any)=>{
+      if(command instanceof PutObjectCommand){objects.set(command.input.Key,Buffer.from(command.input.Body));return {} as any;}
+      const bytes=objects.get(command.input.Key);const body:any=Readable.from(bytes||Buffer.alloc(0));body.transformToByteArray=async()=>bytes;return{Body:body,ContentType:'application/pdf'} as any;
+    });
+    const mod=await Test.createTestingModule({imports:[JwtModule.register({secret:'test-documents-isolated'})],controllers:[FilesController,EmployeeDocumentsController],providers:[FilesService,EmployeeDocumentsService,EmployeesService,JwtAuthGuard,RolesGuard,{provide:PrismaService,useValue:db},{provide:DocumentCustomerEmailsService,useValue:{}},{provide:DocumentPdfSnapshotService,useValue:{}}]}).compile();
+    jwt=mod.get(JwtService);app=mod.createNestApplication();await app.init();
+  });
+  beforeEach(()=>{rows=[];objects=new Map();jest.clearAllMocks()});
+  afterAll(async()=>{await app.close();s3.mockRestore();process.env=beforeEnv});
+  async function upload(){return request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('office')).field('category','CEDULA').field('displayName','ignored-custom-name').attach('files',Buffer.from('%PDF-1.7\nTEST FIXTURE'),{filename:'x.pdf',contentType:'application/pdf'}).expect(201)}
+  it('renames using the employee name from DB, preserves original metadata and prevents overwrites',async()=>{
+    const a=await upload(),b=await upload();
+    expect(a.body.files[0]).toMatchObject({displayName:'samuel_guerrero_cedula.pdf',originalName:'x.pdf',category:'CEDULA'});
+    expect(a.body.files[0].objectKey).toMatch(/\/samuel_guerrero_cedula\.pdf$/);
+    expect(a.body.files[0].objectKey).not.toEqual(b.body.files[0].objectKey);
+    expect(objects.size).toBe(2);
+  });
+  it('lets an employee list and download only its own documents, ignoring forged employee IDs',async()=>{
+    const uploadResult=await upload();const id=uploadResult.body.files[0].id;
+    rows.push({id:randomUUID(),entityType:'EMPLOYEE',entityId:other,displayName:'other.pdf'});
+    const list=await request(app.getHttpServer()).get(`/employee-portal/documents?employeeId=${other}`).set('Authorization','Bearer '+token('employee')).expect(200);
+    expect(list.body).toHaveLength(1);expect(list.body[0].id).toBe(id);
+    const download=await request(app.getHttpServer()).get(`/employee-portal/documents/${id}/download`).set('Authorization','Bearer '+token('employee')).expect(200);
+    expect(download.headers['content-disposition']).toContain('samuel_guerrero_cedula.pdf');
+    expect(download.headers['cache-control']).toContain('no-store');
+    await request(app.getHttpServer()).get(`/employee-portal/documents/${rows[1].id}/download`).set('Authorization','Bearer '+token('employee')).expect(404);
+  });
+  it('blocks access to another employee via generic file endpoints and blocks employee uploads',async()=>{
+    await request(app.getHttpServer()).get(`/files/entities/EMPLOYEE/${other}`).set('Authorization','Bearer '+token('driver')).expect(403);
+    await request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('employee')).expect(401);
+    await request(app.getHttpServer()).get('/employee-portal/documents').expect(401);
+  });
+});

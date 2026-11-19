@@ -36,6 +36,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/customers', 'Clientes'],
   ['/providers', 'Proveedores'],
   ['/attendance', 'Mi asistencia'],
+  ['/employees/affiliations', 'EPS y ARL'],
   ['/employees/attendance', 'Asistencia y rostros'],
   ['/employees/whatsapp-reports', 'Reportes WhatsApp'],
   ['/employees/activities', 'Bitácora de empleados'],

@@ -105,7 +105,7 @@ export default function FileUploadModal({
         formData.append(isEvidenceMode ? 'photos' : 'files', file),
       );
       if (!isEvidenceMode && category) formData.append('category', category);
-      if (!isEvidenceMode && displayName.trim()) formData.append('displayName', displayName.trim());
+      if (!isEvidenceMode && entityType !== 'EMPLOYEE' && displayName.trim()) formData.append('displayName', displayName.trim());
       if (!isEvidenceMode && expiresAt) formData.append('expiresAt', expiresAt);
 
       await api(
@@ -167,13 +167,13 @@ export default function FileUploadModal({
           required
         />
 
-        {mode === 'generic' ? <TextInput
+        {mode === 'generic' ? (entityType === 'EMPLOYEE' ? <Text size="sm" c="dimmed">El archivo se nombrará automáticamente con el nombre del empleado y la categoría.</Text> : <TextInput
           label="Nombre visible"
           description="Opcional. Si lo dejas vacío se usará el nombre original del archivo."
           placeholder="Ej. Manual de operación"
           value={displayName}
           onChange={(event) => setDisplayName(event.currentTarget.value)}
-        /> : null}
+        />) : null}
 
         {mode === 'generic' ? <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Select
