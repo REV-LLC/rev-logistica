@@ -1,4 +1,3 @@
-import { EmployeeAffiliationsService } from './employee-affiliations.service';
 import { MiRevMedicalService } from './mirev-medical.service';
 import { AttendanceStorageService } from '../attendance/attendance-storage.service';
 import { MiRevPortalService } from './mirev-portal.service';
@@ -63,6 +62,6 @@ class MiRevPersonalController {
 @Module({
   imports: [CacheModule.register({ isGlobal: true }), ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 120 }]), PrismaModule, AuthModule, AttendanceModule],
   controllers: [MiRevHealthController, MiRevPersonalController, EmployeePortalController, MiRevPortalController],
-  providers: [EmployeeAffiliationsService, MiRevMedicalService, AttendanceStorageService, MiRevPortalService, EmployeesService, EmployeeLoansService, EmployeeActivitiesService, SettingsService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [ MiRevMedicalService, AttendanceStorageService, MiRevPortalService, EmployeesService, EmployeeLoansService, EmployeeActivitiesService, SettingsService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class MiRevModule {}

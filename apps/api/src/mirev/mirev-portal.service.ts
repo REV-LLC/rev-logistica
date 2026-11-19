@@ -30,7 +30,7 @@ export class MiRevPortalService {
     try {
       const object = await client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: file.objectKey }));
       if (!object.Body) throw new Error('Missing object');
-      return { body: await object.Body.transformToByteArray(), name: file.originalName || file.displayName || 'documento', type: file.mimeType || 'application/octet-stream' };
+      return { body: await object.Body.transformToByteArray(), name: file.displayName || file.originalName || 'documento', type: file.mimeType || 'application/octet-stream' };
     } catch { throw new ServiceUnavailableException('No pudimos descargar el documento. Vuelve a intentar.'); }
     finally { client.destroy(); }
   }

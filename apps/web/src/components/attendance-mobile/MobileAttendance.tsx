@@ -2,7 +2,6 @@
 
 import { getAttendanceLocation as getLocation } from '@/lib/attendance-geolocation';
 import MiRevMedicalLeave from './MiRevMedicalLeave';
-import dynamic from 'next/dynamic';
 import { useCameraViewport } from './useCameraViewport';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2, IconLogin, IconLogout, IconMapPin, IconVolume } from '@tabler/icons-react';
@@ -17,7 +16,6 @@ import MiRevEmployeeProfile, { MiRevEmployeeProvider, MiRevProfileButton } from 
 import { hasPriorDayShift, suggestAttendanceSite } from '@/lib/attendance-mobile-rules';
 import styles from './mobile-attendance.module.css';
 
-const MiRevOffice = dynamic(() => import('./MiRevOffice'), { loading: () => <p role="status">Cargando empleados…</p> });
 
 type Me = {
   employee: { id: string; name: string };
@@ -33,7 +31,7 @@ function shortTime(date: string) {
   return new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' }).format(new Date(date));
 }
 
-export default function MobileAttendance({ view = 'attendance' }: { view?: 'attendance' | 'profile' | 'office' }) {
+export default function MobileAttendance({ view = 'attendance' }: { view?: 'attendance' | 'profile' }) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [help, setHelp] = useState(false);
   const [today, setToday] = useState<Date | null>(null);
@@ -48,7 +46,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
   const expired = useCallback(() => { clearToken(); setSignedIn(false); }, []);
 
   return <MiRevEmployeeProvider enabled={signedIn === true} onExpired={expired}><main className={styles.page}>
-    <div className={`${styles.screen} ${view !== 'attendance' ? styles.profileScreen : ''}`}>
+    <div className={`${styles.screen} ${view === 'profile' ? styles.profileScreen : ''}`}>
       <header className={styles.header}>
         <a href="/attendance/mobile" className={styles.brand} aria-label="Inicio de MiREV"><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></a>
         <div className={styles.headerActions}><button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
@@ -58,7 +56,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
       </header>
       {today ? <p className={styles.today}><time dateTime={today.toISOString()}>{new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).format(today)}</time></p> : null}
       {signedIn === null ? <Loading label="Un momento…" /> : signedIn ?
-        <FaceEnrollmentGate onExpired={expired}>{view === 'office' ? <MiRevOffice /> : view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} />}</FaceEnrollmentGate> : <Login onLogin={() => setSignedIn(true)} />}
+        <FaceEnrollmentGate onExpired={expired}>{view === 'profile' ? <MiRevEmployeeProfile /> : <Attendance onExpired={expired} today={today} />}</FaceEnrollmentGate> : <Login onLogin={() => setSignedIn(true)} />}
       {help ? <section id="attendance-help" className={styles.helpContent}>
         <h2>Estamos para ayudarte</h2>
         <ol><li>Toca el botón de entrada o salida.</li><li>Mira la cámara y toca «Tomar foto».</li><li>Espera la confirmación.</li></ol>

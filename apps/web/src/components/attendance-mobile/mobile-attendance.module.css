@@ -157,3 +157,14 @@
 .portalForm { margin-top: 20px; }
 .page :global(section[aria-label='Gestión de afiliaciones']) { background: var(--mirev-glass-background); box-shadow: var(--mirev-glass-shadow); -webkit-backdrop-filter: var(--mirev-glass-filter); backdrop-filter: var(--mirev-glass-filter); }
 .page :global(section[aria-label='Gestión de afiliaciones']) .portalTabs button[data-active] { background: rgba(255,255,255,.1); }
+
+/* MiREV profile workspace: keep the approved glass with no pale outline. */
+.page .profileView :global(section[aria-label='Gestión del empleado']) {
+  border: 0;
+  margin-top: 0;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .12) !important;
+}
+@media (max-width: 48em) {
+  .page .profileView :global(section[aria-label='Gestión del empleado']) { margin-inline: -8px; width: calc(100% + 16px); }
+  .profileView .portalPanel { padding: 12px; }
+}

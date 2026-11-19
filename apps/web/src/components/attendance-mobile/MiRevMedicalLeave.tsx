@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { IconFileDescription, IconFirstAidKit, IconUpload } from '@tabler/icons-react';
 import { api } from '@/lib/api';
-import { getToken, getTokenPayload } from '@/lib/auth';
+import { getToken } from '@/lib/auth';
 import { getAttendanceLocation } from '@/lib/attendance-geolocation';
 import styles from './mobile-attendance.module.css';
 const MedicalSelfieCapture = dynamic(() => import('./MedicalSelfieCapture'), { loading: () => <p role="status">Preparando cámara…</p> });
@@ -18,7 +17,7 @@ export default function MiRevMedicalLeave({ today }: { today: Date | null }) {
   const [form, setForm] = useState(false), [busy, setBusy] = useState(false), [petition, setPetition] = useState(false);
   const [description, setDescription] = useState(''), [providerType, setProviderType] = useState('EPS');
   const [photo, setPhoto] = useState<Blob | null>(null), [preview, setPreview] = useState(''), [camera, setCamera] = useState(false);
-  const [location, setLocation] = useState<GeolocationPosition | null>(null), [office, setOffice] = useState(false);
+  const [location, setLocation] = useState<GeolocationPosition | null>(null);
   const sessionToken = useRef(getToken());
   function checkSession() { if (getToken() !== sessionToken.current) throw new Error('La cuenta cambió. Cierra sesión e ingresa nuevamente.'); }
   const requestId = useRef(''), lock = useRef(false), alive = useRef(true), formRef = useRef<HTMLFormElement>(null);
@@ -26,7 +25,6 @@ export default function MiRevMedicalLeave({ today }: { today: Date | null }) {
   useEffect(() => {
     alive.current = true;
     const controller = new AbortController();
-    setOffice(['ADMIN','OFFICE'].includes(getTokenPayload()?.role || ''));
     const load = () => {
       if (document.hidden || lock.current) return;
       void api<Today>('/employee-portal/medical-leave/today', { signal: controller.signal, cache: 'no-store' })
@@ -110,7 +108,6 @@ export default function MiRevMedicalLeave({ today }: { today: Date | null }) {
       {!data?.leave && !form ? <button className={styles.secondary} disabled={busy} onClick={() => void open()}><IconFirstAidKit size={24} />REGISTRAR INCAPACIDAD</button> : null}
       <button className={styles.secondary} onClick={() => setPetition(value => !value)} aria-expanded={petition}><IconFileDescription size={24} />HACER PETICIÓN</button>
       {petition ? <p role="status" className={styles.muted}>Próximamente podrás enviar tus peticiones desde aquí.</p> : null}
-      {office ? <Link className={styles.link} href="/attendance/mobile/office">Configurar EPS y ARL de empleados</Link> : null}
     </div>
   </>;
 }
