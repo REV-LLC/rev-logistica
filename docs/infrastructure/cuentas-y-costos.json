@@ -71,8 +71,8 @@
             "api_service_id": "0ff17e12-2c35-4659-b99e-de2809856464",
             "dominio": "https://mirev.revcontractorsllc.com",
             "api_url": "https://mirev-api-production.up.railway.app",
-            "web_deployment_id": "4aa2ff4c-e637-46fe-b657-582c8aaf95c1",
-            "api_deployment_id": "69506dba-3ebc-48dd-844c-80ebdb2851f2",
+            "web_deployment_id": "9d940e0d-8b36-4fa6-8f7e-32e2cee46af4",
+            "api_deployment_id": "b9ca1f59-0cc7-455d-8ce5-e3ea000e7b7d",
             "datos": "Postgres producción existente, esquema public; fotos R2 y worker facial de producción mediante referencias Railway. Sin copiar datos de staging.",
             "aislamiento": "Servicios nuevos; API principal, Vercel REV Logística y staging sin redeploy. API MiREV sin scheduler y sin predeploy/migraciones.",
             "facturacion": "Consumo incremental de dos servicios en el plan Railway existente; importe aún no medido. Sin nuevo plan contratado.",
@@ -106,8 +106,8 @@
             "portal_empleados": {
               "fecha": "2026-11-19",
               "migration": "20261119170000_mirev_employee_portal",
-              "oficina_url": "https://mirev.revcontractorsllc.com/attendance/mobile/office",
-              "eps_arl": "Columnas opcionales en Employee; solo Admin/Office configuran",
+              "oficina_url": "https://app.revcontractorsllc.com/employees/affiliations",
+              "eps_arl": "Catalogo y asignacion solo en REV Logistica; MiREV consulta afiliaciones propias.",
               "evidencia": "docs/infrastructure/mirev-portal-empleados-2026-11-19.json",
               "catalogo_eps_arl": {
                 "fecha": "2026-11-19",
@@ -117,10 +117,22 @@
                   "arlId"
                 ],
                 "migration": "20261119190000_employee_affiliation_catalog",
-                "url": "https://mirev.revcontractorsllc.com/attendance/mobile/office?tab=catalog",
-                "evidencia": "docs/infrastructure/mirev-catalogo-afiliaciones-2026-11-19.json"
+                "url": "https://app.revcontractorsllc.com/employees/affiliations",
+                "evidencia": "docs/infrastructure/mirev-catalogo-afiliaciones-2026-11-19.json",
+                "entidades_iniciales": {
+                  "EPS": 26,
+                  "ARL": 10
+                },
+                "evidencia_publicacion_actual": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
               }
-            }
+            },
+            "ultima_publicacion_evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
+          },
+          "afiliaciones_documentos_publicacion_2026_11_19": {
+            "evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json",
+            "api_deployment_id": "0f884dd8-167d-4b0a-afe0-9c18b238361f",
+            "github_merge_sha": "2109fd7f03a41278286e87f4a9fac52d469696be",
+            "vercel_deployment_id": "dpl_5unEWrchzvbhswCiXTbkj7nLcPWu"
           }
         },
         {
@@ -267,6 +279,14 @@
         "fecha_revision": "2026-11-16",
         "alcance_de_la_evidencia": "Repositorio del checkout y metadata del despliegue Vercel activo coinciden en REV-LLC/rev-logistica. Usuario humano y correo primario verificados previamente en Settings. Esto no implica que todas las automatizaciones se autentiquen como ese usuario personal.",
         "evidencia": "docs/infrastructure/verificacion-cuentas-produccion-2026-11-16.json"
+      },
+      "acceso_tecnico_cli": {
+        "login": "REVContractors",
+        "id": 200385542,
+        "repositorio_id": "R_kgDOQykzJA",
+        "viewerPermission": "ADMIN",
+        "metodo": "gh api user y gh repo view con sesion existente; no se cambiaron credenciales. Cuenta humana del registro conservada.",
+        "fecha_verificacion": "2026-11-19"
       }
     },
     {
@@ -282,7 +302,9 @@
       "cuenta_facturacion": "01048A-50B060-B8A288",
       "recursos": [
         "Address Validation API",
-        "Maps Embed API"
+        "Maps Embed API",
+        "Maps JavaScript API",
+        "Routes API"
       ],
       "facturacion": {
         "moneda": "USD",
@@ -319,6 +341,74 @@
           "https://web-staging-staging-cf10.up.railway.app/*"
         ],
         "web_deployment": "06f73dfe-8ce9-42f6-9dac-831804c17e22"
+      },
+      "tracking_produccion": {
+        "fecha": "2026-11-18",
+        "proyecto": "rev-logistica",
+        "project_number": "583636128913",
+        "apis_activadas": [
+          "maps-backend.googleapis.com",
+          "routes.googleapis.com"
+        ],
+        "claves": [
+          {
+            "id": "rev-fleet-maps-browser-20261118",
+            "uid": "e336edda-52cf-4f46-8a2c-4c8c9005300a",
+            "api": "maps-backend.googleapis.com",
+            "referrers": [
+              "https://app.revcontractorsllc.com/*"
+            ],
+            "variable": "TRACKING_MAPS_BROWSER_KEY"
+          },
+          {
+            "id": "rev-fleet-routes-server-20261118",
+            "uid": "1e2f86d7-76f5-402b-8a54-1d5429b767d5",
+            "api": "routes.googleapis.com",
+            "uso": "privado en API Railway, sin restriccion IP por egreso dinamico",
+            "variable": "TRACKING_ROUTES_API_KEY"
+          }
+        ],
+        "autorizacion": "Usuario autorizo activacion, claves restringidas y GPS/destino a Google el 2026-11-18",
+        "estado": "activo_verificado_produccion",
+        "cuotas_aplicacion_por_dia": {
+          "rutas": 100,
+          "cargas_mapa": 200
+        },
+        "evidencia": "docs/infrastructure/tracking-live-routes-evidence-2026-11-18.json",
+        "costo": "No se consulto nueva factura; limites de aplicacion no equivalen a garantia de costo cero.",
+        "commit": "5589690443416170530950cb898eeeafec83f557",
+        "api_deployment": "ba58bcef-b9dd-4919-a621-bd7717682d88",
+        "vercel_deployment": "dpl_CGMGzpJRRpq246yLki8U2Ycs81ip",
+        "verificacion": "Google Maps real en REV, recorrido GVU047 y ruta con trafico a sede principal: 44 min, 12.9 km, contador 1/100; API y Web mismo commit verificado."
+      },
+      "tracking_local": {
+        "fecha": "2026-11-19",
+        "autorizacion": "Usuario autorizo clave local restringida expresamente en este chat",
+        "proyecto": "rev-logistica",
+        "clave_id": "rev-fleet-maps-local-20261119",
+        "clave_uid": "fcaa31a6-da69-42b9-9377-6a1bd2981af8",
+        "api": "maps-backend.googleapis.com",
+        "referrers": [
+          "http://localhost:3040/*",
+          "http://127.0.0.1:3040/*"
+        ],
+        "variable_local": "TRACKING_LOCAL_BROWSER_KEY",
+        "estado": "creada_restricciones_verificadas_mapa_real_local_operativo",
+        "facturacion": "Mismo proyecto REV; consumo adicional por uso. Sin plan ni cuenta nuevos. No se consulto nueva factura.",
+        "cuotas_aplicacion_local_dia": {
+          "mapas": 100
+        },
+        "nota": "Demo local simplificada a ubicacion e historial GPS. Eliminados codigo y endpoint de planificacion; no carga la clave privada ni consulta Routes. Cupo Maps persistido localmente. Produccion conserva su configuracion previa.",
+        "evidencia": "tools/tracking-local/README.md en rama codex/tracking-local-preview",
+        "archivo_gps": {
+          "fecha": "2026-11-19",
+          "retencion_dias": 30,
+          "parada_minutos": 15,
+          "almacenamiento": "SQLite en .cache/tracking-local/archive.sqlite del proyecto principal, fuera de worktrees temporales; ignorado por Git",
+          "sincronizacion": "Importacion inicial de Traccar por dias y actualizacion cada 60 segundos mientras la demo esta encendida; recupera datos disponibles al reiniciar",
+          "verificacion": "Mas de 8000 puntos de ambos camiones; historico disponible desde 2026-10-20; selector de fecha, recorrido individual y marcas de inicio/fin comprobados; persistencia y purga probadas",
+          "costo": "Disco local; sin nuevo servicio o plan. Retencion del Traccar remoto no modificada."
+        }
       }
     },
     {
@@ -718,12 +808,33 @@
       "hecho": "Cristal aprobado 36% / 16 px extendido a cards de MiREV con variables y selectores bajo su clase page. Perfil compartido recibe overrides solo dentro de MiREV; paneles internos transparentes para no acumular opacidad. Solo frontend MiREV."
     },
     {
+      "fecha": "2026-11-18",
+      "hecho": "Usuario autorizó Maps JavaScript API y Routes API para seguimiento REV. Ambas activadas en proyecto rev-logistica (583636128913); dos claves nuevas restringidas desde creación y asignación a API Railway comprobada por huellas. Routes real entre sedes: HTTP 200, 313 m, 75 s. PR 380 fusionado a production (5589690443416170530950cb898eeeafec83f557); web READY y API SUCCESS verificados. Mapa Google, recorrido y ruta con tráfico probados dentro de REV; contador real 1/100. Sin cambios a claves Address Validation o Maps Embed de asistencia."
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Por solicitud de vista local sin login con datos reales, creada clave Maps JavaScript de desarrollo rev-fleet-maps-local-20261119, restringida desde creacion a localhost/127.0.0.1 puerto 3040. Mapa real y lecturas Traccar locales verificados; claves de produccion sin modificar. Registro guarda solo metadatos."
+    },
+    {
       "fecha": "2026-11-19",
       "hecho": "MiREV portal de empleados publicado: documentos propios, EPS/ARL en Employee con editor Office, incapacidad diaria con GPS y selfie solo sin entrada de hoy, diagnostico cifrado posterior, boton de peticion pendiente de flujo y scroll de camara. Migracion puntual aplicada, 64 pruebas API y 21 frontend aprobadas; sesion real verificada sin crear registros. Solo despliegues API y web MiREV, REV y staging preservados. Evidencia docs/infrastructure/mirev-portal-empleados-2026-11-19.json."
     },
     {
       "fecha": "2026-11-19",
+      "hecho": "Usuario pidio retirar planificacion y ETA de la version local de flota. Eliminados UI, endpoint y cliente Routes en rama codex/tracking-local-preview; conserva Google Maps para ubicacion e historial real Traccar. Sin cambios a servicios, claves o despliegues de produccion."
+    },
+    {
+      "fecha": "2026-11-19",
       "hecho": "MiREV normaliza EPS/ARL en catalogo EmployeeAffiliationProvider con asignaciones Employee.epsId/arlId y espejos compatibles. Migracion puntual aplicada; catalogo y selectores publicados y verificados con sesion real sin crear datos. 71 pruebas API, QA local y backfill de duplicados aprobados. Solo despliegues MiREV. Evidencia docs/infrastructure/mirev-catalogo-afiliaciones-2026-11-19.json."
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Demo local incorpora archivo persistente de GPS durante 30 dias y separacion por paradas confirmadas de 15 minutos elegidas por usuario. Datos en carpeta cache ignorada del proyecto principal, fuera de copias temporales. Importados reportes disponibles de Traccar de ambos camiones; no se modifico produccion ni su retencion. Compilacion, 54 pruebas y recorrido historico real verificados."
+    },
+    {
+      "fecha": "2026-11-19",
+      "hecho": "Catalogo EPS/ARL trasladado a REV Logistica y poblado con 26 EPS y 10 ARL; documentos propios en perfil y nombres automaticos de nuevas cargas. Publicacion verificada sin datos ficticios en produccion; staging aislado conservado. Identidad tecnica GitHub REVContractors verificada separadamente del usuario humano.",
+      "evidencia": "docs/infrastructure/rev-afiliaciones-documentos-2026-11-19.json"
     }
   ],
   "ultima_auditoria_produccion": {

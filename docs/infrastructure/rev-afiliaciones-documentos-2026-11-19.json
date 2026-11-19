@@ -1,0 +1,55 @@
+{
+  "fecha": "2026-11-19",
+  "proyecto": "rev-logistica",
+  "github": {
+    "repositorio": "REV-LLC/rev-logistica",
+    "pull_request": 382,
+    "merge_sha": "2109fd7f03a41278286e87f4a9fac52d469696be",
+    "ci_run": 44596426055,
+    "promotion_run": 44596426273,
+    "estado": "success"
+  },
+  "despliegues": {
+    "rev_api_production": "0f884dd8-167d-4b0a-afe0-9c18b238361f",
+    "rev_api_staging_regular": "7ff75c72-b5e1-42f6-b2f2-e29f9335f2da",
+    "rev_web_vercel": "dpl_5unEWrchzvbhswCiXTbkj7nLcPWu",
+    "mirev_api": "b9ca1f59-0cc7-455d-8ce5-e3ea000e7b7d",
+    "mirev_web": "9d940e0d-8b36-4fa6-8f7e-32e2cee46af4",
+    "mirev_source_sha": "f8966e0",
+    "estado": "SUCCESS"
+  },
+  "catalogo": {
+    "url": "https://app.revcontractorsllc.com/employees/affiliations",
+    "creadas": 36,
+    "eps": 26,
+    "arl": 10,
+    "asignaciones_empleados_modificadas": false,
+    "fuentes": [
+      "https://www.minsalud.gov.co/Proteccion-Social/Paginas/asignacion-eps.aspx",
+      "https://www.fasecolda.com/ramos/riesgos-laborales/companias-autorizadas/"
+    ],
+    "nota": "Nombres de referencia; oficina asigna la afiliacion real. Semilla idempotente, sin reactivar ni renombrar entidades existentes."
+  },
+  "documentos": {
+    "lector": "Identidad activa propia, autenticado; vista PDF/imagen y descarga. Sin carga en MiREV.",
+    "nuevos_uploads_rev": "Nombre completo y categoria normalizados; extension original compatible con MIME. UUID por objeto. Nombre original conservado como trazabilidad.",
+    "historicos": "Sin movimientos ni renombrado masivo"
+  },
+  "verificacion": {
+    "api_suites_aprobadas": 166,
+    "api_tests_aprobados": 1612,
+    "mirev_tests_aprobados": 36,
+    "builds": "API y Web de ambas ramas aprobados",
+    "produccion": "Sesion ADMIN real: 36 entidades, busqueda Sanitas 2 resultados, selector de empleado y documentos propios visibles. MiREV personal: botones vista/descarga, sin carga ni oficina. Sin escrituras de prueba.",
+    "http": "Health 200 en ambas APIs; pagina y endpoints de oficina retirados de MiREV responden 404.",
+    "card_mirev": "Segunda card sin borde; margenes 16 px a 390 px y 12 px a 320 px, sin desborde. Comprobado publicado.",
+    "asistencia_aislada": "attendance-test-api d25e73be-14af-4e91-bd0d-6e942126f62a, web-staging a4063db3-23c7-4843-a99a-7ab4ca320c93 y face-recognition 63449cbe-b770-47cd-9ff3-3ea36bc3c1fb conservados."
+  },
+  "identidad_tecnica_github": {
+    "login": "REVContractors",
+    "id": 200385542,
+    "repositorio_id": "R_kgDOQykzJA",
+    "viewerPermission": "ADMIN",
+    "metodo": "gh api user y gh repo view con sesion existente; no se cambiaron credenciales. Cuenta humana del registro conservada."
+  }
+}
