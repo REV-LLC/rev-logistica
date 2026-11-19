@@ -192,6 +192,7 @@ async function main() {
   assert.equal(imageDetails.Architecture, 'amd64');
   assert(!directory.includes(':'), 'Unsupported workspace path');
   run('docker', ['run', '--rm', '--platform', 'linux/amd64', '--network', 'none', '--entrypoint', 'node', '--mount', `type=bind,source=${path.join(directory, 'scripts/check-api-runtime.cjs')},target=/app/scripts/check-api-runtime.cjs,readonly`, imageTag, '/app/scripts/check-api-runtime.cjs']);
+  run('docker', ['run', '--rm', '--platform', 'linux/amd64', '--network', 'none', '--entrypoint', 'node', imageTag, '-e', "const {execFileSync}=require('node:child_process'); const langs=execFileSync('tesseract',['--list-langs'],{encoding:'utf8'}); if(!/\\bspa\\b/.test(langs))throw Error('Spanish OCR model missing'); execFileSync('pdfinfo',['-v'],{stdio:'pipe'}); execFileSync('pdftotext',['-v'],{stdio:'pipe'}); execFileSync('pdftoppm',['-v'],{stdio:'pipe'}); console.log('Local certificate reader runtime verified');"]);
   // Re-check visibility immediately before the first application upload.
   privatePackage(await github(PACKAGE_ROUTE), environment.GITHUB_REPOSITORY_ID);
   run('docker', ['push', imageTag]);

@@ -64,6 +64,10 @@ describe('employee documents: real JWT, upload, ownership and filename',()=>{
     await request(app.getHttpServer()).get(`/employee-portal/documents/${evidence.id}/download`).set('Authorization','Bearer '+token('employee')).expect(404);
     expect(rows).toContainEqual(evidence);
   });
+  it('queues EPS recognition atomically with the personal document and keeps its source file ID',async()=>{
+    const result=await request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('office')).field('category','EPS').attach('files',Buffer.from('%PDF-1.7\nFIXTURE'),{filename:'certificate.pdf',contentType:'application/pdf'}).expect(201);
+    expect(rows[0].employeeDocument.create.affiliationRecognition.create).toEqual({employeeId:own,sourceFileObjectId:result.body.files[0].id,kind:'EPS',expectedProviderId:null});
+  });
   it('blocks access to another employee via generic file endpoints and blocks employee uploads',async()=>{
     await request(app.getHttpServer()).get(`/files/entities/EMPLOYEE/${other}`).set('Authorization','Bearer '+token('driver')).expect(403);
     await request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('employee')).expect(401);
