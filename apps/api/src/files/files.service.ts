@@ -218,6 +218,7 @@ export class FilesService {
       where: {
         entityType,
         entityId,
+        ...(entityType === 'EMPLOYEE' ? { employeeDocument: { is: { employeeId: entityId } } } : {}),
         fileType: {
           notIn:
             entityType === 'ASSET'
@@ -336,16 +337,19 @@ export class FilesService {
       createdBy: string;
       providerWarehouseId: string | null;
     }> = [];
-    const employee = entityType === 'EMPLOYEE' ? await this.prisma.employee.findUnique({ where: { id: entityId }, select: { name: true, lastName: true } }) : null;
-    if (entityType === 'EMPLOYEE' && !employee) throw new NotFoundException('Empleado no encontrado');
+    const personnelDocument = entityType === 'EMPLOYEE' && CATEGORIES_BY_ENTITY.EMPLOYEE.has(category);
+    const employee = personnelDocument ? await this.prisma.employee.findUnique({ where: { id: entityId }, select: { name: true, lastName: true } }) : null;
+    if (personnelDocument && !employee) throw new NotFoundException('Empleado no encontrado');
     for (const file of files) {
       const extension =
         EXTENSION_BY_MIME_TYPE[file.mimetype] ??
         this.inferExtension(file.originalname);
       const generatedName = employee ? employeeDocumentFilename(employee, category, file) : null;
       const objectKey = generatedName
-        ? `employee/${entityId}/${category.toLowerCase()}/${randomUUID()}/${generatedName}`
-        : `${entityType.toLowerCase()}/${entityId}/${category.toLowerCase()}/${randomUUID()}.${extension}`;
+        ? `employee-documents/${entityId}/${category.toLowerCase()}/${randomUUID()}/${generatedName}`
+        : category === 'EVIDENCIA_WHATSAPP'
+          ? `whatsapp-evidence/${entityId}/${randomUUID()}.${extension}`
+          : `${entityType.toLowerCase()}/${entityId}/${category.toLowerCase()}/${randomUUID()}.${extension}`;
       await s3.send(
         new PutObjectCommand({
           Bucket: config.bucket,
@@ -394,6 +398,7 @@ export class FilesService {
           expiresAt,
           createdBy,
           providerWarehouseId,
+          ...(personnelDocument ? { employeeDocument: { create: { employeeId: entityId } } } : {}),
         },
         select: this.fileSelect,
       });
