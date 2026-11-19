@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import { MiRevMedicalService, medicalData, medicalDay, validateDiagnosis } from './mirev-medical.service';
 import { MiRevPortalService } from './mirev-portal.service';
 
@@ -65,20 +64,6 @@ describe('MiREV ownership and office access', () => {
     await expect(service.diagnosis('user', 'other-leave', { buffer: Buffer.from('%PDF-1.7'), mimetype: 'application/pdf', originalname: 'diagnosis.pdf' })).rejects.toThrow(NotFoundException);
     expect(db.miRevMedicalLeave.findFirst).toHaveBeenCalledWith({ where: { id: 'other-leave', employeeId: 'own-employee' }, select: { id: true } });
     expect(storage.put).not.toHaveBeenCalled();
-  });
-  it.each([Role.EMPLOYEE, Role.DRIVER, Role.OPERATOR])('denies affiliation updates for %s', async role => {
-    db.user.findUnique.mockResolvedValue({ role, active: true });
-    await expect(service.updateDetails('user', 'employee', { eps: 'EPS', arl: 'ARL' })).rejects.toThrow(ForbiddenException);
-    expect(db.employee.update).not.toHaveBeenCalled();
-  });
-  it('denies inactive office accounts', async () => {
-    db.user.findUnique.mockResolvedValue({ role: Role.OFFICE, active: false });
-    await expect(service.office('user')).rejects.toThrow(ForbiddenException);
-  });
-  it('allows active office to save real nullable employee fields', async () => {
-    db.user.findUnique.mockResolvedValue({ role: Role.OFFICE, active: true });
-    await service.updateDetails('office', 'employee', { eps: ' EPS ', arl: '' });
-    expect(db.employee.update).toHaveBeenCalledWith({ where: { id: 'employee' }, data: { eps: 'EPS', arl: null }, select: { id: true, eps: true, arl: true } });
   });
   it('scopes employee documents and downloads to the authenticated employee', async () => {
     db.fileObject = { findMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) };

@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
@@ -43,10 +42,6 @@ export function validateDiagnosis(file?: Attachment) {
 @Injectable()
 export class MiRevMedicalService {
   constructor(private readonly prisma: PrismaService, private readonly employees: EmployeesService, private readonly storage: AttendanceStorageService) {}
-  async staff(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { active: true, role: true } });
-    if (!user?.active || (user.role !== Role.ADMIN && user.role !== Role.OFFICE)) throw new ForbiddenException('Solo oficina puede configurar EPS y ARL.');
-  }
   private entry(employeeId: string, now: Date) {
     const { start, end } = medicalDay(now);
     return this.prisma.attendancePunch.findFirst({ where: { employeeId, kind: 'CHECK_IN', status: { not: 'REJECTED' }, occurredAt: { gte: start, lt: end } }, orderBy: { occurredAt: 'desc' }, select: { id: true } });
@@ -107,17 +102,5 @@ export class MiRevMedicalService {
         return tx.miRevMedicalDiagnosis.create({ data: { ...metadata, medicalLeaveId, evidenceKey }, select: diagnosisSelect });
       });
     } catch (error) { await this.storage.remove(evidenceKey).catch(() => undefined); throw error; }
-  }
-  async office(userId: string) {
-    await this.staff(userId);
-    return this.prisma.employee.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true, lastName: true, eps: true, arl: true } });
-  }
-  async updateDetails(userId: string, employeeId: string, body: { eps?: unknown; arl?: unknown }) {
-    await this.staff(userId);
-    const normalize = (value: unknown) => {
-      if (typeof value !== 'string' || value.trim().length > 160) throw new BadRequestException('Revisa EPS y ARL (máximo 160 caracteres).');
-      return value.trim() || null;
-    };
-    return this.prisma.employee.update({ where: { id: employeeId }, data: { eps: normalize(body.eps), arl: normalize(body.arl) }, select: { id: true, eps: true, arl: true } });
   }
 }

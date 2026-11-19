@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { EmployeeAffiliationsService } from './employee-affiliations.service';
 import { MiRevMedicalService } from './mirev-medical.service';
 import { MiRevPortalService } from './mirev-portal.service';
 
@@ -13,7 +14,7 @@ import { MiRevPortalService } from './mirev-portal.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR, Role.EMPLOYEE)
 export class MiRevPortalController {
-  constructor(private readonly portal: MiRevPortalService, private readonly medical: MiRevMedicalService) {}
+  constructor(private readonly portal: MiRevPortalService, private readonly medical: MiRevMedicalService, private readonly affiliations: EmployeeAffiliationsService) {}
   @Get('medical-leave/today')
   @Header('Cache-Control', 'private, no-store')
   today(@Req() request: { user: { sub: string } }) { return this.medical.today(request.user.sub); }
@@ -29,11 +30,24 @@ export class MiRevPortalController {
   @Get('office/employees')
   @Roles(Role.ADMIN, Role.OFFICE)
   @Header('Cache-Control', 'private, no-store')
-  office(@Req() request: { user: { sub: string } }) { return this.medical.office(request.user.sub); }
+  office(@Req() request: { user: { sub: string } }) { return this.affiliations.employees(request.user.sub); }
 
   @Patch('office/employees/:id/affiliations')
   @Roles(Role.ADMIN, Role.OFFICE)
-  affiliations(@Req() request: { user: { sub: string } }, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: { eps?: unknown; arl?: unknown }) { return this.medical.updateDetails(request.user.sub, id, body); }
+  assignAffiliations(@Req() request: { user: { sub: string } }, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: { epsId?: unknown; arlId?: unknown }) { return this.affiliations.assign(request.user.sub, id, body); }
+
+  @Get('office/affiliation-providers')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  @Header('Cache-Control', 'private, no-store')
+  catalog(@Req() request: { user: { sub: string } }) { return this.affiliations.catalog(request.user.sub); }
+
+  @Post('office/affiliation-providers')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  createProvider(@Req() request: { user: { sub: string } }, @Body() body: { kind?: unknown; name?: unknown }) { return this.affiliations.create(request.user.sub, body); }
+
+  @Patch('office/affiliation-providers/:id')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  updateProvider(@Req() request: { user: { sub: string } }, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: { name?: unknown; active?: unknown }) { return this.affiliations.update(request.user.sub, id, body); }
 
   @Get('documents')
   @Header('Cache-Control', 'private, no-store')

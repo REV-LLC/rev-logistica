@@ -1592,6 +1592,10 @@ model Owner {
 }
 
 model Employee {
+  epsId String?
+  arlId String?
+  epsProvider EmployeeAffiliationProvider? @relation("EmployeeEpsProvider", fields: [epsId], references: [id], onDelete: Restrict)
+  arlProvider EmployeeAffiliationProvider? @relation("EmployeeArlProvider", fields: [arlId], references: [id], onDelete: Restrict)
   eps String? @db.VarChar(160)
   arl String? @db.VarChar(160)
   mirevMedicalLeaves MiRevMedicalLeave[]
@@ -1618,6 +1622,9 @@ model Employee {
   documentsPerformed Document[]
   tabletAuthorizations TabletDocumentAuthorization[]
   createdAt  DateTime     @default(now())
+
+  @@index([epsId])
+  @@index([arlId])
 
   vehicles        EmployeeVehicle[]
   user            User?             @relation(fields: [userId], references: [id])
@@ -2218,4 +2225,18 @@ model MiRevMedicalDiagnosis {
   createdAt DateTime @default(now())
   medicalLeave MiRevMedicalLeave @relation(fields: [medicalLeaveId], references: [id], onDelete: Restrict)
   @@index([medicalLeaveId])
+}
+
+
+model EmployeeAffiliationProvider {
+  id String @id @default(uuid())
+  kind String
+  name String @db.VarChar(160)
+  normalizedName String @db.VarChar(160)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  epsEmployees Employee[] @relation("EmployeeEpsProvider")
+  arlEmployees Employee[] @relation("EmployeeArlProvider")
+  @@unique([kind, normalizedName])
 }

@@ -155,3 +155,5 @@
 .medicalCard h2 { font-size: 24px; }
 .medicalCard p { overflow-wrap: anywhere; }
 .portalForm { margin-top: 20px; }
+.page :global(section[aria-label='Gestión de afiliaciones']) { background: var(--mirev-glass-background); box-shadow: var(--mirev-glass-shadow); -webkit-backdrop-filter: var(--mirev-glass-filter); backdrop-filter: var(--mirev-glass-filter); }
+.page :global(section[aria-label='Gestión de afiliaciones']) .portalTabs button[data-active] { background: rgba(255,255,255,.1); }
