@@ -77,16 +77,8 @@ type NavSection = {
 
 const sections: NavSection[] = [
   {
-    title: 'Mi perfil',
-    links: [
-      { href: '/profile?tab=loans', label: 'Préstamos', icon: IconFileDollar, roles: ['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR'], exact: true },
-      { href: '/profile?tab=activities', label: 'Mi bitácora', icon: IconCalendar, roles: ['ADMIN', 'OFFICE', 'DRIVER', 'OPERATOR'], exact: true },
-    ],
-  },
-  {
     title: "Operación",
     links: [
-      { href: "/attendance", label: "Mi asistencia", icon: IconCalendar, roles: ["ADMIN", "OFFICE", "DRIVER", "OPERATOR", "EMPLOYEE"] },
       { href: "/employees/attendance", label: "Asistencia y rostros", icon: IconUsers, roles: ["ADMIN", "OFFICE"] },
       { href: "/transport/generate", label: "Crear documento", icon: IconFilePlus, roles: ["WAREHOUSE_TABLET"] },
       { href: "/transport/requests", label: "Documentos de bodega", icon: IconClipboardList, roles: ["WAREHOUSE_TABLET"] },
@@ -139,24 +131,6 @@ const sections: NavSection[] = [
         href: "/transport/tracking",
         label: "Mapa",
         icon: IconMap2,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
-        href: "/employees/whatsapp-reports",
-        label: "Reportes WhatsApp",
-        icon: IconMessageCircle,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
-        href: "/notifications/deliveries",
-        label: "Notificaciones",
-        icon: IconBell,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
-        href: "/tasks",
-        label: "Pendientes",
-        icon: IconChecklist,
         roles: ["ADMIN", "OFFICE"],
       },
     ],
@@ -233,20 +207,28 @@ const sections: NavSection[] = [
       },
       {
         href: "/inventory/maintenance",
-        label: "Mantenimientos",
+        label: "Horómetros y mantenimientos",
         icon: IconTools,
-        roles: ["ADMIN", "OFFICE"],
-      },
-      {
-        href: "/inventory/hour-meter",
-        label: "Horómetros",
-        icon: IconGauge,
         roles: ["ADMIN", "OFFICE", "OPERATOR"],
+        children: [
+          {
+            href: "/inventory/hour-meter",
+            label: "Horómetros",
+            icon: IconGauge,
+            roles: ["ADMIN", "OFFICE", "OPERATOR"],
+          },
+          {
+            href: "/inventory/maintenance",
+            label: "Mantenimientos",
+            icon: IconTools,
+            roles: ["ADMIN", "OFFICE"],
+          },
+        ],
       },
     ],
   },
   {
-    title: "Gestión",
+    title: "Clientes, empleados",
     links: [
       {
         href: "/transport/worksites",
@@ -298,14 +280,13 @@ const sections: NavSection[] = [
         icon: IconUser,
         roles: ["ADMIN", "OFFICE"],
         activePrefixes: ["/employees"],
-        excludedPrefixes: ["/employees/activities"],
         children: [
           { href: "/employees", label: "Directorio", icon: IconUsers, roles: ["ADMIN", "OFFICE"], excludedPrefixes: ["/employees/payroll", "/employees/activities", "/employees/affiliations"] },
           { href: "/employees/affiliations", label: "EPS y ARL", icon: IconTag, roles: ["ADMIN", "OFFICE"] },
           { href: "/employees/payroll", label: "Nómina", icon: IconFileDollar, roles: ["ADMIN", "OFFICE"] },
+          { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
         ],
       },
-      { href: "/employees/activities", label: "Bitácora de empleados", icon: IconCalendar, roles: ["ADMIN", "OFFICE"] },
     ],
   },
   {
@@ -330,6 +311,24 @@ const sections: NavSection[] = [
 ];
 
 const toolLinks: NavLinkItem[] = [
+  {
+    href: "/employees/whatsapp-reports",
+    label: "Reportes WhatsApp",
+    icon: IconMessageCircle,
+    roles: ["ADMIN", "OFFICE"],
+  },
+  {
+    href: "/tasks",
+    label: "Pendientes",
+    icon: IconChecklist,
+    roles: ["ADMIN", "OFFICE"],
+  },
+  {
+    href: "/notifications/deliveries",
+    label: "Notificaciones",
+    icon: IconBell,
+    roles: ["ADMIN", "OFFICE"],
+  },
   {
     href: "/tools/pdf-editor",
     label: "Editor de PDF",
@@ -378,6 +377,12 @@ const quickLinks: NavLinkItem[] = [
     activeRoutes: [{ pathnamePrefix: "/inventory/serialized-assets/", searchParam: { key: "scope", value: "own" } }],
   },
 ];
+const profileLink: NavLinkItem = {
+  href: "/profile",
+  label: "Mi perfil",
+  icon: IconUser,
+  roles: ["ADMIN", "OFFICE", "DRIVER", "OPERATOR"],
+};
 const defaultExpandedSections = new Set(["Operación"]);
 const assistantLink: NavLinkItem = {
   href: "/office-assistant",
@@ -900,18 +905,13 @@ export default function Nav({ onNavigate }: NavProps) {
               {userDisplayName}
             </Text>
           ) : null}
-          {currentRole && currentRole !== 'WAREHOUSE_TABLET' ? <Button
-            component={Link} href="/profile" variant="subtle" size="compact-xs" color="gray"
-            onClick={onNavigate} styles={{ root: { color: '#c8d2df' } }}>
-            Ver perfil
-          </Button> : null}
         </Stack>
       </Group>
       <Divider color="rgba(255,255,255,0.10)" />
       <SidebarSearch
         key={routeKey}
         entries={buildNavigationSearchEntries([
-          { title: 'General', links: [homeLink, assistantLink, ...quickLinks].filter(canShowLink) },
+          { title: 'General', links: [homeLink, profileLink, assistantLink, ...quickLinks].filter(canShowLink) },
           ...orderedSections,
         ])}
         onNavigate={onNavigate}
@@ -932,6 +932,7 @@ export default function Nav({ onNavigate }: NavProps) {
         }}
       >
         <Stack gap="md" pr={4}>
+          {canShowLink(profileLink) ? renderNavItem(profileLink) : null}
           {orderedSections.map(renderSection)}
         </Stack>
       </ScrollArea>
