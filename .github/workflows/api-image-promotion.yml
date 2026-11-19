@@ -13,6 +13,11 @@ on:
         description: Successful production CI run for that exact commit
         required: true
         type: string
+      production_only:
+        description: Explicit production-only release; keep staging unchanged (CI and image smoke still required)
+        required: false
+        default: false
+        type: boolean
       allow_initial_git_source:
         description: First migration only; permit Railway-verified recovery to the current Git deployment
         required: false
@@ -32,7 +37,8 @@ concurrency:
 jobs:
   build:
     name: Build immutable API image
-    if: vars.API_IMAGE_PROMOTION_ENABLED == 'true' && github.ref == 'refs/heads/production'
+    # A production-only merge waits for an explicit, exact-SHA manual dispatch.
+    if: vars.API_IMAGE_PROMOTION_ENABLED == 'true' && github.ref == 'refs/heads/production' && !(github.event_name == 'push' && contains(github.event.head_commit.message, '[production-only]'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -111,6 +117,7 @@ jobs:
         run: rm -f "$DOCKER_CONFIG/config.json"
 
   staging:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.production_only) }}
     name: Deploy and verify staging
     needs: build
     runs-on: ubuntu-latest
@@ -158,6 +165,7 @@ jobs:
           retention-days: 30
 
   production:
+    if: ${{ always() && needs.build.result == 'success' && (needs.staging.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.production_only && needs.staging.result == 'skipped')) }}
     name: Promote verified digest to production
     needs: [build, staging]
     runs-on: ubuntu-latest
@@ -188,6 +196,7 @@ jobs:
         with:
           node-version: 22
       - name: Load staging proof from this workflow only
+        if: ${{ !inputs.production_only }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: api-staging-evidence-${{ github.run_id }}
@@ -196,6 +205,7 @@ jobs:
         id: promote
         run: node scripts/deploy/promote-api-image.cjs production
         env:
+          PRODUCTION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.production_only && 'true' || 'false' }}
           STAGING_EVIDENCE_PATH: ${{ runner.temp }}/staging-evidence/api-staging-evidence.json
           EVIDENCE_PATH: ${{ runner.temp }}/api-production-evidence.json
           GH_TOKEN: ${{ github.token }}
