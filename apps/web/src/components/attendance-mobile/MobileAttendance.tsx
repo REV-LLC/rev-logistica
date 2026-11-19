@@ -3,7 +3,6 @@
 import { getAttendanceLocation as getLocation } from '@/lib/attendance-geolocation';
 import MiRevMedicalLeave from './MiRevMedicalLeave';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import { useCameraViewport } from './useCameraViewport';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconCamera, IconCheck, IconClock, IconDoor, IconHelpCircle, IconLoader2, IconLogin, IconLogout, IconMapPin, IconVolume } from '@tabler/icons-react';
@@ -51,7 +50,7 @@ export default function MobileAttendance({ view = 'attendance' }: { view?: 'atte
   return <MiRevEmployeeProvider enabled={signedIn === true} onExpired={expired}><main className={styles.page}>
     <div className={`${styles.screen} ${view !== 'attendance' ? styles.profileScreen : ''}`}>
       <header className={styles.header}>
-        <Link href="/attendance/mobile" className={styles.brand} aria-label="Inicio de MiREV"><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></Link>
+        <a href="/attendance/mobile" className={styles.brand} aria-label="Inicio de MiREV"><img className={styles.logo} src="/fiesta.svg?v=silver" alt="REV" width="108" height="54" /><span>MiREV</span></a>
         <div className={styles.headerActions}><button className={`${styles.link} ${styles.help}`} onClick={() => setHelp(value => !value)} aria-expanded={help} aria-controls="attendance-help">
           <IconHelpCircle size={25} aria-hidden="true" /><span>Ayuda</span>
         </button>
