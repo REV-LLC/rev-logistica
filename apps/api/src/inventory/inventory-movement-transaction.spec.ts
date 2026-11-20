@@ -72,6 +72,19 @@ describe.each(methods)('%s transaction ownership', (method) => {
     expect(f.tx.stockLedger.create.mock.invocationCallOrder[0]).toBeLessThan(f.cache.del.mock.invocationCallOrder[0]);
   });
 
+  it('rejects historical shortages before writing for online and replayed documents alike', async () => {
+    const f = fixture(method);
+    f.tx.$queryRaw.mockResolvedValueOnce([{ id: 'sku' }]).mockResolvedValueOnce([{
+      balance: '-1', effectiveAt: new Date('2026-08-20T12:00:00Z'),
+      name: 'RUEDAS NIVELADORAS', consecutive: 'DV019171',
+    }]);
+    await expect(f.service[method](f.input, 'operator', f.tx as never))
+      .rejects.toThrow('DV019171');
+    expect(f.tx.stockLedger.create).not.toHaveBeenCalled();
+    expect(f.cache.del).not.toHaveBeenCalled();
+    expect(f.tx.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
   it('propagates a ledger write failure without invalidating caches', async () => {
     const f = fixture(method);
     const failure = new Error('synthetic write failure');

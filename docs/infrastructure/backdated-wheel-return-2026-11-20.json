@@ -1,0 +1,113 @@
+{
+  "fecha": "2026-11-20",
+  "alcance": "REV Logística API y web; reparación puntual de datos y validación cronológica de materiales",
+  "autorizacion": "Usuario solicitó corregir DV009658 y evitar negativos al registrar documentos atrasados.",
+  "caso": {
+    "devolucion": "DV009658",
+    "estado_conservado": "DRAFT",
+    "material": "RUEDAS NIVELADORAS",
+    "cantidad": 1,
+    "customerWorksiteId": "bdbb5b44-30bb-47fe-bc72-70e605590c9a",
+    "skuId": "020d7a02-edf9-404d-84cf-f0bb7f6eb893",
+    "ownerWarehouseId": "8941f5b2-56eb-4ecf-899e-7386bac0b04d"
+  },
+  "causa_confirmada": {
+    "saldo_inicial": 5,
+    "devolucion_31_julio": {
+      "documento": "DV019258",
+      "cantidad": 2,
+      "registrada": "2026-08-14T21:27:43.609Z"
+    },
+    "devolucion_4_agosto": {
+      "documento": "DV019171",
+      "cantidad": 4,
+      "registrada": "2026-08-05T01:32:18.100Z"
+    },
+    "entrega_4_agosto": {
+      "documento": "RM019257",
+      "cantidad": 2,
+      "registrada": "2026-08-14T21:23:33.855Z"
+    },
+    "precision_fecha": "Los documentos antiguos declaran solo día; ambos movimientos del 4 de agosto tienen effectiveAt 2026-08-04T17:00:00.000Z y appendOrder original null. No es evidencia de hora física real.",
+    "saldo_orden_anterior": [
+      5,
+      3,
+      -1,
+      1
+    ]
+  },
+  "reparacion_aplicada": {
+    "entorno": "production",
+    "servicio_datos": "Postgres del proyecto Railway bec9984e-3e3a-48c8-9d75-8c87d591b931",
+    "tipo": "Orden administrativo explícito dentro del empate de fecha sin hora",
+    "movimientos": [
+      {
+        "id": "9017dcbb-aa29-434c-adc1-35dc1998ec34",
+        "documento": "RM019257",
+        "appendOrder_anterior": null,
+        "appendOrder_nuevo": 2135
+      },
+      {
+        "id": "e87a6533-d3a6-4ea0-85b8-094828f61b31",
+        "documento": "DV019171",
+        "appendOrder_anterior": null,
+        "appendOrder_nuevo": 2136
+      }
+    ],
+    "saldo_despues": [
+      5,
+      3,
+      5,
+      1
+    ],
+    "fechas_y_cantidades_conservadas": true,
+    "inventario_nuevo_creado": false,
+    "devolucion_actual_confirmada_por_agente": false,
+    "comprobaciones": [
+      "Simulación con rollback antes del cambio",
+      "Transacción serializable con bloqueo del SKU y del borrador",
+      "Saldo cronológico no negativo de obra y bodegas afectadas",
+      "Planificación de devolución de una unidad válida"
+    ]
+  },
+  "offline": {
+    "operaciones_sync_documentos_antiguos": 0,
+    "conclusion": "No hay evidencia suficiente para atribuir el caso a offline. La fecha declarada difiere de la fecha de registro; el sistema offline y el formulario online comparten servidor y validación."
+  },
+  "prevencion": {
+    "ubicacion": "InventoryService: moveOut, moveOnSite, moveIn y moveReturnTransit",
+    "regla": "Validar saldo exacto al insertar y todos los movimientos posteriores, dentro de los bloqueos y la transacción existentes.",
+    "incluye": [
+      "Fechas antiguas de cualquier época, no solo documentos comerciales V2",
+      "Existencias por referencia, propietario y origen",
+      "Despachos, devoluciones a bodega y tránsito de proveedores",
+      "Mismo control para peticiones online y sincronizadas",
+      "Pruebas PostgreSQL con rollback en esquema local temporal"
+    ]
+  },
+  "validacion": {
+    "api_build": "PASS",
+    "api_tests": 1689,
+    "api_tests_omitidos_por_requerir_entornos_especificos": 173,
+    "postgres_local_tests": 10,
+    "web_tests": 431,
+    "browser": {
+      "herramienta": "Playwright; Browser plugin no disponible",
+      "origen": "http://127.0.0.1:3292",
+      "api": "simulada, sin escrituras a producción",
+      "viewports": [
+        "1440x1000",
+        "390x844"
+      ],
+      "flujo": "Abrir borrador -> Aprobar -> error de fecha anterior visible -> continúa en borrador",
+      "resultados": [
+        "Mensaje completo sin prefijo HTTP",
+        "Sin errores de ejecución",
+        "Texto dentro del ancho disponible"
+      ]
+    }
+  },
+  "publicacion": {
+    "estado": "pendiente"
+  }
+}

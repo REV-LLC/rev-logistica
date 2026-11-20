@@ -24,6 +24,7 @@ type Source = Pick<
 export type BulkReturnHistory = {
   id: string;
   skuId: string | null;
+  sku?: { name: string } | null;
   ownerWarehouseId: string;
   movementType: string;
   quantity: Prisma.Decimal;
@@ -31,6 +32,7 @@ export type BulkReturnHistory = {
   reversedByDocumentId: string | null;
   document: {
     id: string;
+    consecutive?: string | null;
     type: string;
     status: string;
     docDate: Date;
@@ -64,10 +66,19 @@ export function planBulkReturnAllocation(
     const plans = new Map<string, Portion[]>();
     const lots = new Map<string, Array<Portion & { reservationKey: string }>>();
     const arrived = new Map<string, Prisma.Decimal>();
-    const review = () =>
-      new BadRequestException(
-        'El historial de este material requiere conciliación antes de devolver; no se modificó ningún movimiento.',
+    let activeMovement: BulkReturnHistory | undefined;
+    const review = (reason: string) => {
+      const material = activeMovement?.sku?.name
+        ? ` de «${activeMovement.sku.name}»`
+        : ' de este material';
+      const document = activeMovement?.document;
+      const reference = document
+        ? ` Revisa el documento${document.consecutive ? ` ${document.consecutive}` : ''} del ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(document.docDate)}.`
+        : '';
+      return new BadRequestException(
+        `No se pudo registrar la devolución${material}. ${reason}${reference} Pide a la persona encargada de inventario que revise y corrija ese registro antes de volver a confirmar. Este intento no cambió el inventario.`,
       );
+    };
     const consume = (
       group: string,
       amount: Prisma.Decimal,
@@ -97,10 +108,15 @@ export function planBulkReturnAllocation(
         portions.push({ source: lot.source, quantity: taken });
       }
       if (remaining.gt(0)) {
-        if (!current) throw review();
+        if (!current)
+          throw review(
+            sourceId
+              ? 'Una devolución anterior está asociada a una entrega que no tiene suficientes unidades disponibles.'
+              : 'Una devolución anterior registra más unidades de las que había disponibles en la obra en esa fecha.',
+          );
         const available = amount.minus(remaining).toString();
         throw new BadRequestException(
-          `La devolución supera el saldo total en obra de esta referencia y propietario a la fecha del documento. Disponible: ${available}.`,
+          `No se pudo registrar la devolución: intentas devolver ${amount.toString()} unidades, pero el saldo total disponible en la obra para ese material y propietario es ${available} en la fecha del documento, después de respetar las devoluciones ya confirmadas. Revisa la cantidad, la fecha y el propietario antes de confirmar de nuevo. Este intento no cambió el inventario.`,
         );
       }
       return portions;
@@ -125,15 +141,19 @@ export function planBulkReturnAllocation(
     };
     let inserted = false;
     for (const movement of history) {
+      activeMovement = movement;
       if (!inserted && movement.effectiveAt > at) {
         insertReturn();
         inserted = true;
       }
-      if (
-        movement.reversedByDocumentId ||
-        (movement.document && movement.document.status !== 'CONFIRMED')
-      )
-        throw review();
+      if (movement.reversedByDocumentId)
+        throw review(
+          'Hay un movimiento anulado en el historial de este material.',
+        );
+      if (movement.document && movement.document.status !== 'CONFIRMED')
+        throw review(
+          'Hay un movimiento de inventario asociado a un documento que no está confirmado.',
+        );
       const group = key(movement.skuId, movement.ownerWarehouseId);
       const lines =
         movement.document?.items.filter(
@@ -148,7 +168,10 @@ export function planBulkReturnAllocation(
         movement.movementType === 'OUT'
           ? movement.quantity.negated()
           : movement.quantity;
-      if (!amount.isFinite() || amount.lt(0)) throw review();
+      if (!amount.isFinite() || amount.lt(0))
+        throw review(
+          'Un movimiento anterior tiene una cantidad inválida para su tipo de operación.',
+        );
       if (amount.isZero()) continue;
       if (entering) {
         let remainder = amount;
@@ -175,7 +198,9 @@ export function planBulkReturnAllocation(
         if (remainder.gt(0)) {
           // Only a pre-cutover ledger-only delivery may lack a documentary line.
           if (movement.document && usesCommercialV2(movement.document.docDate))
-            throw review();
+            throw review(
+              'La cantidad de una entrega anterior no coincide con el detalle de materiales de su documento.',
+            );
           const queue = lots.get(group) ?? [];
           queue.push({
             source: null,
@@ -185,7 +210,10 @@ export function planBulkReturnAllocation(
           lots.set(group, queue);
         }
       } else {
-        if (!['IN', 'TRANSIT'].includes(movement.movementType)) throw review();
+        if (!['IN', 'TRANSIT'].includes(movement.movementType))
+          throw review(
+            'Hay un movimiento cuyo tipo no se puede usar para calcular las unidades pendientes en la obra.',
+          );
         // Linked returns reserve their actual lot; old unlinked returns consume FIFO.
         // Multiple ledger rows for one document consume its lines only once.
         let remainder = amount;
@@ -236,7 +264,9 @@ export async function allocateBulkReturnItems(
   const bulk = document.items.filter(isBulk);
   if (!bulk.length) return document.items;
   if (!document.customerWorksiteId)
-    throw new BadRequestException('La devolución requiere obra.');
+    throw new BadRequestException(
+      'Selecciona la obra de la que regresa el material antes de confirmar la devolución.',
+    );
   if (bulk.some((item) => !item.condition))
     throw new BadRequestException(
       'Selecciona el propietario de cada material que vas a devolver.',
@@ -281,6 +311,7 @@ export async function allocateBulkReturnItems(
     select: {
       id: true,
       skuId: true,
+      sku: { select: { name: true } },
       ownerWarehouseId: true,
       movementType: true,
       quantity: true,
@@ -289,6 +320,7 @@ export async function allocateBulkReturnItems(
       document: {
         select: {
           id: true,
+          consecutive: true,
           type: true,
           status: true,
           docDate: true,
@@ -321,7 +353,7 @@ export async function allocateBulkReturnItems(
   });
   if (history.length > 50000)
     throw new BadRequestException(
-      'El historial de materiales requiere procesamiento por lotes.',
+      'No se pudo registrar la devolución porque hay más de 50.000 movimientos para revisar. Pide a soporte que procese el historial de materiales de esta obra antes de confirmar de nuevo. Este intento no cambió el inventario.',
     );
   const plans = planBulkReturnAllocation(history, bulk, document.docDate);
   const result: DocumentItem[] = [];

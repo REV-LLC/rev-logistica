@@ -61,6 +61,7 @@ import {
 } from './worksite-ledger-balance';
 import { physicalWarehouseLedgerWhere } from './warehouse-stock-balance';
 import { lockBulkStock } from './bulk-stock-lock';
+import { assertBulkSourceTimeline } from './bulk-source-timeline';
 import { buildAssetValidationError } from './asset-validation-error';
 import { resolveLatestSerializedMovements } from './serialized-ledger-location';
 import { serializedBalanceConsistency } from './serialized-balance-consistency';
@@ -1156,6 +1157,9 @@ export class InventoryService {
         }
       }
 
+      await assertBulkSourceTimeline(tx, 'WAREHOUSE', bulkGroups.map(group => ({
+        ...group, locationId: payload.warehouseId,
+      })), effectiveAt);
       const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
@@ -1386,6 +1390,9 @@ export class InventoryService {
         }
       }
 
+      await assertBulkSourceTimeline(tx, 'OWNER', bulkGroups.map(group => ({
+        ...group, locationId: group.ownerWarehouseId,
+      })), effectiveAt);
       const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
@@ -1532,6 +1539,9 @@ export class InventoryService {
         }
       }
 
+      await assertBulkSourceTimeline(tx, 'WORKSITE', bulkGroups.map(group => ({
+        ...group, locationId: payload.customerWorksiteId,
+      })), effectiveAt);
       const created = await Promise.all([
         ...bulkGroups.map((item) => tx.stockLedger.create({ data: {
           movementType: MovementType.TRANSIT, warehouseId: null,
@@ -1681,6 +1691,9 @@ export class InventoryService {
         }
       }
 
+      await assertBulkSourceTimeline(tx, 'WORKSITE', bulkGroups.map(group => ({
+        ...group, locationId: payload.customerWorksiteId,
+      })), effectiveAt);
       const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
