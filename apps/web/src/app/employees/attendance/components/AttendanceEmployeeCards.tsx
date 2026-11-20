@@ -99,10 +99,10 @@ export default function AttendanceEmployeeCards({
   const [range, setRange] = useState(() =>
     requestedDate
       ? { from: requestedDate, to: requestedDate }
-      : (requestedRange ?? presetRange("month")),
+      : (requestedRange ?? presetRange(initialEmployeeId ? "last15" : "month")),
   );
   const [preset, setPreset] = useState<string | null>(
-    requestedDate || requestedRange ? "custom" : "month",
+    requestedDate || requestedRange ? "custom" : initialEmployeeId ? "last15" : "month",
   );
   const [employees, setEmployees] = useState<Employee[]>([]);
   const employeeId = initialEmployeeId;
@@ -111,7 +111,7 @@ export default function AttendanceEmployeeCards({
   const [loading, setLoading] = useState(true);
   const [journalLoading, setJournalLoading] = useState(false);
   const [error, setError] = useState("");
-  const [profile, setProfile] = useState<AttendanceProfile>("operators");
+  const [profile, setProfile] = useState<AttendanceProfile>("all");
   const [search, setSearch] = useState("");
   const [withReports, setWithReports] = useState(false);
   const [status, setStatus] = useState<string | null>("all");
@@ -240,6 +240,7 @@ export default function AttendanceEmployeeCards({
           }}
           data={[
             { value: "today", label: "Hoy" },
+            { value: "last15", label: "Últimos 15 días" },
             { value: "week", label: "Esta semana" },
             { value: "month", label: "Este mes" },
             { value: "custom", label: "Elegir fechas" },
