@@ -33,6 +33,7 @@ const routeTitles: Array<[prefix: string, title: string]> = [
   ['/fuel', 'Combustible'],
   ['/billing/annexes', 'Anexos'],
   ['/billing/price-list', 'Lista de precios'],
+  ['/customers/whatsapp', 'Chats de clientes'],
   ['/customers', 'Clientes'],
   ['/providers', 'Proveedores'],
   ['/attendance', 'Mi asistencia'],

@@ -249,10 +249,17 @@ const sections: NavSection[] = [
         roles: ["ADMIN", "OFFICE"],
         children: [
           {
+            href: "/customers/whatsapp",
+            label: "Chats de clientes",
+            icon: IconMessageCircle,
+            roles: ["ADMIN", "OFFICE"],
+          },
+          {
             href: "/customers",
             label: "Clientes",
             icon: IconUsers,
             roles: ["ADMIN", "OFFICE"],
+            excludedPrefixes: ["/customers/whatsapp"],
           },
           {
             href: "/providers",

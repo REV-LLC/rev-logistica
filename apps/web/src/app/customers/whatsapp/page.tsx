@@ -1,0 +1,635 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Container,
+  Group,
+  Loader,
+  Paper,
+  Select,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
+import {
+  IconArrowLeft,
+  IconCheck,
+  IconMessageCircle,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconRefresh,
+  IconSearch,
+} from "@tabler/icons-react";
+import { api, apiBlob } from "@/lib/api";
+import { getCurrentUserRole } from "@/lib/auth";
+import styles from "./whatsapp.module.css";
+
+type Draft = {
+  items: { equipment: string; quantity: number | null }[];
+  customer: string | null;
+  worksite: string | null;
+  start: string | null;
+  duration: string | null;
+  transport: string | null;
+};
+type Chat = {
+  phone: string;
+  customers: string[];
+  latest: string;
+  count: number;
+  pending: boolean;
+  paused: boolean;
+  preview: string;
+};
+type Listing = { chats: Chat[]; nextPage: number | null; enabled: boolean };
+type Message = {
+  id: string;
+  text: string;
+  type: string;
+  sentAt: string;
+  createdAt: string;
+  replyText: string | null;
+  replySentAt: string | null;
+  error: string | null;
+};
+type Detail = {
+  customers: string[];
+  phone: string;
+  draft: Draft;
+  paused: boolean;
+  notes: string;
+  latest: string | null;
+  reviewedThrough: string | null;
+  messages: Message[];
+  before: string | null;
+  requests: {
+    id: string;
+    details: Draft & { requestedAt?: string };
+    createdAt: string;
+    status: string;
+  }[];
+};
+const date = (d: string) =>
+  new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(d));
+const name = (chat?: { customers: string[] }) =>
+  chat?.customers.length === 1
+    ? chat.customers[0]
+    : chat?.customers.length
+      ? "Contacto de varios clientes"
+      : "Contacto por identificar";
+function RequestDetails({ draft }: { draft: Draft }) {
+  return (
+    <Stack gap={5}>
+      {draft.items.map((item, i) => (
+        <Text key={i} size="sm">
+          {item.quantity ?? "Cantidad por definir"} × {item.equipment}
+        </Text>
+      ))}
+      {[
+        ["Cliente", draft.customer],
+        ["Obra", draft.worksite],
+        ["Fecha solicitada", draft.start],
+        ["Duración", draft.duration],
+        ["Transporte", draft.transport],
+      ].map(([label, value]) => (
+        <Text key={label} size="sm">
+          <Text component="span" c="dimmed">
+            {label}:{" "}
+          </Text>
+          {value || "Por completar"}
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+function Photo({ phone, id }: { phone: string; id: string }) {
+  const [url, setUrl] = useState<string | null>(null),
+    [error, setError] = useState(false),
+    [busy, setBusy] = useState(false);
+  const ref = useRef<string | null>(null);
+  useEffect(
+    () => () => {
+      if (ref.current) URL.revokeObjectURL(ref.current);
+    },
+    [],
+  );
+  async function open() {
+    setBusy(true);
+    setError(false);
+    try {
+      const blob = await apiBlob(
+        `/whatsapp-customers/${phone}/messages/${id}/photo`,
+      );
+      if (ref.current) URL.revokeObjectURL(ref.current);
+      const next = URL.createObjectURL(blob);
+      ref.current = next;
+      setUrl(next);
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div>
+      {url ? (
+        <img
+          src={url}
+          alt="Foto enviada por el cliente"
+          className={styles.photo}
+        />
+      ) : (
+        <Button
+          size="xs"
+          variant="light"
+          loading={busy}
+          onClick={() => void open()}
+        >
+          Ver foto
+        </Button>
+      )}
+      {error && (
+        <Text size="xs" c="dimmed">
+          La foto no está disponible en WhatsApp. Solicita al cliente que la
+          reenvíe.
+        </Text>
+      )}
+    </div>
+  );
+}
+export default function CustomerWhatsappPage() {
+  const [allowed, setAllowed] = useState<boolean | null>(null),
+    [listing, setListing] = useState<Listing | null>(null),
+    [page, setPage] = useState(0),
+    [search, setSearch] = useState(""),
+    [query] = useDebouncedValue(search, 300),
+    [status, setStatus] = useState("all"),
+    [selected, setSelected] = useState<string | null>(null),
+    [detail, setDetail] = useState<Detail | null>(null),
+    [notes, setNotes] = useState(""),
+    [error, setError] = useState<string | null>(null),
+    [busy, setBusy] = useState(false),
+    [saving, setSaving] = useState(false);
+  const detailSeq = useRef(0),
+    listSeq = useRef(0);
+  useEffect(
+    () => setAllowed(["ADMIN", "OFFICE"].includes(getCurrentUserRole() ?? "")),
+    [],
+  );
+  useEffect(() => setPage(0), [query, status]);
+  const loadList = useCallback(async () => {
+    const seq = ++listSeq.current;
+    try {
+      const data = await api<Listing>(
+        `/whatsapp-customers?search=${encodeURIComponent(query)}&status=${status}&page=${page}`,
+      );
+      if (seq === listSeq.current) setListing(data);
+    } catch (e) {
+      if (seq === listSeq.current)
+        setError(
+          e instanceof Error ? e.message : "No se pudo cargar la bandeja",
+        );
+    }
+  }, [query, status, page]);
+  useEffect(() => {
+    if (!allowed) return;
+    void loadList();
+    const timer = setInterval(() => void loadList(), 15000);
+    return () => {
+      clearInterval(timer);
+      listSeq.current++;
+    };
+  }, [allowed, loadList]);
+  const loadDetail = useCallback(
+    async (phone: string, preserveNotes = false) => {
+      const seq = ++detailSeq.current;
+      setBusy(true);
+      setError(null);
+      try {
+        const data = await api<Detail>(`/whatsapp-customers/${phone}`);
+        if (seq === detailSeq.current) {
+          setDetail(data);
+          if (!preserveNotes) setNotes(data.notes);
+        }
+      } catch (e) {
+        if (seq === detailSeq.current)
+          setError(e instanceof Error ? e.message : "No se pudo abrir el chat");
+      } finally {
+        if (seq === detailSeq.current) setBusy(false);
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    setDetail(null);
+    if (selected) void loadDetail(selected);
+    return () => {
+      detailSeq.current++;
+    };
+  }, [selected, loadDetail]);
+  async function save(paused: boolean, reviewed: boolean) {
+    if (!detail) return;
+    const seq = detailSeq.current;
+    setSaving(true);
+    setError(null);
+    try {
+      await api(`/whatsapp-customers/${detail.phone}`, {
+        method: "PATCH",
+        json: {
+          notes,
+          paused,
+          ...(reviewed && detail.latest
+            ? { reviewedThrough: detail.latest }
+            : {}),
+        },
+      });
+      if (seq === detailSeq.current) await loadDetail(detail.phone);
+      await loadList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function older() {
+    if (!detail?.before) return;
+    const phone = detail.phone,
+      seq = detailSeq.current;
+    setBusy(true);
+    try {
+      const data = await api<Detail>(
+        `/whatsapp-customers/${phone}?before=${detail.before}`,
+      );
+      if (seq === detailSeq.current)
+        setDetail((d) =>
+          d && d.phone === phone
+            ? {
+                ...d,
+                before: data.before,
+                messages: [...data.messages, ...d.messages],
+              }
+            : d,
+        );
+    } catch {
+      setError("No se pudieron cargar los mensajes anteriores");
+    } finally {
+      if (seq === detailSeq.current) setBusy(false);
+    }
+  }
+  if (allowed === null)
+    return (
+      <Container py="xl">
+        <Loader />
+      </Container>
+    );
+  if (!allowed)
+    return (
+      <Container py="xl">
+        <Alert color="red">
+          Esta bandeja es exclusiva para administración y oficina.
+        </Alert>
+      </Container>
+    );
+  const listedContact = listing?.chats.find((c) => c.phone === selected);
+  const contact =
+    listedContact ??
+    (detail ? { customers: detail.customers ?? [] } : undefined);
+  const hasNew = !!(
+    detail?.latest &&
+    listedContact &&
+    new Date(listedContact.latest) > new Date(detail.latest)
+  );
+  return (
+    <Container size="xl" py="lg">
+      <Stack gap="lg">
+        <Group justify="space-between">
+          <div>
+            <Group gap="xs">
+              <IconMessageCircle />
+              <Title order={2}>Chats de clientes</Title>
+            </Group>
+            <Text c="dimmed" size="sm" mt={5}>
+              Revisa las conversaciones y las solicitudes de alquiler antes de
+              coordinarlas.
+            </Text>
+          </div>
+          <Button
+            variant="subtle"
+            leftSection={<IconRefresh size={16} />}
+            onClick={() => void loadList()}
+          >
+            Actualizar bandeja
+          </Button>
+        </Group>
+        {error && (
+          <Alert color="red" withCloseButton onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        {listing && !listing.enabled && (
+          <Alert color="yellow">
+            El asistente de clientes está desactivado. Puedes revisar los
+            mensajes que recibió el canal.
+          </Alert>
+        )}
+        <div className={styles.layout}>
+          <Paper
+            withBorder
+            p="md"
+            radius="md"
+            className={`${styles.sidebar} ${selected ? styles.hideMobile : ""}`}
+          >
+            <Stack gap="sm">
+              <TextInput
+                aria-label="Buscar conversación"
+                placeholder="Cliente o teléfono"
+                leftSection={<IconSearch size={16} />}
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+              />
+              <Select
+                aria-label="Estado de revisión"
+                value={status}
+                onChange={(v) => setStatus(v ?? "all")}
+                data={[
+                  { value: "all", label: "Todos los chats" },
+                  { value: "pending", label: "Por revisar" },
+                  { value: "reviewed", label: "Revisados" },
+                  { value: "paused", label: "Bot en pausa" },
+                ]}
+              />
+              {!listing ? (
+                <Loader size="sm" />
+              ) : !listing.chats.length ? (
+                <Text c="dimmed" py="xl" ta="center">
+                  No hay conversaciones en este filtro.
+                </Text>
+              ) : (
+                listing.chats.map((chat) => (
+                  <button
+                    key={chat.phone}
+                    className={styles.chat}
+                    data-selected={chat.phone === selected}
+                    onClick={() => setSelected(chat.phone)}
+                  >
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text fw={600} size="sm" lineClamp={1}>
+                        {name(chat)}
+                      </Text>
+                      {chat.pending && (
+                        <Badge size="xs" color="yellow">
+                          Por revisar
+                        </Badge>
+                      )}
+                    </Group>
+                    <Text size="sm" mt={4}>
+                      +{chat.phone}
+                    </Text>
+                    <Text c="dimmed" size="sm" lineClamp={2} mt={5}>
+                      {chat.preview}
+                    </Text>
+                    <Group justify="space-between" mt="xs">
+                      <Text size="xs" c="dimmed">
+                        {date(chat.latest)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {chat.paused
+                          ? "Bot en pausa"
+                          : `${chat.count} mensajes`}
+                      </Text>
+                    </Group>
+                  </button>
+                ))
+              )}
+              <Group justify="space-between">
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  disabled={listing?.nextPage == null}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Siguiente
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+          <Paper
+            withBorder
+            radius="md"
+            className={`${styles.main} ${!selected ? styles.hideMobile : ""}`}
+          >
+            {!selected ? (
+              <Stack align="center" justify="center" mih={400} p="xl">
+                <IconMessageCircle size={40} />
+                <Text c="dimmed">
+                  Selecciona un chat para revisar su conversación.
+                </Text>
+              </Stack>
+            ) : !detail ? (
+              <Stack p="xl">
+                {busy ? (
+                  <Loader />
+                ) : (
+                  <Text c="dimmed">No se pudo cargar esta conversación.</Text>
+                )}
+                <Button variant="subtle" onClick={() => setSelected(null)}>
+                  Volver a los chats
+                </Button>
+              </Stack>
+            ) : (
+              <Stack gap={0}>
+                <div className={styles.header}>
+                  <Group justify="space-between">
+                    <div>
+                      <Button
+                        className={styles.back}
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<IconArrowLeft size={14} />}
+                        onClick={() => setSelected(null)}
+                      >
+                        Chats
+                      </Button>
+                      <Text fw={700}>{name(contact)}</Text>
+                      <Text size="sm" c="dimmed">
+                        +{detail.phone}
+                        {contact?.customers.length === 1
+                          ? " · Coincidencia por teléfono"
+                          : " · Identidad pendiente de verificar"}
+                      </Text>
+                    </div>
+                    <Button
+                      size="xs"
+                      variant={detail.paused ? "light" : "default"}
+                      color={detail.paused ? "green" : "gray"}
+                      loading={saving}
+                      leftSection={
+                        detail.paused ? (
+                          <IconPlayerPlay size={14} />
+                        ) : (
+                          <IconPlayerPause size={14} />
+                        )
+                      }
+                      onClick={() => void save(!detail.paused, false)}
+                    >
+                      {detail.paused ? "Reanudar bot" : "Pausar bot"}
+                    </Button>
+                  </Group>
+                  {detail.paused && (
+                    <Text size="xs" c="yellow" mt="xs">
+                      Bot en pausa. Los mensajes entrantes se guardan sin
+                      respuesta automática.
+                    </Text>
+                  )}
+                  {hasNew && (
+                    <Button
+                      mt="sm"
+                      size="xs"
+                      onClick={() => void loadDetail(detail.phone, true)}
+                    >
+                      Hay mensajes nuevos · Actualizar chat
+                    </Button>
+                  )}
+                </div>
+                <div className={styles.messages}>
+                  {detail.before && (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      loading={busy}
+                      onClick={() => void older()}
+                    >
+                      Cargar mensajes anteriores
+                    </Button>
+                  )}
+                  {detail.messages.map((message) => (
+                    <div key={message.id}>
+                      <div className={styles.incoming}>
+                        <Text size="xs" fw={600} c="dimmed">
+                          Cliente · {date(message.sentAt)}
+                        </Text>
+                        <Text size="sm" className={styles.messageText}>
+                          {message.text ||
+                            ({
+                              image: "Foto recibida",
+                              audio: "Audio recibido · requiere revisión",
+                              document:
+                                "Documento recibido · requiere revisión",
+                              location: "Ubicación recibida",
+                            }[message.type] ??
+                              "Mensaje recibido")}
+                        </Text>
+                        {message.type === "image" && (
+                          <Photo phone={detail.phone} id={message.id} />
+                        )}
+                      </div>
+                      {message.replyText && (
+                        <div className={styles.outgoing}>
+                          <Text size="xs" fw={600} c="dimmed">
+                            Asistente ·{" "}
+                            {message.replySentAt
+                              ? date(message.replySentAt)
+                              : "Pendiente de envío"}
+                          </Text>
+                          <Text size="sm" className={styles.messageText}>
+                            {message.replyText}
+                          </Text>
+                        </div>
+                      )}
+                      {message.error && (
+                        <Text size="xs" c="yellow" mt={4}>
+                          Requiere revisión de oficina
+                        </Text>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className={styles.review}>
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <Text fw={600}>Solicitudes recibidas</Text>
+                      <Badge color="yellow" variant="light">
+                        Revisión de oficina
+                      </Badge>
+                    </Group>
+                    {detail.requests.length ? (
+                      detail.requests.map((request) => (
+                        <Paper key={request.id} withBorder p="md" radius="md">
+                          <Text size="xs" c="dimmed" mb="sm">
+                            El cliente confirmó los datos ·{" "}
+                            {date(request.createdAt)}
+                          </Text>
+                          <RequestDetails draft={request.details} />
+                        </Paper>
+                      ))
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        Todavía no hay una solicitud confirmada por el cliente.
+                      </Text>
+                    )}
+                    {detail.draft.items.length > 0 && (
+                      <Paper withBorder p="md">
+                        <Text fw={600} size="sm" mb="sm">
+                          Borrador en conversación
+                        </Text>
+                        <RequestDetails draft={detail.draft} />
+                      </Paper>
+                    )}
+                    <Text size="xs" c="dimmed">
+                      Las solicitudes no reservan equipos ni confirman precios o
+                      entregas. Las fechas relativas se conservan tal como las
+                      expresó el cliente; usa la hora del mensaje como
+                      referencia.
+                    </Text>
+                    <Textarea
+                      label="Notas internas"
+                      description="Solo visibles para administración y oficina"
+                      value={notes}
+                      onChange={(e) => setNotes(e.currentTarget.value)}
+                      maxLength={4000}
+                      minRows={3}
+                      autosize
+                    />
+                    <Group justify="flex-end">
+                      <Button
+                        variant="default"
+                        loading={saving}
+                        onClick={() => void save(detail.paused, false)}
+                      >
+                        Guardar notas
+                      </Button>
+                      <Button
+                        leftSection={<IconCheck size={16} />}
+                        loading={saving}
+                        onClick={() => void save(detail.paused, true)}
+                      >
+                        Marcar como revisado
+                      </Button>
+                    </Group>
+                  </Stack>
+                </div>
+              </Stack>
+            )}
+          </Paper>
+        </div>
+      </Stack>
+    </Container>
+  );
+}
