@@ -1,3 +1,6 @@
+import { WhatsappCustomerController } from './whatsapp-customer.controller';
+import { WhatsappCustomerService } from './whatsapp-customer.service';
+import { WhatsappCustomerAiService } from './whatsapp-customer-ai.service';
 import { AttendanceJournalsService } from './attendance-journals.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
@@ -14,8 +17,10 @@ import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, FilesModule, MailModule],
-  controllers: [WhatsappReportsController],
+  controllers: [WhatsappReportsController, WhatsappCustomerController],
   providers: [
+    WhatsappCustomerService,
+    WhatsappCustomerAiService,
     AttendanceJournalsService,
     WhatsappCloudService,
     WhatsappInboxService,

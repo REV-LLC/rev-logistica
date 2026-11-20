@@ -1,3 +1,4 @@
+import { WhatsappCustomerService } from './whatsapp-customer.service';
 import {
   whatsappAttendanceEnabled,
   ATTENDANCE_RETIRED_MESSAGE,
@@ -10,6 +11,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, WhatsappInboundMessage } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -63,6 +65,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly files: FilesService,
     private readonly ai: WhatsappReportAiService,
     private readonly records: WhatsappReportRecordsService,
+    @Optional() private readonly customers?: WhatsappCustomerService,
   ) {}
 
   onModuleInit() {
@@ -186,6 +189,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
 
   private async processOne(message: WhatsappInboundMessage) {
     const employee = await this.employeeForPhone(message.phone);
+    if (!employee && (await this.customers?.process(message))) return;
     if (!employee || message.sentAt.getTime() < Date.now() - 23 * 3600000) {
       await this.prisma.whatsappInboundMessage.updateMany({
         where: { id: message.id, status: 'QUEUED' },
@@ -1043,6 +1047,21 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       take: 20,
     });
     for (const message of replies) {
+      if (
+        message.replyKind.startsWith('CUSTOMER_') &&
+        !(await this.customers?.canReply(
+          message.phone,
+          message.replyKind === 'CUSTOMER_HANDOFF',
+        ))
+      ) {
+        // Suppress retired/paused replies permanently so they cannot starve the
+        // shared employee outbox or be replayed after a later reactivation.
+        await this.prisma.whatsappInboundMessage.updateMany({
+          where: { id: message.id, replySentAt: null },
+          data: { replyText: null },
+        });
+        continue;
+      }
       // Durable compare-and-swap avoids duplicate sends by concurrent replicas.
       const claim = await this.prisma.whatsappInboundMessage.updateMany({
         where: {

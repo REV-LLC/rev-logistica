@@ -130,6 +130,7 @@ const routeTitles: Array<{ prefix: string; title: string; subtitle: string }> =
       subtitle: "Datos y bodegas",
     },
     { prefix: "/billing/annexes", title: "Anexos", subtitle: "Cobro por obra" },
+    { prefix: "/customers/whatsapp", title: "Chats de clientes", subtitle: "Solicitudes por WhatsApp" },
     { prefix: "/customers", title: "Clientes", subtitle: "Relacion comercial" },
     { prefix: "/employees/affiliations", title: "EPS y ARL", subtitle: "Afiliaciones de empleados" },
     { prefix: "/employees", title: "Empleados", subtitle: "Equipo interno" },

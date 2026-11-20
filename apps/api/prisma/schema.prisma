@@ -2295,3 +2295,31 @@ model EmployeeAffiliationRecognition {
   @@index([status,leaseUntil,createdAt])
   @@index([employeeId,createdAt])
 }
+
+// Customer requests are intake drafts, never inventory reservations or confirmed rentals.
+model WhatsappCustomerChat {
+  phone String @id
+  lastCustomerAt DateTime?
+  confirmationMessageId String?
+  draft Json
+  awaitingConfirmation Boolean @default(false)
+  paused Boolean @default(false)
+  reviewedThrough DateTime?
+  reviewedBy String?
+  notes String @default("")
+  leaseUntil DateTime @default(now())
+  leaseToken String?
+  updatedAt DateTime @updatedAt
+  requests WhatsappCustomerRequest[]
+}
+
+model WhatsappCustomerRequest {
+  id String @id @default(uuid())
+  phone String
+  chat WhatsappCustomerChat @relation(fields: [phone], references: [phone])
+  sourceMessageId String @unique
+  details Json
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  @@index([phone, createdAt])
+}
