@@ -22,7 +22,15 @@ describe('Attendance employee profile metadata', () => {
       worksiteAttendance: {
         findMany: jest
           .fn()
-          .mockResolvedValue([{ id: 'journey', activityNote: null, punches }]),
+          .mockResolvedValue([
+            {
+              id: 'journey',
+              enteredAt: new Date('2026-11-18T12:00:00Z'),
+              leftAt: new Date('2026-11-18T20:00:00Z'),
+              activityNote: null,
+              punches,
+            },
+          ]),
       },
     };
     const result = await new AttendanceJournalsService(
@@ -52,6 +60,8 @@ describe('Attendance employee profile metadata', () => {
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'journey',
+            enteredAt: new Date('2026-11-18T12:00:00Z'),
+            leftAt: new Date('2026-11-18T20:00:00Z'),
             activityNote: {
               id: 'note',
               verifiedEnteredAt: new Date('2026-11-18T13:00:00Z'),

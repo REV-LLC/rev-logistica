@@ -144,6 +144,16 @@ async function fixture(overrides = {}, fail = false) {
       ),
   };
 }
+
+test('review modal displays corrected presence and retains original timestamps as evidence', async () => {
+  const f = await fixture({
+    enteredAt: '2026-11-14T12:00:00Z', leftAt: '2026-11-17T21:00:00Z',
+    effective: { enteredAt: '2026-11-14T12:00:00Z', leftAt: '2026-11-14T21:00:00Z', hours: 9, corrected: true },
+  });
+  assert.match(f.container.textContent, /Presencia reportada: 9.00/);
+  assert.match(f.container.textContent, /Registro original:/);
+  assert.doesNotMatch(f.container.textContent, /81.00/);
+});
 test("confirms the selected employee note through the audited review endpoint", async () => {
   const f = await fixture();
   await f.click("Aprobar");

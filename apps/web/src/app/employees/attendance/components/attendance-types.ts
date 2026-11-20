@@ -1,4 +1,5 @@
 import type { EmployeeCardRole } from "@/components/EmployeeCard";
+import type { AttendanceJournalTiming } from "@/lib/attendance-journal-timing";
 
 export type AttendanceEmployee = {
   id: string;
@@ -27,6 +28,7 @@ export type AttendanceEvidence = {
 };
 
 export type AttendanceJournal = {
+  effective?: AttendanceJournalTiming;
   id: string;
   enteredAt: string;
   leftAt: string | null;
