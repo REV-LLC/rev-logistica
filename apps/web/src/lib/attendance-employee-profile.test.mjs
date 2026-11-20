@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { attendanceEmployeeProfile } from "./attendance-employee-profile.ts";
+test("attendance initially displays all employee profiles", () => {
+  const source = readFileSync(new URL("../app/employees/attendance/components/AttendanceEmployeeCards.tsx", import.meta.url), "utf8");
+  assert.match(source, /useState<AttendanceProfile>\("all"\)/);
+  assert.match(source, /profile === "all" \|\| attendanceEmployeeProfile\(e\) === profile/);
+});
 test("attendance operator cards include both operator jobs, with or without a software account", () => {
   for (const role of ["HEAVY_MACHINERY_OPERATOR", "MACHINIST"])
     for (const accountRole of [null, "OPERATOR"])

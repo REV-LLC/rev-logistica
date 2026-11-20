@@ -12,6 +12,7 @@ export function attendancePresetRange(preset: string, today: string) {
   }
   if (preset === "week")
     first.setUTCDate(first.getUTCDate() - ((first.getUTCDay() + 6) % 7));
+  if (preset === "last15") first.setUTCDate(first.getUTCDate() - 14);
   return { from: first.toISOString().slice(0, 10), to: today };
 }
 export function attendanceDayTitle(value: string) {
