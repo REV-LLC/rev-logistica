@@ -1,12 +1,14 @@
-'use client';
-import { Button, Group, Modal, Stack } from '@mantine/core';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
-import { type PointerEvent as ReactPointerEvent } from 'react';
+"use client";
+import { ActionIcon, Button, Modal, Text, Tooltip } from "@mantine/core";
+import { IconCheck, IconEraser, IconX } from "@tabler/icons-react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
+import { type PointerEvent as ReactPointerEvent } from "react";
+import styles from "./RequestSignatureDialog.module.css";
 
 type Props = {
   signatureModalOpen: boolean;
   setSignatureModalOpen: Dispatch<SetStateAction<boolean>>;
-  customerSignatureLabel: 'Firma de quien entrega' | 'Firma de recibido';
+  customerSignatureLabel: "Firma de quien entrega" | "Firma de recibido";
   signatureCanvasRef: RefObject<HTMLCanvasElement | null>;
   beginSignature: (event: ReactPointerEvent<HTMLCanvasElement>) => void;
   moveSignature: (event: ReactPointerEvent<HTMLCanvasElement>) => void;
@@ -33,47 +35,62 @@ export default function RequestSignatureDialog({
       opened={signatureModalOpen}
       onClose={() => setSignatureModalOpen(false)}
       title={customerSignatureLabel}
+      withCloseButton={false}
+      transitionProps={{ duration: 0 }}
+      classNames={{
+        content: styles.content,
+        header: styles.hiddenHeader,
+        body: styles.body,
+      }}
+      size="xl"
       centered
     >
-      <Stack gap="md">
-        <canvas
-          ref={signatureCanvasRef}
-          onPointerDown={beginSignature}
-          onPointerMove={moveSignature}
-          onPointerUp={endSignature}
-          onPointerCancel={endSignature}
-          onPointerLeave={endSignature}
-          style={{
-            width: '100%',
-            height: 180,
-            border: '1px solid var(--mantine-color-gray-4)',
-            borderRadius: 8,
-            background: '#fff',
-            touchAction: 'none',
-          }}
-        />
-        <Group justify="space-between" className="mobile-actions">
-          <Button variant="default" onClick={clearSignature}>
+      <div className={styles.editor}>
+        <div className={styles.toolbar}>
+          <Text fw={600} className={styles.title}>
+            {customerSignatureLabel}
+          </Text>
+          <Button
+            variant="default"
+            leftSection={<IconEraser size={18} />}
+            onClick={clearSignature}
+          >
             Limpiar
           </Button>
-          <Group>
-            <Button
+          <Button
+            leftSection={<IconCheck size={18} />}
+            onClick={() => {
+              setReceivedSignature(signatureDraft ?? null);
+              setSignatureModalOpen(false);
+            }}
+          >
+            Guardar firma
+          </Button>
+          <Tooltip label="Cancelar">
+            <ActionIcon
+              aria-label="Cancelar firma"
               variant="default"
+              size={40}
               onClick={() => setSignatureModalOpen(false)}
             >
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => {
-                setReceivedSignature(signatureDraft ?? null);
-                setSignatureModalOpen(false);
-              }}
-            >
-              Confirmar y guardar
-            </Button>
-          </Group>
-        </Group>
-      </Stack>
+              <IconX size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </div>
+        <div className={styles.surface}>
+          <canvas
+            aria-label={customerSignatureLabel}
+            ref={signatureCanvasRef}
+            onPointerDown={beginSignature}
+            onPointerMove={moveSignature}
+            onPointerUp={endSignature}
+            onPointerCancel={endSignature}
+            onPointerLeave={endSignature}
+            className={styles.canvas}
+          />
+          <div className={styles.guide} aria-hidden="true" />
+        </div>
+      </div>
     </Modal>
   );
 }
