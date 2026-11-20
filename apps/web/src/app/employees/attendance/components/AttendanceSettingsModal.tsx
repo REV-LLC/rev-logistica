@@ -16,6 +16,7 @@ import { api } from "@/lib/api";
 import { type AttendanceSite, attendanceDate } from "@/lib/attendance";
 import AttendancePrivatePhoto from "./AttendancePrivatePhoto";
 import AttendanceSiteLocation from "./AttendanceSiteLocation";
+import AttendanceWorkSchedule from "./AttendanceWorkSchedule";
 
 type ReferenceEmployee = {
   id: string;
@@ -35,7 +36,9 @@ export default function AttendanceSettingsModal({
 }: {
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<string | null>("references");
+  const [tab, setTab] = useState<string | null>("schedule");
+  const [scheduleState, setScheduleState] = useState({ dirty: false, saving: false });
+  const onScheduleStateChange = useCallback((state: { dirty: boolean; saving: boolean }) => setScheduleState(state), []);
   const [employees, setEmployees] = useState<ReferenceEmployee[]>([]);
   const [sites, setSites] = useState<AttendanceSite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +64,7 @@ export default function AttendanceSettingsModal({
     [],
   );
   useEffect(() => {
+    if (tab === 'schedule') { setLoading(false); setError(''); return; }
     let active = true;
     setLoading(true);
     setError("");
@@ -160,13 +164,13 @@ export default function AttendanceSettingsModal({
       <Modal
         opened
         onClose={() => {
-          if (!busy) onClose();
+          if (!busy && !scheduleState.saving && (!scheduleState.dirty || window.confirm('¿Descartar los cambios del horario?'))) onClose();
         }}
         title="Ajustes de asistencia"
         size="xl"
-        closeOnClickOutside={!busy}
-        closeOnEscape={!busy}
-        withCloseButton={!busy}
+        closeOnClickOutside={!busy && !scheduleState.saving}
+        closeOnEscape={!busy && !scheduleState.saving}
+        withCloseButton={!busy && !scheduleState.saving}
       >
         <Stack>
           {error ? (
@@ -174,8 +178,13 @@ export default function AttendanceSettingsModal({
               {error}
             </Alert>
           ) : null}
-          <Tabs value={tab} onChange={setTab}>
+          <Tabs keepMounted={false} value={tab} onChange={value => {
+            if (value === tab || scheduleState.saving) return;
+            if (scheduleState.dirty && !window.confirm('¿Descartar los cambios del horario?')) return;
+            setScheduleState({ dirty: false, saving: false }); setTab(value);
+          }}>
             <Tabs.List>
+              <Tabs.Tab value="schedule" disabled={Boolean(busy) || scheduleState.saving}>Horario de REV</Tabs.Tab>
               <Tabs.Tab value="references" disabled={Boolean(busy)}>
                 Fotos de referencia
               </Tabs.Tab>
@@ -183,6 +192,7 @@ export default function AttendanceSettingsModal({
                 Ubicación de obras
               </Tabs.Tab>
             </Tabs.List>
+            <Tabs.Panel value="schedule" pt="md"><AttendanceWorkSchedule onStateChange={onScheduleStateChange} /></Tabs.Panel>
             {loading ? (
               <Loader aria-label="Cargando ajustes de asistencia" />
             ) : null}

@@ -1,4 +1,9 @@
+import { DEFAULT_WORK_SCHEDULE, WORK_SCHEDULE_KEY } from './work-schedule';
+
 export const APP_SETTING_DEFINITIONS = {
+  [WORK_SCHEDULE_KEY]: {
+    category: 'ATTENDANCE', description: 'Horario semanal de REV en hora de Colombia', defaultValue: DEFAULT_WORK_SCHEDULE,
+  },
   'loans.payments_positive': {
     category: 'LOANS', description: 'Mostrar pagos con signo positivo y préstamos con signo negativo; no cambia los saldos', defaultValue: false,
   },

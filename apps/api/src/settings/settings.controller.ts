@@ -6,12 +6,31 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { SettingsService } from './settings.service';
+import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
+import { WORK_SCHEDULE_KEY } from './work-schedule';
 
 @Controller('settings')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
+
+  @Get('work-schedule')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  async workSchedule() {
+    const row = (await this.settings.list('ATTENDANCE')).find(setting => setting.key === WORK_SCHEDULE_KEY)!;
+    return { schedule: row.value, timeZone: 'America/Bogota', updatedAt: row.updatedAt };
+  }
+
+  @Patch('work-schedule')
+  @Roles(Role.ADMIN, Role.OFFICE)
+  async updateWorkSchedule(
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })) payload: UpdateWorkScheduleDto,
+    @Req() request: Request & { user: { sub: string } },
+  ) {
+    await this.settings.update({ [WORK_SCHEDULE_KEY]: payload.schedule }, request.user.sub);
+    return this.workSchedule();
+  }
 
   @Get('loan-display')
   @Roles(Role.ADMIN, Role.OFFICE, Role.DRIVER, Role.OPERATOR)
