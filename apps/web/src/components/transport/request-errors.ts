@@ -67,9 +67,7 @@ export function formatTransportError(error: unknown, fallback: string) {
     /\b(missing|required|not found|not available|request failed|failed to|invalid|unknown error)\b/i;
   const visibleMessage =
     !message || technicalEnglishMessage.test(message) ? fallback : message;
-  return error instanceof ApiError
-    ? `${error.status}: ${visibleMessage}`
-    : visibleMessage;
+  return visibleMessage;
 }
 
 export function extractOwnerWarehouseIdFromMessage(message: string) {

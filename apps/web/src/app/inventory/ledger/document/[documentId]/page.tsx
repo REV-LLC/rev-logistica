@@ -27,6 +27,7 @@ import {
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { formatTransportError } from '@/components/transport/request-errors';
 import { getCurrentUserRole } from '@/lib/auth';
 import { documentPrintRows, documentItemDescription, documentItemCode } from '@/lib/document-print-rows';
 import {
@@ -518,7 +519,7 @@ export default function DocumentDetailPage() {
       } catch (err) {
         if (!mounted) return;
         if (err instanceof ApiError) {
-          setError(`${err.status}: ${err.message}`);
+          setError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
@@ -774,7 +775,7 @@ export default function DocumentDetailPage() {
       setBillingItemId(null);
     } catch (err) {
       if (err instanceof ApiError) {
-        setBillingError(`${err.status}: ${err.message}`);
+        setBillingError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
       } else if (err instanceof Error) {
         setBillingError(err.message);
       } else {
@@ -804,7 +805,7 @@ export default function DocumentDetailPage() {
       setBillingItemId(null);
     } catch (err) {
       if (err instanceof ApiError) {
-        setBillingError(`${err.status}: ${err.message}`);
+        setBillingError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
       } else if (err instanceof Error) {
         setBillingError(err.message);
       } else {
@@ -884,7 +885,7 @@ export default function DocumentDetailPage() {
       return;
     }
 
-    setError(`${err.status}: ${err.message}`);
+    setError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
   };
 
   const closeResolveModal = () => {
@@ -1023,7 +1024,7 @@ export default function DocumentDetailPage() {
       setCreateSerialFuel(null);
     } catch (err) {
       if (err instanceof ApiError) {
-        setCreateSerialError(`${err.status}: ${err.message}`);
+        setCreateSerialError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
       } else if (err instanceof Error) {
         setCreateSerialError(err.message);
       } else {
@@ -1147,7 +1148,7 @@ export default function DocumentDetailPage() {
     } catch (err) {
       setProviderRemissionError(
         err instanceof ApiError
-          ? `${err.status}: ${err.message}`
+          ? formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.')
           : err instanceof Error
             ? err.message
             : 'No se pudieron subir las remisiones del proveedor.',
@@ -1176,7 +1177,7 @@ export default function DocumentDetailPage() {
         router.refresh();
       } catch (err) {
         if (err instanceof ApiError) {
-          setError(`${err.status}: ${err.message}`);
+          setError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
@@ -1238,7 +1239,7 @@ export default function DocumentDetailPage() {
       setEmailRetryMessage('Correo final enviado correctamente.');
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(`${err.status}: ${err.message}`);
+        setError(formatTransportError(err, 'No se pudo completar la operación. Intenta de nuevo; si el problema continúa, comunícate con soporte.'));
       } else if (err instanceof Error) {
         setError(err.message);
       } else {

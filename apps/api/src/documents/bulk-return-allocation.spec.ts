@@ -76,7 +76,26 @@ describe('BULK returns by reference/owner/worksite, internal FIFO', () => {
   });
   it('does not manufacture an origin for a v2 remission missing its documentary items', () => {
     const entry = arrival('first', 8); entry.document!.items = [];
-    expect(() => summary([entry], 2)).toThrow('conciliación');
+    expect(() => summary([entry], 2)).toThrow('La cantidad de una entrega anterior no coincide');
+  });
+  it.each([
+    [{ reversedByDocumentId: 'cancelled' }, 'movimiento anulado'],
+    [{ quantity: decimal(8) }, 'cantidad inválida'],
+  ])('explains the actual history problem without changing stock (%j)', (extra, reason) => {
+    const entry = arrival('first', 8, 1, { ...extra, sku: { name: 'RUEDAS NIVELADORAS' } });
+    entry.document!.consecutive = 'RM001';
+    expect(() => summary([entry], 1)).toThrow(reason);
+    expect(() => summary([entry], 1)).toThrow('RUEDAS NIVELADORAS');
+    expect(() => summary([entry], 1)).toThrow('RM001');
+    expect(() => summary([entry], 1)).toThrow('Este intento no cambió el inventario');
+  });
+  it('distinguishes unconfirmed documents and previous returns without enough stock', () => {
+    const draft = arrival('draft', 8); draft.document!.status = 'DRAFT';
+    expect(() => summary([draft], 1)).toThrow('documento que no está confirmado');
+    expect(() => summary([arrival('first', 2), returned('previous', 3, 3, 'first')], 1))
+      .toThrow('Una devolución anterior está asociada a una entrega');
+    expect(() => summary([arrival('first', 2), returned('previous', 3, 3)], 1))
+      .toThrow('Una devolución anterior registra más unidades');
   });
   it('respects provider-transit returns exactly like physical warehouse returns', () => {
     const previous = returned('previous', 3, 3, 'first'); previous.movementType = 'TRANSIT';
