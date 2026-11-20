@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  attendanceTiming,
+  attendanceOverlaps,
+  attendanceRangeCandidates,
+} from './attendance-timing';
 
 const day = (date: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -111,10 +116,7 @@ export class AttendanceJournalsService {
   constructor(private readonly prisma: PrismaService) {}
   async employees(from?: string, to?: string) {
     const period = attendancePeriod(from, to);
-    const where = {
-      enteredAt: { lt: period.end },
-      OR: [{ leftAt: { gte: period.start } }, { leftAt: null }],
-    };
+    const where = attendanceRangeCandidates(period);
     const [employees, journeys] = await Promise.all([
       this.prisma.employee.findMany({
         where: {
@@ -149,6 +151,8 @@ export class AttendanceJournalsService {
               reviewStatus: true,
               sourceInvalidatedAt: true,
               reviewedSourceExitId: true,
+              verifiedEnteredAt: true,
+              verifiedLeftAt: true,
             },
           },
         },
@@ -156,6 +160,7 @@ export class AttendanceJournalsService {
     ]);
     const groups = new Map<string, typeof journeys>();
     for (const a of journeys) {
+      if (!attendanceOverlaps(a, period)) continue;
       const group = groups.get(a.employeeId) ?? [];
       group.push(a);
       groups.set(a.employeeId, group);
@@ -175,9 +180,15 @@ export class AttendanceJournalsService {
           ...e,
           accountRole: user?.role ?? null,
           journeys: items.length,
-          open: valid.filter((a) => !a.leftAt).length,
+          open: valid.filter((a) => !attendanceTiming(a).leftAt).length,
           pendingReview: items.filter(
             (a) =>
+              Boolean(
+                attendanceTiming(a).leftAt ||
+                a.activityNote?.sourceInvalidatedAt ||
+                a.checkInReport?.deletedAt ||
+                a.checkOutReport?.deletedAt,
+              ) &&
               a.activityNote?.reviewStatus !== 'DISMISSED' &&
               (!a.activityNote ||
                 a.activityNote.reviewStatus === 'SUGGESTED' ||
@@ -186,21 +197,25 @@ export class AttendanceJournalsService {
                 a.checkInReport?.deletedAt ||
                 a.checkOutReport?.deletedAt),
           ).length,
-          reportedHours: valid.reduce(
-            (sum, a) =>
+          reportedHours: valid.reduce((sum, a) => {
+            const timing = attendanceTiming(a);
+            return (
               sum +
-              (a.leftAt
+              (timing.leftAt
                 ? Math.max(
                     0,
-                    Math.min(a.leftAt.getTime(), period.end.getTime()) -
-                      Math.max(a.enteredAt.getTime(), period.start.getTime()),
+                    Math.min(timing.leftAt.getTime(), period.end.getTime()) -
+                      Math.max(
+                        timing.enteredAt.getTime(),
+                        period.start.getTime(),
+                      ),
                   ) / 3600000
-                : 0),
-            0,
-          ),
+                : 0)
+            );
+          }, 0),
           latestWorksite: items[0]?.customerWorksite.worksite.name ?? null,
-          lastEntry: items[0]?.enteredAt ?? null,
-          lastExit: items[0]?.leftAt ?? null,
+          lastEntry: items[0] ? attendanceTiming(items[0]).enteredAt : null,
+          lastExit: items[0] ? attendanceTiming(items[0]).leftAt : null,
         };
       }),
     };
@@ -212,56 +227,64 @@ export class AttendanceJournalsService {
     cursor?: string,
   ) {
     const period = attendancePeriod(from, to);
-    const rows = await this.prisma.worksiteAttendance.findMany({
-      where: {
-        employeeId,
-        enteredAt: { lt: period.end },
-        OR: [{ leftAt: { gte: period.start } }, { leftAt: null }],
-      },
-      orderBy: [{ enteredAt: 'desc' }, { id: 'desc' }],
-      take: 21,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: {
-        customerWorksite: {
-          select: {
-            worksite: { select: { name: true } },
-            customer: { select: { name: true } },
-          },
+    const fetchRows = (after?: string) =>
+      this.prisma.worksiteAttendance.findMany({
+        where: {
+          employeeId,
+          ...attendanceRangeCandidates(period),
         },
-        checkInReport: evidenceReport,
-        checkOutReport: evidenceReport,
-        punches: {
-          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
-          select: {
-            id: true,
-            kind: true,
-            status: true,
-            occurredAt: true,
-            latitude: true,
-            longitude: true,
-            accuracyMeters: true,
+        orderBy: [{ enteredAt: 'desc' }, { id: 'desc' }],
+        take: 21,
+        ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+        include: {
+          customerWorksite: {
+            select: {
+              worksite: { select: { name: true } },
+              customer: { select: { name: true } },
+            },
           },
-        },
-        activityNote: {
-          select: {
-            id: true,
-            reviewStatus: true,
-            description: true,
-            sourceInvalidatedAt: true,
-            reviewedAt: true,
-            reviewedSourceExitId: true,
-            verifiedEnteredAt: true,
-            verifiedLeftAt: true,
-            reviews: {
-              where: { action: 'CORRECT' },
-              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-              take: 1,
-              select: { userId: true, createdAt: true },
+          checkInReport: evidenceReport,
+          checkOutReport: evidenceReport,
+          punches: {
+            orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+            select: {
+              id: true,
+              kind: true,
+              status: true,
+              occurredAt: true,
+              latitude: true,
+              longitude: true,
+              accuracyMeters: true,
+            },
+          },
+          activityNote: {
+            select: {
+              id: true,
+              reviewStatus: true,
+              description: true,
+              sourceInvalidatedAt: true,
+              reviewedAt: true,
+              reviewedSourceExitId: true,
+              verifiedEnteredAt: true,
+              verifiedLeftAt: true,
+              reviews: {
+                where: { action: 'CORRECT' },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: { userId: true, createdAt: true },
+              },
             },
           },
         },
-      },
-    });
+      });
+    const rows: Awaited<ReturnType<typeof fetchRows>> = [];
+    let after = cursor;
+    while (rows.length < 21) {
+      const batch = await fetchRows(after);
+      rows.push(...batch.filter((row) => attendanceOverlaps(row, period)));
+      if (batch.length < 21) break;
+      after = batch[batch.length - 1].id;
+    }
     const page = rows.slice(0, 20);
     const actorIds = [
       ...new Set(
@@ -290,11 +313,13 @@ export class AttendanceJournalsService {
     );
     return {
       journals: page.map((row) => {
-        if (!row.activityNote) return row;
+        const effective = attendanceTiming(row);
+        if (!row.activityNote) return { ...row, effective };
         const { reviews, ...note } = row.activityNote;
         const last = reviews?.[0];
         return {
           ...row,
+          effective,
           activityNote: {
             ...note,
             lastCorrection: last

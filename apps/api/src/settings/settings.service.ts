@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { APP_SETTING_DEFINITIONS, AppSettingKey } from './settings.constants';
+import { validateWorkSchedule, WORK_SCHEDULE_KEY } from './work-schedule';
 
 @Injectable()
 export class SettingsService {
@@ -52,6 +53,10 @@ export class SettingsService {
   }
 
   private validate(key: string, value: unknown) {
+    if (key === WORK_SCHEDULE_KEY) {
+      validateWorkSchedule(value);
+      return;
+    }
     const definition = APP_SETTING_DEFINITIONS[key as AppSettingKey];
     if (!definition) throw new BadRequestException(`Unknown setting: ${key}`);
     if (typeof value !== typeof definition.defaultValue) throw new BadRequestException(`Invalid value for ${key}`);

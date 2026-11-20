@@ -26,6 +26,7 @@ import AttendanceEvidencePhoto from "./AttendanceEvidencePhoto";
 import AttendanceLocationMap from "./AttendanceLocationMap";
 import { statusLabels } from "@/lib/attendance";
 import styles from "./AttendanceReportReviewModal.module.css";
+import { attendanceJournalTiming } from "@/lib/attendance-journal-timing";
 
 const date = (value: string) =>
   new Intl.DateTimeFormat("es-CO", {
@@ -51,6 +52,7 @@ export default function AttendanceReportReviewModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const note = journal.activityNote;
+  const timing = attendanceJournalTiming(journal);
   const originalEntry = note?.verifiedEnteredAt ?? journal.enteredAt;
   const originalExit = note?.verifiedLeftAt ?? journal.leftAt;
   const [entry, setEntry] = useState(() => attendanceLocalTime(originalEntry));
@@ -128,21 +130,28 @@ export default function AttendanceReportReviewModal({
               {[
                 {
                   label: "Entrada",
-                  at: journal.enteredAt,
+                  at: timing.enteredAt,
+                  originalAt: journal.enteredAt,
                   report: journal.checkInReport,
                 },
                 {
                   label: "Salida",
-                  at: journal.leftAt,
+                  at: timing.leftAt,
+                  originalAt: journal.leftAt,
                   report: journal.checkOutReport,
                 },
-              ].map(({ label, at, report }) => (
+              ].map(({ label, at, originalAt, report }) => (
                 <Paper key={label} withBorder p="md">
                   <Stack gap="xs">
                     <Text fw={700}>{label}</Text>
                     <Text size="sm">
                       {at ? date(at) : "Pendiente de reportar"}
                     </Text>
+                    {timing.corrected && originalAt && at !== originalAt ? (
+                      <Text size="xs" c="dimmed">
+                        Registro original: {date(originalAt)}
+                      </Text>
+                    ) : null}
                     {!report?.deletedAt && report ? (
                       <div className={styles.media}>
                         <AttendanceLocationMap
@@ -219,15 +228,9 @@ export default function AttendanceReportReviewModal({
                 </Paper>
               ))}
             </SimpleGrid>
-            {journal.leftAt ? (
+            {timing.leftAt ? (
               <Text size="sm">
-                Presencia reportada:{" "}
-                {Math.max(
-                  0,
-                  (Date.parse(journal.leftAt) - Date.parse(journal.enteredAt)) /
-                    3600000,
-                ).toFixed(2)}{" "}
-                h
+                Presencia reportada: {timing.hours.toFixed(2)} h
               </Text>
             ) : null}
             {note ? (

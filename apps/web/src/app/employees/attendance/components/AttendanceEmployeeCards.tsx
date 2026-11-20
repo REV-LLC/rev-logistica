@@ -1,4 +1,5 @@
 "use client";
+import { attendanceJournalTiming } from "@/lib/attendance-journal-timing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -102,7 +103,11 @@ export default function AttendanceEmployeeCards({
       : (requestedRange ?? presetRange(initialEmployeeId ? "last15" : "month")),
   );
   const [preset, setPreset] = useState<string | null>(
-    requestedDate || requestedRange ? "custom" : initialEmployeeId ? "last15" : "month",
+    requestedDate || requestedRange
+      ? "custom"
+      : initialEmployeeId
+        ? "last15"
+        : "month",
   );
   const [employees, setEmployees] = useState<Employee[]>([]);
   const employeeId = initialEmployeeId;
@@ -335,6 +340,7 @@ export default function AttendanceEmployeeCards({
             </Paper>
           ) : null}
           {journals.map((a) => {
+            const timing = attendanceJournalTiming(a);
             const invalid = Boolean(
               a.activityNote?.sourceInvalidatedAt ||
               a.checkInReport?.deletedAt ||
@@ -350,7 +356,7 @@ export default function AttendanceEmployeeCards({
               <Paper
                 key={a.id}
                 component="article"
-                aria-label={`Jornada de ${date(a.enteredAt)}`}
+                aria-label={`Jornada de ${date(timing.enteredAt)}`}
                 withBorder
                 p="md"
                 radius="md"
@@ -359,18 +365,20 @@ export default function AttendanceEmployeeCards({
                   <Group justify="space-between">
                     <Title order={3} className={styles.journeyDate}>
                       <time
-                        dateTime={a.enteredAt}
-                        aria-label={date(a.enteredAt)}
+                        dateTime={timing.enteredAt}
+                        aria-label={date(timing.enteredAt)}
                       >
-                        {attendanceDayTitle(a.enteredAt)}
+                        {attendanceDayTitle(timing.enteredAt)}
                       </time>
                     </Title>
                     <Badge
-                      color={invalid ? "red" : a.leftAt ? "green" : "orange"}
+                      color={
+                        invalid ? "red" : timing.leftAt ? "green" : "orange"
+                      }
                     >
                       {invalid
                         ? "Revisar evidencia"
-                        : a.leftAt
+                        : timing.leftAt
                           ? "Jornada cerrada"
                           : "Salida pendiente"}
                     </Badge>
@@ -381,15 +389,9 @@ export default function AttendanceEmployeeCards({
                       {a.customerWorksite.customer.name}
                     </Text>
                   </Stack>
-                  {a.leftAt ? (
+                  {timing.leftAt ? (
                     <Text size="sm">
-                      Presencia reportada:{" "}
-                      {(
-                        (new Date(a.leftAt).getTime() -
-                          new Date(a.enteredAt).getTime()) /
-                        3600000
-                      ).toFixed(2)}{" "}
-                      h
+                      Presencia reportada: {timing.hours.toFixed(2)} h
                     </Text>
                   ) : (
                     <Text size="sm" c="dimmed">
@@ -403,13 +405,24 @@ export default function AttendanceEmployeeCards({
                     ].map(([label, report]) => {
                       const r = report as Evidence | null;
                       const title = label as string;
+                      const at =
+                        title === "Entrada" ? timing.enteredAt : timing.leftAt;
+                      const originalAt =
+                        title === "Entrada" ? a.enteredAt : a.leftAt;
                       return (
                         <Paper key={title} withBorder p="sm" radius="sm">
                           <Stack gap="xs">
                             <Text fw={600}>{title}</Text>
                             {r ? (
                               <>
-                                <Text size="sm">{date(r.occurredAt)}</Text>
+                                <Text size="sm">
+                                  {at ? date(at) : "Pendiente de reportar."}
+                                </Text>
+                                {timing.corrected && at !== originalAt ? (
+                                  <Text size="xs" c="dimmed">
+                                    Registro original: {date(r.occurredAt)}
+                                  </Text>
+                                ) : null}
                                 {r.deletedAt ? (
                                   <Alert color="red">
                                     Marcación eliminada; se conserva su
@@ -457,13 +470,12 @@ export default function AttendanceEmployeeCards({
                               </>
                             ) : (
                               <Text size="sm" c="dimmed">
-                                {title === "Entrada" || a.leftAt
-                                  ? date(
-                                      title === "Entrada"
-                                        ? a.enteredAt
-                                        : a.leftAt!,
-                                    )
-                                  : "Pendiente de reportar."}
+                                {at ? date(at) : "Pendiente de reportar."}
+                                {timing.corrected &&
+                                originalAt &&
+                                at !== originalAt
+                                  ? ` (original: ${date(originalAt)})`
+                                  : ""}
                               </Text>
                             )}
                           </Stack>
@@ -485,10 +497,13 @@ export default function AttendanceEmployeeCards({
                     >
                       {invalid
                         ? "Evidencia por revisar"
-                        : changed
-                          ? "Nueva salida: revisar sugerencia"
-                          : (reviewLabels[a.activityNote?.reviewStatus ?? ""] ??
-                            "Sugerencia por generar")}
+                        : !timing.leftAt
+                          ? "En curso"
+                          : changed
+                            ? "Nueva salida: revisar sugerencia"
+                            : (reviewLabels[
+                                a.activityNote?.reviewStatus ?? ""
+                              ] ?? "Sugerencia por generar")}
                     </Badge>
                     {canManage ? (
                       <Button
