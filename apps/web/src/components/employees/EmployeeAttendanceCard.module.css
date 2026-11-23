@@ -1,0 +1,108 @@
+.card {
+  width: 100%;
+  max-width: 340px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 16px;
+  background: rgb(42 44 51 / 94%);
+  color: #f1f3f5;
+  backdrop-filter: blur(18px);
+  color-scheme: dark;
+}
+.header {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.tabs {
+  margin-bottom: 0;
+  justify-content: center;
+}
+.tabs button {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.navigation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.monthLabel {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: #bdc3ce;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.day {
+  --day-accent: #626c79;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 2px;
+  border: 1px solid var(--day-accent);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 5%);
+  color: #f1f3f5;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  cursor: pointer;
+}
+.day[data-status="early"] {
+  --day-accent: #50c38e;
+}
+.day[data-status="on-time"] {
+  --day-accent: #70b8f5;
+}
+.day[data-status="late"] {
+  --day-accent: #f1878d;
+}
+.day[data-status="review"] {
+  --day-accent: #eac57c;
+}
+.day[data-status="off"] {
+  --day-accent: #7b8492;
+  background: rgb(255 255 255 / 2%);
+}
+.day[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px currentColor;
+  background: rgb(255 255 255 / 11%);
+}
+.day:hover,
+.day:focus-visible {
+  background: var(--day-accent);
+  color: #101820;
+}
+.day:focus-visible {
+  outline: 2px solid #70b8f5;
+  outline-offset: 1px;
+}
+.clock {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.loading {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+}
+@media (max-width: 400px) {
+  .card {
+    padding: 12px;
+  }
+}

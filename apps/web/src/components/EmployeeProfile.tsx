@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from '@/components/PageTransitionLink';
 import EmployeePageBackground from '@/components/EmployeePageBackground';
 import { Alert, Button, Container, Skeleton, Stack, Title } from '@mantine/core';
 import { IconArrowLeft, IconId, IconPhone, IconTruck } from '@tabler/icons-react';
 import EmployeePhotoControl from '@/components/EmployeePhotoControl';
 import { api, ApiError } from '@/lib/api';
+import { getCurrentUserRole } from '@/lib/auth';
 import { employeeProfileBackground, employeeProfileName, employeeProfileVehicleLabel, type EmployeeProfileIdentity } from '@/lib/employee-profile';
 import { employeeRoleLabels } from '@/lib/employee-roles';
 import styles from '@/app/employees/[employeeId]/profile.module.css';
@@ -18,12 +20,18 @@ type ProfileState =
   | { status: 'missing' }
   | { status: 'error' };
 
+const EmployeeAttendanceCard = dynamic(() => import('@/components/employees/EmployeeAttendanceCard'), {
+  loading: () => <Skeleton height={400} radius="md" />,
+});
+
 export default function EmployeeProfile({ employeeId, selfService = false }: { employeeId?: string; selfService?: boolean }) {
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [canViewAttendance, setCanViewAttendance] = useState(false);
   const backgroundSrc = employeeProfileBackground(state.status === 'ready' ? state.employee.role : undefined);
 
   useEffect(() => {
+    setCanViewAttendance(!selfService && ['ADMIN', 'OFFICE'].includes(getCurrentUserRole() ?? ''));
     const controller = new AbortController();
     setState({ status: 'loading' });
     api<EmployeeProfileIdentity>(selfService ? '/employee-portal/profile' : `/employees/${encodeURIComponent(employeeId!)}`, { signal: controller.signal })
@@ -59,7 +67,10 @@ export default function EmployeeProfile({ employeeId, selfService = false }: { e
           </div>
         </div>
       </section> : null}
-      {state.status === 'ready' ? <EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} /> : null}
+      {state.status === 'ready' ? <div className={styles.contentGrid} data-has-attendance={canViewAttendance ? 'true' : undefined}>
+        {canViewAttendance ? <aside className={styles.attendanceRail}><EmployeeAttendanceCard key={state.employee.id} employee={{ id: state.employee.id, name: state.employee.name, lastName: state.employee.lastName ?? '' }} /></aside> : null}
+        <div className={styles.profileWorkspace}><EmployeeProfileWorkspace key={state.employee.id} employeeId={state.employee.id} selfService={selfService} /></div>
+      </div> : null}
       {state.status === 'missing' ? <Alert color="red" title="Empleado no disponible" role="alert">{selfService ? 'No tienes un empleado activo vinculado a tu cuenta. Contacta a administración.' : 'No se encontró el empleado de este enlace.'}</Alert> : null}
       {state.status === 'error' ? <Alert color="red" title="No se pudo cargar el perfil" role="alert">
         Comprueba la conexión e intenta de nuevo.
