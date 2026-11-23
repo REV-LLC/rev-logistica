@@ -9,6 +9,7 @@ const modules = Promise.all([
   import(new URL('./content/interpreter.js', root).href),
   import(new URL('./cos/adapters.js', root).href),
   import(new URL('./cos/streams.js', root).href),
+  import(new URL('./fonts/standard14.js', root).href),
 ]);
 
 type Operand = { t: string; bytes?: Uint8Array; v?: number; items?: Operand[]; start?: number; end?: number };
@@ -146,7 +147,7 @@ async function writeSource(doc: PdfDocument, pageIndex: number, source: Source, 
 }
 
 async function contextFor(doc: PdfDocument, pageIndex: number, source: Source, extractedText?: import('ts-pdf-edit').PageText) {
-  const [{ logicalContentForPage }, { scan }, { ResourceResolver }, { ContentInterpreter }, { PDFName, PDFDict, PDFStream }, { decodeStream }] = await modules;
+  const [{ logicalContentForPage }, { scan }, { ResourceResolver }, { ContentInterpreter }, { PDFName, PDFDict, PDFStream, PDFArray, PDFNumber }, { decodeStream }, { encodingUnicodeToCode }] = await modules;
   const page = doc.getPage(pageIndex);
   const logical = { bytes: source.bytes };
   const ops = source.ops;
@@ -181,6 +182,24 @@ async function contextFor(doc: PdfDocument, pageIndex: number, source: Source, e
     const baseFont = dict?.lookup(PDFName.of('BaseFont'));
     const encoding = dict?.lookup(PDFName.of('Encoding'));
     const encodingName = encoding instanceof PDFName ? (encoding as unknown as { decodeText(): string }).decodeText() : '';
+    // A named WinAnsi encoding is independent of the font family. The engine
+    // only exposes an encoder for Standard-14 names, so Arial/Arial Narrow
+    // from Acrobat otherwise have no map at all. Explicit positive widths
+    // identify available glyphs even in embedded subsets with sparse /Widths.
+    if (!map.size && model && !model.isComposite && !model.isType3 && encodingName === 'WinAnsiEncoding') {
+      const widths = dict?.lookup(PDFName.of('Widths'));
+      const first = dict?.lookup(PDFName.of('FirstChar'));
+      if (widths instanceof PDFArray && first instanceof PDFNumber) {
+        const available = widths as import('pdf-lib').PDFArray;
+        const firstCode = (first as import('pdf-lib').PDFNumber).asNumber();
+        for (const [unicode, code] of encodingUnicodeToCode('WinAnsi')) {
+          const position = code - firstCode;
+          if (position < 0 || position >= available.size()) continue;
+          const width = available.lookup(position);
+          if (width instanceof PDFNumber && (width as import('pdf-lib').PDFNumber).asNumber() > 0) map.set(code.toString(16).padStart(2, '0'), String.fromCodePoint(unicode));
+        }
+      }
+    }
     const nameValue = baseFont instanceof PDFName ? (baseFont as unknown as { decodeText(): string }).decodeText() : name;
     const descriptor = dict?.lookup(PDFName.of('FontDescriptor'));
     const embedded = descriptor instanceof PDFDict && ['FontFile', 'FontFile2', 'FontFile3'].some((key) => (descriptor as unknown as { has(key: unknown): boolean }).has(PDFName.of(key)));
