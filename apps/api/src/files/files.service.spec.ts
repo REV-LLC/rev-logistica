@@ -17,6 +17,13 @@ describe('FilesService categories', () => {
     {} as never,
   );
 
+  it('offers Planilla only as an employee document category', () => {
+    expect(service.getCategories('EMPLOYEE')).toContainEqual({ value: 'PLANILLA', label: 'Planilla' });
+    for (const entity of ['DOCUMENT', 'ASSET', 'SKU', 'VEHICLE', 'CUSTOMER', 'WAREHOUSE']) {
+      expect(service.getCategories(entity)).not.toContainEqual(expect.objectContaining({ value: 'PLANILLA' }));
+    }
+  });
+
   it('acepta la categoría de guías de movilidad para activos', () => {
     expect(service.getCategories('ASSET')).toContainEqual({
       value: 'GUIA_MOVILIDAD',
