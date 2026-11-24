@@ -34,6 +34,16 @@ describe('employee documents: real JWT, upload, ownership and filename',()=>{
   beforeEach(()=>{rows=[];objects=new Map();jest.clearAllMocks()});
   afterAll(async()=>{await app.close();s3.mockRestore();process.env=beforeEnv});
   async function upload(){return request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('office')).field('category','CEDULA').field('displayName','ignored-custom-name').attach('files',Buffer.from('%PDF-1.7\nTEST FIXTURE'),{filename:'x.pdf',contentType:'application/pdf'}).expect(201)}
+  it('lists Planilla and persists uploads as personal documents without EPS/ARL recognition',async()=>{
+    const categories=await request(app.getHttpServer()).get('/files/categories/EMPLOYEE').set('Authorization','Bearer '+token('office')).expect(200);
+    expect(categories.body).toContainEqual({value:'PLANILLA',label:'Planilla'});
+    const result=await request(app.getHttpServer()).post(`/files/entities/EMPLOYEE/${own}`).set('Authorization','Bearer '+token('office')).field('category','planilla').attach('files',Buffer.from('%PDF-1.7\nTEST FIXTURE'),{filename:'planilla.pdf',contentType:'application/pdf'}).expect(201);
+    expect(result.body.files[0]).toMatchObject({category:'PLANILLA',fileType:'PLANILLA',displayName:'samuel_guerrero_planilla.pdf'});
+    expect(rows[0].employeeDocument).toEqual({create:{employeeId:own}});
+    const listed=await request(app.getHttpServer()).get('/employee-portal/documents').set('Authorization','Bearer '+token('employee')).expect(200);
+    expect(listed.body).toHaveLength(1);
+    expect(listed.body[0]).toMatchObject({id:result.body.files[0].id,category:'PLANILLA'});
+  });
   it('renames using the employee name from DB, preserves original metadata and prevents overwrites',async()=>{
     const a=await upload(),b=await upload();
     expect(a.body.files[0]).toMatchObject({displayName:'samuel_guerrero_cedula.pdf',originalName:'x.pdf',category:'CEDULA'});

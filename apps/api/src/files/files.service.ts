@@ -76,6 +76,7 @@ const CATEGORIES_BY_ENTITY: Record<FileEntityType, Set<string>> = {
     'CEDULA',
     'ARL',
     'EPS',
+    'PLANILLA',
     'CURSO_ALTURAS',
     'CONTRATO',
     'CERTIFICADO',
