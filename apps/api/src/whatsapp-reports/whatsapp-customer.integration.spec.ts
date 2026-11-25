@@ -112,6 +112,7 @@ if (url) {
       });
       const first = await receive('necesito una rana');
       expect(first.status).toBe('CUSTOMER_PROCESSED');
+      expect(first.replyText).toMatch(/^(Buenos días|Buenas tardes) 👋/);
       expect(first.replyText).toContain('Cuántas');
       expect(
         await prisma.whatsappCustomerRequest.count({ where: { phone } }),

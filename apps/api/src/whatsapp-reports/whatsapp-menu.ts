@@ -1,5 +1,9 @@
+import { businessGreeting } from './whatsapp-greeting';
 import {
   whatsappAttendanceEnabled,
+  extendedEmployeeReportsEnabled,
+  REQUESTS_ONLY_MESSAGE,
+  isRetiredEquipmentReply,
   ATTENDANCE_RETIRED_MESSAGE,
   isRetiredAttendanceReply,
 } from './whatsapp-report-capabilities';
@@ -13,7 +17,7 @@ export type WhatsappReplyKind =
   | 'CONFIRMATION'
   | 'EQUIPMENT_MENU'
   | 'WORKSITE_MENU';
-export const REPORT_MENU_ROWS = [
+const LEGACY_REPORT_MENU_ROWS = [
   {
     id: 'report_damage',
     title: 'Reportar daño',
@@ -31,20 +35,26 @@ export const REPORT_MENU_ROWS = [
   },
 ] as const;
 
+export const REPORT_MENU_ROWS = [LEGACY_REPORT_MENU_ROWS[2]] as const;
+
 export function reportMenuRows() {
+  if (!extendedEmployeeReportsEnabled()) return REPORT_MENU_ROWS;
   return whatsappAttendanceEnabled()
     ? [
-        ...REPORT_MENU_ROWS,
+        ...LEGACY_REPORT_MENU_ROWS,
         {
           id: 'report_attendance',
           title: 'Entrada o salida',
           description: 'Horario en obra con ubicación o foto',
         },
       ]
-    : REPORT_MENU_ROWS;
+    : LEGACY_REPORT_MENU_ROWS;
 }
 
-export function employeeGreeting(employee: Pick<Employee, 'name'>) {
+export function employeeGreeting(
+  employee: Pick<Employee, 'name'>,
+  at = new Date(),
+) {
   const name = employee.name
     .replace(/[*_~`\r\n]/g, ' ')
     .trim()
@@ -55,12 +65,16 @@ export function employeeGreeting(employee: Pick<Employee, 'name'>) {
       (_, space: string, letter: string) =>
         space + letter.toLocaleUpperCase('es-CO'),
     );
-  return name ? `Hola, ${name} 👋` : 'Hola 👋';
+  return name
+    ? `${businessGreeting(at)}, ${name} 👋`
+    : `${businessGreeting(at)} 👋`;
 }
 export function reportMenuText(
   employee: Pick<Employee, 'name'>,
   pending = false,
 ) {
+  if (!extendedEmployeeReportsEnabled())
+    return `${employeeGreeting(employee)}\nSoy el asistente de REV Logística. Cuéntame qué necesitas solicitar a oficina. Puedes escribir tu petición o tocar «Ver opciones».${pending ? '\nTienes una petición pendiente; puedes seguir completándola.' : ''}`;
   return `${employeeGreeting(employee)}\nSoy el asistente de REV Logística.\n${
     pending
       ? 'Tienes un reporte pendiente. Puedes seguir completándolo o elegir otra opción para iniciar uno nuevo.'
@@ -73,6 +87,7 @@ export function isGreeting(command: string) {
   );
 }
 export function selectionKind(id: string): Draft['kind'] {
+  if (!extendedEmployeeReportsEnabled() && id !== 'report_request') return null;
   if (
     !whatsappAttendanceEnabled() &&
     ['attendance_check_in', 'attendance_check_out'].includes(id)
@@ -116,10 +131,17 @@ export function whatsappReplyPayload(
   confirmationMessageId?: string,
   options?: EquipmentReplyOptions,
 ) {
+  text = text.replace(/^Hola(?=[,\s👋])/u, businessGreeting());
+  if (!extendedEmployeeReportsEnabled() && isRetiredEquipmentReply(kind, text))
+    return whatsappReplyPayload(
+      phone,
+      `${businessGreeting()} 👋\n${REQUESTS_ONLY_MESSAGE}`,
+      'REPORT_MENU',
+    );
   if (!whatsappAttendanceEnabled() && isRetiredAttendanceReply(kind, text))
     return whatsappReplyPayload(
       phone,
-      ATTENDANCE_RETIRED_MESSAGE,
+      `${businessGreeting()} 👋\n${ATTENDANCE_RETIRED_MESSAGE}`,
       'REPORT_MENU',
     );
   const base = { messaging_product: 'whatsapp', to: phone };

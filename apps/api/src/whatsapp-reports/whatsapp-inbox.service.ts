@@ -1,6 +1,9 @@
 import { WhatsappCustomerService } from './whatsapp-customer.service';
 import {
   whatsappAttendanceEnabled,
+  extendedEmployeeReportsEnabled,
+  REQUESTS_ONLY_MESSAGE,
+  isEquipmentReport,
   ATTENDANCE_RETIRED_MESSAGE,
   isAttendanceSelection,
   isAttendanceStart,
@@ -261,7 +264,25 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       const retiredAttendanceDraft =
         !whatsappAttendanceEnabled() &&
         (isAttendance(draft.kind) || draft.menuStage === 'ATTENDANCE');
-      if (retiredAttendanceDraft) draft = emptyDraft();
+      const retiredEquipmentDraft =
+        !extendedEmployeeReportsEnabled() && isEquipmentReport(draft.kind);
+      if (retiredAttendanceDraft || retiredEquipmentDraft) draft = emptyDraft();
+      if (!extendedEmployeeReportsEnabled() && draft.kind === 'REQUEST') {
+        draft = {
+          ...draft,
+          subjectType: null,
+          subjectReference: null,
+          worksiteReference: null,
+          customerReference: null,
+          hours: null,
+          photoHours: null,
+          selectedEquipment: undefined,
+          equipmentMenu: undefined,
+          selectedWorksiteId: undefined,
+          worksiteMenu: undefined,
+          menuStage: undefined,
+        };
+      }
       const command = normalized(message.text);
       const selected =
         message.type === 'interactive' ? message.selectionId : null;
@@ -276,7 +297,9 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         (!draft.kind
           ? (
               {
-                '1': 'report_damage',
+                '1': extendedEmployeeReportsEnabled()
+                  ? 'report_damage'
+                  : 'report_request',
                 '2': 'report_hour_meter',
                 '3': 'report_request',
                 '4': 'report_attendance',
@@ -408,7 +431,22 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         replyOptions = picker.options;
         replyKind = picker.options ? 'WORKSITE_MENU' : 'TEXT';
       };
+      const retireEquipment = () => {
+        draft = { ...emptyDraft(), ready: false };
+        confirmation = false;
+        offerConfirmation = false;
+        replyOptions = undefined;
+        reply = `${REQUESTS_ONLY_MESSAGE}\n${reportMenuText(employee)}`;
+        replyKind = 'REPORT_MENU';
+      };
       const resolveDraft = async () => {
+        if (
+          !extendedEmployeeReportsEnabled() &&
+          isEquipmentReport(draft.kind)
+        ) {
+          retireEquipment();
+          return;
+        }
         if (!whatsappAttendanceEnabled() && isAttendance(draft.kind)) {
           retireAttendance();
           return;
@@ -452,6 +490,17 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             !isGreeting(command)))
       ) {
         retireAttendance();
+      } else if (
+        !extendedEmployeeReportsEnabled() &&
+        (['report_damage', 'report_hour_meter'].includes(choice ?? '') ||
+          selected?.startsWith('equipment') ||
+          (retiredEquipmentDraft &&
+            (confirmationChoice ||
+              ['si', 'si registrar', 'registrar', 'confirmar'].includes(
+                command,
+              ))))
+      ) {
+        retireEquipment();
       } else if (
         choice === 'report_cancel' ||
         (!selected && ['cancelar', 'cancel'].includes(command))
@@ -770,6 +819,19 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           const parsed = {
             ...(await this.ai.extract(message.text, draft, image)),
           };
+          if (!extendedEmployeeReportsEnabled()) {
+            // Natural-language requests can mention faults or hours, but cannot
+            // create maintenance events, readings or equipment selections.
+            parsed.kind = 'REQUEST';
+            parsed.description ??=
+              message.type === 'text' ? message.text.trim() || null : null;
+            parsed.subjectType = null;
+            parsed.subjectReference = null;
+            parsed.worksiteReference = null;
+            parsed.customerReference = null;
+            parsed.hours = null;
+            parsed.photoHours = null;
+          }
           if (
             image &&
             draft.selectedEquipment &&
@@ -863,6 +925,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       }
       if (!whatsappAttendanceEnabled() && isAttendance(draft.kind))
         retireAttendance();
+      if (!extendedEmployeeReportsEnabled() && isEquipmentReport(draft.kind))
+        retireEquipment();
       // Re-resolve on confirmation. No AI-supplied IDs can reach domain writes.
       const resolution = confirmation
         ? await this.records.resolve(draft, employee.id)
@@ -898,6 +962,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         replyKind !== 'REPORT_MENU'
       )
         reply = `${employeeGreeting(employee)}\n${reply}`;
+      if (replyKind === 'REPORT_MENU') {
+        const greeting = employeeGreeting(employee);
+        reply = `${greeting}\n${reply.replace(`${greeting}\n`, '')}`;
+      }
       // Meta limits interactive message bodies to 1024 characters. Long confirmations remain complete text.
       if (replyKind === 'CONFIRMATION' && reply.length > 1024)
         replyKind = 'TEXT';
@@ -1019,9 +1087,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               Date.now() + Math.min(300000, 10000 * 2 ** message.attempts),
             ),
             replyText: terminal
-              ? recoverableInput
-                ? error.message
-                : 'No pude registrar este mensaje. Comunícate con oficina o vuelve a enviarlo más tarde. Tu mensaje quedó en la bandeja para revisión.'
+              ? `${employeeGreeting(employee)}\n${recoverableInput ? error.message : 'No pude registrar este mensaje. Comunícate con oficina o vuelve a enviarlo más tarde. Tu mensaje quedó en la bandeja para revisión.'}`
               : null,
           },
         });

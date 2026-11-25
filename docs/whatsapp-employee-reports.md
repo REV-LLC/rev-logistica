@@ -1,5 +1,28 @@
 # Reportes de empleados por WhatsApp
 
+## Estado actual — 25 de noviembre de 2026
+
+Los empleados solo pueden enviar **peticiones para oficina** por WhatsApp,
+con descripción, fotos opcionales y confirmación. El menú ofrece una única
+opción «Petición general» (opción numérica 1; se admite el 3 anterior).
+Los botones de daños/horómetros y sus borradores pendientes se retiran sin
+crear movimientos ni modificar el historial. Un texto que mencione una falla,
+una lectura o una máquina se guarda como petición, sin registrar daños,
+horómetros ni selección de equipo. Entrada/salida sigue fuera del canal.
+
+Los clientes externos conservan su flujo de solicitudes de alquiler y su
+bandeja separada. El primer saludo usa la hora de `America/Bogota`: «Buenos días»
+antes de las 12 y «Buenas tardes» desde las 12. Para empleados incluye su nombre;
+para clientes también se antepone al primer pedido escrito directamente y al
+primer mensaje de un nuevo día. No depende del reloj del servidor ni de la IA.
+
+`WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED` está desactivado por defecto. Su
+opt-in explícito conserva únicamente la cobertura de regresiones históricas;
+no debe habilitarse en producción. Asistencia necesita además su antiguo flag.
+No se borran reportes, fotos, jornadas ni bitácoras existentes.
+
+Las siguientes secciones documentan versiones anteriores y compatibilidad.
+
 ## Estado actual — 19 de noviembre de 2026
 
 El menú de WhatsApp tiene tres opciones: daños, horómetros y peticiones.
