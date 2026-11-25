@@ -29,6 +29,8 @@ describe('Roads matching keeps raw GPS and shared consumption boundaries',()=>{
  });
  it('does not adjust stationary jitter or bridge gaps and caps requests to 100 input points',()=>{
   expect(trails({...history,segments:[points.map(p=>({...p,latitude:3.44}))]})).toEqual([]);
+  const jitter=Array.from({length:100},(_,i)=>({...points[0],latitude:3.44+(i%2)*.00002,reportedAt:new Date(now-(99-i)*5000).toISOString()}));
+  expect(trails({...history,segments:[jitter]})).toEqual([]);
   const long=Array.from({length:120},(_,i)=>({...points[0],latitude:3.44+i*.0001,reportedAt:new Date(now-(119-i)*5000).toISOString()}));
   expect(trails({...history,segments:[long]}).flat().length).toBeLessThanOrEqual(100);
  });

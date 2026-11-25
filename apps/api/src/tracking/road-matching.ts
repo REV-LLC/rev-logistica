@@ -1,7 +1,7 @@
 import { HttpException } from '@nestjs/common';
 type RoadPoint = { latitude:number; longitude:number; reportedAt:string };
 type RoadHistory = { deviceId:number; to:string; segments:RoadPoint[][] };
-// Optional Google Roads adapter. No requests are made without explicit local
+// Optional Google Roads adapter. No requests are made without explicit server
 // enablement and a dedicated private key. Google geometry is never written to disk.
 export const ROADS_DAILY_LIMIT = 100;
 const radians = Math.PI / 180;
@@ -30,7 +30,7 @@ export function trails(history: RoadHistory) {
     if (current.length >= 3) result.unshift(current);
     if (!remaining) break;
   }
-  return result.filter(points => points.reduce((distance, p, i) => distance + (i ? meters(points[i-1],p) : 0),0) >= 50).slice(-10);
+  return result.filter(points => points.some(p => meters(points[0],p) >= 50)).slice(-10);
 }
 export class RoadMatching {
   private key: string | undefined; enabled: boolean; private reserve: () => Promise<boolean>;
