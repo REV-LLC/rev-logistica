@@ -111,4 +111,4 @@ export const REPORT_LABELS = {
   CHECK_OUT: 'Salida de obra',
 };
 export const HELP =
-  'Puedes reportar:\n1. Daño de equipo o vehículo.\n2. Horómetro con foto.\n3. Petición para oficina y gerencia.\nElige la máquina en la lista o escribe su nombre. Envía un reporte a la vez. Escribe CANCELAR para empezar de nuevo.';
+  'Por WhatsApp puedes enviar peticiones para oficina. Cuéntame qué necesitas y, si ayuda, adjunta fotos. Confirma el resumen para registrar la petición. Escribe CANCELAR para empezar de nuevo.';

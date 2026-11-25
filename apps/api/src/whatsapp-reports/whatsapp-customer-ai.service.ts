@@ -30,7 +30,7 @@ export const emptyCustomerDraft = (): CustomerDraft => ({
 });
 export function customerQuestion(d: CustomerDraft): string | null {
   if (!d.items.length)
-    return 'Hola 👋 Soy el asistente de Renta Equipos del Valle. ¿Qué equipo necesitas alquilar? Puedes escribirlo como lo conoces.';
+    return 'Soy el asistente de Renta Equipos del Valle. ¿Qué equipo necesitas alquilar? Puedes escribirlo como lo conoces.';
   const incomplete = d.items.find((item) => !item.quantity);
   if (incomplete)
     return `¿Cuántas unidades de ${incomplete.equipment} necesitas?`;

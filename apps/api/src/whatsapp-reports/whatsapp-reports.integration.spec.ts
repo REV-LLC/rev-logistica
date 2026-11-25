@@ -160,6 +160,7 @@ if (testUrl) {
     }
     beforeAll(async () => {
       process.env.WHATSAPP_REPORTS_ENABLED = 'true';
+      process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED = 'true'; // Legacy regression coverage only.
       process.env.WHATSAPP_ATTENDANCE_ENABLED = 'true'; // Legacy flow regression coverage; production defaults off.
       process.env.WHATSAPP_PHONE_NUMBER_ID = 'qa-phone';
       process.env.META_APP_SECRET = 'test-secret';
@@ -468,7 +469,9 @@ if (testUrl) {
 
     it('sends a named four-option menu for greetings without an AI request', async () => {
       const greeting = await send('Hola');
-      expect(greeting?.replyText).toContain('Hola, Operario Qa');
+      expect(greeting?.replyText).toMatch(
+        /^(Buenos días|Buenas tardes), Operario Qa/,
+      );
       expect(greeting?.replyKind).toBe('REPORT_MENU');
       expect(greeting?.replySentAt).not.toBeNull();
       expect(cloud.reply).toHaveBeenCalledWith(
@@ -2189,6 +2192,137 @@ if (testUrl) {
         expect(stale?.replyKind).toBe('REPORT_MENU');
       });
     });
+    describe('requests-only employee channel by default', () => {
+      let originalExtended: string | undefined;
+      let baseline: unknown;
+      beforeEach(async () => {
+        originalExtended =
+          process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED;
+        delete process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED;
+        await send('Cancelar');
+        ai.extract.mockReset();
+        baseline = await prisma.whatsappReport.findMany({
+          where: { kind: { not: 'REQUEST' } },
+          orderBy: { id: 'asc' },
+        });
+      });
+      afterEach(async () => {
+        expect(
+          await prisma.whatsappReport.findMany({
+            where: { kind: { not: 'REQUEST' } },
+            orderBy: { id: 'asc' },
+          }),
+        ).toEqual(baseline);
+        if (originalExtended === undefined)
+          delete process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED;
+        else
+          process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED =
+            originalExtended;
+      });
+      it.each([
+        'report_damage',
+        'report_hour_meter',
+        'equipment:old:0',
+        'equipment_page:old:1',
+      ])('redirects old employee selection %s', async (selectionId) => {
+        const result = await send('selección antigua', { selectionId });
+        expect(result?.replyText).toContain('solo recibimos peticiones');
+        expect(result?.replyKind).toBe('REPORT_MENU');
+        expect(ai.extract).not.toHaveBeenCalled();
+      });
+      it('uses option 1 for requests, then records text as a request even when AI guesses damage', async () => {
+        await prisma.whatsappConversation.update({
+          where: { phone: normalizePhone(employee.phone)! },
+          data: { expiresAt: new Date(0) },
+        });
+        const start = await send('1');
+        expect(start?.replyText).toContain('petición');
+        expect(start?.replyText).toMatch(/^(Buenos días|Buenas tardes),/);
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'DAMAGE',
+            subjectReference: asset.publicCode,
+            description: 'Necesito reparación para la máquina',
+          }),
+        );
+        const result = await send('Necesito reparación para la máquina');
+        expect(result?.replyKind).toBe('CONFIRMATION');
+        expect(result?.replyText).toContain('Petición');
+        await send('SÍ');
+        const record = await prisma.whatsappReport.findFirstOrThrow({
+          where: {
+            sourceMessageId: { not: '' },
+            description: 'Necesito reparación para la máquina',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(record.kind).toBe('REQUEST');
+        expect(record.assetId).toBeNull();
+        expect(record.hours).toBeNull();
+      });
+      it('keeps optional request photos without creating an hour reading', async () => {
+        ai.extract.mockResolvedValue(
+          extracted({
+            kind: 'HOUR_METER',
+            hours: 321,
+            photoHours: 321,
+            subjectReference: asset.publicCode,
+            description: 'Necesito ayuda con esta lectura',
+          }),
+        );
+        const result = await send('Necesito ayuda con esta lectura', {
+          image: true,
+        });
+        expect(result?.replyText).toContain('Petición');
+        await send('SÍ');
+        const record = await prisma.whatsappReport.findFirstOrThrow({
+          where: { description: 'Necesito ayuda con esta lectura' },
+          include: { evidence: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(record.kind).toBe('REQUEST');
+        expect(record.hours).toBeNull();
+        expect(record.evidence).toHaveLength(1);
+      });
+      it.each(['DAMAGE', 'HOUR_METER'] as const)(
+        'does not confirm a pending retired %s draft',
+        async (kind) => {
+          await prisma.whatsappConversation.update({
+            where: { phone: normalizePhone(employee.phone)! },
+            data: {
+              draft: {
+                ...emptyDraft(),
+                kind,
+                ready: true,
+                description: 'old draft',
+                confirmationMessageId: 'old-summary',
+              },
+              expiresAt: new Date(Date.now() + 60000),
+            },
+          });
+          const result = await send('Sí, registrar', {
+            selectionId: 'report_confirm:old-summary',
+          });
+          expect(result?.replyText).toContain('solo recibimos peticiones');
+          expect(ai.extract).not.toHaveBeenCalled();
+        },
+      );
+      it.each(['DAMAGE', 'HOUR_METER', 'CHECK_IN', 'CHECK_OUT'] as const)(
+        'blocks direct %s writes before SQL, even if the attendance flag is enabled',
+        async (kind) => {
+          await expect(
+            records.record(
+              {} as any,
+              employee,
+              { ...emptyDraft(), kind },
+              {} as any,
+              randomUUID(),
+            ),
+          ).rejects.toThrow();
+        },
+      );
+    });
+
     describe('retired WhatsApp attendance with the production default', () => {
       let originalFlag: string | undefined;
       let historical: string;

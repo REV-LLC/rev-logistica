@@ -14,6 +14,7 @@ describe('WhatsApp Cloud media boundaries', () => {
       WHATSAPP_API_VERSION: 'v25.0',
     };
     delete process.env.WHATSAPP_ATTENDANCE_ENABLED;
+    delete process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED;
     global.fetch = fetchMock;
     fetchMock.mockReset();
   });
@@ -107,10 +108,11 @@ describe('WhatsApp Cloud media boundaries', () => {
     const payload = JSON.parse(options.body);
     expect(payload.type).toBe('interactive');
     expect(payload.interactive.type).toBe('list');
-    expect(payload.interactive.action.sections[0].rows).toHaveLength(3);
+    expect(payload.interactive.action.sections[0].rows).toHaveLength(1);
     expect(options.redirect).toBe('error');
   });
-  it('sends persisted equipment rows and remembered-machine buttons as native interactions', async () => {
+  it('sends persisted equipment rows and remembered-machine buttons only for legacy opt-in environments', async () => {
+    process.env.WHATSAPP_EMPLOYEE_EXTENDED_REPORTS_ENABLED = 'true';
     fetchMock.mockResolvedValue(new Response('{}'));
     const rows = [
       {

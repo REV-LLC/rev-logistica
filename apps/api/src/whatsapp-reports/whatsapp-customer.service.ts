@@ -1,3 +1,4 @@
+import { businessGreeting, sameBusinessDay } from './whatsapp-greeting';
 import {
   BadRequestException,
   ConflictException,
@@ -184,6 +185,13 @@ export class WhatsappCustomerService {
           }
         }
       }
+      if (
+        reply &&
+        (stale ||
+          !chat.lastCustomerAt ||
+          !sameBusinessDay(chat.lastCustomerAt, new Date()))
+      )
+        reply = `${businessGreeting()} 👋\n${reply}`;
       await this.prisma.$transaction(async (tx) => {
         const owns = await tx.whatsappCustomerChat.updateMany({
           where: {
