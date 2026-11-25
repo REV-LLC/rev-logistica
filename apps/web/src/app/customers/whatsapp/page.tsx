@@ -28,8 +28,13 @@ import {
 import { api, apiBlob } from "@/lib/api";
 import { getCurrentUserRole } from "@/lib/auth";
 import styles from "./whatsapp.module.css";
+import ContactReviewModal, {
+  type ContactProfile,
+  type LinkableRequest,
+} from "./ContactReviewModal";
 
 type Draft = {
+  contactName?: string | null;
   items: { equipment: string; quantity: number | null }[];
   customer: string | null;
   worksite: string | null;
@@ -38,6 +43,12 @@ type Draft = {
   transport: string | null;
 };
 type Chat = {
+  contactName?: string | null;
+  declaredCustomer?: string | null;
+  declaredWorksite?: string | null;
+  registered?: boolean;
+  requestCount?: number;
+  itemSummary?: string;
   phone: string;
   customers: string[];
   latest: string;
@@ -46,7 +57,12 @@ type Chat = {
   paused: boolean;
   preview: string;
 };
-type Listing = { chats: Chat[]; nextPage: number | null; enabled: boolean };
+type Listing = {
+  chats: Chat[];
+  nextPage: number | null;
+  enabled: boolean;
+  profilesEnabled?: boolean;
+};
 type Message = {
   id: string;
   text: string;
@@ -58,6 +74,7 @@ type Message = {
   error: string | null;
 };
 type Detail = {
+  profile: ContactProfile;
   customers: string[];
   phone: string;
   draft: Draft;
@@ -68,6 +85,12 @@ type Detail = {
   messages: Message[];
   before: string | null;
   requests: {
+    customerId?: string | null;
+    customerWorksiteId?: string | null;
+    linkedContactName?: string | null;
+    linkedCustomerName?: string | null;
+    linkedWorksiteName?: string | null;
+    linkedAt?: string | null;
     id: string;
     details: Draft & { requestedAt?: string };
     createdAt: string;
@@ -80,12 +103,13 @@ const date = (d: string) =>
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(d));
-const name = (chat?: { customers: string[] }) =>
-  chat?.customers.length === 1
+const name = (chat?: { customers: string[]; contactName?: string | null }) =>
+  chat?.contactName ||
+  (chat?.customers.length === 1
     ? chat.customers[0]
     : chat?.customers.length
       ? "Contacto de varios clientes"
-      : "Contacto por identificar";
+      : "Contacto nuevo");
 function RequestDetails({ draft }: { draft: Draft }) {
   return (
     <Stack gap={5}>
@@ -95,7 +119,8 @@ function RequestDetails({ draft }: { draft: Draft }) {
         </Text>
       ))}
       {[
-        ["Cliente", draft.customer],
+        ["Solicita", draft.contactName],
+        ["Empresa o cliente", draft.customer],
         ["Obra", draft.worksite],
         ["Fecha solicitada", draft.start],
         ["Duración", draft.duration],
@@ -105,7 +130,10 @@ function RequestDetails({ draft }: { draft: Draft }) {
           <Text component="span" c="dimmed">
             {label}:{" "}
           </Text>
-          {value || "Por completar"}
+          {value ||
+            (label === "Solicita"
+              ? "No indicado en el pedido"
+              : "Por completar")}
         </Text>
       ))}
     </Stack>
@@ -167,6 +195,14 @@ function Photo({ phone, id }: { phone: string; id: string }) {
   );
 }
 export default function CustomerWhatsappPage() {
+  const [reviewTarget, setReviewTarget] = useState<{
+    request: LinkableRequest | null;
+  } | null>(null);
+  const requestSection = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("search");
+    if (q) setSearch(q.slice(0, 100));
+  }, []);
   const [allowed, setAllowed] = useState<boolean | null>(null),
     [listing, setListing] = useState<Listing | null>(null),
     [page, setPage] = useState(0),
@@ -302,7 +338,15 @@ export default function CustomerWhatsappPage() {
   const listedContact = listing?.chats.find((c) => c.phone === selected);
   const contact =
     listedContact ??
-    (detail ? { customers: detail.customers ?? [] } : undefined);
+    (detail
+      ? {
+          customers: detail.customers ?? [],
+          contactName:
+            detail.draft.contactName ||
+            detail.requests[0]?.details.contactName ||
+            detail.profile?.contactName,
+        }
+      : undefined);
   const hasNew = !!(
     detail?.latest &&
     listedContact &&
@@ -351,7 +395,7 @@ export default function CustomerWhatsappPage() {
             <Stack gap="sm">
               <TextInput
                 aria-label="Buscar conversación"
-                placeholder="Cliente o teléfono"
+                placeholder="Persona, empresa, obra o teléfono"
                 leftSection={<IconSearch size={16} />}
                 value={search}
                 onChange={(e) => setSearch(e.currentTarget.value)}
@@ -362,6 +406,12 @@ export default function CustomerWhatsappPage() {
                 onChange={(v) => setStatus(v ?? "all")}
                 data={[
                   { value: "all", label: "Todos los chats" },
+                  ...(listing?.profilesEnabled
+                    ? [
+                        { value: "requests", label: "Pedidos recibidos" },
+                        { value: "unlinked", label: "Contactos por registrar" },
+                      ]
+                    : []),
                   { value: "pending", label: "Por revisar" },
                   { value: "reviewed", label: "Revisados" },
                   { value: "paused", label: "Bot en pausa" },
@@ -394,9 +444,36 @@ export default function CustomerWhatsappPage() {
                     <Text size="sm" mt={4}>
                       +{chat.phone}
                     </Text>
-                    <Text c="dimmed" size="sm" lineClamp={2} mt={5}>
-                      {chat.preview}
+                    <Text c="dimmed" size="xs" mt={4}>
+                      {chat.declaredCustomer ||
+                        chat.customers[0] ||
+                        "Empresa por indicar"}
+                      {chat.declaredWorksite
+                        ? ` · ${chat.declaredWorksite}`
+                        : ""}
                     </Text>
+                    <Text c="dimmed" size="sm" lineClamp={2} mt={5}>
+                      {chat.itemSummary || chat.preview}
+                    </Text>
+                    <Group gap={5} mt="xs">
+                      <Badge
+                        size="xs"
+                        color={chat.requestCount ? "blue" : "gray"}
+                      >
+                        {chat.requestCount
+                          ? `${chat.requestCount} ${chat.requestCount === 1 ? "pedido recibido" : "pedidos recibidos"}`
+                          : "En conversación"}
+                      </Badge>
+                      <Badge
+                        size="xs"
+                        variant="outline"
+                        color={chat.registered ? "green" : "yellow"}
+                      >
+                        {chat.registered
+                          ? "Contacto registrado"
+                          : "Por registrar"}
+                      </Badge>
+                    </Group>
                     <Group justify="space-between" mt="xs">
                       <Text size="xs" c="dimmed">
                         {date(chat.latest)}
@@ -470,9 +547,9 @@ export default function CustomerWhatsappPage() {
                       <Text fw={700}>{name(contact)}</Text>
                       <Text size="sm" c="dimmed">
                         +{detail.phone}
-                        {contact?.customers.length === 1
-                          ? " · Coincidencia por teléfono"
-                          : " · Identidad pendiente de verificar"}
+                        {detail.profile?.contactName
+                          ? " · Contacto registrado por oficina"
+                          : " · Contacto pendiente de registro"}
                       </Text>
                     </div>
                     <Button
@@ -492,6 +569,39 @@ export default function CustomerWhatsappPage() {
                       {detail.paused ? "Reanudar bot" : "Pausar bot"}
                     </Button>
                   </Group>
+                  <Group mt="sm" gap="xs">
+                    {detail.profile && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => setReviewTarget({ request: null })}
+                      >
+                        {detail.profile?.contactName
+                          ? "Editar contacto"
+                          : "Registrar contacto"}
+                      </Button>
+                    )}
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() =>
+                        requestSection.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        })
+                      }
+                    >
+                      Ver pedidos ({detail.requests.length})
+                    </Button>
+                  </Group>
+                  {detail.profile?.customer && (
+                    <Text size="xs" c="dimmed" mt={5}>
+                      Perfil de WhatsApp: {detail.profile.customer.name}
+                      {detail.profile.customerWorksite
+                        ? ` · ${detail.profile.customerWorksite.worksite.name}`
+                        : ""}
+                    </Text>
+                  )}
                   {detail.paused && (
                     <Text size="xs" c="yellow" mt="xs">
                       Bot en pausa. Los mensajes entrantes se guardan sin
@@ -561,7 +671,7 @@ export default function CustomerWhatsappPage() {
                     </div>
                   ))}
                 </div>
-                <div className={styles.review}>
+                <div ref={requestSection} className={styles.review}>
                   <Stack gap="md">
                     <Group justify="space-between">
                       <Text fw={600}>Solicitudes recibidas</Text>
@@ -577,6 +687,27 @@ export default function CustomerWhatsappPage() {
                             {date(request.createdAt)}
                           </Text>
                           <RequestDetails draft={request.details} />
+                          {request.linkedAt && (
+                            <Text size="sm" c="green" mt="sm">
+                              Vinculado por oficina: {request.linkedContactName}{" "}
+                              · {request.linkedCustomerName}
+                              {request.linkedWorksiteName
+                                ? ` · ${request.linkedWorksiteName}`
+                                : ""}
+                            </Text>
+                          )}
+                          {detail.profile && (
+                            <Button
+                              mt="sm"
+                              size="xs"
+                              variant="light"
+                              onClick={() => setReviewTarget({ request })}
+                            >
+                              {request.linkedAt
+                                ? "Revisar vinculación"
+                                : "Vincular pedido y contacto"}
+                            </Button>
+                          )}
                         </Paper>
                       ))
                     ) : (
@@ -630,6 +761,32 @@ export default function CustomerWhatsappPage() {
           </Paper>
         </div>
       </Stack>
+      {reviewTarget && detail && (
+        <ContactReviewModal
+          phone={detail.phone}
+          profile={
+            detail.profile ?? {
+              contactName: null,
+              customer: null,
+              customerWorksite: null,
+              version: 0,
+              updatedAt: null,
+            }
+          }
+          request={reviewTarget.request}
+          draft={
+            detail.draft.items.length
+              ? detail.draft
+              : (detail.requests[0]?.details ?? detail.draft)
+          }
+          onClose={() => setReviewTarget(null)}
+          onSaved={() => {
+            setReviewTarget(null);
+            void loadDetail(detail.phone, true);
+            void loadList();
+          }}
+        />
+      )}
     </Container>
   );
 }

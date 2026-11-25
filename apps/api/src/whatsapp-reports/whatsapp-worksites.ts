@@ -108,7 +108,7 @@ export type WorksiteCandidate = {
   alias: string | null;
   customer: string;
 };
-function wordSimilarity(a: string, b: string) {
+export function wordSimilarity(a: string, b: string) {
   if (a.includes(b) || b.includes(a)) return 1;
   const previous = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {

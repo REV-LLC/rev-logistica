@@ -1,3 +1,4 @@
+import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappCustomerService } from './whatsapp-customer.service';
 import { emptyCustomerDraft } from './whatsapp-customer-ai.service';
@@ -27,6 +28,7 @@ if (url) {
     const ai = { extract: jest.fn() },
       cloud = { reply: jest.fn().mockResolvedValue(undefined) };
     const customers = new WhatsappCustomerService(prisma, ai as any);
+    const profiles = new WhatsappCustomerProfilesService(prisma);
     const inbox = new WhatsappInboxService(
       prisma,
       cloud as any,
@@ -42,6 +44,7 @@ if (url) {
     let phone: string;
     const complete = {
       ...emptyCustomerDraft(),
+      contactName: 'Persona QA',
       items: [
         { equipment: 'rana compactadora', quantity: 2 },
         { equipment: 'cortadora', quantity: 1 },
@@ -108,11 +111,14 @@ if (url) {
     it('keeps unknown contacts for review, asks missing data and requires a sent summary before creating a request', async () => {
       ai.extract.mockResolvedValueOnce({
         ...emptyCustomerDraft(),
+        contactName: 'Persona QA',
         items: [{ equipment: 'rana', quantity: null }],
       });
       const first = await receive('necesito una rana');
       expect(first.status).toBe('CUSTOMER_PROCESSED');
-      expect(first.replyText).toMatch(/^(Buenos días|Buenas tardes) 👋/);
+      expect(first.replyText).toMatch(
+        /^(Buenos días|Buenas tardes), Persona QA 👋/,
+      );
       expect(first.replyText).toContain('Cuántas');
       expect(
         await prisma.whatsappCustomerRequest.count({ where: { phone } }),
@@ -265,6 +271,180 @@ if (url) {
       expect((await customers.list(phone)).chats).toHaveLength(1);
       await expect(customers.list('', 'invalid')).rejects.toThrow();
       await expect(customers.detail('573000000000', old.id)).rejects.toThrow();
+    });
+    it('takes an unknown person and company without creating customer or worksite profiles automatically', async () => {
+      const beforeCustomers = await prisma.customer.count(),
+        beforeSites = await prisma.customerWorksite.count();
+      ai.extract.mockResolvedValueOnce({
+        ...emptyCustomerDraft(),
+        items: [{ equipment: 'rana', quantity: 2 }],
+        customer: 'Empresa que aún no existe',
+        worksite: 'Obra nueva indicada',
+      });
+      const first = await receive('Necesito dos ranas para una obra nueva');
+      expect(first.replyText).toContain('Cómo te llamas');
+      ai.extract.mockResolvedValueOnce({
+        ...complete,
+        contactName: 'Juan de prueba',
+        customer: 'Empresa que aún no existe',
+      });
+      await receive('Soy Juan de prueba');
+      await receive('sí');
+      const list = await customers.list('Juan de prueba', 'requests');
+      expect(list.chats.find((c) => c.phone === phone)).toMatchObject({
+        contactName: 'Juan de prueba',
+        declaredCustomer: 'Empresa que aún no existe',
+        registered: false,
+        requestCount: 1,
+      });
+      expect(await prisma.customer.count()).toBe(beforeCustomers);
+      expect(await prisma.customerWorksite.count()).toBe(beforeSites);
+    });
+    it('preserves legacy drafts and asks the missing person name instead of pausing or accepting an incomplete confirmation', async () => {
+      const { contactName, ...legacy } = complete;
+      await prisma.whatsappCustomerChat.create({
+        data: {
+          phone,
+          draft: legacy,
+          awaitingConfirmation: true,
+          lastCustomerAt: new Date(),
+          leaseUntil: new Date(0),
+        },
+      });
+      const reply = await receive('sí');
+      expect(reply.replyText).toContain('Cómo te llamas');
+      const detail = await customers.detail(phone);
+      expect(detail.paused).toBe(false);
+      expect(detail.draft.items).toHaveLength(2);
+      expect(detail.requests).toHaveLength(0);
+    });
+    it('allows office to link a profile and just one request, preserving original messages and declarations', async () => {
+      ai.extract.mockResolvedValue(complete);
+      await receive('pedido');
+      await receive('sí');
+      const before = await customers.detail(phone),
+        request = before.requests[0];
+      const company = await prisma.customer.create({
+        data: {
+          name: 'Cliente de oficina QA',
+          contactDirectory: [
+            { type: 'GENERAL', label: 'Principal', phone: '573001112233' },
+          ],
+        },
+      });
+      const site = await prisma.worksite.create({
+        data: { name: 'Obra elegida por oficina' },
+      });
+      const relation = await prisma.customerWorksite.create({
+        data: { customerId: company.id, worksiteId: site.id },
+      });
+      await profiles.save(
+        phone,
+        {
+          contactName: 'Juan Revisado',
+          customerId: company.id,
+          customerWorksiteId: relation.id,
+          requestId: request.id,
+          version: 0,
+        },
+        'qa-office',
+      );
+      const after = await customers.detail(phone);
+      expect(after.profile.contactName).toBe('Juan Revisado');
+      expect(after.profile.customer?.id).toBe(company.id);
+      expect(after.requests[0]).toMatchObject({
+        customerId: company.id,
+        customerWorksiteId: relation.id,
+        linkedContactName: 'Juan Revisado',
+        linkedBy: 'qa-office',
+      });
+      expect(after.requests[0].details).toEqual(request.details);
+      expect(after.messages).toEqual(before.messages);
+      expect(
+        (await prisma.customer.findUniqueOrThrow({ where: { id: company.id } }))
+          .contactDirectory,
+      ).toEqual(company.contactDirectory);
+      expect(
+        (await customers.list('Juan Revisado')).chats.find(
+          (c) => c.phone === phone,
+        )?.registered,
+      ).toBe(true);
+      await expect(
+        profiles.save(
+          phone,
+          { contactName: 'Stale edit', customerId: company.id, version: 0 },
+          'qa-other',
+        ),
+      ).rejects.toThrow('contacto cambió');
+      ai.extract.mockImplementation(async (_text, draft) => ({
+        ...draft,
+        items: [{ equipment: 'otra rana', quantity: 1 }],
+      }));
+      const next = await receive('Necesito otra rana');
+      expect(ai.extract.mock.calls.at(-1)?.[1]).toMatchObject({
+        contactName: 'Juan Revisado',
+        customer: 'Cliente de oficina QA',
+        worksite: null,
+      });
+      expect(next.replyText).toContain('obra');
+    });
+    it('rejects a worksite from another customer, a request from another phone and a busy conversation', async () => {
+      await receive('asesor');
+      const a = await prisma.customer.create({
+          data: { name: 'Empresa A QA' },
+        }),
+        b = await prisma.customer.create({ data: { name: 'Empresa B QA' } }),
+        site = await prisma.worksite.create({ data: { name: 'Obra B' } }),
+        relation = await prisma.customerWorksite.create({
+          data: { customerId: b.id, worksiteId: site.id },
+        });
+      await expect(
+        profiles.save(
+          phone,
+          {
+            contactName: 'Juan QA',
+            customerId: a.id,
+            customerWorksiteId: relation.id,
+            version: 0,
+          },
+          'qa-office',
+        ),
+      ).rejects.toThrow('no pertenece');
+      const otherPhone = phone.slice(0, -1) + (phone.endsWith('9') ? '8' : '9');
+      await prisma.whatsappCustomerChat.create({
+        data: { phone: otherPhone, draft: emptyCustomerDraft() },
+      });
+      const foreign = await prisma.whatsappCustomerRequest.create({
+        data: {
+          phone: otherPhone,
+          sourceMessageId: randomUUID(),
+          details: complete,
+        },
+      });
+      await expect(
+        profiles.save(
+          phone,
+          {
+            contactName: 'Juan QA',
+            customerId: a.id,
+            requestId: foreign.id,
+            version: 0,
+          },
+          'qa-office',
+        ),
+      ).rejects.toThrow('no pertenece');
+      await prisma.whatsappCustomerChat.update({
+        where: { phone },
+        data: { leaseUntil: new Date(Date.now() + 60000) },
+      });
+      await expect(
+        profiles.save(
+          phone,
+          { contactName: 'Juan QA', customerId: a.id, version: 0 },
+          'qa-office',
+        ),
+      ).rejects.toThrow('procesando');
+      expect((await customers.detail(phone)).profile.version).toBe(0);
     });
     it('suppresses unsent customer replies when disabled, without blocking the shared outbox', async () => {
       ai.extract.mockResolvedValue(complete);

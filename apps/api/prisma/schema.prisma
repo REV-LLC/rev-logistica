@@ -556,6 +556,8 @@ model AppSettingAudit {
 }
 
 model Customer {
+  whatsappContactChats WhatsappCustomerChat[] @relation("WhatsappChatCustomer")
+  whatsappCustomerRequests WhatsappCustomerRequest[] @relation("WhatsappRequestCustomer")
   annexPrefix AnnexCustomerPrefix?
   id                    String                        @id @default(uuid())
   name                  String
@@ -604,6 +606,8 @@ model Worksite {
 }
 
 model CustomerWorksite {
+  whatsappContactChats WhatsappCustomerChat[] @relation("WhatsappChatWorksite")
+  whatsappCustomerRequests WhatsappCustomerRequest[] @relation("WhatsappRequestWorksite")
   annexCodes AnnexConsultationCode[]
   attendancePunches AttendancePunch[]
   whatsappReports WhatsappReport[]
@@ -2299,6 +2303,14 @@ model EmployeeAffiliationRecognition {
 // Customer requests are intake drafts, never inventory reservations or confirmed rentals.
 model WhatsappCustomerChat {
   phone String @id
+  contactName String?
+  customerId String?
+  customer Customer? @relation("WhatsappChatCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  customerWorksiteId String?
+  customerWorksite CustomerWorksite? @relation("WhatsappChatWorksite", fields: [customerWorksiteId], references: [id], onDelete: SetNull)
+  profileVersion Int @default(0)
+  profileUpdatedBy String?
+  profileUpdatedAt DateTime?
   lastCustomerAt DateTime?
   confirmationMessageId String?
   draft Json
@@ -2311,10 +2323,21 @@ model WhatsappCustomerChat {
   leaseToken String?
   updatedAt DateTime @updatedAt
   requests WhatsappCustomerRequest[]
+  @@index([customerId])
+  @@index([customerWorksiteId])
 }
 
 model WhatsappCustomerRequest {
   id String @id @default(uuid())
+  customerId String?
+  customer Customer? @relation("WhatsappRequestCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  customerWorksiteId String?
+  customerWorksite CustomerWorksite? @relation("WhatsappRequestWorksite", fields: [customerWorksiteId], references: [id], onDelete: SetNull)
+  linkedContactName String?
+  linkedCustomerName String?
+  linkedWorksiteName String?
+  linkedBy String?
+  linkedAt DateTime?
   phone String
   chat WhatsappCustomerChat @relation(fields: [phone], references: [phone])
   sourceMessageId String @unique
@@ -2322,4 +2345,6 @@ model WhatsappCustomerRequest {
   status String @default("PENDING")
   createdAt DateTime @default(now())
   @@index([phone, createdAt])
+  @@index([customerId])
+  @@index([customerWorksiteId])
 }
