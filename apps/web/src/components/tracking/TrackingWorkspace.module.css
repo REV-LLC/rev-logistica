@@ -6,6 +6,10 @@
 .selected { border-color:#0f766e; box-shadow:inset 3px 0 #0f766e; background:light-dark(#f0fdfa,#112e2b); }
 .legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; }
 .key { display:inline-block; width:22px; border-top:3px solid #0f766e; margin-right:6px; vertical-align:middle; }
-.planned { border-color:#7c3aed; border-top-style:dashed; }
 @media(max-width:900px) { .layout{grid-template-columns:minmax(0,1fr);} .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));} .vehicle{padding:12px;} }
 @media(max-width:520px) { .list{display:flex;flex-direction:row;overflow-x:auto;padding:3px;scroll-snap-type:x proximity;} .vehicle{min-width:245px;scroll-snap-align:start;} }
+
+.journeys { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px; max-height:380px; overflow-y:auto; padding:3px; }
+.journey { width:100%; padding:12px; border:1px solid var(--mantine-color-default-border); border-radius:10px; background:var(--mantine-color-body); color:inherit; text-align:left; cursor:pointer; }
+.journey:hover { border-color:#0f766e; }
+.journey:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }

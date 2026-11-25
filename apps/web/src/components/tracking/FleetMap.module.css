@@ -12,3 +12,9 @@
 .primaryName { right:38px; }
 .secondaryName { left:38px; }
 @media(max-width:600px) { .map{height:55dvh; min-height:360px;} .siteName{font-size:11px; max-width:118px; white-space:normal; width:max-content;} .primaryName{right:auto;left:-68px;top:-94px;text-align:center;} }
+
+.boundary { width:28px; height:28px; font-size:12px; font-weight:800; z-index:5; }
+.start { background:#087f5b; left:-12px; }
+.end { background:#c92a2a; left:12px; }
+.boundaryLabel { position:absolute; right:18px; bottom:15px; white-space:nowrap; font-size:11px; font-weight:700; padding:2px 5px; background:white; color:#087f5b; border-radius:4px; box-shadow:0 1px 4px #0003; pointer-events:none; }
+.endLabel { right:auto; left:18px; color:#c92a2a; }
