@@ -55,7 +55,10 @@ límite local de manera conservadora.
 
 La geometría de Roads se muestra azul como estimación separada del GPS original;
 no cambia distancias, paradas ni registros de Traccar. No se persiste en base,
-archivos ni logs. Se rechazan respuestas parciales o ajustes mayores de 100 m.
+archivos ni logs. Se eliminan coordenadas consecutivas identicas solo en la entrada al proveedor.
+Los puntos omitidos por Google separan tramos; se muestran solo segmentos con
+al menos dos puntos originales consecutivos, sin unir huecos. Se rechazan
+coordenadas fuera de rango, avisos del proveedor y ajustes mayores de 100 m.
 El proveedor puede inferir una calle incorrecta: no es prueba del camino exacto.
 
 Tarifa pública consultada el 24 de noviembre: 5000 consultas/mes gratuitas para
