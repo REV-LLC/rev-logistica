@@ -1,4 +1,4 @@
-import { businessGreeting, sameBusinessDay } from './whatsapp-greeting';
+import { contactGreeting, sameBusinessDay } from './whatsapp-greeting';
 import {
   BadRequestException,
   ConflictException,
@@ -114,14 +114,21 @@ export class WhatsappCustomerService {
     try {
       const chat = await this.prisma.whatsappCustomerChat.findUniqueOrThrow({
         where: { phone: message.phone },
+        include: {
+          customer: { select: { id: true, name: true, active: true } },
+        },
       });
       let draft = customerDraftSchema
         .catch(emptyCustomerDraft())
-        .parse(chat.draft);
+        .parse({ contactName: null, ...(chat.draft as object) });
       const stale =
         !chat.lastCustomerAt ||
         chat.lastCustomerAt.getTime() < message.sentAt.getTime() - 23 * 3600000;
       if (stale) draft = emptyCustomerDraft();
+      if (!draft.items.length) {
+        draft.contactName ??= chat.contactName;
+        draft.customer ??= chat.customer?.active ? chat.customer.name : null;
+      }
       let awaitingConfirmation = stale ? false : chat.awaitingConfirmation;
       let paused = chat.paused;
       let reply: string | null = null;
@@ -152,19 +159,23 @@ export class WhatsappCustomerService {
             'correcto',
           ].includes(command)
         ) {
-          if (customerQuestion(draft))
-            throw new Error('Incomplete confirmation');
-          const summarySent = chat.confirmationMessageId
-            ? await this.prisma.whatsappInboundMessage.findFirst({
-                where: {
-                  id: chat.confirmationMessageId,
-                  phone: message.phone,
-                  replySentAt: { not: null },
-                },
-              })
-            : null;
-          submit = !!summarySent;
-          reply = submit ? pendingReply : customerSummary(draft);
+          const incomplete = customerQuestion(draft);
+          if (incomplete) {
+            awaitingConfirmation = false;
+            reply = incomplete;
+          } else {
+            const summarySent = chat.confirmationMessageId
+              ? await this.prisma.whatsappInboundMessage.findFirst({
+                  where: {
+                    id: chat.confirmationMessageId,
+                    phone: message.phone,
+                    replySentAt: { not: null },
+                  },
+                })
+              : null;
+            submit = !!summarySent;
+            reply = submit ? pendingReply : customerSummary(draft);
+          }
         } else if (message.type !== 'text' && !message.text.trim()) {
           reply =
             'Recibí tu mensaje. Para completar el pedido, escribe los datos por texto. Los audios y documentos aún necesitan revisión de oficina.\n' +
@@ -191,7 +202,7 @@ export class WhatsappCustomerService {
           !chat.lastCustomerAt ||
           !sameBusinessDay(chat.lastCustomerAt, new Date()))
       )
-        reply = `${businessGreeting()} 👋\n${reply}`;
+        reply = `${contactGreeting(draft.contactName || chat.contactName)}\n${reply}`;
       await this.prisma.$transaction(async (tx) => {
         const owns = await tx.whatsappCustomerChat.updateMany({
           where: {
@@ -298,7 +309,14 @@ export class WhatsappCustomerService {
       !Number.isInteger(page) ||
       page < 0 ||
       page > 10000 ||
-      !['all', 'pending', 'reviewed', 'paused'].includes(status)
+      ![
+        'all',
+        'pending',
+        'reviewed',
+        'paused',
+        'requests',
+        'unlinked',
+      ].includes(status)
     )
       throw new BadRequestException('Filtro inválido');
     const [employees, names] = await Promise.all([
@@ -313,8 +331,14 @@ export class WhatsappCustomerService {
     const exclusion = employees.length
       ? Prisma.sql`AND m."phone" NOT IN (${Prisma.join(employees)})`
       : Prisma.empty;
+    const pattern = `%${search.trim().replace(/[\\%_]/g, '')}%`;
     const searchClause = search.trim()
-      ? Prisma.sql`AND (m."phone" LIKE ${`%${search.replace(/[^0-9]/g, '') || 'no-phone'}%`} ${matching.length ? Prisma.sql`OR m."phone" IN (${Prisma.join(matching)})` : Prisma.empty})`
+      ? Prisma.sql`AND (
+          m."phone" LIKE ${`%${search.replace(/[^0-9]/g, '') || 'no-phone'}%`}
+          ${matching.length ? Prisma.sql`OR m."phone" IN (${Prisma.join(matching)})` : Prisma.empty}
+          OR EXISTS (SELECT 1 FROM "WhatsappCustomerChat" s LEFT JOIN "Customer" sc ON sc."id"=s."customerId" WHERE s."phone"=m."phone" AND concat_ws(' ',s."contactName",s."draft"->>'contactName',s."draft"->>'customer',s."draft"->>'worksite',sc."name") ILIKE ${pattern})
+          OR EXISTS (SELECT 1 FROM "WhatsappCustomerRequest" q WHERE q."phone"=m."phone" AND concat_ws(' ',q."details"->>'contactName',q."details"->>'customer',q."details"->>'worksite',q."linkedContactName",q."linkedCustomerName",q."linkedWorksiteName") ILIKE ${pattern})
+        )`
       : Prisma.empty;
     const filter =
       status === 'pending'
@@ -323,7 +347,11 @@ export class WhatsappCustomerService {
           ? Prisma.sql`WHERE c."reviewedThrough" >= g.latest`
           : status === 'paused'
             ? Prisma.sql`WHERE c."paused" = true`
-            : Prisma.empty;
+            : status === 'requests'
+              ? Prisma.sql`WHERE EXISTS(SELECT 1 FROM "WhatsappCustomerRequest" f WHERE f."phone"=g."phone")`
+              : status === 'unlinked'
+                ? Prisma.sql`WHERE c."contactName" IS NULL OR c."customerId" IS NULL`
+                : Prisma.empty;
     const rows = await this.prisma.$queryRaw<
       Array<{
         phone: string;
@@ -332,23 +360,63 @@ export class WhatsappCustomerService {
         reviewedThrough: Date | null;
         paused: boolean | null;
         text: string | null;
+        registeredContactName: string | null;
+        linkedCustomerName: string | null;
+        declared: Prisma.JsonValue | null;
+        requestCount: number;
       }>
     >(Prisma.sql`
       WITH g AS (SELECT m."phone", MAX(m."createdAt") AS latest, COUNT(*) AS count FROM "WhatsappInboundMessage" m WHERE ${eligible} ${exclusion} ${searchClause} GROUP BY m."phone")
-      SELECT g.*, c."reviewedThrough", c."paused", (SELECT x."text" FROM "WhatsappInboundMessage" x WHERE x."phone"=g."phone" AND x."employeeId" IS NULL ORDER BY x."createdAt" DESC, x."id" DESC LIMIT 1) AS text
-      FROM g LEFT JOIN "WhatsappCustomerChat" c ON c."phone"=g."phone" ${filter} ORDER BY g.latest DESC, g."phone" ASC LIMIT 51 OFFSET ${page * 50}`);
+      SELECT g.*, c."reviewedThrough", c."paused",c."contactName" AS "registeredContactName",lc."name" AS "linkedCustomerName",
+        CASE WHEN COALESCE(jsonb_array_length(c."draft"->'items'),0)>0 THEN c."draft" ELSE latest_request."details" END AS declared,
+        (SELECT COUNT(*)::int FROM "WhatsappCustomerRequest" q WHERE q."phone"=g."phone") AS "requestCount",
+        (SELECT x."text" FROM "WhatsappInboundMessage" x WHERE x."phone"=g."phone" AND x."employeeId" IS NULL ORDER BY x."createdAt" DESC, x."id" DESC LIMIT 1) AS text
+      FROM g LEFT JOIN "WhatsappCustomerChat" c ON c."phone"=g."phone"
+        LEFT JOIN "Customer" lc ON lc."id"=c."customerId"
+        LEFT JOIN LATERAL (SELECT q."details" FROM "WhatsappCustomerRequest" q WHERE q."phone"=g."phone" ORDER BY q."createdAt" DESC,q."id" DESC LIMIT 1) latest_request ON true
+      ${filter} ORDER BY g.latest DESC, g."phone" ASC LIMIT 51 OFFSET ${page * 50}`);
     return {
       enabled: customerChannelEnabled(),
+      profilesEnabled: true,
       nextPage: rows.length > 50 ? page + 1 : null,
-      chats: rows.slice(0, 50).map((r) => ({
-        phone: r.phone,
-        customers: [...(names.get(r.phone) ?? [])],
-        latest: r.latest,
-        count: Number(r.count),
-        pending: !r.reviewedThrough || r.reviewedThrough < r.latest,
-        paused: !!r.paused,
-        preview: r.text || 'Mensaje adjunto',
-      })),
+      chats: rows.slice(0, 50).map((r) => {
+        const d = (
+          r.declared &&
+          typeof r.declared === 'object' &&
+          !Array.isArray(r.declared)
+            ? r.declared
+            : {}
+        ) as Record<string, unknown>;
+        const text = (v: unknown) => (typeof v === 'string' ? v : null);
+        return {
+          phone: r.phone,
+          customers: [
+            ...new Set([
+              ...(names.get(r.phone) ?? []),
+              ...(r.linkedCustomerName ? [r.linkedCustomerName] : []),
+            ]),
+          ],
+          latest: r.latest,
+          count: Number(r.count),
+          pending: !r.reviewedThrough || r.reviewedThrough < r.latest,
+          paused: !!r.paused,
+          preview: r.text || 'Mensaje adjunto',
+          contactName: text(d.contactName) || r.registeredContactName,
+          declaredCustomer: text(d.customer),
+          declaredWorksite: text(d.worksite),
+          registered: !!r.registeredContactName && !!r.linkedCustomerName,
+          requestCount: r.requestCount,
+          itemSummary: Array.isArray(d.items)
+            ? d.items
+                .slice(0, 3)
+                .map(
+                  (item: any) =>
+                    `${typeof item?.quantity === 'number' ? item.quantity + ' × ' : ''}${text(item?.equipment) || ''}`,
+                )
+                .join(' · ')
+            : '',
+        };
+      }),
     };
   }
   async detail(phone: string, before?: string) {
@@ -360,7 +428,19 @@ export class WhatsappCustomerService {
       : null;
     if (before && !beforeRow) throw new BadRequestException('Página inválida');
     const [chat, messages, requests] = await Promise.all([
-      this.prisma.whatsappCustomerChat.findUnique({ where: { phone } }),
+      this.prisma.whatsappCustomerChat.findUnique({
+        where: { phone },
+        include: {
+          customer: { select: { id: true, name: true, active: true } },
+          customerWorksite: {
+            select: {
+              id: true,
+              active: true,
+              worksite: { select: { name: true, active: true } },
+            },
+          },
+        },
+      }),
       this.prisma.whatsappInboundMessage.findMany({
         where: {
           phone,
@@ -399,8 +479,20 @@ export class WhatsappCustomerService {
     const names = await this.customerNames();
     return {
       phone,
-      customers: [...(names.get(phone) ?? [])],
-      draft: chat?.draft ?? emptyCustomerDraft(),
+      customers: [
+        ...new Set([
+          ...(names.get(phone) ?? []),
+          ...(chat?.customer?.name ? [chat.customer.name] : []),
+        ]),
+      ],
+      draft: { ...emptyCustomerDraft(), ...((chat?.draft as object) ?? {}) },
+      profile: {
+        contactName: chat?.contactName ?? null,
+        customer: chat?.customer ?? null,
+        customerWorksite: chat?.customerWorksite ?? null,
+        version: chat?.profileVersion ?? 0,
+        updatedAt: chat?.profileUpdatedAt ?? null,
+      },
       paused: !!chat?.paused,
       notes: chat?.notes ?? '',
       reviewedThrough: chat?.reviewedThrough ?? null,

@@ -1,3 +1,4 @@
+import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { WhatsappCustomerController } from './whatsapp-customer.controller';
 import { WhatsappCustomerService } from './whatsapp-customer.service';
 import { WhatsappCustomerAiService } from './whatsapp-customer-ai.service';
@@ -20,6 +21,7 @@ import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
   controllers: [WhatsappReportsController, WhatsappCustomerController],
   providers: [
     WhatsappCustomerService,
+    WhatsappCustomerProfilesService,
     WhatsappCustomerAiService,
     AttendanceJournalsService,
     WhatsappCloudService,

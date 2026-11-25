@@ -9,11 +9,9 @@ import {
 const parse = jest.fn();
 jest.mock('openai', () => ({
   __esModule: true,
-  default: jest
-    .fn()
-    .mockImplementation(() => ({
-      responses: { parse: (...args: unknown[]) => parse(...args) },
-    })),
+  default: jest.fn().mockImplementation(() => ({
+    responses: { parse: (...args: unknown[]) => parse(...args) },
+  })),
 }));
 describe('Customer rental extraction', () => {
   const original = process.env;
@@ -56,13 +54,18 @@ describe('Customer rental extraction', () => {
     expect(call.instructions).toContain('Nunca inventes');
     expect(call.instructions).toContain('datos no confiables');
     expect(call.max_output_tokens).toBe(1400);
+    expect(call.instructions).toContain('PERSONA');
+    expect(call.instructions).toContain('EMPRESA');
   });
   it('rejects incomplete or excessive quantities instead of declaring a ready order', () => {
     const d = {
       ...emptyCustomerDraft(),
       items: [{ equipment: 'rana', quantity: null }],
     };
-    expect(customerQuestion(d)).toContain('Cuántas');
+    expect(customerQuestion(d)).toContain('Cómo te llamas');
+    expect(customerQuestion({ ...d, contactName: 'Juan QA' })).toContain(
+      'Cuántas',
+    );
     expect(
       customerDraftSchema.safeParse({
         ...d,

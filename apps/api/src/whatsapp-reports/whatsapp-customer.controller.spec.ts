@@ -1,3 +1,4 @@
+import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -19,6 +20,14 @@ describe('Customer chat access', () => {
       controllers: [WhatsappCustomerController],
       providers: [
         { provide: WhatsappCustomerService, useValue: service },
+        {
+          provide: WhatsappCustomerProfilesService,
+          useValue: {
+            customers: jest.fn().mockResolvedValue([]),
+            worksites: jest.fn().mockResolvedValue([]),
+            save: jest.fn().mockResolvedValue({ saved: true }),
+          },
+        },
         { provide: WhatsappCloudService, useValue: {} },
         { provide: PrismaService, useValue: {} },
       ],
@@ -76,6 +85,47 @@ describe('Customer chat access', () => {
         .patch('/whatsapp-customers/573001234567')
         .set('x-role', role)
         .send({ notes: '', paused: false })
+        .expect(403);
+    },
+  );
+  it.each(['ADMIN', 'OFFICE'])(
+    'lets %s explicitly link a validated contact profile',
+    async (role) => {
+      await request(app.getHttpServer())
+        .get('/whatsapp-customers/catalog/customers?search=obra')
+        .set('x-role', role)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/profile')
+        .set('x-role', role)
+        .send({
+          contactName: 'Juan QA',
+          customerId: '11111111-2222-4333-8444-555555555555',
+          version: 0,
+        })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/profile')
+        .set('x-role', role)
+        .send({ contactName: 'X', customerId: 'bad', version: -1 })
+        .expect(400);
+    },
+  );
+  it.each(['DRIVER', 'OPERATOR', 'EMPLOYEE', 'WAREHOUSE_TABLET'])(
+    'denies %s customer directories and profile creation',
+    async (role) => {
+      await request(app.getHttpServer())
+        .get('/whatsapp-customers/catalog/customers')
+        .set('x-role', role)
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/profile')
+        .set('x-role', role)
+        .send({
+          contactName: 'Juan QA',
+          customerId: '11111111-2222-4333-8444-555555555555',
+          version: 0,
+        })
         .expect(403);
     },
   );

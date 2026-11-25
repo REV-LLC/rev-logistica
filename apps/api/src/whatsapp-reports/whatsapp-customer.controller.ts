@@ -1,3 +1,4 @@
+import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import {
   Body,
   Controller,
@@ -5,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
   Req,
   Res,
@@ -14,6 +16,10 @@ import {
 import { Role } from '@prisma/client';
 import {
   IsBoolean,
+  IsUUID,
+  IsInt,
+  Min,
+  MinLength,
   IsDateString,
   IsOptional,
   IsString,
@@ -33,6 +39,13 @@ class ReviewChatDto {
   @IsBoolean() paused: boolean;
   @IsOptional() @IsDateString() reviewedThrough?: string;
 }
+class SaveCustomerProfileDto {
+  @IsString() @MinLength(2) @MaxLength(80) contactName: string;
+  @IsUUID() customerId: string;
+  @IsOptional() @IsUUID() customerWorksiteId?: string;
+  @IsOptional() @IsUUID() requestId?: string;
+  @IsInt() @Min(0) version: number;
+}
 @Controller('whatsapp-customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.OFFICE)
@@ -41,6 +54,7 @@ export class WhatsappCustomerController {
     private readonly customers: WhatsappCustomerService,
     private readonly cloud: WhatsappCloudService,
     private readonly prisma: PrismaService,
+    private readonly profiles: WhatsappCustomerProfilesService,
   ) {}
   @Get()
   list(
@@ -53,6 +67,32 @@ export class WhatsappCustomerController {
       status,
       page ? Number(page) : 0,
     );
+  }
+  @Get('catalog/customers')
+  customerCatalog(@Query('search') search?: string) {
+    return this.profiles.customers(search?.slice(0, 160));
+  }
+  @Get('catalog/worksites')
+  worksiteCatalog(
+    @Query('customerId', new ParseUUIDPipe()) customerId: string,
+    @Query('search') search?: string,
+  ) {
+    return this.profiles.worksites(customerId, search?.slice(0, 160));
+  }
+  @Post(':phone/profile')
+  saveProfile(
+    @Param('phone') phone: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    body: SaveCustomerProfileDto,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.profiles.save(phone, body, req.user.sub);
   }
   @Get(':phone')
   detail(
