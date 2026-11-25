@@ -16,7 +16,11 @@ export function trails(history: RoadHistory) {
   let remaining = 100;
   // Use only recorded valid GPS, with short temporal and spatial gaps.
   for (const segment of [...history.segments].reverse()) {
-    const points = segment.filter(p => Date.parse(p.reportedAt) >= cutoff).slice(-remaining);
+    const recent = segment.filter(p => Date.parse(p.reportedAt) >= cutoff);
+    // Google can collapse repeated fixes while parked. Deduplicate only provider
+    // input; raw GPS history, timestamps and stop detection remain unchanged.
+    const distinct = recent.filter((point, index) => index === 0 || point.latitude !== recent[index-1].latitude || point.longitude !== recent[index-1].longitude);
+    const points = distinct.slice(-remaining);
     remaining -= points.length;
     let current: RoadPoint[] = [];
     for (const p of points) {
@@ -53,18 +57,39 @@ export class RoadMatching {
           const data = await response.json();
           const snapped = data.snappedPoints;
           if (!Array.isArray(snapped) || !snapped.length || snapped.length > 10_000) throw new Error('Invalid geometry');
-          const indices = new Set();
-          const path = snapped.map(p => {
-            const coordinate = { latitude:p.location?.latitude, longitude:p.location?.longitude };
+          if (data.warningMessage) throw new Error('Unreliable provider warning');
+          const accepted = new Set<number>();
+          const groupSegments: {latitude:number;longitude:number}[][] = [];
+          let path: {latitude:number;longitude:number}[] = [], anchors: number[] = [];
+          let interpolated: {latitude:number;longitude:number}[] = [], previousIndex: number | null = null;
+          const finish = () => {
+            if (anchors.length >= 2) { groupSegments.push(path); for (const index of anchors) accepted.add(index); }
+            path = []; anchors = []; interpolated = []; previousIndex = null;
+          };
+          let lastIndex = -1;
+          for (const point of snapped) {
+            const coordinate = { latitude:point.location?.latitude, longitude:point.location?.longitude };
             if (!Number.isFinite(coordinate.latitude) || !Number.isFinite(coordinate.longitude) || Math.abs(coordinate.latitude)>90 || Math.abs(coordinate.longitude)>180) throw new Error('Invalid coordinate');
-            if (p.originalIndex !== undefined) {
-              if (!Number.isInteger(p.originalIndex) || !points[p.originalIndex] || meters(points[p.originalIndex],coordinate)>100) throw new Error('Unreliable match');
-              indices.add(p.originalIndex);
+            if (point.originalIndex === undefined) {
+              if (previousIndex !== null) interpolated.push(coordinate);
+              continue;
             }
-            return coordinate;
-          });
-          if (indices.size !== points.length || data.warningMessage) throw new Error('Incomplete match');
-          segments.push(path); matchedPointCount += points.length;
+            const index = point.originalIndex;
+            if (!Number.isInteger(index) || !points[index] || index <= lastIndex) throw new Error('Invalid original index');
+            lastIndex = index;
+            if (meters(points[index],coordinate)>100) { finish(); skipped++; continue; }
+            // An omitted measured point is a gap, never permission to draw a
+            // road connection through it. Only contiguous original indices join.
+            if (previousIndex !== null && index !== previousIndex+1) { finish(); skipped++; }
+            if (previousIndex === null) path = [coordinate];
+            else path.push(...interpolated,coordinate);
+            anchors.push(index); previousIndex = index; interpolated = [];
+          }
+          finish();
+          if (!accepted.size) throw new Error('No reliable continuous match');
+          segments.push(...groupSegments);
+          matchedPointCount += accepted.size;
+          if (accepted.size < points.length) skipped++;
         } catch { skipped++; }
       }
       if (!segments.length) throw failure(503,'No se pudo obtener un ajuste confiable o se agotó el cupo diario. Se conserva el recorrido GPS original.');

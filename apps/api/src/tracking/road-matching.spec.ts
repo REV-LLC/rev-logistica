@@ -22,9 +22,28 @@ describe('Roads matching keeps raw GPS and shared consumption boundaries',()=>{
   expect(history.segments[0]).toBe(points);
   expect(JSON.stringify(matched)).not.toContain('private');
  });
- it('rejects partial or implausibly shifted geometry without substituting raw positions',async()=>{
+ it('deduplicates parked coordinates before asking Google without deleting raw GPS evidence',async()=>{
+  const repeated=points.flatMap(point=>[point,{...point}]);
+  const original={...history,segments:[repeated]};
+  let sent=0;
+  const matcher=new RoadMatching({enabled:true,key:'test',reserve:async()=>true,fetcher:async url=>{
+   sent=new URL(String(url)).searchParams.get('path')!.split('|').length;
+   return response();
+  }});
+  expect((await matcher.match(original)).matchedPointCount).toBe(10);
+  expect(sent).toBe(10);expect(original.segments[0]).toHaveLength(20);
+ });
+ it('rejects unusable or implausibly shifted geometry without substituting raw positions',async()=>{
   const matcher=new RoadMatching({enabled:true,key:'test',reserve:async()=>true,fetcher:async()=>new Response(JSON.stringify({snappedPoints:[{location:{latitude:4,longitude:-76},originalIndex:0}]}))});
   await expect(matcher.match(history)).rejects.toMatchObject({status:503});
+  expect(history.segments[0]).toBe(points);
+ });
+ it('keeps reliable partial matches separated instead of drawing across omitted GPS points',async()=>{
+  const selected=[0,1,4,5,6];
+  const matcher=new RoadMatching({enabled:true,key:'test',reserve:async()=>true,fetcher:async()=>new Response(JSON.stringify({snappedPoints:selected.map(i=>({location:{latitude:points[i].latitude,longitude:points[i].longitude},originalIndex:i}))}))});
+  const result=await matcher.match(history);
+  expect(result.segments.map(segment=>segment.length)).toEqual([2,3]);
+  expect(result.matchedPointCount).toBe(5);expect(result.message).toContain('parcial');
   expect(history.segments[0]).toBe(points);
  });
  it('does not adjust stationary jitter or bridge gaps and caps requests to 100 input points',()=>{
