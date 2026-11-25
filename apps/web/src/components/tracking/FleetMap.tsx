@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@mantine/core';
 import { loadTrackingMap } from './google-map-loader';
+import { trackingMapStyle } from './tracking-map-style';
+import { canAnimate, interpolatePosition } from './tracking-motion';
 import { gpsAge } from './tracking-types';
-import type { FleetState, PlannedRoute, RouteHistory } from './tracking-types';
+import type { FleetState, GpsPosition, Journey, RoadMatch, RouteHistory } from './tracking-types';
 import classes from './FleetMap.module.css';
 
-type MarkerData = { latitude: number; longitude: number; label: string; selected?: boolean; stale?: boolean; site?: string; number?: string; onClick?: () => void };
+type MarkerData = { animateMs?: number; boundary?: 'start' | 'end'; latitude: number; longitude: number; label: string; selected?: boolean; stale?: boolean; site?: string; number?: string; onClick?: () => void };
 type Overlay = { setMap: (map: google.maps.Map | null) => void; update: (data: MarkerData) => void };
 
 const fitPadding = (width: number) => width < 600 ? { top: 110, bottom: 60, left: 85, right: 175 } : { top: 100, bottom: 70, left: 175, right: 175 };
@@ -16,7 +18,9 @@ function markerType() {
   return class extends google.maps.OverlayView {
     private data: MarkerData;
     private element: HTMLDivElement | null = null;
-    constructor(data: MarkerData, map: google.maps.Map) { super(); this.data = data; this.setMap(map); }
+    private displayed: { latitude: number; longitude: number };
+    private frame: number | null = null;
+    constructor(data: MarkerData, map: google.maps.Map) { super(); this.data = data; this.displayed = { latitude: data.latitude, longitude: data.longitude }; this.setMap(map); }
     onAdd() {
       this.element = document.createElement('div'); this.element.className = classes.anchor;
       this.getPanes()?.overlayMouseTarget.appendChild(this.element);
@@ -28,10 +32,15 @@ function markerType() {
       this.element.replaceChildren();
       const d = this.data;
       const button = document.createElement('button'); button.type = 'button';
-      button.setAttribute('aria-label', d.site ? d.label : `Ver camión ${d.label}`);
+      button.setAttribute('aria-label', d.boundary || d.site ? d.label : `Ver camión ${d.label}`);
       button.className = `${classes.marker} ${d.selected ? classes.selected : ''} ${d.stale ? classes.stale : ''}`;
       button.onclick = d.onClick || null;
-      if (d.site) {
+      if (d.boundary) {
+        button.textContent = d.boundary === 'start' ? 'I' : 'F';
+        button.className = `${classes.marker} ${classes.boundary} ${d.boundary === 'end' ? classes.end : classes.start}`;
+        const label = document.createElement('span'); label.className = `${classes.boundaryLabel} ${d.boundary === 'end' ? classes.endLabel : ''}`;
+        label.textContent = d.label; this.element.append(label);
+      } else if (d.site) {
         const primary = d.site === 'primary'; const color = primary ? '#1971c2' : '#c2410c';
         this.element.style.setProperty('--site-color', color);
         this.element.style.setProperty('--site-x', primary ? '-18px' : '18px');
@@ -54,26 +63,44 @@ function markerType() {
     update(data: MarkerData) {
       const old = this.data;
       this.data = data;
-      if (old.label !== data.label || old.selected !== data.selected || old.stale !== data.stale || old.site !== data.site || old.number !== data.number) this.render();
+      if (old.label !== data.label || old.selected !== data.selected || old.stale !== data.stale || old.site !== data.site || old.number !== data.number || old.boundary !== data.boundary) this.render();
+      const changed = old.latitude !== data.latitude || old.longitude !== data.longitude;
+      if (changed || data.stale || (!data.animateMs && this.frame !== null)) {
+        if (this.frame !== null) cancelAnimationFrame(this.frame);
+        this.frame = null;
+        if (changed && data.animateMs && !data.stale) {
+          const from = { ...this.displayed }, started = performance.now(), duration = data.animateMs;
+          const step = (now: number) => {
+            const t = Math.min(1, (now - started) / duration);
+            this.displayed = interpolatePosition(from, data, t);
+            this.draw();
+            this.frame = t < 1 ? requestAnimationFrame(step) : null;
+          };
+          this.frame = requestAnimationFrame(step);
+        } else this.displayed = { latitude: data.latitude, longitude: data.longitude };
+      }
       this.draw();
     }
     draw() {
-      const p = this.getProjection()?.fromLatLngToDivPixel(new google.maps.LatLng(this.data.latitude, this.data.longitude));
+      const p = this.getProjection()?.fromLatLngToDivPixel(new google.maps.LatLng(this.displayed.latitude, this.displayed.longitude));
       if (p && this.element) { this.element.style.left = `${p.x}px`; this.element.style.top = `${p.y}px`; }
     }
-    onRemove() { this.element?.remove(); this.element = null; }
+    onRemove() { if (this.frame !== null) cancelAnimationFrame(this.frame); this.element?.remove(); this.element = null; }
   };
 }
 
-export default function FleetMap({ browserKey, fleet, selectedId, history, route, follow, fitVersion, historyFitVersion, onSelect, onStopFollowing }: {
-  browserKey: string; fleet: FleetState | null; selectedId: number | null; history: RouteHistory | null; route: PlannedRoute | null;
+export default function FleetMap({ browserKey, fleet, selectedId, history, journeys, follow, fitVersion, historyFitVersion, onSelect, onStopFollowing, smoothMovement = false, roadMatch }: {
+  browserKey: string; fleet: FleetState | null; selectedId: number | null; history: RouteHistory | null; journeys?: Journey[];
+  smoothMovement?: boolean; roadMatch?: RoadMatch | null;
   follow: boolean; fitVersion: number; historyFitVersion: number; onSelect: (id: number) => void; onStopFollowing: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const markers = useRef(new Map<string, Overlay>());
+  const boundaries = useRef(new Map<string, Overlay>());
   const Marker = useRef<ReturnType<typeof markerType> | null>(null);
   const didFit = useRef(false);
+  const lastPositions = useRef(new Map<number, GpsPosition>());
   const callbacks = useRef({ onSelect, onStopFollowing }); callbacks.current = { onSelect, onStopFollowing };
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
@@ -84,13 +111,14 @@ export default function FleetMap({ browserKey, fleet, selectedId, history, route
     void loadTrackingMap(browserKey).then(() => {
       if (!active || !host.current) return;
       map.current = new google.maps.Map(host.current, { center: { lat: 3.4384, lng: -76.5353 }, zoom: 12,
+        styles: trackingMapStyle,
         mapTypeControl: false, streetViewControl: false, rotateControl: false, fullscreenControl: true, gestureHandling: 'cooperative', clickableIcons: false });
       Marker.current = markerType();
       drag = map.current.addListener('dragstart', () => callbacks.current.onStopFollowing());
       setReady(true);
     }).catch(() => { if (active) setError(true); });
     return () => {
-      active = false; drag?.remove(); markers.current.forEach(m => m.setMap(null)); markers.current.clear();
+      active = false; drag?.remove(); boundaries.current.forEach(m => m.setMap(null)); boundaries.current.clear(); markers.current.forEach(m => m.setMap(null)); markers.current.clear();
       if (map.current) google.maps.event.clearInstanceListeners(map.current);
       map.current = null;
     };
@@ -104,8 +132,15 @@ export default function FleetMap({ browserKey, fleet, selectedId, history, route
       const existing = markers.current.get(key);
       if (existing) existing.update(data); else markers.current.set(key, new Marker.current!(data, map.current!));
     };
-    for (const d of fleet.devices) if (d.position) upsert(`device-${d.id}`, { ...d.position, label: d.name,
-      selected: d.id === selectedId, stale: gpsAge(d.position).seconds > 300, onClick: () => callbacks.current.onSelect(d.id) });
+    for (const d of fleet.devices) if (d.position) {
+      const previous = lastPositions.current.get(d.id);
+      const animate = smoothMovement && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        && d.latestReport?.valid !== false && canAnimate(previous, d.position);
+      upsert(`device-${d.id}`, { ...d.position, label: d.name,
+        animateMs: animate ? 3500 : 0,
+        selected: d.id === selectedId, stale: Boolean(d.position.historical) || gpsAge(d.position).seconds > 90, onClick: () => callbacks.current.onSelect(d.id) });
+      lastPositions.current.set(d.id, d.position);
+    }
     fleet.places.forEach((p, i) => upsert(`place-${p.id}`, { ...p, label: p.name,
       site: p.siteType || (i % 2 ? 'secondary' : 'primary'), number: p.siteType === 'primary' ? '1' : p.siteType === 'secondary' ? '2' : 'P',
       onClick: () => { callbacks.current.onStopFollowing(); map.current?.panTo({ lat: p.latitude, lng: p.longitude }); } }));
@@ -119,7 +154,25 @@ export default function FleetMap({ browserKey, fleet, selectedId, history, route
     }
     const selected = fleet.devices.find(d => d.id === selectedId)?.position;
     if (follow && selected) map.current.panTo({ lat: selected.latitude, lng: selected.longitude });
-  }, [ready, fleet, selectedId, follow]);
+  }, [ready, fleet, selectedId, follow, smoothMovement]);
+
+  useEffect(() => {
+    if (!ready || !map.current || !Marker.current) return;
+    const needed = new Set<string>();
+    for (const journey of journeys || []) {
+      const ends = [{ kind: 'start' as const, point: journey.start, label: journey.startReason === 'window' ? 'Primer GPS' : 'Inicio' },
+        ...(journey.endReason === 'pause' ? [{ kind: 'end' as const, point: journey.end, label: 'Fin' }] : [])];
+      for (const { kind, point, label } of ends) {
+        const key = `${journey.id}:${kind}`; needed.add(key);
+        const hour = new Date(point.reportedAt).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' });
+        const data: MarkerData = { ...point, boundary: kind, label: `${label} · ${hour}`,
+          onClick: () => { callbacks.current.onStopFollowing(); map.current?.panTo({ lat: point.latitude, lng: point.longitude }); } };
+        const current = boundaries.current.get(key);
+        if (current) current.update(data); else boundaries.current.set(key, new Marker.current(data, map.current));
+      }
+    }
+    for (const [key, marker] of boundaries.current) if (!needed.has(key)) { marker.setMap(null); boundaries.current.delete(key); }
+  }, [ready, journeys]);
 
   useEffect(() => {
     if (!ready || !map.current || !fleet) return;
@@ -142,22 +195,15 @@ export default function FleetMap({ browserKey, fleet, selectedId, history, route
   useEffect(() => {
     if (!ready || !map.current) return;
     const lines = (history?.segments || []).filter(segment => segment.length > 1).map(segment => new google.maps.Polyline({
-      map: map.current, path: segment.map(p => ({ lat: p.latitude, lng: p.longitude })), strokeColor: '#0f766e', strokeOpacity: .9, strokeWeight: 4, zIndex: 2 }));
+      map: map.current, path: segment.map(p => ({ lat: p.latitude, lng: p.longitude })), strokeColor: '#0f766e', strokeOpacity: roadMatch?.segments.length ? .35 : .9, strokeWeight: 4, zIndex: 2 }));
+    for (const segment of roadMatch?.segments || []) if (segment.length > 1) lines.push(new google.maps.Polyline({
+      map: map.current, path: segment.map(p => ({ lat: p.latitude, lng: p.longitude })), strokeColor: '#2563eb', strokeOpacity: .95, strokeWeight: 5, zIndex: 3,
+    }));
     return () => lines.forEach(line => line.setMap(null));
-  }, [ready, history]);
-
-  useEffect(() => {
-    if (!ready || !map.current || !route) return;
-    const path = google.maps.geometry.encoding.decodePath(route.encodedPolyline);
-    const line = new google.maps.Polyline({ map: map.current, path, strokeColor: '#7c3aed', strokeOpacity: 0, strokeWeight: 5, zIndex: 3,
-      icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: '#7c3aed', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }] });
-    const bounds = new google.maps.LatLngBounds(); path.forEach(p => bounds.extend(p));
-    if (path.length) map.current.fitBounds(bounds, fitPadding(host.current?.clientWidth || 800));
-    return () => line.setMap(null);
-  }, [ready, route]);
+  }, [ready, history, roadMatch]);
 
   return <div>
     {error ? <Alert color="orange" mb="sm">No fue posible cargar el mapa. Puedes seguir usando el panel Traccar.</Alert> : null}
-    <div ref={host} className={classes.map} role="region" aria-label="Mapa de flota, recorrido real y ruta prevista" />
+    <div ref={host} className={classes.map} role="region" aria-label="Mapa de flota y recorrido GPS real" />
   </div>;
 }

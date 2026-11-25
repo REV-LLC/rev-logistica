@@ -14,7 +14,7 @@ export function loadTrackingMap(key: string) {
     };
     const timeout = setTimeout(() => finish(new Error('No fue posible cargar el mapa.')), 25_000);
     window.__revTrackingMapReady = () => finish();
-    const params = new URLSearchParams({ key, callback: '__revTrackingMapReady', loading: 'async', libraries: 'geometry', v: 'weekly', language: 'es', region: 'CO' });
+    const params = new URLSearchParams({ key, callback: '__revTrackingMapReady', loading: 'async', v: 'weekly', language: 'es', region: 'CO' });
     script.src = `https://maps.googleapis.com/maps/api/js?${params}`;
     script.async = true;
     script.referrerPolicy = 'strict-origin-when-cross-origin';

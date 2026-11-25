@@ -1,12 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { telemetry, routeHistory } from './tracking-telemetry';
 import type { NativePosition } from './tracking-telemetry';
-import { TrackingRoutingService } from './tracking-routing.service';
+import { TrackingMapService } from './tracking-map.service';
+import { splitJourneys } from './tracking-journeys';
+import { TraccarLive } from './traccar-live';
+import { RoadMatching } from './road-matching';
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 type TrackingUser = { id: number; email: string; administrator?: boolean; attributes?: Record<string, unknown> };
-type TrackingDevice = { id: number; name: string; positionId: number };
+type TrackingDevice = { id: number; name: string; positionId: number; disabled?: boolean; attributes?: Record<string, unknown> };
+const activeDevices = (devices: TrackingDevice[]) => devices.filter(d => !d.disabled && d.attributes?.revRetired !== true);
 type TrackingPosition = { id: number; deviceId: number; latitude: number; longitude: number; valid: boolean; fixTime: string };
 type TrackingPlace = { id: number; name: string; area: string; attributes: Record<string, unknown> };
 export type CreateTrackingPlace = { name: string; deviceId: number; positionId: number; radiusMeters: number; requestId: string };
@@ -38,9 +42,13 @@ export type TrackingIdentity = { sub: string; exp?: number };
 
 @Injectable()
 export class TrackingService {
+  private live: TraccarLive | undefined;
+  private subscribers = 0;
+  private readonly lastValid = new Map<number, NativePosition>();
+  private readonly lastLookup = new Map<number, number>();
   private fleetCache: { key: string; at: number; value: ReturnType<TrackingService['loadFleet']> } | undefined;
   private readonly pending = new Map<string, Promise<unknown>>();
-  constructor(private readonly prisma: PrismaService, private readonly routing: TrackingRoutingService) {}
+  constructor(private readonly prisma: PrismaService, private readonly maps: TrackingMapService) {}
 
   async createSession(identity: TrackingIdentity) {
     const previous = this.pending.get(identity.sub) || Promise.resolve();
@@ -71,8 +79,11 @@ export class TrackingService {
         method: user ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...user, ...profile }),
       });
-      const devices = await this.request<{ id: number }[]>(server, '/api/devices?all=true', admin);
+      const devices = activeDevices(await this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin));
       const linked = await this.request<{ id: number }[]>(server, `/api/devices?userId=${user.id}`, admin);
+      for (const retired of linked.filter(item => !devices.some(device => device.id === item.id))) {
+        await this.request(server, '/api/permissions', admin, { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId:user.id,deviceId:retired.id}) });
+      }
       const linkedIds = new Set(linked.map((device) => device.id));
       for (const device of devices) {
         if (!linkedIds.has(device.id)) await this.request(server, '/api/permissions', admin, {
@@ -123,7 +134,7 @@ export class TrackingService {
     const { server, admin } = this.connection();
     try {
       const [devices, nativePlaces] = await Promise.all([
-        this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin),
+        this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin).then(activeDevices),
         this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
       ]);
       const places = nativePlaces.filter((place) => place.attributes?.revKnownPlace === true && circle(place));
@@ -145,6 +156,49 @@ export class TrackingService {
     } catch { throw new ServiceUnavailableException('No fue posible consultar los puntos conocidos. Intenta nuevamente.'); }
   }
 
+  private rememberPosition(position: NativePosition) {
+    const previous = this.lastValid.get(position.deviceId);
+    if (telemetry(position) && (!previous || Date.parse(position.fixTime) >= Date.parse(previous.fixTime))) this.lastValid.set(position.deviceId, position);
+  }
+
+  assertAccess(identity: TrackingIdentity) { return this.authorize(identity); }
+
+  subscribeLive(callback: (event: Record<string, unknown>) => void) {
+    if (this.subscribers >= 50) throw new HttpException('Demasiadas vistas de seguimiento abiertas.', 429);
+    if (!this.live) {
+      const { server, integrationPassword } = this.connection();
+      this.live = new TraccarLive({ server: server.origin, email: process.env.TRACCAR_INTEGRATION_EMAIL!, password: integrationPassword,
+        invalidate: () => this.invalidateFleetCache(), onPositions: positions => {
+          for (const p of positions) this.rememberPosition(p);
+        } });
+      void this.live.start();
+    }
+    this.subscribers++;
+    const live = this.live;
+    live.on('update', callback); callback(live.status());
+    let disposed = false;
+    return () => {
+      if (disposed) return; disposed = true;
+      live.off('update', callback); this.subscribers--;
+      if (!this.subscribers && this.live === live) { live.stop(); this.live = undefined; }
+    };
+  }
+  onModuleDestroy() { this.live?.stop(); }
+
+  async matchRoads(identity: TrackingIdentity, deviceId: string, from: string, to: string) {
+    await this.authorize(identity);
+    if (!this.maps.configuration().roadMatchingAvailable) throw new ServiceUnavailableException('El ajuste a calles no está disponible.');
+    const end = Date.parse(to), requestedStart = Date.parse(from);
+    if (!Number.isFinite(end) || !Number.isFinite(requestedStart) || requestedStart >= end || end-requestedStart>86400_000 || requestedStart<Date.now()-30*86400_000 || end>Date.now()+60_000) throw new BadRequestException('Selecciona un período válido dentro de los últimos 30 días.');
+    const start = Math.max(requestedStart, end - 15 * 60_000);
+    const history = await this.getHistory(identity, deviceId, new Date(start).toISOString(), to);
+    const roads = new RoadMatching({ key: process.env.TRACKING_ROADS_API_KEY, enabled: true,
+      reserve: () => this.maps.reserveRoads() });
+    return roads.match(history);
+  }
+
+  invalidateFleetCache() { this.fleetCache = undefined; }
+
   async getFleet(identity: TrackingIdentity) {
     await this.authorize(identity);
     const { server, admin } = this.connection();
@@ -159,7 +213,7 @@ export class TrackingService {
   private async loadFleet(server: URL, admin: string) {
     try {
       const [devices, nativePlaces] = await Promise.all([
-        this.request<(TrackingDevice & { status?: string; lastUpdate?: string })[]>(server, '/api/devices?all=true', admin),
+        this.request<(TrackingDevice & { status?: string; lastUpdate?: string })[]>(server, '/api/devices?all=true', admin).then(value => activeDevices(value) as (TrackingDevice & { status?: string; lastUpdate?: string })[]),
         this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
       ]);
       const places = nativePlaces.filter(p => p.attributes?.revKnownPlace === true && circle(p))
@@ -169,34 +223,62 @@ export class TrackingService {
       const positions = query.size ? await this.request<NativePosition[]>(server, `/api/positions?${query}`, admin) : [];
       const now = Date.now();
       return { fetchedAt: new Date(now).toISOString(), refreshSeconds: 5, places,
-        devices: devices.map(d => {
+        devices: await Promise.all(devices.map(async d => {
           const p = positions.find(p => p.deviceId === d.id && p.id === d.positionId);
-          const position = telemetry(p, now);
+          const current = telemetry(p, now);
+          if (current && p) this.rememberPosition(p);
+          if (!current && !this.lastValid.has(d.id) && now - (this.lastLookup.get(d.id) || 0) > 60_000) {
+            this.lastLookup.set(d.id, now);
+            try {
+              const query = new URLSearchParams({ deviceId: String(d.id), from: new Date(now-86400_000).toISOString(), to: new Date(now).toISOString() });
+              const history = await this.request<NativePosition[]>(server, `/api/reports/route?${query}`, admin, {headers:{Accept:'application/json'}});
+              if (Array.isArray(history) && history.length <= 12000) {
+                const previous = history.filter(item => item.deviceId === d.id && telemetry(item,now)).sort((a,b)=>Date.parse(b.fixTime)-Date.parse(a.fixTime))[0];
+                if (previous) this.lastValid.set(d.id, previous);
+              }
+            } catch { /* Latest report remains visible even if historical lookup fails. */ }
+          }
+          const previous = this.lastValid.get(d.id);
+          const fallback = previous && now-Date.parse(previous.fixTime) <= 30*86400_000 ? telemetry(previous,now) : null;
+          const position = current ? { ...current, historical:false } : fallback ? { ...fallback, historical:true } : null;
           return { id: d.id, name: d.name, connection: d.status || 'unknown', lastConnectionAt: d.lastUpdate || null, position,
-            knownPlaces: position ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
-        }),
+            latestReport: p ? { valid: p.valid === true, reportedAt: p.fixTime, receivedAt: p.serverTime || null,
+              ignition: typeof p.attributes?.ignition === 'boolean' ? p.attributes.ignition : null } : null,
+            knownPlaces: current ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
+        })),
       };
     } catch { throw new ServiceUnavailableException('No fue posible actualizar la flota. Se conserva el último reporte disponible.'); }
   }
 
   async getHistory(identity: TrackingIdentity, deviceId: string, from: string, to: string) {
+    const source = await this.readHistoryPositions(identity, deviceId, from, to);
+    return { deviceId: source.deviceId, deviceName: source.deviceName,
+      from: new Date(source.start).toISOString(), to: new Date(source.end).toISOString(),
+      ...routeHistory(source.positions, source.deviceId, source.start, source.end),
+      ...splitJourneys(source.positions, source.deviceId, source.start, source.end),
+      archive: { retentionDays:30, parkingMinutes:15, syncing:false, lastSyncAt:new Date().toISOString(),
+        earliestReportedAt:source.positions.filter(p=>p.valid).map(p=>p.fixTime).sort()[0] || null,
+        storedPoints:source.positions.length, error:null } };
+  }
+
+  async readHistoryPositions(identity: TrackingIdentity, deviceId: string, from: string, to: string) {
     await this.authorize(identity);
     const id = Number(deviceId);
-    const start = Date.parse(from), end = Date.parse(to);
-    if (!/^\d+$/.test(deviceId || '') || !Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(start) || !Number.isFinite(end)
-      || start >= end || end - start > 24 * 60 * 60_000 || end > Date.now() + 60_000) {
+    const requestedStart = Date.parse(from), end = Date.parse(to);
+    const start = Math.max(requestedStart, Date.now()-30*86400_000);
+    if (!/^\d+$/.test(deviceId || '') || !Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(requestedStart) || !Number.isFinite(end)
+      || start >= end || end - requestedStart > 24 * 60 * 60_000 || end > Date.now() + 60_000) {
       throw new BadRequestException('Selecciona un camión y un período de hasta 24 horas.');
     }
     const { server, admin } = this.connection();
     try {
-      const devices = await this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin);
+      const devices = activeDevices(await this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin));
       const device = devices.find(d => d.id === id);
       if (!device) throw new BadRequestException('El camión no está disponible.');
       const query = new URLSearchParams({ deviceId: String(id), from: new Date(start).toISOString(), to: new Date(end).toISOString() });
       const positions = await this.request<NativePosition[]>(server, `/api/reports/route?${query}`, admin, { headers: { Accept: 'application/json' } });
       if (!Array.isArray(positions) || positions.length > 12_000) throw new BadRequestException('El recorrido es muy extenso. Selecciona un período más corto.');
-      return { deviceId: id, deviceName: device.name, from: new Date(start).toISOString(), to: new Date(end).toISOString(),
-        ...routeHistory(positions, id, start, end) };
+      return { deviceId: id, deviceName: device.name, positions, start, end };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new ServiceUnavailableException('No fue posible consultar el recorrido. Intenta nuevamente.');
@@ -205,27 +287,7 @@ export class TrackingService {
 
   async mapConfiguration(identity: TrackingIdentity) {
     await this.authorize(identity);
-    return this.routing.mapConfiguration();
-  }
-
-  async planRoute(identity: TrackingIdentity, input: { deviceId?: number; placeId?: number; address?: string }) {
-    const fleet = await this.getFleet(identity);
-    if (!Number.isSafeInteger(input?.deviceId) || !input.deviceId || input.deviceId <= 0) throw new BadRequestException('Selecciona un camión.');
-    const device = fleet.devices.find(d => d.id === input.deviceId);
-    if (!device?.position) throw new BadRequestException('El camión no tiene una ubicación GPS válida.');
-    let destination: Parameters<TrackingRoutingService['calculate']>[1];
-    let label: string;
-    if (input.placeId !== undefined) {
-      const place = fleet.places.find(p => p.id === input.placeId);
-      if (!place) throw new BadRequestException('Selecciona un punto conocido válido.');
-      destination = { location: { latLng: { latitude: place.latitude, longitude: place.longitude } } };
-      label = place.name;
-    } else {
-      if (typeof input.address !== 'string' || input.address.trim().length < 5 || input.address.trim().length > 240) throw new BadRequestException('Escribe la dirección completa y la ciudad del destino.');
-      label = input.address.trim();
-      destination = { address: label };
-    }
-    return { deviceId: device.id, deviceName: device.name, ...await this.routing.calculate(device.position, destination, label) };
+    return this.maps.mapConfiguration();
   }
 
   async createPlace(identity: TrackingIdentity, input: CreateTrackingPlace) {
@@ -250,7 +312,7 @@ export class TrackingService {
     const { server, admin } = this.connection();
     try {
       const [devices, places, users] = await Promise.all([
-        this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin),
+        this.request<TrackingDevice[]>(server, '/api/devices?all=true', admin).then(activeDevices),
         this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
         this.request<TrackingUser[]>(server, '/api/users', admin),
       ]);
