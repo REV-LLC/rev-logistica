@@ -124,6 +124,28 @@ async function render(bytes, page = 0) {
   } finally { await task.destroy(); globalThis.pdfjsWorker = previousWorker; }
 }
 
+test('edits Acrobat-style named WinAnsi fonts without ToUnicode or a Standard-14 name', async () => {
+  const original = await generatedFixture('BT /F1 14 Tf 1 0 0 1 50 700 Tm (Report 12345) Tj ET');
+  const pdf = await PDFDocument.load(original);
+  const font = pdf.getPage(0).node.Resources().lookup(PDFName.of('Font')).lookup(PDFName.of('F1'));
+  font.set(PDFName.of('BaseFont'), PDFName.of('ABCDEF+ArialNarrow-Bold'));
+  font.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
+  font.set(PDFName.of('FirstChar'), pdf.context.obj(32));
+  font.set(PDFName.of('Widths'), pdf.context.obj(Array.from({ length: 95 }, () => 556)));
+  const bytes = await pdf.save();
+  const hit = (await service.inspect(bytes, '0')).texts.find((item) => item.text === 'Report 12345');
+  assert.ok(hit?.editable, JSON.stringify(hit));
+  const changed = await service.edit(bytes, { page: '0', kind: 'text', index: String(hit.index), original: hit.text, replacement: 'Report 54321' });
+  const saved = Buffer.from(changed.pdf, 'base64');
+  assert.ok((await service.inspect(saved, '0')).texts.some((item) => item.editable && item.text === 'Report 54321'));
+  const reopened = await PDFDocument.load(saved);
+  assert.equal(reopened.getPage(0).node.Resources().toString(), pdf.getPage(0).node.Resources().toString());
+  // Named encoding is explicit: do not guess the same mapping for custom fonts.
+  font.delete(PDFName.of('Encoding'));
+  const unsupported = await service.inspect(await pdf.save(), '0');
+  assert.equal(unsupported.texts.some((item) => item.editable), false);
+});
+
 function diffOutside(before, after, box) {
   assert.equal(after.width, before.width); assert.equal(after.height, before.height);
   let outside = 0, inside = 0; const bounds = [Infinity, Infinity, 0, 0];
