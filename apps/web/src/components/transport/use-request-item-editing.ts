@@ -165,12 +165,22 @@ export function useRequestItemEditing({
     setSelectedItems((prev) =>
       prev.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
+        if (item.ownerWarehouseId === ownerWarehouseId) return item;
+        // A provider pickup follows its owner when office corrects ownership.
+        // Preserve a different physical source (equipment held in custody), and
+        // leave the worksite source of returns unchanged.
+        const sourceWarehouseId = sourceMode === 'warehouse' &&
+          (!item.sourceWarehouseId || item.sourceWarehouseId === item.ownerWarehouseId)
+          ? ownerWarehouseId : item.sourceWarehouseId;
         return {
           ...item,
           ownerWarehouseId,
-          ...(item.type === 'bulk' && item.skuId
-            ? { bulkKey: buildBulkKey({ skuId: item.skuId, ownerWarehouseId, sourceWarehouseId: item.sourceWarehouseId, sourceDocumentItemId: item.sourceDocumentItemId }) }
-            : {}),
+          sourceWarehouseId,
+          availableQuantity: undefined,
+          physicalAvailableQuantity: undefined,
+          bulkKey: item.type === 'bulk' && item.skuId
+            ? buildBulkKey({ skuId: item.skuId, ownerWarehouseId, sourceWarehouseId, sourceDocumentItemId: item.sourceDocumentItemId })
+            : undefined,
         };
       }),
     );
@@ -199,6 +209,11 @@ export function useRequestItemEditing({
           selectionId: createSelectionId(),
           quantity: quantity - 1,
           ownerWarehouseId: null,
+          sourceWarehouseId: sourceMode === 'warehouse' && item.sourceWarehouseId === item.ownerWarehouseId
+            ? null : item.sourceWarehouseId,
+          availableQuantity: undefined,
+          physicalAvailableQuantity: undefined,
+          bulkKey: undefined,
         },
       );
       return next;
