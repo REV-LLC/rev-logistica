@@ -100,6 +100,7 @@ if (testUrl) {
       text: string,
       options: {
         image?: boolean;
+        audioId?: string;
         location?: { latitude: number; longitude: number };
         from?: string;
         id?: string;
@@ -123,25 +124,39 @@ if (testUrl) {
                       id,
                       from: options.from ?? '573001234567',
                       timestamp: String(++timestamp),
-                      type: options.selectionId
-                        ? 'interactive'
-                        : options.location
-                          ? 'location'
-                          : options.image
-                            ? 'image'
-                            : 'text',
-                      ...(options.selectionId
+                      type: options.audioId
+                        ? 'audio'
+                        : options.selectionId
+                          ? 'interactive'
+                          : options.location
+                            ? 'location'
+                            : options.image
+                              ? 'image'
+                              : 'text',
+                      ...(options.audioId
                         ? {
-                            interactive: {
-                              [options.button ? 'button_reply' : 'list_reply']:
-                                { id: options.selectionId, title: text },
+                            audio: {
+                              id: options.audioId,
+                              mime_type: 'audio/ogg; codecs=opus',
+                              voice: true,
                             },
                           }
-                        : options.location
-                          ? { location: options.location }
-                          : options.image
-                            ? { image: { id: '12345', caption: text } }
-                            : { text: { body: text } }),
+                        : options.selectionId
+                          ? {
+                              interactive: {
+                                [options.button
+                                  ? 'button_reply'
+                                  : 'list_reply']: {
+                                  id: options.selectionId,
+                                  title: text,
+                                },
+                              },
+                            }
+                          : options.location
+                            ? { location: options.location }
+                            : options.image
+                              ? { image: { id: '12345', caption: text } }
+                              : { text: { body: text } }),
                     },
                   ],
                 },
@@ -295,6 +310,39 @@ if (testUrl) {
       });
     });
 
+    it('retains employee audio for office without AI or a report, and repairs signed retries without replaying', async () => {
+      await prisma.whatsappConversation.deleteMany({
+        where: { phone: '573001234567' },
+      });
+      const before = await prisma.whatsappReport.count();
+      const audio = await send('', { audioId: '34567' });
+      expect(audio?.mediaId).toBe('34567');
+      expect(audio?.error).toBe('AUDIO_REVIEW_REQUIRED');
+      expect(audio?.replyText).toContain('pendiente de escuchar');
+      expect(ai.extract).not.toHaveBeenCalled();
+      expect(await prisma.whatsappReport.count()).toBe(before);
+      const replies = cloud.reply.mock.calls.length;
+      await prisma.whatsappInboundMessage.update({
+        where: { id: audio!.id },
+        data: { mediaId: null },
+      });
+      const retry = await send('', {
+        audioId: '34567',
+        id: audio!.providerMessageId,
+      });
+      expect(retry?.mediaId).toBe('34567');
+      expect(retry?.status).toBe(audio?.status);
+      expect(retry?.replySentAt).toEqual(audio?.replySentAt);
+      expect(cloud.reply).toHaveBeenCalledTimes(replies);
+      await send('', { audioId: '98765', id: audio!.providerMessageId });
+      expect(
+        (
+          await prisma.whatsappInboundMessage.findUniqueOrThrow({
+            where: { id: audio!.id },
+          })
+        ).mediaId,
+      ).toBe('34567');
+    });
     it('deletes only the chosen report with an ADMIN/OFFICE audit trail and cancels its alerts', async () => {
       const create = (
         description: string,

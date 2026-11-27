@@ -93,11 +93,12 @@ export class WhatsappReportsController {
     });
   }
   @Get('inbox')
-  inbox() {
-    return this.prisma.whatsappInboundMessage.findMany({
+  async inbox() {
+    const messages = await this.prisma.whatsappInboundMessage.findMany({
       where: {
         OR: [
           { status: { in: ['FAILED', 'REJECTED'] } },
+          { type: 'audio', employeeId: { not: null } },
           { replyAttempts: { gte: 5 }, replySentAt: null },
         ],
       },
@@ -113,8 +114,13 @@ export class WhatsappReportsController {
         error: true,
         createdAt: true,
         replyAttempts: true,
+        mediaId: true,
       },
     });
+    return messages.map(({ mediaId, ...m }) => ({
+      ...m,
+      audioAvailable: m.type === 'audio' && !!mediaId,
+    }));
   }
   @Delete(':id')
   remove(

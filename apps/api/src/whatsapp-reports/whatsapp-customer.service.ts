@@ -176,6 +176,11 @@ export class WhatsappCustomerService {
             submit = !!summarySent;
             reply = submit ? pendingReply : customerSummary(draft);
           }
+        } else if (message.type === 'audio') {
+          awaitingConfirmation = false;
+          reply = message.mediaId
+            ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Si quieres completar el pedido con el asistente, envía los datos también por escrito.'
+            : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe los datos del pedido para que oficina pueda revisarlos.';
         } else if (message.type !== 'text' && !message.text.trim()) {
           reply =
             'Recibí tu mensaje. Para completar el pedido, escribe los datos por texto. Los audios y documentos aún necesitan revisión de oficina.\n' +
@@ -465,6 +470,7 @@ export class WhatsappCustomerService {
           replyText: true,
           replySentAt: true,
           error: true,
+          mediaId: true,
         },
       }),
       this.prisma.whatsappCustomerRequest.findMany({
@@ -497,7 +503,12 @@ export class WhatsappCustomerService {
       notes: chat?.notes ?? '',
       reviewedThrough: chat?.reviewedThrough ?? null,
       latest: before ? null : (visible[0]?.createdAt ?? null),
-      messages: visible.reverse(),
+      messages: visible
+        .reverse()
+        .map(({ mediaId, ...m }) => ({
+          ...m,
+          audioAvailable: m.type === 'audio' && !!mediaId,
+        })),
       before: messages.length > 100 ? visible[0].id : null,
       requests,
     };

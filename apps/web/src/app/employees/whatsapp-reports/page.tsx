@@ -19,6 +19,7 @@ import {
 } from "@mantine/core";
 import { getCurrentUserRole } from "@/lib/auth";
 import { api, apiBlob } from "@/lib/api";
+import WhatsappAudio from "@/components/WhatsappAudio";
 
 type Kind = "DAMAGE" | "HOUR_METER" | "REQUEST" | "CHECK_IN" | "CHECK_OUT";
 const labels: Record<Kind, string> = {
@@ -68,6 +69,8 @@ type Health = {
   hectorFound: boolean;
 };
 type InboxIssue = {
+  type: string;
+  audioAvailable?: boolean;
   id: string;
   phone: string;
   text: string;
@@ -436,11 +439,23 @@ export default function WhatsappReportsPage() {
                       {i.phone} · {date(i.createdAt)}
                     </Text>
                   </Group>
-                  <Text mt="xs">{i.text || "Mensaje sin texto"}</Text>
-                  <Text size="sm" c="dimmed">
-                    {(i.error && inboxErrorLabels[i.error]) ||
-                      "No se pudo completar la respuesta. Revisa el mensaje."}
+                  <Text mt="xs">
+                    {i.type === "audio"
+                      ? "Audio pendiente de escuchar por oficina"
+                      : i.text || "Mensaje sin texto"}
                   </Text>
+                  <Text size="sm" c="dimmed">
+                    {i.type === "audio"
+                      ? "El audio no crea una petición automáticamente."
+                      : (i.error && inboxErrorLabels[i.error]) ||
+                        "No se pudo completar la respuesta. Revisa el mensaje."}
+                  </Text>
+                  {i.type === "audio" && (
+                    <WhatsappAudio
+                      messageId={i.id}
+                      available={!!i.audioAvailable}
+                    />
+                  )}
                 </Paper>
               ))}
               {!issues.length ? (

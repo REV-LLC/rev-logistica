@@ -100,6 +100,82 @@ describe('WhatsApp Cloud media boundaries', () => {
     fetchMock.mockResolvedValueOnce(new Response('not an image'));
     await expect(service.photo('456')).rejects.toThrow();
   });
+  it.each([
+    'https://attacker.example/audio',
+    'http://lookaside.fbsbx.com/audio',
+    'https://lookaside.fbsbx.com.attacker.example/audio',
+    'https://secret@lookaside.fbsbx.com/audio',
+  ])('never sends credentials to invalid audio host %s', async (url) => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ url, mime_type: 'audio/ogg', file_size: 20 }),
+      ),
+    );
+    await expect(service.audio('456')).rejects.toThrow(
+      'Invalid Meta audio host',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { mime_type: 'application/pdf', file_size: 20 },
+    { mime_type: 'audio/ogg', file_size: 17 * 1024 * 1024 },
+  ])(
+    'rejects unsupported or oversized audio before downloading',
+    async (metadata) => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://lookaside.fbsbx.com/audio',
+            ...metadata,
+          }),
+        ),
+      );
+      await expect(service.audio('456')).rejects.toThrow('Audio must be');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('serves original Opus bytes with bounded authenticated requests', async () => {
+    const bytes = Buffer.from('OggS test OpusHead original');
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          url: 'https://lookaside.fbsbx.com/audio',
+          mime_type: 'audio/ogg; codecs=opus',
+          file_size: bytes.length,
+        }),
+      ),
+    );
+    fetchMock.mockResolvedValueOnce(new Response(bytes));
+    const result = await service.audio('456');
+    expect(result.buffer).toEqual(bytes);
+    expect(result.mimetype).toBe('audio/ogg; codecs=opus');
+    expect(result.filename).toBe('nota-de-voz.ogg');
+    expect(fetchMock.mock.calls[0][0]).toContain('phone_number_id=123');
+    for (const [, options] of fetchMock.mock.calls)
+      expect(options).toEqual(
+        expect.objectContaining({
+          redirect: 'error',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+  });
+  it('rejects disguised non-audio and oversize streamed content', async () => {
+    const meta = () =>
+      new Response(
+        JSON.stringify({
+          url: 'https://lookaside.fbsbx.com/audio',
+          mime_type: 'audio/ogg',
+        }),
+      );
+    fetchMock
+      .mockResolvedValueOnce(meta())
+      .mockResolvedValueOnce(new Response('<html>not audio</html>'));
+    await expect(service.audio('456')).rejects.toThrow('Invalid audio content');
+    fetchMock
+      .mockResolvedValueOnce(meta())
+      .mockResolvedValueOnce(new Response(Buffer.alloc(16 * 1024 * 1024 + 1)));
+    await expect(service.audio('456')).rejects.toThrow('Audio too large');
+  });
   it('sends the native list payload through the existing authenticated Meta endpoint', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{}'));
     await service.reply('573001234567', 'Hola, Samuel 👋', 'REPORT_MENU');

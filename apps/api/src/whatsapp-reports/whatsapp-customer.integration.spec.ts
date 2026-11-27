@@ -55,7 +55,12 @@ if (url) {
       duration: '3 días',
       transport: 'Entrega en obra',
     };
-    async function receive(text: string, p = phone, type = 'text') {
+    async function receive(
+      text: string,
+      p = phone,
+      type = 'text',
+      audioId?: string,
+    ) {
       const body = {
         object: 'whatsapp_business_account',
         entry: [
@@ -71,6 +76,13 @@ if (url) {
                       from: p,
                       timestamp: String(Math.floor(Date.now() / 1000)),
                       type,
+                      audio: audioId
+                        ? {
+                            id: audioId,
+                            mime_type: 'audio/ogg; codecs=opus',
+                            voice: true,
+                          }
+                        : undefined,
                       text: { body: text },
                     },
                   ],
@@ -107,6 +119,35 @@ if (url) {
     afterAll(async () => {
       await prisma.$disconnect();
       process.env = original;
+    });
+    it('retains audio references, makes them playable in detail and does not invent an order', async () => {
+      ai.extract.mockResolvedValueOnce(complete);
+      await receive('pedido completo');
+      const audio = await receive('', phone, 'audio', '123456');
+      expect(audio.mediaId).toBe('123456');
+      expect(audio.status).toBe('CUSTOMER_PROCESSED');
+      expect(audio.replyText).toContain('pendiente de escuchar');
+      expect(ai.extract).toHaveBeenCalledTimes(1);
+      const chat = await prisma.whatsappCustomerChat.findUniqueOrThrow({
+        where: { phone },
+      });
+      expect(chat.awaitingConfirmation).toBe(false);
+      expect(chat.confirmationMessageId).toBeNull();
+      expect(
+        await prisma.whatsappCustomerRequest.count({ where: { phone } }),
+      ).toBe(0);
+      const detail = await customers.detail(phone);
+      const visible = detail.messages.find((m) => m.id === audio.id)!;
+      expect(visible.audioAvailable).toBe(true);
+      expect(visible).not.toHaveProperty('mediaId');
+      await prisma.whatsappInboundMessage.update({
+        where: { id: audio.id },
+        data: { mediaId: null },
+      });
+      expect(
+        (await customers.detail(phone)).messages.find((m) => m.id === audio.id)
+          ?.audioAvailable,
+      ).toBe(false);
     });
     it('keeps unknown contacts for review, asks missing data and requires a sent summary before creating a request', async () => {
       ai.extract.mockResolvedValueOnce({

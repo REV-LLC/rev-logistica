@@ -129,7 +129,10 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             mediaId:
               message.type === 'image'
                 ? message.image?.id?.slice(0, 100)
-                : null,
+                : message.type === 'audio' &&
+                    /^\d{1,100}$/.test(message.audio?.id ?? '')
+                  ? message.audio!.id!
+                  : null,
             location:
               message.type === 'location' &&
               locationCoordinatesSchema.safeParse(message.location).success
@@ -140,6 +143,24 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         ],
         skipDuplicates: true,
       });
+      if (
+        !result.count &&
+        message.type === 'audio' &&
+        /^\d{1,100}$/.test(message.audio?.id ?? '')
+      ) {
+        // A signed Meta retry can restore a reference discarded by an older
+        // version, without replaying the message or sending a second reply.
+        await this.prisma.whatsappInboundMessage.updateMany({
+          where: {
+            providerMessageId: message.id,
+            phone,
+            phoneNumberId,
+            type: 'audio',
+            mediaId: null,
+          },
+          data: { mediaId: message.audio!.id! },
+        });
+      }
       accepted += result.count;
     }
     return accepted;
@@ -318,6 +339,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       let replyKind: WhatsappReplyKind = 'TEXT';
       let replyOptions: EquipmentReplyOptions | undefined;
       let confirmation = false;
+      let audioReview = false;
       let offerConfirmation = false;
       let selectedForMemory: EquipmentReference | undefined;
       if (
@@ -764,6 +786,13 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
                 ? 'La ubicación se usa para entrada o salida de obra. Continúa este reporte o escribe MENÚ.'
                 : 'Continúa este reporte con texto y fotos. Para registrar asistencia utiliza MiREV.';
         }
+      } else if (message.type === 'audio') {
+        draft.ready = false;
+        delete draft.confirmationMessageId;
+        audioReview = true;
+        reply = message.mediaId
+          ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Para registrar una petición con el asistente, escríbela y confirma el resumen.'
+          : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe tu petición para que oficina pueda revisarla.';
       } else if (!['text', 'image', 'interactive'].includes(message.type)) {
         reply =
           'Por ahora envía el reporte por escrito y las fotos como imagen. Los audios y documentos no se registran.\n' +
@@ -1047,7 +1076,7 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               replyOptions: replyOptions
                 ? (replyOptions as unknown as Prisma.InputJsonValue)
                 : Prisma.DbNull,
-              error: null,
+              error: audioReview ? 'AUDIO_REVIEW_REQUIRED' : null,
             },
           });
         },
