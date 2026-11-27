@@ -9,6 +9,7 @@ describe('Private WhatsApp audio', () => {
   let app: INestApplication;
   const findFirst = jest.fn();
   const audio = jest.fn();
+  const document = jest.fn();
   const path =
     '/whatsapp-reports/messages/11111111-2222-4333-8444-555555555555/audio';
   const original = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -21,7 +22,7 @@ describe('Private WhatsApp audio', () => {
           provide: PrismaService,
           useValue: { whatsappInboundMessage: { findFirst } },
         },
-        { provide: WhatsappCloudService, useValue: { audio } },
+        { provide: WhatsappCloudService, useValue: { audio, document } },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -38,14 +39,19 @@ describe('Private WhatsApp audio', () => {
     await app.init();
   });
   beforeEach(() => {
-    findFirst.mockReset().mockResolvedValue({ mediaId: '123' });
-    audio
+    document
       .mockReset()
       .mockResolvedValue({
-        buffer: Buffer.from('ID3 test audio'),
-        mimetype: 'audio/mpeg',
-        filename: 'nota-de-voz.mp3',
+        buffer: Buffer.from('%PDF-1.7 test'),
+        mimetype: 'application/pdf',
+        filename: 'Contrato Bogotá.pdf',
       });
+    findFirst.mockReset().mockResolvedValue({ mediaId: '123' });
+    audio.mockReset().mockResolvedValue({
+      buffer: Buffer.from('ID3 test audio'),
+      mimetype: 'audio/mpeg',
+      filename: 'nota-de-voz.mp3',
+    });
   });
   afterAll(async () => {
     await app.close();
@@ -103,4 +109,35 @@ describe('Private WhatsApp audio', () => {
       .expect(400);
     expect(findFirst).not.toHaveBeenCalled();
   });
+  it('downloads documents privately with controlled headers', async () => {
+    const r = await request(app.getHttpServer())
+      .get(path.replace('/audio', '/document'))
+      .set('x-role', 'OFFICE')
+      .expect(200);
+    expect(r.headers['content-type']).toContain('application/pdf');
+    expect(r.headers['content-disposition']).toContain('attachment;');
+    expect(r.headers['content-disposition']).toContain(
+      'Contrato%20Bogot%C3%A1.pdf',
+    );
+    expect(r.headers['content-security-policy']).toBe('sandbox');
+    expect(r.headers['cache-control']).toBe('private, no-store');
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: '11111111-2222-4333-8444-555555555555',
+        type: 'document',
+        phoneNumberId: 'qa-number',
+      },
+      select: { mediaId: true, mediaFilename: true },
+    });
+  });
+  it.each(['DRIVER', 'OPERATOR', 'EMPLOYEE', 'WAREHOUSE_TABLET'])(
+    'denies %s documents before downloading',
+    async (role) => {
+      await request(app.getHttpServer())
+        .get(path.replace('/audio', '/document'))
+        .set('x-role', role)
+        .expect(403);
+      expect(document).not.toHaveBeenCalled();
+    },
+  );
 });

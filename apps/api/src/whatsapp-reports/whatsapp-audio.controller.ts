@@ -22,6 +22,37 @@ export class WhatsappAudioController {
     private readonly prisma: PrismaService,
     private readonly cloud: WhatsappCloudService,
   ) {}
+  @Get(':id/document')
+  async document(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res() res: Response,
+  ) {
+    const message = await this.prisma.whatsappInboundMessage.findFirst({
+      where: {
+        id,
+        type: 'document',
+        phoneNumberId:
+          process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || 'not-configured',
+      },
+      select: { mediaId: true, mediaFilename: true },
+    });
+    if (!message?.mediaId)
+      throw new NotFoundException(
+        'Este documento no quedó disponible. Solicita que lo reenvíen.',
+      );
+    const file = await this.cloud.document(
+      message.mediaId,
+      message.mediaFilename,
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', 'sandbox');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="documento.${file.filename.split('.').pop()}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+    );
+    res.type(file.mimetype).send(file.buffer);
+  }
   @Get(':id/audio')
   async audio(
     @Param('id', new ParseUUIDPipe()) id: string,

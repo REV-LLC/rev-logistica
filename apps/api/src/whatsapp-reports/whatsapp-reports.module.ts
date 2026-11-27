@@ -1,3 +1,4 @@
+import { WhatsappOfficeService } from './whatsapp-office.service';
 import { WhatsappAudioController } from './whatsapp-audio.controller';
 import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { WhatsappCustomerController } from './whatsapp-customer.controller';
@@ -25,6 +26,7 @@ import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
     WhatsappAudioController,
   ],
   providers: [
+    WhatsappOfficeService,
     WhatsappCustomerService,
     WhatsappCustomerProfilesService,
     WhatsappCustomerAiService,

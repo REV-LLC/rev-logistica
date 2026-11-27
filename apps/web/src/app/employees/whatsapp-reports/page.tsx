@@ -20,6 +20,7 @@ import {
 import { getCurrentUserRole } from "@/lib/auth";
 import { api, apiBlob } from "@/lib/api";
 import WhatsappAudio from "@/components/WhatsappAudio";
+import WhatsappDocument from "@/components/WhatsappDocument";
 
 type Kind = "DAMAGE" | "HOUR_METER" | "REQUEST" | "CHECK_IN" | "CHECK_OUT";
 const labels: Record<Kind, string> = {
@@ -71,6 +72,8 @@ type Health = {
 type InboxIssue = {
   type: string;
   audioAvailable?: boolean;
+  documentAvailable?: boolean;
+  mediaFilename?: string | null;
   id: string;
   phone: string;
   text: string;
@@ -442,14 +445,23 @@ export default function WhatsappReportsPage() {
                   <Text mt="xs">
                     {i.type === "audio"
                       ? "Audio pendiente de escuchar por oficina"
-                      : i.text || "Mensaje sin texto"}
+                      : i.type === "document"
+                        ? "Documento pendiente de revisión por oficina"
+                        : i.text || "Mensaje sin texto"}
                   </Text>
                   <Text size="sm" c="dimmed">
-                    {i.type === "audio"
-                      ? "El audio no crea una petición automáticamente."
+                    {["audio", "document"].includes(i.type)
+                      ? "El archivo no crea una petición automáticamente."
                       : (i.error && inboxErrorLabels[i.error]) ||
                         "No se pudo completar la respuesta. Revisa el mensaje."}
                   </Text>
+                  {i.type === "document" && (
+                    <WhatsappDocument
+                      messageId={i.id}
+                      available={!!i.documentAvailable}
+                      filename={i.mediaFilename}
+                    />
+                  )}
                   {i.type === "audio" && (
                     <WhatsappAudio
                       messageId={i.id}
