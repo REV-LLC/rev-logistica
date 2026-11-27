@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { validateGoogleAddress } from '../customers/google-address-validation';
-import { groupAddresses, googleAddressPoint } from './tracking-addresses';
+import { groupAddresses, googleAddressPoint, automaticAddressParams } from './tracking-addresses';
 import type { GoogleAddressResult } from './tracking-addresses';
 
 @Injectable()
@@ -30,7 +30,9 @@ export class TrackingAddressStoreService {
   const claim=await this.prisma.trackingAddressLocation.updateMany({where:{key:group.key,attempts:{lt:3},OR:[{status:'pending'},{status:'error',retryAfter:{lte:now}},{status:'processing',lastAttemptAt:{lt:new Date(now.getTime()-120_000)}}]},data:{status:'processing',lastAttemptAt:now,attempts:{increment:1}}});
   if (!claim.count) return row;
   try {
-   const result=await validateGoogleAddress({address});
+   const params=automaticAddressParams(address);
+   if (!params) return this.prisma.trackingAddressLocation.update({where:{key:group.key},data:{status:'needs_review',latitude:null,longitude:null}});
+   const result=await validateGoogleAddress(params);
    await this.rememberValidatedAddress(address,result.formattedAddress,result);
    return this.prisma.trackingAddressLocation.findUnique({where:{key:group.key}});
   } catch (e) {

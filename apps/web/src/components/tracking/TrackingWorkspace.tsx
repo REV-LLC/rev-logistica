@@ -252,9 +252,9 @@ export default function TrackingWorkspace({ readOnly = false, pilotDeviceId, loc
       <Text size="xs" c="dimmed">{fleet ? `Consulta ${localTime(fleet.fetchedAt)}${config?.trackingPolicy ? ' · frecuencia según jornada REV' : ' · recepción automática'}` : 'Consultando flota…'}</Text>
     </Group>
     {fleet?.placeSync?.total ? <Text size="xs" c="dimmed" aria-label="Ubicaciones de clientes y obras">
-      Clientes y obras: {fleet.placeSync.located} de {fleet.placeSync.total} direcciones ubicadas.
+      Clientes y obras: {fleet.placeSync.located} de {fleet.placeSync.total} direcciones ubicadas. Acerca el mapa para ver clientes y sedes.
       {fleet.placeSync.pending > 0 ? ` ${fleet.placeSync.pending} pendientes de ubicación.` : ''}
-      {fleet.placeSync.needsReview + fleet.placeSync.errors > 0 ? ` ${fleet.placeSync.needsReview + fleet.placeSync.errors} son aproximadas o necesitan revisión.` : ''}
+      {fleet.placeSync.needsReview + fleet.placeSync.errors > 0 ? ` ${fleet.placeSync.needsReview + fleet.placeSync.errors} requieren revisión y se omiten del mapa.` : ''}
     </Text> : null}
     <div className={classes.layout}>
       <div className={classes.list} aria-label="Camiones de la flota">

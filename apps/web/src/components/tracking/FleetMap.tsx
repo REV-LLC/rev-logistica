@@ -11,7 +11,8 @@ import type { FleetState, GpsPosition, Journey, MapMatch, RouteHistory } from '.
 import classes from './FleetMap.module.css';
 
 type Point = { latitude: number; longitude: number };
-type Pin = { marker: MarkerInstance; element: HTMLDivElement; displayed: Point; frame: number | null };
+const PLACE_MIN_ZOOM = 16;
+type Pin = { kind: 'truck' | 'place' | 'boundary'; marker: MarkerInstance; element: HTMLDivElement; displayed: Point; frame: number | null };
 const lines = (segments: Point[][]) => ({ type: 'FeatureCollection', features: segments.filter(s => s.length > 1).map(segment => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: segment.map(p => [p.longitude, p.latitude]) } })) });
 function fit(map: MapInstance, points: Point[]) {
  if (!points.length) return;
@@ -36,6 +37,10 @@ export default function FleetMap({ mapboxToken, fleet, selectedId, history, jour
    instance.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
    instance.addControl(new lib.FullscreenControl(), 'top-right');
    instance.on('dragstart', () => callbacks.current.onStopFollowing());
+   instance.on('zoom', () => {
+    const showPlaces = instance.getZoom() >= PLACE_MIN_ZOOM;
+    pins.current.forEach(pin => { if (pin.kind === 'place') pin.element.style.display = showPlaces ? '' : 'none'; });
+   });
    instance.on('load', () => {
     if (!active) return;
     for (const layer of instance.getStyle().layers || []) if (layer.id.includes('poi')) instance.setLayoutProperty(layer.id, 'visibility', 'none');
@@ -59,10 +64,11 @@ export default function FleetMap({ mapboxToken, fleet, selectedId, history, jour
    needed.add(key); let pin = pins.current.get(key);
    if (!pin) {
     const element = document.createElement('div');
-    pin = { element, marker: new lib.Marker({ element }).setLngLat([point.longitude, point.latitude]).addTo(instance), displayed: point, frame: null };
+    pin = { kind, element, marker: new lib.Marker({ element }).setLngLat([point.longitude, point.latitude]).addTo(instance), displayed: point, frame: null };
     pins.current.set(key, pin);
    }
    const current = pin;
+   current.element.style.display = kind === 'place' && instance.getZoom() < PLACE_MIN_ZOOM ? 'none' : '';
    // Preserve the SDK anchor classes; replacing className offsets markers from GPS.
    current.element.classList.add(classes.pin);
    current.element.style.setProperty('--asset-color', color);
