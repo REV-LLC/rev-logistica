@@ -14,7 +14,7 @@ export class TrackingAddressStoreService {
   if (result) {
    const alias=groupAddresses([{address:inputAddress,name:'address'}])[0];
    if (alias && alias.key!==result.key) await this.prisma.trackingAddressLocation.upsert({where:{key:alias.key},
-    create:{key:alias.key,address:inputAddress,canonicalKey:result.key,status:result.status==='located'?'located':'pending',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider},
+    create:{key:alias.key,address:inputAddress,canonicalKey:result.key,status:['located','needs_review'].includes(result.status)?result.status:'pending',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider},
     update:{canonicalKey:result.key,...(result.status==='located'?{status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider,retryAfter:null}:{})}});
   }
   return result?.status || 'pending';
@@ -28,6 +28,7 @@ export class TrackingAddressStoreService {
    const canonical=await this.prisma.trackingAddressLocation.findUnique({where:{key:row.canonicalKey}});
    const result=canonical && await this.resolve(canonical.address,visited);
    if (result?.status==='located') return this.prisma.trackingAddressLocation.update({where:{key:row.key},data:{status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider,retryAfter:null}});
+   if (result?.status==='needs_review') return this.prisma.trackingAddressLocation.update({where:{key:row.key},data:{status:'needs_review'}});
    return row;
   }
   if (!this.enabled() || row.status==='located' || row.status==='needs_review' || row.attempts>=3 || Date.now()<this.retryAt) return row;
