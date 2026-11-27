@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api';
 import OpenInMapsButton from '@/components/worksites/OpenInMapsButton';
 
 type AddressValidationResponse = {
+  mapLocationStatus?: string;
   inputAddress: string;
   formattedAddress: string;
   context: { department: string | null; city: string | null };
@@ -162,6 +163,7 @@ export default function WorksiteAddressField({
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Sugerida por Maps</Text>
                 <Text size="sm">{validation.formattedAddress}</Text>
+                {validation.mapLocationStatus === 'located' ? <Text size="xs" c="teal" mt={4}>Ubicación guardada para los mapas de REV.</Text> : null}
                 {validation.googleContext.city || validation.googleContext.department ? (
                   <Text size="xs" c="dimmed" mt={4}>
                     {[validation.googleContext.city, validation.googleContext.department]

@@ -1,3 +1,4 @@
+import { TrackingAddressStoreService } from '../tracking/tracking-address-store.service';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 
 type GoogleAddressValidationResponse = {
@@ -40,6 +41,7 @@ type WorksiteAddressValidationParams = {
 
 @Injectable()
 export class WorksiteAddressValidationService {
+  constructor(private readonly locations?: TrackingAddressStoreService) {}
   async validate(params: WorksiteAddressValidationParams) {
     const { address } = params;
     const regionCode = (params.regionCode ?? 'CO').trim().toUpperCase();
@@ -103,7 +105,15 @@ export class WorksiteAddressValidationService {
     }
 
     const location = data.result?.geocode?.location;
+    // Save both accepted spellings so keeping the written address or using
+    // Google's suggestion both reuse the persisted map point.
+    let mapLocationStatus = 'pending';
+    if (this.locations) {
+      try { mapLocationStatus = await this.locations.rememberValidatedAddress(cleanAddress, formattedAddress); }
+      catch { mapLocationStatus = 'error'; }
+    }
     return {
+      mapLocationStatus,
       inputAddress: cleanAddress,
       formattedAddress,
       context: {

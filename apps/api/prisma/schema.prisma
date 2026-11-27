@@ -2348,3 +2348,21 @@ model WhatsappCustomerRequest {
   @@index([customerId])
   @@index([customerWorksiteId])
 }
+
+// Permanent address results are reused across customers/worksites and map openings.
+model TrackingAddressLocation {
+  key             String   @id
+  address         String
+  status          String   @default("pending")
+  latitude        Float?
+  longitude       Float?
+  resolvedAddress String?
+  provider        String?
+  attempts        Int      @default(0)
+  lastAttemptAt   DateTime?
+  retryAfter      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, retryAfter])
+}

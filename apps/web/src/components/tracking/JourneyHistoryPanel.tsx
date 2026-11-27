@@ -76,7 +76,7 @@ export default function JourneyHistoryPanel(p: Props) {
      </button>;
     })}
    </div> : p.history ? <div className={classes.journeyEmpty}><IconRoute size={27}/><Text size="sm" fw={600}>{p.history.pointCount ? 'Sin desplazamientos en este período' : 'Sin ubicaciones en este período'}</Text><Text size="xs" c="dimmed">{p.history.pointCount ? 'Los reportes recibidos no forman un recorrido con movimiento suficiente.' : 'Prueba con otra fecha o un período más amplio.'}</Text></div> : null}
-   <Group gap={6} mt="sm" wrap="nowrap"><IconClock size={14} aria-hidden="true"/><Text size="xs" c="dimmed">Una parada de 15 minutos separa los recorridos. Historial disponible durante 30 días.</Text></Group>
+   <Group gap={6} mt="sm" wrap="nowrap"><IconClock size={14} aria-hidden="true"/><Text size="xs" c="dimmed">Una parada de 20 minutos separa los recorridos. Historial disponible durante 30 días.</Text></Group>
   </div>
   <Accordion className={classes.routeDetails} chevronSize={14}>
    <Accordion.Item value="details"><Accordion.Control>Detalles de seguimiento</Accordion.Control><Accordion.Panel>

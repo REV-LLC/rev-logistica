@@ -218,7 +218,7 @@ export default function TrackingWorkspace({ readOnly = false, pilotDeviceId, loc
   }, [localViews, liveView, config?.mapMatchingAvailable]);
 
   const mapFleet = useMemo(() => !fleet || !localViews ? fleet : liveView
-    ? { ...fleet, places: fleet.places.filter(p => p.siteType !== 'primary' && p.siteType !== 'secondary') }
+    ? fleet
     : { ...fleet, devices: fleet.devices.filter(d => d.id === selectedId) }, [fleet, liveView, localViews, selectedId]);
 
   const selectedCadence = refreshPolicy(config?.trackingPolicy, selectedId, clock);
@@ -249,8 +249,13 @@ export default function TrackingWorkspace({ readOnly = false, pilotDeviceId, loc
           onClick={() => setFollow(v => !v)}>{follow ? `Siguiendo ${device?.name || ''}` : 'Seguir camión'}</Button>
         <Button variant="default" onClick={() => { setFollow(false); setFit(n => n + 1); }}>{localViews ? (liveView ? 'Ver todos los activos y clientes' : 'Centrar vehículo y puntos') : pilotDeviceId ? 'Centrar camión y sedes' : 'Ver toda la flota'}</Button>
       </Group>
-      <Text size="xs" c="dimmed">{fleet ? `Consulta ${localTime(fleet.fetchedAt)}${pilotDeviceId ? (config?.trackingPolicy ? ' · frecuencia según jornada REV' : ' · recepción automática') : ' · cada 5 s'}` : 'Consultando flota…'}</Text>
+      <Text size="xs" c="dimmed">{fleet ? `Consulta ${localTime(fleet.fetchedAt)}${config?.trackingPolicy ? ' · frecuencia según jornada REV' : ' · recepción automática'}` : 'Consultando flota…'}</Text>
     </Group>
+    {fleet?.placeSync?.total ? <Text size="xs" c="dimmed" aria-label="Ubicaciones de clientes y obras">
+      Clientes y obras: {fleet.placeSync.located} de {fleet.placeSync.total} direcciones ubicadas.
+      {fleet.placeSync.pending > 0 ? ` ${fleet.placeSync.pending} pendientes de ubicación.` : ''}
+      {fleet.placeSync.needsReview + fleet.placeSync.errors > 0 ? ` ${fleet.placeSync.needsReview + fleet.placeSync.errors} necesitan revisar su dirección o ubicación.` : ''}
+    </Text> : null}
     <div className={classes.layout}>
       <div className={classes.list} aria-label="Camiones de la flota">
         {!fleet && !fleetError ? <Loader aria-label="Cargando flota" /> : null}
