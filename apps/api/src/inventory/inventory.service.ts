@@ -1157,9 +1157,9 @@ export class InventoryService {
         }
       }
 
-      await assertBulkSourceTimeline(tx, 'WAREHOUSE', bulkGroups.map(group => ({
-        ...group, locationId: payload.warehouseId,
-      })), effectiveAt);
+      // Drafts can predate stock entered by office. Dispatch bulk stock against
+      // the current balance checked under the SKU lock above; effectiveAt keeps
+      // the document's date for traceability, not a historical stock reservation.
       const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
@@ -1390,9 +1390,8 @@ export class InventoryService {
         }
       }
 
-      await assertBulkSourceTimeline(tx, 'OWNER', bulkGroups.map(group => ({
-        ...group, locationId: group.ownerWarehouseId,
-      })), effectiveAt);
+      // Direct owner dispatches use the same current-stock rule as moveOut.
+      // Keep the documentary date even when office registered stock afterwards.
       const ledgerOps = [
         ...bulkGroups.map((group) =>
           tx.stockLedger.create({
