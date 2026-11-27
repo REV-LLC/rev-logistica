@@ -1,3 +1,9 @@
+import {
+  DOCUMENT_EXTENSIONS,
+  MAX_DOCUMENT_BYTES,
+  safeDownloadName,
+  validDocument,
+} from './whatsapp-document';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import sharp from 'sharp';
 import type { EquipmentReplyOptions } from './whatsapp-report.types';
@@ -52,6 +58,110 @@ export class WhatsappCloudService {
       throw new ServiceUnavailableException(
         `WhatsApp reply HTTP ${response.status}`,
       );
+  }
+  async sendOfficeText(phone: string, text: string) {
+    const config = this.config();
+    const response = await fetch(
+      `${config.base}/${config.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'text',
+          text: { body: text, preview_url: false },
+        }),
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error',
+      },
+    );
+    if (!response.ok) {
+      const error = new Error('WhatsApp did not confirm the send') as Error & {
+        rejected?: boolean;
+      };
+      error.rejected = response.status >= 400 && response.status < 500;
+      throw error;
+    }
+    const result = (await response.json()) as { messages?: { id?: string }[] };
+    const id = result.messages?.[0]?.id;
+    if (!id || id.length > 250)
+      throw new Error('Missing WhatsApp send confirmation');
+    return id;
+  }
+  async document(mediaId: string, originalName?: string | null) {
+    if (!/^\d{1,100}$/.test(mediaId))
+      throw new Error('Invalid document media id');
+    const config = this.config();
+    const meta = await fetch(
+      `${config.base}/${mediaId}?phone_number_id=${config.phoneNumberId}`,
+      {
+        headers: { Authorization: `Bearer ${config.token}` },
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error',
+      },
+    );
+    if (!meta.ok)
+      throw new ServiceUnavailableException(
+        'Documento no disponible. Solicita que lo reenvíen.',
+      );
+    const data = (await meta.json()) as {
+      url?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
+    const mime = data.mime_type?.split(';')[0].trim().toLowerCase() ?? '';
+    if (
+      !DOCUMENT_EXTENSIONS[mime] ||
+      (data.file_size !== undefined &&
+        (!Number.isFinite(data.file_size) ||
+          data.file_size < 0 ||
+          data.file_size > MAX_DOCUMENT_BYTES))
+    )
+      throw new ServiceUnavailableException(
+        'Usa PDF, Word, Excel, PowerPoint o texto de hasta 20 MB.',
+      );
+    const url = new URL(data.url ?? '');
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !['lookaside.fbsbx.com', 'facebook.com', 'fbcdn.net'].some(
+        (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+      )
+    )
+      throw new Error('Invalid Meta document host');
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${config.token}` },
+      signal: AbortSignal.timeout(30000),
+      redirect: 'error',
+    });
+    if (!response.ok || !response.body)
+      throw new ServiceUnavailableException(
+        'No se pudo descargar el documento.',
+      );
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > MAX_DOCUMENT_BYTES)
+        throw new ServiceUnavailableException('El documento supera 20 MB.');
+      chunks.push(Buffer.from(chunk));
+    }
+    const buffer = Buffer.concat(chunks);
+    if (!validDocument(buffer, mime))
+      throw new ServiceUnavailableException(
+        'El contenido del documento no coincide con su formato.',
+      );
+    return {
+      buffer,
+      mimetype: mime,
+      filename: safeDownloadName(originalName, DOCUMENT_EXTENSIONS[mime]),
+    };
   }
   async audio(mediaId: string) {
     if (!/^\d{1,100}$/.test(mediaId)) throw new Error('Invalid audio media id');

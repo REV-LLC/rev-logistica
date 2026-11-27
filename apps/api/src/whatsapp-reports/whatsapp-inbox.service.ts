@@ -1,3 +1,4 @@
+import { cleanDocumentName } from './whatsapp-document';
 import { WhatsappCustomerService } from './whatsapp-customer.service';
 import {
   whatsappAttendanceEnabled,
@@ -104,9 +105,16 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
         sentAt.getTime() > Date.now() + 300000
       )
         continue;
+      const fileMedia =
+        message.type === 'audio'
+          ? message.audio
+          : message.type === 'document'
+            ? message.document
+            : undefined;
       const text = (
         message.text?.body ??
         message.image?.caption ??
+        message.document?.caption ??
         message.interactive?.button_reply?.title ??
         message.interactive?.list_reply?.title ??
         ''
@@ -129,10 +137,14 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             mediaId:
               message.type === 'image'
                 ? message.image?.id?.slice(0, 100)
-                : message.type === 'audio' &&
-                    /^\d{1,100}$/.test(message.audio?.id ?? '')
-                  ? message.audio!.id!
+                : ['audio', 'document'].includes(message.type ?? '') &&
+                    /^\d{1,100}$/.test(fileMedia?.id ?? '')
+                  ? fileMedia!.id!
                   : null,
+            mediaFilename:
+              message.type === 'document'
+                ? cleanDocumentName(message.document?.filename)
+                : null,
             location:
               message.type === 'location' &&
               locationCoordinatesSchema.safeParse(message.location).success
@@ -145,8 +157,8 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       });
       if (
         !result.count &&
-        message.type === 'audio' &&
-        /^\d{1,100}$/.test(message.audio?.id ?? '')
+        ['audio', 'document'].includes(message.type ?? '') &&
+        /^\d{1,100}$/.test(fileMedia?.id ?? '')
       ) {
         // A signed Meta retry can restore a reference discarded by an older
         // version, without replaying the message or sending a second reply.
@@ -155,10 +167,15 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
             providerMessageId: message.id,
             phone,
             phoneNumberId,
-            type: 'audio',
+            type: message.type,
             mediaId: null,
           },
-          data: { mediaId: message.audio!.id! },
+          data: {
+            mediaId: fileMedia!.id!,
+            ...(message.type === 'document'
+              ? { mediaFilename: cleanDocumentName(message.document?.filename) }
+              : {}),
+          },
         });
       }
       accepted += result.count;
@@ -304,7 +321,9 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
           menuStage: undefined,
         };
       }
-      const command = normalized(message.text);
+      const command = ['audio', 'document'].includes(message.type)
+        ? ''
+        : normalized(message.text);
       const selected =
         message.type === 'interactive' ? message.selectionId : null;
       // Route stable IDs rather than localized titles; unknown selections can never confirm a report.
@@ -786,13 +805,18 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
                 ? 'La ubicación se usa para entrada o salida de obra. Continúa este reporte o escribe MENÚ.'
                 : 'Continúa este reporte con texto y fotos. Para registrar asistencia utiliza MiREV.';
         }
-      } else if (message.type === 'audio') {
+      } else if (['audio', 'document'].includes(message.type)) {
         draft.ready = false;
         delete draft.confirmationMessageId;
         audioReview = true;
-        reply = message.mediaId
-          ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Para registrar una petición con el asistente, escríbela y confirma el resumen.'
-          : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe tu petición para que oficina pueda revisarla.';
+        reply =
+          message.type === 'document'
+            ? message.mediaId
+              ? 'Recibí tu documento y quedó pendiente de revisión por oficina. No se registra una petición automáticamente.'
+              : 'El documento llegó sin un archivo disponible. Envíalo de nuevo para que oficina pueda revisarlo.'
+            : message.mediaId
+              ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Para registrar una petición con el asistente, escríbela y confirma el resumen.'
+              : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe tu petición para que oficina pueda revisarla.';
       } else if (!['text', 'image', 'interactive'].includes(message.type)) {
         reply =
           'Por ahora envía el reporte por escrito y las fotos como imagen. Los audios y documentos no se registran.\n' +
@@ -1076,7 +1100,11 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
               replyOptions: replyOptions
                 ? (replyOptions as unknown as Prisma.InputJsonValue)
                 : Prisma.DbNull,
-              error: audioReview ? 'AUDIO_REVIEW_REQUIRED' : null,
+              error: audioReview
+                ? message.type === 'document'
+                  ? 'DOCUMENT_REVIEW_REQUIRED'
+                  : 'AUDIO_REVIEW_REQUIRED'
+                : null,
             },
           });
         },
@@ -1142,69 +1170,90 @@ export class WhatsappInboxService implements OnModuleInit, OnModuleDestroy {
       take: 20,
     });
     for (const message of replies) {
-      if (
-        message.replyKind.startsWith('CUSTOMER_') &&
-        !(await this.customers?.canReply(
-          message.phone,
-          message.replyKind === 'CUSTOMER_HANDOFF',
-        ))
-      ) {
-        // Suppress retired/paused replies permanently so they cannot starve the
-        // shared employee outbox or be replayed after a later reactivation.
-        await this.prisma.whatsappInboundMessage.updateMany({
-          where: { id: message.id, replySentAt: null },
-          data: { replyText: null },
+      const customerReply = message.replyKind.startsWith('CUSTOMER_');
+      const replyToken = randomUUID();
+      if (customerReply) {
+        const lease = await this.prisma.whatsappCustomerChat.updateMany({
+          where: { phone: message.phone, leaseUntil: { lte: new Date() } },
+          data: {
+            leaseToken: replyToken,
+            leaseUntil: new Date(Date.now() + 60000),
+          },
         });
-        continue;
+        if (!lease.count) continue;
       }
-      // Durable compare-and-swap avoids duplicate sends by concurrent replicas.
-      const claim = await this.prisma.whatsappInboundMessage.updateMany({
-        where: {
-          id: message.id,
-          replySentAt: null,
-          nextAttemptAt: { lte: new Date() },
-        },
-        data: {
-          nextAttemptAt: new Date(Date.now() + LEASE_MS),
-          replyAttempts: { increment: 1 },
-        },
-      });
-      if (!claim.count) continue;
       try {
         if (
-          ['EQUIPMENT_MENU', 'WORKSITE_MENU'].includes(message.replyKind) &&
-          message.replyOptions
+          message.replyKind.startsWith('CUSTOMER_') &&
+          !(await this.customers?.canReply(
+            message.phone,
+            message.replyKind === 'CUSTOMER_HANDOFF',
+          ))
         ) {
-          await this.cloud.reply(
-            message.phone,
-            message.replyText!,
-            message.replyKind,
-            undefined,
-            message.replyOptions as unknown as EquipmentReplyOptions,
-          );
-        } else if (message.replyKind === 'CONFIRMATION') {
-          await this.cloud.reply(
-            message.phone,
-            message.replyText!,
-            message.replyKind,
-            message.id,
-          );
-        } else {
-          await this.cloud.reply(
-            message.phone,
-            message.replyText!,
-            message.replyKind,
-          );
+          // Suppress retired/paused replies permanently so they cannot starve the
+          // shared employee outbox or be replayed after a later reactivation.
+          await this.prisma.whatsappInboundMessage.updateMany({
+            where: { id: message.id, replySentAt: null },
+            data: { replyText: null },
+          });
+          continue;
         }
-        await this.prisma.whatsappInboundMessage.update({
-          where: { id: message.id },
-          data: { replySentAt: new Date() },
+        // Durable compare-and-swap avoids duplicate sends by concurrent replicas.
+        const claim = await this.prisma.whatsappInboundMessage.updateMany({
+          where: {
+            id: message.id,
+            replySentAt: null,
+            replyText: message.replyText,
+            nextAttemptAt: { lte: new Date() },
+          },
+          data: {
+            nextAttemptAt: new Date(Date.now() + LEASE_MS),
+            replyAttempts: { increment: 1 },
+          },
         });
-      } catch {
-        this.logger.warn({
-          event: 'whatsapp_reply_failed',
-          messageId: message.id,
-        });
+        if (!claim.count) continue;
+        try {
+          if (
+            ['EQUIPMENT_MENU', 'WORKSITE_MENU'].includes(message.replyKind) &&
+            message.replyOptions
+          ) {
+            await this.cloud.reply(
+              message.phone,
+              message.replyText!,
+              message.replyKind,
+              undefined,
+              message.replyOptions as unknown as EquipmentReplyOptions,
+            );
+          } else if (message.replyKind === 'CONFIRMATION') {
+            await this.cloud.reply(
+              message.phone,
+              message.replyText!,
+              message.replyKind,
+              message.id,
+            );
+          } else {
+            await this.cloud.reply(
+              message.phone,
+              message.replyText!,
+              message.replyKind,
+            );
+          }
+          await this.prisma.whatsappInboundMessage.update({
+            where: { id: message.id },
+            data: { replySentAt: new Date() },
+          });
+        } catch {
+          this.logger.warn({
+            event: 'whatsapp_reply_failed',
+            messageId: message.id,
+          });
+        }
+      } finally {
+        if (customerReply)
+          await this.prisma.whatsappCustomerChat.updateMany({
+            where: { phone: message.phone, leaseToken: replyToken },
+            data: { leaseToken: null, leaseUntil: new Date(0) },
+          });
       }
     }
   }

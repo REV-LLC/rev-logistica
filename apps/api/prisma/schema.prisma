@@ -2030,6 +2030,7 @@ model WhatsappInboundMessage {
   selectionId String?
   text String
   mediaId String?
+  mediaFilename String?
   location Json?
   evidenceFileObjectId String?
   sentAt DateTime
@@ -2323,6 +2324,7 @@ model WhatsappCustomerChat {
   leaseToken String?
   updatedAt DateTime @updatedAt
   requests WhatsappCustomerRequest[]
+  officeMessages WhatsappOfficeMessage[]
   @@index([customerId])
   @@index([customerWorksiteId])
 }
@@ -2347,4 +2349,24 @@ model WhatsappCustomerRequest {
   @@index([phone, createdAt])
   @@index([customerId])
   @@index([customerWorksiteId])
+}
+
+// Explicit human replies; uncertain sends are never retried automatically.
+model WhatsappOfficeMessage {
+  id String @id @default(uuid())
+  phone String
+  chat WhatsappCustomerChat @relation(fields: [phone], references: [phone])
+  phoneNumberId String
+  actorUserId String
+  actorName String
+  text String
+  status String @default("SENDING")
+  providerMessageId String? @unique
+  error String?
+  sentAt DateTime?
+  deliveredAt DateTime?
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([phone, createdAt, id])
 }

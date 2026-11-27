@@ -1,3 +1,4 @@
+import { WhatsappOfficeService } from './whatsapp-office.service';
 import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import {
   Body,
@@ -34,6 +35,10 @@ import { WhatsappCustomerService } from './whatsapp-customer.service';
 import { WhatsappCloudService } from './whatsapp-cloud.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
+class OfficeMessageDto {
+  @IsString() @MinLength(1) @MaxLength(4000) text: string;
+  @IsUUID() id: string;
+}
 class ReviewChatDto {
   @IsString() @MaxLength(4000) notes: string;
   @IsBoolean() paused: boolean;
@@ -55,6 +60,7 @@ export class WhatsappCustomerController {
     private readonly cloud: WhatsappCloudService,
     private readonly prisma: PrismaService,
     private readonly profiles: WhatsappCustomerProfilesService,
+    private readonly office: WhatsappOfficeService,
   ) {}
   @Get()
   list(
@@ -93,6 +99,28 @@ export class WhatsappCustomerController {
     @Req() req: { user: { sub: string } },
   ) {
     return this.profiles.save(phone, body, req.user.sub);
+  }
+  @Post(':phone/messages')
+  sendOfficeMessage(
+    @Param('phone') phone: string,
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    body: OfficeMessageDto,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.office.send(phone, body.text, body.id, req.user.sub);
+  }
+  @Get(':phone/office-messages')
+  officeMessages(
+    @Param('phone') phone: string,
+    @Query('before', new ParseUUIDPipe({ optional: true })) before?: string,
+  ) {
+    return this.office.list(phone, before);
   }
   @Get(':phone')
   detail(

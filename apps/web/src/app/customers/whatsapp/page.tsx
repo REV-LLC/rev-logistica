@@ -29,6 +29,11 @@ import { api, apiBlob } from "@/lib/api";
 import { getCurrentUserRole } from "@/lib/auth";
 import styles from "./whatsapp.module.css";
 import WhatsappAudio from "@/components/WhatsappAudio";
+import WhatsappDocument from "@/components/WhatsappDocument";
+import OfficeComposer, {
+  type OfficeMessage,
+  officeStatus,
+} from "./OfficeComposer";
 import ContactReviewModal, {
   type ContactProfile,
   type LinkableRequest,
@@ -65,6 +70,8 @@ type Listing = {
   profilesEnabled?: boolean;
 };
 type Message = {
+  documentAvailable?: boolean;
+  mediaFilename?: string | null;
   audioAvailable?: boolean;
   id: string;
   text: string;
@@ -76,6 +83,10 @@ type Message = {
   error: string | null;
 };
 type Detail = {
+  officeMessages?: OfficeMessage[];
+  officeBefore?: string | null;
+  replyWindowEndsAt?: string | null;
+  officeRepliesEnabled?: boolean;
   profile: ContactProfile;
   customers: string[];
   phone: string;
@@ -319,6 +330,42 @@ export default function CustomerWhatsappPage() {
         );
     } catch {
       setError("No se pudieron cargar los mensajes anteriores");
+    } finally {
+      if (seq === detailSeq.current) setBusy(false);
+    }
+  }
+  async function olderOffice() {
+    if (!detail?.officeBefore) return;
+    const phone = detail.phone,
+      seq = detailSeq.current;
+    setBusy(true);
+    try {
+      const data = await api<{
+        messages: OfficeMessage[];
+        before: string | null;
+      }>(
+        `/whatsapp-customers/${phone}/office-messages?before=${detail.officeBefore}`,
+      );
+      if (seq === detailSeq.current)
+        setDetail((d) =>
+          d && d.phone === phone
+            ? {
+                ...d,
+                officeBefore: data.before,
+                officeMessages: [
+                  ...new Map(
+                    [...data.messages, ...(d.officeMessages ?? [])].map((m) => [
+                      m.id,
+                      m,
+                    ]),
+                  ).values(),
+                ],
+              }
+            : d,
+        );
+    } catch {
+      if (seq === detailSeq.current)
+        setError("No se pudieron cargar las respuestas anteriores.");
     } finally {
       if (seq === detailSeq.current) setBusy(false);
     }
@@ -610,15 +657,17 @@ export default function CustomerWhatsappPage() {
                       respuesta automática.
                     </Text>
                   )}
-                  {hasNew && (
-                    <Button
-                      mt="sm"
-                      size="xs"
-                      onClick={() => void loadDetail(detail.phone, true)}
-                    >
-                      Hay mensajes nuevos · Actualizar chat
-                    </Button>
-                  )}
+                  <Button
+                    mt="sm"
+                    size="xs"
+                    variant="subtle"
+                    leftSection={<IconRefresh size={14} />}
+                    onClick={() => void loadDetail(detail.phone, true)}
+                  >
+                    {hasNew
+                      ? "Hay mensajes nuevos · Actualizar chat"
+                      : "Actualizar chat"}
+                  </Button>
                 </div>
                 <div className={styles.messages}>
                   {detail.before && (
@@ -631,55 +680,133 @@ export default function CustomerWhatsappPage() {
                       Cargar mensajes anteriores
                     </Button>
                   )}
-                  {detail.messages.map((message) => (
-                    <div key={message.id}>
-                      <div className={styles.incoming}>
-                        <Text size="xs" fw={600} c="dimmed">
-                          Cliente · {date(message.sentAt)}
-                        </Text>
-                        <Text size="sm" className={styles.messageText}>
-                          {message.text ||
-                            ({
-                              image: "Foto recibida",
-                              audio: "Audio pendiente de escuchar por oficina",
-                              document:
-                                "Documento recibido · requiere revisión",
-                              location: "Ubicación recibida",
-                            }[message.type] ??
-                              "Mensaje recibido")}
-                        </Text>
-                        {message.type === "audio" && (
-                          <WhatsappAudio
-                            key={message.id}
-                            messageId={message.id}
-                            available={!!message.audioAvailable}
-                          />
-                        )}
-                        {message.type === "image" && (
-                          <Photo phone={detail.phone} id={message.id} />
-                        )}
-                      </div>
-                      {message.replyText && (
-                        <div className={styles.outgoing}>
-                          <Text size="xs" fw={600} c="dimmed">
-                            Asistente ·{" "}
-                            {message.replySentAt
-                              ? date(message.replySentAt)
-                              : "Pendiente de envío"}
-                          </Text>
-                          <Text size="sm" className={styles.messageText}>
-                            {message.replyText}
-                          </Text>
+                  {detail.officeBefore && (
+                    <Button
+                      variant="subtle"
+                      loading={busy}
+                      onClick={() => void olderOffice()}
+                    >
+                      Cargar respuestas anteriores de oficina
+                    </Button>
+                  )}
+                  {[
+                    ...detail.messages.map((message) => ({
+                      kind: "incoming" as const,
+                      time: message.createdAt,
+                      id: message.id,
+                      message,
+                    })),
+                    ...(detail.officeMessages ?? []).map((message) => ({
+                      kind: "office" as const,
+                      time: message.createdAt,
+                      id: message.id,
+                      message,
+                    })),
+                  ]
+                    .sort(
+                      (a, b) =>
+                        a.time.localeCompare(b.time) ||
+                        a.id.localeCompare(b.id),
+                    )
+                    .map((entry) => {
+                      if (entry.kind === "office") {
+                        const m = entry.message;
+                        return (
+                          <div key={m.id} className={styles.outgoing}>
+                            <Text size="xs" fw={600} c="dimmed">
+                              Oficina · {m.actorName} · {date(m.createdAt)}
+                            </Text>
+                            <Text size="sm" className={styles.messageText}>
+                              {m.text}
+                            </Text>
+                            <Text
+                              size="xs"
+                              c={
+                                ["FAILED", "UNCERTAIN", "SENDING"].includes(
+                                  m.status,
+                                )
+                                  ? "yellow"
+                                  : "dimmed"
+                              }
+                              mt={4}
+                            >
+                              {officeStatus[m.status] ?? "Envío sin confirmar"}
+                            </Text>
+                            {["UNCERTAIN", "SENDING"].includes(m.status) && (
+                              <Text size="xs">
+                                Verifica WhatsApp antes de enviar este mensaje
+                                otra vez.
+                              </Text>
+                            )}
+                          </div>
+                        );
+                      }
+                      const message = entry.message;
+                      return (
+                        <div key={message.id}>
+                          <div className={styles.incoming}>
+                            <Text size="xs" fw={600} c="dimmed">
+                              Cliente · {date(message.sentAt)}
+                            </Text>
+                            <Text size="sm" className={styles.messageText}>
+                              {message.text ||
+                                ({
+                                  image: "Foto recibida",
+                                  audio:
+                                    "Audio pendiente de escuchar por oficina",
+                                  document:
+                                    "Documento recibido · requiere revisión",
+                                  location: "Ubicación recibida",
+                                }[message.type] ??
+                                  "Mensaje recibido")}
+                            </Text>
+                            {message.type === "audio" && (
+                              <WhatsappAudio
+                                key={message.id}
+                                messageId={message.id}
+                                available={!!message.audioAvailable}
+                              />
+                            )}
+                            {message.type === "document" && (
+                              <WhatsappDocument
+                                messageId={message.id}
+                                available={!!message.documentAvailable}
+                                filename={message.mediaFilename}
+                              />
+                            )}
+                            {message.type === "image" && (
+                              <Photo phone={detail.phone} id={message.id} />
+                            )}
+                          </div>
+                          {message.replyText && (
+                            <div className={styles.outgoing}>
+                              <Text size="xs" fw={600} c="dimmed">
+                                Asistente ·{" "}
+                                {message.replySentAt
+                                  ? date(message.replySentAt)
+                                  : "Pendiente de envío"}
+                              </Text>
+                              <Text size="sm" className={styles.messageText}>
+                                {message.replyText}
+                              </Text>
+                            </div>
+                          )}
+                          {message.error && (
+                            <Text size="xs" c="yellow" mt={4}>
+                              Requiere revisión de oficina
+                            </Text>
+                          )}
                         </div>
-                      )}
-                      {message.error && (
-                        <Text size="xs" c="yellow" mt={4}>
-                          Requiere revisión de oficina
-                        </Text>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
+                <OfficeComposer
+                  key={detail.phone}
+                  phone={detail.phone}
+                  endsAt={detail.replyWindowEndsAt ?? null}
+                  enabled={!!detail.officeRepliesEnabled}
+                  onSent={() => void loadDetail(detail.phone, true)}
+                />
                 <div ref={requestSection} className={styles.review}>
                   <Stack gap="md">
                     <Group justify="space-between">

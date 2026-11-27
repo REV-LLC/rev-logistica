@@ -129,12 +129,17 @@ export class WhatsappCustomerService {
         draft.contactName ??= chat.contactName;
         draft.customer ??= chat.customer?.active ? chat.customer.name : null;
       }
-      let awaitingConfirmation = stale ? false : chat.awaitingConfirmation;
+      let awaitingConfirmation =
+        stale || ['audio', 'document'].includes(message.type)
+          ? false
+          : chat.awaitingConfirmation;
       let paused = chat.paused;
       let reply: string | null = null;
       let handoff = false;
       let submit = false;
-      const command = normalized(message.text);
+      const command = ['audio', 'document'].includes(message.type)
+        ? ''
+        : normalized(message.text);
       const expired = message.sentAt.getTime() < Date.now() - 23 * 3600000;
       if (!paused && !expired) {
         if (
@@ -176,11 +181,16 @@ export class WhatsappCustomerService {
             submit = !!summarySent;
             reply = submit ? pendingReply : customerSummary(draft);
           }
-        } else if (message.type === 'audio') {
+        } else if (['audio', 'document'].includes(message.type)) {
           awaitingConfirmation = false;
-          reply = message.mediaId
-            ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Si quieres completar el pedido con el asistente, envía los datos también por escrito.'
-            : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe los datos del pedido para que oficina pueda revisarlos.';
+          reply =
+            message.type === 'document'
+              ? message.mediaId
+                ? 'Recibí tu documento y quedó pendiente de revisión por oficina. Si quieres completar el pedido con el asistente, escribe los datos también por texto.'
+                : 'El documento llegó sin un archivo disponible. Envíalo de nuevo para que oficina pueda revisarlo.'
+              : message.mediaId
+                ? 'Recibí tu audio y quedó pendiente de escuchar por oficina. Si quieres completar el pedido con el asistente, envía los datos también por escrito.'
+                : 'El audio llegó sin un archivo disponible. Envíalo de nuevo o escribe los datos del pedido para que oficina pueda revisarlos.';
         } else if (message.type !== 'text' && !message.text.trim()) {
           reply =
             'Recibí tu mensaje. Para completar el pedido, escribe los datos por texto. Los audios y documentos aún necesitan revisión de oficina.\n' +
@@ -432,53 +442,85 @@ export class WhatsappCustomerService {
         })
       : null;
     if (before && !beforeRow) throw new BadRequestException('Página inválida');
-    const [chat, messages, requests] = await Promise.all([
-      this.prisma.whatsappCustomerChat.findUnique({
-        where: { phone },
-        include: {
-          customer: { select: { id: true, name: true, active: true } },
-          customerWorksite: {
-            select: {
-              id: true,
-              active: true,
-              worksite: { select: { name: true, active: true } },
+    const [chat, messages, requests, officeRows, latestInbound] =
+      await Promise.all([
+        this.prisma.whatsappCustomerChat.findUnique({
+          where: { phone },
+          include: {
+            customer: { select: { id: true, name: true, active: true } },
+            customerWorksite: {
+              select: {
+                id: true,
+                active: true,
+                worksite: { select: { name: true, active: true } },
+              },
             },
           },
-        },
-      }),
-      this.prisma.whatsappInboundMessage.findMany({
-        where: {
-          phone,
-          employeeId: null,
-          ...(beforeRow
-            ? {
-                OR: [
-                  { createdAt: { lt: beforeRow.createdAt } },
-                  { createdAt: beforeRow.createdAt, id: { lt: beforeRow.id } },
-                ],
-              }
-            : {}),
-        },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: 101,
-        select: {
-          id: true,
-          text: true,
-          type: true,
-          sentAt: true,
-          createdAt: true,
-          replyText: true,
-          replySentAt: true,
-          error: true,
-          mediaId: true,
-        },
-      }),
-      this.prisma.whatsappCustomerRequest.findMany({
-        where: { phone },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
-      }),
-    ]);
+        }),
+        this.prisma.whatsappInboundMessage.findMany({
+          where: {
+            phone,
+            employeeId: null,
+            ...(beforeRow
+              ? {
+                  OR: [
+                    { createdAt: { lt: beforeRow.createdAt } },
+                    {
+                      createdAt: beforeRow.createdAt,
+                      id: { lt: beforeRow.id },
+                    },
+                  ],
+                }
+              : {}),
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 101,
+          select: {
+            id: true,
+            text: true,
+            type: true,
+            sentAt: true,
+            createdAt: true,
+            replyText: true,
+            replySentAt: true,
+            error: true,
+            mediaId: true,
+            mediaFilename: true,
+          },
+        }),
+        this.prisma.whatsappCustomerRequest.findMany({
+          where: { phone },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+        }),
+        this.prisma.whatsappOfficeMessage.findMany({
+          where: { phone },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 51,
+          select: {
+            id: true,
+            text: true,
+            actorName: true,
+            status: true,
+            error: true,
+            createdAt: true,
+            sentAt: true,
+            deliveredAt: true,
+            readAt: true,
+          },
+        }),
+        this.prisma.whatsappInboundMessage.findFirst({
+          where: {
+            phone,
+            employeeId: null,
+            phoneNumberId:
+              process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || 'not-configured',
+            sentAt: { lte: new Date() },
+          },
+          orderBy: { sentAt: 'desc' },
+          select: { sentAt: true },
+        }),
+      ]);
     if (!messages.length && !chat)
       throw new NotFoundException('Conversación no encontrada');
     const visible = messages.slice(0, 100);
@@ -503,14 +545,21 @@ export class WhatsappCustomerService {
       notes: chat?.notes ?? '',
       reviewedThrough: chat?.reviewedThrough ?? null,
       latest: before ? null : (visible[0]?.createdAt ?? null),
-      messages: visible
-        .reverse()
-        .map(({ mediaId, ...m }) => ({
-          ...m,
-          audioAvailable: m.type === 'audio' && !!mediaId,
-        })),
+      messages: visible.reverse().map(({ mediaId, ...m }) => ({
+        ...m,
+        audioAvailable: m.type === 'audio' && !!mediaId,
+        documentAvailable: m.type === 'document' && !!mediaId,
+      })),
       before: messages.length > 100 ? visible[0].id : null,
       requests,
+      officeMessages: officeRows.slice(0, 50).reverse(),
+      officeBefore: officeRows.length > 50 ? officeRows[49].id : null,
+      replyWindowEndsAt: latestInbound
+        ? new Date(latestInbound.sentAt.getTime() + 24 * 3600000).toISOString()
+        : null,
+      officeRepliesEnabled:
+        customerChannelEnabled() &&
+        process.env.WHATSAPP_REPORTS_ENABLED === 'true',
     };
   }
   async review(

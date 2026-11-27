@@ -76,13 +76,22 @@ if (url) {
                       from: p,
                       timestamp: String(Math.floor(Date.now() / 1000)),
                       type,
-                      audio: audioId
-                        ? {
-                            id: audioId,
-                            mime_type: 'audio/ogg; codecs=opus',
-                            voice: true,
-                          }
-                        : undefined,
+                      audio:
+                        type === 'audio' && audioId
+                          ? {
+                              id: audioId,
+                              mime_type: 'audio/ogg; codecs=opus',
+                              voice: true,
+                            }
+                          : undefined,
+                      document:
+                        type === 'document' && audioId
+                          ? {
+                              id: audioId,
+                              filename: '../Contrato.pdf',
+                              mime_type: 'application/pdf',
+                            }
+                          : undefined,
                       text: { body: text },
                     },
                   ],
@@ -119,6 +128,42 @@ if (url) {
     afterAll(async () => {
       await prisma.$disconnect();
       process.env = original;
+    });
+    it('retains document references and names without creating a request or interpreting the attachment', async () => {
+      const msg = await receive('', phone, 'document', '998877');
+      expect(msg.mediaId).toBe('998877');
+      expect(msg.mediaFilename).toBe('Contrato.pdf');
+      expect(msg.replyText).toContain('documento');
+      expect(ai.extract).not.toHaveBeenCalled();
+      expect(
+        await prisma.whatsappCustomerRequest.count({ where: { phone } }),
+      ).toBe(0);
+      const detail = await customers.detail(phone);
+      expect(
+        detail.messages.find((m) => m.id === msg.id)?.documentAvailable,
+      ).toBe(true);
+      expect(detail.messages.find((m) => m.id === msg.id)).not.toHaveProperty(
+        'mediaId',
+      );
+      await customers.review(phone, { paused: true, notes: '' }, randomUUID());
+      const paused = await receive('', phone, 'document', '998878');
+      expect(paused.replyText).toBeNull();
+    });
+    it('does not treat a document caption as confirmation of a pending order', async () => {
+      ai.extract.mockResolvedValueOnce(complete);
+      await receive('pedido completo');
+      await receive('sí', phone, 'document', '998899');
+      expect(
+        await prisma.whatsappCustomerRequest.count({ where: { phone } }),
+      ).toBe(0);
+      expect(
+        (
+          await prisma.whatsappCustomerChat.findUniqueOrThrow({
+            where: { phone },
+          })
+        ).awaitingConfirmation,
+      ).toBe(false);
+      expect(ai.extract).toHaveBeenCalledTimes(1);
     });
     it('retains audio references, makes them playable in detail and does not invent an order', async () => {
       ai.extract.mockResolvedValueOnce(complete);

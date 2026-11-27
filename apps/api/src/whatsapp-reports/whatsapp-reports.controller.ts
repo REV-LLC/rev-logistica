@@ -98,7 +98,7 @@ export class WhatsappReportsController {
       where: {
         OR: [
           { status: { in: ['FAILED', 'REJECTED'] } },
-          { type: 'audio', employeeId: { not: null } },
+          { type: { in: ['audio', 'document'] }, employeeId: { not: null } },
           { replyAttempts: { gte: 5 }, replySentAt: null },
         ],
       },
@@ -115,11 +115,13 @@ export class WhatsappReportsController {
         createdAt: true,
         replyAttempts: true,
         mediaId: true,
+        mediaFilename: true,
       },
     });
     return messages.map(({ mediaId, ...m }) => ({
       ...m,
       audioAvailable: m.type === 'audio' && !!mediaId,
+      documentAvailable: m.type === 'document' && !!mediaId,
     }));
   }
   @Delete(':id')

@@ -101,6 +101,7 @@ if (testUrl) {
       options: {
         image?: boolean;
         audioId?: string;
+        documentId?: string;
         location?: { latitude: number; longitude: number };
         from?: string;
         id?: string;
@@ -124,39 +125,49 @@ if (testUrl) {
                       id,
                       from: options.from ?? '573001234567',
                       timestamp: String(++timestamp),
-                      type: options.audioId
-                        ? 'audio'
-                        : options.selectionId
-                          ? 'interactive'
-                          : options.location
-                            ? 'location'
-                            : options.image
-                              ? 'image'
-                              : 'text',
-                      ...(options.audioId
+                      type: options.documentId
+                        ? 'document'
+                        : options.audioId
+                          ? 'audio'
+                          : options.selectionId
+                            ? 'interactive'
+                            : options.location
+                              ? 'location'
+                              : options.image
+                                ? 'image'
+                                : 'text',
+                      ...(options.documentId
                         ? {
-                            audio: {
-                              id: options.audioId,
-                              mime_type: 'audio/ogg; codecs=opus',
-                              voice: true,
+                            document: {
+                              id: options.documentId,
+                              filename: 'Contrato.pdf',
+                              caption: text,
                             },
                           }
-                        : options.selectionId
+                        : options.audioId
                           ? {
-                              interactive: {
-                                [options.button
-                                  ? 'button_reply'
-                                  : 'list_reply']: {
-                                  id: options.selectionId,
-                                  title: text,
-                                },
+                              audio: {
+                                id: options.audioId,
+                                mime_type: 'audio/ogg; codecs=opus',
+                                voice: true,
                               },
                             }
-                          : options.location
-                            ? { location: options.location }
-                            : options.image
-                              ? { image: { id: '12345', caption: text } }
-                              : { text: { body: text } }),
+                          : options.selectionId
+                            ? {
+                                interactive: {
+                                  [options.button
+                                    ? 'button_reply'
+                                    : 'list_reply']: {
+                                    id: options.selectionId,
+                                    title: text,
+                                  },
+                                },
+                              }
+                            : options.location
+                              ? { location: options.location }
+                              : options.image
+                                ? { image: { id: '12345', caption: text } }
+                                : { text: { body: text } }),
                     },
                   ],
                 },
@@ -310,6 +321,30 @@ if (testUrl) {
       });
     });
 
+    it('keeps employee documents for review without interpreting their caption', async () => {
+      const before = await prisma.whatsappReport.count();
+      const file = await send('sí', { documentId: '889900' });
+      expect(file?.mediaId).toBe('889900');
+      expect(file?.mediaFilename).toBe('Contrato.pdf');
+      expect(file?.error).toBe('DOCUMENT_REVIEW_REQUIRED');
+      expect(file?.replyText).toContain('documento');
+      expect(ai.extract).not.toHaveBeenCalled();
+      expect(await prisma.whatsappReport.count()).toBe(before);
+      await prisma.whatsappInboundMessage.update({
+        where: { id: file!.id },
+        data: { mediaId: null },
+      });
+      const replies = cloud.reply.mock.calls.length;
+      expect(
+        (
+          await send('sí', {
+            documentId: '889900',
+            id: file!.providerMessageId,
+          })
+        )?.mediaId,
+      ).toBe('889900');
+      expect(cloud.reply).toHaveBeenCalledTimes(replies);
+    });
     it('retains employee audio for office without AI or a report, and repairs signed retries without replaying', async () => {
       await prisma.whatsappConversation.deleteMany({
         where: { phone: '573001234567' },

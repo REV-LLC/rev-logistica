@@ -176,6 +176,99 @@ describe('WhatsApp Cloud media boundaries', () => {
       .mockResolvedValueOnce(new Response(Buffer.alloc(16 * 1024 * 1024 + 1)));
     await expect(service.audio('456')).rejects.toThrow('Audio too large');
   });
+
+  it.each([
+    'https://evil.example/file',
+    'https://lookaside.fbsbx.com.evil.example/file',
+    'http://lookaside.fbsbx.com/file',
+    'https://user@lookaside.fbsbx.com/file',
+  ])('does not expose credentials to document host %s', async (url) => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ url, mime_type: 'application/pdf', file_size: 20 }),
+      ),
+    );
+    await expect(service.document('456')).rejects.toThrow(
+      'Invalid Meta document host',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { mime_type: 'text/html', file_size: 10 },
+    { mime_type: 'application/pdf', file_size: 21 * 1024 * 1024 },
+  ])('rejects unsupported or oversized documents', async (data) => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ url: 'https://lookaside.fbsbx.com/file', ...data }),
+      ),
+    );
+    await expect(service.document('456')).rejects.toThrow('hasta 20 MB');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('downloads an original PDF with a safe extension and bounded requests', async () => {
+    const bytes = Buffer.from('%PDF-1.7 test');
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://lookaside.fbsbx.com/file',
+            mime_type: 'application/pdf',
+            file_size: bytes.length,
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response(bytes));
+    const file = await service.document('456', '../../contrato.exe');
+    expect(file.buffer).toEqual(bytes);
+    expect(file.filename).toBe('contrato.pdf');
+    expect(file.mimetype).toBe('application/pdf');
+    for (const [, options] of fetchMock.mock.calls)
+      expect(options.redirect).toBe('error');
+  });
+  it('rejects documents with mismatched content and streamed oversize', async () => {
+    const meta = () =>
+      new Response(
+        JSON.stringify({
+          url: 'https://lookaside.fbsbx.com/file',
+          mime_type: 'application/pdf',
+        }),
+      );
+    fetchMock
+      .mockResolvedValueOnce(meta())
+      .mockResolvedValueOnce(new Response('<html>not a PDF</html>'));
+    await expect(service.document('456')).rejects.toThrow('no coincide');
+    fetchMock
+      .mockResolvedValueOnce(meta())
+      .mockResolvedValueOnce(new Response(Buffer.alloc(20 * 1024 * 1024 + 1)));
+    await expect(service.document('456')).rejects.toThrow('supera 20 MB');
+  });
+  it('sends an explicit office text without link previews and returns only provider identity', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: [{ id: 'wamid.qa' }] })),
+    );
+    expect(
+      await service.sendOfficeText('573001234567', 'Respuesta humana'),
+    ).toBe('wamid.qa');
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://graph.facebook.com/v25.0/123/messages');
+    expect(JSON.parse(options.body)).toEqual({
+      messaging_product: 'whatsapp',
+      to: '573001234567',
+      type: 'text',
+      text: { body: 'Respuesta humana', preview_url: false },
+    });
+    expect(options.redirect).toBe('error');
+  });
+  it('distinguishes a Meta rejection from an ambiguous server failure', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 400 }));
+    await expect(
+      service.sendOfficeText('573001234567', 'Texto'),
+    ).rejects.toMatchObject({ rejected: true });
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 503 }));
+    await expect(
+      service.sendOfficeText('573001234567', 'Texto'),
+    ).rejects.toMatchObject({ rejected: false });
+  });
   it('sends the native list payload through the existing authenticated Meta endpoint', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{}'));
     await service.reply('573001234567', 'Hola, Samuel 👋', 'REPORT_MENU');

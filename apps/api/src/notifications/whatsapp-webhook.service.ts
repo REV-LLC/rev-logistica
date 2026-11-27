@@ -104,10 +104,49 @@ export class WhatsappWebhookService {
                     : null,
               },
             });
+      const officeResult =
+        documentResult.count ||
+        notificationResult.count ||
+        alertResult.count ||
+        !alertStatus
+          ? { count: 0 }
+          : await this.prisma.whatsappOfficeMessage.updateMany({
+              where: {
+                providerMessageId: status.id,
+                phoneNumberId:
+                  process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() ||
+                  'not-configured',
+                status: {
+                  in:
+                    alertStatus === 'READ'
+                      ? ['SENDING', 'SENT', 'DELIVERED', 'UNCERTAIN', 'FAILED']
+                      : alertStatus === 'DELIVERED'
+                        ? ['SENDING', 'SENT', 'UNCERTAIN']
+                        : alertStatus === 'FAILED'
+                          ? ['SENDING', 'SENT', 'UNCERTAIN']
+                          : ['SENDING', 'UNCERTAIN'],
+                },
+              },
+              data: {
+                status: alertStatus,
+                ...(alertStatus === 'READ'
+                  ? {
+                      readAt: this.occurredAt(status.timestamp),
+                      deliveredAt: this.occurredAt(status.timestamp),
+                    }
+                  : alertStatus === 'DELIVERED'
+                    ? { deliveredAt: this.occurredAt(status.timestamp) }
+                    : alertStatus === 'SENT'
+                      ? { sentAt: this.occurredAt(status.timestamp) }
+                      : {}),
+                error: alertStatus === 'FAILED' ? 'META_DELIVERY_FAILED' : null,
+              },
+            });
       if (
         documentResult.count ||
         notificationResult.count ||
-        alertResult.count
+        alertResult.count ||
+        officeResult.count
       ) {
         processed += 1;
       } else {
