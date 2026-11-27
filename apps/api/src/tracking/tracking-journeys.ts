@@ -2,7 +2,7 @@ import { metersBetween, routeHistory } from './tracking-telemetry';
 import type { NativePosition, telemetry } from './tracking-telemetry';
 
 type Point = NonNullable<ReturnType<typeof telemetry>>;
-export const PARKING_MINUTES = 15;
+export const PARKING_MINUTES = 20;
 const PARKING_MS = PARKING_MINUTES * 60_000;
 const GAP_MS = 10 * 60_000;
 type Journey = {
@@ -14,7 +14,7 @@ type Journey = {
 type Stop = { startedAt: string; resumedAt: string | null; lastReportedAt: string; point: Point; confirmedMinutes: number };
 
 // Derived only from reported GPS. Silence never confirms parking, and inaccurate
-// fixes cannot turn drift into a 15-minute stop or an invented departure.
+// fixes cannot turn drift into a 20-minute stop or an invented departure.
 export function splitJourneys(positions: NativePosition[], deviceId: number, from: number, to: number, now = Date.now()) {
   const history = routeHistory(positions, deviceId, from, to, now);
   const points = history.segments.flat().filter(p => p.accuracyMeters === null || p.accuracyMeters <= 100);

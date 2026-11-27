@@ -72,7 +72,7 @@ export default function FleetMap({ mapboxToken, fleet, selectedId, history, jour
    button.setAttribute('aria-label', kind === 'truck' ? `Ver camión ${label}` : label); button.onclick = click;
    if (kind === 'truck') button.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 5h11v12H3zM14 9h4l3 4v4h-7M6 17a2 2 0 1 0 4 0M16 17a2 2 0 1 0 4 0"/></svg>';
    else button.textContent = badge || 'P';
-   const text = document.createElement('span'); text.className = classes.label; text.textContent = label;
+   const text = document.createElement('span'); text.className = classes.label; text.textContent = label; text.title = label; button.title = label;
    current.element.replaceChildren(button, text);
    if (current.frame !== null) cancelAnimationFrame(current.frame); current.frame = null;
    const changed = current.displayed.latitude !== point.latitude || current.displayed.longitude !== point.longitude;
@@ -88,13 +88,13 @@ export default function FleetMap({ mapboxToken, fleet, selectedId, history, jour
    upsert(`device-${device.id}`, position, device.name, assetColor(device.id), 'truck', () => callbacks.current.onSelect(device.id), animate, Boolean(position.historical) || gpsAge(position).seconds > 90);
    previous.current.set(device.id, position);
   }
-  for (const place of fleet?.places || []) upsert(`place-${place.id}`, place, place.name, place.siteType === 'secondary' ? '#c2410c' : '#1971c2', 'place', () => { callbacks.current.onStopFollowing(); instance.easeTo({ center: [place.longitude, place.latitude] }); }, false, false, place.siteType === 'primary' ? '1' : place.siteType === 'secondary' ? '2' : 'P');
+  for (const place of fleet?.places || []) upsert(`place-${place.id}`, place, place.approximate ? `${place.name} · ubicación aproximada` : place.name, place.approximate ? '#b45309' : place.siteType === 'secondary' ? '#c2410c' : '#1971c2', 'place', () => { callbacks.current.onStopFollowing(); instance.easeTo({ center: [place.longitude, place.latitude] }); }, false, false, place.approximate ? '?' : place.siteType === 'primary' ? '1' : place.siteType === 'secondary' ? '2' : 'P');
   for (const journey of journeys || []) {
    const ends = [{ kind: 'start', point: journey.start, label: journey.startReason === 'window' ? 'Primer GPS' : 'Inicio' }, ...(journey.endReason === 'pause' ? [{ kind: 'end', point: journey.end, label: 'Fin' }] : [])];
    for (const end of ends) upsert(`${journey.id}:${end.kind}`, end.point, `${end.label} · ${localTime(end.point.reportedAt)}`, end.kind === 'start' ? '#059669' : '#dc2626', 'boundary', () => { callbacks.current.onStopFollowing(); instance.easeTo({ center: [end.point.longitude, end.point.latitude] }); }, false, false, end.kind === 'start' ? 'I' : 'F');
   }
   for (const [key, pin] of pins.current) if (!needed.has(key)) { if (pin.frame !== null) cancelAnimationFrame(pin.frame); pin.marker.remove(); pins.current.delete(key); }
-  if (!didFit.current && fleet) { const points = [...fleet.places, ...fleet.devices.flatMap(d => d.position ? [d.position] : [])]; if (points.length) { fit(instance, points); didFit.current = true; } }
+  if (!didFit.current && fleet) { const positions = fleet.devices.flatMap(d => d.position ? [d.position] : []); const points = positions.length ? [...fleet.places.filter(p => p.siteType === 'primary' || p.siteType === 'secondary'), ...positions] : fleet.places; if (points.length) { fit(instance, points); didFit.current = true; } }
   const selected = fleet?.devices.find(d => d.id === selectedId)?.position;
   if (follow && selected) instance.easeTo({ center: [selected.longitude, selected.latitude], duration: 500 });
  }, [ready, fleet, journeys, selectedId, follow, smoothMovement]);

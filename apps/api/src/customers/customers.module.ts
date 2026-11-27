@@ -1,3 +1,4 @@
+import { TrackingModule } from '../tracking/tracking.module';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -9,7 +10,7 @@ import { WorksitesController } from './worksites.controller';
 import { PublicCustomerUpdatesController } from './public-customer-updates.controller';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, TrackingModule],
   controllers: [CustomersController, WorksitesController, PublicCustomerUpdatesController],
   providers: [CustomersService, CustomerRutPdfParserService, WorksiteAddressValidationService],
 })

@@ -6,8 +6,8 @@ export type GpsPosition = {
   historical?: boolean;
 };
 export type FleetDevice = { trackingPolicy?: { assetKind: 'vehicle' | 'machine'; mode: 'continuous' | 'reduced'; intervalSeconds: number; roadMatching: boolean };  trackingProtocol?: string | null; id: number; name: string; connection: string; lastConnectionAt: string | null; position: GpsPosition | null; latestReport?: { valid: boolean; reportedAt: string; receivedAt: string | null; ignition: boolean | null; batteryPercent?: number | null; batterySource?: string | null; batteryProvisional?: boolean; charging?: boolean | null } | null; knownPlaces: { id: number; name: string }[] };
-export type FleetPlace = { id: number; name: string; latitude: number; longitude: number; radiusMeters: number; siteType: string | null };
-export type FleetState = { fetchedAt: string; refreshSeconds: number; devices: FleetDevice[]; places: FleetPlace[] };
+export type FleetPlace = { approximate?: boolean; id: number; name: string; latitude: number; longitude: number; radiusMeters: number; siteType: string | null };
+export type FleetState = { placeSync?: { total: number; located: number; pending: number; needsReview: number; errors: number; geocodingEnabled: boolean }; fetchedAt: string; refreshSeconds: number; devices: FleetDevice[]; places: FleetPlace[] };
 export type Journey = { id: string; startedAt: string; endedAt: string | null; lastReportedAt: string;
   start: GpsPosition; end: GpsPosition; status: 'closed' | 'active' | 'unknown' | 'gap';
   startReason: 'pause' | 'window' | 'gap'; endReason: 'pause' | 'gap' | null;

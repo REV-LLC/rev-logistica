@@ -2,8 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, HttpExcepti
 import { telemetry, routeHistory, batteryTelemetry } from './tracking-telemetry';
 import type { NativePosition } from './tracking-telemetry';
 import { TrackingMapService } from './tracking-map.service';
-import { splitJourneys } from './tracking-journeys';
+import { PARKING_MINUTES, splitJourneys } from './tracking-journeys';
 import { TraccarLive } from './traccar-live';
+import { TrackingLocationsService } from './tracking-locations.service';
 import { TrackingMatchingService } from './tracking-matching.service';
 const { validatePolicy, devicePolicy, FleetPublication, CadencedNotifications } = require('./engine/tracking-policy.cjs');
 const policy = validatePolicy(require('./engine/tracking-policy.json'));
@@ -34,7 +35,7 @@ function recentPosition(position?: TrackingPosition) {
   const age = Date.now() - Date.parse(position!.fixTime);
   return age >= -60_000 && age <= MAX_POSITION_AGE;
 }
-function distanceMeters(a: TrackingPosition, b: { latitude: number; longitude: number }) {
+function distanceMeters(a: Pick<TrackingPosition, 'latitude' | 'longitude'>, b: { latitude: number; longitude: number }) {
   const radians = (value: number) => value * Math.PI / 180;
   const h = Math.sin(radians(b.latitude - a.latitude) / 2) ** 2
     + Math.cos(radians(a.latitude)) * Math.cos(radians(b.latitude)) * Math.sin(radians(b.longitude - a.longitude) / 2) ** 2;
@@ -57,7 +58,7 @@ export class TrackingService {
   private fleetCache: { key: string; at: number; value: ReturnType<TrackingService['loadFleet']> } | undefined;
   private readonly historyCache = new Map<string, { at: number; value: Promise<any> }>();
   private readonly pending = new Map<string, Promise<unknown>>();
-  constructor(private readonly prisma: PrismaService, private readonly maps: TrackingMapService, private readonly matching?: TrackingMatchingService) {}
+  constructor(private readonly prisma: PrismaService, private readonly maps: TrackingMapService, private readonly matching?: TrackingMatchingService, private readonly locations?: TrackingLocationsService) {}
 
   async createSession(identity: TrackingIdentity) {
     const previous = this.pending.get(identity.sub) || Promise.resolve();
@@ -232,13 +233,16 @@ export class TrackingService {
         this.request<(TrackingDevice & { status?: string; lastUpdate?: string })[]>(server, '/api/devices?all=true', admin).then(value => activeDevices(value) as (TrackingDevice & { status?: string; lastUpdate?: string })[]),
         this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
       ]);
-      const places = nativePlaces.filter(p => p.attributes?.revKnownPlace === true && circle(p))
-        .map(p => ({ id: p.id, name: p.name, ...circle(p)!, siteType: ['primary', 'secondary'].includes(String(p.attributes?.revSiteType)) ? String(p.attributes.revSiteType) : null }));
+      const nativePoints = nativePlaces.filter(p => p.attributes?.revKnownPlace === true && circle(p))
+        .map(p => ({ id: p.id, name: p.name, ...circle(p)!, siteType: ['primary', 'secondary'].includes(String(p.attributes?.revSiteType)) ? String(p.attributes.revSiteType) : null, approximate:false }));
+      const imported = this.locations?.snapshot();
+      const places = [...nativePoints, ...(imported?.places || []).filter(p => !nativePoints.some(native =>
+        native.name.trim().toUpperCase() === p.name.trim().toUpperCase() && distanceMeters(p, native) < 100))];
       const query = new URLSearchParams();
       for (const d of devices) if (d.positionId) query.append('id', String(d.positionId));
       const positions = query.size ? await this.request<NativePosition[]>(server, `/api/positions?${query}`, admin) : [];
       const now = Date.now();
-      return { fetchedAt: new Date(now).toISOString(), refreshSeconds: 5, places,
+      return { fetchedAt: new Date(now).toISOString(), refreshSeconds: 5, places, placeSync: imported?.summary,
         devices: await Promise.all(devices.map(async d => {
           const p = positions.find(p => p.deviceId === d.id && p.id === d.positionId);
           const current = telemetry(p, now);
@@ -261,7 +265,7 @@ export class TrackingService {
             latestReport: p ? { valid: p.valid === true, reportedAt: p.fixTime, receivedAt: p.serverTime || null,
               ...batteryTelemetry(p, d.uniqueId),
               ignition: typeof p.attributes?.ignition === 'boolean' ? p.attributes.ignition : null } : null,
-            knownPlaces: current ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
+            knownPlaces: current ? places.filter(place => !place.approximate && distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
         })),
       };
     } catch { throw new ServiceUnavailableException('No fue posible actualizar la flota. Se conserva el último reporte disponible.'); }
@@ -273,7 +277,7 @@ export class TrackingService {
       from: new Date(source.start).toISOString(), to: new Date(source.end).toISOString(),
       ...routeHistory(source.positions, source.deviceId, source.start, source.end),
       ...splitJourneys(source.positions, source.deviceId, source.start, source.end),
-      archive: { retentionDays:30, parkingMinutes:15, syncing:false, lastSyncAt:new Date().toISOString(),
+      archive: { retentionDays:30, parkingMinutes:PARKING_MINUTES, syncing:false, lastSyncAt:new Date().toISOString(),
         earliestReportedAt:source.positions.filter(p=>p.valid).map(p=>p.fixTime).sort()[0] || null,
         storedPoints:source.positions.length, error:null } };
   }

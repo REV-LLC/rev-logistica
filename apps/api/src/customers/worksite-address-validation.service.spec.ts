@@ -59,6 +59,20 @@ describe('WorksiteAddressValidationService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('persists the map location for both the written and accepted Google address', async () => {
+    fetchMock.mockResolvedValue(reply(200,success()));
+    const locations={rememberValidatedAddress:jest.fn().mockResolvedValue('located')};
+    const value=await new WorksiteAddressValidationService(locations as never).validate({address:'Carrera 7 #32-16',city:'Bogotá'});
+    expect(locations.rememberValidatedAddress).toHaveBeenCalledWith('Carrera 7 #32-16','Avenida Carrera 7 #32-16, Bogotá, Colombia',expect.objectContaining({location:{lat:4.62,lng:-74.07},countryCode:'CO'}));
+    expect(value.mapLocationStatus).toBe('located');
+  });
+  it('does not invalidate a valid address if saving its map point temporarily fails', async () => {
+    fetchMock.mockResolvedValue(reply(200,success()));
+    const locations={rememberValidatedAddress:jest.fn().mockRejectedValue(new Error('storage unavailable'))};
+    const value=await new WorksiteAddressValidationService(locations as never).validate({address:'Carrera 7 #32-16',city:'Bogotá'});
+    expect(value.formattedAddress).toContain('Bogotá');expect(value.mapLocationStatus).toBe('error');
+  });
+
   it('does not retry malformed input responses', async () => {
     fetchMock.mockResolvedValue(reply(400, { error: { message: 'Invalid address' } }));
     await expect(service.validate({ address: 'Carrera 7' })).rejects.toBeInstanceOf(BadRequestException);

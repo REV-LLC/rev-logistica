@@ -1,22 +1,22 @@
 import { splitJourneys } from './tracking-journeys';
 import type { NativePosition } from './tracking-telemetry';
 
-describe('Recorded journeys separated by confirmed 15-minute parking', () => {
+describe('Recorded journeys separated by confirmed 20-minute parking', () => {
   const start = Date.parse('2026-11-19T10:00:00Z');
   const point = (minute: number, moving = false, patch: Partial<NativePosition> = {}): NativePosition => ({
     id: minute + 1, deviceId: 2, valid: true, latitude: moving ? 3.44 + minute / 1000 : 3.442,
     longitude: -76.53, accuracy: 10, speed: moving ? 10 : 0,
     fixTime: new Date(start + minute * 60_000).toISOString(), ...patch });
-  const split = (points: NativePosition[], now = start + 25 * 60_000) => splitJourneys(points, 2, start, now, now);
+  const split = (points: NativePosition[], now = start + 32 * 60_000) => splitJourneys(points, 2, start, now, now);
   it('ends at the first stationary report after confirmation and restarts at the next movement', () => {
-    const result = split([point(0, true), point(1, true), point(2), point(7), point(12), point(17), point(20, true), point(21, true)]);
+    const result = split([point(0, true), point(1, true), point(2), point(7), point(12), point(17), point(22), point(25, true), point(26, true)]);
     expect(result.journeys).toHaveLength(2);
     expect(result.journeys[0]).toMatchObject({ startedAt: point(0).fixTime, endedAt: point(2).fixTime, status: 'closed', endReason: 'pause' });
-    expect(result.journeys[1]).toMatchObject({ startedAt: point(20).fixTime, endedAt: null, startReason: 'pause' });
-    expect(result.stops[0]).toMatchObject({ startedAt: point(2).fixTime, resumedAt: point(20).fixTime, confirmedMinutes: 15 });
+    expect(result.journeys[1]).toMatchObject({ startedAt: point(25).fixTime, endedAt: null, startReason: 'pause' });
+    expect(result.stops[0]).toMatchObject({ startedAt: point(2).fixTime, resumedAt: point(25).fixTime, confirmedMinutes: 20 });
   });
-  it('does not split a 14-minute stop or a traffic pause', () => {
-    const result = split([point(0, true), point(2), point(7), point(12), point(16), point(17, true), point(22, true)]);
+  it('does not split a 19-minute stop or a traffic pause', () => {
+    const result = split([point(0, true), point(2), point(7), point(12), point(17), point(21), point(22, true), point(23, true)]);
     expect(result.journeys).toHaveLength(1); expect(result.stops).toHaveLength(0);
     expect(result.journeys[0].endedAt).toBeNull();
   });
