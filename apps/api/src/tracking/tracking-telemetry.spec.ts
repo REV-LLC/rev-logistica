@@ -1,4 +1,4 @@
-import { routeHistory, telemetry } from './tracking-telemetry';
+import { routeHistory, telemetry, batteryTelemetry } from './tracking-telemetry';
 
 describe('Tracking telemetry evidence', () => {
   const now = Date.parse('2026-11-18T14:00:00Z');
@@ -12,6 +12,22 @@ describe('Tracking telemetry evidence', () => {
   it('does not invent a missing or invalid battery value', () => {
     expect(telemetry({ ...point, attributes: {} }, now)?.batteryPercent).toBeNull();
     expect(telemetry({ ...point, attributes: { batteryLevel: 101 } }, now)?.batteryPercent).toBeNull();
+  });
+  it('reads io8 only for the scoped H02 pilot and labels it provisional, including zero', () => {
+    const gps = { ...point, protocol: 'h02', attributes: { io5: '19', io8: '100' } };
+    expect(batteryTelemetry(gps, '9210199160')).toMatchObject({ batteryPercent: 100, batterySource: 'io8', batteryProvisional: true, charging: null });
+    expect(batteryTelemetry({ ...gps, attributes: { io8: '0' } }, '9210199160').batteryPercent).toBe(0);
+    expect(batteryTelemetry(gps, 'other').batteryPercent).toBeNull();
+    expect(batteryTelemetry({ ...gps, protocol: 'osmand' }, '9210199160').batteryPercent).toBeNull();
+    for (const io8 of ['', ' ', '101', '-1', '100abc', false, null, NaN, Infinity]) {
+      expect(batteryTelemetry({ ...gps, attributes: { io8 } }, '9210199160').batteryPercent).toBeNull();
+    }
+    expect(batteryTelemetry({ ...gps, attributes: { io5: '19' } }, '9210199160').batteryPercent).toBeNull();
+  });
+  it('prefers native battery and accepts a device report independently of GPS validity', () => {
+    expect(batteryTelemetry({ ...point, valid: false, protocol: 'h02', attributes: { io8: '100', batteryLevel: 0, charge: false } }, '9210199160'))
+      .toEqual({ batteryPercent: 0, batterySource: 'batteryLevel', batteryProvisional: false, charging: false });
+    expect(batteryTelemetry(undefined).batteryPercent).toBeNull();
   });
   it.each([{ valid: false }, { latitude: 91 }, { longitude: NaN }, { fixTime: 'invalid' }, { fixTime: new Date(now + 61_000).toISOString() }])('rejects unusable coordinates or time %j', patch => {
     expect(telemetry({ ...point, ...patch }, now)).toBeNull();

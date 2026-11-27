@@ -30,11 +30,14 @@ export class TrackingController {
     }, 15_000);
     response.on('close', () => { clearInterval(timer); dispose(); });
   }
-  @Get('road-match')
+  @Get('map-matching')
   @Header('Cache-Control', 'no-store')
-  matchRoads(@Req() request: { user: TrackingIdentity }, @Query('deviceId') id: string, @Query('from') from: string, @Query('to') to: string) {
-    return this.tracking.matchRoads(request.user, id, from, to);
+  matchRoads(@Req() request: { user: TrackingIdentity }, @Query('deviceId') id: string, @Query('from') from: string, @Query('to') to: string, @Query('journeyId') journeyId: string) {
+    return this.tracking.matchRoads(request.user, id, from, to, journeyId);
   }
+  @Get('matching-usage')
+  @Header('Cache-Control', 'no-store')
+  matchingUsage(@Req() request: { user: TrackingIdentity }) { return this.tracking.matchingUsage(request.user); }
   @Get('fleet')
   @Header('Cache-Control', 'no-store')
   getFleet(@Req() request: { user: TrackingIdentity }) {
