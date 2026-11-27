@@ -9,7 +9,35 @@
 @media(max-width:900px) { .layout{grid-template-columns:minmax(0,1fr);} .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));} .vehicle{padding:12px;} }
 @media(max-width:520px) { .list{display:flex;flex-direction:row;overflow-x:auto;padding:3px;scroll-snap-type:x proximity;} .vehicle{min-width:245px;scroll-snap-align:start;} }
 
-.journeys { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px; max-height:380px; overflow-y:auto; padding:3px; }
-.journey { width:100%; padding:12px; border:1px solid var(--mantine-color-default-border); border-radius:10px; background:var(--mantine-color-body); color:inherit; text-align:left; cursor:pointer; }
-.journey:hover { border-color:#0f766e; }
-.journey:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.routePanel { overflow:hidden; }
+.routeHeader { display:flex;flex-wrap:wrap; justify-content:space-between; align-items:center; gap:20px; padding:22px 24px; }
+.routeIcon { display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;background:light-dark(#f1f5f9,#ffffff09);border-radius:12px; }
+.routeFilters { display:flex;gap:10px;align-items:flex-end;flex-shrink:0; }
+.routeFilters > :not(button) { width:180px; }
+.routeToolbar { display:flex;justify-content:space-between;align-items:center;gap:20px;padding:16px 24px;border-top:1px solid var(--mantine-color-default-border);border-bottom:1px solid var(--mantine-color-default-border);background:light-dark(#f8fafc,#ffffff03); }
+.routeMetrics { display:flex;gap:40px;align-items:center; }
+.traceControl { min-width:260px; }
+.journeySection { padding:16px 24px; }
+.journeyList { display:flex;flex-direction:column;gap:6px;max-height:370px;overflow-y:auto;padding:3px; }
+.journeyRow { display:grid;grid-template-columns:12px minmax(160px,1fr) minmax(300px,1.6fr) 90px 18px;align-items:center;gap:16px;width:100%;padding:16px;text-align:left;color:inherit;background:transparent;border:1px solid var(--mantine-color-default-border);border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s; }
+.journeyRow:hover { background:light-dark(#f8fafc,#ffffff05);border-color:var(--journey-color); }
+.journeyRow:focus-visible { outline:3px solid #2563eb;outline-offset:1px; }
+.journeySelected { border-color:var(--journey-color);background:light-dark(#f8fafc,#ffffff06);box-shadow:inset 3px 0 var(--journey-color); }
+.journeyDot { width:9px;height:9px;border:2px solid var(--journey-color);border-radius:50%; }
+.journeySelected .journeyDot { background:var(--journey-color); }
+.journeyIdentity { display:flex;gap:12px;align-items:center;flex-wrap:wrap; }
+.journeyName { font-size:14px;font-weight:650; }
+.journeyTimes { display:flex;align-items:center;gap:20px;font-size:13px; }
+.journeyTimes > span:not(.timeArrow) { display:flex;flex-direction:column;gap:3px; }
+.journeyTimes small,.journeyDistance small { color:var(--mantine-color-dimmed);font-size:11px;font-weight:400; }
+.timeArrow,.journeyChevron { color:var(--mantine-color-dimmed); }
+.journeyDistance { display:flex;flex-direction:column;text-align:right;gap:2px;font-size:17px;font-weight:650;font-variant-numeric:tabular-nums; }
+.journeyEmpty { min-height:115px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:var(--mantine-color-dimmed);text-align:center;padding:16px; }
+.routeDetails { border-top:1px solid var(--mantine-color-default-border); }
+.routeDetails :global(.mantine-Accordion-item) { border-bottom:0; }
+.routeDetails :global(.mantine-Accordion-control) { padding:10px 24px;color:var(--mantine-color-dimmed);font-size:12px; }
+.routeDetails :global(.mantine-Accordion-content) { padding:4px 24px 20px; }
+@media(max-width:1100px) { .routeHeader{align-items:flex-start;flex-direction:column;gap:16px;} .routeFilters{width:100%;} .routeFilters > :not(button){flex:1;width:auto;min-width:0;} }
+@media(max-width:700px) { .routeHeader,.routeToolbar,.journeySection{padding:16px;} .routeToolbar{align-items:stretch;flex-direction:column;gap:16px;} .routeMetrics{gap:32px;} .traceControl{min-width:0;} .traceControl :global(.mantine-SegmentedControl-root){width:100%;} .routeFilters{flex-wrap:wrap;} .routeFilters > :not(button){min-width:130px;} .routeFilters > button{flex:1;} .journeyRow{grid-template-columns:10px minmax(0,1fr) 64px;gap:12px;padding:14px;} .journeyIdentity{gap:8px;grid-column:2;grid-row:1;} .journeyTimes{grid-column:2;grid-row:2;gap:12px;font-size:12px;} .journeyDistance{grid-column:3;grid-row:1 / span 2;} .journeyChevron{display:none;} .journeyDot{grid-column:1;grid-row:1;} .routeDetails :global(.mantine-Accordion-control){padding-inline:16px;} }
+@media(max-width:520px) { .routeFilters{display:grid;grid-template-columns:minmax(0,1fr);} .routeFilters > :not(button){width:100%;min-width:0;} .routeFilters > button{width:100%;} .journeyTimes{gap:10px;} }
+@media(min-width:1101px) { .routeFilters .routeDate{width:240px;} .routeFilters .routeSelector{width:260px;} }

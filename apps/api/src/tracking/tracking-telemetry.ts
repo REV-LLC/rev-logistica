@@ -1,11 +1,28 @@
 export type NativePosition = {
-  id: number; deviceId: number; latitude: number; longitude: number; valid: boolean;
+  id: number; deviceId: number; protocol?: string; latitude: number; longitude: number; valid: boolean;
   fixTime: string; serverTime?: string; speed?: number; course?: number; accuracy?: number;
   attributes?: Record<string, unknown>;
 };
 
 const bounded = (value: unknown, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : null;
+
+// Local pilot profile: io8 is a candidate percentage, not a universal H02 mapping.
+// Keep native values authoritative and never interpret io5 (satellites on this unit).
+export function batteryTelemetry(position: NativePosition | undefined, uniqueId?: string) {
+  const attributes = position?.attributes || {};
+  const native = bounded(attributes.batteryLevel, 0, 100);
+  const candidate = uniqueId === '9210199160' && position?.protocol === 'h02'
+    ? attributes.io8 : undefined;
+  const parsed = typeof candidate === 'string' && /^\d{1,3}$/.test(candidate)
+    ? bounded(Number(candidate), 0, 100) : bounded(candidate, 0, 100);
+  return {
+    batteryPercent: native ?? parsed,
+    batterySource: native !== null ? 'batteryLevel' : parsed !== null ? 'io8' : null,
+    batteryProvisional: native === null && parsed !== null,
+    charging: typeof attributes.charge === 'boolean' ? attributes.charge : null,
+  };
+}
 
 export function telemetry(position: NativePosition | undefined, now = Date.now()) {
   if (!position?.valid || bounded(position.latitude, -90, 90) === null || bounded(position.longitude, -180, 180) === null) return null;

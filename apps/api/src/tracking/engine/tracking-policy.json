@@ -1,0 +1,10 @@
+{
+  "source": "docs/10-anexos-prefacturas.md:232-233 · Horario REV confirmado",
+  "vehicleIds": [2, 3],
+  "slowSeconds": 30,
+  "workWindows": [
+    { "days": [1, 2, 3, 4, 5], "start": "07:30", "end": "12:00" },
+    { "days": [1, 2, 3, 4, 5], "start": "13:00", "end": "16:00" },
+    { "days": [6], "start": "07:00", "end": "11:00" }
+  ]
+}
