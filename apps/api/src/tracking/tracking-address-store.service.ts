@@ -11,18 +11,25 @@ export class TrackingAddressStoreService {
  enabled() { return process.env.TRACKING_CUSTOMER_GEOCODING_ENABLED==='true' && Boolean(process.env.TRACKING_GEOCODING_TOKEN || process.env.MAPBOX_ACCESS_TOKEN); }
  async rememberValidatedAddress(inputAddress: string, formattedAddress: string) {
   const result=await this.resolve(formattedAddress);
-  if (result?.status==='located') {
+  if (result) {
    const alias=groupAddresses([{address:inputAddress,name:'address'}])[0];
    if (alias && alias.key!==result.key) await this.prisma.trackingAddressLocation.upsert({where:{key:alias.key},
-    create:{key:alias.key,address:inputAddress,status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider},
-    update:{status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider,retryAfter:null}});
+    create:{key:alias.key,address:inputAddress,canonicalKey:result.key,status:result.status==='located'?'located':'pending',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider},
+    update:{canonicalKey:result.key,...(result.status==='located'?{status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider,retryAfter:null}:{})}});
   }
   return result?.status || 'pending';
  }
- async resolve(address: string) {
+ async resolve(address: string, visited = new Set<string>()) {
   const group=groupAddresses([{address,name:'address'}])[0];
-  if (!group) return null;
+  if (!group || visited.has(group.key)) return null;
+  visited.add(group.key);
   let row=await this.prisma.trackingAddressLocation.upsert({where:{key:group.key},create:{key:group.key,address},update:{}});
+  if (row.canonicalKey && row.canonicalKey!==row.key && this.enabled()) {
+   const canonical=await this.prisma.trackingAddressLocation.findUnique({where:{key:row.canonicalKey}});
+   const result=canonical && await this.resolve(canonical.address,visited);
+   if (result?.status==='located') return this.prisma.trackingAddressLocation.update({where:{key:row.key},data:{status:'located',latitude:result.latitude,longitude:result.longitude,resolvedAddress:result.resolvedAddress,provider:result.provider,retryAfter:null}});
+   return row;
+  }
   if (!this.enabled() || row.status==='located' || row.status==='needs_review' || row.attempts>=3 || Date.now()<this.retryAt) return row;
   const now=new Date();
   const claim=await this.prisma.trackingAddressLocation.updateMany({where:{key:group.key,attempts:{lt:3},OR:[{status:'pending'},{status:'error',retryAfter:{lte:now}},{status:'processing',lastAttemptAt:{lt:new Date(now.getTime()-120_000)}}]},data:{status:'processing',lastAttemptAt:now,attempts:{increment:1}}});

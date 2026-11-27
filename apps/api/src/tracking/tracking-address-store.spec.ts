@@ -15,6 +15,7 @@ describe('Persisting future address validations',()=>{
   const upsert=jest.fn().mockResolvedValue({key:'key',status:'needs_review'});
   const service=new TrackingAddressStoreService({trackingAddressLocation:{upsert}} as never);
   expect(await service.rememberValidatedAddress('Calle 5','Calle 5, Colombia')).toBe('needs_review');
-  expect(upsert).toHaveBeenCalledTimes(1);
+  expect(upsert).toHaveBeenCalledTimes(2);
+  expect(upsert.mock.calls[1][0].create).toMatchObject({canonicalKey:'key',status:'pending'});
  });
 });

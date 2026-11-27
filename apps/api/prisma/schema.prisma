@@ -2352,6 +2352,7 @@ model WhatsappCustomerRequest {
 // Permanent address results are reused across customers/worksites and map openings.
 model TrackingAddressLocation {
   key             String   @id
+  canonicalKey    String?
   address         String
   status          String   @default("pending")
   latitude        Float?
