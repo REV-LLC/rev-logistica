@@ -22,12 +22,12 @@ describe('Customer point synchronization',()=>{
  });
  it('stores a Google response once per address and never consults on map openings',async()=>{
   process.env.TRACKING_CUSTOMER_GEOCODING_ENABLED='true';process.env.GOOGLE_MAPS_API_KEY='test-key';
-  fetcher.mockImplementation(async url=>{expect(new URL(String(url)).hostname).toBe('addressvalidation.googleapis.com');return new Response(JSON.stringify({result:{address:{formattedAddress:'Carrera 22 #5a-07, Cali',postalAddress:{regionCode:'CO'}},geocode:{location:{latitude:3.44,longitude:-76.53},placeId:'place'},verdict:{geocodeGranularity:'PREMISE'}}}));});
+  fetcher.mockImplementation(async url=>{expect(new URL(String(url)).hostname).toBe('addressvalidation.googleapis.com');return new Response(JSON.stringify({result:{address:{formattedAddress:'Carrera 22 #5a-07, Cali',postalAddress:{regionCode:'CO',locality:'Cali'}},geocode:{location:{latitude:3.44,longitude:-76.53},placeId:'place'},verdict:{geocodeGranularity:'PREMISE'}}}));});
   const service=new TrackingLocationsService(prisma,new TrackingAddressStoreService(prisma));await service.refresh();await service.refresh();service.snapshot();service.snapshot();
   expect(fetcher).toHaveBeenCalledTimes(1);expect(rows[0]).toMatchObject({status:'located',attempts:1,provider:'google-address-validation'});expect(rows[0].expiresAt).toBeInstanceOf(Date);expect(service.snapshot().places).toHaveLength(1);
  });
  it('does not repeatedly query ambiguous addresses',async()=>{
-  process.env.TRACKING_CUSTOMER_GEOCODING_ENABLED='true';process.env.GOOGLE_MAPS_API_KEY='test-key';fetcher.mockResolvedValue(new Response(JSON.stringify({result:{address:{formattedAddress:'Carrera 22 #5a-07, Cali',postalAddress:{regionCode:'CO'}},geocode:{location:{latitude:3.44,longitude:-76.53}},verdict:{geocodeGranularity:'ROUTE'}}})));
+  process.env.TRACKING_CUSTOMER_GEOCODING_ENABLED='true';process.env.GOOGLE_MAPS_API_KEY='test-key';fetcher.mockResolvedValue(new Response(JSON.stringify({result:{address:{formattedAddress:'Carrera 22 #5a-07, Cali',postalAddress:{regionCode:'CO',locality:'Cali'}},geocode:{location:{latitude:3.44,longitude:-76.53}},verdict:{geocodeGranularity:'ROUTE'}}})));
   const service=new TrackingLocationsService(prisma,new TrackingAddressStoreService(prisma));await service.refresh();await service.refresh();
   expect(fetcher).toHaveBeenCalledTimes(1);expect(service.snapshot().summary.needsReview).toBe(1);
  });

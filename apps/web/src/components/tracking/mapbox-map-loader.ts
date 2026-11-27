@@ -1,4 +1,5 @@
 export type MapInstance = {
+ getZoom(): number;
  on(event: string, callback: () => void): void; remove(): void;
  addSource(id: string, source: unknown): void; addLayer(layer: unknown): void;
  getSource(id: string): { setData(data: unknown): void } | undefined;
