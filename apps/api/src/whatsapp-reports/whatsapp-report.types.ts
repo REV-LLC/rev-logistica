@@ -81,6 +81,7 @@ export interface IncomingWhatsappMessage {
   type?: string;
   text?: { body?: string };
   image?: { id?: string; caption?: string };
+  audio?: { id?: string; mime_type?: string; voice?: boolean; sha256?: string };
   location?: { latitude?: number; longitude?: number };
   interactive?: {
     button_reply?: { id?: string; title?: string };

@@ -1,3 +1,4 @@
+import { WhatsappAudioController } from './whatsapp-audio.controller';
 import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { WhatsappCustomerController } from './whatsapp-customer.controller';
 import { WhatsappCustomerService } from './whatsapp-customer.service';
@@ -18,7 +19,11 @@ import { WhatsappReportAlertsService } from './whatsapp-report-alerts.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, FilesModule, MailModule],
-  controllers: [WhatsappReportsController, WhatsappCustomerController],
+  controllers: [
+    WhatsappReportsController,
+    WhatsappCustomerController,
+    WhatsappAudioController,
+  ],
   providers: [
     WhatsappCustomerService,
     WhatsappCustomerProfilesService,

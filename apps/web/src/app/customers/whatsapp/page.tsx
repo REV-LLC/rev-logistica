@@ -28,6 +28,7 @@ import {
 import { api, apiBlob } from "@/lib/api";
 import { getCurrentUserRole } from "@/lib/auth";
 import styles from "./whatsapp.module.css";
+import WhatsappAudio from "@/components/WhatsappAudio";
 import ContactReviewModal, {
   type ContactProfile,
   type LinkableRequest,
@@ -64,6 +65,7 @@ type Listing = {
   profilesEnabled?: boolean;
 };
 type Message = {
+  audioAvailable?: boolean;
   id: string;
   text: string;
   type: string;
@@ -639,13 +641,20 @@ export default function CustomerWhatsappPage() {
                           {message.text ||
                             ({
                               image: "Foto recibida",
-                              audio: "Audio recibido · requiere revisión",
+                              audio: "Audio pendiente de escuchar por oficina",
                               document:
                                 "Documento recibido · requiere revisión",
                               location: "Ubicación recibida",
                             }[message.type] ??
                               "Mensaje recibido")}
                         </Text>
+                        {message.type === "audio" && (
+                          <WhatsappAudio
+                            key={message.id}
+                            messageId={message.id}
+                            available={!!message.audioAvailable}
+                          />
+                        )}
                         {message.type === "image" && (
                           <Photo phone={detail.phone} id={message.id} />
                         )}
