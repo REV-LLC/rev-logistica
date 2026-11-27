@@ -1,3 +1,4 @@
+import { WhatsappOfficeService } from './whatsapp-office.service';
 import { WhatsappCustomerProfilesService } from './whatsapp-customer-profiles.service';
 import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -19,6 +20,13 @@ describe('Customer chat access', () => {
     const m = await Test.createTestingModule({
       controllers: [WhatsappCustomerController],
       providers: [
+        {
+          provide: WhatsappOfficeService,
+          useValue: {
+            send: jest.fn().mockResolvedValue({ status: 'SENT' }),
+            list: jest.fn().mockResolvedValue({ messages: [], before: null }),
+          },
+        },
         { provide: WhatsappCustomerService, useValue: service },
         {
           provide: WhatsappCustomerProfilesService,
@@ -142,4 +150,36 @@ describe('Customer chat access', () => {
         .send(body)
         .expect(400);
   });
+  it.each(['ADMIN', 'OFFICE'])(
+    'allows %s to send a validated explicit reply',
+    async (role) => {
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/messages')
+        .set('x-role', role)
+        .send({
+          id: '11111111-2222-4333-8444-555555555555',
+          text: 'Mensaje de oficina',
+        })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/messages')
+        .set('x-role', role)
+        .send({ id: 'invalid', text: '' })
+        .expect(400);
+    },
+  );
+  it.each(['DRIVER', 'OPERATOR', 'EMPLOYEE', 'WAREHOUSE_TABLET'])(
+    'denies %s manual sending and outbound history',
+    async (role) => {
+      await request(app.getHttpServer())
+        .post('/whatsapp-customers/573001234567/messages')
+        .set('x-role', role)
+        .send({ id: '11111111-2222-4333-8444-555555555555', text: 'No enviar' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/whatsapp-customers/573001234567/office-messages')
+        .set('x-role', role)
+        .expect(403);
+    },
+  );
 });
