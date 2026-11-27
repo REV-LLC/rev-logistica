@@ -2351,10 +2351,13 @@ model WhatsappCustomerRequest {
   @@index([customerWorksiteId])
 }
 
-// Permanent address results are reused across customers/worksites and map openings.
+// Cached address coordinates are reused across customers/worksites and map openings.
 model TrackingAddressLocation {
   key             String   @id
   canonicalKey    String?
+  expiresAt       DateTime?
+  placeId         String?
+  precision       String?
   address         String
   status          String   @default("pending")
   latitude        Float?

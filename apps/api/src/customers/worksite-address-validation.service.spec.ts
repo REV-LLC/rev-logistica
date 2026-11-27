@@ -63,7 +63,7 @@ describe('WorksiteAddressValidationService', () => {
     fetchMock.mockResolvedValue(reply(200,success()));
     const locations={rememberValidatedAddress:jest.fn().mockResolvedValue('located')};
     const value=await new WorksiteAddressValidationService(locations as never).validate({address:'Carrera 7 #32-16',city:'Bogotá'});
-    expect(locations.rememberValidatedAddress).toHaveBeenCalledWith('Carrera 7 #32-16','Avenida Carrera 7 #32-16, Bogotá, Colombia');
+    expect(locations.rememberValidatedAddress).toHaveBeenCalledWith('Carrera 7 #32-16','Avenida Carrera 7 #32-16, Bogotá, Colombia',expect.objectContaining({location:{lat:4.62,lng:-74.07},countryCode:'CO'}));
     expect(value.mapLocationStatus).toBe('located');
   });
   it('does not invalidate a valid address if saving its map point temporarily fails', async () => {

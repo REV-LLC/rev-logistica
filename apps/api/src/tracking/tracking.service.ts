@@ -234,7 +234,7 @@ export class TrackingService {
         this.request<TrackingPlace[]>(server, '/api/geofences?all=true', admin),
       ]);
       const nativePoints = nativePlaces.filter(p => p.attributes?.revKnownPlace === true && circle(p))
-        .map(p => ({ id: p.id, name: p.name, ...circle(p)!, siteType: ['primary', 'secondary'].includes(String(p.attributes?.revSiteType)) ? String(p.attributes.revSiteType) : null }));
+        .map(p => ({ id: p.id, name: p.name, ...circle(p)!, siteType: ['primary', 'secondary'].includes(String(p.attributes?.revSiteType)) ? String(p.attributes.revSiteType) : null, approximate:false }));
       const imported = this.locations?.snapshot();
       const places = [...nativePoints, ...(imported?.places || []).filter(p => !nativePoints.some(native =>
         native.name.trim().toUpperCase() === p.name.trim().toUpperCase() && distanceMeters(p, native) < 100))];
@@ -265,7 +265,7 @@ export class TrackingService {
             latestReport: p ? { valid: p.valid === true, reportedAt: p.fixTime, receivedAt: p.serverTime || null,
               ...batteryTelemetry(p, d.uniqueId),
               ignition: typeof p.attributes?.ignition === 'boolean' ? p.attributes.ignition : null } : null,
-            knownPlaces: current ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
+            knownPlaces: current ? places.filter(place => !place.approximate && distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
         })),
       };
     } catch { throw new ServiceUnavailableException('No fue posible actualizar la flota. Se conserva el último reporte disponible.'); }

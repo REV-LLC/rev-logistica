@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TrackingAddressStoreService } from './tracking-address-store.service';
-import { groupAddresses, customerMapPlaces, usableLocation } from './tracking-addresses';
+import { groupAddresses, customerMapPlaces, mergeCustomerPlaces, usableLocation } from './tracking-addresses';
 
 @Injectable()
 export class TrackingLocationsService implements OnModuleInit, OnModuleDestroy {
@@ -21,6 +21,10 @@ export class TrackingLocationsService implements OnModuleInit, OnModuleDestroy {
   if (this.running || this.stopped) return;
   this.running=true;
   try {
+   // Google coordinate caching is limited to 30 days. Keep identifiers, discard
+   // expired geometry and refresh only through the shared recovery pipeline.
+   await this.prisma.trackingAddressLocation.updateMany({where:{provider:'google-address-validation',expiresAt:{lte:new Date()}},
+    data:{status:'pending',latitude:null,longitude:null,resolvedAddress:null,expiresAt:null,attempts:0}});
    const [customers, worksites] = await Promise.all([
     this.prisma.customer.findMany({where:{active:true,billingAddress:{not:null}},select:{name:true,billingAddress:true}}),
     this.prisma.worksite.findMany({where:{active:true,address:{not:null},customerWorksites:{some:{active:true,customer:{active:true}}}},
@@ -37,8 +41,8 @@ export class TrackingLocationsService implements OnModuleInit, OnModuleDestroy {
    const project=()=>{
     const places=customerMapPlaces(groups,rows),located=new Set(places.map(p=>p.id));
     const unresolved=rows.filter(row=>!located.has(-(parseInt(row.key.slice(0,12),16)+1)));
-    this.value={places,summary:{total:groups.length,located:places.length,pending:unresolved.filter(r=>['pending','processing'].includes(r.status)).length,
-     needsReview:unresolved.filter(r=>r.status==='needs_review').length,errors:unresolved.filter(r=>r.status==='error').length,geocodingEnabled:enabled}};
+    this.value={places:mergeCustomerPlaces(places),summary:{total:groups.length,located:places.length,pending:unresolved.filter(r=>['pending','processing'].includes(r.status)).length,
+     needsReview:rows.filter(r=>r.status==='needs_review').length,errors:unresolved.filter(r=>r.status==='error').length,geocodingEnabled:enabled}};
    };
    project();
    for (const group of groups) {

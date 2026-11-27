@@ -1,6 +1,9 @@
 CREATE TABLE "TrackingAddressLocation" (
   "key" TEXT NOT NULL,
   "canonicalKey" TEXT,
+  "expiresAt" TIMESTAMP(3),
+  "placeId" TEXT,
+  "precision" TEXT,
   "address" TEXT NOT NULL,
   "status" TEXT NOT NULL DEFAULT 'pending',
   "latitude" DOUBLE PRECISION,

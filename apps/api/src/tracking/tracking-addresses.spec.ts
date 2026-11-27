@@ -1,4 +1,4 @@
-import { groupAddresses, customerMapPlaces, permanentAddressResult } from './tracking-addresses';
+import { groupAddresses, customerMapPlaces, mergeCustomerPlaces, googleAddressPoint } from './tracking-addresses';
 describe('Automatic customer map points',()=>{
  const source={address:'Cra 22 #5A-07, Cali',name:'Cliente A'};
  it('groups repeated addresses and reuses worksite coordinates without changing the address',()=>{
@@ -17,14 +17,16 @@ describe('Automatic customer map points',()=>{
  });
  it('never plots failed or missing geocodes or invalid coordinates',()=>{
   const groups=groupAddresses([source,{address:' ',name:'Empty'}]);
-  for (const row of [{key:groups[0].key,status:'needs_review',latitude:3.44,longitude:-76.53},{key:groups[0].key,status:'located',latitude:0,longitude:0}]) expect(customerMapPlaces(groups,[row])).toEqual([]);
+  for (const row of [{key:groups[0].key,status:'pending',latitude:null,longitude:null},{key:groups[0].key,status:'located',latitude:0,longitude:0}]) expect(customerMapPlaces(groups,[row])).toEqual([]);
  });
- const feature=(patch:any={})=>({geometry:{type:'Point'},properties:{feature_type:'address',coordinates:{latitude:3.44,longitude:-76.53,accuracy:'rooftop'},context:{country:{country_code:'CO'}},match_code:{confidence:'high',street:'matched',address_number:'matched',place:'matched'},full_address:'Dirección confirmada',...patch}});
- it('accepts only an actual address in Colombia with a matched city and number',()=>{
-  expect(permanentAddressResult({features:[feature()]})).toMatchObject({latitude:3.44});
-  for(const patch of [{feature_type:'street'},{context:{country:{country_code:'US'}}},{coordinates:{latitude:3.44,longitude:-76.53,accuracy:'approximate'}},{match_code:{confidence:'low'}},{match_code:{confidence:'high',street:'matched',address_number:'matched',place:'inferred'}}])expect(permanentAddressResult({features:[feature(patch)]})).toBeNull();
+ it('marks a general Google coordinate as approximate for display, rather than a confirmed known site',()=>{const groups=groupAddresses([source]);expect(customerMapPlaces(groups,[{key:groups[0].key,status:'needs_review',latitude:3.44,longitude:-76.53}])[0]).toMatchObject({approximate:true});});
+ it('shares a marker for co-located customers while retaining their names',()=>{const groups=groupAddresses([source,{address:'Otra dirección, Cali',name:'Cliente B'}]);const places=customerMapPlaces(groups,groups.map(g=>({key:g.key,status:'located',latitude:3.44,longitude:-76.53})));expect(places).toHaveLength(2);const merged=mergeCustomerPlaces(places);expect(merged).toHaveLength(1);expect(merged[0].name).toBe('Cliente A · Cliente B');});
+ const result=(patch:any={})=>({countryCode:'CO',formattedAddress:'Dirección confirmada',location:{lat:3.44,lng:-76.53},verdict:{geocodeGranularity:'PREMISE'},...patch});
+ it('accepts actual Google coordinates and records precision explicitly',()=>{
+  expect(googleAddressPoint(result())).toMatchObject({latitude:3.44,precise:true});
+  for(const patch of [{countryCode:'US'},{location:null},{location:{lat:0,lng:0}}])expect(googleAddressPoint(result(patch))).toBeNull();
  });
- it('does not silently choose one of two distant plausible locations',()=>{
-  expect(permanentAddressResult({features:[feature(),feature({coordinates:{latitude:4.7,longitude:-74.1,accuracy:'rooftop'}})]})).toBeNull();
+ it('retains general coordinates for review without declaring a building-level fix',()=>{
+  for(const geocodeGranularity of ['ROUTE','OTHER'])expect(googleAddressPoint(result({verdict:{geocodeGranularity}}))).toMatchObject({latitude:3.44,precise:false});
  });
 });

@@ -254,7 +254,7 @@ export default function TrackingWorkspace({ readOnly = false, pilotDeviceId, loc
     {fleet?.placeSync?.total ? <Text size="xs" c="dimmed" aria-label="Ubicaciones de clientes y obras">
       Clientes y obras: {fleet.placeSync.located} de {fleet.placeSync.total} direcciones ubicadas.
       {fleet.placeSync.pending > 0 ? ` ${fleet.placeSync.pending} pendientes de ubicación.` : ''}
-      {fleet.placeSync.needsReview + fleet.placeSync.errors > 0 ? ` ${fleet.placeSync.needsReview + fleet.placeSync.errors} necesitan revisar su dirección o ubicación.` : ''}
+      {fleet.placeSync.needsReview + fleet.placeSync.errors > 0 ? ` ${fleet.placeSync.needsReview + fleet.placeSync.errors} son aproximadas o necesitan revisión.` : ''}
     </Text> : null}
     <div className={classes.layout}>
       <div className={classes.list} aria-label="Camiones de la flota">
