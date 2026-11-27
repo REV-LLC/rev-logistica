@@ -815,3 +815,104 @@ test('envío rechaza fecha u hora inválida antes de guardar o encolar el docume
   assert.deepEqual(calls, []);
   assert.match(errors.at(-1), /una fecha válida y una hora entre 00:00 y 23:59/);
 });
+
+const { useRequestItemEditing } = loadTransportModule('use-request-item-editing.ts');
+function useOwnerEdit({ items, sourceMode = 'warehouse' }) {
+  const [selectedItems, setSelectedItems] = React.useState(items);
+  const editing = useRequestItemEditing({
+    setSelectedItems, sourceMode, setError: noop, freeTagInput: '',
+    sourceOwnerWarehouseId: null, warehouses: [], freeInternalNumber: '',
+    setFreeTagInput: noop, setFreeInternalNumber: noop, setItemsAddedNotice: noop,
+    skuOptions: [{ id: 'cercha', name: 'CERCHA METALICA (3.00 M)', controlType: 'BULK' }],
+  });
+  return { ...editing, selectedItems };
+}
+const verealCerchas = {
+  selectionId: 'cerchas', type: 'bulk', skuId: 'cercha', name: 'CERCHA METALICA (3.00 M)',
+  quantity: 20, availableQuantity: 40, ownerWarehouseId: 'vereal', sourceWarehouseId: 'vereal',
+  bulkKey: 'cercha::vereal::vereal',
+};
+
+test('RM-APP-000088: cambiar Vereal a propia guarda dueño y salida corregidos y la aprobación consulta el inventario propio', async () => {
+  Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value: true });
+  const editing = await mountHook(useOwnerEdit, { items: [verealCerchas] });
+  await act(() => editing.current.updateSelectedOwner(0, 'own'));
+  const row = editing.current.selectedItems[0];
+  assert.equal(row.sourceWarehouseId, 'own');
+  assert.equal(row.ownerWarehouseId, 'own');
+  assert.equal(row.quantity, 20);
+  assert.equal(row.selectionId, 'cerchas');
+  assert.equal(row.bulkKey, 'cercha::own::own');
+  assert.equal(row.availableQuantity, undefined);
+
+  const calls = [], errors = [];
+  let storedDocument;
+  const boundary = { ApiError, api: async (url, options) => {
+    calls.push({ url, options });
+    if (options?.method === 'PATCH') {
+      storedDocument = {
+        id: 'document', type: 'REMISSION', warehouse: { id: 'own' },
+        inventorySourceMode: 'WAREHOUSE', customerWorksite: { id: 'site' },
+        items: options.json.items.map(item => ({ ...item, condition: item.ownerWarehouseId })),
+      };
+      return { id: 'document' };
+    }
+    if (url.endsWith('/provider-remission-requirements')) return { missingProviders: [] };
+    if (url === '/documents/document') return storedDocument;
+    if (url === '/inventory/warehouse/own') return { bulk: [{ skuId: 'cercha', ownerWarehouseId: 'own', quantity: 87 }], serial: [] };
+    return {};
+  } };
+  const { useRequestSubmission } = loadTransportModule('use-request-submission.ts', {
+    '@/lib/api': boundary, '@/lib/offline-queue': { enqueueOfflineOperation: noop, syncOfflineOperations: noop },
+  });
+  const save = await mountHook(useRequestSubmission, {
+    ...submissionOptions, editingRequestId: 'document', selectedItems: editing.current.selectedItems,
+    setError: value => errors.push(value),
+  });
+  await act(() => save.current.handleSubmit());
+  assert.deepEqual(errors.filter(Boolean), []);
+  const patch = calls.find(call => call.options?.method === 'PATCH');
+  assert.equal(patch.options.json.items[0].ownerWarehouseId, 'own');
+  assert.equal(patch.options.json.items[0].sourceWarehouseId, 'own');
+
+  const { loadRequestSourceInventories } = loadTransportModule('request-inventory-source.ts');
+  const inventory = await loadRequestSourceInventories(storedDocument, ['own'], id => boundary.api(`/inventory/warehouse/${id}`));
+  assert.equal(inventory['own::own'].bulk[0].quantity, 87);
+  const { useRequestApproval } = loadTransportModule('use-request-approval.ts', { '@/lib/api': boundary });
+  window.confirm = () => true;
+  const approve = await mountHook(useRequestApproval, approvalOptions);
+  await act(() => approve.current.decideRequest('document', 'APPROVE'));
+  assert.ok(calls.some(call => call.url === '/documents/document/decision'));
+  assert.ok(!calls.some(call => call.url === '/inventory/warehouse/vereal'));
+});
+
+test('corregir dueño conserva una salida distinta por custodia y no mueve el origen de devoluciones', async () => {
+  const custody = await mountHook(useOwnerEdit, { items: [{ ...verealCerchas, sourceWarehouseId: 'custody' }] });
+  await act(() => custody.current.updateSelectedOwner(0, 'own'));
+  assert.equal(custody.current.selectedItems[0].sourceWarehouseId, 'custody');
+  assert.equal(custody.current.selectedItems[0].bulkKey, 'cercha::own::custody');
+  const returned = await mountHook(useOwnerEdit, { items: [verealCerchas], sourceMode: 'on-site' });
+  await act(() => returned.current.updateSelectedOwner(0, 'own'));
+  assert.equal(returned.current.selectedItems[0].sourceWarehouseId, 'vereal');
+});
+
+test('dividir cantidad entre bodegas asigna a cada porción su dueño y su salida sin alterar la otra', async () => {
+  const editing = await mountHook(useOwnerEdit, { items: [verealCerchas] });
+  await act(() => editing.current.splitSelectedItem(0));
+  await act(() => editing.current.updateSelectedOwner(1, 'own'));
+  assert.equal(editing.current.selectedItems[0].ownerWarehouseId, 'vereal');
+  assert.equal(editing.current.selectedItems[0].sourceWarehouseId, 'vereal');
+  assert.equal(editing.current.selectedItems[1].ownerWarehouseId, 'own');
+  assert.equal(editing.current.selectedItems[1].sourceWarehouseId, 'own');
+  assert.equal(editing.current.selectedItems.reduce((sum, row) => sum + row.quantity, 0), 20);
+});
+
+test('resolver una referencia manual después de cambiar el dueño conserva el nuevo origen', async () => {
+  const editing = await mountHook(useOwnerEdit, { items: [{ ...verealCerchas, type: 'free', skuId: undefined, requestedTag: verealCerchas.name }] });
+  await act(() => editing.current.updateSelectedOwner(0, 'own'));
+  await act(() => editing.current.resolveFreeItemToSku(0, 'cercha'));
+  assert.equal(editing.current.selectedItems[0].type, 'bulk');
+  assert.equal(editing.current.selectedItems[0].ownerWarehouseId, 'own');
+  assert.equal(editing.current.selectedItems[0].sourceWarehouseId, 'own');
+  assert.equal(editing.current.selectedItems[0].bulkKey, 'cercha::own::own');
+});
