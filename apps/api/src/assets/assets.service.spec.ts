@@ -135,3 +135,19 @@ describe('AssetsService asset deletion', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
+
+test('editing the asset profile cannot bypass the daily meter limit', async () => {
+  const tx = {
+    asset: { findUniqueOrThrow: jest.fn().mockResolvedValue({ hourMeter: 699.9 }), update: jest.fn() },
+    assetHourReading: {
+      findFirst: jest.fn().mockResolvedValue({ hours: 699.9, recordedAt: new Date(Date.now() - 86_400_000) }),
+      create: jest.fn(),
+    },
+  };
+  const prisma = { asset: { findUnique: jest.fn().mockResolvedValue({ id: 'case' }) }, $transaction: jest.fn(run => run(tx)) };
+  const service = new AssetsService(prisma as never, { del: jest.fn() } as never);
+  await expect(service.updateAsset('case', { hourMeter: 7007.5 }, 'admin'))
+    .rejects.toMatchObject({ response: { code: 'HOUR_METER_DAILY_LIMIT' } });
+  expect(tx.assetHourReading.create).not.toHaveBeenCalled();
+  expect(tx.asset.update).not.toHaveBeenCalled();
+});
