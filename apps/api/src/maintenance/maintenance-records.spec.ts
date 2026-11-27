@@ -17,8 +17,8 @@ function setup(chargeType = 'HOUR', currentHours = 100) {
       create: jest.fn().mockImplementation(async ({ data }) => ({ id: 'completion', ...data })),
     },
     asset: { findUniqueOrThrow: jest.fn().mockResolvedValue({ hourMeter: currentHours }), update: jest.fn() },
-    assetHourReading: { create: jest.fn() },
-    vehicleHourReading: { findFirst: jest.fn().mockResolvedValue({ hours: currentHours }), create: jest.fn() },
+    assetHourReading: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+    vehicleHourReading: { findFirst: jest.fn().mockResolvedValue({ hours: currentHours, recordedAt: new Date('2025-01-01') }), create: jest.fn() },
   };
   const prisma = {
     user: { findFirst: jest.fn().mockImplementation(async ({ where }) => ({ id: where.id })) },
@@ -199,4 +199,16 @@ describe('Direct maintenance records', () => {
     const dto = plainToInstance(RecordMaintenanceDto, { assetId: '73b02e42-f973-4860-add0-d1091d3d238b', tasks: [{ name: 'Aceite', recurrence: { name: 'Aceite', intervalHours: -1, recipients: [] } }] });
     expect((await validate(dto)).some((error) => error.property === 'tasks')).toBe(true);
   });
+});
+
+test('a maintenance entry cannot bypass the daily meter limit or create partial completions', async () => {
+  const { service, tx, payload } = setup('HOUR', 699.9);
+  payload.completedAt = new Date().toISOString();
+  payload.completedAtHours = 7007.5;
+  tx.assetHourReading.findFirst.mockResolvedValue({ hours: 699.9, recordedAt: new Date(Date.now() - 86_400_000) });
+  await expect(service.recordMaintenance(payload, 'admin')).rejects.toMatchObject({ response: { code: 'HOUR_METER_DAILY_LIMIT' } });
+  expect(tx.maintenanceCompletion.create).not.toHaveBeenCalled();
+  expect(tx.maintenanceItem.create).not.toHaveBeenCalled();
+  expect(tx.asset.update).not.toHaveBeenCalled();
+  expect(tx.assetHourReading.create).not.toHaveBeenCalled();
 });

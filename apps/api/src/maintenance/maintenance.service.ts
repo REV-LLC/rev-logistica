@@ -1,3 +1,4 @@
+import { assertHourMeterIncrease } from '../common/hour-meter-limit';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ChargeType, Prisma, Role, WarehouseType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -114,6 +115,17 @@ export class MaintenanceService {
 
     return this.prisma.$transaction(async (tx) => {
       const subjectWhere = payload.assetId ? { assetId: payload.assetId } : { vehicleId: payload.vehicleId! };
+      // Validate before creating completions or schedules, including this route's
+      // implicit meter update. Earlier maintenance below today's meter is valid.
+      if (scheduleType === 'HOURS') {
+        const current = payload.assetId
+          ? (await tx.asset.findUniqueOrThrow({ where: { id: payload.assetId }, select: { hourMeter: true } })).hourMeter
+          : (await tx.vehicleHourReading.findFirst({ where: { vehicleId: payload.vehicleId! }, orderBy: { hours: 'desc' } }))?.hours ?? 0;
+        if (new Prisma.Decimal(payload.completedAtHours!).gt(current)) {
+          await assertHourMeterIncrease(tx, payload.assetId ? { assetId: payload.assetId } : { vehicleId: payload.vehicleId! },
+            current, payload.completedAtHours!, completedAt);
+        }
+      }
       const completions: Array<{ id: string }> = [];
       const reusableWhere = { plan: { ...subjectWhere, active: true }, OR: [{ active: true }, { intervalHours: null, intervalDays: null }] };
       const normalizeName = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -461,8 +473,11 @@ export class MaintenanceService {
       if (payload.hours < latestHours) {
         throw new BadRequestException(`Hours cannot decrease below ${latestHours}`);
       }
+      const recordedAt = payload.recordedAt ? new Date(payload.recordedAt) : new Date();
+      await assertHourMeterIncrease(tx, subject === 'asset' ? { assetId: id } : { vehicleId: id },
+        latestHours, payload.hours, recordedAt);
       const data = {
-        hours: payload.hours, recordedAt: payload.recordedAt ? new Date(payload.recordedAt) : new Date(),
+        hours: payload.hours, recordedAt,
         note: payload.note?.trim() || null, recordedByUserId: userId,
       };
       if (payload.hours === latestHours && subject === 'vehicle') {

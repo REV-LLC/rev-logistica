@@ -27,6 +27,7 @@ describe('MaintenanceService', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       assetHourReading: {
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'reading-1', hours: 251 }),
       },
     };
@@ -79,5 +80,27 @@ describe('operator reported hours validation', () => {
   it.each([0, 6, 6.25])('accepts reported hours %s', async (hours) => {
     const payload = Object.assign(new RecordAssetHoursDto(), { hours: 241, operatorReportedHours: hours });
     expect(await validate(payload)).toEqual([]);
+  });
+});
+
+describe('daily meter limit on operator reports', () => {
+  it('rejects a jump before writing either the meter or its reading', async () => {
+    const tx = {
+      asset: { findUniqueOrThrow: jest.fn().mockResolvedValue({ hourMeter: 699.9 }), update: jest.fn() },
+      assetHourReading: {
+        findFirst: jest.fn().mockResolvedValue({ hours: 699.9, recordedAt: new Date(Date.now() - 86_400_000) }),
+        create: jest.fn(),
+      },
+    };
+    const prisma = {
+      asset: { findUnique: jest.fn().mockResolvedValue({ id: 'case', sku: { chargeType: ChargeType.HOUR }, warehouseOwner: { type: WarehouseType.OWN } }) },
+      fileObject: { findFirst: jest.fn().mockResolvedValue({ id: 'photo' }) },
+      $transaction: jest.fn((run) => run(tx)),
+    };
+    const service = new MaintenanceService(prisma as never, {} as never);
+    await expect(service.recordAssetHours('case', { hours: 7007.5, operatorReportedHours: 8.5, evidenceFileObjectId: 'photo' }, 'operator', Role.OPERATOR))
+      .rejects.toMatchObject({ response: { code: 'HOUR_METER_DAILY_LIMIT' } });
+    expect(tx.asset.update).not.toHaveBeenCalled();
+    expect(tx.assetHourReading.create).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,4 @@
+import { assertHourMeterIncrease } from '../common/hour-meter-limit';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
@@ -586,6 +587,7 @@ export class AssetsService {
             );
           }
           if (payload.hourMeter > Number(current.hourMeter)) {
+            await assertHourMeterIncrease(tx, { assetId }, current.hourMeter, payload.hourMeter, new Date());
             await tx.assetHourReading.create({
               data: {
                 assetId,
