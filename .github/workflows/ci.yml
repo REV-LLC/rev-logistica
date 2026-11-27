@@ -68,6 +68,10 @@ jobs:
         if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: npm --workspace apps/api run build
 
+      - name: Test tracking matching and publication cadence
+        if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
+        run: node --test apps/api/test/tracking-engine/*.test.cjs
+
       - name: Test PDF editor text fidelity
         if: steps.reuse.outcome != 'success' || steps.reuse.outputs.reuse != 'true'
         run: node --test apps/api/test/pdf-editor.test.mjs

@@ -68,10 +68,9 @@ export default function PrivacyPage() {
               <p>El seguimiento utiliza Traccar para recibir y consultar los reportes de las tablets
                 asignadas a los camiones. Los usuarios autorizados pueden consultar el último punto
                 registrado, su hora y el recorrido disponible.</p>
-              <p>La vista de mapas y el cálculo de rutas con tráfico utilizan Google Maps Platform.
-                Al solicitar una ruta se envían a Google las coordenadas de origen y el destino
-                seleccionado o la dirección ingresada. Su tratamiento se describe en la{' '}
-                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de privacidad de Google</a>.
+              <p>La visualización del mapa utiliza Mapbox.
+                Su tratamiento se describe en la{' '}
+                <a href="https://www.mapbox.com/legal/privacy" target="_blank" rel="noopener noreferrer">Política de privacidad de Mapbox</a>.
                 Consulta también las <Link href="/map-terms">condiciones de la función de mapas</Link>.</p>
             </section>
 

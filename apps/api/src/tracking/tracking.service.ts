@@ -1,15 +1,17 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
-import { telemetry, routeHistory } from './tracking-telemetry';
+import { telemetry, routeHistory, batteryTelemetry } from './tracking-telemetry';
 import type { NativePosition } from './tracking-telemetry';
 import { TrackingMapService } from './tracking-map.service';
 import { splitJourneys } from './tracking-journeys';
 import { TraccarLive } from './traccar-live';
-import { RoadMatching } from './road-matching';
+import { TrackingMatchingService } from './tracking-matching.service';
+const { validatePolicy, devicePolicy, FleetPublication, CadencedNotifications } = require('./engine/tracking-policy.cjs');
+const policy = validatePolicy(require('./engine/tracking-policy.json'));
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 type TrackingUser = { id: number; email: string; administrator?: boolean; attributes?: Record<string, unknown> };
-type TrackingDevice = { id: number; name: string; positionId: number; disabled?: boolean; attributes?: Record<string, unknown> };
+type TrackingDevice = { id: number; name: string; positionId: number; disabled?: boolean; attributes?: Record<string, unknown>; uniqueId?: string };
 const activeDevices = (devices: TrackingDevice[]) => devices.filter(d => !d.disabled && d.attributes?.revRetired !== true);
 type TrackingPosition = { id: number; deviceId: number; latitude: number; longitude: number; valid: boolean; fixTime: string };
 type TrackingPlace = { id: number; name: string; area: string; attributes: Record<string, unknown> };
@@ -43,12 +45,19 @@ export type TrackingIdentity = { sub: string; exp?: number };
 @Injectable()
 export class TrackingService {
   private live: TraccarLive | undefined;
+  private readonly publication = new FleetPublication(policy);
+  private cadenceTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly notifications = new CadencedNotifications(policy, deviceIds => {
+    for (const callback of this.liveCallbacks) callback({ ...this.live?.status(), deviceIds });
+  });
+  private readonly liveCallbacks = new Set<(event: Record<string, unknown>) => void>();
   private subscribers = 0;
   private readonly lastValid = new Map<number, NativePosition>();
   private readonly lastLookup = new Map<number, number>();
   private fleetCache: { key: string; at: number; value: ReturnType<TrackingService['loadFleet']> } | undefined;
+  private readonly historyCache = new Map<string, { at: number; value: Promise<any> }>();
   private readonly pending = new Map<string, Promise<unknown>>();
-  constructor(private readonly prisma: PrismaService, private readonly maps: TrackingMapService) {}
+  constructor(private readonly prisma: PrismaService, private readonly maps: TrackingMapService, private readonly matching?: TrackingMatchingService) {}
 
   async createSession(identity: TrackingIdentity) {
     const previous = this.pending.get(identity.sub) || Promise.resolve();
@@ -169,32 +178,39 @@ export class TrackingService {
       const { server, integrationPassword } = this.connection();
       this.live = new TraccarLive({ server: server.origin, email: process.env.TRACCAR_INTEGRATION_EMAIL!, password: integrationPassword,
         invalidate: () => this.invalidateFleetCache(), onPositions: positions => {
-          for (const p of positions) this.rememberPosition(p);
+          for (const p of positions) {
+            this.rememberPosition(p);
+            for (const key of this.historyCache.keys()) if (key.startsWith(`${p.deviceId}:`)) this.historyCache.delete(key);
+          }
         } });
+      this.live.on('update', event => { if (event.deviceIds?.length) this.notifications.push(event.deviceIds); });
+      this.cadenceTimer = setInterval(() => this.notifications.flush(), 1000);
       void this.live.start();
     }
     this.subscribers++;
     const live = this.live;
-    live.on('update', callback); callback(live.status());
+    this.liveCallbacks.add(callback); callback(live.status());
     let disposed = false;
     return () => {
       if (disposed) return; disposed = true;
-      live.off('update', callback); this.subscribers--;
-      if (!this.subscribers && this.live === live) { live.stop(); this.live = undefined; }
+      this.liveCallbacks.delete(callback); this.subscribers--;
+      if (!this.subscribers && this.live === live) { live.stop(); this.live = undefined; clearInterval(this.cadenceTimer); this.notifications.pending.clear(); }
     };
   }
-  onModuleDestroy() { this.live?.stop(); }
+  onModuleDestroy() { this.live?.stop(); clearInterval(this.cadenceTimer); this.liveCallbacks.clear(); }
 
-  async matchRoads(identity: TrackingIdentity, deviceId: string, from: string, to: string) {
+  async matchRoads(identity: TrackingIdentity, deviceId: string, from: string, to: string, journeyId: string) {
     await this.authorize(identity);
-    if (!this.maps.configuration().roadMatchingAvailable) throw new ServiceUnavailableException('El ajuste a calles no está disponible.');
-    const end = Date.parse(to), requestedStart = Date.parse(from);
-    if (!Number.isFinite(end) || !Number.isFinite(requestedStart) || requestedStart >= end || end-requestedStart>86400_000 || requestedStart<Date.now()-30*86400_000 || end>Date.now()+60_000) throw new BadRequestException('Selecciona un período válido dentro de los últimos 30 días.');
-    const start = Math.max(requestedStart, end - 15 * 60_000);
-    const history = await this.getHistory(identity, deviceId, new Date(start).toISOString(), to);
-    const roads = new RoadMatching({ key: process.env.TRACKING_ROADS_API_KEY, enabled: true,
-      reserve: () => this.maps.reserveRoads() });
-    return roads.match(history);
+    if (!this.matching || !devicePolicy(policy, Number(deviceId)).roadMatching) throw new BadRequestException('Selecciona un vehículo disponible para ajustar a calles.');
+    const history = await this.getHistory(identity, deviceId, from, to);
+    const journey = history.journeys.find(item => item.id === journeyId);
+    if (!journey) throw new BadRequestException('Selecciona un recorrido para ajustar a calles.');
+    return this.matching.match({ deviceId: history.deviceId, journeyId: journey.id, segments: journey.segments });
+  }
+
+  async matchingUsage(identity: TrackingIdentity) {
+    await this.authorize(identity);
+    return this.matching?.usage();
   }
 
   invalidateFleetCache() { this.fleetCache = undefined; }
@@ -203,10 +219,10 @@ export class TrackingService {
     await this.authorize(identity);
     const { server, admin } = this.connection();
     const key = server.origin;
-    if (this.fleetCache?.key === key && Date.now() - this.fleetCache.at < 3000) return this.fleetCache.value;
+    if (this.fleetCache?.key === key && Date.now() - this.fleetCache.at < 3000) return this.publication.project(await this.fleetCache.value);
     const value = this.loadFleet(server, admin);
     this.fleetCache = { key, at: Date.now(), value };
-    try { return await value; }
+    try { return this.publication.project(await value); }
     catch (error) { if (this.fleetCache?.value === value) this.fleetCache = undefined; throw error; }
   }
 
@@ -241,8 +257,9 @@ export class TrackingService {
           const previous = this.lastValid.get(d.id);
           const fallback = previous && now-Date.parse(previous.fixTime) <= 30*86400_000 ? telemetry(previous,now) : null;
           const position = current ? { ...current, historical:false } : fallback ? { ...fallback, historical:true } : null;
-          return { id: d.id, name: d.name, connection: d.status || 'unknown', lastConnectionAt: d.lastUpdate || null, position,
+          return { id: d.id, name: d.name, trackingProtocol: p?.protocol || null, connection: d.status || 'unknown', lastConnectionAt: d.lastUpdate || null, position,
             latestReport: p ? { valid: p.valid === true, reportedAt: p.fixTime, receivedAt: p.serverTime || null,
+              ...batteryTelemetry(p, d.uniqueId),
               ignition: typeof p.attributes?.ignition === 'boolean' ? p.attributes.ignition : null } : null,
             knownPlaces: current ? places.filter(place => distanceMeters(p!, place) <= place.radiusMeters).map(place => ({ id: place.id, name: place.name })) : [] };
         })),
@@ -276,7 +293,16 @@ export class TrackingService {
       const device = devices.find(d => d.id === id);
       if (!device) throw new BadRequestException('El camión no está disponible.');
       const query = new URLSearchParams({ deviceId: String(id), from: new Date(start).toISOString(), to: new Date(end).toISOString() });
-      const positions = await this.request<NativePosition[]>(server, `/api/reports/route?${query}`, admin, { headers: { Accept: 'application/json' } });
+      const cacheKey = `${id}:${start}:${Math.floor(end / 10000)}`;
+      let entry = this.historyCache.get(cacheKey);
+      if (!entry || Date.now() - entry.at > 10_000) {
+        const value = this.request<NativePosition[]>(server, `/api/reports/route?${query}`, admin, { headers: { Accept: 'application/json' } });
+        entry = { at: Date.now(), value }; this.historyCache.set(cacheKey, entry);
+        void value.catch(() => { if (this.historyCache.get(cacheKey)?.value === value) this.historyCache.delete(cacheKey); });
+        for (const [key, item] of this.historyCache) if (Date.now() - item.at > 10_000) this.historyCache.delete(key);
+        if (this.historyCache.size > 16) this.historyCache.delete(this.historyCache.keys().next().value!);
+      }
+      const positions = await entry.value as NativePosition[];
       if (!Array.isArray(positions) || positions.length > 12_000) throw new BadRequestException('El recorrido es muy extenso. Selecciona un período más corto.');
       return { deviceId: id, deviceName: device.name, positions, start, end };
     } catch (error) {
@@ -287,7 +313,9 @@ export class TrackingService {
 
   async mapConfiguration(identity: TrackingIdentity) {
     await this.authorize(identity);
-    return this.maps.mapConfiguration();
+    const engine = await this.matching?.status();
+    return { ...await this.maps.mapConfiguration(), mapMatchingAvailable: engine?.available === true,
+      mapMatchingEngine: 'valhalla', trackingPolicy: { ...policy, timeZone: 'America/Bogota' } };
   }
 
   async createPlace(identity: TrackingIdentity, input: CreateTrackingPlace) {
